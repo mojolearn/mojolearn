@@ -37,12 +37,16 @@ class UMAP(NumericModeMixin):
     """UMAP embedding with exact Euclidean neighbors and spectral init.
 
     Supports fit/fit_transform/transform, 2D or 3D output, and local_connectivity=1.
-    Dense graph storage uses O(n_samples**2) memory. At least
+    The source fit path stores a CSR graph in O(n_samples*n_neighbors)
+    space, linear in samples when n_neighbors is bounded; exact neighbor
+    search still performs quadratic pair comparisons. Spectral initialization
+    uses at most 20 Lanczos basis vectors for 2D/3D output. At least
     2*n_components+4 samples are required. n_epochs=None uses 200 epochs;
     random_state defaults to 0. Input is converted to C-order float32;
     input_copied_ records whether a copy was needed.
 
-    transform retains private copies of training data, embedding, parameters
+    transform retains private copies of training data and embedding, adding
+    O(n_samples*n_features + n_samples*n_components) storage, plus parameters
     and mode from the last successful fit. It computes query-to-training
     neighbors, memberships, weighted initialization and seeded refinement
     against the frozen training embedding. Default refinement is 100 epochs

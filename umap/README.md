@@ -4,16 +4,19 @@ The Python API is `mojolearn.UMAP(...).fit(X)` / `.fit_transform(X)`.
 It uses the existing metrics/spectral extension in all three numeric modes.
 `embedding_`, `n_features_in_`, and `input_copied_` describe a completed fit.
 The supported slice is dense Euclidean input, spectral initialization,
-2D/3D output, and `local_connectivity=1`; graph memory is quadratic in the
-sample count. `transform` of new data and supervised fitting are not implemented.
+2D/3D output, and `local_connectivity=1`. The published 0.5.0 wheel uses a
+dense graph and has no `transform`. Current source enables CSR fit and
+`transform`; their qualification status is described below. Supervised
+fitting is unsupported.
 The installed-wheel gate exercises the public surface in each shipped mode
 and compares IDENTICAL layout bits to the named source fixture below.
 
 The host-list estimator composes exact k-NN, fuzzy graph construction,
 spectral initialization, curve fitting and 2D/3D layout optimization.
-IDENTICAL uses serial layout updates; FAST uses the GPU Jacobi trajectory.
+IDENTICAL uses serial layout updates; FAST uses the GPU Jacobi trajectory
+at 1,024 samples and above, with the existing serial crossover below that.
 The public slice requires `local_connectivity=1` and enough samples for
-spectral initialization. Graph storage is currently dense.
+spectral initialization. Current source stores graph edges in CSR.
 
 ## Identity evidence
 
@@ -135,11 +138,28 @@ fit layouts, and two held-out quality fixtures. The quality record retains
 exact source hashes and inputs; its source matches this implementation.
 These initial checks do not establish cross-vendor transform identity.
 
-The separate sparse estimator candidate builds CSR graph storage directly
-from neighbors and shares the spectral solver. Apple dense/sparse graph and
-fit comparisons passed initial fixtures. Public fit still uses dense storage;
-the sparse candidate is not yet enabled. Exact neighbor computation remains
-quadratic even when persistent graph storage is sparse.
+Public source `fit_transform` now delegates to the sparse estimator, which
+builds CSR directly from neighbors and shares the existing spectral solver.
+The dense graph helper remains available for stage certificates and the
+independent dense comparison. Apple dense/sparse graph and fit comparisons
+passed initial fixtures before this public switch. The integrated public
+path still requires fresh all-mode and remote qualification; these source
+edits are not part of the published 0.5.0 wheel or the running older-source
+NVIDIA campaign.
+
+Graph storage is O(n_samples*n_neighbors), linear when neighbors are bounded.
+For 2D/3D output the Lanczos basis has at most 20 vectors. Exact neighbor
+computation still compares quadratically many pairs, using bounded query-tile
+workspace. Transform additionally retains copies of training data and the
+fitted embedding, using O(n_samples*n_features + n_samples*n_components)
+storage. These are storage-complexity statements, not measured peak-memory
+or performance claims.
 
 See [retained Apple evidence](../bench/results/umap/2026-09-05-sparse-transform/).
 Broader modes, remote qualification and installed-artifact checks remain open.
+
+The integrated CSR source API subsequently passed Apple metrics builds, all
+fit/transform API groups, and both held-out quality cases in each of the three
+modes. The retained embeddings match the prior dense-fit records within each
+mode. See [public CSR integration evidence](../bench/results/umap/2026-09-05-public-sparse/).
+Remote public integration and installed-wheel qualification remain open.

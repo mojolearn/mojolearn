@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CSR UMAP candidate: exact neighbors, sparse graph, same solver/optimizer.
 
-Not wired into the public estimator yet. For fixed k and 2D/3D output,
+Used by the source public estimator. For fixed k and 2D/3D output,
 fuzzy graph and Lanczos basis storage are linear in n (ncv<=20). Exact
 brute-force neighbor work remains quadratic in computation; its bounded
 query-tile workspace is O(tile*n), not an n*n distance matrix. No whole-

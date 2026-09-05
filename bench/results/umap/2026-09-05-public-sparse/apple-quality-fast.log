@@ -1,0 +1,2 @@
+cubic128_interleaved64_64 fast {'trustworthiness': 0.9973684210526316, 'retention': 0.8875, 'rank_penalty': 48} control_margins {'trustworthiness': 0.4620614035087719, 'retention': 0.8125} PASS
+saddle_grid64_cellcenters49 fast {'trustworthiness': 0.9907626208378089, 'retention': 0.8408163265306122, 'rank_penalty': 129} control_margins {'trustworthiness': 0.4320085929108486, 'retention': 0.746938775510204} PASS

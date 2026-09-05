@@ -1,0 +1,32 @@
+[
+  {
+    "mode": "fast",
+    "job": "build",
+    "exit_code": 0
+  },
+  {
+    "mode": "fast",
+    "job": "api",
+    "exit_code": 0
+  },
+  {
+    "mode": "fast",
+    "job": "quality",
+    "exit_code": 0
+  },
+  {
+    "mode": "deterministic",
+    "job": "build",
+    "exit_code": 0
+  },
+  {
+    "mode": "deterministic",
+    "job": "api",
+    "exit_code": 0
+  },
+  {
+    "mode": "deterministic",
+    "job": "quality",
+    "exit_code": 0
+  }
+]

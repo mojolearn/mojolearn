@@ -1,0 +1,1079 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:28:
+Imported from ./umap/spectral_init.mojo:8:
+/Users/andrewhendel/CascadeProjects/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:28:
+Imported from ./umap/spectral_init.mojo:8:
+/Users/andrewhendel/CascadeProjects/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:28:
+Imported from ./umap/spectral_init.mojo:8:
+/Users/andrewhendel/CascadeProjects/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:28:
+Imported from ./umap/spectral_init.mojo:8:
+/Users/andrewhendel/CascadeProjects/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:151:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/distance/detail/distance_ops.mojo:191:
+/Users/andrewhendel/CascadeProjects/mojolearn/./core/pinned_reduce.mojo:99:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:151:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/distance/detail/distance_ops.mojo:191:
+/Users/andrewhendel/CascadeProjects/mojolearn/./core/pinned_reduce.mojo:104:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:151:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/distance/detail/distance_ops.mojo:191:
+/Users/andrewhendel/CascadeProjects/mojolearn/./core/pinned_reduce.mojo:104:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:151:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/distance/detail/distance_ops.mojo:191:
+/Users/andrewhendel/CascadeProjects/mojolearn/./core/pinned_reduce.mojo:104:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:151:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/distance/detail/distance_ops.mojo:191:
+/Users/andrewhendel/CascadeProjects/mojolearn/./core/pinned_reduce.mojo:107:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:28:
+Imported from ./umap/spectral_init.mojo:8:
+/Users/andrewhendel/CascadeProjects/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:441:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:450:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:464:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:466:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        regy[j] = sy[
+                                  ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:480:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:491:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[
+                                    ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:513:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:523:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:537:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:638:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:669:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:674:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:744:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:222:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:223:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:224:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:225:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:226:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_BACK_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:227:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt32(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:253:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:254:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:255:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:267:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:269:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:274:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:332:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:333:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:339:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:340:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:344:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:345:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:346:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:346:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:349:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:353:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:353:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:355:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:357:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var needed = Int(ctr[CTR_K])
+                             ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:199:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:200:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:201:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:202:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:203:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt64(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:227:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:228:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:229:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:239:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:241:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:246:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:290:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:291:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:296:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:297:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:299:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:300:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:301:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:301:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:306:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:309:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:309:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:315:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:356:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_val[tid] = o_val.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:357:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_idx[tid] = o_idx.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:360:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                  ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:360:52: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                              ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:363:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                             ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:363:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:365:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_val.unsafe_store(rank, s_val[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/checks/select_radix_identical.mojo:366:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_idx.unsafe_store(rank, s_idx[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:684:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    val_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:689:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    idx_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:537:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:550:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:301:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:432:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:624:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_val: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:629:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_idx: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:571:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_val: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:576:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_idx: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:518:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:601:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:647:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:666:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:283:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:367:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/Users/andrewhendel/CascadeProjects/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:375:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/umap/checks/sparse_estimator_check.mojo:28:
+Included from ./umap/spectral_init.mojo:11:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/./spectral/impl/spectral/spectral_embedding.mojo:25:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:59:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/./spectral/impl/sparse/linalg/detail/laplacian.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/./spectral/impl/sparse/op/coo_ops.mojo:114:9: warning: ref 'i' was never used, remove it?
+    for i in range(n):
+        ^
+UMAP sparse estimator mode DETERMINISTIC
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.rho 0 1065353216
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.rho 1 1065353216
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.rho 2 1067030938
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.rho 3 1072064102
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.rho 4 1075838976
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.rho 5 1080033280
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.rho 6 1083179008
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.rho 7 1085276160
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.sigma 0 1074739712
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.sigma 1 1052702720
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.sigma 2 1066351104
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.sigma 3 1067915776
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.sigma 4 1072609280
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.sigma 5 1072609280
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.sigma 6 1072609280
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.sigma 7 1090930176
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 0 3240099827
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 1 3234590691
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 2 3239908310
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 3 3232958240
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 4 3237691389
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 5 1056936119
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 6 3224521551
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 7 1092616154
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 8 1077037962
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 9 1092616192
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 10 1090207756
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 11 1056936819
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 12 1092424672
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 13 3232958270
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 14 1092616192
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.initial 15 3234590775
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 0 3238743653
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 1 3226481371
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 2 3239445684
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 3 3230550443
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 4 3238179779
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 5 3212503615
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 6 3214701450
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 7 1092056380
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 8 1066187291
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 9 1092090132
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 10 1090556717
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 11 3202160467
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 12 1092523258
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 13 3233627708
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 14 1092185903
+UMAP_SPARSE_FIT_BITS 8x1-2d-e4-seed19.layout 15 3231522035
+UMAP_SPARSE_FIT_CASE_PASS 8x1-2d-e4-seed19 graph_logical_bytes 480
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 0 1063552661
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 1 1060982919
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 2 1063986857
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 3 1058412515
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 4 1055881041
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 5 1058412515
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 6 1055881041
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 7 1059269419
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 8 1057222779
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 9 1057222779
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 10 1057222779
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 11 1057222779
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 12 1059269419
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 13 1055881041
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 14 1059269419
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.rho 15 1055881041
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 0 1050654208
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 1 1042565376
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 2 1036128512
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 3 1052726016
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 4 1058863360
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 5 1040340992
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 6 1057224704
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 7 1054489856
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 8 1042578176
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 9 1051540480
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 10 1053214720
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 11 1046243072
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 12 1051019520
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 13 1060600704
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 14 1040915456
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.sigma 15 1065788032
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 0 3231378113
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 1 1084125403
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 2 3230801398
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 3 3210155255
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 4 1091723328
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 5 3228176175
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 6 1083681654
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 7 1082954565
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 8 3225297890
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 9 3239116873
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 10 3231289485
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 11 3224273221
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 12 1067604325
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 13 1092616192
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 14 3222959775
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 15 3239135835
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 16 3231234323
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 17 3223233424
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 18 3200049451
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 19 1092313362
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 20 1055156421
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 21 1092093316
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 22 3230629007
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 23 3213125135
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 24 3235845097
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 25 3234220721
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 26 3203854243
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 27 1088028408
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 28 3222053063
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 29 3202041363
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 30 3236293064
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 31 3231374121
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 32 1067665705
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 33 1080321904
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 34 3230508094
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 35 1070135996
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 36 1092616192
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 37 3233447208
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 38 3205448404
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 39 3223086283
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 40 1083587821
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 41 1092012234
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 42 1090018860
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 43 3232028453
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 44 1055392197
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 45 3224145489
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 46 1081526603
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.initial 47 1092616192
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 0 3227671457
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 1 1085956440
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 2 3227285800
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 3 1063840675
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 4 1093143052
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 5 3186623516
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 6 1082415467
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 7 1083590270
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 8 3220782127
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 9 3237497172
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 10 3230663968
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 11 1058234255
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 12 1058884595
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 13 1092387369
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 14 3202372500
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 15 3236497922
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 16 3231587390
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 17 1068699170
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 18 3188763063
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 19 1092888516
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 20 1045770369
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 21 1093047255
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 22 3231261187
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 23 3222673937
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 24 3233571184
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 25 3233781799
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 26 1078643152
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 27 1087017688
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 28 3224422833
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 29 3213183579
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 30 3231747837
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 31 3235348805
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 32 1082674334
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 33 1088104459
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 34 3227515863
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 35 3200658741
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 36 1093730722
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 37 3232579431
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 38 3225044109
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 39 3226768368
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 40 1085394557
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 41 1092198028
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 42 1085858994
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 43 3224678238
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 44 3198211532
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 45 3224221346
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 46 1084311835
+UMAP_SPARSE_FIT_BITS 16x3-3d-e12-seed7.layout 47 1091562143
+UMAP_SPARSE_FIT_CASE_PASS 16x3-3d-e12-seed7 graph_logical_bytes 1536
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 0 1072463078
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 1 1056416594
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 2 1076553735
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 3 1063610340
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 4 3196983176
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 5 1040195656
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 6 1064117388
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 7 1075480412
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 8 1070807425
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 9 1079202965
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 10 1054402640
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 11 1068073529
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 12 3212389660
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 13 1074646180
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 14 3219921992
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.serial 15 1079625211
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 0 3232495398
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 1 3225711518
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 2 3219121786
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 3 3238196148
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 4 3224247420
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 5 3228786932
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 6 1076034305
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 7 1076350333
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 8 1077928603
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 9 1076406955
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 10 3219256307
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 11 3206543218
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 12 1092344156
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 13 1092440021
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 14 1095109213
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.jacobi 15 1094815048
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 0 1060626324
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 1 1066590326
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 2 1052086492
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 3 1025088890
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 4 3213857645
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 5 3205584401
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 6 3223119393
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 7 1072194299
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 8 3220769670
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 9 1057500184
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 10 1073016178
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 11 1070455460
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 12 1071529073
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 13 1072567685
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 14 1040802797
+UMAP_SPARSE_FIT_BITS optimizer-n8-d2-zerosFalse.dispatch 15 1074477019
+UMAP_SPARSE_OPTIMIZER_PASS optimizer-n8-d2-zerosFalse
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 0 1055086770
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 1 1032373724
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 2 1065238119
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 3 1082214757
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 4 1064226382
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 5 1067534361
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 6 1080647360
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 7 1061665932
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 8 1067936357
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 9 1082973789
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 10 1044976784
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 11 1066272696
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 12 1073411295
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 13 1067252286
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 14 1064970451
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 15 1077175842
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 16 1074546460
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 17 3169569437
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 18 1057399545
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 19 1009108944
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 20 1064935346
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 21 1067276182
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 22 3207587448
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.serial 23 1068388648
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 0 1060542273
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 1 1056380935
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 2 1068317378
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 3 3214497400
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 4 3219740016
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 5 3215978880
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 6 1061432890
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 7 3214756236
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 8 3202849640
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 9 1060031898
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 10 3205613595
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 11 3200100428
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 12 3198335873
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 13 1058611397
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 14 1039117342
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 15 3216520114
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 16 1071635768
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 17 1059829265
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 18 1070697317
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 19 1072758609
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 20 1074286355
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 21 1095693510
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 22 1095006336
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.jacobi 23 1095400769
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 0 3215840321
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 1 1046133004
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 2 1068610376
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 3 1071403272
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 4 3185093131
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 5 1065867788
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 6 1068264155
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 7 3214901783
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 8 3202015729
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 9 1064016600
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 10 1068973369
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 11 3196904707
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 12 1074070057
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 13 1079363525
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 14 3214566196
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 15 1074484975
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 16 1078080432
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 17 3207912679
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 18 3190952272
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 19 1061449680
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 20 1069174391
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 21 1064780174
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 22 1064076444
+UMAP_SPARSE_FIT_BITS optimizer-n8-d3-zerosTrue.dispatch 23 1075847909
+UMAP_SPARSE_OPTIMIZER_PASS optimizer-n8-d3-zerosTrue
+UMAP sparse estimator PASS
