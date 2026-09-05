@@ -1,0 +1,4 @@
+/root/mojolearn/umap/checks/self_neighbor_check.mojo:18:9: warning: ref 'repeat' was never used, remove it?
+    for repeat in range(2):
+        ^
+UMAP SELF NEIGHBORS PASS: four cases, idempotence, uncorrected refusal

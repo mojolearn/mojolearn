@@ -1,5 +1,12 @@
 # NVIDIA fixed UMAP: PASS; Mamba3 L65 intermediate gate: RED
 
+**Subsequent correction:** the matching AMD diagnostics exposed a missing
+scale/gamma chain-rule contribution shared by the native Mamba3 join and
+its staged float32 reference. The old public-leaf comparison and baseline
+Mamba3 gate are superseded; raw byte matches alone do not establish full
+gradient correctness. See the
+[AMD diagnosis](../../e1/2026-09-05_231144-mojolearn-e2-amd/README.md).
+
 RTX 4090, source `d88c788374a06597c9ebd457666afc7e4054d0d9`.
 The baseline certificate passes all five cases and retains 54 gradient tensors.
 All 24 follow-up rows except the final long-sequence row passed: the targeted

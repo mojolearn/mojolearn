@@ -1,0 +1,6 @@
+cubic128_interleaved64_64 fast {'trustworthiness': 0.9976973684210526, 'retention': 0.903125, 'rank_penalty': 42} control_margins {'trustworthiness': 0.47012061403508776, 'retention': 0.825} PASS
+saddle_grid64_cellcenters49 fast {'trustworthiness': 0.9903329752953813, 'retention': 0.8326530612244898, 'rank_penalty': 135} control_margins {'trustworthiness': 0.42620837808807743, 'retention': 0.7346938775510204} PASS
+cubic256_interleaved128_128_seed3 fast {'trustworthiness': 0.9986957644628099, 'retention': 0.8921875, 'rank_penalty': 101} control_margins {'trustworthiness': 0.4860020661157025, 'retention': 0.8546875} PASS
+cubic256_interleaved128_128_seed41 fast {'trustworthiness': 0.9986441115702479, 'retention': 0.8890625, 'rank_penalty': 105} control_margins {'trustworthiness': 0.48755165289256197, 'retention': 0.8453125} PASS
+saddle_grid128_cellcenters105_seed11 fast {'trustworthiness': 0.9974970484061393, 'retention': 0.8380952380952381, 'rank_penalty': 159} control_margins {'trustworthiness': 0.44099173553719007, 'retention': 0.7961904761904762} PASS
+saddle_grid128_cellcenters105_seed29 fast {'trustworthiness': 0.9965682802046438, 'retention': 0.8114285714285714, 'rank_penalty': 218} control_margins {'trustworthiness': 0.4419205037386855, 'retention': 0.7638095238095237} PASS

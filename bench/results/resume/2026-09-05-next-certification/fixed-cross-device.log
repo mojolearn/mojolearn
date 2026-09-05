@@ -1,0 +1,2 @@
+PASS: baseline Mamba bytes; both UMAP stage fixtures; 36 held-out mode/vendor cases; six IDENTICAL embeddings
+Long-sequence certificate: FAIL (see retained gate logs)

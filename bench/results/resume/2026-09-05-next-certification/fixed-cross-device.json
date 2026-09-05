@@ -1,0 +1,530 @@
+{
+  "status": "FAIL",
+  "amd": "bench/results/e1/2026-09-05_231144-mojolearn-e2-amd",
+  "nvidia": "bench/results/e1g/2026-09-05_184117-nvidia-mamba/remote",
+  "scope": "Named source fixtures on AMD and NVIDIA; no fresh Apple or installed-wheel claim",
+  "mamba": {
+    "baseline-v1": {
+      "exit_code": 0,
+      "stdout": "BITWISE PASS: bench/results/e1/2026-09-05_231144-mojolearn-e2-amd/diag/mamba-cert == bench/results/e1g/2026-09-05_184117-nvidia-mamba/remote/mamba-cert; devices=amd,nvidia; 54 gradient tensors\n",
+      "stderr": ""
+    },
+    "long-sequence-v1": {
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "MAMBA BACKWARD IDENTITY FAILED: bench/results/e1/2026-09-05_231144-mojolearn-e2-amd/diag/followup/mamba-long-cert: incomplete or failed numerical gate\n"
+    }
+  },
+  "umap_native": {
+    "umap.identity.log": {
+      "status": "PASS",
+      "uint32_cells": 186
+    },
+    "followup/umap-broader.log": {
+      "status": "PASS",
+      "uint32_cells": 690
+    }
+  },
+  "umap_quality": {
+    "amd/identical": {
+      "status": "PASS",
+      "cases": [
+        {
+          "profile": "cubic128_interleaved64_64",
+          "quality": {
+            "trustworthiness": 0.9983004385964912,
+            "retention": 0.915625,
+            "rank_penalty": 31
+          },
+          "control_margins": {
+            "trustworthiness": 0.4670504385964912,
+            "retention": 0.8375
+          }
+        },
+        {
+          "profile": "saddle_grid64_cellcenters49",
+          "quality": {
+            "trustworthiness": 0.9903329752953813,
+            "retention": 0.8367346938775511,
+            "rank_penalty": 135
+          },
+          "control_margins": {
+            "trustworthiness": 0.426279985678482,
+            "retention": 0.7428571428571429
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed3",
+          "quality": {
+            "trustworthiness": 0.9985408057851239,
+            "retention": 0.884375,
+            "rank_penalty": 113
+          },
+          "control_margins": {
+            "trustworthiness": 0.48737086776859506,
+            "retention": 0.8453125
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed41",
+          "quality": {
+            "trustworthiness": 0.9981921487603306,
+            "retention": 0.8796875,
+            "rank_penalty": 140
+          },
+          "control_margins": {
+            "trustworthiness": 0.4869189049586776,
+            "retention": 0.8359375
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed11",
+          "quality": {
+            "trustworthiness": 0.9974498229043683,
+            "retention": 0.8438095238095238,
+            "rank_penalty": 162
+          },
+          "control_margins": {
+            "trustworthiness": 0.44162140889413615,
+            "retention": 0.8019047619047619
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed29",
+          "quality": {
+            "trustworthiness": 0.9963636363636363,
+            "retention": 0.8114285714285714,
+            "rank_penalty": 231
+          },
+          "control_margins": {
+            "trustworthiness": 0.4421094057457693,
+            "retention": 0.7657142857142857
+          }
+        }
+      ]
+    },
+    "nvidia/identical": {
+      "status": "PASS",
+      "cases": [
+        {
+          "profile": "cubic128_interleaved64_64",
+          "quality": {
+            "trustworthiness": 0.9983004385964912,
+            "retention": 0.915625,
+            "rank_penalty": 31
+          },
+          "control_margins": {
+            "trustworthiness": 0.4670504385964912,
+            "retention": 0.8375
+          }
+        },
+        {
+          "profile": "saddle_grid64_cellcenters49",
+          "quality": {
+            "trustworthiness": 0.9903329752953813,
+            "retention": 0.8367346938775511,
+            "rank_penalty": 135
+          },
+          "control_margins": {
+            "trustworthiness": 0.426279985678482,
+            "retention": 0.7428571428571429
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed3",
+          "quality": {
+            "trustworthiness": 0.9985408057851239,
+            "retention": 0.884375,
+            "rank_penalty": 113
+          },
+          "control_margins": {
+            "trustworthiness": 0.48737086776859506,
+            "retention": 0.8453125
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed41",
+          "quality": {
+            "trustworthiness": 0.9981921487603306,
+            "retention": 0.8796875,
+            "rank_penalty": 140
+          },
+          "control_margins": {
+            "trustworthiness": 0.4869189049586776,
+            "retention": 0.8359375
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed11",
+          "quality": {
+            "trustworthiness": 0.9974498229043683,
+            "retention": 0.8438095238095238,
+            "rank_penalty": 162
+          },
+          "control_margins": {
+            "trustworthiness": 0.44162140889413615,
+            "retention": 0.8019047619047619
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed29",
+          "quality": {
+            "trustworthiness": 0.9963636363636363,
+            "retention": 0.8114285714285714,
+            "rank_penalty": 231
+          },
+          "control_margins": {
+            "trustworthiness": 0.4421094057457693,
+            "retention": 0.7657142857142857
+          }
+        }
+      ]
+    },
+    "amd/fast": {
+      "status": "PASS",
+      "cases": [
+        {
+          "profile": "cubic128_interleaved64_64",
+          "quality": {
+            "trustworthiness": 0.9976973684210526,
+            "retention": 0.903125,
+            "rank_penalty": 42
+          },
+          "control_margins": {
+            "trustworthiness": 0.47012061403508776,
+            "retention": 0.825
+          }
+        },
+        {
+          "profile": "saddle_grid64_cellcenters49",
+          "quality": {
+            "trustworthiness": 0.9903329752953813,
+            "retention": 0.8326530612244898,
+            "rank_penalty": 135
+          },
+          "control_margins": {
+            "trustworthiness": 0.42620837808807743,
+            "retention": 0.7346938775510204
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed3",
+          "quality": {
+            "trustworthiness": 0.9986957644628099,
+            "retention": 0.8921875,
+            "rank_penalty": 101
+          },
+          "control_margins": {
+            "trustworthiness": 0.4860020661157025,
+            "retention": 0.8546875
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed41",
+          "quality": {
+            "trustworthiness": 0.9986441115702479,
+            "retention": 0.8890625,
+            "rank_penalty": 105
+          },
+          "control_margins": {
+            "trustworthiness": 0.48755165289256197,
+            "retention": 0.8453125
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed11",
+          "quality": {
+            "trustworthiness": 0.9974970484061393,
+            "retention": 0.8380952380952381,
+            "rank_penalty": 159
+          },
+          "control_margins": {
+            "trustworthiness": 0.44099173553719007,
+            "retention": 0.7961904761904762
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed29",
+          "quality": {
+            "trustworthiness": 0.9965682802046438,
+            "retention": 0.8114285714285714,
+            "rank_penalty": 218
+          },
+          "control_margins": {
+            "trustworthiness": 0.4419205037386855,
+            "retention": 0.7638095238095237
+          }
+        }
+      ]
+    },
+    "nvidia/fast": {
+      "status": "PASS",
+      "cases": [
+        {
+          "profile": "cubic128_interleaved64_64",
+          "quality": {
+            "trustworthiness": 0.9983004385964912,
+            "retention": 0.91875,
+            "rank_penalty": 31
+          },
+          "control_margins": {
+            "trustworthiness": 0.45729166666666665,
+            "retention": 0.840625
+          }
+        },
+        {
+          "profile": "saddle_grid64_cellcenters49",
+          "quality": {
+            "trustworthiness": 0.9902613677049767,
+            "retention": 0.8326530612244898,
+            "rank_penalty": 136
+          },
+          "control_margins": {
+            "trustworthiness": 0.43172216254923024,
+            "retention": 0.7387755102040816
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed3",
+          "quality": {
+            "trustworthiness": 0.9986053719008264,
+            "retention": 0.8828125,
+            "rank_penalty": 108
+          },
+          "control_margins": {
+            "trustworthiness": 0.48681559917355377,
+            "retention": 0.84375
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed41",
+          "quality": {
+            "trustworthiness": 0.9984375,
+            "retention": 0.8828125,
+            "rank_penalty": 121
+          },
+          "control_margins": {
+            "trustworthiness": 0.47922262396694215,
+            "retention": 0.8359375
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed11",
+          "quality": {
+            "trustworthiness": 0.9972451790633609,
+            "retention": 0.8380952380952381,
+            "rank_penalty": 175
+          },
+          "control_margins": {
+            "trustworthiness": 0.4397481306572215,
+            "retention": 0.7942857142857143
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed29",
+          "quality": {
+            "trustworthiness": 0.9961589925226288,
+            "retention": 0.8171428571428572,
+            "rank_penalty": 244
+          },
+          "control_margins": {
+            "trustworthiness": 0.4404092876820149,
+            "retention": 0.7714285714285715
+          }
+        }
+      ]
+    },
+    "amd/deterministic": {
+      "status": "PASS",
+      "cases": [
+        {
+          "profile": "cubic128_interleaved64_64",
+          "quality": {
+            "trustworthiness": 0.9976973684210526,
+            "retention": 0.903125,
+            "rank_penalty": 42
+          },
+          "control_margins": {
+            "trustworthiness": 0.47012061403508776,
+            "retention": 0.825
+          }
+        },
+        {
+          "profile": "saddle_grid64_cellcenters49",
+          "quality": {
+            "trustworthiness": 0.9903329752953813,
+            "retention": 0.8326530612244898,
+            "rank_penalty": 135
+          },
+          "control_margins": {
+            "trustworthiness": 0.42620837808807743,
+            "retention": 0.7346938775510204
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed3",
+          "quality": {
+            "trustworthiness": 0.9986957644628099,
+            "retention": 0.8921875,
+            "rank_penalty": 101
+          },
+          "control_margins": {
+            "trustworthiness": 0.4860020661157025,
+            "retention": 0.8546875
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed41",
+          "quality": {
+            "trustworthiness": 0.9986441115702479,
+            "retention": 0.8890625,
+            "rank_penalty": 105
+          },
+          "control_margins": {
+            "trustworthiness": 0.48755165289256197,
+            "retention": 0.8453125
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed11",
+          "quality": {
+            "trustworthiness": 0.9974970484061393,
+            "retention": 0.8380952380952381,
+            "rank_penalty": 159
+          },
+          "control_margins": {
+            "trustworthiness": 0.4407083825265643,
+            "retention": 0.7961904761904762
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed29",
+          "quality": {
+            "trustworthiness": 0.9965682802046438,
+            "retention": 0.8114285714285714,
+            "rank_penalty": 218
+          },
+          "control_margins": {
+            "trustworthiness": 0.4419205037386855,
+            "retention": 0.7638095238095237
+          }
+        }
+      ]
+    },
+    "nvidia/deterministic": {
+      "status": "PASS",
+      "cases": [
+        {
+          "profile": "cubic128_interleaved64_64",
+          "quality": {
+            "trustworthiness": 0.9983004385964912,
+            "retention": 0.91875,
+            "rank_penalty": 31
+          },
+          "control_margins": {
+            "trustworthiness": 0.45729166666666665,
+            "retention": 0.840625
+          }
+        },
+        {
+          "profile": "saddle_grid64_cellcenters49",
+          "quality": {
+            "trustworthiness": 0.9902613677049767,
+            "retention": 0.8326530612244898,
+            "rank_penalty": 136
+          },
+          "control_margins": {
+            "trustworthiness": 0.43172216254923024,
+            "retention": 0.7387755102040816
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed3",
+          "quality": {
+            "trustworthiness": 0.9986053719008264,
+            "retention": 0.8828125,
+            "rank_penalty": 108
+          },
+          "control_margins": {
+            "trustworthiness": 0.48681559917355377,
+            "retention": 0.84375
+          }
+        },
+        {
+          "profile": "cubic256_interleaved128_128_seed41",
+          "quality": {
+            "trustworthiness": 0.9984375,
+            "retention": 0.8828125,
+            "rank_penalty": 121
+          },
+          "control_margins": {
+            "trustworthiness": 0.47922262396694215,
+            "retention": 0.8359375
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed11",
+          "quality": {
+            "trustworthiness": 0.9972451790633609,
+            "retention": 0.8380952380952381,
+            "rank_penalty": 175
+          },
+          "control_margins": {
+            "trustworthiness": 0.4397481306572215,
+            "retention": 0.7942857142857143
+          }
+        },
+        {
+          "profile": "saddle_grid128_cellcenters105_seed29",
+          "quality": {
+            "trustworthiness": 0.9961589925226288,
+            "retention": 0.8171428571428572,
+            "rank_penalty": 244
+          },
+          "control_margins": {
+            "trustworthiness": 0.4404092876820149,
+            "retention": 0.7714285714285715
+          }
+        }
+      ]
+    }
+  },
+  "umap_identical": [
+    {
+      "profile": "cubic128_interleaved64_64",
+      "status": "PASS",
+      "training_embedding_sha256": "ae505e07f21d8496d618db3015bf34b7d6d247b20c217156a5a72973aa091e0a",
+      "query_embedding_sha256": "f7c5f2578d1bd437310d926b81f143d46984b7ae0e2499df138fd6d662c74987"
+    },
+    {
+      "profile": "saddle_grid64_cellcenters49",
+      "status": "PASS",
+      "training_embedding_sha256": "e71d2cce698e64f2dab2c08b13fca1d717aae668b8ec4f800c64b5dc9d288ae0",
+      "query_embedding_sha256": "3c6cca04bfe3d8e4f0a259539784e5133f401e1e9891f249dcacad727b769afb"
+    },
+    {
+      "profile": "cubic256_interleaved128_128_seed3",
+      "status": "PASS",
+      "training_embedding_sha256": "9535d287162c32b10143f4c11558d70afdfa4f1f22dff59dee6da6975795a472",
+      "query_embedding_sha256": "1fe4ff65ddebca3ef11ec1af34c4eb279a03336dca25de8e37cef5b315494f9d"
+    },
+    {
+      "profile": "cubic256_interleaved128_128_seed41",
+      "status": "PASS",
+      "training_embedding_sha256": "05a41d6f88207905f69c044929eca47151e7d479d1e1ae83154e026b14d7f8ee",
+      "query_embedding_sha256": "ba2aa6312d8ff5365e446f5d478f09d94d43b641f502fdfaa6cb678872658fed"
+    },
+    {
+      "profile": "saddle_grid128_cellcenters105_seed11",
+      "status": "PASS",
+      "training_embedding_sha256": "8541cd178d27c86fa790868583afc729babbf93bd866eeafb06ea589b59093f4",
+      "query_embedding_sha256": "ebcf7c6b84ad73794704d11be1a860d79b05e01856d68aee79e5c670bb1ba472"
+    },
+    {
+      "profile": "saddle_grid128_cellcenters105_seed29",
+      "status": "PASS",
+      "training_embedding_sha256": "b6774c9bbf437d8196e7908ba1e1e8fafbad7ab819c4772e3afea79c3c44a7b4",
+      "query_embedding_sha256": "59b8e6c25215f38fb9cfcccfac5f562de24778cbb56b11b93d2f1c21dd968268"
+    }
+  ]
+}
