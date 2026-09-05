@@ -1,0 +1,24 @@
+✨ Pixi task (mamba-grad-m1-public in skgpu): oracle=/tmp/mojolearn-mamba1-grad; actual=/tmp/mojolearn-mamba1-actual; mkdir -p $oracle $actual; find $oracle -maxdepth 1 -type f -delete; find $actual -maxdepth 1 -type f -delete; python tools/mamba_gradient_oracle.py --family mamba1 --out $oracle; MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba_backward_device_tail_dump.mojo; python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba1/base_b2_l4_d8 gradients to /tmp/mojolearn-mamba1-grad
+finite-difference worst relative-scale error: 1.742e-10
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:15:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:15:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:15:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+MAMBA1 BACKWARD DEVICE WHOLE PASS: emitted all 11 external-oracle gradients plus diagnostic dB/dC
+Mamba gradient public-prefill comparison passed: 11 tensors
+  selected manifest policy=mamba1.public_prefill_leaves.exact11.v1
