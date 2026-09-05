@@ -59,6 +59,7 @@ from gbdt.estimator import (
     GbdtFitParams,
     GbdtFitResult,
     gbdt_fit,
+    gbdt_fit_two_level_feature_freq,
     gbdt_model_dim,
     gbdt_predict,
     gbdt_predict_multi,
@@ -437,12 +438,47 @@ def gbdt_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def gbdt_fit_two_level_feature_freq_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    sources_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Explicit dense-categorical two-level FeatureFreq fit.
+
+    `params` is `[n_rows, n_features, n_sources, learning_rate,
+    l2_leaf_reg, random_seed]`; source indices are UInt32.
+    """
+    if len(params) != 6:
+        raise Error("two-level FeatureFreq params must have six values")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var sp = _u32_ptr(Int(py=sources_addr))
+    var n_rows = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_sources = Int(py=params[2])
+    var learning_rate = Float32(Float64(py=params[3]))
+    var l2_leaf_reg = Float32(Float64(py=params[4]))
+    var random_seed = UInt64(Int(py=params[5]))
+    var text: String
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        text = gbdt_fit_two_level_feature_freq(
+            ctx, xp, n_rows, n_features, yp, sp, n_sources,
+            learning_rate, l2_leaf_reg, random_seed,
+        )
+    return PythonObject(text)
+
+
 @export
 def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
         m.def_function[gbdt_vendor_binding]("gbdt_vendor")
         m.def_function[gbdt_fit_binding]("gbdt_fit")
+        m.def_function[gbdt_fit_two_level_feature_freq_binding](
+            "gbdt_fit_two_level_feature_freq"
+        )
         m.def_function[gbdt_predict_binding]("gbdt_predict")
         m.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         m.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")

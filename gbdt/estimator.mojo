@@ -62,13 +62,27 @@ from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     TCatFeatureParams,
 )
-from gbdt.methods.doc_parallel_boosting import model_approx_dim
+from gbdt.methods.doc_parallel_boosting import (
+    fit_two_level_feature_freq_tree,
+    model_approx_dim,
+)
+from gbdt.models.tensor_ctr_value_table import (
+    build_feature_freq_tensor_table,
+    materialize_tensor_candidate,
+    stage_tensor_candidate_host,
+)
+from gbdt.models.ctr_value_table import dense_category_code, TCtrValueTable
+from gbdt.ctrs.ctr_binarization import (
+    BORDER_SELECTION_UNIFORM,
+    TBinarizationOptions,
+)
 from gbdt.options.overfitting_detector_options import (
     load_overfitting_detector_options,
 )
 from gbdt.overfitting_detector.overfitting_detector import od_type_name
 from gbdt.models.model_text import load_model_text
 from gbdt.train import (
+    TrainedModel,
     model_input_features,
     multiclass_probabilities,
     one_vs_all_probabilities,
@@ -76,6 +90,99 @@ from gbdt.train import (
     predict_multi_floats,
     train,
 )
+
+
+def gbdt_fit_two_level_feature_freq(
+    ctx: DeviceContext,
+    x: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    y: MutPointer[Float32, MutUntrackedOrigin],
+    sources: MutPointer[UInt32, MutUntrackedOrigin],
+    n_sources: Int,
+    learning_rate: Float32 = Float32(0.03),
+    l2_leaf_reg: Float32 = Float32(3.0),
+    random_seed: UInt64 = UInt64(0),
+) raises -> String:
+    """Explicit two-level FeatureFreq fit for dense categorical inputs.
+
+    Every raw column is a dense category code and remains a one-hot model
+    prefix column. At least two distinct source columns define the initial
+    combination tensor. This separate entry cannot alter ordinary GBDT fit.
+    """
+    if n_rows < 1 or n_features < 2 or n_sources < 2:
+        raise Error("two-level FeatureFreq fit needs rows and two sources")
+    var raw = List[Float32]()
+    raw.resize(n_rows * n_features, Float32(0.0))
+    memcpy(dest=raw.unsafe_ptr(), src=x, count=n_rows * n_features)
+    var target = List[Float32]()
+    target.resize(n_rows, Float32(0.0))
+    memcpy(dest=target.unsafe_ptr(), src=y, count=n_rows)
+    var source_ids = List[Int]()
+    var seen_source = List[Bool]()
+    seen_source.resize(n_features, False)
+    for i in range(n_sources):
+        var source = Int(sources.unsafe_load(i))
+        if source < 0 or source >= n_features or seen_source[source]:
+            raise Error("two-level FeatureFreq source is invalid or duplicated")
+        seen_source[source] = True
+        source_ids.append(source)
+
+    var columns = List[List[UInt32]]()
+    var folds = List[Int]()
+    var one_hot = List[Bool]()
+    var borders = List[List[Float32]]()
+    var flat_bins = List[UInt32]()
+    for f in range(n_features):
+        var col = List[UInt32]()
+        var max_code = -1
+        var seen_codes = List[Bool]()
+        for r in range(n_rows):
+            var code = dense_category_code(raw[f * n_rows + r], f, r)
+            if code > max_code:
+                max_code = code
+                seen_codes.resize(max_code + 1, False)
+            seen_codes[code] = True
+            col.append(UInt32(code))
+            flat_bins.append(UInt32(code))
+        if max_code < 1:
+            raise Error("two-level FeatureFreq raw column is constant")
+        for code in range(max_code + 1):
+            if not seen_codes[code]:
+                raise Error("two-level FeatureFreq categories must be dense")
+        columns.append(col^)
+        folds.append(max_code + 1)
+        one_hot.append(True)
+        var feature_borders = List[Float32]()
+        for code in range(max_code):
+            feature_borders.append(Float32(code) + Float32(0.5))
+        borders.append(feature_borders^)
+
+    var table = build_feature_freq_tensor_table(
+        raw, n_rows, n_features, source_ids^
+    )
+    var values = List[Float32]()
+    for r in range(n_rows):
+        values.append(table.value_for_row(raw, n_rows, r))
+    var grid = TBinarizationOptions(BORDER_SELECTION_UNIFORM, 3)
+    var candidate = materialize_tensor_candidate(table^, values^, grid)
+    var initial = stage_tensor_candidate_host(
+        columns, folds, one_hot, candidate^, fold_capacity=grid.border_count
+    )
+    var fitted = fit_two_level_feature_freq_tree(
+        ctx, initial, raw, target, flat_bins, columns, folds, one_hot,
+        borders, n_rows, n_features, grid,
+        learning_rate=learning_rate, l2_leaf_reg=l2_leaf_reg,
+        random_seed=random_seed,
+    )
+    var nan_treatment = List[Int]()
+    nan_treatment.resize(len(fitted.fold_counts), 0)
+    var trained = TrainedModel(
+        fitted.model.copy(), fitted.fold_counts.copy(), fitted.one_hot.copy(),
+        fitted.borders.copy(), nan_treatment^, List[Float64](), List[Float64](),
+        0, False, 0, List[TCtrValueTable](), fitted.registry.copy(),
+    )
+    return model_text(trained)
 
 #: `gbdt_predict_multi`'s transform, mirroring their `EPredictionType`
 #: (`libs/model/eval_processing.h:186-226`). `RAW` is their `RawFormulaVal`,
