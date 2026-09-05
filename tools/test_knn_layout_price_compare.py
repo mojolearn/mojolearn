@@ -52,6 +52,28 @@ def campaign(root):
 
 
 class LayoutEvidenceTests(unittest.TestCase):
+    def test_allocator_diagnostics_preserve_protocol_order(self):
+        warning = ("534 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] "
+                   "Warning: Unable to mbind memory (errno=1, base=0x336f80000000, nodemask=1)\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "runtime.log"
+            for original, parse in (
+                (check_fixture("both"), lambda p: parse_check(p, "both")),
+                (price_fixture(32, "both"), lambda p: parse_price(p, 32, "both")),
+            ):
+                path.write_text(original)
+                expected, _ = parse(path)
+                path.write_text(warning + original)
+                actual, _ = parse(path)
+                self.assertEqual(actual, expected)
+                for prefix in ("PRICE_UNKNOWN\n", "DISPATCH_UNKNOWN\n", "KNN PASS\n"):
+                    path.write_text(warning + prefix + original)
+                    with self.assertRaisesRegex(ValueError, "first protocol record"):
+                        parse(path)
+                path.write_text(warning + original + warning)
+                with self.assertRaises(ValueError):
+                    parse(path)
+
     def test_activation_order_and_completeness(self):
         original = check_fixture("both")
         cell = "LAYOUT_CELL 0 65 257 17 10 0 1065353216 0\n"

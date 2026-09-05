@@ -1279,6 +1279,20 @@ leg_require_file() {
     return 0
 }
 
+leg_layout_artifacts() {
+    if ! grep -qx 'layout_exit=0' "$1/leg.txt" 2>/dev/null; then
+        echo "  layout-only payload failed or did not finish; read layout-console.log"
+        return 1
+    fi
+    # Every child redirects output to its own campaign log. A successful
+    # controller console can therefore be empty, but it must be fetched.
+    if [ ! -f "$1/layout-console.log" ]; then
+        echo "  MISSING: $1/layout-console.log (layout-only console was not fetched)"
+        return 1
+    fi
+    return 0
+}
+
 leg_require_identical() {
     _log="$1"; _what="$2"
     if [ ! -f "$_log" ]; then
@@ -3816,6 +3830,35 @@ leg_rehearse() {
     echo "   dry run rather than described in a comment."
     echo
 
+    _layout_fixture="$TMPD/layout-artifact-fixture"
+    mkdir -p "$_layout_fixture"
+    printf 'layout_exit=0\n' > "$_layout_fixture/leg.txt"
+    : > "$_layout_fixture/layout-console.log"
+    if leg_layout_artifacts "$_layout_fixture"; then
+        rok "LAYOUT1 a fetched empty console with successful status is valid"
+    else
+        rbad "LAYOUT1 a fetched empty console with successful status is valid"
+    fi
+    rm "$_layout_fixture/layout-console.log"
+    if leg_layout_artifacts "$_layout_fixture" >/dev/null 2>&1; then
+        rbad "LAYOUT2 a missing console is refused"
+    else
+        rok "LAYOUT2 a missing console is refused"
+    fi
+    : > "$_layout_fixture/layout-console.log"
+    printf 'layout_exit=1\n' > "$_layout_fixture/leg.txt"
+    if leg_layout_artifacts "$_layout_fixture" >/dev/null 2>&1; then
+        rbad "LAYOUT3 a failed payload is refused even with a console"
+    else
+        rok "LAYOUT3 a failed payload is refused even with a console"
+    fi
+    rm "$_layout_fixture/leg.txt"
+    if leg_layout_artifacts "$_layout_fixture" >/dev/null 2>&1; then
+        rbad "LAYOUT4 a missing payload status is refused"
+    else
+        rok "LAYOUT4 a missing payload status is refused"
+    fi
+
     # -- A. argument validation ---------------------------------------------
     _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" walrus 2>&1) && _rc=0 || _rc=$?
     if [ "$_rc" = "2" ] && echo "$_out" | grep -q "exactly 'nvidia' or 'amd'"; then
@@ -4964,11 +5007,7 @@ if [ "$PAYLOAD" = "speed" ]; then
     leg_speed_artifacts || RED=1
 elif [ "$PAYLOAD" = "mamba" ]; then
     if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
-        if ! grep -qx 'layout_exit=0' "$OUT/remote/leg.txt" 2>/dev/null; then
-            echo "  layout-only payload failed or did not finish; read layout-console.log"
-            RED=1
-        fi
-        leg_require_file "$OUT/remote/layout-console.log" "layout-only console was not fetched" || RED=1
+        leg_layout_artifacts "$OUT/remote" || RED=1
     else
         leg_mamba_artifacts || RED=1
     fi

@@ -17,6 +17,7 @@ from knn_smallk_price_compare import QUERIES, ROUNDS, distribution, parse_log, r
 
 ARMS = {"baseline": (0, 0), "selector": (1, 0),
         "transpose": (0, 1), "both": (1, 1)}
+RECORD_PREFIXES = ("SMALLK_", "DISPATCH_", "LAYOUT_", "KNN", "PRICE_")
 SOURCE_FILES = (
     "tools/knn_layout_price_compare.py", "tools/knn_smallk_price_compare.py",
     "bench/knn_layout_dispatch_check.mojo", "bench/knn_layout_dispatch_price.mojo",
@@ -38,7 +39,12 @@ def flags(lines, arm, path):
                 "transpose", str(transpose)]
     require([line for line in lines if line[0].startswith("LAYOUT_FLAGS")] == [expected],
             f"{path}: missing, duplicate or incorrect LAYOUT_FLAGS")
-    require(lines[0] == expected, f"{path}: LAYOUT_FLAGS must be the first record")
+    # CUDA's allocator may emit diagnostics before main() prints the header.
+    # Activation must still precede every benchmark protocol record.
+    protocol = [line for line in lines if line[0].startswith(RECORD_PREFIXES)]
+    require(protocol and protocol[0] == expected,
+            f"{path}: LAYOUT_FLAGS must be the first protocol record")
+    return protocol
 
 
 def cell_bytes(line, index_bound, path, allow_negative=False):
@@ -78,10 +84,9 @@ def parse_check(path, arm):
     data = path.read_bytes()
     lines = [line.split() for line in data.decode("utf-8").splitlines() if line.strip()]
     require(lines, f"{path}: empty check log")
-    flags(lines, arm, path)
+    protocol = flags(lines, arm, path)
     # Ignore ordinary runtime diagnostics, never misspelled/extra protocol records.
-    reserved = ("SMALLK_", "DISPATCH_", "LAYOUT_", "KNN", "PRICE_")
-    records = [line for line in lines[1:] if line[0].startswith(reserved)]
+    records = protocol[1:]
     expected = iter(expected_check_records(ARMS[arm][0]))
     outputs = {"DISPATCH_CELL": bytearray(), "LAYOUT_CELL": bytearray()}
     for line in records:
@@ -117,11 +122,9 @@ def parse_price(path, queries, arm):
     # timing and complete output. Add four-arm activation plus strict cell order.
     lines = [line.split() for line in path.read_text().splitlines() if line.strip()]
     require(lines, f"{path}: empty price log")
-    flags(lines, arm, path)
+    protocol = flags(lines, arm, path)[1:]
     selector = ARMS[arm][0]
     cells, sample = parse_log(path, queries, "experimental" if selector else "legacy")
-    protocol = [line for line in lines[1:] if line[0].startswith(
-        ("SMALLK_", "PRICE_", "KNN", "LAYOUT_", "DISPATCH_"))]
     expected_kinds = ["SMALLK_PRICE", *(["PRICE_CELL"] * (queries * 10)), "PRICE_MS", "KNN"]
     require([line[0] for line in protocol] == expected_kinds,
             f"{path}: missing, extra or reordered pricing protocol records")
