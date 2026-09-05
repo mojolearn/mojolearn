@@ -9,12 +9,14 @@ from gbdt.models.tensor_ctr_value_table import (
     join_tensor_hash,
     insert_staged_tensor_candidate_device,
     materialize_tensor_candidate,
+    materialize_staged_tensor_cindex_device,
     parse_feature_freq_tensor_table,
     persist_ranked_tensor_winners,
     persist_synchronized_tensor_path,
     persist_winning_tensor_candidate,
     regenerate_feature_freq_after_winner,
     split_tensor_hash,
+    stage_next_feature_freq_after_winner,
     stage_tensor_candidate_host,
     TStagedTensorCandidate,
     TTensorCtrRegistry,
@@ -534,10 +536,12 @@ def main() raises:
     # A synchronized dynamic driver pins the ephemeral column capacity, so
     # regeneration rewrites only its bits and never invalidates histogram or
     # workspace sizing established before the tree loop.
-    var pinned_next = stage_tensor_candidate_host(
-        zero_columns, base_folds, List[Bool](), regenerated^,
-        fold_capacity=grid.border_count,
+    var pinned_next = stage_next_feature_freq_after_winner(
+        pinned_initial, splits[0], x, cindex, 6, 3,
+        zero_columns, base_folds, List[Bool](), grid, grid.border_count,
     )
+    if pinned_next.candidate.tensor_hash != regenerated.tensor_hash:
+        raise Error("production regeneration disagrees with direct oracle")
     ref initial_cf = pinned_initial.compressed.layout.features[
         pinned_initial.feature_id
     ]
@@ -556,19 +560,11 @@ def main() raises:
     # drained, then execute level two. The replacement invalidates parent
     # histograms, so this level must rebuild all live leaves; subtracting a
     # new-column child from an old-column parent is mathematically invalid.
-    var replacement_base = pinned_next.compressed.words.copy()
-    ref replacement_cf = pinned_next.compressed.layout.features[
-        pinned_next.feature_id
-    ]
-    var replacement_mask = replacement_cf.mask << replacement_cf.shift
-    for r in range(6):
-        var at = Int(replacement_cf.offset) * 6 + r
-        replacement_base[at] &= ~replacement_mask
-    var replacement_device = insert_staged_tensor_candidate_device(
-        ctx, pinned_next, replacement_base.copy()
+    var replacement_device = materialize_staged_tensor_cindex_device(
+        ctx, pinned_next
     )
-    var reference_replacement_device = insert_staged_tensor_candidate_device(
-        ctx, pinned_next, replacement_base^
+    var reference_replacement_device = materialize_staged_tensor_cindex_device(
+        ctx, pinned_next
     )
     sync_state.replace_active_cindex(ctx, replacement_device^)
     reference_state.replace_active_cindex(ctx, reference_replacement_device^)

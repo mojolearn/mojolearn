@@ -463,6 +463,20 @@ def insert_staged_tensor_candidate_device(
     return d_words^
 
 
+def materialize_staged_tensor_cindex_device(
+    ctx: DeviceContext, staged: TStagedTensorCandidate
+) raises -> DeviceBuffer[DType.uint32]:
+    """Upload the staged host reference as the exact searchable cindex."""
+    var base_words = staged.compressed.words.copy()
+    ref cf = staged.compressed.layout.features[staged.feature_id]
+    var shifted_mask = cf.mask << cf.shift
+    var n_rows = len(staged.candidate.bins)
+    for r in range(n_rows):
+        var at = Int(cf.offset) * n_rows + r
+        base_words[at] &= ~shifted_mask
+    return insert_staged_tensor_candidate_device(ctx, staged, base_words^)
+
+
 def materialize_tensor_candidate(
     var table: TFeatureFreqTensorTable,
     var learn_values: List[Float32],
@@ -1066,3 +1080,46 @@ def regenerate_feature_freq_after_winner(
             table, x_colmajor, extended_cindex, n_rows, row
         )
     return materialize_tensor_candidate(table^, values^, grid)
+
+
+def stage_next_feature_freq_after_winner(
+    staged: TStagedTensorCandidate,
+    winning_split: TBinarySplit,
+    x_colmajor: List[Float32],
+    base_quantized_cindex: List[UInt32],
+    n_rows: Int,
+    n_raw_features: Int,
+    base_columns: List[List[UInt32]],
+    base_fold_counts: List[Int],
+    base_one_hot: List[Bool],
+    grid: TBinarizationOptions,
+    fold_capacity: Int,
+) raises -> TStagedTensorCandidate:
+    """Materialize the exact level-two FeatureFreq candidate and cindex.
+
+    The accepted level-one column is appended to the host cindex before the
+    split-history table is built. This is deliberately bounded to one
+    regeneration: a deeper path needs versioned physical history columns,
+    because one reused slot cannot represent two prior tensor generations.
+    """
+    if n_rows < 1 or len(base_quantized_cindex) % n_rows != 0:
+        raise Error("tensor regeneration base cindex shape mismatch")
+    if len(base_columns) != len(base_fold_counts):
+        raise Error("tensor regeneration base layout mismatch")
+    for s in range(len(staged.candidate.table.splits)):
+        if Int(staged.candidate.table.splits[s].feature_id) == staged.feature_id:
+            raise Error(
+                "tensor regeneration beyond level two needs versioned"
+                " history columns"
+            )
+    var extended = base_quantized_cindex.copy()
+    for r in range(n_rows):
+        extended.append(staged.candidate.bins[r])
+    var candidate = regenerate_feature_freq_after_winner(
+        staged, winning_split, x_colmajor, extended^,
+        n_rows, n_raw_features, grid,
+    )
+    return stage_tensor_candidate_host(
+        base_columns, base_fold_counts, base_one_hot, candidate^,
+        fold_capacity=fold_capacity,
+    )
