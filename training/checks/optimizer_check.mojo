@@ -423,7 +423,6 @@ def opt_stage_tag(i: Int) raises -> String:
         + String(OPT_STAGE_COUNT)
     )
 
-
 def stage_index_of(tag: String) raises -> Int:
     for i in range(OPT_STAGE_COUNT):
         if opt_stage_tag(i) == tag:
@@ -3368,84 +3367,3 @@ def main() raises:
         " three vendors at leg 11 (144aa5b) -- **that measurement is the"
         " GEMM's, not this lane's**."
     )
-
-
-# ===========================================================================
-# OWED, AND WHY I DID NOT DO IT HERE
-#
-# This file and `optimizer_fixture.mojo` are the only two of this lane's
-# four that this agent was permitted to write for the optimizer half.
-# Everything below is a belief about ANOTHER file, recorded rather than
-# acted on. None of it has been verified by running anything.
-#
-# 1. **A COMPILE, AND THEN A RUN.** Nothing here has been through the front
-#    end. The likeliest failures are listed in this lane's report; the two
-#    most likely are the `DeviceOptState` struct holding eleven
-#    `DeviceBuffer` fields (a `mut` field passed as a `mut` argument at a
-#    call site is the borrow this repository has least experience with) and
-#    `List` implicit-copy sites.
-#
-# 2. **`adam.gwd` AND `adamw.pdec` HAVE NO PRODUCER.** DEVIATION 1477.
-#    Contract section 10 lists both. `AdamElement` carries `p`, `m`, `v`,
-#    `denom` and `q`; the decayed gradient and the decayed parameter are
-#    LOCALS. So the one seam where Adam and AdamW differ -- contract 7.4
-#    calls it "the entire difference between the two algorithms" -- has no
-#    stage of its own, and `OPT_SAB_ADAMW_AS_ADAM`'s first-moved stage is
-#    therefore `param.out`, which is an ABSORBED address rather than an
-#    aimed one. Adding two fields to `AdamElement` and two output pointers
-#    to `adam_update_kernel` fixes it and is an edit to two files this lane
-#    may not touch.
-#
-# 3. **THREE STAGES NEED `-D MOJOLEARN_OPT_RECORD`.** DEVIATION 1476.
-#    `adam.denom`, `adam.q` and `sgd.dir`. A build without it gates 20
-#    stages instead of 23 and TWO ARMS lose their first-stage address
-#    (`OPT_SAB_EPS_INSIDE_SQRT` and `OPT_SAB_MHAT_FORM`). This file REFUSES
-#    to evaluate those two without the define. Whether the define should
-#    simply be on by default is the owner's call; the argument against is
-#    in `OPT_RECORD_INTERMEDIATES`'s own docstring (the shipped step should
-#    perform no store it does not need) and it is a good one.
-#
-# 4. **THE DEVICE-SIDE REFUSAL.** DEVIATION 1478.
-#    `identical_optimizer_step` has no refusal;
-#    `identical_clip_grad_norm` refuses ONE scalar and only when clipping
-#    is on. `optimizer.mojo`'s own docstring calls this out and owes "a
-#    device-side refusal pass". Clause (f) MEASURES the gap.
-#
-# 5. **`OPT_TPB` IS A LITERAL.** DEVIATION 1479 and contract 16.6.
-#    `column_max_block_size(COLUMN_SPEC_BASELINE)` is 128, so a literal 256
-#    is REFUSED on the portable-floor column rather than resolved down to
-#    it -- and the geometry half of contract 11(b) needs one BUILD per
-#    geometry until there is a `kernel_matrix.mojo` row.
-#
-# 6. **A RUNNER FOR THE ARMS.** Twenty `-D` builds plus two gate-local
-#    runs. `tools/gemm_ladder.sh` is the shape and its line 71 is the scar
-#    the EXPECT variable answers. Owed as a shell file under `tools/`.
-#
-# 7. **A `pixi.toml` TASK.** `check-optimizer`, contract 16.2. Outside the
-#    write set.
-#
-# 8. **`IDENTITY_PATHS.md` ROWS** for the optimizer step and the
-#    global-norm clip, contract 16.3, in the file's PIN / REPLACE / REFUSE
-#    form. The row number must be taken at commit time because three lanes
-#    are writing rows concurrently.
-#
-# 9. **A PYTORCH SOURCE READ.** Contract 16.5 and 0.3's citation health
-#    warning: every PyTorch spelling in sections 3.1, 7.2, 7.3 and 7.4 is
-#    cited FROM MEMORY, which violates `[[read-their-source-against-ours]]`.
-#    Nothing in this gate can substitute for it -- the gate checks that our
-#    device matches our oracle, and if the oracle mis-cites the reference
-#    both halves are wrong together.
-#
-# 10. **A CORPUS.** Contract 16.10 names five adversarial cases. All five
-#     exist HERE as fixture cases (`adam_tiny_grad`, `adam_dead_v`,
-#     `sgd_damp_t1`, `clip_j5`, `adam_t1000`) and NONE exists as a record
-#     with an independently produced expected value. A fixture case says
-#     "run this shape"; a corpus record says "and this is the answer, from
-#     outside".
-#
-# 11. **`OPT_SAB_RECIP_MUL` HAS NO INERT CASE** and this file could not
-#     build one. It is a SMOKE TEST and the verdict prints the word.
-#
-# 12. **A `[[mojolearn-shared-checkout-parents]]` COMMIT** is owed by
-#     whoever commits these files. This lane does not touch git.
-# ===========================================================================
