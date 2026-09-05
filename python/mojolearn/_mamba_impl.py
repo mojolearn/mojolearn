@@ -7,13 +7,8 @@ PRIVATE MODULE. `Mamba1Block`, `Mamba2Block`, `Mamba3Block` and their
 state classes are re-exported from `mojolearn/__init__.py` and from
 `mojolearn.mamba`.
 
-WRITTEN 2026-09-01, closing `archive/evidence/mamba/FEATURE_PARITY.md`'s consumer table
-row "PyPI surface: NONE EXISTS" -- until this file, the certified Mamba-1
-block (profile `mojolearn.identical.mamba1.fp32.v1`, three-vendor
-identity card, IDENTITY_PATHS row 55) and the Mamba-2 block (profile
-`mojolearn.identical.mamba2.fp32.v1`, gated on the Apple M4, cross-vendor
-legs OWED) exported no Python symbol at all. The parity document's SHIP
-NOW dispositions are the scope authority for everything on this surface;
+The Python surface was introduced on 2026-09-01. The scope authority is
+`archive/evidence/mamba/FEATURE_PARITY.md` and the versioned contracts;
 its SHIP LATER rows (knobs for d_state/d_conv/expand/dt_rank, varlen,
 the multi-block backbone, generation) and REFUSE rows (fused-path knobs,
 bitwise torch-RNG initializers, tensor parallel, CUDA graphs) are not
@@ -58,40 +53,36 @@ are refused BY NAME and by flat index on the device path
 `mamba3_refuse_bad_inputs`, contract section 6), and a Python-side copy
 would make those refusals unreachable.
 
-THE NUMERIC TIER IS THE LOADED BINARY'S, SELECTED AT BUILD TIME OF THE
-.so. `numeric_mode=` on any of the classes (or the process default)
-picks which compiled set answers -- fast (no promise), deterministic
-(same bits run to run on one device), identical (also the same bits
-across vendors, where the lane's cards say so: THREE vendors for
-Mamba-1; for Mamba-2 the 2026-09-01 evening Apple-vs-RTX-4090 judge,
-26/26 stages identical, its contract's PHASE 6 record, and the
-Apple-vs-AMD hash diff RUN 2026-09-02 and MEASURED IDENTICAL on all 26
-recorded stages (Apple M4 at cd56e8ce against an AMD MI325X, gfx942, at
-cb8ea360, the compiled path unchanged across those commits) -- All three
-vendors now agree pairwise against Apple, but the three columns are NOT
-all at one commit -- the NVIDIA column is the 2026-09-01
-Apple-vs-RTX-4090 result at that day's commit and was NOT re-run at
-cd56e8ce, so a single-commit three-vendor card is still OWED, and an
-H100 leg at cd56e8ce is IN FLIGHT to close exactly that; Mamba-3 PASSES
-on Apple and its AMD
-column is RED as of 2026-09-02, gate (a) off by one ULP on 1,179 cells
-on an MI325X (gfx942), NVIDIA owed) -- and
-`_extension()` cross-checks the binary's own compile-time answer against
-the tier the package resolved, `_gp_impl.py`'s pattern, so a wrong-arm
-measurement cannot be correctly labelled by accident.
+THE NUMERIC TIER IS THE LOADED BINARY'S, SELECTED AT BUILD TIME.
+`numeric_mode=` selects fast, deterministic (repeatability on one device),
+or identical (cross-vendor identity within the certified profile and
+fixtures). `_extension()` checks the binary's compile-time mode against
+the requested tier.
 
-RUN LEDGER. The Mamba-1/Mamba-2 surface BUILT AND GATED 2026-09-01: all
-three tiers green through `tests/test_mamba_surface.py`, bitwise arms
-asserted under identical (`archive/evidence/mamba/FEATURE_PARITY.md`'s consumer-table
-PyPI row; one box, one vendor). `Mamba3Block`/`Mamba3State`, added
-later the same day, are BUILT AND GATED: green at `08a38a13`
-(2026-09-02) in all three tiers, bitwise-asserted, corpus arm added
-2026-09-03. ONE APPLE M4 -- the binding FAULTS on AMD in every tier
-(GPU memory access fault, rc 134), so no non-Apple claim may be made
-for this surface. The gate is
-`python/mojolearn/tests/test_mamba_surface.py`; the build is
-`bash bindings/build_mamba.sh` per tier, REBUILT before any run is
-believed.
+EVIDENCE SNAPSHOT, 2026-09-05. Native forward/backward certification and
+Python API qualification are separate. At source `718495cd`, Apple M4,
+NVIDIA RTX 4090 and AMD MI300X matched 54 native gradient tensors across
+five Mamba-1/2/3 cases; see
+`bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json`.
+The newer NVIDIA source/binding record at `b715b124` retained five native
+cases and 102 Python forward/state checks:
+`bench/results/e1g/2026-09-05_065820-nvidia-mamba/classification.json`.
+DigitalOcean AMD MI325X matched all 54 NVIDIA native gradient tensors at
+that same source; see
+`bench/results/e1/2026-09-05_111524-mojolearn-e2-amd/comparisons.json`.
+
+The AMD Python binding at that baseline aborted with a GPU memory fault
+(exit 134). The state-allocation fix `6dc93269` has a retained Apple
+IDENTICAL API result: 102 checks, zero failures; see
+`bench/results/mamba/2026-09-05-state-allocation-fix/metadata.json`.
+Durable AMD and NVIDIA API qualification of that fix remains pending;
+an AMD supplemental pass without retained artifacts is not a certificate.
+The released macOS 0.5.0 wheel predates this fix. These source results do
+not certify a Linux wheel. Python backward is not exposed.
+
+The API gate is `python/mojolearn/tests/test_mamba_surface.py`; build
+with `bash bindings/build_mamba.sh` for the selected numeric mode.
+
 """
 
 import math
@@ -325,9 +316,9 @@ class Mamba1Block(_MambaBase):
     """One Mamba-1 block on the GPU -- norm, mixer, residual
     (`MambaBlock.forward`, transformers modeling_mamba.py:505-530) --
     under profile `mojolearn.identical.mamba1.fp32.v1`
-    (`mamba/IDENTICAL_MAMBA_CONTRACT.md`; three-vendor identity card at
-    IDENTITY_PATHS row 55 for the LANE -- this Python path itself is
-    UNVERIFIED, RUN OWED until `test_mamba_surface.py` prints).
+    (`mamba/IDENTICAL_MAMBA_CONTRACT.md`). The module evidence snapshot
+    distinguishes native cross-vendor certificates from Python API checks;
+    the Python surface exposes forward and state continuation, not backward.
 
     WEIGHTS IN, AS GIVEN BITS. The constructor takes a dict keyed by the
     upstream parameter names (the corpus's names,
@@ -505,13 +496,11 @@ class Mamba2Block(_MambaBase):
     (`Mamba2Block.forward`, HF modeling_mamba2.py:617-631; mixer the
     non-mem-eff arm of mamba2.py:209-276) -- under profile
     `mojolearn.identical.mamba2.fp32.v1`
-    (`mamba/IDENTICAL_MAMBA2_CONTRACT.md`). The LANE is gated on the
-    Apple M4 (identical tier, the contract's RUN RECORD) and, since the
-    2026-09-01 evening judge, bit-identical Apple vs a rented RTX 4090
-    (26/26 stages, its PHASE 6 record; the AMD column is OWED, so no
-    three-vendor sentence exists and this class claims none). The
-    Python path printed green in all three tiers on 2026-09-01, one
-    box, one vendor (`test_mamba_surface.py`).
+    (`mamba/IDENTICAL_MAMBA2_CONTRACT.md`). Native certificates include
+    the five-case Mamba-1/2/3 backward evidence described in the module
+    snapshot. Python forward/state qualification of the state-allocation
+    fix is retained on Apple; NVIDIA and AMD requalification is pending.
+    Python backward is not exposed.
 
     WEIGHTS IN, AS GIVEN BITS, keyed by the corpus's names
     (`mamba/corpus/README.md`, Mamba-2 section). With d_inner =
@@ -810,11 +799,10 @@ class Mamba3Block(_MambaBase):
     (`Mamba3.forward`'s SISO arm, mamba_ssm mamba3.py:160-278, inside
     `Block.forward`'s non-fused arm, block.py:51-53) -- under profile
     `mojolearn.identical.mamba3.siso.fp32.v1`
-    (`mamba/IDENTICAL_MAMBA3_CONTRACT.md`). The LANE is gated on the
-    Apple M4 (identical tier, the contract's RUN RECORD, 2026-09-01);
-    there is NO cross-vendor card yet and this class claims none -- and
-    this Python path itself is UNVERIFIED, RUN OWED until
-    `test_mamba_surface.py` prints with the mamba3 arms in.
+    (`mamba/IDENTICAL_MAMBA3_CONTRACT.md`). The module evidence snapshot
+    includes native three-vendor backward certification and qualified Apple
+    Python forward/state checks. NVIDIA and AMD API requalification of
+    the state-allocation fix is pending. Python backward is not exposed.
 
     DELTAS FROM Mamba2Block, in one breath (contract section 0): NO conv
     (in_proj feeds the core directly; v is the RAW x split); NO dt clamp

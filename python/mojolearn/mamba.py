@@ -19,23 +19,25 @@ for byte). Prefill, continuation from a carried state, `initial_states`
 (Mamba-2) / `Input_States` (Mamba-3) and single-token decode all run
 through the certified Mojo entry points the lane gates run;
 `numeric_mode=` selects the fast / deterministic / identical tier at
-call time, per instance. The identity claims are the LANES': three
-vendors for Mamba-1; for Mamba-2, Apple + NVIDIA bit-identical and now
-Apple + AMD too, the Apple-vs-AMD hash diff having RUN 2026-09-02 and
-come back IDENTICAL on all 26 recorded stages (Apple M4 at cd56e8ce
-against an AMD MI325X, gfx942, at cb8ea360, with the compiled path
-unchanged across those commits) -- All three vendors now agree pairwise
-against Apple, but the three columns are NOT all at one commit -- the
-NVIDIA column is the 2026-09-01 Apple-vs-RTX-4090 result at that day's
-commit and was NOT re-run at cd56e8ce, so a single-commit three-vendor
-card is still OWED, and an H100 leg at cd56e8ce is IN FLIGHT to close
-exactly that; and for Mamba-3, Apple PASS with the AMD column RED as of 2026-09-02 --
-gate (a) failed on an MI325X (gfx942) by one ULP on 1,179 cells over
-four stages, NVIDIA owed
-(`mamba/IDENTICAL_MAMBA3_CONTRACT.md`'s 2026-09-02 RUN RECORD). The Mamba-1/2
-Python path printed green in all three tiers on 2026-09-01 (one box,
-one vendor); the Mamba-3 path is UNVERIFIED, RUN OWED until
-`tests/test_mamba_surface.py` prints with its arms in.
+call time, per instance. Python backward is not exposed.
+
+Native and Python evidence have separate scopes. At `718495cd`, Apple,
+NVIDIA and AMD matched 54 native backward gradient tensors across five
+Mamba-1/2/3 cases; see
+`bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json`.
+At `b715b124`, NVIDIA retained five native cases and 102 Python API
+checks; see `bench/results/e1g/2026-09-05_065820-nvidia-mamba/classification.json`.
+DigitalOcean AMD MI325X matched those 54 NVIDIA native tensors at the
+same source; see
+`bench/results/e1/2026-09-05_111524-mojolearn-e2-amd/comparisons.json`.
+The baseline AMD Python path faulted (exit 134). The state-allocation fix
+`6dc93269` passed 102 Apple IDENTICAL API checks, retained in
+`bench/results/mamba/2026-09-05-state-allocation-fix/metadata.json`;
+durable NVIDIA/AMD qualification of that fix is pending. A supplemental
+AMD pass whose artifacts were not retained does not close that gate.
+These are fixture-scoped source checks, not universal identity or Linux
+wheel certification. The released macOS 0.5.0 wheel predates the fix.
+
 
     import numpy as np
     from mojolearn.mamba import Mamba1Block

@@ -32,11 +32,12 @@ case "$VENDOR" in
   *) echo "vendor must be amd or nv"; exit 2 ;;
 esac
 
-api() { curl -s -H "Authorization: Bearer $TOK" "$@"; }
+api() { printf 'header = "Authorization: Bearer %s"\n' "$TOK" | curl -s --config - "$@"; }
 log() { echo "[$(date +%T) $VENDOR] $*"; }
 
 DROPLET_ID=""
 DEADMAN_PID=""
+DESTROY_CONFIRMED=0
 
 # FLUSH THE VOLUME BEFORE THE DEVICE GOES AWAY.
 #
@@ -68,23 +69,30 @@ destroy() {
     # leave a droplet behind (the leg-10 orphan)
     for id in $(api "$API/droplets?tag_name=e2&per_page=50" | python3 -c "import json,sys
 d=json.load(sys.stdin); print(' '.join(str(x['id']) for x in d.get('droplets',[]) if x['name']=='$NAME'))" 2>/dev/null); do
-      code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $TOK" "$API/droplets/$id")
+      code=$(api -o /dev/null -w '%{http_code}' -X DELETE "$API/droplets/$id")
       log "DELETE by-name droplet $id -> HTTP $code"
     done
     return 0
   fi
   for i in 1 2 3 4 5 6; do
-    code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
-      -H "Authorization: Bearer $TOK" "$API/droplets/$DROPLET_ID")
+    code=$(api --max-time 20 -o /dev/null -w '%{http_code}' -X DELETE "$API/droplets/$DROPLET_ID")
     log "DELETE droplet $DROPLET_ID -> HTTP $code"
     case "$code" in 204|404) break ;; esac
     sleep 10
   done
-  sleep 5
-  left=$(api "$API/droplets/$DROPLET_ID" | python3 -c \
-    "import json,sys; d=json.load(sys.stdin); print(d.get('droplet',{}).get('status','gone'))" 2>/dev/null)
-  log "post-destroy status: ${left:-gone}"
-  echo "destroyed $(date -u +%FT%TZ)" >> "$STATE"
+  # DELETE 204 acknowledges an asynchronous request. Only GET 404 proves
+  # absence; an empty/error response must not cancel the remaining guard.
+  for i in 1 2 3 4 5 6; do
+    code=$(api --max-time 10 -o /dev/null -w '%{http_code}' "$API/droplets/$DROPLET_ID")
+    log "post-destroy GET droplet $DROPLET_ID -> HTTP $code"
+    if [ "$code" = 404 ]; then
+      DESTROY_CONFIRMED=1
+      echo "destroyed $(date -u +%FT%TZ) verified_http_404" >> "$STATE"
+      break
+    fi
+    sleep 5
+  done
+  [ "$DESTROY_CONFIRMED" = 1 ] || log "destruction unconfirmed; leaving dead-man armed"
 }
 
 teardown() {
@@ -94,7 +102,7 @@ teardown() {
   # kill the wrapper AND its sleep child: killing only the wrapper leaves an
   # orphan `sleep` (harmless -- the DELETE after it dies with the wrapper --
   # but seven of them were found after the first E2 day)
-  if [ -n "$DEADMAN_PID" ]; then
+  if [ -n "$DEADMAN_PID" ] && [ "$DESTROY_CONFIRMED" = 1 ]; then
     pkill -P "$DEADMAN_PID" 2>/dev/null
     kill "$DEADMAN_PID" 2>/dev/null && log "dead-man timer cancelled"
   fi
