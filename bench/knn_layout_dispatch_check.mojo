@@ -16,7 +16,7 @@ than replaces candidate component cancellation/subnormal/transpose-bit gates.
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from std.memory import bitcast
-from bench.knn_smallk_dispatch_check import main as dispatch_main, _coordinate
+from bench.knn_smallk_dispatch_fixture import run_check, _coordinate
 from checks.numerics import numeric_mode_name
 from neighbors.estimator import knn_search
 from neighbors.impl.neighbors.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL, EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL
@@ -74,7 +74,7 @@ def main() raises:
     print("LAYOUT_FLAGS", "mode", numeric_mode_name(),
           "selector", Int(EXPERIMENTAL_SMALLK_IDENTICAL),
           "transpose", Int(EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL))
-    dispatch_main()
+    run_check()
     _metric_case(DIST_L2_EXPANDED)
     _metric_case(DIST_L2_SQRT_EXPANDED)
     _metric_case(DIST_L1)

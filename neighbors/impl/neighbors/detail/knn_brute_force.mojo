@@ -392,7 +392,7 @@ def tiled_brute_force_knn(
                               min((n_index + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ), 1),
                     block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
                 )
-                var transposed_ptr = transposed.unsafe_ptr()
+                var transposed_ptr = Optional(transposed.unsafe_ptr())
                 _tiled_brute_force_knn_impl(
                     ctx, queries, query_norm, index, index_norm, dist_tile, buf_val, buf_idx,
                     out_dist, out_idx, out_idx32, n_queries, n_index, n_features, k,
@@ -409,16 +409,17 @@ def tiled_brute_force_knn(
             # owner is released. No temporary sub-buffer or borrowed view.
             _ = transposed^
             return
-    var original_ptr = index.unsafe_ptr()
+    # An absent layout has no pointer and no second mutable alias of index.
+    var no_transpose = Optional[MutPointer[Float32, MutUntrackedOrigin]]()
     _tiled_brute_force_knn_impl(
         ctx, queries, query_norm, index, index_norm, dist_tile, buf_val, buf_idx,
         out_dist, out_idx, out_idx32, n_queries, n_index, n_features, k,
         query_tile, buf_len, is_sqrt, use_vendor_topk, metric, metric_arg,
-        original_ptr, False,
+        no_transpose, False,
     )
 
 
-def _tiled_brute_force_knn_impl(
+def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     ctx: DeviceContext,
     mut queries: DeviceBuffer[DType.float32],
     mut query_norm: DeviceBuffer[DType.float32],
@@ -440,7 +441,7 @@ def _tiled_brute_force_knn_impl(
     use_vendor_topk: Bool,
     metric: Int,
     metric_arg: Float32,
-    transposed_index: MutPointer[Float32, MutAnyOrigin],
+    transposed_index: Optional[MutPointer[Float32, transposed_origin]],
     use_transposed_index: Bool,
 ) raises:
     """Tile the QUERIES, keep the whole index resident, top-k per query row.
@@ -577,7 +578,7 @@ def _tiled_brute_force_knn_impl(
                         ctx.enqueue_function[transposed_index_distance_kernel](
                             dist_tile.unsafe_ptr(),
                             queries.unsafe_ptr().unsafe_offset(q * n_features),
-                            transposed_index,
+                            transposed_index.value(),
                             query_norm.unsafe_ptr().unsafe_offset(q),
                             index_norm.unsafe_ptr(),
                             Int32(rows), Int32(n_index), Int32(n_features),

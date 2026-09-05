@@ -45,7 +45,7 @@ taskset -pc "$cores" $$ > "$diag/knn-public-price-affinity.log" 2>&1
 printf 'commit=%s\ncpu_affinity=%s\nprice_budget_seconds=480\nscope=native-public-upload-search-download-synchronize\n' \
     "$commit" "$cores" > "$MOJOLEARN_SMALLK_PRICE_OUT/controller-metadata.txt"
 sha256sum tools/knn_public_price_do_diag.sh tools/knn_smallk_dispatch_price.sh \
-    bench/knn_smallk_dispatch_price.mojo pixi.toml pixi.lock \
+    bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_price_fixture.mojo pixi.toml pixi.lock \
     > "$MOJOLEARN_SMALLK_PRICE_OUT/payload-SHA256SUMS"
 
 # Serial child owns both builds and all 54 rotating invocations. Retain its

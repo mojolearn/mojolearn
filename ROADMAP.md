@@ -56,23 +56,37 @@ multiple seeds and parameter settings, alongside independent embedding-quality
 checks. Use RunPod for NVIDIA and **DigitalOcean for AMD**, with tests and
 measurements in the main lane only.
 
-Local follow-up now covers two 64x3 synthetic quality fixtures in all three
-installed-wheel modes, with independent trustworthiness and permutation
-controls. A second 16x3/3D stage profile repeats all 690 cells on Apple M4;
-its installed API gate pins the 48 final coordinates. These are local gates,
-not new remote certification. Run both profiles on matching-source NVIDIA
-and DigitalOcean AMD next; extend quality coverage to less regular datasets.
+The 0.6.0 source candidate now implements fitted-state `transform` and CSR
+graph storage for public fitting. Integrated fit/transform API checks passed
+in all three modes on Apple, NVIDIA and DigitalOcean AMD. Named held-out
+IDENTICAL inputs and embeddings also match between those source bindings
+and the exact installed macOS candidate; see the
+[held-out comparison](bench/results/wheels/2026-09-05-umap-060/cross-vendor-heldout.json).
+These fixture results do not establish large-dataset scalability.
 
-Then add fitted-state `transform` following the pinned cuML implementation:
-new-to-training k-NN, membership weights, weighted initialization from the
-training embedding, and layout optimization against the retained embedding.
-The current API intentionally refuses that operation. Quadratic graph storage
-also needs a sparse path before claiming large-dataset scalability.
+The exact macOS 0.6.0 candidate passed the Python 3.10–3.14 smoke matrix and
+additional installed fit/transform and held-out quality checks in all three
+modes. Its build-only workflow failed during artifact upload after the build
+and smoke checks passed; see the
+[candidate qualification](bench/results/wheels/2026-09-05-umap-060/README.md).
+Complete artifact delivery, publication and fresh Linux installed-wheel
+qualification next. Broaden quality fixtures and measure scalability separately.
+
+The latest k-NN work adds opt-in transposed distances alongside the opt-in
+small-k selector. Qualify baseline, selector-only, transpose-only and combined
+builds with the four-arm public driver before changing dispatch defaults.
+Earlier two-arm selector results do not qualify the new distance layout.
+The resumed dirty source passed all four IDENTICAL correctness arms on Apple
+M4: all 143,628 selected distance/index pairs matched exactly. See the
+[local qualification](bench/results/resume/2026-09-05-layout-local/results.json).
+This closes the local fixture comparison only; new-layout remote qualification
+and performance measurements remain pending.
 
 ## Now: release truth and artifact closure
 
-1. Complete the refreshed Linux wheel and installed-API gates on NVIDIA and
-   DigitalOcean AMD. The macOS 0.5.0 installed-wheel gate is complete.
+1. Complete 0.6.0 artifact delivery/publication and refreshed Linux wheel and
+   installed-API gates on NVIDIA and DigitalOcean AMD. The exact macOS 0.6.0
+   candidate's installed checks passed; its upload workflow failed.
 2. Stamp native artifacts with source/build identity and refuse stale
    artifacts at import or release time.
 3. Generate extension, public-surface, architecture, and certification tables
@@ -86,8 +100,8 @@ also needs a sparse path before claiming large-dataset scalability.
   surface has only been smoke-tested on one Apple M4; NVIDIA and AMD remain.
 - Close current NVIDIA legs for Holt-Winters, spectral clustering, TSA,
   Mamba 3, transformer bindings, and other recently exposed surfaces.
-- Localize and fix the recorded AMD `_mojolearn_mamba` binding memory fault
-  before making an AMD Python-surface claim.
+- Complete AMD installed-wheel Mamba qualification. The binding fix and newer
+  source forward/state API checks passed; source checks do not certify a wheel.
 - Add independent numerical references where cards currently prove stable
   bits without validating the calculus or accuracy, especially transformer
   backward and training/embedding paths.

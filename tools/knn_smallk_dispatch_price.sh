@@ -22,7 +22,10 @@ run() {
 : > "$OUT/status.tsv"
 run build-legacy pixi run mojo build -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . bench/knn_smallk_dispatch_price.mojo -o "$OUT/legacy"
 run build-experimental pixi run mojo build -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL=1 -I . bench/knn_smallk_dispatch_price.mojo -o "$OUT/experimental"
-sha256sum "$OUT/legacy" "$OUT/experimental" bench/knn_smallk_dispatch_price.mojo neighbors/impl/neighbors/detail/knn_brute_force.mojo neighbors/checks/select_smallk_identical_candidate.mojo > "$OUT/SHA256SUMS"
+sha256sum "$OUT/legacy" "$OUT/experimental" bench/knn_smallk_dispatch_price.mojo \
+    bench/knn_smallk_price_fixture.mojo \
+    neighbors/impl/neighbors/detail/knn_brute_force.mojo \
+    neighbors/checks/select_smallk_identical_candidate.mojo > "$OUT/SHA256SUMS"
 for queries in 32 128 1000; do
     for round in 0 1 2 3 4 5 6 7 8; do
         arms='legacy experimental'

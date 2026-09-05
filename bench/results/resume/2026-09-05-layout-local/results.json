@@ -1,0 +1,144 @@
+{
+  "status": "PASS",
+  "scope": "Apple local IDENTICAL four-arm public kNN correctness; no timing or remote qualification",
+  "created_utc": "2026-09-05T16:10:35.619652+00:00",
+  "commit": "323b7301a832c831cabfaaf71e014fdffb3ba26f",
+  "dirty_source": true,
+  "hardware": "Apple M4",
+  "source_sha256": {
+    "bench/knn_layout_dispatch_check.mojo": "60c909eaaea65b82dec7d1e495aa15a1e0ab99ef301739369adedc78d329b6d2",
+    "bench/knn_layout_dispatch_price.mojo": "a19e0d3b5a3a704adbb25075be34a89c30b2258617175d7dbe599805efb356fd",
+    "bench/knn_smallk_dispatch_check.mojo": "c9eb73305a12489a12c64a98323245ff015886d8b41335479941b7fc400a7155",
+    "bench/knn_smallk_dispatch_fixture.mojo": "236d4e48c26b0077f3413878cdb917ff33f1df678f2dc48a7642c28ea9938d49",
+    "bench/knn_smallk_dispatch_price.mojo": "3cac34ba0a93522f9f2990bc91b56320dffc75779c7e8b90fd0aae79dcc0637d",
+    "bench/knn_smallk_price_fixture.mojo": "95e1b03feccf570419d3845826eeac73892ef7fb4f7b0e7a527e8ee61ab7dc47",
+    "neighbors/checks/select_smallk_identical_candidate.mojo": "51bfaa82bfb5de25ff360d50d7ee8eb79456603a23b5b37d10fabf236a9663c5",
+    "neighbors/checks/transposed_index_distance_candidate.mojo": "550bf07614190841000786afade7fe3ca68e863b607a94eb1607ce44b274754c",
+    "neighbors/impl/neighbors/detail/knn_brute_force.mojo": "a67dff937fe62f2f3466e1b6e9890793f9885775d0884ababc981d340eb9a891",
+    "tools/e2_remote_leg.sh": "0fd26ddf389d9f2c68df643151abc2fbeb898ce049342052631ba31813beb54a",
+    "tools/gemm_remote_leg.sh": "4ca53b9fda2d2effb6e302597035d53187f77d0e6f095f4dc06cc0d2819d9f80",
+    "tools/knn_layout_dispatch_price.sh": "6e7cc62d26d91401707fef2281e3e53ebe416b3957e17caaa094d7cc6e7ea7d4",
+    "tools/knn_layout_price_compare.py": "8893e037772e25e28b39e049355ffc0609e0cc1ae1e267f3683678088b639ecc",
+    "tools/knn_public_price_do_diag.sh": "5fdafd654c99b1ad0b905dac5a07aed78b57bcbdf44047244f321c2b9482c00f",
+    "tools/knn_smallk_dispatch_price.sh": "ae1122133498a241e8d164ea6a64195d45aecf9ee9cdab52a8c7c41e988757bd",
+    "tools/knn_smallk_price_compare.py": "993d5ac34b267b0d4942bddb0e7c2a97cb8824272558fdf1ff8bb14b9552061e"
+  },
+  "arms": {
+    "baseline": {
+      "status": "PASS",
+      "outputs": {
+        "DISPATCH_CELL": {
+          "pairs": 133348,
+          "sha256": "513174452587e1d4d19d76c557eadf311bd25a17ea7c568cfc68759742de668a"
+        },
+        "LAYOUT_CELL": {
+          "pairs": 10280,
+          "sha256": "3f5b9f05262c7e69b16c45a0d1006c575532743fc22e29c9fc794d9c37dbe576"
+        }
+      },
+      "logs": {
+        "build": {
+          "file": "baseline-build.log.gz",
+          "uncompressed_sha256": "6d7841125f6cb01bb6b322a7d0eaaa903ca48faa654a163f49487998c9ae6789"
+        },
+        "check": {
+          "file": "baseline-check.log",
+          "uncompressed_sha256": "9856c7347ba59afc30895592e81a1c0817e5ab984515a3d06df4a1e5ae9e16f8"
+        }
+      },
+      "price_build": {
+        "status": "PASS",
+        "file": "baseline-price-build.log.gz",
+        "uncompressed_sha256": "7b0f7fe39de70f220538a846473b78993ed8e5a37d451335efca7cb072ce93b8"
+      }
+    },
+    "selector": {
+      "status": "PASS",
+      "outputs": {
+        "DISPATCH_CELL": {
+          "pairs": 133348,
+          "sha256": "513174452587e1d4d19d76c557eadf311bd25a17ea7c568cfc68759742de668a"
+        },
+        "LAYOUT_CELL": {
+          "pairs": 10280,
+          "sha256": "3f5b9f05262c7e69b16c45a0d1006c575532743fc22e29c9fc794d9c37dbe576"
+        }
+      },
+      "logs": {
+        "build": {
+          "file": "selector-build.log.gz",
+          "uncompressed_sha256": "6d7841125f6cb01bb6b322a7d0eaaa903ca48faa654a163f49487998c9ae6789"
+        },
+        "check": {
+          "file": "selector-check.log",
+          "uncompressed_sha256": "b55751db21cbe03c008c6c0f58eed5d1c2a237a0164d704acff1bca9d338b9b0"
+        }
+      },
+      "price_build": {
+        "status": "PASS",
+        "file": "selector-price-build.log.gz",
+        "uncompressed_sha256": "7b0f7fe39de70f220538a846473b78993ed8e5a37d451335efca7cb072ce93b8"
+      }
+    },
+    "transpose": {
+      "status": "PASS",
+      "outputs": {
+        "DISPATCH_CELL": {
+          "pairs": 133348,
+          "sha256": "513174452587e1d4d19d76c557eadf311bd25a17ea7c568cfc68759742de668a"
+        },
+        "LAYOUT_CELL": {
+          "pairs": 10280,
+          "sha256": "3f5b9f05262c7e69b16c45a0d1006c575532743fc22e29c9fc794d9c37dbe576"
+        }
+      },
+      "logs": {
+        "build": {
+          "file": "transpose-build.log.gz",
+          "uncompressed_sha256": "6d7841125f6cb01bb6b322a7d0eaaa903ca48faa654a163f49487998c9ae6789"
+        },
+        "check": {
+          "file": "transpose-check.log",
+          "uncompressed_sha256": "efaf0cb9707bc1fc578c3871921fa7922d583f202a4ddd2733acc62bf1825fd3"
+        }
+      },
+      "price_build": {
+        "status": "PASS",
+        "file": "transpose-price-build.log.gz",
+        "uncompressed_sha256": "7b0f7fe39de70f220538a846473b78993ed8e5a37d451335efca7cb072ce93b8"
+      }
+    },
+    "both": {
+      "status": "PASS",
+      "outputs": {
+        "DISPATCH_CELL": {
+          "pairs": 133348,
+          "sha256": "513174452587e1d4d19d76c557eadf311bd25a17ea7c568cfc68759742de668a"
+        },
+        "LAYOUT_CELL": {
+          "pairs": 10280,
+          "sha256": "3f5b9f05262c7e69b16c45a0d1006c575532743fc22e29c9fc794d9c37dbe576"
+        }
+      },
+      "logs": {
+        "build": {
+          "file": "both-build.log.gz",
+          "uncompressed_sha256": "6d7841125f6cb01bb6b322a7d0eaaa903ca48faa654a163f49487998c9ae6789"
+        },
+        "check": {
+          "file": "both-check.log",
+          "uncompressed_sha256": "3df89047de86a928b914448cd3c60f1ef82092217c7ce029052e774510708287"
+        }
+      },
+      "price_build": {
+        "status": "PASS",
+        "file": "both-price-build.log.gz",
+        "uncompressed_sha256": "7b0f7fe39de70f220538a846473b78993ed8e5a37d451335efca7cb072ce93b8"
+      }
+    }
+  },
+  "parser_tests": {
+    "passed": 7
+  },
+  "fixture_extraction": "Both fixtures equal their HEAD driver sources with only main renamed."
+}

@@ -35,6 +35,7 @@ sha256sum "$OUT"/check-baseline "$OUT"/check-selector "$OUT"/check-transpose "$O
     "$OUT"/price-baseline "$OUT"/price-selector "$OUT"/price-transpose "$OUT"/price-both \
     bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo \
     bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo \
+    bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo \
     neighbors/impl/neighbors/detail/knn_brute_force.mojo \
     neighbors/checks/transposed_index_distance_candidate.mojo \
     neighbors/checks/select_smallk_identical_candidate.mojo > "$OUT/SHA256SUMS"
