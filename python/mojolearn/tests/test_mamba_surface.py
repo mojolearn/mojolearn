@@ -29,18 +29,10 @@ atol 1e-6) -- a TOLERANCE anchor, per that README: the bitwise oracle is
 the lane's, and this file makes no cross-vendor claim. The corpus lives
 in the repository, not the wheel, so this gate runs IN-REPO; a missing
 Mamba-1/2 corpus is a FAILURE naming the path, never a skip
-([[not-applicable-is-not-a-pass]]). MAMBA-3 HAS NO COMMITTED CORPUS YET
-(the fixture table landed first, `mamba3_fixture.mojo`'s header;
-`mamba3_check.mojo`'s gate (g) refuses by name until the corpus lane
-generates `mamba/corpus/mamba3/`), so its tolerance arm is a RECORDED
-DEBT below: the row passes as "[OWED]" while the directory is absent
-and FAILS the moment the directory appears without the comparison being
-wired, so the debt cannot rot into a silent skip. The Mamba-3 bitwise
-arms need no external bytes: they compare the surface against ITSELF
-through the binding -- decode against prefill, split prefill against
-whole, the same continuation twice -- exactly the mamba2 arms' shape,
-on fixture-scale hashed-style inputs (the ranges
-`mamba3_fixture.mojo`'s scale note documents).
+([[not-applicable-is-not-a-pass]]). All three families require their independent corpus cases; a missing
+Mamba-3 case fails just as a missing Mamba-1/2 case does. Mamba-3 also
+checks decode against prefill, split prefill against whole, and repeated
+continuation through the binding on fixture-scale inputs.
 
 WHAT IS ASSERTED AND WHAT IS REPORTED. Under `identical` the bitwise
 arms -- decode == prefill per token, and split prefill (L-1 tokens then
@@ -50,10 +42,10 @@ under `fast` they are REPORTED, per [[fast-is-not-identical]]. The
 corpus tolerances, the shapes, the state bookkeeping and every refusal
 are asserted in every tier.
 
-RUN LEDGER. The Mamba-1/2 arms PRINTED GREEN in all three tiers on
-2026-09-01 (one box, one vendor; `archive/evidence/mamba/FEATURE_PARITY.md`'s PyPI row).
-The Mamba-3 arms have never run: UNVERIFIED, RUN OWED, per tier, with
-the binding REBUILT first.
+RUN LEDGER. The macOS 0.5.0 installed-wheel surface passed for all three
+families and numeric modes. Current remote source-binding results belong in
+the dated result directories and SUPPORT_MATRIX.md. This suite does not
+expose or certify Python backward; native backward has a separate certificate.
 
 HOW TO RUN IT
 -------------
@@ -718,18 +710,17 @@ def main(out=sys.stdout):
     if not assert_bits:
         out.write(
             "test_mamba_surface: the %s arms passed. The corpus forwards\n"
-            "(Mamba-1/2; the Mamba-3 corpus arm is a recorded debt), the\n"
+            "(Mamba-1/2/3), the\n"
             "shapes, the state bookkeeping and every refusal hold.\n"
-            "THE BITWISE ARMS WERE REPORTED, NOT ASSERTED: this tier\n"
-            "promises speed only. Re-run under\n"
+            "THE DECODE/PREFILL BITWISE ARMS WERE REPORTED, NOT ASSERTED.\n"
+            "Re-run under\n"
             "MOJOLEARN_NUMERIC_MODE=identical for the asserted form.\n"
             % mode)
         return 0
     out.write(
-        "test_mamba_surface: GREEN. Mamba-1 and Mamba-2 reproduce the\n"
+        "test_mamba_surface: GREEN. Mamba-1/2/3 reproduce the\n"
         "committed corpus at its calibrated tolerance through the Python\n"
-        "surface (the Mamba-3 corpus arm is a recorded debt until\n"
-        "mamba/corpus/mamba3 is generated), decode equals prefill bit\n"
+        "surface; decode equals prefill bit\n"
         "for bit per token through this path for all three blocks --\n"
         "Mamba-3 across the Q=64 chunk seal included -- a split prefill\n"
         "resumes bit for bit through the explicit state, a repeated\n"

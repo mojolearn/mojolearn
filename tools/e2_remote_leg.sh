@@ -410,8 +410,24 @@ fi
 
 if [ "$CLONE_OK" != 1 ]; then
   log "archive $COMMIT (git archive, bench/results excluded)"
-  git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' \
-    | gzip > "$BUNDLE" || { log "archive failed"; exit 6; }
+  if [ "${E2_SOURCE_PROFILE:-}" = "umap-mamba" ]; then
+    # Match the bounded RunPod certificate source, plus the DO bootstrap.
+    # No old result trees or generated corpus payloads cross the network.
+    git -C "$REPO" archive --format=tar "$COMMIT" -- \
+      .gitattributes pixi.toml pixi.lock umap neighbors spectral core metrics cluster \
+      checks bindings python gemm/__init__.mojo gemm/checks \
+      mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py \
+      tools/mamba_backward_certify.sh tools/mamba_backward_identity.py \
+      tools/mamba_gradient_oracle.py tools/with_identical_mode.sh \
+      tools/with_build_lock.sh tools/umap_identity_compare.py \
+      tools/umap_mamba_followup.sh tools/umap_quality_check.py \
+      tools/umap_mamba_do_diag.sh tools/e1_bootstrap.sh \
+      bench/external/record_environment.sh | gzip > "$BUNDLE" \
+      || { log "bounded archive failed"; exit 6; }
+  else
+    git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' \
+      | gzip > "$BUNDLE" || { log "archive failed"; exit 6; }
+  fi
   SRC_SHA=$( { shasum -a 256 "$BUNDLE" 2>/dev/null || sha256sum "$BUNDLE"; } | awk '{print $1}' )
   log "  archive $(du -h "$BUNDLE" | awk '{print $1}'), sha256 ${SRC_SHA:0:16}"
   # THE BUNDLE COPY RETRIES. A box answers `echo SSH-OK` before its sshd is
