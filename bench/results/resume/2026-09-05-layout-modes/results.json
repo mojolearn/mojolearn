@@ -1,0 +1,37 @@
+{
+  "status": "PASS",
+  "commit": "fbce61037eb97be86c5c99a4276b689e9087b120",
+  "dirty_source": true,
+  "hardware": "Apple M4",
+  "scope": "FAST and DETERMINISTIC experiment isolation and public estimator checks; local Apple only",
+  "source_sha256": {
+    "bench/knn_layout_mode_check.mojo": "0aad45c0ff7a4628d87cd110ecadea2776cf902aeef0382da82c2b4528ca0977",
+    "tools/gemm_remote_leg.sh": "473ae4cb4f37d81810a1df9da74b804bd830122737e634f685057b8d20fd20f8",
+    "neighbors/impl/neighbors/detail/knn_brute_force.mojo": "a67dff937fe62f2f3466e1b6e9890793f9885775d0884ababc981d340eb9a891",
+    "neighbors/checks/estimator_check.mojo": "daa18470a01af4a88de91f5dc5736111203c5d0334cbb51828f9f5f6310bb049",
+    "checks/numerics.mojo": "efb9b91c00b42da759fe661c7e361882ee290e6d67441667df53e544e3be234f"
+  },
+  "checks": {
+    "fast-baseline": {
+      "status": "PASS",
+      "output_sha256": "731541136945e636617cc2a0860f1c3009a48c873dd56470b25625beae1ca0cf"
+    },
+    "fast-armed": {
+      "status": "PASS",
+      "output_sha256": "731541136945e636617cc2a0860f1c3009a48c873dd56470b25625beae1ca0cf"
+    },
+    "deterministic-baseline": {
+      "status": "PASS",
+      "output_sha256": "f0891768ccfa2b34381d06fb9600271d9e05eb76ce9f19d05293a536222834ac"
+    },
+    "deterministic-armed": {
+      "status": "PASS",
+      "output_sha256": "f0891768ccfa2b34381d06fb9600271d9e05eb76ce9f19d05293a536222834ac"
+    }
+  },
+  "within_mode_baseline_vs_armed_log_equality": "PASS",
+  "identical_mode_refusal": "PASS",
+  "controller_rehearsal": "PASS; no rental",
+  "source_equivalent_commit": "75319203",
+  "commit_note": "The tested parent fbce6103 was amended as 75319203 solely to store correctness logs as plain text for Git delta compression; tested source files are unchanged."
+}

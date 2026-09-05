@@ -4879,7 +4879,9 @@ if [ "$MODE" = "dry" ]; then
     echo
     echo "   the command:"
     echo "     export RUNPOD_API_KEY=...   # or MOJOLEARN_RUNPOD_KEY_FILE"
-    if [ "$PAYLOAD" = "phase8" ]; then
+    if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
+    echo "     MOJOLEARN_KNN_LAYOUT_ONLY=1 tools/gemm_remote_leg.sh $VENDOR --payload mamba --source-ref $COMMIT --rent --minutes $MINUTES --work-timeout $WORK_TIMEOUT"
+    elif [ "$PAYLOAD" = "phase8" ]; then
     echo "     tools/gemm_remote_leg.sh $VENDOR --payload phase8 --rent --minutes $MINUTES"
     elif [ "$PAYLOAD" = "mamba" ]; then
     if [ -n "$SOURCE_REF" ]; then

@@ -81,6 +81,11 @@ M4: all 143,628 selected distance/index pairs matched exactly. See the
 [local qualification](bench/results/resume/2026-09-05-layout-local/results.json).
 This closes the local fixture comparison only; new-layout remote qualification
 and performance measurements remain pending.
+The separate [mode-isolation gate](bench/results/resume/2026-09-05-layout-modes/results.json)
+passed on Apple M4 in FAST and DETERMINISTIC, with neither and both
+experimental defines: both effective flags stayed disabled, and public
+host-reference, alternate-method and query-tile checks passed. The guarded
+NVIDIA layout controller also passed its dry run; no remote hardware ran.
 
 ## Now: release truth and artifact closure
 
