@@ -1,0 +1,532 @@
+{
+  "status": "PASS",
+  "primary": {
+    "directory": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1g/2026-09-05_103918-nvidia-mamba/remote/followup/knn-public-price",
+    "status": "PASS",
+    "log_count": 54,
+    "scope": "native-public-upload-search-download-synchronize",
+    "quartile_method": "inclusive linear interpolation",
+    "ratio_direction": "legacy milliseconds / experimental milliseconds; above 1 favors experimental",
+    "shapes": {
+      "32": {
+        "selected_pairs": 320,
+        "output_sha256": "092ad56dd84ba1fa66a167e0c9318fb155b4f382042d285b7d3cf9f0b1b6ef33",
+        "samples": {
+          "legacy": [
+            {
+              "round": 0,
+              "milliseconds": 10.803166,
+              "used_tile": 32,
+              "log": "q32-r0-legacy.log",
+              "sha256": "bec7e75f68938cbb5dff7a037c9d2e094785f1032c06248e2088c59c77fb3775"
+            },
+            {
+              "round": 1,
+              "milliseconds": 10.29866,
+              "used_tile": 32,
+              "log": "q32-r1-legacy.log",
+              "sha256": "0b6374cd65d9ae3f71f3fc78f36600c02c9e1ed1fdaa259487cba317fe84a0d7"
+            },
+            {
+              "round": 2,
+              "milliseconds": 10.493016,
+              "used_tile": 32,
+              "log": "q32-r2-legacy.log",
+              "sha256": "ea3c457890dbe11a246f6b807edb7d89a6ec238f7a2801f75697cce7df2164c9"
+            },
+            {
+              "round": 3,
+              "milliseconds": 10.130814,
+              "used_tile": 32,
+              "log": "q32-r3-legacy.log",
+              "sha256": "bacd3912f55c876ee809ed726e5bcbd8de91511829a68c42bbbb88a837ccc00b"
+            },
+            {
+              "round": 4,
+              "milliseconds": 11.412264,
+              "used_tile": 32,
+              "log": "q32-r4-legacy.log",
+              "sha256": "bb8243a6ecc17cef3e69921319040bbb22e2391b75a3df186b5af671bdb2084c"
+            },
+            {
+              "round": 5,
+              "milliseconds": 15.384928,
+              "used_tile": 32,
+              "log": "q32-r5-legacy.log",
+              "sha256": "1fc30364a527c83532f39e2ec955c01fc4efcc5a888804c6ac1a0e927ef95b9a"
+            },
+            {
+              "round": 6,
+              "milliseconds": 15.229744,
+              "used_tile": 32,
+              "log": "q32-r6-legacy.log",
+              "sha256": "b43f14a03d0d758ca34370aa2bda4c8820b363e8dddde75b2bc22c78ed1a6b7b"
+            },
+            {
+              "round": 7,
+              "milliseconds": 9.779293,
+              "used_tile": 32,
+              "log": "q32-r7-legacy.log",
+              "sha256": "fcb45dad529332c4673bad654ef83da20e3030604e082b2018a7bfb3c47c7b07"
+            },
+            {
+              "round": 8,
+              "milliseconds": 11.474496,
+              "used_tile": 32,
+              "log": "q32-r8-legacy.log",
+              "sha256": "9a9ca80acef167bd3de44cd6b0b582a3132aeacb3731f878f06db22c6ab9b9a5"
+            }
+          ],
+          "experimental": [
+            {
+              "round": 0,
+              "milliseconds": 3.899041,
+              "used_tile": 32,
+              "log": "q32-r0-experimental.log",
+              "sha256": "1f8201180a55b81bacf1030eea55f60df08ce282b7e27cdee813ae2f44054564"
+            },
+            {
+              "round": 1,
+              "milliseconds": 3.448207,
+              "used_tile": 32,
+              "log": "q32-r1-experimental.log",
+              "sha256": "f61ba98e26914b08a8c078cfd549e753e3651d8cd23b3a662e632719fb185485"
+            },
+            {
+              "round": 2,
+              "milliseconds": 3.495199,
+              "used_tile": 32,
+              "log": "q32-r2-experimental.log",
+              "sha256": "4641a582da590cbe7aeea831d43c9a827f19918df74e00fbadd2e338f3c2d71d"
+            },
+            {
+              "round": 3,
+              "milliseconds": 3.600512,
+              "used_tile": 32,
+              "log": "q32-r3-experimental.log",
+              "sha256": "534357d5597629e514f5a94b7a4164d268715ed9e6be71f48bc9bd644c3b245a"
+            },
+            {
+              "round": 4,
+              "milliseconds": 3.724046,
+              "used_tile": 32,
+              "log": "q32-r4-experimental.log",
+              "sha256": "83ff134bdc4485b627a13f612465317eb01ee5d22590b5a0842e590c807f5199"
+            },
+            {
+              "round": 5,
+              "milliseconds": 3.362204,
+              "used_tile": 32,
+              "log": "q32-r5-experimental.log",
+              "sha256": "68468ead344a185c611b17ef79bac507bf3ed32ff29d33e29e1c2415d9e952e2"
+            },
+            {
+              "round": 6,
+              "milliseconds": 3.459278,
+              "used_tile": 32,
+              "log": "q32-r6-experimental.log",
+              "sha256": "ad4e31c61d54f603ffefbb6628797f52adf86f9644ae5b84eb4b7921ade7d631"
+            },
+            {
+              "round": 7,
+              "milliseconds": 3.644193,
+              "used_tile": 32,
+              "log": "q32-r7-experimental.log",
+              "sha256": "b16098c683ba82476ccc7c8fac9a0fb264eef81c055bb1a10dbbe18348cbc5f9"
+            },
+            {
+              "round": 8,
+              "milliseconds": 3.881961,
+              "used_tile": 32,
+              "log": "q32-r8-experimental.log",
+              "sha256": "3fb0b5f0b8ede11277dab35c7447491c32d63473c907d05c8f01a0c89a565708"
+            }
+          ]
+        },
+        "milliseconds": {
+          "legacy": {
+            "median": 10.803166,
+            "q1": 10.29866,
+            "q3": 11.474496,
+            "iqr": 1.1758360000000003,
+            "minimum": 9.779293,
+            "maximum": 15.384928
+          },
+          "experimental": {
+            "median": 3.600512,
+            "q1": 3.459278,
+            "q3": 3.724046,
+            "iqr": 0.2647680000000001,
+            "minimum": 3.362204,
+            "maximum": 3.899041
+          }
+        },
+        "paired_legacy_over_experimental": {
+          "raw": [
+            2.770723877999744,
+            2.986671043820745,
+            3.002122625922015,
+            2.8137148272245724,
+            3.0644798694752966,
+            4.575846081915315,
+            4.40257880401633,
+            2.683527738514398,
+            2.9558504065342235
+          ],
+          "median": 2.986671043820745,
+          "q1": 2.8137148272245724,
+          "q3": 3.0644798694752966,
+          "iqr": 0.25076504225072416,
+          "minimum": 2.683527738514398,
+          "maximum": 4.575846081915315
+        }
+      },
+      "128": {
+        "selected_pairs": 1280,
+        "output_sha256": "68cefa4c97710a4b881e548f51bff31d13d7acaf106336ff7989b3fb4bb8833b",
+        "samples": {
+          "legacy": [
+            {
+              "round": 0,
+              "milliseconds": 39.732395,
+              "used_tile": 128,
+              "log": "q128-r0-legacy.log",
+              "sha256": "c63fe8dc311c208d092f9d77741a5dd64d4687cab03d7ae9227831f938ed5672"
+            },
+            {
+              "round": 1,
+              "milliseconds": 46.156614,
+              "used_tile": 128,
+              "log": "q128-r1-legacy.log",
+              "sha256": "40552a1a8ee5f94833dcecfadcc88a060f948b40efc79deb3fa910db9a818969"
+            },
+            {
+              "round": 2,
+              "milliseconds": 27.01421,
+              "used_tile": 128,
+              "log": "q128-r2-legacy.log",
+              "sha256": "24e6f14188f715b3ce862dc789c784021e1abab566827385d4075b88b559b5d4"
+            },
+            {
+              "round": 3,
+              "milliseconds": 34.551644,
+              "used_tile": 128,
+              "log": "q128-r3-legacy.log",
+              "sha256": "c515fde703d04c11d2884ec15cf1c161743ed0ff9ca599f34403570621247e21"
+            },
+            {
+              "round": 4,
+              "milliseconds": 25.981057,
+              "used_tile": 128,
+              "log": "q128-r4-legacy.log",
+              "sha256": "f715ac2dab84943c15896a88013766e7b2887c7e610bc3b05ff8e6b38ce78dfa"
+            },
+            {
+              "round": 5,
+              "milliseconds": 43.992297,
+              "used_tile": 128,
+              "log": "q128-r5-legacy.log",
+              "sha256": "1e17d989ed9e3723bc5b916d20180fa98f89400ce7de9607762c8ea7776f44de"
+            },
+            {
+              "round": 6,
+              "milliseconds": 29.958941,
+              "used_tile": 128,
+              "log": "q128-r6-legacy.log",
+              "sha256": "98032a13d451b500349ea21b110618ac986935d7a118a9557c3d16ea3f9bc14d"
+            },
+            {
+              "round": 7,
+              "milliseconds": 33.205752,
+              "used_tile": 128,
+              "log": "q128-r7-legacy.log",
+              "sha256": "dd5d0e9786c020fbe79c73c0e9528877748b85594c04d156d3f28161720007df"
+            },
+            {
+              "round": 8,
+              "milliseconds": 30.717262,
+              "used_tile": 128,
+              "log": "q128-r8-legacy.log",
+              "sha256": "6d584a1054b9f1d59f4a0f4f4f8c3df5773437898e2feec4f2f2580f2bb231c0"
+            }
+          ],
+          "experimental": [
+            {
+              "round": 0,
+              "milliseconds": 5.529892,
+              "used_tile": 128,
+              "log": "q128-r0-experimental.log",
+              "sha256": "33fbf7ab60af793be2dca8a751a4a1703db70c2ef948a309bcdf92a0c2ba0a18"
+            },
+            {
+              "round": 1,
+              "milliseconds": 5.540003,
+              "used_tile": 128,
+              "log": "q128-r1-experimental.log",
+              "sha256": "85d606bf130e35fa8a73ceff19a12f1a48fb7a568fceb974facf3bcd06b2db76"
+            },
+            {
+              "round": 2,
+              "milliseconds": 5.47574,
+              "used_tile": 128,
+              "log": "q128-r2-experimental.log",
+              "sha256": "7e5c1578376a63cf0098ca862264ba7a534ce9e70fae28fba61dbdba2cb370b6"
+            },
+            {
+              "round": 3,
+              "milliseconds": 5.533382,
+              "used_tile": 128,
+              "log": "q128-r3-experimental.log",
+              "sha256": "b2919cb82f4206ab7336fd4ec50edaf45f07178bb4e5435d115cd9cb250fd03b"
+            },
+            {
+              "round": 4,
+              "milliseconds": 5.621965,
+              "used_tile": 128,
+              "log": "q128-r4-experimental.log",
+              "sha256": "a1a36b2bd7cd606194af532f0c35e9a4288f5de9c5b2f5e64d953679ede3132b"
+            },
+            {
+              "round": 5,
+              "milliseconds": 5.664626,
+              "used_tile": 128,
+              "log": "q128-r5-experimental.log",
+              "sha256": "f8c724246d858e2b163f2e54084333ae4ade366eba474a9ebc197fbbf1b2a8e7"
+            },
+            {
+              "round": 6,
+              "milliseconds": 5.48398,
+              "used_tile": 128,
+              "log": "q128-r6-experimental.log",
+              "sha256": "f636fa2a5e386ff5ab35987306c8b743cbbc09c0355a891908327996054e4126"
+            },
+            {
+              "round": 7,
+              "milliseconds": 5.539111,
+              "used_tile": 128,
+              "log": "q128-r7-experimental.log",
+              "sha256": "976f339c530e90a2ca216ce65f5803966fea32932a9251162a109ef5b4a7b5c9"
+            },
+            {
+              "round": 8,
+              "milliseconds": 5.497039,
+              "used_tile": 128,
+              "log": "q128-r8-experimental.log",
+              "sha256": "f448889d9267216c941c8de6c66d5c31d94544c7602633e48aae5f9fc117336a"
+            }
+          ]
+        },
+        "milliseconds": {
+          "legacy": {
+            "median": 33.205752,
+            "q1": 29.958941,
+            "q3": 39.732395,
+            "iqr": 9.773453999999997,
+            "minimum": 25.981057,
+            "maximum": 46.156614
+          },
+          "experimental": {
+            "median": 5.533382,
+            "q1": 5.497039,
+            "q3": 5.540003,
+            "iqr": 0.04296399999999956,
+            "minimum": 5.47574,
+            "maximum": 5.664626
+          }
+        },
+        "paired_legacy_over_experimental": {
+          "raw": [
+            7.185021877461621,
+            8.331514260912856,
+            4.933435480866513,
+            6.244218093021592,
+            4.621348051793278,
+            7.76614325464735,
+            5.462992388739565,
+            5.994780028780791,
+            5.587965084475479
+          ],
+          "median": 5.994780028780791,
+          "q1": 5.462992388739565,
+          "q3": 7.185021877461621,
+          "iqr": 1.7220294887220557,
+          "minimum": 4.621348051793278,
+          "maximum": 8.331514260912856
+        }
+      },
+      "1000": {
+        "selected_pairs": 10000,
+        "output_sha256": "f12c050622289f72aaa3052166aad8689f138cc40e699fb6418636b0563ea625",
+        "samples": {
+          "legacy": [
+            {
+              "round": 0,
+              "milliseconds": 306.252676,
+              "used_tile": 256,
+              "log": "q1000-r0-legacy.log",
+              "sha256": "c3e485d1c93a8d301bc193ddfc32aa8838f02e9f37ffddeb9caf759624a7718b"
+            },
+            {
+              "round": 1,
+              "milliseconds": 325.093991,
+              "used_tile": 256,
+              "log": "q1000-r1-legacy.log",
+              "sha256": "21daaca965b8810c26c1acd3b5af687424c6513b9a565775c0b43fee23e5aa7a"
+            },
+            {
+              "round": 2,
+              "milliseconds": 275.873336,
+              "used_tile": 256,
+              "log": "q1000-r2-legacy.log",
+              "sha256": "38d42bf14c9968411debd60d7af10d04283086773156806f3ad92bf0b40967bc"
+            },
+            {
+              "round": 3,
+              "milliseconds": 357.173597,
+              "used_tile": 256,
+              "log": "q1000-r3-legacy.log",
+              "sha256": "8d6033fe464c187f2a27261e1241fa47ad438412ec656ccc3d42f8536ad948c2"
+            },
+            {
+              "round": 4,
+              "milliseconds": 320.16068,
+              "used_tile": 256,
+              "log": "q1000-r4-legacy.log",
+              "sha256": "e3a91513d2478704a6b80e570d1d1cffb439463693179ee2bb902cb3cdcda9a6"
+            },
+            {
+              "round": 5,
+              "milliseconds": 349.242649,
+              "used_tile": 256,
+              "log": "q1000-r5-legacy.log",
+              "sha256": "992738baf035aa1bb0398a52de91902d07cebee9c672d021ddc05f158bfa83e0"
+            },
+            {
+              "round": 6,
+              "milliseconds": 303.813747,
+              "used_tile": 256,
+              "log": "q1000-r6-legacy.log",
+              "sha256": "1ca4794a812c4d8e9d1ba192806324158bef3627e34ff5cb92726b9e25a37461"
+            },
+            {
+              "round": 7,
+              "milliseconds": 335.924504,
+              "used_tile": 256,
+              "log": "q1000-r7-legacy.log",
+              "sha256": "b85ebec5e72265d68eddca9df01706c82f74d35d2f0d71859281d4f861d31eef"
+            },
+            {
+              "round": 8,
+              "milliseconds": 347.172251,
+              "used_tile": 256,
+              "log": "q1000-r8-legacy.log",
+              "sha256": "920c4b6282124a858b68a0457c17ce126a10717ffea2cc56407828928c985d08"
+            }
+          ],
+          "experimental": [
+            {
+              "round": 0,
+              "milliseconds": 16.87594,
+              "used_tile": 256,
+              "log": "q1000-r0-experimental.log",
+              "sha256": "ea94cde63c2d453b458ef592c59009c3d08f9cbc9aa1a252998b0a5591dc0079"
+            },
+            {
+              "round": 1,
+              "milliseconds": 16.84362,
+              "used_tile": 256,
+              "log": "q1000-r1-experimental.log",
+              "sha256": "e5f68b5add64e5b996a7b9bf083f50e07de321a57bffc84d7219082e126379d1"
+            },
+            {
+              "round": 2,
+              "milliseconds": 16.737796,
+              "used_tile": 256,
+              "log": "q1000-r2-experimental.log",
+              "sha256": "a684ae18b40318d6edc0086d487250fb9514cf6bed3ce0368d0a2e53dca77ed9"
+            },
+            {
+              "round": 3,
+              "milliseconds": 17.330625,
+              "used_tile": 256,
+              "log": "q1000-r3-experimental.log",
+              "sha256": "848745a4f3682251afeed2bfb555b68a809e6ec37143fcc79af75a4c65a88bf9"
+            },
+            {
+              "round": 4,
+              "milliseconds": 16.979304,
+              "used_tile": 256,
+              "log": "q1000-r4-experimental.log",
+              "sha256": "248371b3dc7499693ab602499377b1de4ff05fde200075d3527a970a5fdea68a"
+            },
+            {
+              "round": 5,
+              "milliseconds": 17.318025,
+              "used_tile": 256,
+              "log": "q1000-r5-experimental.log",
+              "sha256": "13b37561683a382ef39ba6cbaeca3d9ab90204ffe7f9090d816e8a8743cfca58"
+            },
+            {
+              "round": 6,
+              "milliseconds": 16.740016,
+              "used_tile": 256,
+              "log": "q1000-r6-experimental.log",
+              "sha256": "dd4d0cb0353073cd19b695906e89c1fed69914423e441aaae393096cf9f605b7"
+            },
+            {
+              "round": 7,
+              "milliseconds": 17.854623,
+              "used_tile": 256,
+              "log": "q1000-r7-experimental.log",
+              "sha256": "d6f276e777797bacbe26aa7dbeab3ee28b58f4603ca200601545fb0612e9316e"
+            },
+            {
+              "round": 8,
+              "milliseconds": 18.228455,
+              "used_tile": 256,
+              "log": "q1000-r8-experimental.log",
+              "sha256": "f77f7c6e22fbf979bcee8b6c82d04941406aa26001ef20781579f106e50d8f59"
+            }
+          ]
+        },
+        "milliseconds": {
+          "legacy": {
+            "median": 325.093991,
+            "q1": 306.252676,
+            "q3": 347.172251,
+            "iqr": 40.91957500000001,
+            "minimum": 275.873336,
+            "maximum": 357.173597
+          },
+          "experimental": {
+            "median": 16.979304,
+            "q1": 16.84362,
+            "q3": 17.330625,
+            "iqr": 0.4870049999999999,
+            "minimum": 16.737796,
+            "maximum": 18.228455
+          }
+        },
+        "paired_legacy_over_experimental": {
+          "raw": [
+            18.147295854334633,
+            19.300719857132847,
+            16.482058689208543,
+            20.609389274766485,
+            18.855936615540898,
+            20.166424808833572,
+            18.14895200817012,
+            18.814427165446173,
+            19.045621310198808
+          ],
+          "median": 18.855936615540898,
+          "q1": 18.14895200817012,
+          "q3": 19.300719857132847,
+          "iqr": 1.1517678489627272,
+          "minimum": 16.482058689208543,
+          "maximum": 20.609389274766485
+        }
+      }
+    }
+  }
+}
