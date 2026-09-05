@@ -308,14 +308,15 @@
 #                                  SECOND leg can bring `.bin` sidecars home
 #                                  for the differ's cell-level step. It is a
 #                                  SUBSTRING match; keep it narrow.
-#   MOJOLEARN_GEMM_LEG_PAYLOAD     gemm (default) or phase8; --payload wins.
+#   MOJOLEARN_GEMM_LEG_PAYLOAD     gemm, phase8, speed, or mamba;
+#                                  --payload wins.
 #   MOJOLEARN_GEMM_LEG_APPLE_DIR   phase8 only: the Apple bootstrap directory
 #                                  this box's column will be judged against.
 #                                  The default is the newest one under
 #                                  bench/results/e1/ that has a lanes/
 #                                  directory AND records this commit.
-#   MOJOLEARN_GEMM_LEG_WORK_TIMEOUT phase8 only: seconds the bootstrap may
-#                                  run on the box. 0 (default) derives it
+#   MOJOLEARN_GEMM_LEG_WORK_TIMEOUT phase8/speed/mamba: seconds the payload
+#                                  may run on the box. 0 (default) derives it
 #                                  from the lease minus a 600s fetch-and-
 #                                  terminate reserve.
 #   MOJOLEARN_GEMM_LEG_REHEARSAL   internal interlock. When 1, any paid call
@@ -509,7 +510,7 @@ SPEED_LANES=""
 # phase8 only: the Apple column this box's column will be judged against.
 APPLE_DIR="${MOJOLEARN_GEMM_LEG_APPLE_DIR:-}"
 APPLE_MISSING=0
-# phase8 only, and it is the same idea as --ready-timeout: the work is
+# Bounded payloads only, and it is the same idea as --ready-timeout: work is
 # bounded IN CODE. The lease's watchdog is the backstop for a dead session,
 # not a schedule, and a box killed by its own watchdog mid-bootstrap dies
 # with every card still on it because the fetch never runs. 0 means "the
@@ -655,10 +656,10 @@ leg_usage() {
     echo "options: --rent --dry-run --minutes N --gpu ID --image REF"
     echo "         --ssh TARGET --local-card PATH --column-sweep"
     echo "         --ready-timeout SECONDS"
-    echo "         --payload gemm|phase8|speed  (--phase8 is the short form)"
+    echo "         --payload gemm|phase8|speed|mamba"
     echo "         --apple-dir DIR         phase8: the Apple column to be"
     echo "                                 judged against"
-    echo "         --work-timeout SECONDS  phase8/speed: bound the work"
+    echo "         --work-timeout SECONDS  phase8/speed/mamba: bound the work"
     echo "         --family NAME           speed: gemmseq | classical |"
     echo "                                 forest. One family per leg."
     echo "         --rounds N              speed: timed rounds per arm"
@@ -751,7 +752,7 @@ esac
 # a payload this script does not understand must not fall through to the
 # default one and rent a box to run the wrong program.
 case "$PAYLOAD" in
-    gemm|phase8|speed) : ;;
+    gemm|phase8|speed|mamba) : ;;
     *)
         echo "gemm_remote_leg: unknown payload '$PAYLOAD'." >&2
         echo "  gemm   (default) gemm_device_check.mojo + gemm_card.sh" >&2
@@ -768,8 +769,16 @@ case "$PAYLOAD" in
         echo "                   brings the FSPEED lines home for" >&2
         echo "                   tools/fast_speed_table.py. One --family" >&2
         echo "                   per leg; it does not fit in one lease." >&2
+        echo "  mamba            NVIDIA-only strict Mamba 1/2/3 backward" >&2
+        echo "                   public-prefill certificate; no training." >&2
         exit 2 ;;
 esac
+
+if [ "$PAYLOAD" = "mamba" ] && [ "$VENDOR" != "nvidia" ]; then
+    echo "gemm_remote_leg: --payload mamba currently certifies NVIDIA only." >&2
+    echo "  Use: tools/gemm_remote_leg.sh nvidia --payload mamba [--rent]" >&2
+    exit 2
+fi
 
 if [ "$PAYLOAD" = "speed" ]; then
     # THE ALIAS IS RESOLVED HERE, after the argument loop, so that BOTH the
@@ -879,6 +888,7 @@ STAMP=$(date +%Y-%m-%d_%H%M%S)
 PSUF=""
 if [ "$PAYLOAD" = "phase8" ]; then PSUF="-phase8"; fi
 if [ "$PAYLOAD" = "speed" ]; then PSUF="-speed-$SPEED_FAMILY"; fi
+if [ "$PAYLOAD" = "mamba" ]; then PSUF="-mamba"; fi
 if [ "$MODE" = "dry" ]; then
     OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}${PSUF}-dryrun}"
 else
@@ -1130,6 +1140,7 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
 LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm original bindings python/mojolearn pixi.toml pixi.lock"
+LEG_SOURCE_PATHS_MAMBA="tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh mamba checks core gemm original pixi.toml pixi.lock"
 
 leg_check_tree_clean() {
     # THE LOCAL CARD COMES FROM THE WORKING TREE AND THE REMOTE CARD COMES
@@ -1142,6 +1153,7 @@ leg_check_tree_clean() {
     _paths="$LEG_SOURCE_PATHS"
     if [ "$PAYLOAD" = "phase8" ]; then _paths="$LEG_SOURCE_PATHS_PHASE8"; fi
     if [ "$PAYLOAD" = "speed" ]; then _paths="$LEG_SOURCE_PATHS_SPEED"; fi
+    if [ "$PAYLOAD" = "mamba" ]; then _paths="$LEG_SOURCE_PATHS_MAMBA"; fi
     # The list is a deliberate word list, so it is unquoted.
     # shellcheck disable=SC2086
     _dirty=$(git status --porcelain -- $_paths 2>/dev/null || true)
@@ -1430,6 +1442,54 @@ leg_speed_artifacts() {
     return "$_bad"
 }
 
+leg_mamba_artifacts() {
+    _md="$OUT/remote/mamba-cert"
+    _bad=0
+    leg_require_file "$_md/results.tsv" \
+        "the Mamba certificate produced no results.tsv" || _bad=1
+    leg_require_file "$_md/environment.txt" \
+        "the Mamba certificate produced no environment.txt" || _bad=1
+    leg_require_file "$_md/SHA256SUMS" \
+        "the Mamba certificate produced no SHA256SUMS" || _bad=1
+    if [ "$_bad" = "0" ]; then
+        if ! grep -q '^mode=IDENTICAL$' "$_md/environment.txt"; then
+            echo "  MAMBA CERT MODE IS NOT IDENTICAL."
+            _bad=1
+        fi
+        if ! grep -q "^commit=$COMMIT$" "$_md/environment.txt"; then
+            echo "  MAMBA CERT COMMIT DOES NOT MATCH THE PINNED ARCHIVE."
+            _bad=1
+        fi
+        _green=$(awk -F '\t' '$2=="GREEN" {n++} END {print n+0}' "$_md/results.tsv")
+        _red=$(awk -F '\t' '$2=="RED" {n++} END {print n+0}' "$_md/results.tsv")
+        if [ "$_green" != "3" ] || [ "$_red" != "0" ]; then
+            echo "  MAMBA CERT IS INCOMPLETE: green=$_green red=$_red (expected 3/0)."
+            _bad=1
+        fi
+        for _family in mamba1 mamba2 mamba3; do
+            if ! awk -F '\t' -v family="$_family" '
+                $1 == family && $2 == "GREEN" && $3 == "0" && NF == 5 &&
+                length($4) == 64 && $4 !~ /[^0-9a-f]/ &&
+                length($5) == 64 && $5 !~ /[^0-9a-f]/ { found=1 }
+                END { exit !found }
+            ' "$_md/results.tsv"; then
+                echo "  MAMBA CERT HAS NO COMPLETE GREEN $_family MANIFEST ROW."
+                _bad=1
+            fi
+        done
+        if ! (cd "$_md" && sha256sum -c SHA256SUMS >/dev/null 2>&1); then
+            echo "  MAMBA CERT SHA256SUMS VERIFICATION FAILED."
+            _bad=1
+        fi
+        cat "$_md/results.tsv"
+    fi
+    grep -q '^mamba_cert_exit=0$' "$OUT/remote/leg.txt" 2>/dev/null || {
+        echo "  remote Mamba payload exited non-zero or did not finish."
+        _bad=1
+    }
+    return "$_bad"
+}
+
 leg_phase8_artifacts() {
     # WHAT CAME HOME, lane by lane. This leg does NOT judge these cards --
     # tools/e3_round_judge.sh section 7 does, against the Apple column. What
@@ -1595,6 +1655,8 @@ leg_archive_required() {
         # and comes home unable to say whether `deterministic` is deterministic
         # on this vendor.
         echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/checks/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/checks/mamba_check.mojo"
+    elif [ "$PAYLOAD" = "mamba" ]; then
+        echo "tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
     else
         echo "gemm/checks/gemm_identical.mojo"
     fi
@@ -2162,10 +2224,60 @@ leg_build_remote_body() {
         leg_body_speed > "$_body"
     elif [ "$PAYLOAD" = "phase8" ]; then
         leg_body_phase8 > "$_body"
+    elif [ "$PAYLOAD" = "mamba" ]; then
+        leg_body_mamba > "$_body"
     else
         leg_body_gemm > "$_body"
     fi
     leg_check_remote_body
+}
+
+leg_body_mamba() {
+    cat <<'REMOTE_BODY_MAMBA'
+#!/bin/sh
+# Generated by tools/gemm_remote_leg.sh (--payload mamba). RUNS ON THE POD.
+set -u
+ROOT=/root/mojolearn
+OUT=/root/gemm_leg_out
+mkdir -p "$OUT"
+cd "$ROOT" || exit 9
+{
+  echo "vendor=@VENDOR@"
+  echo "payload=mamba"
+  echo "commit=@COMMIT@"
+  echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$OUT/leg.txt"
+uname -a > "$OUT/uname.txt" 2>&1
+@SMI@ > "$OUT/gpu.txt" 2>&1 || echo "no vendor smi tool answered" >> "$OUT/gpu.txt"
+{ find . -name '*.mojo' -not -path './.pixi/*' -not -path './bench/results/*' \
+    | LC_ALL=C sort | xargs shasum -a 256 2>/dev/null || \
+  find . -name '*.mojo' -not -path './.pixi/*' -not -path './bench/results/*' \
+    | LC_ALL=C sort | xargs sha256sum ; } \
+  | { shasum -a 256 2>/dev/null || sha256sum ; } \
+  | awk '{print $1}' > "$OUT/source_sha256.txt"
+if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi >/dev/null 2>&1; then
+    curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
+fi
+PATH="$HOME/.pixi/bin:$PATH"
+export PATH
+pixi install > "$OUT/pixi_env.log" 2>&1
+echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
+if command -v timeout >/dev/null 2>&1; then
+    MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_MAMBA_CERT_OUT="$OUT/mamba-cert" \
+      timeout -k 30 @WORKTIMEOUT@ pixi run mamba-backward-cert-nvidia \
+      > "$OUT/mamba_cert_console.log" 2>&1
+    cert_rc=$?
+else
+    MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_MAMBA_CERT_OUT="$OUT/mamba-cert" \
+      pixi run mamba-backward-cert-nvidia > "$OUT/mamba_cert_console.log" 2>&1
+    cert_rc=$?
+fi
+echo "mamba_cert_exit=$cert_rc" >> "$OUT/leg.txt"
+echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
+tail -40 "$OUT/mamba_cert_console.log"
+: > /root/gemm_leg.done
+echo REMOTE_BODY_DONE
+REMOTE_BODY_MAMBA
 }
 
 leg_body_gemm() {
@@ -3268,6 +3380,16 @@ leg_check_remote_body() {
             return 1
         fi
     fi
+    if [ "$PAYLOAD" = "mamba" ]; then
+        if ! grep -q 'pixi run mamba-backward-cert-nvidia' "$_body"; then
+            echo "  the mamba body does not invoke its certification payload."
+            return 1
+        fi
+        if ! grep -q 'MOJOLEARN_MAMBA_CERT_OUT=' "$_body"; then
+            echo "  the mamba body does not pin a fetchable artifact path."
+            return 1
+        fi
+    fi
     return 0
 }
 
@@ -3779,10 +3901,10 @@ leg_rehearse() {
     # not on speed's, which has no card and asserts the OPPOSITE mode --
     # `leg_require_identical` would refuse every log a speed leg produces,
     # correctly, because a FAST banner is exactly what that payload wants.
-    if [ "$PAYLOAD" = "speed" ]; then
-        rok "D/E skipped: the speed payload has no card and requires FAST, not IDENTICAL"
+    if [ "$PAYLOAD" = "speed" ] || [ "$PAYLOAD" = "mamba" ]; then
+        rok "D/E skipped: the $PAYLOAD payload has no gemm card"
     fi
-    if [ "$PAYLOAD" != "phase8" ] && [ "$PAYLOAD" != "speed" ]; then
+    if [ "$PAYLOAD" != "phase8" ] && [ "$PAYLOAD" != "speed" ] && [ "$PAYLOAD" != "mamba" ]; then
 
     # -- D. the contamination guard -----------------------------------------
     printf '== bench/gemm_card_main.mojo [FAST] ==\nstages: 60 over 20 shapes; 0 skipped\n' > "$TMPD/fast.log"
@@ -4195,13 +4317,13 @@ leg_rehearse() {
         else
             rok "L1 the Apple column exists at this commit ($APPLE_DIR)"
         fi
-    elif [ "$PAYLOAD" = "speed" ]; then
+    elif [ "$PAYLOAD" = "speed" ] || [ "$PAYLOAD" = "mamba" ]; then
         # NOT `rok`, and the distinction matters. There is no Apple
         # reference here at all and there is not supposed to be one: a
         # millisecond from an M4 cannot enter a table of H100 milliseconds.
         # Printing "ok, the reference is a real measurement" would be a
         # green check on a thing that does not exist.
-        rok "L1 no Apple reference is required: a speed leg compares two libraries on ONE box"
+        rok "L1 no Apple reference is required for the $PAYLOAD payload"
     else
         rok "L1 the Apple reference card is a real measurement"
     fi
@@ -4289,7 +4411,11 @@ fi
 
 mkdir -p "$OUT"
 echo "== gemm.fp32.v1 remote leg (DEVIATION 536) =="
+if [ "$PAYLOAD" = "mamba" ]; then
+echo "   profile:  strict Mamba 1/2/3 public-prefill backward certificate"
+else
 echo "   profile:  mojolearn.identical.gemm.fp32.v1"
+fi
 echo "   vendor:   $VENDOR    label in the diff: $VLABEL"
 echo "   payload:  $PAYLOAD$( [ "$PAYLOAD" = phase8 ] && echo '   (tools/e1_bootstrap.sh; phase 8 is seven lanes)' )"
 if [ "$PAYLOAD" = "speed" ]; then
@@ -4306,6 +4432,9 @@ fi
 echo "   MODE:     FAST. No -D MOJOLEARN_NUMERIC_IDENTICAL anywhere in this"
 echo "             payload. This leg measures the arm a user gets and makes"
 echo "             NO identity claim about it."
+elif [ "$PAYLOAD" = "mamba" ]; then
+echo "   MODE:     IDENTICAL. Strict public-prefill backward gates for"
+echo "             Mamba 1/2/3; no training and no timing claim."
 fi
 echo "   mode:     $MODE$( [ "$MODE" = dry ] && echo '  (nothing is rented; --rent opts in)' )"
 echo "   gpu:      $GPU_ID"
@@ -4333,10 +4462,14 @@ COMMIT_LINE=$(git log -1 --format='%h parent %p' 2>/dev/null || echo unknown)
 echo "   commit:   $COMMIT_LINE"
 echo
 
-if [ "$PAYLOAD" = "speed" ]; then
+if [ "$PAYLOAD" = "speed" ] || [ "$PAYLOAD" = "mamba" ]; then
 
 echo "== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT =="
 echo "   This payload builds NOTHING on this Mac and compares nothing to it."
+if [ "$PAYLOAD" = "mamba" ]; then
+echo "   The semantic oracle and NVIDIA dumps are generated together on"
+echo "   the pod; the fetched strict certificate is self-contained."
+else
 echo "   A wall-clock number is a property of ONE box, and the comparison"
 echo "   that matters is made ON the rented box, in one hour, between our"
 echo "   FAST arm and the vendor's own library running on the same silicon"
@@ -4346,6 +4479,7 @@ echo "   comparison of two libraries."
 echo
 echo "   What comes home is FSPEED lines. The verdict is"
 echo "   tools/fast_speed_table.py, run HERE, over the fetched logs."
+fi
 
 elif [ "$PAYLOAD" = "phase8" ]; then
 
@@ -4481,7 +4615,11 @@ if [ "$MODE" = "dry" ]; then
     echo "      from the pinned sha; read each lane's mode back"
     echo "   9. NO DIFF HERE. tools/e3_round_judge.sh section 7 judges it"
     else
-    if [ "$PAYLOAD" = "speed" ]; then
+    if [ "$PAYLOAD" = "mamba" ]; then
+    echo "   7. mamba-backward-cert-nvidia, bounded at ${WORK_TIMEOUT}s"
+    echo "   8. fetch strict public manifests, logs and SHA256SUMS"
+    echo "   9. require three GREEN rows and an IDENTICAL mode witness"
+    elif [ "$PAYLOAD" = "speed" ]; then
     echo "   7. the bench/speed/ drivers, FAST (NO -D define), and the"
     echo "      vendor arms, on the box, one arm per process, each bounded"
     echo "      at ${ARM_BUDGET}s: family=$SPEED_FAMILY"
@@ -4506,6 +4644,8 @@ if [ "$MODE" = "dry" ]; then
     echo "     export RUNPOD_API_KEY=...   # or MOJOLEARN_RUNPOD_KEY_FILE"
     if [ "$PAYLOAD" = "phase8" ]; then
     echo "     tools/gemm_remote_leg.sh $VENDOR --payload phase8 --rent --minutes $MINUTES"
+    elif [ "$PAYLOAD" = "mamba" ]; then
+    echo "     tools/gemm_remote_leg.sh nvidia --payload mamba --rent --minutes $MINUTES"
     else
     echo "     tools/gemm_remote_leg.sh $VENDOR --rent --minutes $MINUTES"
     fi
@@ -4574,6 +4714,8 @@ echo "== step 8: what came home =="
 RED=$FETCH_RED
 if [ "$PAYLOAD" = "speed" ]; then
     leg_speed_artifacts || RED=1
+elif [ "$PAYLOAD" = "mamba" ]; then
+    leg_mamba_artifacts || RED=1
 elif [ "$PAYLOAD" = "phase8" ] && [ "$_wants_phase8" = "1" ]; then
     leg_phase8_artifacts || RED=1
 elif [ "$PAYLOAD" = "phase8" ]; then
@@ -4620,7 +4762,7 @@ fi
 if [ -f "$OUT/remote/leg.txt" ]; then
     sed 's/^/    /' "$OUT/remote/leg.txt"
 fi
-if [ "$PAYLOAD" = "speed" ]; then
+if [ "$PAYLOAD" = "speed" ] || [ "$PAYLOAD" = "mamba" ]; then
     :
 elif [ "$PAYLOAD" = "phase8" ]; then
     if grep -q 'bootstrap_exit=0' "$OUT/remote/leg.txt" 2>/dev/null; then
@@ -4662,6 +4804,11 @@ echo "  ARE SLOWER, and for the gemm lane the fair opponent is cublas-tf32"
 echo "  rather than cublas-fp32, because our FAST arm took the same"
 echo "  precision cut. That is written at length in"
 echo "  bench/speed/gemm_speed_main.mojo's docstring."
+elif [ "$PAYLOAD" = "mamba" ]; then
+echo "== step 9: Mamba backward certificate =="
+echo "  Strict public-prefill results and manifests:"
+echo "    $OUT/remote/mamba-cert"
+echo "  This payload ran no training and produced no timing claim."
 elif [ "$PAYLOAD" = "phase8" ]; then
 echo "== step 9: the judge, which is not this leg =="
 echo "  This leg does not diff phase-8 cards and must not:"
@@ -4721,6 +4868,9 @@ if [ "$PAYLOAD" = "speed" ]; then
     echo "the only place the pod's details exist:"
     echo "  python3 tools/fast_speed_table.py $OUT/remote/logs \\"
     echo "      --out bench/results/fast_speed/${STAMP}-${VENDOR}-${SPEED_FAMILY}.md"
+elif [ "$PAYLOAD" = "mamba" ]; then
+    echo "the certificate: $OUT/remote/mamba-cert"
+    echo "read results.tsv, device.csv, commit.txt, and SHA256SUMS together."
 elif [ "$PAYLOAD" = "phase8" ]; then
     echo "the column:  $E1_DEST"
     echo "$E1_DEST" > "$OUT/e1_dir.txt"
