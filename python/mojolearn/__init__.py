@@ -59,7 +59,7 @@ gpu_arch_how = _backend.gpu_arch_how
 from .cluster import KMeans
 from .decomposition import PCA, TruncatedSVD
 from .density import DBSCAN, KernelDensity
-from .ensemble import GradientBoosting
+from .ensemble import ExperimentalTwoLevelFeatureFreq, GradientBoosting
 from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
 from .linear_model import LinearRegression, LogisticRegression, Ridge
 from .neighbors import (
@@ -200,6 +200,7 @@ __all__ = [
     "ExtraTreesClassifier",
     "ExtraTreesRegressor",
     "ElasticNet",
+    "ExperimentalTwoLevelFeatureFreq",
     "GradientBoosting",
     "ExponentialSmoothing",
     "IsolationForest",

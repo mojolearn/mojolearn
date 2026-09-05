@@ -1331,3 +1331,78 @@ class GradientBoosting(NumericModeMixin):
         obj.loss_curve_ = None
         obj.test_loss_curve_ = None
         return obj
+
+
+class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
+    """Experimental one-tree, depth-two FeatureFreq combination estimator.
+
+    This intentionally narrow surface accepts only dense categorical codes
+    in every column and at least two explicit source columns. It is separate
+    from :class:`GradientBoosting`; selecting it cannot change standard fit
+    behavior or imply support for deeper/general CatBoost combinations.
+    """
+
+    def __init__(
+        self, sources, learning_rate=0.03, l2_leaf_reg=3.0, random_state=0
+    ):
+        super().__init__(
+            loss="RMSE", n_estimators=1, max_depth=2,
+            learning_rate=learning_rate, l2_leaf_reg=l2_leaf_reg,
+            random_state=random_state,
+        )
+        try:
+            parsed = tuple(int(i) for i in sources)
+        except (TypeError, ValueError):
+            raise ValueError("mojolearn: sources must be integer indices") from None
+        if len(parsed) < 2 or len(set(parsed)) != len(parsed):
+            raise ValueError("mojolearn: sources need at least two unique indices")
+        self.sources = parsed
+
+    def fit(self, X, y):
+        Xa, Xcol, _ = as_f32_colmajor(X, "X")
+        n_rows, n_features = Xa.shape
+        if n_rows == 0 or n_features < 2:
+            raise ValueError("mojolearn: experimental FeatureFreq needs rows and columns")
+        if any(i < 0 or i >= n_features for i in self.sources):
+            raise ValueError(
+                f"mojolearn: sources {self.sources!r} outside {n_features} features"
+            )
+        if not np.isfinite(Xa).all() or (Xa < 0).any() or not np.equal(
+            Xa, np.floor(Xa)
+        ).all():
+            raise ValueError(
+                "mojolearn: experimental FeatureFreq X must contain finite "
+                "non-negative integer category codes"
+            )
+        for f in range(n_features):
+            values = np.unique(Xa[:, f])
+            if values.size < 2 or not np.array_equal(
+                values, np.arange(values.size, dtype=values.dtype)
+            ):
+                raise ValueError(
+                    "mojolearn: every experimental FeatureFreq column must "
+                    f"be densely coded 0..k-1; column {f} has {values!r}"
+                )
+        ya = np.ascontiguousarray(np.asarray(y).ravel(), dtype=np.float32)
+        if ya.shape[0] != n_rows or not np.isfinite(ya).all():
+            raise ValueError("mojolearn: y must be finite with one value per row")
+        source_array = np.ascontiguousarray(self.sources, dtype=np.uint32)
+        self.model_ = self._bind(
+            "_mojolearn_gbdt"
+        ).gbdt_fit_two_level_feature_freq(
+            _addr_ro(Xcol), _addr_ro(ya), _addr_ro(source_array),
+            [
+                n_rows, n_features, source_array.size,
+                float(self.learning_rate), float(self.l2_leaf_reg),
+                int(self.random_state),
+            ],
+        )
+        self.n_features_in_ = n_features
+        self.approx_dim_ = 1
+        self.n_classes_ = None
+        self.bias_ = 0.0
+        self.best_iteration_ = 0
+        self.stopped_early_ = False
+        self.loss_curve_ = None
+        self.test_loss_curve_ = None
+        return self
