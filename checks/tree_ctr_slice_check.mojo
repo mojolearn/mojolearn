@@ -510,11 +510,17 @@ def main() raises:
         production_columns, production_folds, production_one_hot,
         oracle_candidate^, fold_capacity=grid.border_count,
     )
-    var oracle_weights: List[Float32] = [0, 0, 1, 2, 3, 0]
+    # Only key (0,0) has zero mass. The other three keys have distinct
+    # weighted targets, so both split axes remain useful: zeroing the whole
+    # first-feature side allowed a one-split tree with no zero-mass leaf.
+    # The repeated (1,1) key has unequal targets AND unequal weights, which
+    # makes an implementation that ignores weights fail the leaf oracle.
+    var oracle_weights: List[Float32] = [0, 1, 2, 3, 4, 0]
+    var oracle_targets: List[Float32] = [7, 1, 2, 3, 5, -3]
     for regularization in range(2):
         var oracle_l2 = Float32(3 * regularization)
         var weighted_fit = fit_two_level_feature_freq_tree(
-            ctx, oracle_initial, x, production_y, oracle_weights,
+            ctx, oracle_initial, x, oracle_targets, oracle_weights,
             production_base_cindex, production_columns, production_folds,
             production_one_hot, production_borders, 6, 3, grid,
             learning_rate=Float32(0.1), l2_leaf_reg=oracle_l2,
@@ -538,7 +544,7 @@ def main() raises:
         oracle_mass.resize(n_leaves, Float32(0.0))
         for r in range(6):
             var leaf = Int(memberships[r])
-            oracle_sums[leaf] += oracle_weights[r] * production_y[r]
+            oracle_sums[leaf] += oracle_weights[r] * oracle_targets[r]
             oracle_mass[leaf] += oracle_weights[r]
         var saw_zero_weight_row_leaf = False
         for r in range(6):
