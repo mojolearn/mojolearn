@@ -8,6 +8,8 @@ override ROWS/COLS/D with the same prefix. SAMPLES defaults9, minimum7.
 Norms and selection use production kernels. Timing labels distinguish distance
 only, transpose+distance, and unchanged selection; these are NOT end-to-end
 kNN measurements. Allocations and norm calculation are excluded.
+Large fixtures default to independently seeded pseudorandom queries/index
+(PROFILE=3). PROFILE=0 retains the original duplicate-heavy fixture.
 MOJOLEARN_KNN_LAYOUT_DUMP=1 prints every distance UInt32 for full cross-device
 comparison; otherwise only small fixtures emit cells. Local comparisons always
 check EVERY cell, including the large fixture.
@@ -25,13 +27,21 @@ from neighbors.checks.select_radix_identical import radix_topk_identical_kernel
 from neighbors.impl.matrix.detail.select_radix import SELECT_BLOCK
 
 
-def _values(rows: Int, d: Int, profile: Int) -> List[Float32]:
+def _values(rows: Int, d: Int, profile: Int, salt: Int = 3) -> List[Float32]:
     var out = List[Float32]()
     for i in range(rows):
         for p in range(d):
             # Repeated rows deliberately produce exact neighbor ties.
             var v = Float32(((i % 19) * 17 + p * 11) % 61 - 30) / Float32(32)
-            if profile == 1:
+            if profile == 3:
+                # Same dyadic generator as lanes_price_main._price_u01.
+                # Independent query/index salts avoid deliberate self matches.
+                var z = UInt64(i) * 0x9E3779B97F4A7C15 + UInt64(p + 1) * 0xBF58476D1CE4E5B9 + UInt64(salt + 1) * 0x94D049BB133111EB
+                z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+                z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+                z = z ^ (z >> 31)
+                v = Float32(Int((z >> 40) & UInt64(0xFFFF))) / Float32(65536.0)
+            elif profile == 1:
                 v = Float32(4096) + Float32((i + p) % 3) / Float32(1024)
             elif profile == 2:
                 var bits = UInt32(0)
@@ -77,8 +87,8 @@ def _select(
 
 
 def _case(r: Int, n: Int, d: Int, profile: Int, root: Int, timing: Bool, samples: Int) raises:
-    var hq = _values(r, d, profile)
-    var hy = _values(n, d, profile)
+    var hq = _values(r, d, profile, 5)
+    var hy = _values(n, d, profile, 3)
     var k = min(8, n)
     with DeviceContext() as ctx:
         var q = _upload(ctx, hq)
@@ -189,7 +199,7 @@ def main() raises:
     var samples = _env_int("MOJOLEARN_KNN_LAYOUT_SAMPLES", 9)
     if samples < 7:
         raise Error("at least seven samples required")
-    for profile in range(3):
+    for profile in range(4):
         for root in range(2):
             _case(1, 1, 1, profile, root, False, samples)
             _case(3, 33, 31, profile, root, False, samples)
@@ -200,5 +210,8 @@ def main() raises:
         var d = _env_int("MOJOLEARN_KNN_LAYOUT_D", 32)
         if r <= 0 or n <= 0 or d <= 0 or r > 1024 or n > 1000000 or d > 4096 or r * n > 16000000 or n * d > 16000000:
             raise Error("fixture exceeds bounded positive dimensions/storage")
-        _case(r, n, d, 0, 1, True, samples)
+        var profile = _env_int("MOJOLEARN_KNN_LAYOUT_PROFILE", 3)
+        if profile != 0 and profile != 3:
+            raise Error("large fixture PROFILE must be 0 (duplicates) or 3 (random)")
+        _case(r, n, d, profile, 1, True, samples)
     print("KNN INDEX LAYOUT QUALIFICATION PASS")
