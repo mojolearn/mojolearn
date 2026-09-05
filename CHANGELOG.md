@@ -5,7 +5,13 @@ contain the detailed investigation record.
 
 ## Unreleased
 
-## 0.5.0 — release candidate
+## 0.5.0 — 2026-09-05
+
+- Published the macOS arm64 wheel with 15 native extensions in all three modes.
+  All Python 3.10–3.14/mode combinations passed isolated installed-wheel checks.
+  The downloaded PyPI artifact matched the publication digest and passed smoke,
+  Mamba, and Transformer API suites in all modes on Python 3.12 / Apple M4.
+  A refreshed Linux wheel remains pending.
 
 - Added `mojolearn.UMAP.fit` and `fit_transform` for dense Euclidean input,
   spectral initialization, and 2D/3D embeddings, with per-estimator numeric modes.

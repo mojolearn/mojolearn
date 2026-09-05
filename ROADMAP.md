@@ -42,8 +42,11 @@ groups in every combination, including the 16 pinned layout cells in
 IDENTICAL mode. The installed Mamba and Transformer surface suites also
 passed in all three modes on Python 3.12. See the
 [qualification record](bench/results/wheels/2026-09-05-umap-api/release-status.json).
-The tagged PyPI publication workflow is in progress; Linux installed-wheel
-qualification remains separate.
+The tagged [PyPI publication workflow](https://github.com/mojolearn/mojolearn/actions/runs/33958208803)
+succeeded. The downloaded PyPI wheel matched the publication digest and passed
+all nine smoke/Mamba/Transformer checks across the three modes on Python 3.12;
+see the [post-publication record](bench/results/wheels/2026-09-05-umap-api/postpublish/results.json).
+Linux installed-wheel qualification remains separate.
 
 ## UMAP follow-up priority
 
@@ -61,8 +64,8 @@ also needs a sparse path before claiming large-dataset scalability.
 
 ## Now: release truth and artifact closure
 
-1. Build a clean wheel and verify all 15 native extensions in `fast`,
-   `deterministic`, and `identical` mode from an isolated installation.
+1. Complete the refreshed Linux wheel and installed-API gates on NVIDIA and
+   DigitalOcean AMD. The macOS 0.5.0 installed-wheel gate is complete.
 2. Stamp native artifacts with source/build identity and refuse stale
    artifacts at import or release time.
 3. Generate extension, public-surface, architecture, and certification tables

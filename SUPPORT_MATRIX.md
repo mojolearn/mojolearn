@@ -1,6 +1,6 @@
 # Support and certification
 
-This page is the current support snapshot for the mojolearn 0.5.0 release candidate. It deliberately
+This page is the current support snapshot for mojolearn 0.5.0. It deliberately
 separates API availability, packaging, and numerical certification. A feature
 being importable does not mean that every hardware column or numeric mode has
 been certified.
@@ -32,9 +32,9 @@ device.
 
 | Platform | Status | Qualification |
 |---|---|---|
-| macOS arm64 / Apple silicon | Primary packaged platform | Built at the Apple M1 ISA floor. Current packaging inventory contains 15 extensions in each of three modes. A clean release-wheel run is required before claiming that every newly added extension ships correctly. |
-| Linux x86-64 / NVIDIA CUDA | Supported source-build and wheel path | Device code is architecture-specific. Certification on one NVIDIA architecture does not certify another. Release 0.3.0 had an AVX-512 host-code defect; it is historical and must not be used as current evidence. |
-| Linux x86-64 / AMD HIP | Supported source-build and wheel path | Measured chiefly on `gfx942`. That is not evidence for every AMD architecture. |
+| macOS arm64 / Apple silicon | Primary packaged platform | Built at the Apple M1 ISA floor. Current packaging inventory contains 15 extensions in each of three modes. The 0.5.0 wheel passed every Python 3.10–3.14/mode combination on Apple M4 and fresh PyPI-install API checks. |
+| Linux x86-64 / NVIDIA CUDA | Source builds; 0.5.0 wheel pending | Device code is architecture-specific. Certification on one NVIDIA architecture does not certify another. Release 0.3.0 had an AVX-512 host-code defect; it is historical and must not be used as current evidence. |
+| Linux x86-64 / AMD HIP | Source builds; 0.5.0 wheel pending | Measured chiefly on `gfx942`. That is not evidence for every AMD architecture. |
 | CPU-only and other accelerators | Unsupported | There is no CPU implementation. |
 
 Before publishing a release, validate the installed wheel rather than only the
@@ -58,10 +58,11 @@ cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
 | ARIMA filtering | Beta | Three-vendor card for the recorded filter fixture | The newer fitted-estimator surface still needs NVIDIA and AMD qualification. |
 | Holt-Winters and spectral/time-series helpers | Beta | Apple–AMD cards for recorded fixtures | NVIDIA column remains pending. |
 | Gaussian process | Experimental | Apple–AMD IDENTICAL card for recorded fixture | Complete current-wheel and NVIDIA qualification; no performance claim. |
-| Mamba 1 | Experimental | Three-vendor operator card for recorded fixture | Forward/backward public surfaces need independent oracle and wheel validation. |
-| Mamba 2 | Experimental | Pairwise Apple–NVIDIA and Apple–AMD cards, not all from one source state | Produce a same-commit three-vendor forward/backward certificate. |
-| Mamba 3 | Experimental | Apple–AMD card for recorded fixture | NVIDIA is pending; forward and backward need a dedicated qualification lane. |
+| Mamba 1 | Experimental | Three-vendor operator card and backward certificate at `718495cd` | Current macOS forward/state API gate passed; NVIDIA/AMD API and Python backward exposure remain. |
+| Mamba 2 | Experimental | Three-vendor backward certificate at `718495cd`, including L257 and incoming state | Broaden forward/state vendor fixtures; qualify NVIDIA/AMD APIs and expose Python backward. |
+| Mamba 3 | Experimental | Three-vendor backward certificate at `718495cd` | Qualify NVIDIA/AMD Python forward/state APIs and expose Python backward. |
 | Transformer block | Experimental | Three-vendor operator card for an earlier fixture | Current Python binding and backward path need NVIDIA/AMD and corpus-oracle qualification. |
+| UMAP | Beta: `fit`, `fit_transform` | Three-vendor source fixture: 186 stage cells at `718495cd`; macOS wheel layout bits checked | Broader shape/quality fixtures, NVIDIA/AMD API qualification, `transform`, and sparse graph storage. |
 | Training primitives and checkpointing | Experimental | Local correctness gates | Cross-vendor public-surface qualification remains open. |
 
 ## What counts as certification
@@ -87,7 +88,7 @@ cross-vendor claim. See [verification](docs/VERIFY.md) and
   benchmark FAST, IDENTICAL, and one external comparator per method.
 - Treat Mamba 1/2/3 forward and backward as a dedicated lane with independent
   calculus/oracle checks and same-commit vendor cards.
-- Finish clean installed-wheel validation for every extension and mode.
+- Extend the completed macOS 0.5.0 installed-wheel validation to NVIDIA and DigitalOcean AMD.
 - Add build/source provenance to native artifacts so stale binaries cannot be
   mistaken for current results.
 - Close pending NVIDIA and AMD legs for already-public APIs before adding more
@@ -100,8 +101,11 @@ support claims.
 ## UMAP and Mamba closure (2026-09-05)
 
 `UMAP.fit` and `fit_transform` expose the supported dense Euclidean 2D/3D
-slice in the 0.5.0 candidate. Installed-wheel qualification is required before
-publishing; no Linux wheel is inferred from the Apple build.
+slice in the published macOS 0.5.0 wheel. Its installed API passed in all
+three modes on Python 3.10–3.14. The downloaded PyPI artifact matched the
+publication digest and passed additional API checks; see the
+[post-publication record](bench/results/wheels/2026-09-05-umap-api/postpublish/results.json).
+A 0.5.0 Linux wheel and NVIDIA/AMD installed-API qualification remain pending.
 
 At `718495cd`, Apple M4, NVIDIA RTX 4090, and AMD MI300X matched all 54
 native Mamba backward gradient tensors across five cases and all 186 cells

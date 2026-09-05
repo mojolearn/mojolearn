@@ -2,7 +2,7 @@
   "release_version": "0.5.0",
   "source_commit": "529ec5ec73c81c14826135fe615fac1a7631bf54",
   "qualification_workflow": "https://github.com/mojolearn/mojolearn/actions/runs/33956384758",
-  "status": "QUALIFIED_PYPI_WORKFLOW_STARTED",
+  "status": "PUBLISHED_AND_VERIFIED",
   "planned_platform": "macosx_11_0_arm64",
   "numeric_modes": [
     "fast",
@@ -71,5 +71,12 @@
   },
   "qualification_conclusion": "success",
   "release_tag": "v0.5.0",
-  "publication_workflow": "https://github.com/mojolearn/mojolearn/actions/runs/33958208803"
+  "publication_workflow": "https://github.com/mojolearn/mojolearn/actions/runs/33958208803",
+  "publication_conclusion": "success",
+  "published_wheel_sha256": "4652f8ecbf8f131f7707e08972af3126f12ef0ebb93f05230d389075c6ea64cc",
+  "pypi": "https://pypi.org/project/mojolearn/0.5.0/",
+  "completed_at": "2026-09-05T10:20:00.338652+00:00",
+  "postpublication_results": "postpublish/results.json",
+  "pypi_matches_publication_build": true,
+  "postpublication_api_checks_passed": 9
 }

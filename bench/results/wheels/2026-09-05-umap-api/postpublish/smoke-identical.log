@@ -1,0 +1,6 @@
+......
+----------------------------------------------------------------------
+Ran 6 tests in 5.984s
+
+OK
+v0.5.0 py3.12 mode=identical vendor=metal kmeans n_iter=2 knn tile=50 gbdt rf et dbscan pca svd ols ok
