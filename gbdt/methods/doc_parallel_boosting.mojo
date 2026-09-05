@@ -414,6 +414,25 @@ struct TTwoLevelTensorFitResult(Movable):
     var leaf_sizes: List[Int]
 
 
+def two_level_weighted_leaf_value(
+    y: List[Float32], sample_weight: List[Float32],
+    row_order: HostBuffer[DType.uint32], begin: Int, size: Int,
+    learning_rate: Float32, l2_leaf_reg: Float32,
+) raises -> Float32:
+    """Estimate one validated partition; zero-mass occupied leaves return zero."""
+    var total = Float32(0.0)
+    var total_weight = Float32(0.0)
+    for i in range(size):
+        var row = Int(row_order.unsafe_ptr().unsafe_load(begin + i))
+        var weight = Float32(1.0) if len(sample_weight) == 0 else sample_weight[row]
+        total += weight * y[row]
+        total_weight += weight
+    return (
+        learning_rate * total / (total_weight + l2_leaf_reg)
+        if total_weight > Float32(0.0) else Float32(0.0)
+    )
+
+
 def fit_two_level_feature_freq_tree(
     ctx: DeviceContext,
     initial: TStagedTensorCandidate,
@@ -495,23 +514,11 @@ def fit_two_level_feature_freq_tree(
     var weak = TObliviousTreeModel(structure^)
     weak.dim = 1
     for leaf in range(len(tree.leaf_sizes)):
-        var total = Float32(0.0)
-        var total_weight = Float32(0.0)
-        var begin = tree.leaf_offsets[leaf]
-        for i in range(tree.leaf_sizes[leaf]):
-            var row = Int(h_final_rows.unsafe_ptr().unsafe_load(begin + i))
-            var weight = (
-                Float32(1.0)
-                if len(sample_weight) == 0 else sample_weight[row]
-            )
-            total += weight * y[row]
-            total_weight += weight
-        # Zero-weight rows may occupy a leaf even when the global weight is
-        # positive. Such a leaf contributes zero, including with no L2.
-        var denominator = total_weight + l2_leaf_reg
         weak.leaf_values.append(
-            learning_rate * total / denominator
-            if total_weight > Float32(0.0) else Float32(0.0)
+            two_level_weighted_leaf_value(
+                y, sample_weight, h_final_rows, tree.leaf_offsets[leaf],
+                tree.leaf_sizes[leaf], learning_rate, l2_leaf_reg,
+            )
         )
     var model = TAdditiveModel()
     model.add_weak_model(weak^)
