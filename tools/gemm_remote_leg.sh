@@ -3846,19 +3846,19 @@ leg_rehearse() {
     fi
 
     _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 MOJOLEARN_NVIDIA_CAMPAIGN=0 MOJOLEARN_KNN_LAYOUT_ONLY=1 "$0" amd --payload mamba 2>&1) && _rc=0 || _rc=$?
-    if [ "$_rc" = "2" ] && echo "$_out" | grep -q 'KNN layout-only requires nvidia'; then
+    if [ "$_rc" = "1" ] && echo "$_out" | grep -q 'KNN layout-only requires nvidia'; then
         rok "A4-layout-vendor layout-only refuses AMD"
     else
         rbad "A4-layout-vendor layout-only refuses AMD" "got exit $_rc: $_out"
     fi
     _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 MOJOLEARN_NVIDIA_CAMPAIGN=0 MOJOLEARN_KNN_LAYOUT_ONLY=1 "$0" nvidia --payload gemm 2>&1) && _rc=0 || _rc=$?
-    if [ "$_rc" = "2" ] && echo "$_out" | grep -q 'KNN layout-only requires nvidia'; then
+    if [ "$_rc" = "1" ] && echo "$_out" | grep -q 'KNN layout-only requires nvidia'; then
         rok "A4-layout-payload layout-only refuses a non-mamba transport"
     else
         rbad "A4-layout-payload layout-only refuses a non-mamba transport" "got exit $_rc: $_out"
     fi
     _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 MOJOLEARN_NVIDIA_CAMPAIGN=1 MOJOLEARN_KNN_LAYOUT_ONLY=1 "$0" nvidia --payload mamba 2>&1) && _rc=0 || _rc=$?
-    if [ "$_rc" = "2" ] && echo "$_out" | grep -q 'cannot run alongside'; then
+    if [ "$_rc" = "1" ] && echo "$_out" | grep -q 'cannot run alongside'; then
         rok "A4-layout-conflict layout-only refuses NVIDIA campaign"
     else
         rbad "A4-layout-conflict layout-only refuses NVIDIA campaign" "got exit $_rc: $_out"
@@ -4848,7 +4848,11 @@ if [ "$MODE" = "dry" ]; then
     echo "      from the pinned sha; read each lane's mode back"
     echo "   9. NO DIFF HERE. tools/e3_round_judge.sh section 7 judges it"
     else
-    if [ "$PAYLOAD" = "mamba" ]; then
+    if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
+    echo "   7. only four-arm public k-NN checks and pricing, bounded at ${WORK_TIMEOUT}s"
+    echo "   8. fetch layout-price logs, status and source/binary hashes"
+    echo "   9. require layout_exit=0; compare exact full outputs after collection"
+    elif [ "$PAYLOAD" = "mamba" ]; then
     echo "   7. mamba-backward-cert-$VENDOR, bounded at ${WORK_TIMEOUT}s"
     echo "   8. fetch manifests, native gradient bytes, logs and SHA256SUMS"
     echo "   9. require five GREEN rows, valid native bytes and IDENTICAL mode"
