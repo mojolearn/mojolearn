@@ -34,6 +34,11 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 GEN_PATH = ROOT / "mamba" / "corpus" / "gen_corpus.py"
 PUBLIC_PREFILL_LEAVES = {
+    "mamba1": (
+        "x", "norm.weight", "in_proj.weight", "conv1d.weight",
+        "conv1d.bias", "out_proj.weight", "D", "A_log",
+        "dt_proj.weight", "dt_proj.bias", "x_proj.weight",
+    ),
     "mamba2": (
         "x", "block_norm.weight", "in_proj.weight", "conv1d.weight",
         "conv1d.bias", "dt_bias", "A_log", "D", "norm.weight",
@@ -1166,7 +1171,36 @@ def compare(args):
             dump_tensors = []
         if len(dump_tensors) != len(set(dump_tensors)):
             failures.append("dump tensors contain duplicate names")
-        unknown_dump = set(dump_tensors).difference(manifest["gradients"])
+        declared_diagnostics = dump_manifest.get("diagnostics", [])
+        if family == "mamba1":
+            expected_diagnostics = ["stage.dB", "stage.dC"]
+            if declared_diagnostics != expected_diagnostics:
+                failures.append(
+                    f"dump diagnostics: {declared_diagnostics!r}, "
+                    f"expected {expected_diagnostics!r}"
+                )
+            x_shape = manifest["gradients"]["x"]["shape"]
+            state_width = manifest["gradients"]["A_log"]["shape"][-1]
+            diagnostic_bytes = int(np.prod(x_shape[:-1])) * state_width * 4
+            for diagnostic in expected_diagnostics:
+                diagnostic_path = actual_dir / (diagnostic + ".f32")
+                if not diagnostic_path.exists():
+                    failures.append(
+                        f"missing required diagnostic dump: {diagnostic_path.name}"
+                    )
+                elif diagnostic_path.stat().st_size != diagnostic_bytes:
+                    failures.append(
+                        f"{diagnostic_path.name}: bytes "
+                        f"{diagnostic_path.stat().st_size}, expected "
+                        f"{diagnostic_bytes}"
+                    )
+        elif declared_diagnostics:
+            failures.append(
+                f"unexpected declared diagnostics: {declared_diagnostics!r}"
+            )
+        unknown_dump = set(dump_tensors).difference(
+            set(manifest["gradients"]).union(declared_diagnostics)
+        )
         if unknown_dump:
             failures.append(
                 "dump names diagnostics absent from oracle: "
@@ -1179,7 +1213,8 @@ def compare(args):
                 + ", ".join(sorted(missing_oracle))
             )
         selected_policies.append(
-            f"manifest policy={family}.public_prefill_leaves.exact10.v1"
+            f"manifest policy={family}.public_prefill_leaves."
+            f"exact{len(canonical_public)}.v1"
         )
     expected_provenance = {
         "schema": "mojolearn.mamba.gradient-dump.v1",
@@ -1198,7 +1233,10 @@ def compare(args):
         if name not in dump_manifest.get("tensors", []):
             if (
                 args.require_public_prefill
-                and (name in required_public or manifest["family"] == "mamba2")
+                and (
+                    name in required_public
+                    or manifest["family"] in ("mamba1", "mamba2")
+                )
             ) or (
                 not args.allow_partial and not args.require_public_prefill
             ):
@@ -1213,7 +1251,10 @@ def compare(args):
             if not path.exists():
                 if (
                     args.require_public_prefill
-                    and (name in required_public or manifest["family"] == "mamba2")
+                    and (
+                        name in required_public
+                        or manifest["family"] in ("mamba1", "mamba2")
+                    )
                 ) or (
                     not args.allow_partial and not args.require_public_prefill
                 ):
