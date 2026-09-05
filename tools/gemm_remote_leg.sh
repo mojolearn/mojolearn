@@ -1134,7 +1134,7 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
 LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm original bindings python/mojolearn pixi.toml pixi.lock"
-LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py"
+LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py bindings python metrics checks/vendor.mojo"
 # The certificate needs the Mamba implementation plus three small shared
 # numerical modules. The Python oracle imports the forward definitions from
 # mamba/corpus/gen_corpus.py, but it constructs fixtures directly and reads
@@ -1142,7 +1142,7 @@ LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mam
 # larger than the work payload itself.
 # Keep this a git-archive pathspec so every shipped byte still comes from the
 # pinned commit; do not replace it with a working-tree tar.
-LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py"
+LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py bindings python metrics checks/vendor.mojo"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
 
 leg_git_archive() {
@@ -1525,6 +1525,10 @@ leg_mamba_artifacts() {
     fi
     grep -q '^mamba_cert_exit=0$' "$OUT/remote/leg.txt" 2>/dev/null || {
         echo "  remote Mamba payload exited non-zero or did not finish."
+        _bad=1
+    }
+    grep -q '^followup_exit=0$' "$OUT/remote/leg.txt" 2>/dev/null || {
+        echo "  UMAP/Mamba follow-up failed or is incomplete."
         _bad=1
     }
     return "$_bad"
@@ -2290,6 +2294,10 @@ ROOT=/root/mojolearn
 OUT=/root/gemm_leg_out
 mkdir -p "$OUT"
 cd "$ROOT" || exit 9
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+export MAX_JOBS=4 CMAKE_BUILD_PARALLEL_LEVEL=4
+cores=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:4])))')
+taskset -pc "$cores" $$ > "$OUT/cpu-affinity.log" 2>&1 || exit 9
 {
   echo "vendor=@VENDOR@"
   echo "payload=mamba"
@@ -2335,6 +2343,15 @@ else
     fi
 fi
 echo "mamba_cert_exit=$cert_rc" >> "$OUT/leg.txt"
+work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + work_started))
+followup_rc=124
+if [ "$work_remaining" -gt 60 ]; then
+    MOJOLEARN_FOLLOWUP_OUT="$OUT/followup" MOJOLEARN_MAMBA_CERT_VENDOR="@VENDOR@" \
+      timeout -k 30 "$work_remaining" bash tools/umap_mamba_followup.sh \
+      > "$OUT/followup-console.log" 2>&1
+    followup_rc=$?
+fi
+echo "followup_exit=$followup_rc" >> "$OUT/leg.txt"
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
 tail -40 "$OUT/mamba_cert_console.log"
 : > /root/gemm_leg.done
