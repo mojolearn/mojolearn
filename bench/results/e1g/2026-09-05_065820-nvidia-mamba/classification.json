@@ -1,0 +1,15 @@
+{
+  "classification": "INFRA_FAILURE",
+  "source_commit": "b715b12413599d1e932b24b0d9a27a15472eb6a8",
+  "device": "NVIDIA RTX 4090",
+  "driver": "580.159.04",
+  "cpu_affinity": "0-3; OMP/BLAS libraries limited to one thread",
+  "native_backward": "PASS: five cases, 54 retained gradient tensors",
+  "mamba_python_identical": "PASS: 102 checks, all three families forward/state, independent corpus comparisons",
+  "umap_original": "PASS: 186 cells match prior Apple capture",
+  "umap_broader": "PASS: 690 cells match prior Apple capture",
+  "source_equivalence": "UMAP numerical source unchanged between retained Apple snapshots and b715b124; new scripts/tasks do not alter the pipeline",
+  "open": "UMAP Python/quality checks did not run: metrics extension compilation failed because trimmed archive omitted cluster and checks.fixed_point dependencies. Corrected in ded4786c orchestration.",
+  "teardown": "HTTP 204 delete; absence verified HTTP 404",
+  "scope": "Source and source-built binding checks only; no Linux wheel claim; no Python backward exposure"
+}
