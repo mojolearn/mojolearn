@@ -1,0 +1,1235 @@
+{
+  "status": "PASS",
+  "primary": {
+    "directory": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1g/2026-09-05_163958-nvidia-mamba/remote/layout-price",
+    "status": "PASS",
+    "status_count": 120,
+    "price_log_count": 108,
+    "check_log_count": 4,
+    "build_log_count": 8,
+    "activation": {
+      "baseline": {
+        "selector": 0,
+        "transpose": 0
+      },
+      "selector": {
+        "selector": 1,
+        "transpose": 0
+      },
+      "transpose": {
+        "selector": 0,
+        "transpose": 1
+      },
+      "both": {
+        "selector": 1,
+        "transpose": 1
+      }
+    },
+    "scope": "native-public-upload-search-download-synchronize",
+    "quartile_method": "inclusive linear interpolation",
+    "ratio_direction": "baseline milliseconds / arm milliseconds; above 1 favors arm",
+    "status_sha256": "84d50f179678585196963a65c3e9b39a528fe5bd742183957962342066b1495a",
+    "build_log_sha256": {
+      "build-check-baseline.log": "5adad35a268bb4c63cabcd2e0a2484dca9287d90859b0541e86d8ec64099f2a3",
+      "build-check-both.log": "fce3abb5cebfb5a7fcb6ceb3f582d32a59b77b861702e80eae27da9e78c23ba1",
+      "build-check-selector.log": "613529536d127c1e8b66941506b9be7ecb264c445e482152d61632697459f093",
+      "build-check-transpose.log": "758d31d738c20c668906e681ef1b2aaa140f2be8f03fd458af8132e5c31275ad",
+      "build-price-baseline.log": "d29f7ef264834e1f7af5b8f11c8295e27ca72f2a884453986110327154e58936",
+      "build-price-both.log": "9efd59269bed4cbd6ebba3e9b475a0f11d38b181b090fc4074683832e28f01e9",
+      "build-price-selector.log": "1e9c22466b559ffa0d071cc1cbe7e312226f6450a06f736595b917b221d5f9ad",
+      "build-price-transpose.log": "bc4b5f905b15c8469cb449d6b5ce63c342d0c2ef5f5ec3d68c8282fd22fc4146"
+    },
+    "checks": {
+      "baseline": {
+        "log": "check-baseline.log",
+        "sha256": "d55a579c0feb8c5a2aa23c99c564fe8379be0b4a12b6224dd5be55dc1a74bbe9",
+        "dispatch_selected_pairs": 133348,
+        "layout_selected_pairs": 10280,
+        "output_sha256": {
+          "DISPATCH_CELL": "513174452587e1d4d19d76c557eadf311bd25a17ea7c568cfc68759742de668a",
+          "LAYOUT_CELL": "3f5b9f05262c7e69b16c45a0d1006c575532743fc22e29c9fc794d9c37dbe576"
+        }
+      },
+      "selector": {
+        "log": "check-selector.log",
+        "sha256": "f26a0324dac7f215768d42fd0e0b714ec24e42cf20339b0746af8c2b63d3b2b6",
+        "dispatch_selected_pairs": 133348,
+        "layout_selected_pairs": 10280,
+        "output_sha256": {
+          "DISPATCH_CELL": "513174452587e1d4d19d76c557eadf311bd25a17ea7c568cfc68759742de668a",
+          "LAYOUT_CELL": "3f5b9f05262c7e69b16c45a0d1006c575532743fc22e29c9fc794d9c37dbe576"
+        }
+      },
+      "transpose": {
+        "log": "check-transpose.log",
+        "sha256": "ab8563871274dff8b917126cdbec6251d7ea7b53768b179471b525258e26b400",
+        "dispatch_selected_pairs": 133348,
+        "layout_selected_pairs": 10280,
+        "output_sha256": {
+          "DISPATCH_CELL": "513174452587e1d4d19d76c557eadf311bd25a17ea7c568cfc68759742de668a",
+          "LAYOUT_CELL": "3f5b9f05262c7e69b16c45a0d1006c575532743fc22e29c9fc794d9c37dbe576"
+        }
+      },
+      "both": {
+        "log": "check-both.log",
+        "sha256": "a64a00ae40bd306ba11dbe88aa834a6ab38d660f0ab0647cc3f4d37152b07e83",
+        "dispatch_selected_pairs": 133348,
+        "layout_selected_pairs": 10280,
+        "output_sha256": {
+          "DISPATCH_CELL": "513174452587e1d4d19d76c557eadf311bd25a17ea7c568cfc68759742de668a",
+          "LAYOUT_CELL": "3f5b9f05262c7e69b16c45a0d1006c575532743fc22e29c9fc794d9c37dbe576"
+        }
+      }
+    },
+    "shapes": {
+      "32": {
+        "selected_pairs": 320,
+        "output_sha256": "092ad56dd84ba1fa66a167e0c9318fb155b4f382042d285b7d3cf9f0b1b6ef33",
+        "samples": {
+          "baseline": [
+            {
+              "round": 0,
+              "milliseconds": 25.504088,
+              "used_tile": 32,
+              "log": "q32-r0-baseline.log",
+              "sha256": "b5b1cc8a37feba727de4eed5b4ecc7de9915fe3aee5c4669e433c77f577c2660"
+            },
+            {
+              "round": 1,
+              "milliseconds": 26.583639,
+              "used_tile": 32,
+              "log": "q32-r1-baseline.log",
+              "sha256": "790c25a2a59581001893361fce9b15ad2e238c2116595b3977be61cb4c3d547c"
+            },
+            {
+              "round": 2,
+              "milliseconds": 18.094417,
+              "used_tile": 32,
+              "log": "q32-r2-baseline.log",
+              "sha256": "b584132b097104512168f3a66e1889f6de7dfa3a911e36e47a4d7591689fd262"
+            },
+            {
+              "round": 3,
+              "milliseconds": 25.62358,
+              "used_tile": 32,
+              "log": "q32-r3-baseline.log",
+              "sha256": "68a24681580754e1d1fb45480d8bcd6c6b8a1c0e375bd640b754221e9ceac6d1"
+            },
+            {
+              "round": 4,
+              "milliseconds": 26.375607,
+              "used_tile": 32,
+              "log": "q32-r4-baseline.log",
+              "sha256": "b6951e63f5007a8a93272c8f3468fc8b459c49ac4dcb1d73f89555828528c977"
+            },
+            {
+              "round": 5,
+              "milliseconds": 15.326729,
+              "used_tile": 32,
+              "log": "q32-r5-baseline.log",
+              "sha256": "e406ed8f44818f0add2eec343ae09618af82ecafe002a1a649c186e6ab8c436f"
+            },
+            {
+              "round": 6,
+              "milliseconds": 26.424677,
+              "used_tile": 32,
+              "log": "q32-r6-baseline.log",
+              "sha256": "3e6395df0316e72671616d487f6ab4c078ee2221ced756caf18d6d77b21114ce"
+            },
+            {
+              "round": 7,
+              "milliseconds": 25.753671,
+              "used_tile": 32,
+              "log": "q32-r7-baseline.log",
+              "sha256": "da0bc89f8cab12409f560da09a4d11566425753609cd5405a429309340a913c9"
+            },
+            {
+              "round": 8,
+              "milliseconds": 25.938393,
+              "used_tile": 32,
+              "log": "q32-r8-baseline.log",
+              "sha256": "a2a3b54cbe0e0f17a63e0a9414259d300bf0360c32c7c2bbfcdf9c73965a8f42"
+            }
+          ],
+          "selector": [
+            {
+              "round": 0,
+              "milliseconds": 4.780937,
+              "used_tile": 32,
+              "log": "q32-r0-selector.log",
+              "sha256": "8982e666f3903d686b8a56d4c818ea75c3ed0f044037a01a37e72b8576f71de7"
+            },
+            {
+              "round": 1,
+              "milliseconds": 5.002819,
+              "used_tile": 32,
+              "log": "q32-r1-selector.log",
+              "sha256": "49e32c878dedad8b4ff3d55fb0c532d48b627fa1b3af3882948e29d8981869bf"
+            },
+            {
+              "round": 2,
+              "milliseconds": 4.771416,
+              "used_tile": 32,
+              "log": "q32-r2-selector.log",
+              "sha256": "176bfa834ea07c7fffc04fbcca9b9f1b95557105598b70242892595ab138b99b"
+            },
+            {
+              "round": 3,
+              "milliseconds": 4.710136,
+              "used_tile": 32,
+              "log": "q32-r3-selector.log",
+              "sha256": "731f2e977d83107bc6c8e4a505e95dc866b8deebb5b72e36a2ef438c1cd45d90"
+            },
+            {
+              "round": 4,
+              "milliseconds": 4.732766,
+              "used_tile": 32,
+              "log": "q32-r4-selector.log",
+              "sha256": "b0ef5c563acc925ff70a3ea116d045aec17b0f9a977ce126cdd013e5d2133913"
+            },
+            {
+              "round": 5,
+              "milliseconds": 4.974988,
+              "used_tile": 32,
+              "log": "q32-r5-selector.log",
+              "sha256": "ca92f1c758cb99e77fdd0a4c8c4d37ca0cb645e1e2725975d8e368fb720aa059"
+            },
+            {
+              "round": 6,
+              "milliseconds": 4.834657,
+              "used_tile": 32,
+              "log": "q32-r6-selector.log",
+              "sha256": "6d1e080f1fd09f0987e60457294b75b5d5a583ec627a707052cb45d587196fce"
+            },
+            {
+              "round": 7,
+              "milliseconds": 4.990969,
+              "used_tile": 32,
+              "log": "q32-r7-selector.log",
+              "sha256": "addbb5a4908db340f3f60fc2e6fb6c30a634838e14bf7ca3d91563921d04187b"
+            },
+            {
+              "round": 8,
+              "milliseconds": 4.770517,
+              "used_tile": 32,
+              "log": "q32-r8-selector.log",
+              "sha256": "c43139b092925fbe0e2fe76bd6255ba0c0d8719001f5182ce9b5c583d1a2750b"
+            }
+          ],
+          "transpose": [
+            {
+              "round": 0,
+              "milliseconds": 26.976923,
+              "used_tile": 32,
+              "log": "q32-r0-transpose.log",
+              "sha256": "72ffafc8ce88afee41e31c940e9be98fe752e13608cbfca4676091d9cc6c0cb1"
+            },
+            {
+              "round": 1,
+              "milliseconds": 27.097434,
+              "used_tile": 32,
+              "log": "q32-r1-transpose.log",
+              "sha256": "9aa0c9fdf5c210a71325e535d2d2f21c716f5738f1e4e8fd6fb48513846675ac"
+            },
+            {
+              "round": 2,
+              "milliseconds": 17.352879,
+              "used_tile": 32,
+              "log": "q32-r2-transpose.log",
+              "sha256": "487b6df808bf12547a509aba26275d79cf4ac9d06be418e616ee6b51bb67b682"
+            },
+            {
+              "round": 3,
+              "milliseconds": 17.853193,
+              "used_tile": 32,
+              "log": "q32-r3-transpose.log",
+              "sha256": "bf159f1b2910c57e9631f20eb1c4c84bac9eae28ee4365921369833548866b56"
+            },
+            {
+              "round": 4,
+              "milliseconds": 27.832002,
+              "used_tile": 32,
+              "log": "q32-r4-transpose.log",
+              "sha256": "b8bf93866cf00b12c5028f3d80b788596f653940cf9c083bf0b8292f04f40894"
+            },
+            {
+              "round": 5,
+              "milliseconds": 26.182235,
+              "used_tile": 32,
+              "log": "q32-r5-transpose.log",
+              "sha256": "8e2e2f4c9f574f26df311e1b3eef86b106755b307e0e988715ff3246310f93d2"
+            },
+            {
+              "round": 6,
+              "milliseconds": 18.46537,
+              "used_tile": 32,
+              "log": "q32-r6-transpose.log",
+              "sha256": "fe1ff54a427b61da2e0a01f269bff9fe08d8b88cc567a6e09e88f115c6a9042e"
+            },
+            {
+              "round": 7,
+              "milliseconds": 20.002744,
+              "used_tile": 32,
+              "log": "q32-r7-transpose.log",
+              "sha256": "3916679086e6bdd8613c71030690907387023461f883a9427d140313ff91d0bf"
+            },
+            {
+              "round": 8,
+              "milliseconds": 26.928312,
+              "used_tile": 32,
+              "log": "q32-r8-transpose.log",
+              "sha256": "91b1e5c1d448a9a06808afe4cade28df9d4f69e79983e132f94a47c639db137a"
+            }
+          ],
+          "both": [
+            {
+              "round": 0,
+              "milliseconds": 5.20252,
+              "used_tile": 32,
+              "log": "q32-r0-both.log",
+              "sha256": "2a3150c0fd287edb4e1dd2798e41aa4c1409490f137baf66f359b099a926975c"
+            },
+            {
+              "round": 1,
+              "milliseconds": 3.227832,
+              "used_tile": 32,
+              "log": "q32-r1-both.log",
+              "sha256": "c5ae55817a0817158429e620e224e89fbdadf7403a671375bb6cdaf53a52ad5b"
+            },
+            {
+              "round": 2,
+              "milliseconds": 5.017159,
+              "used_tile": 32,
+              "log": "q32-r2-both.log",
+              "sha256": "bda35b633152a01c3d846e2430004dc9fb0589a183662cf5fc322ad9a3cbe5bd"
+            },
+            {
+              "round": 3,
+              "milliseconds": 3.295302,
+              "used_tile": 32,
+              "log": "q32-r3-both.log",
+              "sha256": "596ad9e157c0e5901b7ef591f0d3c4b02b2711d0acfd041728cfb0fd1c87c624"
+            },
+            {
+              "round": 4,
+              "milliseconds": 3.263512,
+              "used_tile": 32,
+              "log": "q32-r4-both.log",
+              "sha256": "2b811835e4ce8d168edb321f759548f956c4cf6b090f419c134acbcdf31832ba"
+            },
+            {
+              "round": 5,
+              "milliseconds": 3.223641,
+              "used_tile": 32,
+              "log": "q32-r5-both.log",
+              "sha256": "ca80f11da8df219aaedad8948aa1f645d665c5756a22ae596e72432ca3a0b1ef"
+            },
+            {
+              "round": 6,
+              "milliseconds": 5.028609,
+              "used_tile": 32,
+              "log": "q32-r6-both.log",
+              "sha256": "c8e298566cb7423fdeb465d0e977bf8d7a8ee50438e180a7453610a5b6c5aa87"
+            },
+            {
+              "round": 7,
+              "milliseconds": 5.329602,
+              "used_tile": 32,
+              "log": "q32-r7-both.log",
+              "sha256": "67b4867ac6a169a82aeb8e5cc6a2919bc3d873efc0d5d5fe0a10e065dad1e1fa"
+            },
+            {
+              "round": 8,
+              "milliseconds": 5.008609,
+              "used_tile": 32,
+              "log": "q32-r8-both.log",
+              "sha256": "5b236e1177aa753076f0c88839fdd2d84d3d477c7a0152898e669009279c6d51"
+            }
+          ]
+        },
+        "milliseconds": {
+          "baseline": {
+            "median": 25.753671,
+            "q1": 25.504088,
+            "q3": 26.375607,
+            "iqr": 0.8715189999999993,
+            "minimum": 15.326729,
+            "maximum": 26.583639
+          },
+          "selector": {
+            "median": 4.780937,
+            "q1": 4.770517,
+            "q3": 4.974988,
+            "iqr": 0.20447099999999985,
+            "minimum": 4.710136,
+            "maximum": 5.002819
+          },
+          "transpose": {
+            "median": 26.182235,
+            "q1": 18.46537,
+            "q3": 26.976923,
+            "iqr": 8.511553,
+            "minimum": 17.352879,
+            "maximum": 27.832002
+          },
+          "both": {
+            "median": 5.008609,
+            "q1": 3.263512,
+            "q3": 5.028609,
+            "iqr": 1.7650970000000004,
+            "minimum": 3.223641,
+            "maximum": 5.329602
+          }
+        },
+        "paired_baseline_over_arm": {
+          "baseline": {
+            "raw": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "median": 1.0,
+            "q1": 1.0,
+            "q3": 1.0,
+            "iqr": 0.0,
+            "minimum": 1.0,
+            "maximum": 1.0
+          },
+          "selector": {
+            "raw": [
+              5.334537560315059,
+              5.313731917944663,
+              3.792253075397324,
+              5.440093449530969,
+              5.57297931061878,
+              3.0807569787103004,
+              5.465677709918201,
+              5.160054290058705,
+              5.437228920890545
+            ],
+            "median": 5.334537560315059,
+            "q1": 5.160054290058705,
+            "q3": 5.440093449530969,
+            "iqr": 0.2800391594722642,
+            "minimum": 3.0807569787103004,
+            "maximum": 5.57297931061878
+          },
+          "transpose": {
+            "raw": [
+              0.9454038920598914,
+              0.9810389795579907,
+              1.0427328514190641,
+              1.4352379431511215,
+              0.9476719281638454,
+              0.5853865798699004,
+              1.4310396704750568,
+              1.287506904052764,
+              0.9632387280717782
+            ],
+            "median": 0.9810389795579907,
+            "q1": 0.9476719281638454,
+            "q3": 1.287506904052764,
+            "iqr": 0.33983497588891864,
+            "minimum": 0.5853865798699004,
+            "maximum": 1.4352379431511215
+          },
+          "both": {
+            "raw": [
+              4.902256598725233,
+              8.23575669365692,
+              3.606506590682097,
+              7.775791111103019,
+              8.081970282321622,
+              4.754477623283734,
+              5.254868095729853,
+              4.832194036252613,
+              5.178761807919125
+            ],
+            "median": 5.178761807919125,
+            "q1": 4.832194036252613,
+            "q3": 7.775791111103019,
+            "iqr": 2.9435970748504063,
+            "minimum": 3.606506590682097,
+            "maximum": 8.23575669365692
+          }
+        }
+      },
+      "128": {
+        "selected_pairs": 1280,
+        "output_sha256": "68cefa4c97710a4b881e548f51bff31d13d7acaf106336ff7989b3fb4bb8833b",
+        "samples": {
+          "baseline": [
+            {
+              "round": 0,
+              "milliseconds": 84.461383,
+              "used_tile": 128,
+              "log": "q128-r0-baseline.log",
+              "sha256": "21fb8bac05084ec17fe17bf2568a6b3774331ad5f6728c936cdcbe55d258be24"
+            },
+            {
+              "round": 1,
+              "milliseconds": 86.775015,
+              "used_tile": 128,
+              "log": "q128-r1-baseline.log",
+              "sha256": "f55c43930bd0907c64981cd69dba8b8d188e619ce878999e73f5da55c1b9aec0"
+            },
+            {
+              "round": 2,
+              "milliseconds": 87.124599,
+              "used_tile": 128,
+              "log": "q128-r2-baseline.log",
+              "sha256": "f1748fe235b1a6e7da92893bdf3acff80766dccb120fdd9dad9491c84deb300d"
+            },
+            {
+              "round": 3,
+              "milliseconds": 61.055955,
+              "used_tile": 128,
+              "log": "q128-r3-baseline.log",
+              "sha256": "a3de5a8bc898e4f90f81ac6d787808df7a19a648c6faf57561b6f8a05466f915"
+            },
+            {
+              "round": 4,
+              "milliseconds": 82.13484,
+              "used_tile": 128,
+              "log": "q128-r4-baseline.log",
+              "sha256": "7bc795061a13670799ef353e3a8ac9e1dacbbaf4acb933fb0802b91569a9cb67"
+            },
+            {
+              "round": 5,
+              "milliseconds": 88.352401,
+              "used_tile": 128,
+              "log": "q128-r5-baseline.log",
+              "sha256": "e646ef48a8b0bc7fa68194ba6e73352a2cb89ea51f34e6df55f3e715c8ec98a9"
+            },
+            {
+              "round": 6,
+              "milliseconds": 58.246528,
+              "used_tile": 128,
+              "log": "q128-r6-baseline.log",
+              "sha256": "2e7a0b48b85fd0ec498e1dc966bbd831f66aac3dc0a26e06490c781004cf999c"
+            },
+            {
+              "round": 7,
+              "milliseconds": 67.093113,
+              "used_tile": 128,
+              "log": "q128-r7-baseline.log",
+              "sha256": "8feb06bc52ffdd11183c1bd0ea76c3cbe312091a59d5aff8d7e0de44a31c578c"
+            },
+            {
+              "round": 8,
+              "milliseconds": 59.604861,
+              "used_tile": 128,
+              "log": "q128-r8-baseline.log",
+              "sha256": "d5c2352fa381815549c9a02feed67c4f5532a25f0139d828fa5cb1918ab68cde"
+            }
+          ],
+          "selector": [
+            {
+              "round": 0,
+              "milliseconds": 4.869828,
+              "used_tile": 128,
+              "log": "q128-r0-selector.log",
+              "sha256": "324f5fe0d4256134fb41e62a6db734d742f303e25443257a6a35024fc68e5414"
+            },
+            {
+              "round": 1,
+              "milliseconds": 7.228581,
+              "used_tile": 128,
+              "log": "q128-r1-selector.log",
+              "sha256": "c3e7376b43bda9ef5c6452be0db88e5c0e080e24cfd5e201c1bffd7ee40c6ac1"
+            },
+            {
+              "round": 2,
+              "milliseconds": 6.671265,
+              "used_tile": 128,
+              "log": "q128-r2-selector.log",
+              "sha256": "8038c4ef2e5081d26beade24a103e8e39810918b1c81591845f5352d1179f55e"
+            },
+            {
+              "round": 3,
+              "milliseconds": 6.760035,
+              "used_tile": 128,
+              "log": "q128-r3-selector.log",
+              "sha256": "91829e7766cca720a129b0010586f816c7c0f49c118cc05798eb6840619b5b45"
+            },
+            {
+              "round": 4,
+              "milliseconds": 6.575104,
+              "used_tile": 128,
+              "log": "q128-r4-selector.log",
+              "sha256": "de9283da386e50cb3e56751712c246460d6ea123905610abc0e7fa10b0b7ca18"
+            },
+            {
+              "round": 5,
+              "milliseconds": 6.900007,
+              "used_tile": 128,
+              "log": "q128-r5-selector.log",
+              "sha256": "490d1de47e85e12cb554c725229e0945d15016e9802d66c49d249f8431498c51"
+            },
+            {
+              "round": 6,
+              "milliseconds": 4.898857,
+              "used_tile": 128,
+              "log": "q128-r6-selector.log",
+              "sha256": "7c3433912818fd51c259647c4dc964ec7448a28452d359236e202a48c4486969"
+            },
+            {
+              "round": 7,
+              "milliseconds": 4.915648,
+              "used_tile": 128,
+              "log": "q128-r7-selector.log",
+              "sha256": "2ee643267ff64a6427fd0681ed63843a3ce0854dd67ba8aecb0e41f7acc4f4e4"
+            },
+            {
+              "round": 8,
+              "milliseconds": 5.016199,
+              "used_tile": 128,
+              "log": "q128-r8-selector.log",
+              "sha256": "287c041c16481a97991c62764c82ad34ddc610ee93ec09843302ebee042d98ed"
+            }
+          ],
+          "transpose": [
+            {
+              "round": 0,
+              "milliseconds": 87.069378,
+              "used_tile": 128,
+              "log": "q128-r0-transpose.log",
+              "sha256": "928c164c3e2151ff36c58fd91d1f9c82959049d51642b52904af0d53325fb702"
+            },
+            {
+              "round": 1,
+              "milliseconds": 71.730359,
+              "used_tile": 128,
+              "log": "q128-r1-transpose.log",
+              "sha256": "af70ab544b32ad8b5c92117ab84b1c2c2659ce3878f6e7eb1442a988e2c9a891"
+            },
+            {
+              "round": 2,
+              "milliseconds": 82.210941,
+              "used_tile": 128,
+              "log": "q128-r2-transpose.log",
+              "sha256": "74d681fe21928ea18b5c762c48f7565b2f11114db5d6bdcce3546c5dcea45732"
+            },
+            {
+              "round": 3,
+              "milliseconds": 84.257991,
+              "used_tile": 128,
+              "log": "q128-r3-transpose.log",
+              "sha256": "4d324b19dd71918a99f691303d3b1ed66a7d2f36ee73de783d9ac1f794d4cdbc"
+            },
+            {
+              "round": 4,
+              "milliseconds": 85.483303,
+              "used_tile": 128,
+              "log": "q128-r4-transpose.log",
+              "sha256": "49b90c47840afd10e63de81cdadac54a5c70f0cbef0892e85d030bb344fbc6a0"
+            },
+            {
+              "round": 5,
+              "milliseconds": 84.076009,
+              "used_tile": 128,
+              "log": "q128-r5-transpose.log",
+              "sha256": "49e1b1972b3d88754b5a5665e04b19ddc49c21e8bac5ffff8575a24890bc66aa"
+            },
+            {
+              "round": 6,
+              "milliseconds": 55.675473,
+              "used_tile": 128,
+              "log": "q128-r6-transpose.log",
+              "sha256": "336581f0c4c7c8c19822e8fe2ba80c2ee43d929f5e36367967e2950b8476d77c"
+            },
+            {
+              "round": 7,
+              "milliseconds": 60.585861,
+              "used_tile": 128,
+              "log": "q128-r7-transpose.log",
+              "sha256": "52bdc6d9558c0f9b817d98b6636bfd2d0dce8bedc3594e9c31951a4d4a2665fb"
+            },
+            {
+              "round": 8,
+              "milliseconds": 86.999798,
+              "used_tile": 128,
+              "log": "q128-r8-transpose.log",
+              "sha256": "0c8ef19bc844f7a4ad4098079da3bb626db7cf8127beb17e49cfd35c375b6375"
+            }
+          ],
+          "both": [
+            {
+              "round": 0,
+              "milliseconds": 6.1823,
+              "used_tile": 128,
+              "log": "q128-r0-both.log",
+              "sha256": "da370fc25b2bc9247537a9d6398909ed4e546337b6cecfa3e80cd0f0a66ab8a4"
+            },
+            {
+              "round": 1,
+              "milliseconds": 6.264051,
+              "used_tile": 128,
+              "log": "q128-r1-both.log",
+              "sha256": "74cc32a6b6c12c3869ba88f5e6435dd0b179d848f414069fd931dc88804a9d3d"
+            },
+            {
+              "round": 2,
+              "milliseconds": 6.236631,
+              "used_tile": 128,
+              "log": "q128-r2-both.log",
+              "sha256": "6d666cd8b19f854f2ca0ace8175eec6a7a125c6bc370c68b934d098174e056f7"
+            },
+            {
+              "round": 3,
+              "milliseconds": 6.490914,
+              "used_tile": 128,
+              "log": "q128-r3-both.log",
+              "sha256": "a8a53c61453fef947d13dc1bae846c38825d92df94c1bd7a518379e057354b94"
+            },
+            {
+              "round": 4,
+              "milliseconds": 6.20338,
+              "used_tile": 128,
+              "log": "q128-r4-both.log",
+              "sha256": "cdfda13164b5456bd4f664a01604e7212e37d1e9855fa53c6dfa26d33db145ff"
+            },
+            {
+              "round": 5,
+              "milliseconds": 4.837727,
+              "used_tile": 128,
+              "log": "q128-r5-both.log",
+              "sha256": "8556dca6edf905df93e83d93d2ccf806fee0f0a90747b815061153b6bfb9703e"
+            },
+            {
+              "round": 6,
+              "milliseconds": 6.545284,
+              "used_tile": 128,
+              "log": "q128-r6-both.log",
+              "sha256": "102f6c612be28b0dfb47aeb65a816efdd5e93c0d3a0c3a4d95cff8870df5d13d"
+            },
+            {
+              "round": 7,
+              "milliseconds": 6.419723,
+              "used_tile": 128,
+              "log": "q128-r7-both.log",
+              "sha256": "b1cc6fd92a021b4ca15c59a0a2185cf1614adfc4906231259b04f76dcbc275e8"
+            },
+            {
+              "round": 8,
+              "milliseconds": 4.530925,
+              "used_tile": 128,
+              "log": "q128-r8-both.log",
+              "sha256": "596d854db3ab78b512c11221fe7f8600fc490529cbf05c9b06e37f047ac8aca2"
+            }
+          ]
+        },
+        "milliseconds": {
+          "baseline": {
+            "median": 82.13484,
+            "q1": 61.055955,
+            "q3": 86.775015,
+            "iqr": 25.71906,
+            "minimum": 58.246528,
+            "maximum": 88.352401
+          },
+          "selector": {
+            "median": 6.575104,
+            "q1": 4.915648,
+            "q3": 6.760035,
+            "iqr": 1.8443870000000002,
+            "minimum": 4.869828,
+            "maximum": 7.228581
+          },
+          "transpose": {
+            "median": 84.076009,
+            "q1": 71.730359,
+            "q3": 85.483303,
+            "iqr": 13.752944,
+            "minimum": 55.675473,
+            "maximum": 87.069378
+          },
+          "both": {
+            "median": 6.236631,
+            "q1": 6.1823,
+            "q3": 6.419723,
+            "iqr": 0.2374230000000006,
+            "minimum": 4.530925,
+            "maximum": 6.545284
+          }
+        },
+        "paired_baseline_over_arm": {
+          "baseline": {
+            "raw": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "median": 1.0,
+            "q1": 1.0,
+            "q3": 1.0,
+            "iqr": 0.0,
+            "minimum": 1.0,
+            "maximum": 1.0
+          },
+          "selector": {
+            "raw": [
+              17.343812348197922,
+              12.004432820217412,
+              13.059681934385758,
+              9.03189924312522,
+              12.491793285703162,
+              12.80468280684353,
+              11.889820013117346,
+              13.648884745205516,
+              11.882475356340526
+            ],
+            "median": 12.491793285703162,
+            "q1": 11.889820013117346,
+            "q3": 13.059681934385758,
+            "iqr": 1.1698619212684118,
+            "minimum": 9.03189924312522,
+            "maximum": 17.343812348197922
+          },
+          "transpose": {
+            "raw": [
+              0.9700469319994452,
+              1.2097390311402176,
+              1.0597689059416069,
+              0.724631032325468,
+              0.9608290404969493,
+              1.0508634038516267,
+              1.046179311310027,
+              1.1074054555401962,
+              0.6851149355542182
+            ],
+            "median": 1.046179311310027,
+            "q1": 0.9608290404969493,
+            "q3": 1.0597689059416069,
+            "iqr": 0.0989398654446576,
+            "minimum": 0.6851149355542182,
+            "maximum": 1.2097390311402176
+          },
+          "both": {
+            "raw": [
+              13.66180596218236,
+              13.852858956608111,
+              13.969817839150657,
+              9.406372507785498,
+              13.240336719659282,
+              18.263205220137472,
+              8.89900697968186,
+              10.451091581365738,
+              13.155119760313843
+            ],
+            "median": 13.240336719659282,
+            "q1": 10.451091581365738,
+            "q3": 13.852858956608111,
+            "iqr": 3.4017673752423736,
+            "minimum": 8.89900697968186,
+            "maximum": 18.263205220137472
+          }
+        }
+      },
+      "1000": {
+        "selected_pairs": 10000,
+        "output_sha256": "f12c050622289f72aaa3052166aad8689f138cc40e699fb6418636b0563ea625",
+        "samples": {
+          "baseline": [
+            {
+              "round": 0,
+              "milliseconds": 780.143511,
+              "used_tile": 256,
+              "log": "q1000-r0-baseline.log",
+              "sha256": "43e02ae3edadbc9d4b008a767b3118fd3b4d9a8427cec6f1802a2d18668672bd"
+            },
+            {
+              "round": 1,
+              "milliseconds": 757.660222,
+              "used_tile": 256,
+              "log": "q1000-r1-baseline.log",
+              "sha256": "4e46a85cd20771888e78b52809b868785ff795bfff86a09a86ae52220b39fcf6"
+            },
+            {
+              "round": 2,
+              "milliseconds": 785.14482,
+              "used_tile": 256,
+              "log": "q1000-r2-baseline.log",
+              "sha256": "dd4bc221cd1fb7b72f004044860b13c8c6f8d3cdc99da9677cd281452508ddb3"
+            },
+            {
+              "round": 3,
+              "milliseconds": 703.281612,
+              "used_tile": 256,
+              "log": "q1000-r3-baseline.log",
+              "sha256": "327e08323cf6f1cc32711bf034359ba576fc9f4fd3069d30072892f5c37ce648"
+            },
+            {
+              "round": 4,
+              "milliseconds": 759.333028,
+              "used_tile": 256,
+              "log": "q1000-r4-baseline.log",
+              "sha256": "71da2e5ff5c3a9e85d17eb671daa118e7f5e54b68c2ce862e157b009581bce52"
+            },
+            {
+              "round": 5,
+              "milliseconds": 820.642719,
+              "used_tile": 256,
+              "log": "q1000-r5-baseline.log",
+              "sha256": "3ae2f580cc62724e3253f9c31cbfad07638c3c95369aae6e6312deabbc5e8b7d"
+            },
+            {
+              "round": 6,
+              "milliseconds": 791.616477,
+              "used_tile": 256,
+              "log": "q1000-r6-baseline.log",
+              "sha256": "b1f1a764cecee5fc90aa0c4bd917f4d70280584115ec80a04c796a88ee14557a"
+            },
+            {
+              "round": 7,
+              "milliseconds": 730.47741,
+              "used_tile": 256,
+              "log": "q1000-r7-baseline.log",
+              "sha256": "f7e9c068442e32e24fffaf4d7bc737da73ed4ffe616ace90157d827eec86cf04"
+            },
+            {
+              "round": 8,
+              "milliseconds": 725.50222,
+              "used_tile": 256,
+              "log": "q1000-r8-baseline.log",
+              "sha256": "12d693a6581cda7b2571c12dc4c433390c0466e4a0698727fa4fc1d6e3fb6992"
+            }
+          ],
+          "selector": [
+            {
+              "round": 0,
+              "milliseconds": 17.396739,
+              "used_tile": 256,
+              "log": "q1000-r0-selector.log",
+              "sha256": "94b9025833193fa92b971af5901f8069a9d8374424b2d38ddcade97ffbe62ded"
+            },
+            {
+              "round": 1,
+              "milliseconds": 18.197687,
+              "used_tile": 256,
+              "log": "q1000-r1-selector.log",
+              "sha256": "1e06b1b307bf52f8ab5e90219de8811c98e25d64999543e9fa6ed2f4882f7e9a"
+            },
+            {
+              "round": 2,
+              "milliseconds": 15.378369,
+              "used_tile": 256,
+              "log": "q1000-r2-selector.log",
+              "sha256": "2153130380f33effebb83593fbd72196e9a8c37b4344584a35cc521a101764ce"
+            },
+            {
+              "round": 3,
+              "milliseconds": 17.241038,
+              "used_tile": 256,
+              "log": "q1000-r3-selector.log",
+              "sha256": "dc91753583c519a5cc6a3a9a9b7bcb0692813bea50d246b548ee3b4599d1c2e4"
+            },
+            {
+              "round": 4,
+              "milliseconds": 17.132037,
+              "used_tile": 256,
+              "log": "q1000-r4-selector.log",
+              "sha256": "a2bb61b73395b4e21996b6b13c70356e61f8ef6ccfc31b640cd5b7979f125bdf"
+            },
+            {
+              "round": 5,
+              "milliseconds": 18.707068,
+              "used_tile": 256,
+              "log": "q1000-r5-selector.log",
+              "sha256": "fbf90a0ca9c6c498c2b208df59b6c978c412a153aa5ee402bb31194f9749449d"
+            },
+            {
+              "round": 6,
+              "milliseconds": 17.269144,
+              "used_tile": 256,
+              "log": "q1000-r6-selector.log",
+              "sha256": "c2f0e57265e725c752e876ed9338a5ebefe25cf719d039caf3fbb41c58e17861"
+            },
+            {
+              "round": 7,
+              "milliseconds": 15.373155,
+              "used_tile": 256,
+              "log": "q1000-r7-selector.log",
+              "sha256": "45ede0fab53cfe8f316dcb8a6092c25c5e1363adc8b5975fb037c5e9f1330dce"
+            },
+            {
+              "round": 8,
+              "milliseconds": 17.202274,
+              "used_tile": 256,
+              "log": "q1000-r8-selector.log",
+              "sha256": "ae5f22249795562e47aaed7e3740637bb7bfd4af4173b747378f6cedd8eea807"
+            }
+          ],
+          "transpose": [
+            {
+              "round": 0,
+              "milliseconds": 669.030719,
+              "used_tile": 256,
+              "log": "q1000-r0-transpose.log",
+              "sha256": "9bf1ede4ab47f365422bc498e323e12645cf1477cd6ea1d7253e236c327cf593"
+            },
+            {
+              "round": 1,
+              "milliseconds": 741.633275,
+              "used_tile": 256,
+              "log": "q1000-r1-transpose.log",
+              "sha256": "e4d25d2d74e11458c62d369ee720a8f60c844a399c88148ab6016d2b1e8abe2f"
+            },
+            {
+              "round": 2,
+              "milliseconds": 749.649824,
+              "used_tile": 256,
+              "log": "q1000-r2-transpose.log",
+              "sha256": "736865b5711697702ce475a48a4e08dfad071b1d41caf671fe7384985d4b3f48"
+            },
+            {
+              "round": 3,
+              "milliseconds": 723.141936,
+              "used_tile": 256,
+              "log": "q1000-r3-transpose.log",
+              "sha256": "f87dfcff31f4415f002f80ea00214420b5d839dc2a3d95e3f0f2feb0e664124c"
+            },
+            {
+              "round": 4,
+              "milliseconds": 791.99366,
+              "used_tile": 256,
+              "log": "q1000-r4-transpose.log",
+              "sha256": "7f2db4a02324d68ca502b035deb6f2658e6499e923800ac1423c1b11253fdd82"
+            },
+            {
+              "round": 5,
+              "milliseconds": 791.907099,
+              "used_tile": 256,
+              "log": "q1000-r5-transpose.log",
+              "sha256": "d18edeee8ac7b94864b1cbc489a22b938bb383a93f543dbc0a537a7e35b5854b"
+            },
+            {
+              "round": 6,
+              "milliseconds": 752.375511,
+              "used_tile": 256,
+              "log": "q1000-r6-transpose.log",
+              "sha256": "02ca2e171bd741918f94e0a4c1a69b77ce886d2acb241008e5625a860d151de0"
+            },
+            {
+              "round": 7,
+              "milliseconds": 791.714417,
+              "used_tile": 256,
+              "log": "q1000-r7-transpose.log",
+              "sha256": "4a18343298b9de2499c3d9d870e5d2f49ce1b2dcff7a5df1546e8a4410669ff6"
+            },
+            {
+              "round": 8,
+              "milliseconds": 767.270721,
+              "used_tile": 256,
+              "log": "q1000-r8-transpose.log",
+              "sha256": "a84c8c2605714b187c0b3863a9261e76eb669909aed1af923addd913eabd9739"
+            }
+          ],
+          "both": [
+            {
+              "round": 0,
+              "milliseconds": 10.770625,
+              "used_tile": 256,
+              "log": "q1000-r0-both.log",
+              "sha256": "7426863851815149b9c8a18359200bb5003eb65d1812520bde2746cc1b329b4f"
+            },
+            {
+              "round": 1,
+              "milliseconds": 8.784985,
+              "used_tile": 256,
+              "log": "q1000-r1-both.log",
+              "sha256": "0c1f9a53d4e6b029f0143933c8009093d60f441a26456bcc069be79dff8f069d"
+            },
+            {
+              "round": 2,
+              "milliseconds": 8.809416,
+              "used_tile": 256,
+              "log": "q1000-r2-both.log",
+              "sha256": "d37f81608b3d58b92369cdf6a2c05d4f8a4ab83b4df291967e1ef87be4bbc1a5"
+            },
+            {
+              "round": 3,
+              "milliseconds": 9.27273,
+              "used_tile": 256,
+              "log": "q1000-r3-both.log",
+              "sha256": "064b9c27cdd2efd52f3f0945539fd0a67f3c143e4021d7998fcad066d522bf57"
+            },
+            {
+              "round": 4,
+              "milliseconds": 10.957061,
+              "used_tile": 256,
+              "log": "q1000-r4-both.log",
+              "sha256": "37a8cc9f637be916238eb5ea161f91dcd6e30889ea344668d13c4a6c6013f52e"
+            },
+            {
+              "round": 5,
+              "milliseconds": 8.762179,
+              "used_tile": 256,
+              "log": "q1000-r5-both.log",
+              "sha256": "3c08c305998ca97629ad44d4e6489f58e58d88711095b3323a6bc5a65d973c0f"
+            },
+            {
+              "round": 6,
+              "milliseconds": 10.603537,
+              "used_tile": 256,
+              "log": "q1000-r6-both.log",
+              "sha256": "f0bd34747274698114463b7fd1e19d530cba014f75dce8b7c736b07f7728043e"
+            },
+            {
+              "round": 7,
+              "milliseconds": 9.302373,
+              "used_tile": 256,
+              "log": "q1000-r7-both.log",
+              "sha256": "f5fae6a91195a7770c5fcaaac5f3a545bfba45f8727f92a3610339f13b356ac4"
+            },
+            {
+              "round": 8,
+              "milliseconds": 9.173603,
+              "used_tile": 256,
+              "log": "q1000-r8-both.log",
+              "sha256": "5ebbb28779c2f2bcfde6a9a2c0c71053ef1800918b6527089e0a7b5a7a0f83e2"
+            }
+          ]
+        },
+        "milliseconds": {
+          "baseline": {
+            "median": 759.333028,
+            "q1": 730.47741,
+            "q3": 785.14482,
+            "iqr": 54.66741000000002,
+            "minimum": 703.281612,
+            "maximum": 820.642719
+          },
+          "selector": {
+            "median": 17.241038,
+            "q1": 17.132037,
+            "q3": 17.396739,
+            "iqr": 0.26470199999999977,
+            "minimum": 15.373155,
+            "maximum": 18.707068
+          },
+          "transpose": {
+            "median": 752.375511,
+            "q1": 741.633275,
+            "q3": 791.714417,
+            "iqr": 50.081142,
+            "minimum": 669.030719,
+            "maximum": 791.99366
+          },
+          "both": {
+            "median": 9.27273,
+            "q1": 8.809416,
+            "q3": 10.603537,
+            "iqr": 1.7941209999999987,
+            "minimum": 8.762179,
+            "maximum": 10.957061
+          }
+        },
+        "paired_baseline_over_arm": {
+          "baseline": {
+            "raw": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "median": 1.0,
+            "q1": 1.0,
+            "q3": 1.0,
+            "iqr": 0.0,
+            "minimum": 1.0,
+            "maximum": 1.0
+          },
+          "selector": {
+            "raw": [
+              44.84423839433356,
+              41.63497382936634,
+              51.05514245366332,
+              40.791140997427185,
+              44.32240182530542,
+              43.868056661792224,
+              45.83993723139954,
+              47.516427824997535,
+              42.174785728910024
+            ],
+            "median": 44.32240182530542,
+            "q1": 42.174785728910024,
+            "q3": 45.83993723139954,
+            "iqr": 3.6651515024895147,
+            "minimum": 40.791140997427185,
+            "maximum": 51.05514245366332
+          },
+          "transpose": {
+            "raw": [
+              1.1660802543806663,
+              1.0216103396924847,
+              1.0473487685364948,
+              0.9725360637914934,
+              0.9587614981665384,
+              1.0362866048761106,
+              1.052156091507875,
+              0.9226526564565515,
+              0.9455622378688421
+            ],
+            "median": 1.0216103396924847,
+            "q1": 0.9587614981665384,
+            "q3": 1.0473487685364948,
+            "iqr": 0.0885872703699564,
+            "minimum": 0.9226526564565515,
+            "maximum": 1.1660802543806663
+          },
+          "both": {
+            "raw": [
+              72.4325200255324,
+              86.2449078740601,
+              89.12563784023821,
+              75.84407310468438,
+              69.30079407242508,
+              93.65737894649266,
+              74.65588859641835,
+              78.52592128911623,
+              79.08585318113286
+            ],
+            "median": 78.52592128911623,
+            "q1": 74.65588859641835,
+            "q3": 86.2449078740601,
+            "iqr": 11.589019277641754,
+            "minimum": 69.30079407242508,
+            "maximum": 93.65737894649266
+          }
+        }
+      }
+    }
+  },
+  "local_source_sha256": {
+    "tools/knn_layout_price_compare.py": "b5d557e61f2e11f10a242d5303eb5e0831ec5a633c1ba12e241e6807f85bb030",
+    "tools/knn_smallk_price_compare.py": "993d5ac34b267b0d4942bddb0e7c2a97cb8824272558fdf1ff8bb14b9552061e",
+    "bench/knn_layout_dispatch_check.mojo": "60c909eaaea65b82dec7d1e495aa15a1e0ab99ef301739369adedc78d329b6d2",
+    "bench/knn_layout_dispatch_price.mojo": "a19e0d3b5a3a704adbb25075be34a89c30b2258617175d7dbe599805efb356fd",
+    "bench/knn_smallk_dispatch_check.mojo": "c9eb73305a12489a12c64a98323245ff015886d8b41335479941b7fc400a7155",
+    "bench/knn_smallk_dispatch_price.mojo": "3cac34ba0a93522f9f2990bc91b56320dffc75779c7e8b90fd0aae79dcc0637d",
+    "bench/knn_smallk_dispatch_fixture.mojo": "236d4e48c26b0077f3413878cdb917ff33f1df678f2dc48a7642c28ea9938d49",
+    "bench/knn_smallk_price_fixture.mojo": "95e1b03feccf570419d3845826eeac73892ef7fb4f7b0e7a527e8ee61ab7dc47",
+    "neighbors/impl/neighbors/detail/knn_brute_force.mojo": "a67dff937fe62f2f3466e1b6e9890793f9885775d0884ababc981d340eb9a891",
+    "neighbors/checks/select_smallk_identical_candidate.mojo": "51bfaa82bfb5de25ff360d50d7ee8eb79456603a23b5b37d10fabf236a9663c5",
+    "neighbors/checks/transposed_index_distance_candidate.mojo": "550bf07614190841000786afade7fe3ca68e863b607a94eb1607ce44b274754c"
+  },
+  "source_hash_scope": "local parser and selected driver/dependency files at comparison time; not remote build attestation"
+}

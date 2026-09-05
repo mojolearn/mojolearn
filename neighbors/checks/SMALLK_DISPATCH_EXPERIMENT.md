@@ -47,3 +47,30 @@ part of the request. `neighbors/estimator.mojo` allocates radix scratch using
 `buf_len=max(n_index//8,k)`; the isolated selector benchmark uses a larger
 buffer. Its scratch figures and component speedups are not public-API results.
 No workspace reduction or end-to-end speedup is claimed by this patch.
+
+## Four-arm layout follow-up
+
+`bench/knn_layout_dispatch_check.mojo` and
+`bench/knn_layout_dispatch_price.mojo` combine the selector flag with
+`-D MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL=1`. Build with neither
+flag, selector only, transpose only, and both. The public correctness driver
+adds explicit L2, rooted L2, L1 and cosine cases with transpose tails; its
+143,628 selected distance/index pairs must agree across all four arms.
+The shared fixtures live in `bench/knn_smallk_dispatch_fixture.mojo` and
+`bench/knn_smallk_price_fixture.mojo`, and are part of build provenance.
+
+The full Apple M4 / NVIDIA RTX 4090 campaign at `9fe07a33` passed strict
+correctness and pricing-output comparison. Each vendor ran nine rotating
+rounds per arm at 32, 128 and 1,000 queries. NVIDIA's combined arm reduced
+the largest request's median from 17.241 ms selector-only to 9.273 ms;
+Apple did not reproduce that gain and regressed on the smallest request.
+See the [full comparison](../../bench/results/resume/2026-09-05-layout-apple-price/README.md)
+and its raw samples. These results do not justify changing all-vendor defaults.
+AMD, broader data distributions and installed-wheel qualification remain open.
+
+The four-arm parser accepts ordinary runtime diagnostics before the first
+benchmark record, while requiring `LAYOUT_FLAGS` to be the first protocol
+record, complete ordered cells and final completion markers. It compares
+every distance bit and index before admitting timings. An empty controller
+console is valid when child logs contain all output and the payload succeeded;
+a missing console or failed/missing payload status remains a refusal.

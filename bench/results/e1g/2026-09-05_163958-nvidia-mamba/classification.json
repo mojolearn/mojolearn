@@ -1,0 +1,12 @@
+{
+  "payload": "PASS",
+  "strict_evidence_admission": "PASS",
+  "original_controller": "INFRA_FAILURE",
+  "reason": "Fetched layout-console.log was empty because all children write their own logs; the old controller required it to be nonempty.",
+  "original_parser": "INFRA_FAILURE",
+  "parser_reason": "Allocator warning before LAYOUT_FLAGS was incorrectly treated as a protocol ordering failure.",
+  "revalidation": "PASS after allowing pre-header diagnostics while enforcing first protocol record and exact output equality",
+  "source_parity": "PASS",
+  "teardown": "PASS; DELETE 204 then GET 404 for g0iy6aygcufcz7",
+  "new_rental_required_for_revalidation": false
+}

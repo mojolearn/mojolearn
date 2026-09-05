@@ -79,13 +79,23 @@ Earlier two-arm selector results do not qualify the new distance layout.
 The resumed dirty source passed all four IDENTICAL correctness arms on Apple
 M4: all 143,628 selected distance/index pairs matched exactly. See the
 [local qualification](bench/results/resume/2026-09-05-layout-local/results.json).
-This closes the local fixture comparison only; new-layout remote qualification
-and performance measurements remain pending.
+The subsequent full Apple/NVIDIA campaign at `9fe07a33` passed all four
+correctness arms and 108 timing invocations per vendor. Every selected output
+bit matches across vendors, arms and rounds; see the
+[full comparison](bench/results/resume/2026-09-05-layout-apple-price/cross-vendor-summary.json).
+At 1,000 queries, NVIDIA median native request times were 759.333 ms baseline,
+17.241 ms selector-only and 9.273 ms combined. Apple did not reproduce those
+gains, and its combined arm was slower at 32 queries. Keep both experiments
+opt-in: AMD, broader datasets and installed-artifact gates remain pending.
 The separate [mode-isolation gate](bench/results/resume/2026-09-05-layout-modes/results.json)
 passed on Apple M4 in FAST and DETERMINISTIC, with neither and both
 experimental defines: both effective flags stayed disabled, and public
 host-reference, alternate-method and query-tile checks passed. The guarded
-NVIDIA layout controller also passed its dry run; no remote hardware ran.
+NVIDIA layout controller also passed its dry run. The later rental completed
+successfully and was deleted with verified HTTP 404. Its original controller
+reported an empty console as missing, and the initial parser rejected an
+allocator warning before the benchmark header. Both reporting defects now
+have regression controls; the unchanged raw evidence passes revalidation.
 
 ## Now: release truth and artifact closure
 
