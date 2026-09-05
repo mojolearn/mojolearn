@@ -2,14 +2,15 @@
 """Main-lane-only small-k selector bit gate and synchronized component timing.
 
 Author has not compiled/run this candidate. Build/run with IDENTICAL and -I .
-Small cases compare legacy radix, candidate, and a host composite-key top-k.
+Small cases compare legacy radix, runtime candidate, specialized candidate,
+and a host composite-key top-k.
 Every selected value/index is compared raw, including signed zeros, infinities,
 and NaN payloads (the radix selector accepts arbitrary float bit patterns).
 Output CELL records permit exact cross-device comparison of selected pairs.
 
 MOJOLEARN_SMALLK_LARGE=1 adds separately labelled random and duplicate-heavy
-100k-index cases for k8/10/16; ROWS defaults32, may be128. COLS defaults100000.
-SAMPLES defaults9, minimum7; every sample rotates legacy/candidate order.
+and tightly clustered synthetic positive-distance 100k-index cases for k8/10/16; ROWS defaults32, may be128. COLS defaults100000.
+SAMPLES defaults9, minimum7; every sample rotates all three arms.
 Times include COMPLETE selection launch+sync, exclude input/allocations and
 exclude distance calculation. There is no end-to-end kNN claim. GPU memory
 is bounded by rows*cols <= 16000000; one context/fixture runs at a time.
@@ -68,6 +69,11 @@ def _values(rows: Int, n: Int, profile: Int) -> List[Float32]:
                 else:
                     bits = UInt32(0x7FC00002)
                 value = bitcast[DType.float32](bits)
+            elif profile == 5:
+                # Synthetic distance-like values in [2.25, 2.5). Distinct-ish
+                # mantissas but shared high-order radix buckets; no claim that
+                # this is an end-to-end distance distribution measurement.
+                value = bitcast[DType.float32](UInt32(0x40100000) + UInt32(z & UInt64(0x000FFFFF)))
             result.append(value)
     return result^
 
@@ -85,7 +91,7 @@ def _launch(
             grid_dim=(rows, 1, 1), block_dim=(SELECT_BLOCK, 1, 1),
         )
     else:
-        smallk_identical_into(ctx, values, ov, oi, rows, n, k, select_min)
+        smallk_identical_into(ctx, values, ov, oi, rows, n, k, select_min, arm == 2)
 
 
 def _oracle(values: List[Float32], rows: Int, n: Int, k: Int, select_min: Bool) -> List[UInt32]:
@@ -121,7 +127,7 @@ def _case(rows: Int, n: Int, k: Int, profile: Int, select_min: Bool, timing: Boo
         var baseline_values = List[Float32]()
         var baseline_indices = List[UInt32]()
         for repeat in range(2):
-            for arm in range(2):
+            for arm in range(3):
                 ov.enqueue_fill(Float32(-987654))
                 oi.enqueue_fill(UInt32(4294967295))
                 ctx.synchronize()
@@ -152,15 +158,21 @@ def _case(rows: Int, n: Int, k: Int, profile: Int, select_min: Bool, timing: Boo
                   baseline_indices[slot], bitcast[DType.uint32](baseline_values[slot]))
         print("BITGATE PASS", rows, n, k, "profile", profile, "select_min", Int(select_min))
         if timing:
+            var profile_name = String("uniform_positive")
+            if profile == 1:
+                profile_name = "duplicate_heavy"
+            elif profile == 5:
+                profile_name = "synthetic_clustered_positive_2.25_to_2.5"
+            print("PROFILE", profile, profile_name)
             print("TIMING complete_selection launch_sync allocations_input_distance_excluded", rows, n, k,
                   "profile", profile, "legacy_scratch_bytes", 16 * rows * n, "candidate_global_scratch_bytes", 0)
             for warm in range(2):
-                for arm in range(2):
+                for arm in range(3):
                     _launch(ctx, values, ov, oi, bv, bi, rows, n, k, select_min, arm)
                     ctx.synchronize()
             for sample in range(samples):
-                for position in range(2):
-                    var arm = (sample + position) % 2
+                for position in range(3):
+                    var arm = (sample + position) % 3
                     ctx.synchronize()
                     var begin = perf_counter_ns()
                     _launch(ctx, values, ov, oi, bv, bi, rows, n, k, select_min, arm)
@@ -169,9 +181,11 @@ def _case(rows: Int, n: Int, k: Int, profile: Int, select_min: Bool, timing: Boo
                     var label = String("legacy_radix")
                     if arm == 1:
                         label = "candidate_local_topk_merge"
+                    elif arm == 2:
+                        label = "candidate_specialized_topk_merge"
                     print("SAMPLE", rows, n, k, profile, sample, label, elapsed)
-            # Check both arms again after timing, not merely the last writer.
-            for arm in range(2):
+            # Check all three arms again after timing, not merely the last writer.
+            for arm in range(3):
                 _launch(ctx, values, ov, oi, bv, bi, rows, n, k, select_min, arm)
                 ctx.synchronize()
                 _same(baseline_values, _read(ctx, ov), "post-timing selected distances")
@@ -195,7 +209,7 @@ def main() raises:
     var samples = _env_int("MOJOLEARN_SMALLK_SAMPLES", 9)
     if samples < 7:
         raise Error("at least seven timing samples required")
-    for profile in range(5):
+    for profile in range(6):
         for direction in range(2):
             _case(1, 1, 1, profile, direction == 1, False, samples)
             _case(3, 7, 1, profile, direction == 1, False, samples)
@@ -208,7 +222,10 @@ def main() raises:
         var n = _env_int("MOJOLEARN_SMALLK_COLS", 100000)
         if rows <= 0 or rows > 128 or n < 16 or n > 1000000 or rows * n > 16000000:
             raise Error("small-k fixture exceeds bounded dimensions/storage")
-        for profile in range(2):
+        for profile_slot in range(3):
+            var profile = profile_slot
+            if profile_slot == 2:
+                profile = 5
             _case(rows, n, 8, profile, True, True, samples)
             _case(rows, n, 10, profile, True, True, samples)
             _case(rows, n, 16, profile, True, True, samples)
