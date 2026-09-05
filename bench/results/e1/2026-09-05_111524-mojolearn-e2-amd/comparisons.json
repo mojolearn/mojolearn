@@ -1,0 +1,33 @@
+[
+  {
+    "command": [
+      "python3",
+      "tools/mamba_backward_identity.py",
+      "compare",
+      "bench/results/e1g/2026-09-05_065820-nvidia-mamba/remote/mamba-cert",
+      "bench/results/e1/2026-09-05_111524-mojolearn-e2-amd/diag/mamba-cert"
+    ],
+    "exit_code": 0,
+    "output": "BITWISE PASS: bench/results/e1g/2026-09-05_065820-nvidia-mamba/remote/mamba-cert == bench/results/e1/2026-09-05_111524-mojolearn-e2-amd/diag/mamba-cert; devices=nvidia,amd; 54 gradient tensors\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tools/umap_identity_compare.py",
+      "bench/results/umap/2026-09-05-broader-stages/identity-1.log",
+      "bench/results/e1/2026-09-05_111524-mojolearn-e2-amd/diag/followup/umap-broader.log"
+    ],
+    "exit_code": 0,
+    "output": "PASS: 690 uint32 cells identical across 8 stages\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tools/umap_identity_compare.py",
+      "bench/results/umap/2026-09-05_718495cd-apple/identity-1.log",
+      "bench/results/e1/2026-09-05_111524-mojolearn-e2-amd/diag/umap.identity.log"
+    ],
+    "exit_code": 0,
+    "output": "PASS: 186 uint32 cells identical across 8 stages\n"
+  }
+]

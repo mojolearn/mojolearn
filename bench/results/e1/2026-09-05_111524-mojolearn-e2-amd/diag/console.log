@@ -1,0 +1,10 @@
+pid 3292's current affinity list: 0-19
+pid 3292's new affinity list: 0-3
+umap-broader	0
+build-metrics	0
+umap-api	0
+umap-quality	0
+corpus	0
+build-mamba	0
+tools/umap_mamba_followup.sh: line 14:  5853 Aborted                 (core dumped) "$@" > "$OUT/$name.log" 2>&1
+mamba-api	134
