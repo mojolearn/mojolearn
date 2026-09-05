@@ -2956,62 +2956,11 @@ def search_batch(
             List[Int32](),
         )
     # --- 2. the ragged-batch flattening ------------------------------
-    #
-    # ==================================================================
-    # DEVIATION BLOCK 2020 -- the search passes' tile is
-    # `TPB * SEARCH_ROWS_PER_THREAD` rows per block, cuML's exact shape at
-    # the shipped R = 1 and LightGBM's multi-row threads under the arms
-    #
-    # THEIRS (cuML). `updateWorkloadInfo` gives every block exactly TPB
-    # rows (`builder.cuh:365-385` at the pin; v26.08.00 `builder.cuh:
-    # 393-408` is unchanged), so the kernels' block-strided row loop
-    # degenerates to at most ONE iteration per thread, and the two hot
-    # passes launch `sum_i ceildiv(count_i, TPB) * k` workgroups per
-    # cycle. DEVIATION 1943 measured what that costs where dispatch rate
-    # is the bound: on a 64-lane device, halving the workgroup count
-    # halved each pass, twice.
-    #
-    # THEIRS (LightGBM, the incumbent GPU precedent for the arm). Their
-    # histogram kernel derives a REAL per-thread row count from the grid
-    # (`cuda_histogram_constructor.cu:30-32`), sized by
-    # `NUM_DATA_PER_THREAD = 400` (`cuda_histogram_constructor.hpp:22`)
-    # with an occupancy FLOOR of 160 y-blocks so small leaves cannot
-    # starve the device. Ours keeps its floor by construction: a node
-    # never drops below one block per (node, feature), so R only merges
-    # blocks that were siblings of the SAME node.
-    #
-    # OURS. The tile passed to `build_workload_info` -- and ONLY here and
-    # in the regression twin; the partition keeps its own TPB tiling,
-    # which DEVIATION 203's scatter assumes -- is widened by the comptime
-    # `SEARCH_ROWS_PER_THREAD` (default 1: this line compiles the exact
-    # pre-2020 program). BECAUSE the two plans now differ at R > 1, the
-    # level loop's plain-cycle restage skip is no longer sound and the
-    # partition restages `d_wl` -- the 2026-09-01 red round's finding;
-    # see the DEVIATION 2020 restage leg at the `elif len(retry) > 0 or
-    # SEARCH_ROWS_PER_THREAD > 1` sites and the ledger's RED ROUND
-    # section. The kernels need no coverage change: their loop
-    # was ALREADY `for i in tid, tid + TPB*num_blocks, ...`, complete and
-    # disjoint at any block count. The BITS do not move because nothing
-    # order-bearing is regrouped: the score pass sums integers through
-    # atomics (135/171), the cross-block range merge is integer min/max
-    # (204), the block fold is in key space under IDENTICAL (452), and
-    # the one place a real per-thread fold appears at R > 1 -- the range
-    # kernel's local min/max -- runs in key order under the flag (the
-    # DEVIATION 2020 fold leg in `node_feature_range_kernel`), which is
-    # grouping-free by total order and value-identical to R = 1.
-    # Required-RED arm: `-D MOJOLEARN_ET_SAB_RPT_TAIL_DROP` (see
-    # `SEARCH_SAB_RPT_TAIL_DROP`); it is a no-op at R = 1, which is
-    # itself the witness that the arm targets the tiling.
-    #
-    # WHAT IT BUYS AND WHERE: workgroup count of the two hot launches
-    # divides by R at the shallow levels (where DEVIATION 1943's
-    # measured bound lives), and each surviving block amortizes its six
-    # collectives and 3-7 publish atomics over R times the rows. The
-    # gathers themselves do not shrink -- DEVIATION 212's lesson says to
-    # presume the Apple column a wash and let the A/B say otherwise.
-    # UNVERIFIED, RUN OWED: the A/B commands live in DEVIATIONS.md 2020
-    # and PLAN.md.
-    # ==================================================================
+    # Search tiles may cover multiple rows per thread. Coverage remains
+    # complete and disjoint through the kernels' existing grid-stride loops;
+    # score accumulation is integer, range merging is integer min/max, and
+    # the local range fold uses total-order keys. Partitioning retains its
+    # own TPB tile and therefore must restage its workload plan when R > 1.
     var plan = build_workload_info(
         work_items, TPB * SEARCH_ROWS_PER_THREAD
     )
@@ -4017,45 +3966,13 @@ def train_forest_classification_device_timed(
                 # partition below reads `d_items` and `d_wl`, so put this
                 # batch's back.
                 #
-                # ==========================================================
-                # DEVIATION 2020 (restage leg) -- THE DEFECT ITS FIRST CUT
-                # SHIPPED, found by the 2026-09-01 gate round (every RPT>1
-                # arm RED, root-up divergence). The plain no-rescue cycle
-                # SKIPS this restage, and the skip's unstated premise was
-                # that the partition's plan is BYTE-IDENTICAL to the plan
-                # the search staged -- same work_items, same TPB tile -- so
-                # `d_wl` already held it. 2020 widened the SEARCH tile to
-                # `TPB * R` and broke exactly that premise: the partition's
-                # grid is TPB-tiled (`plan` above, DEVIATION 203's scatter
-                # contract) while `d_wl` still held the widened plan --
-                # fewer entries, wrong `num_blocks`/`offset_blockid` -- so
-                # every plain-path partition indexed stale WorkloadInfo and
-                # corrupted `row_ids` from the first level on. So at R > 1
-                # the plain cycle restages too (the comptime disjunct folds
-                # away at R = 1, keeping the shipped program's exact
-                # skip-and-no-drain shape). DEVIATION 472's byte-compare
-                # keeps the restage cheap: on this path only `d_wl`'s bytes
-                # differ, so only `d_wl` actually copies. The drain below is
-                # DEVIATION 455's, and it is REQUIRED here for the same
-                # measured reason: these copies land after the cycle's
-                # reduce drain, and the next cycle's `stage_batch` rewrites
-                # the same `h_*` staging with nothing in between to retire
-                # them. That is one restage + one drain per plain cycle
-                # under the arm -- a real price the A/B now measures instead
-                # of a corruption the gates caught.
-                # ==========================================================
+                # Search and partition use different workload tiles when
+                # R > 1, so the partition plan must be restaged before its
+                # kernels read `d_wl`. The R == 1 path keeps the reusable
+                # byte-identical plan.
                 stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
-                # DEVIATION 455: this re-stage's copies are the ONE set that
-                # DEVIATION 450's invariant did not cover -- they are
-                # enqueued AFTER the cycle's reduce drain, and the next
-                # cycle's `stage_batch` rewrites the same `h_*` staging
-                # with nothing in between to retire them. MEASURED as
-                # run-to-run nondeterminism of the device fit on the
-                # rescue-heavy fixture (rescue_check, shaped_constant_heavy:
-                # device node counts 587/605 across two runs of identical
-                # source). One drain, on the rescue path only (and, since
-                # the 2020 restage leg, on every plain cycle at R > 1); the
-                # R = 1 rescue-free cycle keeps 450's single-drain shape.
+                # Drain before the next cycle rewrites the host staging that
+                # these queued copies still read.
                 ctx.synchronize()
 
             # --- the PARTITION, on the device (deviation 203) -------------
