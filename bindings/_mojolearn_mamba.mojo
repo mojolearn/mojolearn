@@ -447,12 +447,23 @@ def _mamba2_run(
     # with q0 == 0 IS the initial_states path (module header, DEVIATION
     # 792).
     var dstate = Mamba2DeviceState(ctx, b, dims)
-    dstate.conv_win = mamba_upload(ctx, _read_f32(a[10], b * cd * M2_D_CONV))
-    dstate.h = mamba_upload(ctx, _read_f32(a[11], h_n))
-    dstate.buf_xbc = mamba_upload(ctx, _read_f32(a[12], b * M2_CHUNK_SIZE * cd))
-    dstate.buf_dtraw = mamba_upload(
-        ctx, _read_f32(a[13], b * M2_CHUNK_SIZE * nh)
-    )
+    # Keep the constructor's state allocations. Replacing these fields
+    # triggers an AMD HIP memory fault on the B2/L4/DM32 Python path;
+    # copying the same incoming bytes into the retained buffers passes
+    # the forward, decode and carried-state gates without changing math.
+    var incoming_conv = mamba_upload(ctx, _read_f32(a[10], b * cd * M2_D_CONV))
+    var incoming_h = mamba_upload(ctx, _read_f32(a[11], h_n))
+    var incoming_xbc = mamba_upload(ctx, _read_f32(a[12], b * M2_CHUNK_SIZE * cd))
+    var incoming_dt = mamba_upload(ctx, _read_f32(a[13], b * M2_CHUNK_SIZE * nh))
+    ctx.enqueue_copy(dst_buf=dstate.conv_win, src_buf=incoming_conv)
+    ctx.enqueue_copy(dst_buf=dstate.h, src_buf=incoming_h)
+    ctx.enqueue_copy(dst_buf=dstate.buf_xbc, src_buf=incoming_xbc)
+    ctx.enqueue_copy(dst_buf=dstate.buf_dtraw, src_buf=incoming_dt)
+    ctx.synchronize()
+    _ = incoming_conv^
+    _ = incoming_h^
+    _ = incoming_xbc^
+    _ = incoming_dt^
     dstate.buf_len = q0
     var dstages = Mamba2DeviceStages(ctx, b, l, q0, dims)
     var dx = mamba_upload(ctx, _read_f32(a[0], b * l * dm))
