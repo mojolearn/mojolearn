@@ -1340,6 +1340,8 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
     ordinary numeric split candidates. It is separate from
     :class:`GradientBoosting`; selecting it cannot change standard fit
     behavior or imply support for deeper/general CatBoost combinations.
+    ``fit(..., sample_weight=...)`` accepts finite non-negative row weights;
+    structure scores and leaf values both use the same weights.
     """
 
     def __init__(
@@ -1358,7 +1360,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
             raise ValueError("mojolearn: sources need at least two unique indices")
         self.sources = parsed
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         Xa, Xcol, _ = as_f32_colmajor(X, "X")
         n_rows, n_features = Xa.shape
         if n_rows == 0 or n_features < 2:
@@ -1397,13 +1399,32 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         ya = np.ascontiguousarray(np.asarray(y).ravel(), dtype=np.float32)
         if ya.shape[0] != n_rows or not np.isfinite(ya).all():
             raise ValueError("mojolearn: y must be finite with one value per row")
+        if sample_weight is None:
+            weights = ya[:1]
+            n_weights = 0
+        else:
+            weights = np.ascontiguousarray(
+                np.asarray(sample_weight).ravel(), dtype=np.float32
+            )
+            if weights.shape[0] != n_rows:
+                raise ValueError(
+                    "mojolearn: sample_weight must have one value per row"
+                )
+            if not np.isfinite(weights).all() or (weights < 0).any():
+                raise ValueError(
+                    "mojolearn: sample_weight must be finite and non-negative"
+                )
+            if not float(weights.sum(dtype=np.float64)) > 0.0:
+                raise ValueError("mojolearn: sample_weight must have positive sum")
+            n_weights = n_rows
         source_array = np.ascontiguousarray(self.sources, dtype=np.uint32)
         self.model_ = self._bind(
             "_mojolearn_gbdt"
         ).gbdt_fit_two_level_feature_freq(
-            _addr_ro(Xcol), _addr_ro(ya), _addr_ro(source_array),
+            _addr_ro(Xcol), _addr_ro(ya), _addr_ro(weights),
+            _addr_ro(source_array),
             [
-                n_rows, n_features, source_array.size,
+                n_rows, n_features, n_weights, source_array.size,
                 float(self.learning_rate), float(self.l2_leaf_reg),
                 int(self.random_state),
             ],

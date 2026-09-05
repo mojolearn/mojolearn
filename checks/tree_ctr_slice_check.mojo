@@ -23,6 +23,7 @@ from gbdt.models.tensor_ctr_value_table import (
     value_for_split_tensor_row,
     next_tensor_base_from_winner,
 )
+from std.math import abs, isfinite
 from max.gpu.host import DeviceContext
 from gbdt.ctrs.ctr_binarization import (
     BORDER_SELECTION_UNIFORM,
@@ -478,8 +479,11 @@ def main() raises:
             + (Float32(-1.0) if secondary[r] == UInt32(0)
                else Float32(1.0))
         )
+    var fitted_weights = List[Float32]()
+    fitted_weights.resize(6, Float32(1.0))
     var fitted = fit_two_level_feature_freq_tree(
         ctx, production_initial, x, production_y,
+        fitted_weights,
         production_base_cindex, production_columns, production_folds,
         production_one_hot, production_borders, 6, 3, grid,
         learning_rate=Float32(0.1),
@@ -494,6 +498,69 @@ def main() raises:
     var fitted_prediction = predict_floats(ctx, fitted_model, x, 6)
     if len(fitted_prediction) != 6:
         raise Error("two-level tensor fit did not produce usable predictions")
+    # Decode leaf membership through model application, then independently
+    # sum weighted targets. Unequal and zero weights must affect the fitted
+    # values; a zero-weight leaf must stay finite even without regularization.
+    # The earlier ordered Borders fixture intentionally has distinct learn
+    # and apply values. Use full-pool FeatureFreq for this leaf oracle.
+    var oracle_candidate = materialize_tensor_candidate(
+        loaded.copy(), want.copy(), grid
+    )
+    var oracle_initial = stage_tensor_candidate_host(
+        production_columns, production_folds, production_one_hot,
+        oracle_candidate^, fold_capacity=grid.border_count,
+    )
+    var oracle_weights: List[Float32] = [0, 0, 1, 2, 3, 0]
+    for regularization in range(2):
+        var oracle_l2 = Float32(3 * regularization)
+        var weighted_fit = fit_two_level_feature_freq_tree(
+            ctx, oracle_initial, x, production_y, oracle_weights,
+            production_base_cindex, production_columns, production_folds,
+            production_one_hot, production_borders, 6, 3, grid,
+            learning_rate=Float32(0.1), l2_leaf_reg=oracle_l2,
+        )
+        var oracle_nan = List[Int]()
+        oracle_nan.resize(len(weighted_fit.fold_counts), 0)
+        var oracle_model = TrainedModel(
+            weighted_fit.model.copy(), weighted_fit.fold_counts.copy(),
+            weighted_fit.one_hot.copy(), weighted_fit.borders.copy(),
+            oracle_nan^, List[Float64](), List[Float64](), 0, False, 0,
+            List[TCtrValueTable](), weighted_fit.registry.copy(),
+        )
+        var actual = predict_floats(ctx, oracle_model, x, 6)
+        var n_leaves = len(oracle_model.model.weak_models[0].leaf_values)
+        for leaf in range(n_leaves):
+            oracle_model.model.weak_models[0].leaf_values[leaf] = Float32(leaf)
+        var memberships = predict_floats(ctx, oracle_model, x, 6)
+        var oracle_sums = List[Float32]()
+        var oracle_mass = List[Float32]()
+        oracle_sums.resize(n_leaves, Float32(0.0))
+        oracle_mass.resize(n_leaves, Float32(0.0))
+        for r in range(6):
+            var leaf = Int(memberships[r])
+            oracle_sums[leaf] += oracle_weights[r] * production_y[r]
+            oracle_mass[leaf] += oracle_weights[r]
+        var saw_zero_weight_row_leaf = False
+        for r in range(6):
+            var leaf = Int(memberships[r])
+            var expected = Float32(0.0)
+            if oracle_mass[leaf] > Float32(0.0):
+                expected = (
+                    Float32(0.1) * oracle_sums[leaf]
+                    / (oracle_mass[leaf] + oracle_l2)
+                )
+            else:
+                saw_zero_weight_row_leaf = True
+            if not isfinite(actual[r]) or abs(actual[r] - expected) > Float32(1e-6):
+                raise Error(
+                    "weighted tensor leaf differs from independent sum: row="
+                    + String(r) + " leaf=" + String(leaf)
+                    + " actual=" + String(actual[r])
+                    + " expected=" + String(expected)
+                    + " l2=" + String(oracle_l2)
+                )
+        if not saw_zero_weight_row_leaf:
+            raise Error("weighted tensor fixture did not cover a zero-weight leaf")
     var sync_splits = List[TBinarySplit]()
     var reference_splits = List[TBinarySplit]()
     if not run_synchronized_symmetric_level(

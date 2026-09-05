@@ -4,6 +4,7 @@
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
+from std.math import isfinite
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
 from gbdt.metrics.optimal_const_for_loss import (
     calc_one_dimensional_optimum_const_approx,
@@ -418,6 +419,7 @@ def fit_two_level_feature_freq_tree(
     initial: TStagedTensorCandidate,
     x_colmajor: List[Float32],
     y: List[Float32],
+    sample_weight: List[Float32],
     base_quantized_cindex: List[UInt32],
     base_columns: List[List[UInt32]],
     base_fold_counts: List[Int],
@@ -433,11 +435,13 @@ def fit_two_level_feature_freq_tree(
     """Fit the supported two-level, one-tree RMSE tensor arm.
 
     This entry is intentionally separate from ordinary `fit_with_test` so
-    its fixed depth, unit weights, single target, and one-tree contract are
+    its fixed depth, single target, and one-tree contract are
     impossible to select accidentally.
     """
     if n_rows < 1 or len(y) != n_rows:
         raise Error("two-level tensor fit target shape mismatch")
+    if len(sample_weight) != 0 and len(sample_weight) != n_rows:
+        raise Error("two-level tensor fit weight shape mismatch")
     if len(x_colmajor) != n_rows * n_raw_features:
         raise Error("two-level tensor fit raw shape mismatch")
     if len(base_one_hot) != 0 and len(base_one_hot) != n_raw_features:
@@ -447,11 +451,28 @@ def fit_two_level_feature_freq_tree(
     var stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
     var h_stats = ctx.enqueue_create_host_buffer[DType.float32](2 * n_rows)
     var grad_mag = Float32(0.0)
+    var weight_mag = Float32(0.0)
     for r in range(n_rows):
+        var weight = (
+            Float32(1.0) if len(sample_weight) == 0 else sample_weight[r]
+        )
+        if weight < Float32(0.0) or not isfinite(weight):
+            raise Error("two-level tensor fit weight is invalid")
+        var weighted_target = weight * y[r]
+        if not isfinite(weighted_target):
+            raise Error("two-level tensor fit weighted target is not finite")
         h_rows.unsafe_ptr().unsafe_store(r, UInt32(r))
-        h_stats.unsafe_ptr().unsafe_store(r, Float32(1.0))
-        h_stats.unsafe_ptr().unsafe_store(n_rows + r, y[r])
-        grad_mag += -y[r] if y[r] < Float32(0.0) else y[r]
+        h_stats.unsafe_ptr().unsafe_store(r, weight)
+        h_stats.unsafe_ptr().unsafe_store(n_rows + r, weighted_target)
+        weight_mag += weight
+        grad_mag += (
+            -weighted_target
+            if weighted_target < Float32(0.0) else weighted_target
+        )
+    if not isfinite(weight_mag) or not isfinite(grad_mag):
+        raise Error("two-level tensor fit weighted statistics overflow")
+    if not (weight_mag > Float32(0.0)):
+        raise Error("two-level tensor fit weights sum to zero")
     ctx.enqueue_copy(dst_buf=rows, src_ptr=h_rows.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=stats, src_ptr=h_stats.unsafe_ptr())
     var trace = IdentityTrace.disabled()
@@ -461,7 +482,7 @@ def fit_two_level_feature_freq_tree(
         ctx, initial, x_colmajor, base_quantized_cindex,
         base_columns, base_fold_counts, base_one_hot,
         n_rows, n_raw_features, 2, grid, rows, stats,
-        Float32(n_rows), grad_mag, SCORE_FUNCTION_COSINE, False,
+        weight_mag, grad_mag, SCORE_FUNCTION_COSINE, False,
         l2_leaf_reg, Float32(0.0), random_seed, True,
         n_raw_features, base_borders, trace, times, "tensor_fit",
     )
@@ -475,13 +496,22 @@ def fit_two_level_feature_freq_tree(
     weak.dim = 1
     for leaf in range(len(tree.leaf_sizes)):
         var total = Float32(0.0)
+        var total_weight = Float32(0.0)
         var begin = tree.leaf_offsets[leaf]
         for i in range(tree.leaf_sizes[leaf]):
             var row = Int(h_final_rows.unsafe_ptr().unsafe_load(begin + i))
-            total += y[row]
+            var weight = (
+                Float32(1.0)
+                if len(sample_weight) == 0 else sample_weight[row]
+            )
+            total += weight * y[row]
+            total_weight += weight
+        # Zero-weight rows may occupy a leaf even when the global weight is
+        # positive. Such a leaf contributes zero, including with no L2.
+        var denominator = total_weight + l2_leaf_reg
         weak.leaf_values.append(
-            learning_rate * total
-            / (Float32(tree.leaf_sizes[leaf]) + l2_leaf_reg)
+            learning_rate * total / denominator
+            if total_weight > Float32(0.0) else Float32(0.0)
         )
     var model = TAdditiveModel()
     model.add_weak_model(weak^)

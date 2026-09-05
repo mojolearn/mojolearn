@@ -100,6 +100,8 @@ def gbdt_fit_two_level_feature_freq(
     n_rows: Int,
     n_features: Int,
     y: MutPointer[Float32, MutUntrackedOrigin],
+    sample_weight: MutPointer[Float32, MutUntrackedOrigin],
+    n_weights: Int,
     sources: MutPointer[UInt32, MutUntrackedOrigin],
     n_sources: Int,
     learning_rate: Float32 = Float32(0.03),
@@ -110,11 +112,14 @@ def gbdt_fit_two_level_feature_freq(
 
     Source columns are dense category codes and remain one-hot model prefix
     columns. Non-source columns are ordinary numeric candidates quantized on
-    a deterministic Uniform-3 grid. This separate entry cannot alter the
-    ordinary GBDT fit.
+    a deterministic Uniform-3 grid. Optional non-negative row weights affect
+    both split scores and leaf estimation. This separate entry cannot alter
+    the ordinary GBDT fit.
     """
     if n_rows < 1 or n_features < 2 or n_sources < 2:
         raise Error("two-level FeatureFreq fit needs rows and two sources")
+    if n_weights != 0 and n_weights != n_rows:
+        raise Error("two-level FeatureFreq weights must be empty or per-row")
     var raw = List[Float32]()
     raw.resize(n_rows * n_features, Float32(0.0))
     memcpy(dest=raw.unsafe_ptr(), src=x, count=n_rows * n_features)
@@ -124,6 +129,10 @@ def gbdt_fit_two_level_feature_freq(
     for r in range(n_rows):
         if not isfinite(target[r]):
             raise Error("two-level FeatureFreq target is not finite")
+    var weights = List[Float32]()
+    if n_weights != 0:
+        weights.resize(n_rows, Float32(0.0))
+        memcpy(dest=weights.unsafe_ptr(), src=sample_weight, count=n_rows)
     var source_ids = List[Int]()
     var seen_source = List[Bool]()
     seen_source.resize(n_features, False)
@@ -202,7 +211,7 @@ def gbdt_fit_two_level_feature_freq(
         columns, folds, one_hot, candidate^, fold_capacity=grid.border_count
     )
     var fitted = fit_two_level_feature_freq_tree(
-        ctx, initial, raw, target, flat_bins, columns, folds, one_hot,
+        ctx, initial, raw, target, weights, flat_bins, columns, folds, one_hot,
         borders, n_rows, n_features, grid,
         learning_rate=learning_rate, l2_leaf_reg=l2_leaf_reg,
         random_seed=random_seed,
