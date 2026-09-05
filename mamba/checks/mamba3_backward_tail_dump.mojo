@@ -99,6 +99,7 @@ def _check_scale_chain(ctx: DeviceContext) raises:
     var qtrap = mamba_upload(ctx, qtrap_values)
     var qgamma = mamba_zeros(ctx, 2)
     var scale = mamba_upload(ctx, scale_values)
+    var beta = mamba_upload(ctx, scale_values)
     var dt = mamba_upload(ctx, dt_values)
     var sigma = mamba_upload(ctx, sigma_values)
     var out_gamma = mamba_zeros(ctx, 2)
@@ -107,7 +108,7 @@ def _check_scale_chain(ctx: DeviceContext) raises:
     ctx.enqueue_function[mamba3_beta_join_kernel](
         out_gamma.unsafe_ptr(), out_dt.unsafe_ptr(), out_trap.unsafe_ptr(),
         qgamma.unsafe_ptr(), scale.unsafe_ptr(), qdt.unsafe_ptr(),
-        qtrap.unsafe_ptr(), scale.unsafe_ptr(), dt.unsafe_ptr(), sigma.unsafe_ptr(),
+        qtrap.unsafe_ptr(), beta.unsafe_ptr(), dt.unsafe_ptr(), sigma.unsafe_ptr(),
         Int32(1), Int32(2), Int32(1), grid_dim=(1, 1, 1), block_dim=(32, 1, 1),
     )
     var got_dt = mamba_download(ctx, out_dt, 2)
@@ -116,6 +117,7 @@ def _check_scale_chain(ctx: DeviceContext) raises:
     _ = qtrap^
     _ = qgamma^
     _ = scale^
+    _ = beta^
     _ = dt^
     _ = sigma^
     _ = out_gamma^

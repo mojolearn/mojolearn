@@ -533,6 +533,19 @@ for WAVE in "${WAVE_ARR[@]}"; do
   $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && MOJOLEARN_COMMIT='$COMMIT' MOJOLEARN_E1_PHASES='${MOJOLEARN_E1_PHASES:-}' MOJOLEARN_E1_LANES='$WAVE' MOJOLEARN_P9_BINDINGS='${MOJOLEARN_P9_BINDINGS:-}' MOJOLEARN_P9_LANES='${MOJOLEARN_P9_LANES:-}' ${MOJOLEARN_P9_TIERS:+MOJOLEARN_P9_TIERS='$MOJOLEARN_P9_TIERS'} MOJOLEARN_P9_BREAK='${MOJOLEARN_P9_BREAK:-0}' MOJOLEARN_P9_VENDOR='amd-mi325x' ${MOJOLEARN_P9_DIAG:+MOJOLEARN_P9_DIAG='$MOJOLEARN_P9_DIAG'} MOJOLEARN_P9_ONLY_DIAG='${MOJOLEARN_P9_ONLY_DIAG:-0}' MOJOLEARN_P9_DIAG_TIMEOUT='${MOJOLEARN_P9_DIAG_TIMEOUT:-2400}' ${MOJOLEARN_WHEEL_VERSION:+MOJOLEARN_WHEEL_VERSION='$MOJOLEARN_WHEEL_VERSION'} MOJOLEARN_WHEEL_INDEX='${MOJOLEARN_WHEEL_INDEX:-testpypi}' ${MOJOLEARN_GPU_ARCHS:+MOJOLEARN_GPU_ARCHS='$MOJOLEARN_GPU_ARCHS'} timeout -k 30 $WORK_SECONDS bash tools/e1_bootstrap.sh > /root/e2_run_w$WAVE_N.log 2>&1; echo \"WAVE-$WAVE_N-EXIT=\$?  (124 = hit the work bound)\"; tail -30 /root/e2_run_w$WAVE_N.log"
 done
 
+# Optional main-operator repair window. The guards stay armed and the fetch
+# reserve is honored. No remote test is running while the controller waits;
+# the main operator may run a serial, separately recorded frozen-source retry.
+if [ -n "${E2_RELEASE_FILE:-}" ]; then
+  log "main-operator repair window; release file: $E2_RELEASE_FILE"
+  while [ ! -f "$E2_RELEASE_FILE" ]; do
+    NOW=$(date +%s)
+    [ "$NOW" -ge $(( LEG_START + DEADMAN_SECONDS - FETCH_RESERVE - 60 )) ] && break
+    sleep 2
+  done
+  log "repair window closed; collecting and destroying within the lease"
+fi
+
 # EXTRA CHECKS: things phase 8 does not know about yet, run only when asked.
 # Named explicitly rather than swept, so this leg's payload is readable from
 # this file alone. Each gets its own slice of what is left, so one hang cannot
