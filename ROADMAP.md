@@ -18,9 +18,17 @@ current instructions; git history and `archive/` retain their evidence.
 - Stale optimizer comments and startup messages have been corrected while
   preserving independent-corpus limitations and historical evidence.
 
-The active next step is the guarded NVIDIA backward/UMAP capture and its
-comparison with Apple, then AMD when an instance is available. These source
-checks do not replace the installed-wheel release gates below.
+Apple M4 and NVIDIA RTX 4090 at `718495cd` passed all five backward gates;
+all 54 retained gradient tensors and all 186 UMAP stage cells matched by
+bits. See [the comparison record](bench/results/resume/2026-09-05/cross-device.json).
+
+The active next step is the guarded AMD backward/UMAP capture when MI300X
+inventory returns. The plain ROCm 6.4 image needs the new SSH bootstrap;
+the RunPod ROCm 6.1 image starts SSH but is below the compiler's runtime
+minimum. The corrected 6.4 request passed dry-run checks but could not be
+deployed because inventory was unavailable. Compare AMD with fresh Apple
+and NVIDIA certificates from the same source snapshot. No pods remain from
+these attempts. These source checks do not replace installed-wheel gates.
 
 ## Now: release truth and artifact closure
 

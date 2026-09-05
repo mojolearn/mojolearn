@@ -8,6 +8,11 @@ spectral initialization. Graph storage is currently dense.
 
 ## Identity evidence
 
+Apple M4 and NVIDIA RTX 4090 matched all 186 captured cells at source
+commit `718495cd`. The
+[comparison record](../bench/results/umap/2026-09-05_718495cd-apple/apple-nvidia-comparison.json)
+links the retained captures and names the hardware.
+
 The named `umap.identical.8x1.2d.e4.seed19.v1` fixture exports 186 Float32 bit
 patterns across input, rho, sigma, directed memberships, fuzzy weights,
 curve parameters, spectral initialization and final layout. It also checks

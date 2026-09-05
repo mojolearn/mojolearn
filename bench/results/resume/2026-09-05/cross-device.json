@@ -1,0 +1,30 @@
+{
+  "classification": "PASS",
+  "commit": "718495cda991d96d0346b18ad1ef1fadfc8bed14",
+  "devices": [
+    "Apple M4",
+    "NVIDIA RTX4090 driver580.159.04"
+  ],
+  "mamba": {
+    "gradient_tensors": 54,
+    "cases": 5,
+    "apple_certificate": "bench/results/mamba_backward_cert/2026-09-05-resume-apple",
+    "nvidia_certificate": "bench/results/e1g/2026-09-05_033031-nvidia-mamba/remote/mamba-cert",
+    "comparison": "bitwise raw float32 bytes"
+  },
+  "umap": {
+    "profile": "umap.identical.8x1.2d.e4.seed19.v1",
+    "stage_cells": 186,
+    "stages": 8,
+    "comparison": "bitwise uint32"
+  },
+  "nvidia_terminated_verified": true,
+  "amd": {
+    "classification": "INFRA_FAILURE",
+    "certified": false,
+    "reason": "ROCm6.4 default lacked SSH; ROCm6.1 image below driver minimum; corrected6.4 SSH startup request then refused for no inventory",
+    "next_command": "MOJOLEARN_GEMM_LEG_READY_TIMEOUT=300 bash tools/gemm_remote_leg.sh amd --payload mamba --rent --minutes 30 --work-timeout 1200",
+    "runtime_fix_deployment_verified": false
+  },
+  "remaining_live_pods_verified": 0
+}

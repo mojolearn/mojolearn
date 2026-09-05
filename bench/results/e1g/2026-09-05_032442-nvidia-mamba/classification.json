@@ -1,0 +1,7 @@
+{
+  "classification": "INFRA_FAILURE",
+  "reason": "NVIDIA driver570.158.01 is below compiler minimum580/CUDA13; no valid GPU output",
+  "stopped_remaining_tests": true,
+  "terminated_verified": true,
+  "source_commit": "718495cda991d96d0346b18ad1ef1fadfc8bed14"
+}

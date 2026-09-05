@@ -1,0 +1,23 @@
+{
+  "name": "mojolearn-gemm-amd-2026-09-05_035101",
+  "imageName": "rocm/dev-ubuntu-22.04:6.4.1-complete",
+  "gpuTypeIds": [
+    "AMD Instinct MI300X OAM"
+  ],
+  "gpuCount": 1,
+  "cloudType": "SECURE",
+  "containerDiskInGb": 60,
+  "volumeInGb": 0,
+  "ports": [
+    "22/tcp"
+  ],
+  "supportPublicIp": true,
+  "interruptible": false,
+  "dockerEntrypoint": [
+    "/bin/bash",
+    "-lc"
+  ],
+  "dockerStartCmd": [
+    "#!/bin/bash\n# SPDX-License-Identifier: Apache-2.0\n# Full SSH for plain ROCm development images, using RunPod's injected key.\n# https://docs.runpod.io/pods/configuration/use-ssh\n# This is embedded in the create request and runs inside the container.\nset -euo pipefail\n\n: \"${PUBLIC_KEY:?RunPod did not inject PUBLIC_KEY}\"\nif [ ! -x /usr/sbin/sshd ]; then\n    export DEBIAN_FRONTEND=noninteractive\n    apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=30 \\\n        -o Acquire::https::Timeout=30 update\n    apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=30 \\\n        -o Acquire::https::Timeout=30 install -y --no-install-recommends openssh-server\nfi\n# Package installation may start a daemon with the image defaults. Stop it\n# before binding port 22 with the explicit public-key-only configuration.\nif [ -x /etc/init.d/ssh ]; then\n    /etc/init.d/ssh stop || true\nfi\nmkdir -p /run/sshd /root/.ssh\nchmod 700 /root/.ssh\numask 077\nprintf '%s\\n' \"$PUBLIC_KEY\" > /root/.ssh/authorized_keys\nchmod 600 /root/.ssh/authorized_keys\nunset PUBLIC_KEY\nssh-keygen -A\n# Ignore image-specific sshd configuration; every permitted authentication\n# method is explicit. Internal SFTP supports the runner's artifact transfer.\nexec /usr/sbin/sshd -D -e -f /dev/null \\\n    -o PermitRootLogin=prohibit-password \\\n    -o PasswordAuthentication=no \\\n    -o KbdInteractiveAuthentication=no \\\n    -o PubkeyAuthentication=yes \\\n    -o AuthenticationMethods=publickey \\\n    -o AuthorizedKeysFile=/root/.ssh/authorized_keys \\\n    -o AllowUsers=root \\\n    -o UsePAM=yes \\\n    -o 'Subsystem=sftp internal-sftp'\n"
+  ]
+}

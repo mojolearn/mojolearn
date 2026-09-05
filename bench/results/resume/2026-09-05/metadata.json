@@ -1,0 +1,15 @@
+{
+  "source_commit": "718495cda991d96d0346b18ad1ef1fadfc8bed14",
+  "host": "MacBook-Air-1-terrabyte.local",
+  "catboost": {
+    "native_build": "PASS",
+    "weighted_leaf_oracle": "PASS",
+    "binding_invariance": "PASS",
+    "python_policy_tests": 10
+  },
+  "initial_runpod_inventory": {
+    "pods": 0,
+    "amd_previous_attempt": "INFRA_FAILURE: no instances available"
+  },
+  "cleanup": "Executable tokens unchanged except intended optimizer startup banner strings"
+}

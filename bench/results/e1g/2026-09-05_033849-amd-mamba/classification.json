@@ -1,0 +1,6 @@
+{
+  "classification": "INFRA_FAILURE",
+  "reason": "No public IP/SSH before manual bounded cancellation; generic ROCm image also failed SSH in earlier records",
+  "tests_started": false,
+  "terminated_verified": true
+}

@@ -1,0 +1,9 @@
+schema=mojolearn.mamba.backward-certificate.nvidia.v2
+created_utc=2026-09-05T07:33:51Z
+host=c16d2f799483
+kernel=Linux 6.8.0-134-generic x86_64
+mode=IDENTICAL
+vendor=nvidia
+mode_injector=tools/with_identical_mode.sh
+commit=718495cda991d96d0346b18ad1ef1fadfc8bed14
+source_sha256=a762a60c6701379577d22c3931791ceb2359376eb264600492f8fb616c9980e3

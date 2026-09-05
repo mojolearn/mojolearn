@@ -1,0 +1,799 @@
+{
+  "case": "m2_base_b1_l257_d64",
+  "case_seed": "0x4D6D6232436FB270",
+  "dtype": "float64",
+  "environment": {
+    "cuda": null,
+    "device": "cpu",
+    "hip": null,
+    "python": "3.14.7",
+    "torch": "2.13.0"
+  },
+  "family": "mamba2",
+  "finite_difference": [
+    {
+      "abs_error": 1.2947645455785306e-09,
+      "autograd": -0.12117005651488517,
+      "finite_difference": -0.12117005780964972,
+      "flat_index": 0,
+      "relative_scale_error": 1.2947645455785306e-09,
+      "tensor": "x"
+    },
+    {
+      "abs_error": 8.374740900762845e-10,
+      "autograd": -0.7217502309079576,
+      "finite_difference": -0.7217502300704836,
+      "flat_index": 8224,
+      "relative_scale_error": 8.374740900762845e-10,
+      "tensor": "x"
+    },
+    {
+      "abs_error": 1.85544454800457e-09,
+      "autograd": -0.15235774427772672,
+      "finite_difference": -0.15235774242228217,
+      "flat_index": 0,
+      "relative_scale_error": 1.85544454800457e-09,
+      "tensor": "A_log"
+    },
+    {
+      "abs_error": 7.623027695191631e-10,
+      "autograd": -0.04052378349175411,
+      "finite_difference": -0.04052378272945134,
+      "flat_index": 1,
+      "relative_scale_error": 7.623027695191631e-10,
+      "tensor": "A_log"
+    },
+    {
+      "abs_error": 7.097167298297791e-10,
+      "autograd": -11.681037049270653,
+      "finite_difference": -11.681037048560936,
+      "flat_index": 0,
+      "relative_scale_error": 6.075802403812191e-11,
+      "tensor": "D"
+    },
+    {
+      "abs_error": 1.8250680966502841e-09,
+      "autograd": 20.164085789127345,
+      "finite_difference": 20.164085790952413,
+      "flat_index": 1,
+      "relative_scale_error": 9.05108277940966e-11,
+      "tensor": "D"
+    },
+    {
+      "abs_error": 1.405061511583483e-09,
+      "autograd": -0.3080753771040522,
+      "finite_difference": -0.3080753756989907,
+      "flat_index": 0,
+      "relative_scale_error": 1.405061511583483e-09,
+      "tensor": "block_norm.weight"
+    },
+    {
+      "abs_error": 1.1013079337374165e-09,
+      "autograd": 3.1472132289067307,
+      "finite_difference": 3.147213227805423,
+      "flat_index": 32,
+      "relative_scale_error": 3.4993114658455647e-10,
+      "tensor": "block_norm.weight"
+    },
+    {
+      "abs_error": 7.326974582611001e-10,
+      "autograd": 7.981884059682314,
+      "finite_difference": 7.981884058949617,
+      "flat_index": 0,
+      "relative_scale_error": 9.179505149192334e-11,
+      "tensor": "conv1d.bias"
+    },
+    {
+      "abs_error": 7.85748621983523e-10,
+      "autograd": 0.003000712136836458,
+      "finite_difference": 0.00300071292258508,
+      "flat_index": 192,
+      "relative_scale_error": 7.85748621983523e-10,
+      "tensor": "conv1d.bias"
+    },
+    {
+      "abs_error": 2.8660467332741746e-09,
+      "autograd": -1.2134622934684087,
+      "finite_difference": -1.2134622963344555,
+      "flat_index": 0,
+      "relative_scale_error": 2.3618753890679044e-09,
+      "tensor": "conv1d.weight"
+    },
+    {
+      "abs_error": 1.2703129936841862e-09,
+      "autograd": -0.028522481594132922,
+      "finite_difference": -0.028522482864445916,
+      "flat_index": 768,
+      "relative_scale_error": 1.2703129936841862e-09,
+      "tensor": "conv1d.weight"
+    },
+    {
+      "abs_error": 1.6453596679566473e-09,
+      "autograd": -0.004800788875316278,
+      "finite_difference": -0.004800790520675946,
+      "flat_index": 0,
+      "relative_scale_error": 1.6453596679566473e-09,
+      "tensor": "dt_bias"
+    },
+    {
+      "abs_error": 6.703005997477085e-10,
+      "autograd": -0.009485666611911532,
+      "finite_difference": -0.009485665941610932,
+      "flat_index": 1,
+      "relative_scale_error": 6.703005997477085e-10,
+      "tensor": "dt_bias"
+    },
+    {
+      "abs_error": 2.799605880454692e-09,
+      "autograd": -6.349003611248281,
+      "finite_difference": -6.349003614047887,
+      "flat_index": 0,
+      "relative_scale_error": 4.409520061164004e-10,
+      "tensor": "in_proj.weight"
+    },
+    {
+      "abs_error": 9.298531736257054e-10,
+      "autograd": -0.004336414824487635,
+      "finite_difference": -0.004336413894634461,
+      "flat_index": 16448,
+      "relative_scale_error": 9.298531736257054e-10,
+      "tensor": "in_proj.weight"
+    },
+    {
+      "abs_error": 1.6109015232856905e-09,
+      "autograd": -0.669312543001256,
+      "finite_difference": -0.6693125413903545,
+      "flat_index": 0,
+      "relative_scale_error": 1.6109015232856905e-09,
+      "tensor": "norm.weight"
+    },
+    {
+      "abs_error": 2.905899521010724e-09,
+      "autograd": -0.35885348091135677,
+      "finite_difference": -0.3588534838172563,
+      "flat_index": 64,
+      "relative_scale_error": 2.905899521010724e-09,
+      "tensor": "norm.weight"
+    },
+    {
+      "abs_error": 3.2585845133326075e-10,
+      "autograd": -4.980136131719778,
+      "finite_difference": -4.98013613139392,
+      "flat_index": 0,
+      "relative_scale_error": 6.543163534381798e-11,
+      "tensor": "out_proj.weight"
+    },
+    {
+      "abs_error": 1.0973828512561568e-09,
+      "autograd": 1.790048564163576,
+      "finite_difference": 1.790048563066193,
+      "flat_index": 4096,
+      "relative_scale_error": 6.130464129440664e-10,
+      "tensor": "out_proj.weight"
+    }
+  ],
+  "finite_difference_step": 1e-05,
+  "finite_difference_worst_relative_scale_error": 2.905899521010724e-09,
+  "gradients": {
+    "A_log": {
+      "file": "grad.A_log.f64",
+      "ref32_file": "grad.A_log.ref32.f32",
+      "ref32_sha256": "16fe9eec1d6696aedd9a1e72ed3a742fefb2e902b4aac8a67f8831a08b1ff752",
+      "sha256": "fb5aac3eba7c6f7216174f92024f160ca5501e92521383cd75bcf9169bad7530",
+      "shape": [
+        2
+      ]
+    },
+    "D": {
+      "file": "grad.D.f64",
+      "sha256": "e2e89acd6e03903c049ff477249d1ab4b4b7ca5397d60d7bcc29cdebfa21af4f",
+      "shape": [
+        2
+      ]
+    },
+    "block_norm.weight": {
+      "file": "grad.block_norm.weight.f64",
+      "ref32_file": "grad.block_norm.weight.ref32.f32",
+      "ref32_policy": "gemm_fp32_v1_leaf128_balanced",
+      "ref32_sha256": "d5636c38dd92829da3b3a6347621ebad336905a4141878424164771c2e8b4ba5",
+      "sha256": "274bc57af42dccbcd9e6522fdedeea66d3a2700c824e27e5fc4ef39b68affef0",
+      "shape": [
+        64
+      ]
+    },
+    "conv1d.bias": {
+      "file": "grad.conv1d.bias.f64",
+      "ref32_file": "grad.conv1d.bias.ref32.f32",
+      "ref32_policy": "serial_batch_token_v1",
+      "ref32_sha256": "aaaeeb98c4d7384233a483bcc3a2ef24268ddeb4f7e7b6460c82d8fe1d8e7676",
+      "sha256": "b2d63c054bfb159a0ff7f810c60799209473d0300ee06924f84846d26243baf7",
+      "shape": [
+        384
+      ]
+    },
+    "conv1d.weight": {
+      "file": "grad.conv1d.weight.f64",
+      "ref32_file": "grad.conv1d.weight.ref32.f32",
+      "ref32_sha256": "757a84bc827e63ac987584ed6835cdb9864755dc31a805a316a650f59b2e9bbe",
+      "sha256": "7edb60008fb433760b27f90b5018d12cb4b3f81c2ae0d11e8c26679d21217670",
+      "shape": [
+        384,
+        1,
+        4
+      ]
+    },
+    "diagnostic.block_norm.weight_operand": {
+      "file": "grad.diagnostic.block_norm.weight_operand.f64",
+      "ref32_file": "grad.diagnostic.block_norm.weight_operand.ref32.f32",
+      "ref32_sha256": "b0319f1db076b0ad9d5bbb1653ee22a15f16d7ba2753b1a9d04bf881ffa17cdc",
+      "sha256": "c37f0fb43d5e01211ce06546345c4ca5e50fa8dae3b546c5f668d14e689e55e0",
+      "shape": [
+        1,
+        257,
+        64
+      ]
+    },
+    "diagnostic.conv.bias_operand": {
+      "file": "grad.diagnostic.conv.bias_operand.f64",
+      "ref32_file": "grad.diagnostic.conv.bias_operand.ref32.f32",
+      "ref32_sha256": "f82de8d7d0ab8a43d5e72a4e32a20f5bd426b4acbd0ef2b921d1df04387d395c",
+      "sha256": "c94e512a72cb2c98daa7d2e85788185fb5425842acbb4e72aa210f7feed82591",
+      "shape": [
+        1,
+        257,
+        384
+      ]
+    },
+    "diagnostic.in_proj.norm_operand": {
+      "file": "grad.diagnostic.in_proj.norm_operand.f64",
+      "ref32_file": "grad.diagnostic.in_proj.norm_operand.ref32.f32",
+      "ref32_sha256": "cda0a100b652212ced62ea05b98876248769c39985ba4bae73ed0d6f819c5186",
+      "sha256": "14b171b84c84a81700d2c6f7400a5576db806685e65c085934f7b97a6d181912",
+      "shape": [
+        257,
+        64
+      ]
+    },
+    "dt_bias": {
+      "file": "grad.dt_bias.f64",
+      "ref32_file": "grad.dt_bias.ref32.f32",
+      "ref32_sha256": "6ee38428a05e31a70aa35b24b48082be223dd3a517cf592525c4981a8131f09b",
+      "sha256": "b2e8809ba4d89b9b7101aaefec3e5d41f8677fb4d2ab7e57f59d3ee05ddcd6f4",
+      "shape": [
+        2
+      ]
+    },
+    "in_proj.weight": {
+      "file": "grad.in_proj.weight.f64",
+      "ref32_file": "grad.in_proj.weight.ref32.f32",
+      "ref32_policy": "gemm_fp32_v1_leaf128_balanced",
+      "ref32_sha256": "4285022d42eb34dc698bc79a2fd261a4217f2fb439d10be0ca6b7ab4579ec5a8",
+      "sha256": "273c9dac18f1ec6826b23870a93f7c169359c6babcbf33b22e4dabd9fe11e359",
+      "shape": [
+        514,
+        64
+      ]
+    },
+    "initial_state": {
+      "file": "grad.initial_state.f64",
+      "sha256": "125980d0750b6e52991d77bd281e91789a9dd8b887abcd3169a95809fe5b00f6",
+      "shape": [
+        1,
+        2,
+        64,
+        128
+      ]
+    },
+    "norm.weight": {
+      "file": "grad.norm.weight.f64",
+      "sha256": "41ed6ee0e5328c95e82f5733b5364274f026dc8731ade150b8da20db2e754140",
+      "shape": [
+        128
+      ]
+    },
+    "out_proj.weight": {
+      "file": "grad.out_proj.weight.f64",
+      "ref32_file": "grad.out_proj.weight.ref32.f32",
+      "ref32_sha256": "8b4e3db1d0012374cbf31189b23a7a400461e4342a5da1e442b2d2f883af1f20",
+      "sha256": "c30f272a8a8067b7084cf2d490ab4690ade63e811362dd1dd747f75be7105b01",
+      "shape": [
+        64,
+        128
+      ]
+    },
+    "partial.A.from_da": {
+      "file": "grad.partial.A.from_da.f64",
+      "ref32_file": "grad.partial.A.from_da.ref32.f32",
+      "ref32_sha256": "519a326158511e6a30d49a573099ab06e56d7ef69bef2f6579ce09459fb37ccb",
+      "sha256": "9ae448672251f5eb3b40765dc0c2f5788727e909d4a9af348d5ba6baeb0e2e15",
+      "shape": [
+        2
+      ]
+    },
+    "partial.A_log.from_current_ssd": {
+      "file": "grad.partial.A_log.from_current_ssd.f64",
+      "ref32_file": "grad.partial.A_log.from_current_ssd.ref32.f32",
+      "ref32_sha256": "16fe9eec1d6696aedd9a1e72ed3a742fefb2e902b4aac8a67f8831a08b1ff752",
+      "sha256": "5c776eddd812f7e4684068e77dc8c4c9f72b2392a6cb819e603eab3cc9f964e0",
+      "shape": [
+        2
+      ]
+    },
+    "partial.B.from_cb": {
+      "file": "grad.partial.B.from_cb.f64",
+      "ref32_file": "grad.partial.B.from_cb.ref32.f32",
+      "ref32_sha256": "0292e9c9474d83b96617b7f1ad70745a463729b7f5c03f4a3ae6ff24cbd9e975",
+      "sha256": "4f89b7eebbc80163e5c8fc51fcdea3a238e2beb2b60fbfa97e9c54adac2d3d33",
+      "shape": [
+        1,
+        257,
+        128
+      ]
+    },
+    "partial.B.from_cstate": {
+      "file": "grad.partial.B.from_cstate.f64",
+      "ref32_file": "grad.partial.B.from_cstate.ref32.f32",
+      "ref32_sha256": "5650d150ce5b05047653013c99da16d3df85268e698fd2542f55fc69beddead2",
+      "sha256": "f206515602855f8554dbe51bfc345f481cb6c8ae2a38535032f491eb6d968888",
+      "shape": [
+        1,
+        257,
+        128
+      ]
+    },
+    "partial.B.total": {
+      "file": "grad.partial.B.total.f64",
+      "ref32_file": "grad.partial.B.total.ref32.f32",
+      "ref32_sha256": "2de93889e73eebe9f758b8b078cb0285f4d11790855656d29069744d9a7f241c",
+      "sha256": "931dd476fb1ef4d51b062de1d7db94fff3b191511b8f3513cc353363884dc969",
+      "shape": [
+        1,
+        257,
+        128
+      ]
+    },
+    "partial.C.from_cb": {
+      "file": "grad.partial.C.from_cb.f64",
+      "ref32_file": "grad.partial.C.from_cb.ref32.f32",
+      "ref32_sha256": "2418552cd4103eb99f528f5aecf8dd29647614d3208b7da8f377ca47dfba42dc",
+      "sha256": "41e7d8c11573a03669011564666ede27965f4d018ea9dc412916365a8ed29a70",
+      "shape": [
+        1,
+        257,
+        128
+      ]
+    },
+    "partial.C.from_yoff": {
+      "file": "grad.partial.C.from_yoff.f64",
+      "ref32_file": "grad.partial.C.from_yoff.ref32.f32",
+      "ref32_sha256": "05dc54a17dba9f62797196018d5cd5fd7ec2e34b8eef84fc03b5aa8ba7bb71c8",
+      "sha256": "4162636ee536355be57249b72dd9013ec6bc1a55bad89651028ffb90dced998d",
+      "shape": [
+        1,
+        257,
+        128
+      ]
+    },
+    "partial.C.total": {
+      "file": "grad.partial.C.total.f64",
+      "ref32_file": "grad.partial.C.total.ref32.f32",
+      "ref32_sha256": "53f48501f91c46ba3429f81d87e4dee2aec71b7657b43b012368e1196409a060",
+      "sha256": "6b7683adaa39235f38fd0128a5fedc1ae4f53dd3fd3919c28f792982433ede4a",
+      "shape": [
+        1,
+        257,
+        128
+      ]
+    },
+    "partial.cb.G.from_ydiag": {
+      "file": "grad.partial.cb.G.from_ydiag.f64",
+      "ref32_file": "grad.partial.cb.G.from_ydiag.ref32.f32",
+      "ref32_sha256": "fc169d00b532a11f0d7c43969d83621e2c5776f9cd9373b199041d65eecd9074",
+      "sha256": "b226abec9890a0d3e735900dd7b59b180281e3695c2ad752c7905c3f44cd0b47",
+      "shape": [
+        1,
+        2,
+        256,
+        256
+      ]
+    },
+    "partial.conv.input": {
+      "file": "grad.partial.conv.input.f64",
+      "ref32_file": "grad.partial.conv.input.ref32.f32",
+      "ref32_sha256": "08f6df031898f954f0eb1b6f85e3182789886ca6aefa3343e08f6646f0a13c75",
+      "sha256": "47eb15b7029fd3224e0c6a77a46ea61d024d402c87b05c6cbdcfb54049b2f05c",
+      "shape": [
+        1,
+        257,
+        384
+      ]
+    },
+    "partial.da.from_seg": {
+      "file": "grad.partial.da.from_seg.f64",
+      "ref32_file": "grad.partial.da.from_seg.ref32.f32",
+      "ref32_sha256": "7f4aab986bd5e3804df0fcfc05e3837957439195ce240904dd415013c42e9212",
+      "sha256": "837907a07b66571d8c06651c0d5c9339c44ba61bc044eb6348591c1f53d1ba28",
+      "shape": [
+        1,
+        257,
+        2
+      ]
+    },
+    "partial.da.total": {
+      "file": "grad.partial.da.total.f64",
+      "ref32_file": "grad.partial.da.total.ref32.f32",
+      "ref32_sha256": "a5d7d0ed1f9771e97a4fc31bf8bed28a7a371083f88baa2215c040f0f3f54f25",
+      "sha256": "ffc1f2c6c01c6415ef63ab62b1eef443ef4ec344c746707a56dd83a76a4b3473",
+      "shape": [
+        1,
+        257,
+        2
+      ]
+    },
+    "partial.dacs.from_decay": {
+      "file": "grad.partial.dacs.from_decay.f64",
+      "ref32_file": "grad.partial.dacs.from_decay.ref32.f32",
+      "ref32_sha256": "b5f35a57b766af77ab80f069715c26b3bf8c2ef65df3429494d75a23663e2091",
+      "sha256": "ce778d7f34e85725070268be3e4c89154bf6aaab92ddc58aad82850a7a80e637",
+      "shape": [
+        1,
+        2,
+        2,
+        256
+      ]
+    },
+    "partial.dacs.from_state": {
+      "file": "grad.partial.dacs.from_state.f64",
+      "ref32_file": "grad.partial.dacs.from_state.ref32.f32",
+      "ref32_sha256": "ad7facb2586fc6e966c004d7d1d16b024f5805ff7cb47c7a85dabd8b48892ca7",
+      "sha256": "9f1dcbc35c350d6027f98be0f5c8b43b42ca52b7604459c0c42be3aa88913d47",
+      "shape": [
+        1,
+        2,
+        2,
+        256
+      ]
+    },
+    "partial.dacs.from_yoff": {
+      "file": "grad.partial.dacs.from_yoff.f64",
+      "ref32_file": "grad.partial.dacs.from_yoff.ref32.f32",
+      "ref32_sha256": "f857e1a9c23eef739aa1f16e2485a8794e6903bcd5e8782740f6af2b5bc7c6bf",
+      "sha256": "5e8951a13f31d14ec945724b835135d4c453f442344dcd320813b70f6c351672",
+      "shape": [
+        1,
+        2,
+        2,
+        256
+      ]
+    },
+    "partial.dacs.total": {
+      "file": "grad.partial.dacs.total.f64",
+      "ref32_file": "grad.partial.dacs.total.ref32.f32",
+      "ref32_sha256": "fdd9df79d7505a24eb7d8e9d5bb63a4a4a718e7e96e47641183e89c5ae2c9419",
+      "sha256": "93184d232eae01dce81e8d603fefa9513a942a5897dfdee0d9ee30d3e8a79243",
+      "shape": [
+        1,
+        2,
+        2,
+        256
+      ]
+    },
+    "partial.decay.from_cstate": {
+      "file": "grad.partial.decay.from_cstate.f64",
+      "ref32_file": "grad.partial.decay.from_cstate.ref32.f32",
+      "ref32_sha256": "df7b869e1f379651577ca872e94363f8f7e3238a7e199b2a29d16bc018daeda3",
+      "sha256": "f018df9e74a90799245fa30fee32c2a6bf0ff3be80aa99ee474ffb5f8061854d",
+      "shape": [
+        1,
+        2,
+        2,
+        256
+      ]
+    },
+    "partial.dt.from_da": {
+      "file": "grad.partial.dt.from_da.f64",
+      "ref32_file": "grad.partial.dt.from_da.ref32.f32",
+      "ref32_sha256": "adbc2ce3cca82f5adaae5e28d4d8be274178c95e672a3f4307d7fcb2cc7e052a",
+      "sha256": "351fc58d1908dbf15141d5bfb22a24d34d59fb96942cbc1c3deaaba19981d007",
+      "shape": [
+        1,
+        257,
+        2
+      ]
+    },
+    "partial.dt.from_xd": {
+      "file": "grad.partial.dt.from_xd.f64",
+      "ref32_file": "grad.partial.dt.from_xd.ref32.f32",
+      "ref32_sha256": "50d3eff5637b2273752cae532cd139653a73b68e3d478d864ff70a11877526ab",
+      "sha256": "fffe7280e7e4b3aa2dcdb9d0177483be8bd6c04e398713c0f09d51535d110464",
+      "shape": [
+        1,
+        257,
+        2
+      ]
+    },
+    "partial.dt.merged": {
+      "file": "grad.partial.dt.merged.f64",
+      "ref32_file": "grad.partial.dt.merged.ref32.f32",
+      "ref32_sha256": "2200e6e075461738694be124568f67e338983092799bccd174266d9706666259",
+      "sha256": "ef83fa3a815a99ecf40d2ea07ee79173f4bd65750012df88550fb159d5c3d2f9",
+      "shape": [
+        1,
+        257,
+        2
+      ]
+    },
+    "partial.dt_bias.merged": {
+      "file": "grad.partial.dt_bias.merged.f64",
+      "ref32_file": "grad.partial.dt_bias.merged.ref32.f32",
+      "ref32_sha256": "6ee38428a05e31a70aa35b24b48082be223dd3a517cf592525c4981a8131f09b",
+      "sha256": "86a163f5942f8f71cf0c1758efdada069179367aed1869c3546419204472e74c",
+      "shape": [
+        2
+      ]
+    },
+    "partial.dt_raw.merged": {
+      "file": "grad.partial.dt_raw.merged.f64",
+      "ref32_file": "grad.partial.dt_raw.merged.ref32.f32",
+      "ref32_sha256": "e9c4637e82b26df2f3fc094222bf4f20ea15dc4b3826edb262d3b3bcc1cb2e74",
+      "sha256": "9751351688f1e8b028bcf71a6c8864ebdcba3b78a5bac769941e43d0e7e6b556",
+      "shape": [
+        1,
+        257,
+        2
+      ]
+    },
+    "partial.in_proj.packed": {
+      "file": "grad.partial.in_proj.packed.f64",
+      "ref32_file": "grad.partial.in_proj.packed.ref32.f32",
+      "ref32_sha256": "14867c6644666fa0c7a02d0254b6fa5992af3311ca31997a083a82c647a9c8e0",
+      "sha256": "edd65aa88c2f17d5776b02a38b69e696d2573edca361177d8f2b2238550a1d30",
+      "shape": [
+        257,
+        514
+      ]
+    },
+    "partial.seg.L.from_ydiag": {
+      "file": "grad.partial.seg.L.from_ydiag.f64",
+      "ref32_file": "grad.partial.seg.L.from_ydiag.ref32.f32",
+      "ref32_sha256": "f79432180915413f504fa0b029517d05a6b495c295e6f8025143cc589b7bb32d",
+      "sha256": "1b938fbd3566a4487e1f1e1ece6f341bda42389fa5bc4de7f3d4ba684b40ff4a",
+      "shape": [
+        1,
+        2,
+        2,
+        256,
+        256
+      ]
+    },
+    "partial.silu.x.from_D": {
+      "file": "grad.partial.silu.x.from_D.f64",
+      "ref32_file": "grad.partial.silu.x.from_D.ref32.f32",
+      "ref32_sha256": "1dfa68717867a0e359c34876418d6aa8c48a71084a1577048bb39517206652a6",
+      "sha256": "1bd5c6cdcafe956d002491c0260e35bab47fcfd844630bb525416be49da6041d",
+      "shape": [
+        257,
+        2,
+        64
+      ]
+    },
+    "partial.silu.x.total": {
+      "file": "grad.partial.silu.x.total.f64",
+      "ref32_file": "grad.partial.silu.x.total.ref32.f32",
+      "ref32_sha256": "ce733907e093c92835315b9729b44798cc4a3f8321fb3e1ee3e7bebd29ac7f2e",
+      "sha256": "01356e2abf8792d64003251b9220c3cb15d245f1244105dae3fd717f2e1faebe",
+      "shape": [
+        1,
+        257,
+        2,
+        64
+      ]
+    },
+    "partial.x.from_xd": {
+      "file": "grad.partial.x.from_xd.f64",
+      "ref32_file": "grad.partial.x.from_xd.ref32.f32",
+      "ref32_sha256": "ab7fe4866dcc5efd17f03d39c2fb5f107d60c273ad5743832fe1085ff5c329f3",
+      "sha256": "5b028890f05a99da5838d39f532f434a81c3c16699ae69687caeaf1a129ff62f",
+      "shape": [
+        1,
+        257,
+        2,
+        64
+      ]
+    },
+    "partial.xd.from_cstate": {
+      "file": "grad.partial.xd.from_cstate.f64",
+      "ref32_file": "grad.partial.xd.from_cstate.ref32.f32",
+      "ref32_sha256": "1da90a20d3b9ad4b576374d9eb420361f81c52fae681701b6a47c2be5c15eb80",
+      "sha256": "de87dd178a0edc448481f290fbc98500da5198786dd90e1e0726bb664f30a6b3",
+      "shape": [
+        1,
+        257,
+        2,
+        64
+      ]
+    },
+    "partial.xd.from_ydiag": {
+      "file": "grad.partial.xd.from_ydiag.f64",
+      "ref32_file": "grad.partial.xd.from_ydiag.ref32.f32",
+      "ref32_sha256": "b69f11ef747d37e9b5bb2921c63c66ebbcf7019047e70f2dd3558a461e4f0da5",
+      "sha256": "21a33553bb7cff04c27f82e964ebe2d00a51cd344f4be66b33d45c24d375244c",
+      "shape": [
+        1,
+        257,
+        2,
+        64
+      ]
+    },
+    "partial.xd.total": {
+      "file": "grad.partial.xd.total.f64",
+      "ref32_file": "grad.partial.xd.total.ref32.f32",
+      "ref32_sha256": "56fd6453eeb659d44abf95db7d816c9bb46e0e18fe8f370f2fae52f178af46dd",
+      "sha256": "eb236e95fc0df2f177324754568e6bda4aef85c3d2a42eabaa0f0d488653f491",
+      "shape": [
+        1,
+        257,
+        2,
+        64
+      ]
+    },
+    "stage.cstate.out": {
+      "file": "grad.stage.cstate.out.f64",
+      "ref32_file": "grad.stage.cstate.out.ref32.f32",
+      "ref32_sha256": "ccf16467b819c5f4b8f882acb39b4a656fe4633dd581c2ca5fef909fc26e759a",
+      "sha256": "f815391ee4a0769714ebbc12f55ec584897efffaf3709d3bd1b3bbffb22fc4ab",
+      "shape": [
+        1,
+        2,
+        2,
+        64,
+        128
+      ]
+    },
+    "stage.gnorm.gate": {
+      "file": "grad.stage.gnorm.gate.f64",
+      "ref32_file": "grad.stage.gnorm.gate.ref32.f32",
+      "ref32_sha256": "c6156dda80f938d60d75a28bcba558dc0d04d6fe90bb8c0083e8f8a57e16e2e0",
+      "sha256": "38649352e92b8a80f76e2a087edd3fe7e511c9c2bedd6e045f978135f9709f0f",
+      "shape": [
+        257,
+        128
+      ]
+    },
+    "stage.gnorm.out": {
+      "file": "grad.stage.gnorm.out.f64",
+      "sha256": "e6c4ca28640b6d75d55eadf8feac9bebcc97a6d01996a8b31c76c74bc51721f1",
+      "shape": [
+        257,
+        128
+      ]
+    },
+    "stage.in_proj.z": {
+      "file": "grad.stage.in_proj.z.f64",
+      "ref32_file": "grad.stage.in_proj.z.ref32.f32",
+      "ref32_sha256": "a15ceb6dc1aef8b6211d6cd1f9f77e3b26e4f73272027124d4750e683ed82716",
+      "sha256": "43a564d64563af178a78b48dd9c624f7735805a05c67ddc890ca91042f96a493",
+      "shape": [
+        257,
+        128
+      ]
+    },
+    "stage.initial_state": {
+      "file": "grad.stage.initial_state.f64",
+      "ref32_file": "grad.stage.initial_state.ref32.f32",
+      "ref32_sha256": "4e8828873fab4729789da318052981bd80ac56ec1b1f5a3d28971f5d6dbece69",
+      "sha256": "125980d0750b6e52991d77bd281e91789a9dd8b887abcd3169a95809fe5b00f6",
+      "shape": [
+        1,
+        2,
+        64,
+        128
+      ]
+    },
+    "stage.norm.out": {
+      "file": "grad.stage.norm.out.f64",
+      "ref32_file": "grad.stage.norm.out.ref32.f32",
+      "ref32_sha256": "db7611d32386d6a7ee6d1b618740c015d2dd83daf2dd1c4f331634e6d917806c",
+      "sha256": "660a288ea71c2189e19fb5a8c3a49a35cfa82a6d73e029b45571f0a862862643",
+      "shape": [
+        257,
+        64
+      ]
+    },
+    "stage.pass.states.direct": {
+      "file": "grad.stage.pass.states.direct.f64",
+      "ref32_file": "grad.stage.pass.states.direct.ref32.f32",
+      "ref32_sha256": "7a94e9834562b7aae51f06f99ea097559a9f741271bf60758959fb1572795294",
+      "sha256": "8384711cfd02941008b85e19c292666d5285e988b238eeca8be524d5a72345f2",
+      "shape": [
+        1,
+        2,
+        2,
+        64,
+        128
+      ]
+    },
+    "stage.pass.states.total": {
+      "file": "grad.stage.pass.states.total.f64",
+      "ref32_file": "grad.stage.pass.states.total.ref32.f32",
+      "ref32_sha256": "77bef4f4f62df6c6956b8ae5bf3fbf5e27bc84a021f2d825ce79d98f9903d1b9",
+      "sha256": "cf3a7965588b119a33dfe4d04e6d1a3db9bcb48d9829d4ed64566ccc33d58351",
+      "shape": [
+        1,
+        2,
+        2,
+        64,
+        128
+      ]
+    },
+    "stage.scale.product": {
+      "file": "grad.stage.scale.product.f64",
+      "ref32_file": "grad.stage.scale.product.ref32.f32",
+      "ref32_sha256": "b67a32bca56aa53786685a8d1269195a04d3adbae171480610f4139add149cda",
+      "sha256": "6981e419f36611f4e641527523bf920636ec571bf12ee8e5dcd4b90372a22b90",
+      "shape": [
+        1,
+        2,
+        2,
+        64,
+        128
+      ]
+    },
+    "stage.scan.y": {
+      "file": "grad.stage.scan.y.f64",
+      "ref32_file": "grad.stage.scan.y.ref32.f32",
+      "ref32_sha256": "f3b7bc706cb1f662f61ae2a5d6a1b1a902c59dfc888c681b6a8f1576ba129a85",
+      "sha256": "82f3e3fa6910c364260367e01c97cd0431e5215da6e8b7ae1e7ddb6794736a78",
+      "shape": [
+        257,
+        2,
+        64
+      ]
+    },
+    "stage.skip.out": {
+      "file": "grad.stage.skip.out.f64",
+      "ref32_file": "grad.stage.skip.out.ref32.f32",
+      "ref32_sha256": "f3b7bc706cb1f662f61ae2a5d6a1b1a902c59dfc888c681b6a8f1576ba129a85",
+      "sha256": "82f3e3fa6910c364260367e01c97cd0431e5215da6e8b7ae1e7ddb6794736a78",
+      "shape": [
+        257,
+        128
+      ]
+    },
+    "x": {
+      "file": "grad.x.f64",
+      "ref32_file": "grad.x.ref32.f32",
+      "ref32_sha256": "acdcfac3d2f3ca23a4497180fd32081ae86ac6d900c6fe0cf90daf852e10f445",
+      "sha256": "bbf28e603dd6f6e73b024942aac8e34e5a34a325a3cb1014f72d3ab2e331cf99",
+      "shape": [
+        1,
+        257,
+        64
+      ]
+    }
+  },
+  "independent_audit": "central finite difference",
+  "loss": -136.5876558778179,
+  "objective": "sum(flat(block_output) * signed_dyadic_weight_v1)",
+  "oracle": "PyTorch autograd over cited upstream forward transcription",
+  "public_prefill_leaves": [
+    "x",
+    "block_norm.weight",
+    "in_proj.weight",
+    "conv1d.weight",
+    "conv1d.bias",
+    "dt_bias",
+    "A_log",
+    "D",
+    "norm.weight",
+    "out_proj.weight"
+  ],
+  "schema": "mojolearn.mamba.gradient-oracle.v1",
+  "state_boundary_diagnostics": [
+    "stage.initial_state"
+  ],
+  "state_boundary_leaves": [
+    "initial_state"
+  ],
+  "state_boundary_policy": "incoming_state_before_chunk0; block_output_objective; final_state_cotangent=zero"
+}

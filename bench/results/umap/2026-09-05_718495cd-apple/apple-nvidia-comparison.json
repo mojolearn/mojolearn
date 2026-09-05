@@ -1,0 +1,20 @@
+{
+  "classification": "PASS",
+  "comparison": "bitwise uint32",
+  "profile": "umap.identical.8x1.2d.e4.seed19.v1",
+  "cells": 186,
+  "stages": 8,
+  "source_commit": "718495cda991d96d0346b18ad1ef1fadfc8bed14",
+  "left": {
+    "device": "Apple M4",
+    "capture": "identity-1.log",
+    "sha256": "cc878eb0e4374fc4004823980ecbbd25fba2b9b65d430f2b7b670bd14e5ce866"
+  },
+  "right": {
+    "device": "NVIDIA GeForce RTX4090",
+    "driver": "580.159.04",
+    "capture": "nvidia.identity.log",
+    "remote_run": "bench/results/e1g/2026-09-05_033031-nvidia-mamba",
+    "sha256": "d40ca098402119935eb3f6795ce1c5d5e1e598b35cab6159fc5d3a85af96f37c"
+  }
+}

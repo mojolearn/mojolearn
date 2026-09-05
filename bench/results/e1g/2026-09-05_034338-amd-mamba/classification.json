@@ -1,0 +1,6 @@
+{
+  "classification": "INFRA_FAILURE",
+  "reason": "Runtime6.1.40091 below required6.3.30000; no valid numericalGPU output",
+  "stopped_remaining_tests": true,
+  "terminated_verified": true
+}

@@ -1,0 +1,8 @@
+{
+  "classification": "INFRA_FAILURE",
+  "reason": "No MI300X instances available for corrected ROCm6.4.1 SSH bootstrap request",
+  "tests_started": false,
+  "pod_created": false,
+  "remaining_pods_verified": 0,
+  "bootstrap_validation": "JSON request checks and dry run passed; deployment unverified"
+}

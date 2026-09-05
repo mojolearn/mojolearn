@@ -124,3 +124,17 @@ and fingerprints the source, rejecting source changes during a run. The
 comparison requires every semantic gate to be GREEN before comparing native
 bytes and provenance. Cross-device identity is established only when actual
 captures from the named hardware agree.
+
+At source commit `718495cd`, Apple M4 and NVIDIA RTX 4090 (driver
+580.159.04) passed all five semantic gates and matched all 54 captured native
+gradient tensors bit for bit. The fixtures are Mamba1 `base_b2_l4_d8`,
+Mamba2 `m2_base_b2_l4_d32`, Mamba3 `m3_base_b2_l4_d32`, and the Mamba2
+`m2_base_b1_l257_d64` public/state gates. See the
+[comparison record](../bench/results/resume/2026-09-05/cross-device.json)
+and its linked certificates. This evidence is for these source fixtures,
+not arbitrary shapes or installed wheels.
+
+AMD backward identity remains unmeasured for this certificate: the available
+ROCm 6.1 image was below the compiler's minimum, and the corrected ROCm 6.4
+startup request could not acquire an instance. These attempts are recorded
+as infrastructure failures, not numerical disagreements.
