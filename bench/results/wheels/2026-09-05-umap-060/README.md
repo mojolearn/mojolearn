@@ -11,3 +11,9 @@ mode and binary hash. See installed/results.json and the per-job records.
 SHA256SUMS identifies the exact locally retained wheel (binary excluded
 from git). This is candidate qualification, not PyPI publication or Linux
 qualification. The experimental k-NN selector is disabled in this wheel.
+
+The build-only workflow ultimately FAILED during artifact upload after
+reporting “Upload progress stalled.” Its compilation, interpreter smoke,
+metadata and digest steps passed. The extra UMAP qualification above ran
+locally against the preserved exact wheel. See workflow.json and
+upload-failure.log; do not label the overall workflow a pass.

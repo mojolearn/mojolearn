@@ -87,7 +87,12 @@ jobs:
     # Self-hosted and ephemeral. See the header: a hosted runner produces a
     # wheel with no GPU kernels in it.
     runs-on: [self-hosted, macos, arm64, metal, real-gpu]
-    timeout-minutes: 60
+    # The release Mac has a slow uplink: the 0.6.0 candidate passed its
+    # gates but hit upload-artifact's five-minute chunk-progress timeout.
+    timeout-minutes: 90
+    env:
+      ACTIONS_ARTIFACT_UPLOAD_CONCURRENCY: '1'
+      ACTIONS_ARTIFACT_UPLOAD_TIMEOUT_MS: '1200000'
     permissions:
       contents: read
     outputs:

@@ -1,0 +1,21 @@
+Build and verify the wheel	Upload the wheels	﻿2026-09-05T15:02:55.9565390Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:55.9566290Z ##[group]Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:55.9566500Z with:
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:55.9566600Z   name: mojolearn-wheel
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:55.9566740Z   path: python/dist/*.whl
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:55.9566880Z   if-no-files-found: error
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:55.9567020Z   compression-level: 6
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:55.9567240Z   overwrite: false
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:55.9567360Z   include-hidden-files: false
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:55.9567490Z ##[endgroup]
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:56.1489810Z (node:66186) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:56.1490960Z (Use `node --trace-deprecation ...` to show where the warning was created)
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:56.1513840Z With the provided path, there will be 1 file uploaded
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:56.1515810Z Artifact name is valid!
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:56.1516040Z Root directory input is valid!
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:57.2485790Z Beginning upload of artifact content to blob storage
+Build and verify the wheel	Upload the wheels	2026-09-05T15:02:57.3984000Z (node:66186) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+Build and verify the wheel	Upload the wheels	2026-09-05T15:07:57.2770710Z ##[error]Upload progress stalled.
+Build and verify the wheel	Upload the wheels	2026-09-05T15:09:53.8420020Z Uploaded bytes 8388608
+Build and verify the wheel	Upload the wheels	2026-09-05T15:10:54.8705770Z Uploaded bytes 16777216
+Build and verify the wheel	Upload the wheels	2026-09-05T15:20:13.7151240Z Uploaded bytes 21500295
