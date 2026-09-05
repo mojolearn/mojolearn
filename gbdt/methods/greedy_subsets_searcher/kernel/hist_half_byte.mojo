@@ -97,42 +97,9 @@ comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 #: row as `hist_binary.mojo`, and the flush below follows the matrix.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
-#: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
-#:
-#: This used to be a literal 32 in this file and in three others, with a
-#: comment pointing at `kernel_matrix.column_lane_width` for why AMD's 64
-#: must not reach it. That is a matrix row that EXISTS and was bypassed:
-#: `column_lane_width` had fifteen call sites and every one of them was
-#: inside the matrix itself or the table printer, so changing
-#: `TARGET_COLUMN` to AMD would have compiled and silently kept 32 while the
-#: replication geometry assumed a 32-wide slice on a 64-wide wavefront.
-#: One number now flows through, which is the point of having the table.
-#:
-#: AND IT IS THE LOGICAL ROW, NOT THE HARDWARE ONE (2026-09-01, DEVIATION
-#: 1947). IN THIS FILE THE CONSTANT IS LOAD-SIDE ONLY, which was checked
-#: line by line before it moved. Its four uses are `min_docs_per_block`,
-#: `ALIGN_SIZE`, the `warps_per_block` / `global_warp_id` /
-#: `entries_per_warp` / `stripe_size` striping, and
-#: `local_idx = (tid & (LANE_WIDTH - 1)) * LOAD_SIZE`. Every one of them is
-#: a PARTITION OF THE ROW AXIS among groups of threads, and the partition is
-#: self-consistent at any value: `ALIGN_SIZE` is one group's iteration, the
-#: head/tail peel leaves a whole number of them, `stripe_size` is the group
-#: count times that, and each group's lanes take disjoint `LOAD_SIZE`-wide
-#: runs. Nothing here indexes a histogram slot and nothing here assumes
-#: lockstep. So a logical 32 on a 64-wide wave covers exactly the same rows
-#: exactly once.
-#:
-#: WHAT IT COSTS, said rather than hidden: a 64-wide wave now issues its
-#: loads as TWO 32-lane runs of `LOAD_SIZE` elements each, one per logical
-#: group, and those two runs are `entries_per_warp` apart rather than
-#: contiguous. Each run is still 512 contiguous bytes, so it coalesces, but
-#: it is two streams where a wave-width partition would give one. The
-#: precedent says that price is small in practice: `hist_2_one_byte_8bit`
-#: stripes by exactly this logical 32 (`H8_LANE`) and is the kernel the
-#: MI325X has been running one-byte blocks through since 2026-08-27. A
-#: wave-width load partition over a logical slice layout is a legitimate
-#: follow-up and it is a SCHEDULING change; it is not what DEVIATION 1947
-#: claims, and it is unmeasured.
+#: Logical replication width from the kernel matrix. Its uses partition the
+#: row axis into complete, disjoint `LOAD_SIZE` runs; it neither indexes a
+#: histogram slot nor assumes hardware lockstep width.
 comptime LANE_WIDTH = replication_lanes_for[
     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
 ]()
@@ -214,7 +181,7 @@ def half_byte_hist_kernel(
 
     var stats_p = stats + Int(block_idx.z) * stat_line_size
 
-    # `TPointHistHalfByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
+    # `TPointHistHalfByteBase`'s constructor, inlined:
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) buff[i] = 0;
     #     __syncthreads();
     #     Histogram = buff + SliceOffset();
@@ -560,12 +527,6 @@ def half_byte_hist_kernel(
                     # `atomicAdd(dst + fold, val)` -- CatBoost's flush, in
                     # every `AddToGlobalMemory`.
                     #
-                    # This was a plain STORE with a comment saying Mojo could
-                    # not emit a float atomic and that the branch was
-                    # unreachable on Apple. Both halves were false: probed
-                    # 2026-08-19, 1024 threads each adding 1.0 through
-                    # `Atomic.fetch_add` give exactly 1024.0 on the M4.
-                    #
                     # Order-nondeterministic, exactly as theirs is, and
                     # CatBoost ships it that way. `NUMERIC_IDENTICAL` selects
                     # the fixed-point branch above when reproducibility is
@@ -660,7 +621,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
 
     var stats_p = stats + Int(block_idx.z) * stat_line_size
 
-    # `TPointHistHalfByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
+    # `TPointHistHalfByteBase`'s constructor, inlined:
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) buff[i] = 0;
     #     __syncthreads();
     #     Histogram = buff + SliceOffset();
@@ -1045,12 +1006,6 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
                 else:
                     # `atomicAdd(dst + fold, val)` -- CatBoost's flush, in
                     # every `AddToGlobalMemory`.
-                    #
-                    # This was a plain STORE with a comment saying Mojo could
-                    # not emit a float atomic and that the branch was
-                    # unreachable on Apple. Both halves were false: probed
-                    # 2026-08-19, 1024 threads each adding 1.0 through
-                    # `Atomic.fetch_add` give exactly 1024.0 on the M4.
                     #
                     # Order-nondeterministic, exactly as theirs is, and
                     # CatBoost ships it that way. `NUMERIC_IDENTICAL` selects
