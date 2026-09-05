@@ -5,6 +5,17 @@ current instructions; git history and `archive/` retain their evidence.
 
 ## Resumed implementation and identity checks (2026-09-05)
 
+**Mamba3 certification correction:** the L65 diagnostic investigation found
+a missing `trap.scale -> gamma -> dt/sigma` contribution in the backward
+join. The staged float32 reference repeated it, so previous Mamba3 byte
+matches and staged-reference passes do not establish a correct full gradient.
+The independently differentiated float64 forward rejects the retained old
+`x`, `block_norm.weight`, `in_proj.weight` and `dt_bias` outputs. The native
+join and staged references are being corrected, and every public Mamba3
+leaf now also has to pass that independent whole-forward gate at unchanged
+tolerances. Corrective AMD/NVIDIA backward-only runs are required; Apple
+has not been rerun. Mamba1/2 and the completed UMAP/kNN evidence are separate.
+
 - CatBoost's experimental two-level FeatureFreq fit now accepts sample
   weights. Native and Python checks cover unequal weights, unit-weight
   equivalence, and occupied zero-weight leaves with zero regularization.

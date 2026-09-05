@@ -35,6 +35,7 @@ from mamba.impl.mamba_ssm.modules.mamba3 import (
     mamba3_block_forward,
 )
 from mamba.impl.mamba_ssm.modules.mamba3_backward import (
+    mamba3_beta_join_kernel,
     mamba3_backward_gate_skip_into,
     mamba3_backward_qkdot_into,
     mamba3_backward_s16_s15_into,
@@ -86,6 +87,38 @@ def _write_f32(path: String, values: List[Float32]) raises:
         fh.write_bytes(Span(bytes))
 
 
+def _check_scale_chain(ctx: DeviceContext) raises:
+    # Exact dyadic two-token VJP. The scale branch is live at token zero
+    # even though no shifted beta reaches it. The next token receives both.
+    var qdt = mamba_upload(ctx, List[Float32](5, 7))
+    var qtrap = mamba_upload(ctx, List[Float32](11, 13))
+    var qgamma = mamba_zeros(ctx, 2)
+    var scale = mamba_upload(ctx, List[Float32](4, 8))
+    var dt = mamba_upload(ctx, List[Float32](2, 3))
+    var sigma = mamba_upload(ctx, List[Float32](0.25, 0.5))
+    var out_gamma = mamba_zeros(ctx, 2)
+    var out_dt = mamba_zeros(ctx, 2)
+    var out_trap = mamba_zeros(ctx, 2)
+    ctx.enqueue_function[mamba3_beta_join_kernel](
+        out_gamma.unsafe_ptr(), out_dt.unsafe_ptr(), out_trap.unsafe_ptr(),
+        qgamma.unsafe_ptr(), scale.unsafe_ptr(), qdt.unsafe_ptr(),
+        qtrap.unsafe_ptr(), scale.unsafe_ptr(), dt.unsafe_ptr(), sigma.unsafe_ptr(),
+        Int32(1), Int32(2), Int32(1), grid_dim=(1, 1, 1), block_dim=(32, 1, 1),
+    )
+    var got_dt = mamba_download(ctx, out_dt, 2)
+    var got_trap = mamba_download(ctx, out_trap, 2)
+    _ = qdt^
+    _ = qtrap^
+    _ = qgamma^
+    _ = scale^
+    _ = dt^
+    _ = sigma^
+    _ = out_gamma^
+    if got_dt[0] != 6 or got_dt[1] != 13 or got_trap[0] != 12.5 or got_trap[1] != 16:
+        raise Error("Mamba3 scale/gamma chain-rule regression")
+    print("MAMBA3 SCALE CHAIN PASS: first-token gamma and shifted beta")
+
+
 def main() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error(
@@ -112,6 +145,7 @@ def main() raises:
     var dims = weights.dims.copy()
     var m = fixture.b * fixture.l
     var ctx = DeviceContext()
+    _check_scale_chain(ctx)
     var device_weights = Mamba3DeviceWeights(ctx, weights)
     var state = allocate_inference_cache(ctx, fixture.b, dims)
     var stages = Mamba3DeviceStages(ctx, fixture.b, fixture.l, 0, dims)

@@ -1,0 +1,18 @@
+Mamba gradient comparison FAILED
+  block_norm.weight: independent whole-forward float64 gradient FAILED; maxabs=4.163e-02, bad=64
+  dt_bias: independent whole-forward float64 gradient FAILED; maxabs=4.223e-01, bad=2
+  in_proj.weight: independent whole-forward float64 gradient FAILED; maxabs=9.516e-01, bad=256
+  partial.dt.available_total: maxabs=1.907e-05, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.dt.current_total: maxabs=1.907e-05, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.dt.with_seg: maxabs=1.907e-05, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.gamma.total: maxabs=4.578e-05, bad=2; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.join.dt.available_total: maxabs=1.144e-05, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.join.dt.current_total: maxabs=1.144e-05, bad=2; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.join.gamma.total: maxabs=2.384e-05, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.join.kscale: maxabs=2.503e-06, bad=2; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.join.s15.scale: maxabs=2.289e-05, bad=3; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.qkdot.gamma: maxabs=5.245e-06, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.s15.scale: maxabs=4.578e-05, bad=3; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.scale.beta: maxabs=4.578e-05, bad=3; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.scale.gamma: maxabs=4.578e-05, bad=3; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  x: independent whole-forward float64 gradient FAILED; maxabs=5.726e-03, bad=4028
