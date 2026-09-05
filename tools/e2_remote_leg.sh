@@ -416,12 +416,15 @@ if [ "$CLONE_OK" != 1 ]; then
     git -C "$REPO" archive --format=tar "$COMMIT" -- \
       .gitattributes pixi.toml pixi.lock umap neighbors spectral core metrics cluster \
       checks bindings python gemm/__init__.mojo gemm/checks \
+      transformer/__init__.mojo transformer/checks transformer/impl \
+      transformer/corpus/gen_corpus.py \
+      bench/__init__.mojo bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo \
       mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py \
       tools/mamba_backward_certify.sh tools/mamba_backward_identity.py \
       tools/mamba_gradient_oracle.py tools/with_identical_mode.sh \
       tools/with_build_lock.sh tools/umap_identity_compare.py \
       tools/umap_mamba_followup.sh tools/umap_quality_check.py \
-      tools/umap_mamba_do_diag.sh tools/e1_bootstrap.sh \
+      tools/umap_mamba_do_diag.sh tools/gpu_optimization_do_diag.sh tools/e1_bootstrap.sh \
       bench/external/record_environment.sh | gzip > "$BUNDLE" \
       || { log "bounded archive failed"; exit 6; }
   else

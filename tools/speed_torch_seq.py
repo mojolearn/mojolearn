@@ -7,9 +7,8 @@
     python3 tools/speed_torch_seq.py --lane mamba --size smoke
     python3 tools/speed_torch_seq.py --lane attention --dump-dir /tmp/seqdump
 
-**NOTHING IN THIS FILE HAS BEEN RUN.** It was written on 2026-08-25 by an
-agent that was forbidden to execute anything. Treat the first invocation as
-a debugging session, not as a measurement.
+The September 5 admission fixes were source-reviewed only by their author.
+Main-lane validation is required before publishing their measurements.
 
 WHAT THIS IS FOR
 ================
@@ -107,11 +106,20 @@ off here).
 """
 
 import argparse
+import hashlib
 import os
 import re
 import statistics
 import sys
 import time
+
+for _thread_env in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
+    os.environ.setdefault(_thread_env, '2')
+
+AGREEMENT_FAILURES = []
+INPUT_WITNESSES = {}
+AGREE_RTOL = 5e-4
+AGREE_ATOL = 1e-5
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DRIVER_MOJO = os.path.join(REPO, "bench", "speed", "seq_speed_main.mojo")
@@ -364,9 +372,9 @@ def seq_seed(row_index, seed_base):
     return (seed_base + 0x1000 * row_index) & M64
 
 
-def fnv1a64(buf):
+def fnv1a64(buf, initial=FNV_OFFSET):
     """FNV-1a64 over bytes, in order. `core/identity_trace.mojo`'s function."""
-    h = FNV_OFFSET
+    h = initial
     for byte in buf:
         h = ((h ^ byte) * FNV_PRIME) & M64
     return h
@@ -389,13 +397,17 @@ def witness_hash(arr, samples):
     for i in range(8):
         h = ((h ^ ((n >> (8 * i)) & 0xFF)) * FNV_PRIME) & M64
     stride = max(1, n // samples)
-    return fnv1a64(a[::stride].tobytes())
+    return fnv1a64(a[::stride].tobytes(), h)
 
 
 def emit_witness(lane, tag, name, arr, samples):
     a = np.ascontiguousarray(arr, dtype=np.float32).reshape(-1)
+    INPUT_WITNESSES[(lane, tag, name)] = (str(a.size), hex16(witness_hash(a, samples)))
     print("FSPEED-WEIGHTS lane=%s shape=%s tensor=%s n=%d hash=%s"
           % (lane, tag, name, a.size, hex16(witness_hash(a, samples))))
+    if a.nbytes <= 16 * 1024 * 1024:
+        print('FSPEED-INPUT-SHA256 lane=%s shape=%s tensor=%s bytes=%d sha256=%s'
+              % (lane, tag, name, a.nbytes, hashlib.sha256(a.tobytes()).hexdigest()))
 
 
 # ---------------------------------------------------------------------------
@@ -653,6 +665,7 @@ def time_arm(torch, lane, arm, tag, call, rounds, warmups, out_of):
     last = None
     hashes = []
     for i in range(1, rounds + 1):
+        sync(torch, _DEVSTR)
         t0 = time.perf_counter()
         r = call()
         sync(torch, _DEVSTR)
@@ -697,7 +710,8 @@ def undeterminize(torch):
     """
     try:
         torch.use_deterministic_algorithms(False)
-        torch.set_num_threads(os.cpu_count() or 1)
+        cap = max(1, min(2, int(os.environ.get('MOJOLEARN_CPU_THREADS', '2'))))
+        torch.set_num_threads(cap)
     except Exception:
         pass
 
@@ -723,22 +737,23 @@ def note(lane, arm, text):
 # ---------------------------------------------------------------------------
 # FSPEED-AGREE against the Mojo dump
 # ---------------------------------------------------------------------------
-def agree(lane, tag, ours_path, theirs):
+def agree(lane, tag, ours_path, theirs, arm='reference-fp32'):
     """Compare the Mojo driver's dumped output with the eager FP32 arm's.
 
-    A REPORT LINE AND NOT A GATE. Two implementations of the same block in
-    FP32 will not agree bitwise and are not expected to; what this catches is
+    A tolerance gate, not bitwise cross-library agreement. What this catches is
     the failure where a speed number was taken for a block that computes
     something else entirely, which is the failure that makes a whole
     benchmark worthless without ever looking wrong.
     """
     if not ours_path or not os.path.exists(ours_path):
+        AGREEMENT_FAILURES.append('%s/%s/%s missing Mojo dump' % (lane, tag, arm))
         refuse(lane, "agree", "no mojo dump at %s (set MOJOLEARN_SPEED_DUMP_DIR "
                               "on the mojo side and --dump-dir here)" % ours_path)
         return
     ours = np.fromfile(ours_path, dtype=np.float32)
     th = np.ascontiguousarray(theirs, dtype=np.float32).reshape(-1)
     if ours.size != th.size:
+        AGREEMENT_FAILURES.append('%s/%s/%s output size mismatch' % (lane, tag, arm))
         refuse(lane, "agree", "shape %s: mojo dumped %d floats, torch produced %d"
                % (tag, ours.size, th.size))
         return
@@ -747,6 +762,12 @@ def agree(lane, tag, ours_path, theirs):
     print("FSPEED-AGREE lane=%s max_abs_diff=%.6g max_rel_diff=%.6g n=%d"
           % (lane, float(d.max()) if d.size else 0.0,
              float((d / den).max()) if d.size else 0.0, ours.size))
+    passed = bool(np.isfinite(ours).all() and np.isfinite(th).all()
+                  and np.allclose(ours, th, rtol=AGREE_RTOL, atol=AGREE_ATOL))
+    print('FSPEED-AGREE-GATE lane=%s shape=%s arm=%s passed=%s rtol=%g atol=%g'
+          % (lane, tag, arm, str(passed).lower(), AGREE_RTOL, AGREE_ATOL))
+    if not passed:
+        AGREEMENT_FAILURES.append('%s/%s/%s numerical agreement failed' % (lane, tag, arm))
 
 
 # ---------------------------------------------------------------------------
@@ -850,6 +871,7 @@ def run_llama_row(torch, dev, lane, row, args, consts):
     if eager_out is not None:
         agree(lane, tag, dumped, eager_out.detach().to(torch.float32).contiguous().cpu().numpy())
     else:
+        AGREEMENT_FAILURES.append('%s/%s eager FP32 output unavailable' % (lane, tag))
         refuse(lane, "agree", "the eager fp32 arm did not produce an output at "
                               "shape %s, so nothing can be compared" % tag)
 
@@ -947,6 +969,8 @@ def run_mamba_row(torch, dev, lane, row, args, consts):
     try:
         from mamba_ssm.ops.selective_scan_interface import selective_scan_fn as fused
     except Exception as e:
+        if args.require_fused:
+            AGREEMENT_FAILURES.append('Required mamba-ssm CUDA comparator unavailable')
         refuse(lane, "mamba-ssm-cuda",
                "mamba_ssm is not importable (%s). The only opponent left is the "
                "PURE-PYTORCH sequential reference scan, which is NOT what anyone "
@@ -992,7 +1016,11 @@ def run_mamba_row(torch, dev, lane, row, args, consts):
                 # seam S12 is a recorded stage of its own (DEVIATION 723).
                 # So this arm does the same MATH in fewer kernels, and that
                 # difference is part of what is being measured.
-                def call(u=u, delta=delta, A=A, Bt=Bt, Ct=Ct, Dv=Dv, gate=gate):
+                def call():
+                    # The complete block starts with normalization/projection,
+                    # convolution and delta/B/C construction in BOTH arms.
+                    u, delta, A, Bt, Ct, Dv, gate = mamba_prefix(
+                        torch, P, x, di, dt_rank)
                     g = fused(u, delta, A, Bt, Ct, Dv, z=gate, delta_bias=None,
                               delta_softplus=False, return_last_state=False)
                     o = torch.nn.functional.linear(g.transpose(1, 2), P["out_proj.weight"])
@@ -1005,13 +1033,18 @@ def run_mamba_row(torch, dev, lane, row, args, consts):
                     return fused(u, delta, A, Bt, Ct, Dv, z=None, delta_bias=None,
                                  delta_softplus=False, return_last_state=True)
                 pick = lambda r: r[0].transpose(1, 2).contiguous()
-            time_arm(torch, lane, arm, tag, call, args.rounds, args.warmups, pick)
+            fused_out = time_arm(torch, lane, arm, tag, call, args.rounds, args.warmups, pick)
+            agree(lane, tag, dumped,
+                  fused_out.detach().to(torch.float32).contiguous().cpu().numpy(), arm)
         except Exception as e:
+            if args.require_fused:
+                AGREEMENT_FAILURES.append('Required mamba-ssm CUDA comparator failed at ' + tag)
             refuse(lane, arm, "%s at shape %s: %s" % (type(e).__name__, tag, str(e)[:180]))
 
     if ref_out is not None:
         agree(lane, tag, dumped, ref_out.detach().to(torch.float32).contiguous().cpu().numpy())
     else:
+        AGREEMENT_FAILURES.append('%s/%s reference output unavailable' % (lane, tag))
         refuse(lane, "agree", "the reference arm did not produce an output at "
                               "shape %s" % tag)
 
@@ -1023,6 +1056,9 @@ LANES = ("transformer", "attention", "mlp", "rmsnorm", "mamba", "selective_scan"
 
 
 def main():
+    global AGREE_RTOL, AGREE_ATOL
+    AGREEMENT_FAILURES.clear()
+    INPUT_WITNESSES.clear()
     ap = argparse.ArgumentParser()
     ap.add_argument("--lane", required=True, choices=LANES)
     ap.add_argument("--rounds", type=int,
@@ -1040,7 +1076,18 @@ def main():
     ap.add_argument("--no-bf16", dest="bf16", action="store_false")
     ap.add_argument("--crosscheck", action="store_true", default=True)
     ap.add_argument("--no-crosscheck", dest="crosscheck", action="store_false")
+    ap.add_argument('--agree-rtol', type=float, default=5e-4)
+    ap.add_argument('--agree-atol', type=float, default=1e-5)
+    ap.add_argument('--require-fused', action='store_true',
+                    help='Fail unless the Mamba CUDA comparator executes successfully')
+    ap.add_argument('--mojo-log', action='append', default=[],
+                    help='Mojo output whose input witnesses must match; repeat for both modes')
     args = ap.parse_args()
+    AGREE_RTOL, AGREE_ATOL = args.agree_rtol, args.agree_atol
+    if args.rounds < 1 or args.warmups < 1 or min(AGREE_RTOL, AGREE_ATOL) < 0:
+        raise SystemExit('Positive rounds/warmups and nonnegative tolerances required')
+    if not args.mojo_log:
+        AGREEMENT_FAILURES.append('No --mojo-log supplied for input witness admission')
 
     try:
         import torch
@@ -1082,9 +1129,26 @@ def main():
             else:
                 run_mamba_row(torch, dev, lane, row, args, consts)
         except Exception as e:
+            AGREEMENT_FAILURES.append('%s/%s row raised %s' % (lane, row['name'], type(e).__name__))
             refuse(lane, "torch", "row %d %s: %s: %s"
                    % (row["i"], row["name"], type(e).__name__, str(e)[:180]))
     print("FSPEED-DONE lane=%s arm=torch" % lane)
+    for log_path in args.mojo_log:
+        expected = {}
+        with open(log_path) as handle:
+            for line in handle:
+                if line.startswith('FSPEED-WEIGHTS '):
+                    fields = dict(item.split('=', 1) for item in line.split()[1:] if '=' in item)
+                    key = (fields['lane'], fields['shape'], fields['tensor'])
+                    expected[key] = (fields['n'], fields['hash'])
+        if not expected or any(INPUT_WITNESSES.get(key) != value for key, value in expected.items()):
+            AGREEMENT_FAILURES.append('Input witness mismatch or empty Mojo log: ' + log_path)
+        else:
+            print('FSPEED-INPUT-GATE passed=true tensors=%d path=%s' % (len(expected), log_path))
+    if AGREEMENT_FAILURES:
+        for failure in AGREEMENT_FAILURES:
+            print('FSPEED-ADMISSION-FAILED ' + failure)
+        return 2
     return 0
 
 

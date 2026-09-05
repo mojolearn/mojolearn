@@ -72,6 +72,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from checks.numerics import GLOBAL_NUMERIC_MODE
 
 from checks.vendor import COMPILED_VENDOR
 
@@ -409,6 +410,11 @@ def kmeans_fit_binding(
     return out
 
 
+def mojolearn_numeric_mode_binding() raises -> PythonObject:
+    """Read the compiled numeric mode of the reached kNN/kmeans binary."""
+    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+
+
 def mojolearn_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
@@ -588,6 +594,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
+        m.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
         m.def_function[knn_search_binding]("knn_search")
         m.def_function[knn_classify_binding]("knn_classify")
         m.def_function[knn_regress_binding]("knn_regress")
