@@ -30,13 +30,34 @@ The completed AMD pod was terminated and its absence verified by HTTP 404.
 The ROCm 6.4 image with SSH bootstrap therefore has a successful deployment;
 the earlier runtime/inventory failures remain historical evidence.
 
-UMAP's pending non-finite input changes are now checked on Apple M4: both
+UMAP's non-finite input changes are now checked on Apple M4: both
 optimizer entries and public data entries reject all 42 NaN/infinity cases
 in FAST and IDENTICAL builds, and the named fixture still matches all 186
 baseline cells. The [local record](bench/results/umap/2026-09-05-finite-input-resume/metadata.json)
 retains the dirty source snapshot. This later patch has no new remote claim.
-The next step is the installed-wheel artifact closure below; source checks
-do not replace installed-wheel gates.
+The `0.5.0` macOS wheel at `529ec5ec` passed the clean installed-wheel gate:
+all 15 extensions in three modes, Python 3.10 through 3.14, with no skipped
+interpreter. The new `UMAP.fit` / `fit_transform` API passed its six test
+groups in every combination, including the 16 pinned layout cells in
+IDENTICAL mode. The installed Mamba and Transformer surface suites also
+passed in all three modes on Python 3.12. See the
+[qualification record](bench/results/wheels/2026-09-05-umap-api/release-status.json).
+The tagged PyPI publication workflow is in progress; Linux installed-wheel
+qualification remains separate.
+
+## UMAP follow-up priority
+
+UMAP is the next feature focus after the wheel release. Extend the identity
+fixtures beyond the current 8x1 case to multidimensional data, 3D output,
+multiple seeds and parameter settings, alongside independent embedding-quality
+checks. Use RunPod for NVIDIA and **DigitalOcean for AMD**, with tests and
+measurements in the main lane only.
+
+Then add fitted-state `transform` following the pinned cuML implementation:
+new-to-training k-NN, membership weights, weighted initialization from the
+training embedding, and layout optimization against the retained embedding.
+The current API intentionally refuses that operation. Quadratic graph storage
+also needs a sparse path before claiming large-dataset scalability.
 
 ## Now: release truth and artifact closure
 

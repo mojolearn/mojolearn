@@ -1,0 +1,75 @@
+{
+  "release_version": "0.5.0",
+  "source_commit": "529ec5ec73c81c14826135fe615fac1a7631bf54",
+  "qualification_workflow": "https://github.com/mojolearn/mojolearn/actions/runs/33956384758",
+  "status": "QUALIFIED_PYPI_WORKFLOW_STARTED",
+  "planned_platform": "macosx_11_0_arm64",
+  "numeric_modes": [
+    "fast",
+    "deterministic",
+    "identical"
+  ],
+  "extensions_per_mode": 15,
+  "interpreters": [
+    "3.10",
+    "3.11",
+    "3.12",
+    "3.13",
+    "3.14"
+  ],
+  "local_checks": {
+    "source_probe_exit": 0,
+    "release_workflow_preflight": "15 PASS, 0 FAIL",
+    "umap_identical_surface": "6 test groups PASS; 16 expected layout cells exact"
+  },
+  "testing_lane": "main; serialized with with_build_lock.sh",
+  "linux": "No new Linux wheel staged; no new Linux installed-wheel claim",
+  "wheel_sha256": "1762ead631782da314df95e32f13eeee40d7b711fa8d58e0c5ed5d8401ba5644",
+  "installed_wheel_combinations_passed": 15,
+  "additional_installed_api_checks": [
+    {
+      "surface": "mamba",
+      "mode": "fast",
+      "exit_code": 0,
+      "log": "installed-mamba-fast.log"
+    },
+    {
+      "surface": "transformer",
+      "mode": "fast",
+      "exit_code": 0,
+      "log": "installed-transformer-fast.log"
+    },
+    {
+      "surface": "mamba",
+      "mode": "deterministic",
+      "exit_code": 0,
+      "log": "installed-mamba-deterministic.log"
+    },
+    {
+      "surface": "transformer",
+      "mode": "deterministic",
+      "exit_code": 0,
+      "log": "installed-transformer-deterministic.log"
+    },
+    {
+      "surface": "mamba",
+      "mode": "identical",
+      "exit_code": 0,
+      "log": "installed-mamba-identical.log"
+    },
+    {
+      "surface": "transformer",
+      "mode": "identical",
+      "exit_code": 0,
+      "log": "installed-transformer-identical.log"
+    }
+  ],
+  "provider_preference": {
+    "nvidia": "RunPod",
+    "amd": "DigitalOcean",
+    "credentials_verified_http": 200
+  },
+  "qualification_conclusion": "success",
+  "release_tag": "v0.5.0",
+  "publication_workflow": "https://github.com/mojolearn/mojolearn/actions/runs/33958208803"
+}

@@ -1,0 +1,41 @@
+{
+  "wheel_sha256": "1762ead631782da314df95e32f13eeee40d7b711fa8d58e0c5ed5d8401ba5644",
+  "results": [
+    {
+      "surface": "mamba",
+      "mode": "fast",
+      "exit_code": 0,
+      "log": "installed-mamba-fast.log"
+    },
+    {
+      "surface": "transformer",
+      "mode": "fast",
+      "exit_code": 0,
+      "log": "installed-transformer-fast.log"
+    },
+    {
+      "surface": "mamba",
+      "mode": "deterministic",
+      "exit_code": 0,
+      "log": "installed-mamba-deterministic.log"
+    },
+    {
+      "surface": "transformer",
+      "mode": "deterministic",
+      "exit_code": 0,
+      "log": "installed-transformer-deterministic.log"
+    },
+    {
+      "surface": "mamba",
+      "mode": "identical",
+      "exit_code": 0,
+      "log": "installed-mamba-identical.log"
+    },
+    {
+      "surface": "transformer",
+      "mode": "identical",
+      "exit_code": 0,
+      "log": "installed-transformer-identical.log"
+    }
+  ]
+}
