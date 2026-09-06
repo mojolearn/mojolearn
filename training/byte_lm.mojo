@@ -389,7 +389,7 @@ struct ByteTrainer(Movable):
         _require_profile()
         byte_validate_state(initial_params, initial_m, initial_v, flags, completed_steps)
         byte_validate_optimizer(optimizer)
-        self.optimizer = optimizer
+        self.optimizer = optimizer.copy()
         self.completed_steps = completed_steps
         self.healthy = True
         self.buffers = ByteBuffers(ctx, initial_params, initial_m, initial_v, flags)
@@ -569,7 +569,7 @@ def _byte_step_admitted(ctx: DeviceContext, mut tr: ByteTrainer,
     _ = trace
     return ByteStepCapture(ids.copy(), before_p.copy(), before_m.copy(),
         before_v.copy(), before_flags.copy(), grads^, after_p^, after_m^,
-        after_v^, after_flags^, loss, next_step, tr.optimizer,
+        after_v^, after_flags^, loss, next_step, tr.optimizer.copy(),
         String(BYTE_PROFILE), "identical", String(COMPILED_VENDOR))
 
 
