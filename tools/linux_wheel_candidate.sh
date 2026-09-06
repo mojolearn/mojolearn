@@ -75,9 +75,13 @@ with zipfile.ZipFile(repaired[0]) as archive:
 with (out / 'twine.log').open('w') as log:
     subprocess.run(['twine', 'check', str(repaired[0])], stdout=log, stderr=subprocess.STDOUT, check=True)
 PYAUDIT
-phase=qualify
+phase=normalize
 wheels=("$DEST"/repaired/*.whl)
 [[ ${#wheels[@]} = 1 ]] || exit 2
+"$PY" tools/normalize_wheel_directories.py "${wheels[0]}" \
+    "$DEST/normalized/$(basename "${wheels[0]}")" > "$DEST/normalization.json"
+phase=qualify
+wheels=("$DEST"/normalized/*.whl)
 sha=$("$PY" - "${wheels[0]}" <<'PYSHA'
 import hashlib,sys
 print(hashlib.file_digest(open(sys.argv[1], 'rb'), 'sha256').hexdigest())
