@@ -23,6 +23,7 @@ SOURCE_PATHS = (
     "gemm/__init__.mojo", "gemm/checks", "pixi.toml", "pixi.lock",
     "tools/mamba_backward_certify.sh", "tools/mamba_backward_identity.py",
     "tools/mamba_gradient_oracle.py", "tools/with_identical_mode.sh",
+    "tools/mamba3_backward_arithmetic.py", "tools/mamba3_join_diagnostics.py",
     "tools/with_build_lock.sh",
 )
 SCHEMA = "mojolearn.mamba.backward-bytes.v1"

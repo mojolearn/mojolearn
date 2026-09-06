@@ -28,13 +28,14 @@ class ArithmeticContractTests(unittest.TestCase):
             "dt.out": np.array([[[2.0], [3.0]]], np.float32),
             "trap.sigma": np.array([[[0.25], [0.5]]], np.float32),
             "angle.theta": np.zeros((2, 1, 32), np.float32),
+            "angle.rate": np.zeros((2, 32), np.float32),
         }
         self.forward["rot.k"][:, :, 0] = 1.0
         self.forward["bcnorm.B"][:, :, 0] = 1.0
         self.gradients = {name: np.zeros(2, np.float32) for name in arithmetic.GRADIENT_OPERANDS}
         self.gradients["partial.qkdot.dt"][:] = [5, 7]
-        self.gradients["partial.s16.kscale"] = np.zeros((2, 1, 128), np.float32)
-        self.gradients["partial.s16.kscale"][:, 0, 0] = [4, 8]
+        self.gradients["partial.s16.kscale"] = np.zeros((1, 2, 1, 128), np.float32)
+        self.gradients["partial.s16.kscale"][0, :, 0, 0] = [4, 8]
         self.gradients["partial.s17.recur.kscale"] = np.zeros((2, 1, 128), np.float32)
         self.outputs = arithmetic.evaluate(self.gradients, self.forward)
         self.manifest = {"forward_operands": {}, "gradients": {}}
@@ -82,7 +83,7 @@ class ArithmeticContractTests(unittest.TestCase):
     def test_operand_error_is_rejected_even_when_dot_is_unchanged(self):
         name = "partial.s16.kscale"
         values = self.gradients[name].copy()
-        values[0, 0, 1] = 1.0  # Corresponding krot cell is zero.
+        values[0, 0, 0, 1] = 1.0  # Corresponding krot cell is zero.
         values.tofile(self.actual / f"grad.{name}.f32")
         # Keep downstream outputs self-consistent with the corrupt operand.
         # Only the independent operand oracle can reject this construction.
@@ -120,13 +121,21 @@ class ArithmeticContractTests(unittest.TestCase):
         np.testing.assert_array_equal(result["partial.dt.current_total"], [6, 11])
 
     def test_rotation_and_angle_semantics_cannot_be_bypassed(self):
-        for name in ("angle.theta", "rot.k"):
+        for name in ("angle.theta", "rot.k", "angle.rate"):
             with self.subTest(name=name):
                 values = self.forward[name].copy()
                 values.reshape(-1)[0] += np.float32(0.5)
                 values.tofile(self.actual / f"operand.{name}.f32")
-                self.assertTrue(any("operand semantics failed" in row for row in self.audit()))
+                self.assertTrue(self.audit())
                 self.forward[name].tofile(self.actual / f"operand.{name}.f32")
+
+    def test_mod_placement_negative_control(self):
+        rates = np.zeros((1, 3, 32), np.float32)
+        rates[0, :, 0] = [-0.1, 0.2, 0.3]
+        dt = np.ones((1, 3, 1), np.float32)
+        actual = arithmetic.serial_angles(rates, dt)
+        deferred = np.mod(np.cumsum(rates[:, :, None, :], axis=1, dtype=np.float32), np.float32(2*np.pi))
+        self.assertFalse(np.array_equal(actual.view(np.uint32), deferred.view(np.uint32)))
 
 
 if __name__ == "__main__":

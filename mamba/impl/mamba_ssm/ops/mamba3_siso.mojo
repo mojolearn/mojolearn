@@ -357,6 +357,11 @@ def m3_scale_kernel(
 # ===========================================================================
 
 
+def m3_angle_rate(raw: Float32) -> Float32:
+    """Shared S10 rate, so diagnostic captures use the exact forward operand."""
+    return ftz(pinned_mul(identical_tanh(ftz(raw)), M3_PI))
+
+
 def m3_angle_kernel(
     theta_out: MutPointer[Float32, MutAnyOrigin],  # [M, H, R]
     theta_state: MutPointer[Float32, MutAnyOrigin],  # [B, H, R] in/out
@@ -389,14 +394,7 @@ def m3_angle_kernel(
     var qv = m3_q_eff()
     for li in range(l):
         var mm = bb * l + li
-        var a = ftz(
-            pinned_mul(
-                identical_tanh(
-                    ftz(in_proj.unsafe_load(mm * dip + c_ang + r))
-                ),
-                M3_PI,
-            )
-        )
+        var a = m3_angle_rate(in_proj.unsafe_load(mm * dip + c_ang + r))
         var inc = ftz(
             pinned_mul(
                 a, ftz(dt_work.unsafe_load((bb * t_work + q0 + li) * nh + hh))

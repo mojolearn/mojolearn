@@ -1222,6 +1222,7 @@ def generate(args):
             ("dt.out", stages["dt.out"]),
             ("trap.sigma", stages["trap.sigma"]),
             ("angle.theta", stages["angle.theta"]),
+            ("angle.rate", torch.tanh(stages["in_proj.out"][:, -32:]) * torch.pi),
         ):
             filename = "operand." + name + ".f64"
             shape, digest = _write_array(out / filename, value)
@@ -1486,6 +1487,22 @@ def compare(args):
             failures.append(
                 f"provenance {key}: {dump_manifest.get(key)!r}, expected {expected_value!r}"
             )
+    mamba3_arithmetic_outputs = set()
+    if (args.require_public_prefill and manifest["family"] == "mamba3"
+            and manifest["case"] == "m3_base_b1_l65_d64"):
+        from mamba3_backward_arithmetic import OUTPUTS, audit
+        mamba3_arithmetic_outputs = set(OUTPUTS)
+        try:
+            operand_failures, operand_reports = audit(
+                oracle_dir, actual_dir, manifest, dump_manifest, args.rtol, args.atol)
+            failures.extend(operand_failures)
+            arithmetic_reports.extend(operand_reports)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            failures.append(f"Mamba3 arithmetic contract refused: {error}")
+        selected_policies.append(
+            "mamba3.l65.compositional_forward_and_gradient_operands_plus_exact_dag.v1; "
+            "all thirteen outputs checked by bits; independent whole-forward public leaves remain mandatory"
+        )
     for name, entry in manifest["gradients"].items():
         # This gate certifies one state API boundary, not all public parameter
         # contractions at L257. Those have their own strict public-prefill
@@ -1521,6 +1538,8 @@ def compare(args):
                     failures.append(f"{name}: missing gradient dump")
                 continue
         dtype = "<f4" if path.suffix == ".f32" else "<f8"
+        if name in mamba3_arithmetic_outputs and dtype != "<f4":
+            failures.append(f"{name}: Mamba3 arithmetic output must be native float32")
         chosen_oracle = "float64"
         actual = np.fromfile(path, dtype=dtype).astype(np.float64)
         # Mamba3's staged float32 reference previously repeated a missing
@@ -1549,7 +1568,9 @@ def compare(args):
             and manifest["family"] == "mamba2"
             and manifest["case"] == "m2_base_b1_l257_d64"
             and name == "in_proj.weight"
-        )
+        ) or name in mamba3_arithmetic_outputs
+        if name in mamba3_arithmetic_outputs:
+            policy = "mamba3.l65.compositional_operands_plus_exact_dag.v1"
         if dtype == "<f4" and "ref32_file" in entry and not compositional_leaf:
             expected = np.fromfile(
                 oracle_dir / entry["ref32_file"], dtype="<f4"

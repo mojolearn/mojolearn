@@ -47,8 +47,10 @@ def _ordered_target_kernel(
     cursor: MutPointer[Float32, MutAnyOrigin],
     out_w: MutPointer[Float32, MutAnyOrigin],
     out_g: MutPointer[Float32, MutAnyOrigin],
-    size: Int, offset: Int,
+    size_in: Int32, offset_in: Int32,
 ):
+    var size = Int(size_in)
+    var offset = Int(offset_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < size:
         var row = Int(permutation.unsafe_load(i))
@@ -67,8 +69,9 @@ def _ordered_gather_kernel(
     out_w: MutPointer[Float32, MutAnyOrigin],
     out_c: MutPointer[Float32, MutAnyOrigin],
     out_b: MutPointer[UInt32, MutAnyOrigin],
-    size: Int,
+    size_in: Int32,
 ):
+    var size = Int(size_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < size:
         var row = Int(permutation.unsafe_load(i))
@@ -83,8 +86,9 @@ def _ordered_apply_kernel(
     bins: MutPointer[UInt32, MutAnyOrigin],
     leaves: MutPointer[Float32, MutAnyOrigin],
     cursor: MutPointer[Float32, MutAnyOrigin],
-    size: Int, rate: Float32,
+    size_in: Int32, rate: Float32,
 ):
+    var size = Int(size_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < size:
         var row = Int(permutation.unsafe_load(i))
@@ -116,7 +120,7 @@ def ordered_estimate_and_apply(
     ctx.enqueue_function[_ordered_gather_kernel](
         y.unsafe_ptr(), weights.unsafe_ptr(), permutation.unsafe_ptr(),
         cursor.unsafe_ptr(), bins.unsafe_ptr(), gy.unsafe_ptr(),
-        gw.unsafe_ptr(), gc.unsafe_ptr(), gb.unsafe_ptr(), estimate_size,
+        gw.unsafe_ptr(), gc.unsafe_ptr(), gb.unsafe_ptr(), Int32(estimate_size),
         grid_dim=((estimate_size + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
     var part = partition_from_bins(ctx, gb, estimate_size, n_leaves)
@@ -141,7 +145,7 @@ def ordered_estimate_and_apply(
     ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_function[_ordered_apply_kernel](
         permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
-        cursor.unsafe_ptr(), apply_size, rate,
+        cursor.unsafe_ptr(), Int32(apply_size), rate,
         grid_dim=((apply_size + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
     ctx.synchronize()
@@ -245,7 +249,7 @@ def fit_ordered_rmse(
             ctx.enqueue_function[_ordered_target_kernel](
                 dy.unsafe_ptr(), dw.unsafe_ptr(), dp.unsafe_ptr(),
                 cursors[f].unsafe_ptr(), sw.unsafe_ptr(), sg.unsafe_ptr(),
-                size, offset,
+                Int32(size), Int32(offset),
                 grid_dim=((size + 255) // 256, 1, 1), block_dim=(256, 1, 1),
             )
             offset += size
