@@ -31,48 +31,49 @@ def run_case(dimension: Int, profile: Int, metric: Int) raises:
     comptime N = 129
     comptime Q = 17
     comptime K = 10
-    var ctx = DeviceContext()
-    var index = ctx.enqueue_create_host_buffer[DType.float32](N * dimension)
-    var queries = ctx.enqueue_create_host_buffer[DType.float32](Q * dimension)
-    var distances = ctx.enqueue_create_host_buffer[DType.float32](Q * K)
-    var indices = ctx.enqueue_create_host_buffer[DType.uint32](Q * K)
-    for row in range(N):
-        for feature in range(dimension):
-            index.unsafe_ptr().unsafe_store(row * dimension + feature, coordinate(row, feature, profile, False))
-    for row in range(Q):
-        for feature in range(dimension):
-            queries.unsafe_ptr().unsafe_store(row * dimension + feature, coordinate(row, feature, profile, True))
-    var expected_d = List[UInt32]()
-    var expected_i = List[UInt32]()
-    for repeat in range(2):
-        for cell in range(Q * K):
-            distances.unsafe_ptr().unsafe_store(cell, Float32(-12345))
-            indices.unsafe_ptr().unsafe_store(cell, UInt32(4294967295))
-        _ = knn_search(ctx, index.unsafe_ptr(), N, queries.unsafe_ptr(), Q, dimension, K,
-                       distances.unsafe_ptr(), indices.unsafe_ptr(),
-                       requested_query_tile=8 if repeat == 0 else 16, metric=metric)
+    with DeviceContext() as ctx:
+        var index = ctx.enqueue_create_host_buffer[DType.float32](N * dimension)
+        var queries = ctx.enqueue_create_host_buffer[DType.float32](Q * dimension)
+        var distances = ctx.enqueue_create_host_buffer[DType.float32](Q * K)
+        var indices = ctx.enqueue_create_host_buffer[DType.uint32](Q * K)
         ctx.synchronize()
-        for cell in range(Q * K):
-            var value = distances.unsafe_ptr().unsafe_load(cell)
-            var neighbor = indices.unsafe_ptr().unsafe_load(cell)
-            if not isfinite(value) or value == Float32(-12345) or neighbor >= UInt32(N):
-                raise Error("adversarial kNN invalid output")
-            if cell % K > 0:
-                var previous = distances.unsafe_ptr().unsafe_load(cell - 1)
-                var previous_index = indices.unsafe_ptr().unsafe_load(cell - 1)
-                if value < previous or (value == previous and neighbor <= previous_index):
-                    raise Error("adversarial kNN distance/index keys are not strictly ordered")
-            var bits = bitcast[DType.uint32](value)
-            if repeat == 0:
-                expected_d.append(bits)
-                expected_i.append(neighbor)
-                print("ADVERSARIAL_CELL", dimension, profile, metric, cell, bits, neighbor)
-            elif expected_d[cell] != bits or expected_i[cell] != neighbor:
-                raise Error("adversarial kNN query-tile bits changed")
-    _ = index^
-    _ = queries^
-    _ = distances^
-    _ = indices^
+        for row in range(N):
+            for feature in range(dimension):
+                index.unsafe_ptr().unsafe_store(row * dimension + feature, coordinate(row, feature, profile, False))
+        for row in range(Q):
+            for feature in range(dimension):
+                queries.unsafe_ptr().unsafe_store(row * dimension + feature, coordinate(row, feature, profile, True))
+        var expected_d = List[UInt32]()
+        var expected_i = List[UInt32]()
+        for repeat in range(2):
+            for cell in range(Q * K):
+                distances.unsafe_ptr().unsafe_store(cell, Float32(-12345))
+                indices.unsafe_ptr().unsafe_store(cell, UInt32(4294967295))
+            _ = knn_search(ctx, index.unsafe_ptr(), N, queries.unsafe_ptr(), Q, dimension, K,
+                           distances.unsafe_ptr(), indices.unsafe_ptr(),
+                           requested_query_tile=8 if repeat == 0 else 16, metric=metric)
+            ctx.synchronize()
+            for cell in range(Q * K):
+                var value = distances.unsafe_ptr().unsafe_load(cell)
+                var neighbor = indices.unsafe_ptr().unsafe_load(cell)
+                if not isfinite(value) or value == Float32(-12345) or neighbor >= UInt32(N):
+                    raise Error("adversarial kNN invalid output")
+                if cell % K > 0:
+                    var previous = distances.unsafe_ptr().unsafe_load(cell - 1)
+                    var previous_index = indices.unsafe_ptr().unsafe_load(cell - 1)
+                    if value < previous or (value == previous and neighbor <= previous_index):
+                        raise Error("adversarial kNN distance/index keys are not strictly ordered")
+                var bits = bitcast[DType.uint32](value)
+                if repeat == 0:
+                    expected_d.append(bits)
+                    expected_i.append(neighbor)
+                    print("ADVERSARIAL_CELL", dimension, profile, metric, cell, bits, neighbor)
+                elif expected_d[cell] != bits or expected_i[cell] != neighbor:
+                    raise Error("adversarial kNN query-tile bits changed")
+        _ = index^
+        _ = queries^
+        _ = distances^
+        _ = indices^
 
 
 def main() raises:
