@@ -862,7 +862,7 @@ MAMBA_CERT_ONLY=${MOJOLEARN_MAMBA_CERT_ONLY:-0}
 case "$MAMBA_CERT_ONLY" in 0|1) ;; *) echo 'MOJOLEARN_MAMBA_CERT_ONLY must be 0 or 1' >&2; exit 2 ;; esac
 CONTINUED_CERT_CHECKS=${MOJOLEARN_CONTINUED_CERT_CHECKS:-0}
 case "$CONTINUED_CERT_CHECKS" in 0|1) ;; *) echo 'MOJOLEARN_CONTINUED_CERT_CHECKS must be 0 or 1' >&2; exit 2 ;; esac
-case "$NVIDIA_CAMPAIGN" in 0|1|2|3) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0, 1 (general), 2 (feature finish), or 3 (UMAP finish)" ;; esac
+case "$NVIDIA_CAMPAIGN" in 0|1|2|3|4) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0, 1 (general), 2 (feature finish), 3 (UMAP finish), or 4 (training validation)" ;; esac
 if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
     [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaign requires nvidia --payload mamba"
 fi
@@ -1173,6 +1173,13 @@ if [ "$NVIDIA_CAMPAIGN" = 3 ]; then
     _umap_finish_paths="tools/nvidia_umap_finish.sh tools/nvidia_umap_finish_validate.py tools/umap_real_dataset_quality.py tools/amd_serial_guard.py tools/test_amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/nvidia_serial_guard.py tools/nvidia_public_compare.py tools/nvidia_feature_finish_validate.py tools/test_nvidia_feature_finish_validate.py tools/test_nvidia_umap_finish_validate.py"
     LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_umap_finish_paths"
     LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_umap_finish_paths"
+fi
+if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+    _training_validation_paths="training embedding gemm transformer/__init__.mojo transformer/checks transformer/impl tools/training_validation_serial.sh tools/training_validation_admit.py tools/transformer_training_gradient_oracle.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py python/mojolearn/_mlp_impl.py python/mojolearn/neural_network.py python/mojolearn/tests/test_small_mlp_surface.py python/mojolearn/tests/test_small_mlp_numerical_edges.py"
+    LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_training_validation_paths"
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_training_validation_paths"
+    LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA tools/small_mlp_training_capture.py"
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA tools/small_mlp_training_capture.py"
 fi
 
 leg_git_archive() {
@@ -1507,6 +1514,12 @@ leg_speed_artifacts() {
 }
 
 leg_mamba_artifacts() {
+    if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+        grep -q '^training_validation_exit=0$' "$OUT/remote/leg.txt" || return 1
+        cmp "$OUT/source_inventory_local.json" "$OUT/remote/source_inventory.json" || return 1
+        python3 tools/training_validation_admit.py "$OUT/remote/training-validation"
+        return $?
+    fi
     if [ "$NVIDIA_CAMPAIGN" = 3 ]; then
         grep -q '^umap_finish_exit=0$' "$OUT/remote/leg.txt" || return 1
         python3 tools/nvidia_umap_finish_validate.py "$OUT/remote/umap-finish"
@@ -1780,6 +1793,10 @@ leg_archive_required() {
         fi
         if [ "$NVIDIA_CAMPAIGN" = 3 ]; then
             echo "tools/nvidia_umap_finish.sh tools/nvidia_umap_finish_validate.py tools/umap_real_dataset_quality.py tools/amd_serial_guard.py tools/test_amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_nvidia_feature_finish_validate.py tools/test_nvidia_umap_finish_validate.py"
+        fi
+        if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+            echo "tools/small_mlp_training_capture.py"
+            echo "training/__init__.mojo training/mlp_ops.mojo training/estimator.mojo training/checks/train_loop.mojo training/checks/train_gradient_capture.mojo training/checks/optimizer.mojo training/checks/loss.mojo embedding/checks/embedding_identical.mojo gemm/host_entry.mojo tools/training_validation_serial.sh tools/training_validation_admit.py tools/transformer_training_gradient_oracle.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py python/mojolearn/_mlp_impl.py python/mojolearn/neural_network.py python/mojolearn/tests/test_small_mlp_surface.py python/mojolearn/tests/test_small_mlp_numerical_edges.py"
         fi
     else
         echo "gemm/checks/gemm_identical.mojo"
@@ -2387,6 +2404,10 @@ taskset -pc "$cores" $$ > "$OUT/cpu-affinity.log" 2>&1 || exit 9
   echo "commit=@COMMIT@"
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
+if [ "@NVIDIACAMPAIGN@" = 4 ]; then
+    python3 tools/training_validation_admit.py --inventory-root "$ROOT" \
+        > "$OUT/source_inventory.json" || exit 9
+fi
 uname -a > "$OUT/uname.txt" 2>&1
 @SMI@ > "$OUT/gpu.txt" 2>&1 || echo "no vendor smi tool answered" >> "$OUT/gpu.txt"
 { find . -name '*.mojo' -not -path './.pixi/*' -not -path './bench/results/*' \
@@ -2410,6 +2431,26 @@ else
 pixi install > "$OUT/pixi_env.log" 2>&1
 fi
 echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
+# Training integration is a distinct bounded qualification, with no Apple
+# execution and no inherited Mamba/UMAP performance workload.
+if [ "@NVIDIACAMPAIGN@" = 4 ]; then
+    training_rc=124
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+    if [ "$work_remaining" -ge 60 ]; then
+        if [ "$work_remaining" -gt 3000 ]; then work_remaining=3000; fi
+        MOJOLEARN_TRAIN_VALIDATION_OUT="$OUT/training-validation" \
+          MOJOLEARN_TRAIN_EXPECT_VENDOR=cuda MOJOLEARN_COMMIT="@COMMIT@" \
+          MOJOLEARN_TRAIN_VALIDATION_SECONDS="$work_remaining" \
+          timeout -k 10 "$work_remaining" bash tools/training_validation_serial.sh \
+          > "$OUT/training-validation-console.log" 2>&1
+        training_rc=$?
+    fi
+    echo "training_validation_exit=$training_rc" >> "$OUT/leg.txt"
+    echo "scope=bounded NVIDIA training integration and independent gradient checks; no cross-vendor or performance certificate" >> "$OUT/leg.txt"
+    : > /root/gemm_leg.done
+    echo REMOTE_BODY_DONE
+    exit "$training_rc"
+fi
 # Targeted UMAP finish shares bootstrap and the remaining lease budget only.
 # It exits before either the broader feature or sequence campaign starts.
 if [ "@NVIDIACAMPAIGN@" = 3 ]; then
@@ -3697,6 +3738,11 @@ leg_ship_and_run() {
   this commit. Shipping it would rent a box to build nothing."
     done
     leg_source_sha_recipe "$TMPD/archive" > "$OUT/source_sha256_local.txt"
+    if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+        python3 "$TMPD/archive/tools/training_validation_admit.py" \
+            --inventory-root "$TMPD/archive" > "$OUT/source_inventory_local.json" \
+            || leg_die "Could not freeze the training source inventory"
+    fi
     leg_say "  archive source sha256: $(cut -c1-32 < "$OUT/source_sha256_local.txt")"
 
     leg_ssh 'rm -rf /root/mojolearn /root/gemm_leg_out && mkdir -p /root/mojolearn' \
@@ -5210,6 +5256,11 @@ echo "== step 9: k-NN layout dispatch gates and prices =="
 echo "  Results: $OUT/remote/layout-price"
 echo "  Admission requires layout_exit=0 and source parity."
 echo "  Mamba and UMAP checks were not requested by this payload."
+elif [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+echo "== step 9: bounded NVIDIA training integration and independent gradients =="
+echo "  Results: $OUT/remote/training-validation"
+echo "  Admission requires every job and the retained independent gradient oracle."
+echo "  This is not a cross-vendor identity or performance certificate."
 elif [ "$NVIDIA_CAMPAIGN" = 3 ]; then
 echo "== step 9: targeted NVIDIA UMAP comparison and real-data quality =="
 echo "  Read $OUT/remote/umap-finish/results.tsv and its retained admission results."
@@ -5287,6 +5338,9 @@ if [ "$PAYLOAD" = "speed" ]; then
 elif [ "$KNN_LAYOUT_ONLY" = 1 ]; then
     echo "the layout results: $OUT/remote/layout-price"
     echo "read layout-console.log and layout_exit in remote/leg.txt together."
+elif [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+    echo "the training validation results: $OUT/remote/training-validation"
+    echo "read training-validation-console.log and training_validation_exit together."
 elif [ "$NVIDIA_CAMPAIGN" = 3 ]; then
     echo "the targeted UMAP results: $OUT/remote/umap-finish"
     echo "read umap-finish-console.log and umap_finish_exit in remote/leg.txt together."

@@ -11,6 +11,17 @@ validation and measurements remotely on NVIDIA and AMD. Any local host-only
 checks are limited to two CPU cores and two threads. Only the root/main
 thread runs tests, builds or measurements; implementation agents never do.
 
+Near-term training goal: validate the new small MLP, then a two-block,
+34,944-parameter byte language model on pinned real text, with independently
+checked gradients/AdamW, held-out learning, full per-step NVIDIA/AMD state
+equality and cross-vendor checkpoint continuation. New training source is
+authored, not yet qualified. See the [active milestones](FEATURE_COMPLETION_PLAN.md#near-term-training-milestone-active).
+
+The [bounded NVIDIA UMAP follow-up](bench/results/resume/2026-09-06-root-umap-nvidia/README.md)
+passed all 15 jobs, including the pinned digits quality experiment and one
+matched cuML comparison. Its rental is confirmed deleted. This scoped result
+does not qualify newer training changes or establish arbitrary dataset coverage.
+
 ## Apple completion follow-up (2026-09-06)
 
 At `2e53699e`, freshly rebuilt Apple Mamba bindings pass all 102 Python

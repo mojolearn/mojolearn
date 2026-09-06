@@ -4,12 +4,24 @@ Source audit: 2026-09-06. This is an implementation plan, not a qualification re
 
 ## What exists
 
+Near-term implementation update: the new fixed two-block
+[`byte_lm.mojo`](byte_lm.mojo) composition is authored, including forward-only
+evaluation and full before/after state capture. Its exact contract and open
+integration work are in [`BYTE_LM_IMPLEMENTATION.md`](BYTE_LM_IMPLEMENTATION.md).
+The [real-text corpus and schedule](corpus/tinyshakespeare/README.md) are pinned.
+Neither this new module nor the learning experiment is compiled or qualified.
+The public small-MLP surface and independent numerical checks are also
+authored. Root's [`training_validation_serial.sh`](../tools/training_validation_serial.sh)
+prepares serial remote gradient and MLP gates; it is not executed evidence.
+The earlier one-block API proposal below remains a separate scoped contract,
+not a description of an already shipped Transformer training API.
+
 | Surface | Exact source and entry points | Current boundary |
 |---|---|---|
 | Python Transformer | `python/mojolearn/_transformer_impl.py::TransformerBlock`, re-exported by `python/mojolearn/transformer.py` | Nine caller-supplied weights; forward, single-token step, explicit KV state. No public backward or training method. Shapes are configurable within its profile. |
 | Transformer binding | `bindings/_mojolearn_transformer.mojo::_transformer_run`, `transformer_forward_binding`, `transformer_decode_step_binding` | Synchronous host-buffer fold, separate mode/vendor readback. No backward binding. |
 | Native Transformer backward | `transformer/checks/transformer_backward.mojo::LlamaBackwardStages`, `llama_decoder_layer_backward` | Requires the exact forward stages, original block input, RoPE buffers, weights, and incoming host `List[Float32]` cotangent. This is implemented source; stale comments saying “never run” are not current evidence. |
-| Public optimizer/loss | `python/mojolearn/_training_impl.py`, `bindings/_mojolearn_training.mojo`, `training/estimator.mojo` | Optimizer steps and cross-entropy are public primitives, not a Transformer training step. `_Optimizer.state_dict()` omits model weights/configuration/registry. `load_state_dict()` is not a complete training-checkpoint validator. |
+| Private optimizer/loss | `python/mojolearn/_training_impl.py`, `bindings/_mojolearn_training.mojo`, `training/estimator.mojo` | Optimizer steps and cross-entropy remain private primitives: `python/mojolearn/__init__.py:145–158` explicitly keeps `_training_impl` internal. They are not a public Transformer training step. `_Optimizer.state_dict()` omits model weights/configuration/registry. `load_state_dict()` is not a complete training-checkpoint validator. |
 | Complete internal step | `training/checks/train_loop.mojo::TrainBuffers`, `TrainConfig`, `train_step`, `unpack_params`, `pack_grads` | Embedding → one Llama block → untied LM head → causal CE → all backward passes → AdamW. Frozen toy profile, explicit twelve-stage schedule. |
 | Checkpoint codec | `training/checkpoint.mojo::Checkpoint`, `save_checkpoint`, `load_checkpoint`, `compare_checkpoint_files` | Portable host-only versioned binary format for flat weights/moments/flags and descriptor. `load_checkpoint` checks expected names/offsets, but caller still must check intended configuration. |
 | Resume driver | `training/checks/checkpoint_check.mojo::checkpoint_of`, `restore_into`, `train_head`, `train_tail`, `clause_iii` | File save/reload and deliberate bad resumes exist within one device process. Main accepts output-file and two-file comparison modes, but no external-file continuation mode. |
@@ -110,3 +122,30 @@ Set explicit host/GPU memory ceilings, process deadlines, and single-worker/thre
 ## Completion criteria
 
 The first release slice is complete when callers can perform the fixed-profile supplied-data step, save all authoritative state, reload it in another process, and continue on NVIDIA or AMD with the promised IDENTICAL bits; numerical gradients and the public/native adapter have independent evidence. It does not close configurable model dimensions, full pretrained backbones, FAST training, reduced precision, distributed training, arbitrary microbatch schedules, or training through inference caches.
+
+## Independent gradient capture slice (authored, not executed)
+
+`training/checks/train_gradient_capture.mojo` reuses the existing single native step and downloads its actual initial parameters, all 11 packed gradients, loss, initial/post-step Adam moments and post-step parameters. The fixed dimensions and native parameter registry are checked. `MOJOLEARN_TRAIN_CAPTURE_OUTPUT` must be a new directory; optional `MOJOLEARN_TRAIN_CAPTURE_IDS` supplies a bounded JSON list of 18 integers, otherwise the existing generator provides the actual retained IDs. Captures contain raw little-endian FP32 arrays and token integers with hashes, source inventory, and native vendor/IDENTICAL readback. No timing claim is supported.
+
+`tools/transformer_training_gradient_oracle.py` independently constructs the full mathematical graph in PyTorch FP64 on the expected remote CUDA/ROCm GPU, compares every parameter-gradient cell and loss, and retains FP64 reference arrays plus structured comparisons. Declared gradient tolerances are `atol=2e-6, rtol=2e-4`; loss tolerances are `atol=2e-6, rtol=2e-6`. These are provisional, pre-execution criteria, not measured accuracy. A failure must be diagnosed, not silently loosened. The sign control negates captured gradients. The nonlinear control preserves SiLU forward values while dropping the sigmoid derivative and must visibly change a nonlinear-path gradient under the same thresholds. This validates control sensitivity of the independent gate; it is not a native sabotage build or an exhaustive derivative proof. The output retains parameter movement and all updated state, but this gate does not claim independent optimizer verification.
+
+Root-only NVIDIA recipe, from repository root on the remote machine (use fresh absolute paths; reserve the parent artifact directory first):
+
+```sh
+python3 tools/nvidia_serial_guard.py --seconds 900 --rss-gib 12 -- \
+  pixi run mojo build -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
+  training/checks/train_gradient_capture.mojo -o /artifacts/gradient-capture
+
+MOJOLEARN_TRAIN_EXPECT_VENDOR=cuda \
+MOJOLEARN_TRAIN_CAPTURE_OUTPUT=/artifacts/gradient-capture-nvidia \
+python3 tools/nvidia_serial_guard.py --seconds 300 --rss-gib 12 -- \
+  /artifacts/gradient-capture
+
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+python3 tools/nvidia_serial_guard.py --seconds 300 --rss-gib 12 -- \
+  python3 tools/transformer_training_gradient_oracle.py \
+  /artifacts/gradient-capture-nvidia --expected-vendor cuda \
+  --output /artifacts/gradient-oracle-nvidia.json
+```
+
+For remote AMD, use `tools/amd_serial_guard.py` for every command, `hip` as the expected vendor, an explicit actual accelerator target (for example `--target-accelerator gfx942`) on the build, and fresh AMD artifact paths. No Apple commands are authorized. Root retains the exact recipes, logs, binary hashes, runtime/device metadata, and complete guard exit statuses including teardown; a capture or oracle JSON alone is not run admission. Failure can leave newly reserved incomplete output files/directories. No model, test, build, or measurement was executed while authoring this slice.

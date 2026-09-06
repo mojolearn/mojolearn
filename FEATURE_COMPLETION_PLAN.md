@@ -43,6 +43,38 @@ The six follow-ups below add to that scope; they do not replace it.
 See [NVIDIA feature inventory](bench/NVIDIA_FEATURE_COVERAGE_2026-09-06.md)
 and [current campaign record](bench/results/resume/2026-09-06-root-feature-nvidia/README.md).
 
+## Near-term training milestone (active)
+
+The immediate training target is a small neural network followed by a small
+language model that learns next-token prediction from real text. This extends
+item 4 and uses item 3's resume proof; it does not replace the six follow-ups.
+
+- [ ] Validate the public fixed FP32 8→16→3 MLP: forward, independent gradient
+  reference, AdamW, complete state snapshots, and checkpoint continuation.
+  Implementation is authored; execution and qualification remain open.
+- [ ] Independently check the existing one-block Transformer gradients before
+  extending its arithmetic claim. The new capture/oracle is authored, unrun.
+- [ ] Implement a two-block byte-level decoder with vocabulary 256, width 32,
+  context 32 and batch 2, using caller-supplied, pinned real-text token bytes.
+  Expose the complete training step and explicit data continuation cursor.
+- [ ] Demonstrate learning with a predeclared held-out loss criterion and
+  retained training trace. Fix train/validation split, initialization, token
+  schedule and optimizer settings before execution; no selected lucky run.
+- [ ] Compare full parameters, gradients, AdamW moments, counters and loss bits
+  at every step on remote NVIDIA and AMD from the same frozen source. Transfer
+  a checkpoint in both directions and compare against continuous runs.
+- [ ] Record numerical reference checks separately from bitwise agreement:
+  identical outputs alone cannot show that both implementations are correct.
+- [ ] Recertify Metal separately when fresh Apple execution is authorized.
+  Historical three-vendor toy-fixture evidence is not certification of this
+  new model, source or real-text experiment.
+
+This is a **small language model**, not a large language model. Existing
+13,376-parameter single-block training evidence makes it a plausible near-term
+engineering milestone, but neither learning quality nor the new cross-vendor
+claim has passed yet. Several working days is an estimate conditional on the
+gradient checks and remote integration, not a delivery guarantee.
+
 ## 1. Fourth-machine hedges and per-block provenance caveat
 
 - [ ] Inventory every existing hedge that limits identity to the tested
@@ -197,21 +229,24 @@ fixtures, and retained failures. Old Apple–AMD cards do not fill NVIDIA cells.
 
 ## 6. Real-dataset UMAP neighborhood preservation
 
-The source-only [digits quality runner](tools/umap_real_dataset_quality.py)
-has been authored; execution and acceptance remain open.
+The [digits quality runner](tools/umap_real_dataset_quality.py) passed remotely
+on NVIDIA at frozen source `6146b121608d4cf73706d6540bb884e134df409c`.
+See the [retained completion evidence](bench/results/resume/2026-09-06-root-umap-nvidia/README.md).
+Closure below is scoped to the pinned digits experiment and separate bounded
+cuML comparison; it does not assert arbitrary dataset coverage.
 
-- [ ] Select and pin a real dataset with provenance, checksum, bounded sample
+- [x] Select and pin a real dataset with provenance, checksum, bounded sample
   size and fixed preprocessing/train/held-out split. Declare the neighborhood
   metric and acceptance thresholds before viewing the results.
-- [ ] Measure neighborhood preservation (for example trustworthiness and
+- [x] Measure neighborhood preservation (for example trustworthiness and
   neighbor overlap) for public UMAP fit and held-out transform in FAST and
   IDENTICAL. Keep seeds, input bytes, neighborhood size, metric and effective
   optimization parameters in the evidence; check IDENTICAL repetition by bits.
-- [ ] Compare quality against pinned **umap-learn on CPU**. This is the
+- [x] Compare quality against pinned **umap-learn on CPU**. This is the
   explicitly requested **external quality-only baseline exception**, not a
   CPU performance baseline or an exception to NVIDIA-only performance
   comparisons. Do not derive speed ratios from this arm.
-- [ ] Keep the separate NVIDIA performance workload at exactly one external
+- [x] Keep the separate NVIDIA performance workload at exactly one external
   NVIDIA comparator, such as cuML, with matched settings. Different algorithms
   and embeddings require independent quality criteria; do not claim bitwise
   equality to umap-learn or cuML without actual bitwise evidence.
@@ -221,6 +256,37 @@ metric definitions and results, held-out quality, mode provenance and explicit
 pass/fail thresholds. Synthetic fixtures and dispatch checks alone do not
 close real-data quality. See the [UMAP scope in the support matrix](SUPPORT_MATRIX.md)
 and [current NVIDIA inventory](bench/NVIDIA_FEATURE_COVERAGE_2026-09-06.md).
+
+## Added queue: Table 6 context and k-NN/GEMV optimization
+
+- [ ] Locate the current paper's Table 6 (reported page 7) and place the
+  explanation in the same column, directly beside the approximately 25×
+  k-NN and 21× GEMV cost figures. Preserve the measured values and provenance.
+- [ ] Ground the adjacent sentence in the kernel investigation: the reported
+  slowdowns expose current implementation/operand-reuse optimization gaps in
+  the named kernels; they do not establish an unavoidable cost of the
+  identity contract. Distinguish established causes from hypotheses for
+  each kernel. Root reviews the eventual rendered placement.
+- [ ] Queue operand-reuse and dispatch improvements for the pinned distance
+  and GEMV kernels, preserving exact operation/reduction order wherever the
+  contract requires it. Root validates complete bytes before admitting speed.
+- [ ] Prefer NVIDIA through RunPod for new measurements. Compare FAST and
+  IDENTICAL with exactly one matching NVIDIA external implementation per
+  workload: cuML for k-NN when its settings and distance/neighbor semantics
+  match; a suitable NVIDIA BLAS implementation for GEMV if cuML exposes no
+  equivalent public workload. Match inputs, dtype, output semantics, transfer
+  boundaries, warmup and timed rounds; report independent quality checks.
+- [ ] Separately compare MojoLearn IDENTICAL raw outputs across the remote
+  NVIDIA/AMD devices being claimed. cuML is a NVIDIA quality/performance
+  reference, not the cross-vendor bitwise oracle. Fresh Metal remains deferred.
+- [ ] Revisit Table 6 only with retained measurements from the optimized
+  candidate. Keep historical ratios and source scopes available; do not
+  rewrite them as new results or make a universal overhead claim.
+
+All tests, rendering/build checks, models and measurements remain root/main
+only. Subagents may inspect and edit sources but must never execute them.
+This queue addition does not interrupt the active MLP, language-model,
+checkpoint, release or other feature work above.
 
 ## Dependency order and closure
 
