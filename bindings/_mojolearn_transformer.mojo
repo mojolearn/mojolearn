@@ -296,6 +296,8 @@ def _transformer_run(
     _ = rope^
     _ = stages^
     _ = dx^
+    # Keep the context alive until every device allocation is destroyed.
+    _ = ctx^
     return out_len
 
 

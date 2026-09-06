@@ -64,6 +64,8 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
+# Public Mamba forward keeps full-FP32 projection operands in every mode.
+# False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
 from gemm.checks.gemm_identical import identical_gemm
 
 # ORIENTATION NUMBERING: gemm_oracle's OP_NT = 1 (OP_NN = 0, OP_TN = 2),
@@ -902,7 +904,7 @@ def mamba2_block_forward(
     )
 
     # ---- S4: in_proj (mamba2.py:211), gemm v1 OP_NT, k = d_model.
-    identical_gemm(
+    identical_gemm[False](
         ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
     )
     trace.record_device[DType.float32](
@@ -1226,7 +1228,7 @@ def mamba2_block_forward(
     )
 
     # ---- S4: out_proj (mamba2.py:275), gemm v1 OP_NT, k = d_inner.
-    identical_gemm(
+    identical_gemm[False](
         ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
     )
     trace.record_device[DType.float32](

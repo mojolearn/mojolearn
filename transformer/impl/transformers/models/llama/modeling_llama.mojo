@@ -2420,7 +2420,7 @@ def eager_attention_forward(
                 block_dim=(LLAMA_TPB, 1, 1),
             )
             ctx.synchronize()
-            identical_gemm(
+            identical_gemm[False](
                 ctx,
                 stages.sbh,
                 stages.qbh,
@@ -2593,7 +2593,7 @@ def eager_attention_forward(
                     block_dim=(LLAMA_TPB, 1, 1),
                 )
                 ctx.synchronize()
-                identical_gemm(
+                identical_gemm[False](
                     ctx,
                     stages.qbh,
                     stages.sbh,
@@ -2694,19 +2694,22 @@ def llama_attention_forward(
     # ---- q_proj, k_proj, v_proj (:252-254). `nn.Linear(d_model, *,
     #      bias=attention_bias)` with `attention_bias` False, so weight
     #      only. GEMM v1 OP_NT: C[M, out] = norm1_out[M, dm] . W[out, dm]^T.
-    identical_gemm(
+    # Retain FP32 operands in every tier. The vendor fast route can select
+    # TF32 projections, exceeding the block's unchanged accuracy contract.
+    # IDENTICAL already uses this plan; its arithmetic remains unchanged.
+    identical_gemm[False](
         ctx, stages.q_proj, stages.norm1_out, w.w_q, m, qw, dm, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
         ctx, prefix + ".q_proj.out", stages.q_proj, m * qw
     )
-    identical_gemm(
+    identical_gemm[False](
         ctx, stages.k_proj, stages.norm1_out, w.w_k, m, kw, dm, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
         ctx, prefix + ".k_proj.out", stages.k_proj, m * kw
     )
-    identical_gemm(
+    identical_gemm[False](
         ctx, stages.v_proj, stages.norm1_out, w.w_v, m, kw, dm, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
@@ -2823,7 +2826,7 @@ def llama_attention_forward(
     # ---- o_proj (:280). `nn.Linear(n_heads*head_dim, d_model,
     #      bias=attention_bias)`, no bias.
     #      C[M, dm] = ctx[M, qw] . w_o[dm, qw]^T, `k = n_heads*head_dim`.
-    identical_gemm(
+    identical_gemm[False](
         ctx, stages.o_proj, stages.ctxv, w.w_o, m, dm, qw, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
@@ -2858,7 +2861,7 @@ def llama_mlp_forward(
     var it = dims.intermediate
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
-    identical_gemm(
+    identical_gemm[False](
         ctx,
         stages.gate_proj,
         stages.norm2_out,
@@ -2871,7 +2874,7 @@ def llama_mlp_forward(
     trace.record_device[DType.float32](
         ctx, prefix + ".gate_proj.out", stages.gate_proj, m * it
     )
-    identical_gemm(
+    identical_gemm[False](
         ctx,
         stages.up_proj,
         stages.norm2_out,
@@ -2919,7 +2922,7 @@ def llama_mlp_forward(
     #      profile; at `intermediate_size = 300` this one has `P = 3` with a
     #      ragged 44-element last leaf and one carry (contract section 3).
     #      Without that fixture the tree sits unexercised inside the block.
-    identical_gemm(
+    identical_gemm[False](
         ctx,
         stages.down_proj,
         stages.gated,
