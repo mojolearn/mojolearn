@@ -2578,16 +2578,19 @@ taskset -pc "$cores" $$ > "$OUT/cpu-affinity.log" 2>&1 || exit 9
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
 if [ "@NVIDIACAMPAIGN@" = 4 ] || [ "@NVIDIACAMPAIGN@" = 5 ] || [ "@NVIDIACAMPAIGN@" = 6 ]; then
-    # Bound the runtime allocator as well as the external guard. A tiny
-    # fixture must not let the default HIP pool reserve most of an MI300X.
-    # CUDA's retained runtime allocates a 4 GiB block: a 1 GiB cache cap
-    # refuses even a 136.5 KiB request. HIP passed with the 1 GiB pool.
-    case "@VENDOR@" in nvidia) _pool_bytes=4294967296 ;; amd) _pool_bytes=1073741824 ;; *) exit 9 ;; esac
-    export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE=$_pool_bytes
-    export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_ONLY=true
-    export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_CHUNK_PERCENT=100
-    printf '%s\n' "device_memory_pool_bytes=$_pool_bytes" 'device_memory_pool_only=true' \
-        'device_memory_pool_chunk_percent=100' >> "$OUT/leg.txt"
+    # Keep the qualified vendor settings. CUDA pool-only overrides refused
+    # small allocations in two retained attempts; its baseline used defaults.
+    # HIP's default pool exceeded the external guard; its 1 GiB override passed.
+    if [ "@VENDOR@" = amd ]; then
+        export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE=1073741824
+        export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_ONLY=true
+        export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_CHUNK_PERCENT=100
+        printf '%s\n' 'device_memory_pool_bytes=1073741824' 'device_memory_pool_only=true' \
+            'device_memory_pool_chunk_percent=100' >> "$OUT/leg.txt"
+    else
+        unset MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_ONLY MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_CHUNK_PERCENT
+        printf '%s\n' 'device_memory_pool=qualified NVIDIA runtime defaults; external guard retained' >> "$OUT/leg.txt"
+    fi
     python3 tools/training_validation_admit.py --inventory-root "$ROOT" \
         > "$OUT/source_inventory.json" || exit 9
 fi

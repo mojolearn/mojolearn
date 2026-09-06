@@ -37,8 +37,8 @@ be from the opposite vendor. No foreign inputs are accepted for `head64`.
 The pinned Pixi lock installs the runtime; a fresh environment installs only
 binary NumPy 1.26.4. Setup copies the exact retained binding into the public
 IDENTICAL package location. Existing destinations are refused. The existing
-remote watchdog/deletion flow and global deadline remain active. The runtime
-pool is capped at 4 GiB on NVIDIA and 1 GiB on AMD, guards cap process-group RSS at 12 GiB, and inherited
+remote watchdog/deletion flow and global deadline remain active. NVIDIA uses its qualified runtime defaults; AMD retains its successful 1 GiB
+pool override. Guards cap GPU memory at 85%, process-group RSS at 12 GiB, and inherited
 affinity/thread settings cap CPU work at two cores/threads. Setup has its own
 guard; the compact helper then owns each model job's guard without nested locks.
 
