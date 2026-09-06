@@ -27,8 +27,10 @@ class ArithmeticContractTests(unittest.TestCase):
             "C_bias": np.zeros((1, 128), np.float32),
             "dt.out": np.array([[[2.0], [3.0]]], np.float32),
             "trap.sigma": np.array([[[0.25], [0.5]]], np.float32),
+            "angle.theta": np.zeros((2, 1, 32), np.float32),
         }
         self.forward["rot.k"][:, :, 0] = 1.0
+        self.forward["bcnorm.B"][:, :, 0] = 1.0
         self.gradients = {name: np.zeros(2, np.float32) for name in arithmetic.GRADIENT_OPERANDS}
         self.gradients["partial.qkdot.dt"][:] = [5, 7]
         self.gradients["partial.s16.kscale"] = np.zeros((2, 1, 128), np.float32)
@@ -109,6 +111,22 @@ class ArithmeticContractTests(unittest.TestCase):
         del self.manifest["forward_operands"]["rot.k"]
         with self.assertRaises(ValueError):
             self.audit()
+
+    def test_flattened_forward_never_shifts_beta_across_batches(self):
+        forward = {**self.forward, "dt.out": self.forward["dt.out"].reshape(2, 1),
+                   "trap.sigma": self.forward["trap.sigma"].reshape(2, 1)}
+        gradients = {**self.gradients, "partial.s16.kscale": self.gradients["partial.s16.kscale"].reshape(2, 1, 1, 128)}
+        result = arithmetic.evaluate(gradients, forward)
+        np.testing.assert_array_equal(result["partial.dt.current_total"], [6, 11])
+
+    def test_rotation_and_angle_semantics_cannot_be_bypassed(self):
+        for name in ("angle.theta", "rot.k"):
+            with self.subTest(name=name):
+                values = self.forward[name].copy()
+                values.reshape(-1)[0] += np.float32(0.5)
+                values.tofile(self.actual / f"operand.{name}.f32")
+                self.assertTrue(any("operand semantics failed" in row for row in self.audit()))
+                self.forward[name].tofile(self.actual / f"operand.{name}.f32")
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ import numpy as np
 from mamba3_join_diagnostics import ftz, pinned_join
 
 
-FORWARD_OPERANDS = ("rot.k", "bcnorm.B", "bcnorm.C", "B_bias", "C_bias", "dt.out", "trap.sigma")
+FORWARD_OPERANDS = ("rot.k", "bcnorm.B", "bcnorm.C", "B_bias", "C_bias", "dt.out", "trap.sigma", "angle.theta")
 GRADIENT_OPERANDS = (
     "stage.qkdot.out", "partial.qkdot.dt", "partial.s16.kscale",
     "partial.s17.recur.kscale", "partial.angle.dt", "partial.dt.from_seg",
@@ -72,6 +72,15 @@ def evaluate(gradients, forward):
 
     dt = ftz(forward["dt.out"])
     sigma = ftz(forward["trap.sigma"])
+    if dt.ndim == 2 and sigma.shape == dt.shape:
+        # Forward stages flatten batch/token, whereas S16 gradients retain
+        # [B,L,H,N]. Recover boundaries explicitly; never shift beta between
+        # batches merely because adjacent flattened rows exist.
+        s16_shape = np.shape(gradients["partial.s16.kscale"])
+        if len(s16_shape) != 4 or s16_shape[-1] != 128:
+            raise ValueError("flattened dt requires an explicit [B,L,H,128] S16 operand")
+        dt = dt.reshape(s16_shape[:3])
+        sigma = sigma.reshape(s16_shape[:3])
     if dt.ndim != 3 or sigma.shape != dt.shape:
         raise ValueError("dt/sigma must have matching [batch, length, heads] shapes")
     batch, length, heads = dt.shape
@@ -118,7 +127,7 @@ def audit(oracle_dir, actual_dir, manifest, dump, rtol, atol):
         raise ValueError("Mamba3 arithmetic contract requires explicit IDENTICAL provenance")
     if (set(manifest.get("forward_operands", {})) != set(FORWARD_OPERANDS)
             or dump.get("forward_operands") != list(FORWARD_OPERANDS)):
-        raise ValueError("Mamba3 arithmetic contract requires all seven forward operands")
+        raise ValueError("Mamba3 arithmetic contract requires all eight forward operands")
     failures, reports = [], []
 
     def reference(entry, key="file", dtype="<f8", sha="sha256"):
@@ -145,7 +154,24 @@ def audit(oracle_dir, actual_dir, manifest, dump, rtol, atol):
     for name in FORWARD_OPERANDS:
         entry = manifest["forward_operands"][name]
         forward[name] = actual(name, entry, "operand")
-        semantic(name, forward[name], reference(entry), "forward float64")
+        if name != "rot.k":
+            semantic(name, forward[name], reference(entry), "forward float64")
+    # Rotation has cancellation around zero, after an accumulated angle.
+    # Require independently correct base/bias/angle operands above, then
+    # independently evaluate the rotation in float64 at those exact inputs.
+    # This is a local forward semantic gate, not a second staged backward.
+    heads = forward["B_bias"].shape[0]
+    biased = forward["bcnorm.B"].astype(np.float64).reshape(-1, 1, 128) + forward["B_bias"].astype(np.float64).reshape(1, heads, 128)
+    pair = biased.reshape(-1, heads, 64, 2)
+    theta = forward["angle.theta"].astype(np.float64).reshape(-1, heads, 32)
+    cosine = np.pad(np.cos(theta), ((0, 0), (0, 0), (0, 32)), constant_values=1)
+    sine = np.pad(np.sin(theta), ((0, 0), (0, 0), (0, 32)))
+    rotated = np.stack((pair[..., 0]*cosine - pair[..., 1]*sine,
+                        pair[..., 0]*sine + pair[..., 1]*cosine), axis=-1).reshape(forward["rot.k"].shape)
+    semantic("rot.k", forward["rot.k"], rotated, "rotation at exact native operands float64")
+    direct_rot = reference(manifest["forward_operands"]["rot.k"])
+    delta = np.abs(forward["rot.k"].astype(np.float64) - direct_rot)
+    reports.append(f"rot.k: compositional forward semantics; direct-float64 maxabs={float(delta.max()):.3e} bad={int((delta > atol + rtol * np.abs(direct_rot)).sum())}")
     for name in GRADIENT_OPERANDS:
         if name not in dump.get("tensors", []):
             raise ValueError(f"missing declared external gradient operand: {name}")

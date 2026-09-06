@@ -396,6 +396,7 @@ def main() raises:
     _write_f32(output + "/operand.C_bias.f32", mamba_download(ctx, device_weights.c_bias, dims.nheads*M3_D_STATE))
     _write_f32(output + "/operand.dt.out.f32", mamba_download(ctx, stages.dt_work, head_cells))
     _write_f32(output + "/operand.trap.sigma.f32", mamba_download(ctx, stages.sig_work, head_cells))
+    _write_f32(output + "/operand.angle.theta.f32", mamba_download(ctx, stages.theta_out, head_cells*M3_NUM_ROPE_ANGLES))
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -403,7 +404,7 @@ def main() raises:
             + "\"objective\":\"signed_dyadic_weight_v1\","
             + "\"mode\":\"complete-public-prefill\","
             + "\"numeric_mode\":\"" + numeric_mode_name() + "\","
-            + "\"forward_operands\":[\"rot.k\",\"bcnorm.B\",\"bcnorm.C\",\"B_bias\",\"C_bias\",\"dt.out\",\"trap.sigma\"],"
+            + "\"forward_operands\":[\"rot.k\",\"bcnorm.B\",\"bcnorm.C\",\"B_bias\",\"C_bias\",\"dt.out\",\"trap.sigma\",\"angle.theta\"],"
             + "\"public_prefill_leaves\":[\"x\",\"block_norm.weight\","
             + "\"in_proj.weight\",\"dt_bias\",\"B_norm.weight\","
             + "\"C_norm.weight\",\"B_bias\",\"C_bias\",\"D\","
