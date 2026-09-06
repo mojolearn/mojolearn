@@ -123,6 +123,13 @@ run_family() {
         mkdir -p "$family_out/failed-actual" "$family_out/failed-oracle"
         cp -a "$actual/." "$family_out/failed-actual/" || RC=1
         cp -a "$oracle/." "$family_out/failed-oracle/" || RC=1
+    elif [ "$family" = mamba3-l65 ]; then
+        # The long compositional contract uses forward operands and exact
+        # intermediate arithmetic. Retain that successful evidence as well
+        # as public leaves for independent replay and cross-vendor checks.
+        mkdir -p "$family_out/diagnostic-actual" "$family_out/diagnostic-oracle"
+        cp -a "$actual/." "$family_out/diagnostic-actual/" || capture_rc=1
+        cp -a "$oracle/." "$family_out/diagnostic-oracle/" || capture_rc=1
     fi
     verdict=GREEN
     if [ "$gate_rc" -ne 0 ] || [ "$capture_rc" -ne 0 ]; then

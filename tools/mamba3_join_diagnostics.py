@@ -69,6 +69,9 @@ def errors(actual, expected):
 def load_case(case_dir):
     actual_dir = case_dir / "failed-actual"
     oracle_dir = case_dir / "failed-oracle"
+    if not actual_dir.exists():
+        actual_dir = case_dir / "diagnostic-actual"
+        oracle_dir = case_dir / "diagnostic-oracle"
     dump = json.loads((actual_dir / "dump_manifest.json").read_text())
     oracle = json.loads((oracle_dir / "manifest.json").read_text())
     native = json.loads((case_dir / "native" / "manifest.json").read_text())
@@ -114,6 +117,18 @@ def load_case(case_dir):
     for name, entry in native["tensors"].items():
         if name not in rows or entry["sha256"] != rows[name]["sha256"]:
             raise ValueError(f"diagnostic/public capture digest mismatch: {name}")
+    forward_rows = {}
+    if set(oracle.get("forward_operands", {})) != set(dump.get("forward_operands", [])):
+        raise ValueError("forward operand inventory mismatch")
+    for name, entry in oracle.get("forward_operands", {}).items():
+        raw = (actual_dir / f"operand.{name}.f32").read_bytes()
+        operand = np.frombuffer(raw, dtype="<f4")
+        if operand.size != np.prod(entry["shape"]) or not np.isfinite(operand).all():
+            raise ValueError(f"invalid forward operand: {name}")
+        reference_raw = (oracle_dir / entry["file"]).read_bytes()
+        if hashlib.sha256(reference_raw).hexdigest() != entry["sha256"]:
+            raise ValueError(f"forward reference digest mismatch: {name}")
+        forward_rows[name] = {"shape": entry["shape"], "sha256": hashlib.sha256(raw).hexdigest()}
     joins = {}
     for name, inputs in JOINS.items():
         result = pinned_join([values[key] for key in inputs])
@@ -131,7 +146,8 @@ def load_case(case_dir):
                 actual, sum(values[key].astype(np.float64) for key in inputs)),
         }
     report = {"path": str(case_dir), "case": dump["case"],
-              "source_sha256": native["source_sha256"], "tensors": rows, "joins": joins}
+              "source_sha256": native["source_sha256"], "tensors": rows,
+              "forward_operands": forward_rows, "joins": joins}
     return report
 
 
@@ -148,20 +164,26 @@ def main():
     matches = {name: left["tensors"][name]["sha256"] == right["tensors"][name]["sha256"]
                and left["tensors"][name]["shape"] == right["tensors"][name]["shape"]
                for name in left["tensors"]}
+    if set(left["forward_operands"]) != set(right["forward_operands"]):
+        raise ValueError("cross-vendor forward inventory mismatch")
+    forward_matches = {name: row == right["forward_operands"][name]
+                       for name, row in left["forward_operands"].items()}
     result = {
         "scope": "Retained-data diagnostic only; does not issue or change a certificate",
         "rtol": 1e-5, "atol": 1e-6,
-        "cross_device_tensor_matches": matches, "left": left, "right": right,
+        "cross_device_tensor_matches": matches, "cross_device_forward_matches": forward_matches,
+        "left": left, "right": right,
     }
     args.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(f"Native tensor byte matches: {sum(matches.values())}/{len(matches)}")
+    print(f"Forward operand byte matches: {sum(forward_matches.values())}/{len(forward_matches)}")
     for label, report in (("left", left), ("right", right)):
         exact = sum(row["bitwise"] for row in report["joins"].values())
         failed = [name for name, row in report["tensors"].items() if row["float32"]["bad_cells"]]
         explained = [name for name in failed if name in report["joins"] and report["joins"][name]["bitwise"]]
-        print(f"{label}: exact joins {exact}/{len(JOINS)}; unchanged direct failures {len(failed)}")
+        print(f"{label}: exact joins {exact}/{len(JOINS)}; direct float32 tolerance misses {len(failed)}")
         print(f"{label}: failing outputs reproduced from native inputs: {', '.join(explained)}")
-    if not all(matches.values()) or not all(
+    if not all(matches.values()) or not all(forward_matches.values()) or not all(
             row["bitwise"] for report in (left, right) for row in report["joins"].values()):
         raise SystemExit(1)
 

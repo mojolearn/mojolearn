@@ -9,6 +9,7 @@ import re
 
 
 ARMS = {"baseline": (0, 0), "selector": (1, 0), "transpose": (0, 1), "both": (1, 1)}
+KNN_FIXTURES = {(d, p, metric) for d in (1, 3, 17, 33, 65) for p in range(3) for metric in (0, 1)} | {(17, 0, 2), (17, 0, 3)}
 
 
 def knn_records(directory):
@@ -27,6 +28,7 @@ def knn_records(directory):
             assert 0 <= cell < 170 and 0 <= bits < 2**32 and 0 <= neighbor < 129
             keys.append((dimension, profile, metric, cell))
         assert len(set(keys)) == 5440, f"duplicate {arm} cell"
+        assert set(keys) == {(*fixture, cell) for fixture in KNN_FIXTURES for cell in range(170)}, f"wrong {arm} fixture inventory"
         records[arm] = cells
         digests[arm] = hashlib.sha256(("\n".join(cells) + "\n").encode()).hexdigest()
     assert all(records[arm] == records["baseline"] for arm in ARMS), "kNN flag output bytes differ"
@@ -49,7 +51,8 @@ def load(directory):
     assert "ORDERED RMSE PASS:" in ordered_log
     ordered = [line for line in ordered_log.splitlines() if line.startswith("ORDERED_BITS ")]
     assert len(ordered) == len(set(ordered)), "duplicate ordered record"
-    for kind, count in (("prefix", 12), ("prediction", 32), ("fold_cursor", 48)):
+    for kind, count in (("prefix", 12), ("prediction", 32), ("fold_cursor", 48),
+                        ("zero_prefix", 12), ("constant_model", 8)):
         assert sum(line.startswith(f"ORDERED_BITS {kind} ") for line in ordered) == count, f"wrong {kind} coverage"
     for kind in ("split", "leaf"):
         assert {int(line.split()[2]) for line in ordered if line.startswith(f"ORDERED_BITS {kind} ")} == {0, 1, 2}
