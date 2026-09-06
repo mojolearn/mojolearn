@@ -857,6 +857,11 @@ if [ "$PAYLOAD" = "phase8" ]; then
     fi
 fi
 
+# The historical variable name is retained for compatibility. Profile 4 alone
+# is vendor-generic training (profiles 1..3 remain NVIDIA-only):
+#   MOJOLEARN_NVIDIA_CAMPAIGN=4 tools/gemm_remote_leg.sh amd --payload mamba ...
+#   MOJOLEARN_NVIDIA_CAMPAIGN=4 tools/gemm_remote_leg.sh nvidia --payload mamba ...
+# Root runs either command through the existing leased transport/guards.
 NVIDIA_CAMPAIGN=${MOJOLEARN_NVIDIA_CAMPAIGN:-0}
 MAMBA_CERT_ONLY=${MOJOLEARN_MAMBA_CERT_ONLY:-0}
 case "$MAMBA_CERT_ONLY" in 0|1) ;; *) echo 'MOJOLEARN_MAMBA_CERT_ONLY must be 0 or 1' >&2; exit 2 ;; esac
@@ -864,7 +869,13 @@ CONTINUED_CERT_CHECKS=${MOJOLEARN_CONTINUED_CERT_CHECKS:-0}
 case "$CONTINUED_CERT_CHECKS" in 0|1) ;; *) echo 'MOJOLEARN_CONTINUED_CERT_CHECKS must be 0 or 1' >&2; exit 2 ;; esac
 case "$NVIDIA_CAMPAIGN" in 0|1|2|3|4) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0, 1 (general), 2 (feature finish), 3 (UMAP finish), or 4 (training validation)" ;; esac
 if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
-    [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaign requires nvidia --payload mamba"
+    if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+        # Historical variable name: profile 4 is generic remote training.
+        [ "$PAYLOAD" = mamba ] || leg_die "Training profile 4 requires --payload mamba"
+        case "$VENDOR" in nvidia|amd) ;; *) leg_die "Training profile 4 requires nvidia or amd" ;; esac
+    else
+        [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaigns 1..3 require nvidia --payload mamba"
+    fi
 fi
 KNN_LAYOUT_ONLY=${MOJOLEARN_KNN_LAYOUT_ONLY:-0}
 case "$KNN_LAYOUT_ONLY" in 0|1) ;; *) leg_die "MOJOLEARN_KNN_LAYOUT_ONLY must be 0 or 1" ;; esac
@@ -2435,18 +2446,19 @@ echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
 # execution and no inherited Mamba/UMAP performance workload.
 if [ "@NVIDIACAMPAIGN@" = 4 ]; then
     training_rc=124
+    case "@VENDOR@" in nvidia) training_vendor=cuda ;; amd) training_vendor=hip ;; *) exit 9 ;; esac
     work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
     if [ "$work_remaining" -ge 60 ]; then
         if [ "$work_remaining" -gt 3000 ]; then work_remaining=3000; fi
         MOJOLEARN_TRAIN_VALIDATION_OUT="$OUT/training-validation" \
-          MOJOLEARN_TRAIN_EXPECT_VENDOR=cuda MOJOLEARN_COMMIT="@COMMIT@" \
+          MOJOLEARN_TRAIN_EXPECT_VENDOR="$training_vendor" MOJOLEARN_COMMIT="@COMMIT@" \
           MOJOLEARN_TRAIN_VALIDATION_SECONDS="$work_remaining" \
           timeout -k 10 "$work_remaining" bash tools/training_validation_serial.sh \
           > "$OUT/training-validation-console.log" 2>&1
         training_rc=$?
     fi
     echo "training_validation_exit=$training_rc" >> "$OUT/leg.txt"
-    echo "scope=bounded NVIDIA training integration and independent gradient checks; no cross-vendor or performance certificate" >> "$OUT/leg.txt"
+    echo "scope=bounded @VENDOR@ training integration and independent gradient checks; no cross-vendor or performance certificate" >> "$OUT/leg.txt"
     : > /root/gemm_leg.done
     echo REMOTE_BODY_DONE
     exit "$training_rc"
@@ -5257,7 +5269,7 @@ echo "  Results: $OUT/remote/layout-price"
 echo "  Admission requires layout_exit=0 and source parity."
 echo "  Mamba and UMAP checks were not requested by this payload."
 elif [ "$NVIDIA_CAMPAIGN" = 4 ]; then
-echo "== step 9: bounded NVIDIA training integration and independent gradients =="
+echo "== step 9: bounded $VENDOR training integration and independent gradients =="
 echo "  Results: $OUT/remote/training-validation"
 echo "  Admission requires every job and the retained independent gradient oracle."
 echo "  This is not a cross-vendor identity or performance certificate."

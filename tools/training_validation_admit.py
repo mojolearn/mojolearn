@@ -64,11 +64,16 @@ def admit(root):
         ARRAY_COUNTS, PROFILE, SCHEMA, registry, GRAD_ATOL, GRAD_RTOL,
         LOSS_ATOL, LOSS_RTOL,
     )
+    leg = read(root.parent / 'leg.txt').decode().splitlines()
+    vendors = [line.removeprefix('vendor=') for line in leg if line.startswith('vendor=')]
+    require(len(vendors) == 1 and vendors[0] in ('nvidia', 'amd'), 'ambiguous root leg vendor')
+    vendor = {'nvidia': 'cuda', 'amd': 'hip'}[vendors[0]]
     require(read(root / 'exit_code').strip() == b'0', 'campaign did not finish successfully')
     rows = [line.split('\t') for line in read(root / 'results.tsv').decode().splitlines()]
     require(rows == [[name, '0'] for name in JOBS], 'missing, duplicate, reordered, or failed job')
     provenance = read(root / 'provenance.txt').decode().splitlines()
-    require('vendor=cuda' in provenance, 'NVIDIA provenance required')
+    require([line for line in provenance if line.startswith('vendor=')] == ['vendor=' + vendor],
+            'training provenance differs from root leg vendor')
     require(any(re.fullmatch(r'source=[0-9a-f]{40,64}', line) for line in provenance),
             'frozen commit missing')
     for name in JOBS:
@@ -84,7 +89,7 @@ def admit(root):
     manifest = read(capture_dir / 'capture.json')
     capture = json.loads(manifest)
     require(capture.get('schema') == SCHEMA and capture.get('profile') == PROFILE
-            and capture.get('registry') == registry() and capture.get('vendor') == 'cuda'
+            and capture.get('registry') == registry() and capture.get('vendor') == vendor
             and capture.get('numeric_mode') == 'identical'
             and capture.get('completed_steps') == 1, 'capture profile mismatch')
     frozen = json.loads(read(root.parent / 'source_inventory.json', 16 * 1024 * 1024))
@@ -110,9 +115,11 @@ def admit(root):
 
     oracle = json.loads(read(root / 'gradient-oracle.json'))
     require(oracle.get('schema') == 'mojolearn.training.gradient-oracle.v1'
-            and oracle.get('passed') is True and oracle.get('vendor') == 'cuda'
-            and oracle.get('cuda_version') and not oracle.get('hip_version')
-            and oracle.get('device'), 'oracle not admitted on NVIDIA')
+            and oracle.get('passed') is True and oracle.get('vendor') == vendor
+            and oracle.get('device'), 'oracle vendor differs from root leg')
+    runtime_key, forbidden_key = ('cuda_version', 'hip_version') if vendor == 'cuda' else ('hip_version', 'cuda_version')
+    require(isinstance(oracle.get(runtime_key), str) and oracle[runtime_key]
+            and not oracle.get(forbidden_key), 'oracle Torch runtime vendor mismatch')
     require(oracle.get('capture_manifest_sha256') == hashlib.sha256(manifest).hexdigest(),
             'oracle references another capture')
     require(oracle.get('tolerances') == dict(grad_atol=GRAD_ATOL, grad_rtol=GRAD_RTOL,
@@ -140,14 +147,14 @@ def admit(root):
     mlp = json.loads(read(root / 'mlp-comparison.json'))
     require(mlp.get('schema') == 'small-mlp.comparison.v1' and mlp.get('identity') == 'PASS'
             and mlp.get('learning', {}).get('status') == 'PASS'
-            and mlp.get('vendors') == {'left': ['cuda'], 'right': ['cuda', 'cuda']},
+            and mlp.get('vendors') == {'left': [vendor], 'right': [vendor, vendor]},
             'same-device MLP continuation or learning failed')
     for directory, start, end in (('mlp-continuous', 0, 16), ('mlp-head', 0, 8),
                                   ('mlp-resume', 8, 16)):
         folder = root / directory
         meta = json.loads(read(folder / 'metadata.json', 262144))
         require(meta.get('schema') == 'small-mlp.capture.v1' and meta.get('status') == 'CAPTURED'
-                and meta.get('vendor') == 'cuda' and meta.get('numeric_mode') == 'identical'
+                and meta.get('vendor') == vendor and meta.get('numeric_mode') == 'identical'
                 and meta.get('training_mode') == 1 and meta.get('linalg_mode') == 'identical'
                 and meta.get('start_step') == start and meta.get('end_step') == end,
                 f'incomplete MLP capture: {directory}')
@@ -166,7 +173,7 @@ def admit(root):
                     f'MLP retained byte mismatch: {directory}')
         for name in ('training', 'linalg'):
             binding = meta['bindings'][name]
-            require(binding.get('vendor') == 'cuda' and binding.get('sha256') ==
+            require(binding.get('vendor') == vendor and binding.get('sha256') ==
                     digest(root / 'bindings' / ('_mojolearn_' + name + '.so')),
                     'MLP retained binding mismatch')
     retained = {}
@@ -175,7 +182,7 @@ def admit(root):
         require((root / name).stat().st_size > 0, f'empty binary: {name}')
         retained[name] = digest(root / name)
     return dict(schema='mojolearn.training.admission.v1', passed=True,
-                scope='NVIDIA integration and fixed-profile FP64 tolerance checks only; '
+                vendor=vendor, scope='Single-vendor integration and fixed-profile FP64 tolerance checks only; '
                       'no cross-vendor, bitwise, or performance certificate',
                 jobs=list(JOBS), retained_sha256=retained)
 

@@ -2,8 +2,10 @@
 """Root-only serial remote Linux AMD jobs with bounded CPU, RSS and VRAM.
 
 Reads AMD DRM card sysfs counters without loading HIP or running a model.
-Requires a visible /dev/kfd and exactly one distinct AMD PCI device exposing
-mem_info_vram_used/total. Render-node aliases are ignored. This is a device
+Requires a visible /dev/kfd and exactly one accessible AMD render device whose
+character-device major/minor matches sysfs, exposing mem_info_vram_used/total.
+Host sysfs may list unallocated GPUs; only visible /dev/dri render nodes count.
+This is a device
 and memory witness, not proof that a particular GPU architecture supports HIP.
 
 The legacy NVIDIA lock is also held, so an unchanged nvidia_serial_guard.py
@@ -20,6 +22,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -41,23 +44,32 @@ def gpu_memory(device):
     return used, total
 
 
-def amd_device(root=Path('/sys/class/drm')):
+def render_number(node):
+    info = node.stat()
+    if not stat.S_ISCHR(info.st_mode) or not os.access(node, os.R_OK | os.W_OK):
+        raise RuntimeError('AMD render node must be an accessible character device')
+    return str(os.major(info.st_rdev)) + ':' + str(os.minor(info.st_rdev))
+
+
+def amd_device(root=Path('/sys/class/drm'), nodes=Path('/dev/dri')):
     devices = set()
-    for card in Path(root).iterdir():
-        # card0-DP-1 and renderD128 are aliases, not additional devices.
-        if not re.fullmatch(r'card[0-9]+', card.name):
+    for node in Path(nodes).iterdir():
+        if not re.fullmatch(r'renderD[0-9]+', node.name):
             continue
-        device = card / 'device'
+        render = Path(root) / node.name
+        if (render / 'dev').read_text().strip() != render_number(node):
+            raise RuntimeError('AMD render node device number differs from sysfs')
+        device = render / 'device'
         vendor = device / 'vendor'
         if not vendor.is_file():
-            continue
+            raise RuntimeError('Visible render node lacks vendor identity')
         if vendor.read_text().strip().lower() != '0x1002':
             continue
         device = device.resolve(strict=True)
         gpu_memory(device)
         devices.add(device)
     if len(devices) != 1:
-        raise RuntimeError('Requires exactly one AMD GPU with sysfs VRAM counters')
+        raise RuntimeError('Requires exactly one visible AMD render GPU with sysfs VRAM counters')
     return next(iter(devices))
 
 

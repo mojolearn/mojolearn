@@ -103,5 +103,10 @@ def main() raises:
     retain(writer, "updated_v", download_f32(ctx, tb.v_state, tb.n_total))
     ctx.synchronize()
     _ = writer.finish()
-    _ = (tb, w, rope, stages, bst, trace)
+    _ = tb^
+    _ = w^
+    _ = rope^
+    _ = stages^
+    _ = bst^
+    _ = trace^
     print("TRAIN_GRADIENT_CAPTURE_COMPLETE: root must retain guard exit status")

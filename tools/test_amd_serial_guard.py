@@ -11,23 +11,37 @@ import amd_serial_guard as guard
 
 
 class DetectionTests(unittest.TestCase):
+    def setUp(self):
+        # Regular fixture files stand in for Linux character nodes. Separate
+        # render_number tests below cover actual device-type admission.
+        mocked = patch.object(guard, 'render_number', side_effect=lambda node: '226:' + node.name[7:])
+        mocked.start()
+        self.addCleanup(mocked.stop)
+
     def device(self, root, name, vendor='0x1002', used='0', total='17179869184'):
         device = root / name / 'device'
         device.mkdir(parents=True)
         (device / 'vendor').write_text(vendor)
         (device / 'mem_info_vram_used').write_text(used)
         (device / 'mem_info_vram_total').write_text(total)
+        render_name = 'renderD' + str(128 + int(name[4:]))
+        render = root / render_name
+        render.mkdir()
+        (render / 'device').symlink_to(device, target_is_directory=True)
+        (render / 'dev').write_text('226:' + render_name[7:])
+        nodes = root / 'nodes'
+        nodes.mkdir(exist_ok=True)
+        (nodes / render_name).touch()
         return device
 
     def test_render_alias_and_duplicate_card_do_not_add_devices(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             device = self.device(root, 'card0')
-            (root / 'renderD128').symlink_to(root / 'card0', target_is_directory=True)
             (root / 'card1').mkdir()
             (root / 'card1' / 'device').symlink_to(device, target_is_directory=True)
             self.device(root, 'card2', vendor='0x10de')
-            self.assertEqual(guard.amd_device(root), device.resolve())
+            self.assertEqual(guard.amd_device(root, root / 'nodes'), device.resolve())
 
     def test_multiple_amd_devices_refused(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -35,17 +49,56 @@ class DetectionTests(unittest.TestCase):
             self.device(root, 'card0')
             self.device(root, 'card1')
             with self.assertRaisesRegex(RuntimeError, 'exactly one'):
-                guard.amd_device(root)
+                guard.amd_device(root, root / 'nodes')
 
     def test_missing_and_invalid_counters_refused(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             device = self.device(root, 'card0', total='0')
             with self.assertRaisesRegex(RuntimeError, 'VRAM'):
-                guard.amd_device(root)
+                guard.amd_device(root, root / 'nodes')
             (device / 'mem_info_vram_total').unlink()
             with self.assertRaises(FileNotFoundError):
-                guard.amd_device(root)
+                guard.amd_device(root, root / 'nodes')
+
+    def test_unallocated_host_cards_do_not_count(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            chosen = self.device(root, 'card0')
+            for index in range(1, 8):
+                self.device(root, 'card' + str(index))
+                (root / 'nodes' / ('renderD' + str(128 + index))).unlink()
+            self.assertEqual(guard.amd_device(root, root / 'nodes'), chosen.resolve())
+
+    def test_visible_node_sysfs_number_mismatch_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.device(root, 'card0')
+            (root / 'renderD128' / 'dev').write_text('226:129')
+            with self.assertRaisesRegex(RuntimeError, 'device number'):
+                guard.amd_device(root, root / 'nodes')
+
+    def test_visible_node_without_sysfs_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.device(root, 'card0')
+            (root / 'nodes' / 'renderD200').touch()
+            with self.assertRaises(FileNotFoundError):
+                guard.amd_device(root, root / 'nodes')
+
+
+class NodeTypeTests(unittest.TestCase):
+    def test_regular_file_cannot_witness_a_render_device(self):
+        with tempfile.NamedTemporaryFile() as fixture:
+            with self.assertRaisesRegex(RuntimeError, 'character device'):
+                guard.render_number(Path(fixture.name))
+
+    def test_permission_denial_refused(self):
+        node = Mock()
+        node.stat.return_value = Mock(st_mode=guard.stat.S_IFCHR, st_rdev=0)
+        with patch.object(guard.os, 'access', return_value=False):
+            with self.assertRaisesRegex(RuntimeError, 'accessible'):
+                guard.render_number(node)
 
 
 class GuardTests(unittest.TestCase):

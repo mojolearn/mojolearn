@@ -1309,7 +1309,7 @@
     "svm/impl/svm/ws_util.mojo": "77cdb799a1df84ee9efef19094d757e63ba9b9b0da5035523524f8b14ee8e455",
     "svm/svc_main.mojo": "01af4ac896a0704250b8874b49474c7da2d9909693e758f6e7c0103ca12c4604",
     "tools/add_source_headers.py": "3373b249db5a0f0e4f37c45b4dc2f58c5d27db439d5a1ecdd693859d683d085b",
-    "tools/amd_serial_guard.py": "a7d2d15f2e586190ecac33b4deff43fd97fd086ab3d3917d1954d21efcb8b911",
+    "tools/amd_serial_guard.py": "4ba475c31a0038e4d4121d1bbf9a243edfaf77c50b9ddf0cd985c1a1ef43167a",
     "tools/arima_fit_identity_capture.py": "dec8288c3e62ef0031985016667eabbeb8c2a35d2adf4af74aab279d04e00d92",
     "tools/bench_lock.sh": "705d07afb91c3f8c978f52ba9ca5e56180e0a2dc1e4412e315896ae3d882ed16",
     "tools/bfa_oracle_check.py": "01ce1d1cad038cd0201a0f3405b348fbd2060a6afefb15609401a3543889158d",
@@ -1372,7 +1372,7 @@
     "tools/gemm_column_invariance.sh": "35fa2ac09616186bfd749cd364e8d336f90cd3f46b85a5e1589b1bd0c41db5e2",
     "tools/gemm_ladder.sh": "662bba18b778ae25ee669bb3d536b8e6f27dbea57d25c5744d5915e3ceec0a2b",
     "tools/gemm_price.sh": "6dc0742310542f948491ce26c6737ac4a55097334a51275f91f893db77bbb2b1",
-    "tools/gemm_remote_leg.sh": "09637951bf37671d03b79a4a983e6c26ce824ae2e21e0189e3365184da613772",
+    "tools/gemm_remote_leg.sh": "4976dc7df8910c6ab9ba9a77e6fd172381df01d0426c6c571a547575a92bbfdd",
     "tools/gpu_optimization_do_diag.sh": "b7ed149d4467849dcc2fc0f7313ba1b51e955a50af6851e9b2ac23c636746064",
     "tools/greedylogsum_oracle.py": "92292b61760e218c8c99795439afe4004363d547b7d0c76a59d5d53b960304d3",
     "tools/grow_policy_ab.sh": "6e139c4e40cf8f2144fdeac15bd0ee544a1f17000cafd1e294bfabe1da9db70f",
@@ -1446,7 +1446,7 @@
     "tools/speed_gbdt_arm.py": "a827ef448fbf7c6a5456e1e7efdf5cc6555ceb8ebc7e3f5cbd2fec4f584145c3",
     "tools/speed_gemm_arm.py": "92da7ef06cb616a11e2380ab7ad9d11f912fed4d8329d86009a680b58670f177",
     "tools/speed_torch_seq.py": "d6a9d8dbc60bddd45060e52fcf107f2bc97cc2c70497ebfa1b54c0d73a858771",
-    "tools/test_amd_serial_guard.py": "9950236821d44700ebaf4fec78328fee2530465dae75ac8a4402b2de0796de87",
+    "tools/test_amd_serial_guard.py": "4310a07ad57ff7d55cb93d8b9a6cb4e9c0fc063d76afa29ad07f46331884b97d",
     "tools/test_check_linux_release_qualification.py": "829c1d530bbcbd951cd5dad64bdf15a226d66912f6bbebb138352436ffdf1592",
     "tools/test_compare_installed_lanes.py": "ea74204b87ab9f7b113e0b24efc8608951798dc01ccad40f51175d893562d97e",
     "tools/test_compare_ordered_python.py": "be9745ff88550a62e9f6d20403143a6b18afd2664c89f54e7225ebad80ae5fe2",
@@ -1471,7 +1471,7 @@
     "tools/test_verify_linux_surface_qualification.py": "4188eeaf0b0631809ae486b8341fdbed19828541040ae369d3617238464372bb",
     "tools/test_verify_umap_qualification.py": "d5a81ffd1205cbdd2a0cc157fedfa6f4596ebbb5c8378002fa76ad644ce08607",
     "tools/training_cross_vendor_resume.py": "099b0bca4565ed02f9e6edc6121a3a2e5e4bba23da8da1dd1fee43bc494547a9",
-    "tools/training_validation_admit.py": "525fff726eba747ff9665d732d3834413cf6bb00de7e015b6e4b30d4007e7025",
+    "tools/training_validation_admit.py": "13f220f1e20c0099eb180413eee3d319c0453c98c2a5b269ca282505e8d22b4c",
     "tools/training_validation_serial.sh": "c3142b9b7400099cf3c70ad88a5307e88b8d661b32aae7319e51993db712a6ce",
     "tools/transformer_api_diagnostic.py": "5ef52fca0401768322f1c515bb4a1f6fd8dc797e729414ccfe17de5b0776b48c",
     "tools/transformer_corpus_check.py": "f745cb6671969527520110927659a4ce163d538833a61d14e7250c12c78d2e74",
@@ -1517,7 +1517,7 @@
     "training/checks/optimizer_check.mojo": "d8960052af71f07e99b2242c1d91ecf041391e343bcb362b8babdbc5b431bec5",
     "training/checks/optimizer_fixture.mojo": "55ce48e04e2a353c417f2fa5a90be76f90df2d09748f67d54468aa9dfe2a0ff4",
     "training/checks/optimizer_oracle.mojo": "5e8c5b4b6d25fefba3c1328c4ab18aa16e5bbacf413a55970d64635d1ec81c78",
-    "training/checks/train_gradient_capture.mojo": "acc4c6d2894de31bca56d3291b54316ef5c1ad0da83cc66a5b2cd9dcde29132b",
+    "training/checks/train_gradient_capture.mojo": "2a6a775e538fcf9e36414586163d1a508f5954b208ee9d4a5a9b69067c54c072",
     "training/checks/train_loop.mojo": "77ccb8e002c8115e90286009628f0287b43793c271a7ff80d4efcf6442934c8b",
     "training/checks/train_step_check.mojo": "d90b75e9b6844ce46741fc0e994923708389932724f6ac542d8ee3818455dc2a",
     "training/corpus/tinyshakespeare/README.md": "83d2fd13647b44288928fe6442ad1461f13209b450013e4d054f1673f8432a6d",
@@ -1592,6 +1592,6 @@
     "umap/transform.mojo": "411588423a90c4208d8ed85c5308896f58e0e1253e25cd0f6ab21a4a7df34870",
     "vendor_main.mojo": "5b5a55fea41772f259468849687f900d201a183af2c21dd32c344f8c0189f1c0"
   },
-  "parent_snapshot": "6146b121608d4cf73706d6540bb884e134df409c",
-  "scope": "root remote training gradient/MLP candidate; source-only until qualification"
+  "parent_snapshot": "f30670da6f91c58347ec445c6ef358fb37e45fd1",
+  "scope": "root remote training candidate: capture ownership repair, shared NVIDIA/AMD transport and visible-node AMD guard; unqualified"
 }
