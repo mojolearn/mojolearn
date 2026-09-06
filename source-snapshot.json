@@ -1576,7 +1576,8 @@
     "umap/sparse_optimizer.mojo": "80fb05ba42234ae83e3328725490ac21725833a77827f3bacd079cd6b74c1349",
     "umap/spectral_init.mojo": "c29ea232bdae3352200551f678b117b77cf35312a547f0eb82c4a7d470f62076",
     "umap/transform.mojo": "411588423a90c4208d8ed85c5308896f58e0e1253e25cd0f6ab21a4a7df34870",
-    "vendor_main.mojo": "5b5a55fea41772f259468849687f900d201a183af2c21dd32c344f8c0189f1c0"
+    "vendor_main.mojo": "5b5a55fea41772f259468849687f900d201a183af2c21dd32c344f8c0189f1c0",
+    "tools/test_nvidia_feature_finish_validate.py": "f4a77f02856188f088dce7894397869a0944e50ef3f1e3aa3276ddc60319115c"
   },
   "scope": "targeted NVIDIA UMAP runtime/API/quality campaign; no Apple execution"
 }
