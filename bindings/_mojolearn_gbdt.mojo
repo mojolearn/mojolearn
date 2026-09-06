@@ -474,12 +474,72 @@ def gbdt_fit_two_level_feature_freq_binding(
     return PythonObject(text)
 
 
+def gbdt_fit_ordered_rmse_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    weights_addr: PythonObject, permutation_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Numeric, single-permutation ordered RMSE; return normal model text.
+
+    params: [n_rows, n_features, n_weights, n_permutation, n_estimators,
+             max_depth, border_count, learning_rate, l2_leaf_reg].
+    The permutation buffer holds UInt32 original row ids. All Python
+    conversions finish before releasing the GIL; buffers remain borrowed
+    from live arrays held by the wrapper for the duration of this call.
+    """
+    from gbdt.train import train_ordered_rmse
+    from gbdt.models.model_text import model_text
+
+    if len(params) != 9:
+        raise Error("ordered RMSE params must have nine values")
+    var n_rows = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_weights = Int(py=params[2])
+    var n_permutation = Int(py=params[3])
+    var n_estimators = Int(py=params[4])
+    var max_depth = Int(py=params[5])
+    var border_count = Int(py=params[6])
+    var learning_rate = Float32(Float64(py=params[7]))
+    var l2_leaf_reg = Float32(Float64(py=params[8]))
+    if n_rows < 4 or n_features < 1 or n_permutation != n_rows:
+        raise Error("ordered RMSE requires >=4 rows, features and a full permutation")
+    if n_weights != 0 and n_weights != n_rows:
+        raise Error("ordered RMSE sample weight shape mismatch")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=weights_addr))
+    var pp = _u32_ptr(Int(py=permutation_addr))
+    var text: String
+    with GILReleased(Python()):
+        var xs = List[Float32]()
+        var ys = List[Float32]()
+        var ws = List[Float32]()
+        var permutation = List[UInt32]()
+        for i in range(n_rows * n_features):
+            xs.append(xp.unsafe_load(i))
+        for i in range(n_rows):
+            ys.append(yp.unsafe_load(i))
+            permutation.append(pp.unsafe_load(i))
+        for i in range(n_weights):
+            ws.append(wp.unsafe_load(i))
+        with DeviceContext() as ctx:
+            var trained = train_ordered_rmse(
+                ctx, xs, ys, n_rows, n_features, permutation,
+                n_estimators, max_depth, border_count, learning_rate,
+                l2_leaf_reg, ws,
+            )
+            text = model_text(trained)
+            ctx.synchronize()
+    return PythonObject(text)
+
+
 @export
 def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
         m.def_function[gbdt_vendor_binding]("gbdt_vendor")
         m.def_function[gbdt_fit_binding]("gbdt_fit")
+        m.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")
         m.def_function[gbdt_fit_two_level_feature_freq_binding](
             "gbdt_fit_two_level_feature_freq"
         )
