@@ -1,0 +1,60 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  mojolearn.identical.gemm.fp32.v1
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  phase8   (tools/e1_bootstrap.sh; phase 8 is seven lanes)
+   mode:     rent
+   gpu:      NVIDIA GeForce RTX 4090
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      bench/results/e1g/2026-09-06_054101-nvidia-phase8
+
+   commit:   eb835021 parent 6dd44ac5
+
+== step 1: the Apple reference column ==
+   The phase8 payload builds NOTHING on this Mac. Its reference is an
+   Apple bootstrap directory that already exists, and the comparison
+   is made by tools/e3_round_judge.sh once the box's directory lands
+   beside it -- this leg does not diff phase-8 cards.
+   lanes (read out of tools/e3_round_judge.sh section 7): gemm cd kde linkage svm metrics mamba mamba2 mamba3 iforest transformer arima cholesky embedding gp hdbscan holtwinters ivf kernelmethods gmm resample spectral training-loss training-optimizer training-step tsa
+   phase 8 is NOT in MOJOLEARN_E1_PHASES=9, so no lane cards
+   are written and no Apple reference column is required.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /private/tmp/mojolearn-installed-source/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[05:41:03 nvidia] dead-man ARMED before the create: pid 555, fires in 4500s, keyed by name mojolearn-gemm-nvidia-2026-09-06_054101
+[05:41:03 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 555; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-451
+[05:41:03 nvidia] creating mojolearn-gemm-nvidia-2026-09-06_054101 (NVIDIA GeForce RTX 4090, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[05:41:03 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[05:41:05 nvidia] pod xbwb0ksmgel1w8 created
+[05:41:42 nvidia] ssh target: -p 38168 root@213.181.111.2
+[05:41:43 nvidia] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[05:41:43 nvidia] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod xbwb0ksmgel1w8 ...
+    ARMED. Pod xbwb0ksmgel1w8 is TERMINATED through the API in 60 minutes.
+      lease: /private/tmp/mojolearn-installed-source/tools/../bench/results/runpod_leases/xbwb0ksmgel1w8.lease
+      extend with: tools/runpod_guard.sh extend xbwb0ksmgel1w8 '-p 38168 root@213.181.111.2' <minutes>
+    xbwb0ksmgel1w8: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep  6 09:41 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[05:41:51 nvidia] shipping the COMMIT (eb835021dcd79a59a7e8f78c754a75db3c1fea83), not the working tree
+[05:41:53 nvidia]   archive source sha256: 42ac84f8b618e58febebd18647f37a55
+
+== teardown (exit 255) ==
+  lease at exit:
+    xbwb0ksmgel1w8: EXPIRED 0 minutes ago (watchdog should have fired)
+  terminating xbwb0ksmgel1w8 (layer two, from this machine)
+    DELETE /v1/pods/xbwb0ksmgel1w8 -> HTTP 204
+  VERIFIED: xbwb0ksmgel1w8 is gone (HTTP 404).
+  dead-man cancelled (pid 555)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-451/gemm_remote_leg.sh: line 2067:   555 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

@@ -1,0 +1,75 @@
+
+  REFUSALS (Python side, no device)
+    pass a float64 x is refused BY NAME (no silent downcast)
+    pass the refusal message names bfloat16 (a reduced-precision profile ships under its own version, contract section 11)
+    pass a 2-D x is refused for forward (only step squeezes)
+    pass an x whose d_model is not the weights' is refused
+    pass a multi-token step is refused
+    pass step without a state is refused
+    pass a float64 weight is refused by its own name
+    pass q_proj/o_proj are square at every legal config, so their transpose is shape-indistinguishable (NAMED LIMIT: no exact-shape check can see it; the trap is asserted on the non-square k_proj below)
+    pass a transposed projection cannot cross as a plausible buffer (exact-shape refusal; the OP_NT trap's Python face)
+    pass a missing weight name is refused (no silent zero weight)
+    pass d_model = 32 with n_heads = 3 is refused (d_model == n_heads*head_dim; LlamaDims.validate carries the same rule)
+    pass a wrong-shape state buffer is refused by name
+    pass a state allocated for another batch size is refused
+
+  REFERENCE (contract float64, config A: n_kv 1, n_rep 2, it 64)
+    pass y has x's shape
+    pass y is finite
+    pass block output matches the contract's float64 reference at the adopted anchor tolerance (rtol 1e-5, atol 1e-6; header says how to recalibrate honestly if accuracy alone fails it)
+
+  REFERENCE (contract float64, config B: n_kv 2, n_rep 1, it 300)
+    pass y has x's shape
+    pass block output matches the reference with n_rep 1 and the k = 300 down_proj (the GEMM's P = 3 ragged fold inside the composition, contract section 3)
+
+  STATE (cached_tokens and the packed cache)
+    pass cached_tokens after an L=4 prefill is 4
+    pass a carried-state prefill == the stateless prefill (the discarded cache is not an input)
+    pass keys() hands back the packed used region's shape
+    pass values() hands back the packed used region's shape
+    pass the key cache is nonzero after a prefill (the state really came back)
+
+  DECODE (bitwise ASSERTED)
+    pass step token 0 == prefill token 0
+    pass step token 1 == prefill token 1
+    pass step token 2 == prefill token 2
+    pass step token 3 == prefill token 3
+    pass cached_tokens after 4 steps is 4
+    pass the packed key cache after 4 steps == the prefill's
+    pass the packed value cache after 4 steps == the prefill's
+
+  RESUMPTION (bitwise ASSERTED)
+    pass cached_tokens after L-1 tokens is L-1
+    pass the L-1 prefill's rows == the whole prefill's first L-1 rows (prefix property)
+    pass cached_tokens after the step is L
+    pass one decode step after L-1 == prefill token L-1 (contract 7.2: one spelling serves both paths)
+    pass split == whole: the packed key cache
+    pass split == whole: the packed value cache
+
+  DETERMINISM (repeat call bitwise ASSERTED)
+    pass the same fresh prefill through the binding twice is byte-identical
+
+  MOJO REFUSALS (reached from Python, refused by name)
+    pass a step past max_tokens is refused IN MOJO by name (the cache would grow past its capacity)
+    pass max_tokens past 8192 is refused IN MOJO by name (DEVIATION 812's absolute-position ceiling)
+    pass cached_tokens outside [0, max_tokens] is refused BY NAME at the binding boundary (DEVIATION 795(iv): the two sides disagree about the state)
+    pass a NaN in x is refused IN MOJO under the upstream name (llama_refuse_bad_call; payloads are vendor-shaped)
+    pass an odd head_dim is refused IN MOJO by name (RoPE pairs halves; LlamaDims.validate)
+
+  CORPUS DEBT (transformer/corpus)
+    pass transformer/corpus found walking up from this file
+    pass [OWED, recorded debt -- no comparison ran] corpus tolerance arm: transformer/corpus holds a generator and no case data (the lane's phase 7 row: gen_corpus.py has never been executed). The float64 reference above is this file's own transcription, not an independent artifact. This row FAILS once case data appears, until the ref64 arm is wired
+
+  44 checks, 0 failed
+
+test_transformer_surface: GREEN. The block reproduces the
+contract's float64 reference at the anchor tolerance through
+the Python surface on both GQA configs, decode equals prefill
+bit for bit per token through this path, a split prefill
+resumes bit for bit through the explicit caller-owned KV cache,
+the packed cache round-trips exactly, a repeated call is
+byte-identical, and every guard on the path fires by name --
+the Mojo-side refusals included. One box, one vendor: the
+cross-vendor statement belongs to the lane's cards, not to this
+file.

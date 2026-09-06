@@ -1,0 +1,11 @@
+{
+  "schema": "mojolearn.numeric-mode-source-overlay.v1",
+  "scope": "New Python serialization wrapper on built CUDA candidate with failed full qualification; modified installed Python payload, not a release-wheel qualification",
+  "source_commit": "29a8c848",
+  "base_native_source": "eb835021dcd79a59a7e8f78c754a75db3c1fea83",
+  "base_wheel_sha256": "805970b2bc44a002194cee66cbe378996f7e4a483aa3b6ca18a4f6da06060663",
+  "original_ensemble_sha256": "cfb4bee4edaeaf140e2360af388f7e5fe61b1d95084f932f6b9f997c6a19fe87",
+  "ensemble_sha256": "848519c8656ec8c68e98a69e6dd204320cc4494baf6840dce9e9c65ace4215c1",
+  "gate_sha256": "8a7d0d2ccafa4db1d9f33d04396b64303c3cc774bbceaaea2ccb8e4c684599bf",
+  "native_extensions_unchanged": 45
+}

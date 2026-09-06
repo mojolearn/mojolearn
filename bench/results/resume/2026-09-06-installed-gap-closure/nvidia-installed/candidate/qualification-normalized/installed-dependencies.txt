@@ -1,0 +1,2 @@
+mojolearn @ file:///root/installed-candidate/candidate/normalized/mojolearn-0.6.0-py3-none-manylinux_2_35_x86_64.whl#sha256=805970b2bc44a002194cee66cbe378996f7e4a483aa3b6ca18a4f6da06060663
+numpy==2.5.2

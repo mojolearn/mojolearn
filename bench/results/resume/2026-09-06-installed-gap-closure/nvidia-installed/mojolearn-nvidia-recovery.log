@@ -1,0 +1,9 @@
+pid 265's current affinity list: 0-63
+pid 265's new affinity list: 0-3
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+/tmp/mojolearn-nvidia-candidate-recovery.sh: line 22:   416 Killed                  timeout -k 15 2100 bash tools/linux_wheel_candidate.sh "$D/candidate" > "$D/candidate.log" 2>&1
+Unexpected candidate status 137; inspect before recovery

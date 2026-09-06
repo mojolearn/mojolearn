@@ -1,0 +1,32 @@
+{"package": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/__init__.py", "version": "0.6.0", "vendor": "cuda", "mode": "identical"}
+{"package": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/__init__.py", "version": "0.6.0", "vendor": "cuda", "mode": "identical", "wheel_sha256": "805970b2bc44a002194cee66cbe378996f7e4a483aa3b6ca18a4f6da06060663", "installed_bindings": {"_mojolearn": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn.so", "sha256": "7fe4cac4c5960e35048065da9100c4f029480061fdc646907042102da867f918", "mode_code": 1}, "_mojolearn_arima": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_arima.so", "sha256": "a756ad0830053daefab807dab00c2159b52396fea50e52a11ee1f92006f52e3d", "mode_code": 1}, "_mojolearn_estimators": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_estimators.so", "sha256": "0c12e4bfeaed10396ab349b600e3c63cc5f112b471ba8afecf99fea4cebeb6a8", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_gbdt": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_gbdt.so", "sha256": "3a949b18ae6885600c0c073cf8455e20aeab2ac6f4b69b6702371c9d0108d56d", "mode_code": 1}, "_mojolearn_gp": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_gp.so", "sha256": "0b10dcae06a5a389cde4c63086548302cee5cd0080d72b428cbede8f57c079aa", "mode_code": 1}, "_mojolearn_linalg": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_linalg.so", "sha256": "cd58a381fd94c45644daa359caa24f480714adcc09c40f3aec6cd1f356906bae", "mode_code": 1}, "_mojolearn_mamba": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_mamba.so", "sha256": "1cf68018f2c4e60ae6b4e952c8df3f0198e849b41940ee725db8cbed91021873", "mode_code": 1}, "_mojolearn_metrics": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_metrics.so", "sha256": "53555192cd01ea63ff4d0cc9366011ad2501aac69d523b213d079e5be17b3d29", "mode_code": 1}, "_mojolearn_rf": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_rf.so", "sha256": "96de31781f997cd20bf71cdfd4278d276a5e2d7964ba4754c5b78275718c02a1", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_solver": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_solver.so", "sha256": "18e541035e9e5b8b9560be19f326258930069fa233565b05c29b4d739a6f22b4", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_svm": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_svm.so", "sha256": "5ddeba25f175b99ec2cb1fc5a9d26fadab8285b3a8e5a224f885d92cfc939e44", "mode_code": 1}, "_mojolearn_training": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_training.so", "sha256": "57498390ab6acdbfd831368024d6ca4fd9f1ef4ad85b11443efcbbcf9aac0ed6", "mode_code": 1}, "_mojolearn_transformer": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_transformer.so", "sha256": "eae5e6004df63e8a344e5316633c2f2f3a116e16076e8092ffde7278c642f493", "mode_code": 1}, "_mojolearn_trees": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_trees.so", "sha256": "11fe7658bfbf8869e18454566a34db35e5b2e3886391b5e5863762ddb549297d", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_tsa": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_tsa.so", "sha256": "d60a72afbb38406972f6283dfeae3d8f3bb22478f74c3d6f408763f341104b2e", "mode_readback": "unavailable; build provenance and functional gate required"}}}
+  agglomerative    ok   02ca572ae936a2fa     1.3s
+  dbscan           ok   a4608e954c7420b7     0.0s
+  elasticnet       ok   f4a2b16c06f0f290     0.0s
+  et-clf           ok   707d2c92e92f6a40     0.1s
+  et-reg           ok   a1d2eb9ddb149617     0.1s
+  gbdt-depthwise   ok   cd27a77258047c8e     0.1s
+  gbdt-lossguide   ok   e65c2a2686bf7341     0.1s
+  gbdt-rmse        ok   75e3f3a99e5e004b     0.0s
+  gbdt-symmetric   ok   dc987497271f92b1     0.1s
+  gemm-pinned      ok   18ff2fd121056aee     0.0s
+  gemm-vendor      ok   18ff2fd121056aee     0.0s
+  holtwinters      ok   cff24aef76c6431d     0.0s
+  iforest          ok   334ba456c6bb7644     0.2s
+  kde              ok   9a2d41d8dd246e5d     0.0s
+  kmeans           ok   da3cb10e46c91256     0.0s
+  knn-clf          ok   f359ee4876deb908     0.0s
+  knn-reg          ok   ff4a92b889616aea     0.0s
+  knn-tied         ok   eb5d50fc1d09b0e1     0.0s
+  lasso            ok   8c61a582de814863     0.0s
+  logistic         ok   7037da78aa5950dd     0.0s
+  metrics          ok   9e779d081426adc8     0.0s
+  ols              ok   24aff16838df704a     0.0s
+  pca              ok   abe2157474e81469     0.0s
+  rf-clf           ok   eacd6bff8b4088b8     0.1s
+  rf-reg           ok   91269c5ae3828665     0.1s
+  ridge            ok   b72095bd450e4d05     0.0s
+  spectral         ok   7c5f4e5c32dc0ca1     0.1s
+  svc              ok   c982ba99909e46eb     0.0s
+  tsvd             ok   eb98ef49f9c747f0     0.0s
+smoke v0.6.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS

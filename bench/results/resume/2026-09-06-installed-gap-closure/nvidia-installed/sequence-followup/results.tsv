@@ -1,0 +1,6 @@
+build	mamba	fast	1
+build	transformer	fast	1
+build	mamba	deterministic	1
+build	transformer	deterministic	1
+build	mamba	identical	1
+build	transformer	identical	1

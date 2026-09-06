@@ -1,0 +1,5 @@
+source_commit=eb835021dcd79a59a7e8f78c754a75db3c1fea83
+expected_bindings_per_tier=15
+expected_tiers=fast deterministic identical
+build_jobs=1 cpu_affinity_max=4 compiler_jobs=2 blas_threads=1
+artifact=build vendor set; not a wheel or publication

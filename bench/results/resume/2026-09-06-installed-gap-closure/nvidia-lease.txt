@@ -1,0 +1,5 @@
+pod='xbwb0ksmgel1w8'
+target='-p 38168 root@213.181.111.2'
+armed_utc='2026-09-06T09:41:47Z'
+deadline_epoch=1788691307
+minutes=60

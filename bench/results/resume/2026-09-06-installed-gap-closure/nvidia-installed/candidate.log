@@ -1,0 +1,11 @@
+pid 417's current affinity list: 0-3
+pid 417's new affinity list: 0-3
+ WARN Skipped running the post-link scripts because `run-post-link-scripts` = `false`
+	- bin/.librsvg-pre-unlink.sh
+
+To enable them, run:
+	pixi config set --local run-post-link-scripts insecure
+
+More info:
+	https://pixi.sh/latest/reference/pixi_configuration/#run-post-link-scripts
+

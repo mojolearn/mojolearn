@@ -1,0 +1,15 @@
+vendor=cuda
+arch=sm_89
+gpu_archs_requested=
+build_rc=0 stage_rc=0
+build_seconds=2222
+set_fast_count=15
+set_fast_bytes=30421391
+set_deterministic_count=15
+set_deterministic_bytes=30134799
+set_identical_count=15
+set_identical_bytes=27829887
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=21865397

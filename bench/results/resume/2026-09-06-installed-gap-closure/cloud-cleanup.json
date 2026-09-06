@@ -1,0 +1,17 @@
+{
+  "utc": "2026-09-06T10:41:40.512977+00:00",
+  "resources": [
+    {
+      "provider": "runpod",
+      "resource": "pods/xbwb0ksmgel1w8",
+      "get_status": 404,
+      "remaining_inventory_ids": []
+    },
+    {
+      "provider": "digitalocean",
+      "resource": "droplets/598204069",
+      "get_status": 404,
+      "remaining_inventory_ids": []
+    }
+  ]
+}

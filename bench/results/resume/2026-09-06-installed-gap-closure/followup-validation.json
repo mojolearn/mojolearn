@@ -1,0 +1,158 @@
+{
+  "sequence-followup": {
+    "status": "FAILED",
+    "results": [
+      [
+        "build",
+        "mamba",
+        "fast",
+        "1"
+      ],
+      [
+        "build",
+        "transformer",
+        "fast",
+        "1"
+      ],
+      [
+        "build",
+        "mamba",
+        "deterministic",
+        "1"
+      ],
+      [
+        "build",
+        "transformer",
+        "deterministic",
+        "1"
+      ],
+      [
+        "build",
+        "mamba",
+        "identical",
+        "1"
+      ],
+      [
+        "build",
+        "transformer",
+        "identical",
+        "1"
+      ]
+    ],
+    "retained_hashes_verified": 11
+  },
+  "sequence-followup-env-fixed": {
+    "status": "FAILED",
+    "results": [
+      [
+        "build",
+        "mamba",
+        "fast",
+        "0"
+      ],
+      [
+        "gate",
+        "mamba",
+        "fast",
+        "1"
+      ],
+      [
+        "build",
+        "transformer",
+        "fast",
+        "0"
+      ],
+      [
+        "gate",
+        "transformer",
+        "fast",
+        "1"
+      ],
+      [
+        "build",
+        "mamba",
+        "deterministic",
+        "0"
+      ],
+      [
+        "gate",
+        "mamba",
+        "deterministic",
+        "1"
+      ],
+      [
+        "build",
+        "transformer",
+        "deterministic",
+        "0"
+      ],
+      [
+        "gate",
+        "transformer",
+        "deterministic",
+        "1"
+      ],
+      [
+        "build",
+        "mamba",
+        "identical",
+        "0"
+      ],
+      [
+        "gate",
+        "mamba",
+        "identical",
+        "0"
+      ],
+      [
+        "build",
+        "transformer",
+        "identical",
+        "0"
+      ],
+      [
+        "gate",
+        "transformer",
+        "identical",
+        "0"
+      ]
+    ],
+    "retained_hashes_verified": 23
+  },
+  "transformer-fp32-followup": {
+    "status": "PASSED",
+    "results": [
+      [
+        "build",
+        "transformer",
+        "fast",
+        "0"
+      ],
+      [
+        "gate",
+        "transformer",
+        "fast",
+        "0"
+      ],
+      [
+        "build",
+        "transformer",
+        "deterministic",
+        "0"
+      ],
+      [
+        "gate",
+        "transformer",
+        "deterministic",
+        "0"
+      ]
+    ],
+    "retained_hashes_verified": 12
+  },
+  "mode-persistence-followup": {
+    "status": "PASSED",
+    "modes": 3,
+    "model_and_prediction_bits_unchanged": true,
+    "scope": "NewPythonwrapperoverlay; originalcandidatefullqualificationremainsFAILED"
+  }
+}

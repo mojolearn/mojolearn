@@ -1,0 +1,130 @@
+{"package": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/__init__.py", "version": "0.6.0", "vendor": "cuda", "mode": "deterministic"}
+{"package": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/__init__.py", "version": "0.6.0", "vendor": "cuda", "mode": "deterministic", "wheel_sha256": "805970b2bc44a002194cee66cbe378996f7e4a483aa3b6ca18a4f6da06060663", "installed_bindings": {"_mojolearn": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn.so", "sha256": "b2e8b7387a285e1045b50d83f71b8062851cce5d8e5a37bcf29689ec6586d22c", "mode_code": 2}, "_mojolearn_arima": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_arima.so", "sha256": "d4cdd6580dd8ca91047e91208a23593bd0e46f119cd666afaca10c23ac6cf4e8", "mode_code": 2}, "_mojolearn_estimators": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_estimators.so", "sha256": "d7aa2143c354b9521260e9c198bb19376f944754ce8c551554ef755ea6d7755b", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_gbdt": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_gbdt.so", "sha256": "a1ea953c48f56e3ced7e11b3577b5e9686ae3d00e619ba900cf998ff4aaaff2e", "mode_code": 2}, "_mojolearn_gp": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_gp.so", "sha256": "3a1d7e0a689b5741df589c3fd406805ab9171dd33d4253c0d9431319f83a58e1", "mode_code": 2}, "_mojolearn_linalg": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_linalg.so", "sha256": "3c4c277f674a83b529d5af7ccc521c36486dd07a940daa2099d2d0971e01d18b", "mode_code": 2}, "_mojolearn_mamba": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_mamba.so", "sha256": "c6ec846b6889467ff5bf6fe469cd271133e2bcd93bcae20a19db1a6007dfae86", "mode_code": 2}, "_mojolearn_metrics": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_metrics.so", "sha256": "903e5cc2220a25f0147d23e346e394b501b6d9b6b4ca9a35a23ed17da7f6e364", "mode_code": 2}, "_mojolearn_rf": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_rf.so", "sha256": "b81352361dd64824c4b98e1ef6a3e928243bf0a41b73a27d5a47fa40354dd5c3", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_solver": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_solver.so", "sha256": "d2b3b1f39ff4d1eacd633d9e525aa929711990af4e257da627680d0f6aef30c3", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_svm": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_svm.so", "sha256": "09d376843eca76395ef8d2861bdbd55b468cb1e185dd95eab45c5c50deec83df", "mode_code": 2}, "_mojolearn_training": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_training.so", "sha256": "3c24b38e5d898c690ecfbc09605917d5b4d3628fd425a4dffdd604939d58a604", "mode_code": 2}, "_mojolearn_transformer": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_transformer.so", "sha256": "f65aeea9a47378737fad80a5d4aae9a3962d566cff907703ce477dae0035aa2d", "mode_code": 2}, "_mojolearn_trees": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_trees.so", "sha256": "f58f10837dd37967cece90e9fc83fea1a4073deaaaa7400be55f6daf066d6e44", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_tsa": {"path": "/root/installed-candidate/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_tsa.so", "sha256": "3b7bd645cf53e825ebbc8bbcb9e4d66bb02a84097244960758d7308de24f296c", "mode_readback": "unavailable; build provenance and functional gate required"}}}
+
+  REFUSALS (Python side, no device)
+    pass a float64 x is refused BY NAME (no silent downcast)
+    pass the refusal message names bfloat16 (the SHIP LATER profile, FEATURE_PARITY.md section 7)
+    pass a 2-D x is refused for forward (only step squeezes)
+    pass an x whose d_model is not the weights' is refused
+    pass a multi-token step is refused (mamba_simple.py:210)
+    pass step without a state is refused
+    pass a float64 weight is refused by its own name
+    pass a transposed projection cannot cross as a plausible buffer (exact-shape refusal)
+    pass a missing weight name is refused (no silent zero weight)
+    pass a wrong-shape state buffer is refused by name
+    pass Mamba2 d_model = 40 is refused (headdim 64 / expand 2; Mamba2Dims.of carries the same rule)
+    pass Mamba3 d_model = 40 is refused (headdim 64 / expand 2; Mamba3Dims.of carries the same rule)
+    pass Mamba3: a float64 x is refused BY NAME
+    pass Mamba3: step without a state is refused
+    pass Mamba3: a multi-token step is refused
+    pass Mamba3: a wrong-shape state buffer is refused by name
+    pass Mamba3State.set_input_states: a float64 piece is refused by its own name (bits must arrive as made)
+    pass Mamba3: a transposed projection cannot cross as a plausible buffer (exact-shape refusal)
+
+  CORPUS
+    pass mamba/corpus found walking up from this file
+
+  MAMBA-1 forward (corpus base_b2_l4_d8, ref64 tolerance)
+    pass y has x's shape
+    FAIL block output matches ref64 block.out at the corpus tolerance (rtol 1e-5, atol 1e-6) -- worst excess 3.355e-07 over |dump-ref| <= 1e-06 + 1e-05*|ref| at flat index 26 (got -0.0174893476, ref -0.0174878372)
+    pass the carried h matches ref64 scan.h_last -- the state buffer really holds the post-call state
+
+  MAMBA-1 decode (bitwise reported; fast tier)
+    pass [REPORT, not asserted] step token 0 == prefill token 0: same
+    pass [REPORT, not asserted] step token 1 == prefill token 1: same
+    pass [REPORT, not asserted] step token 2 == prefill token 2: same
+    pass [REPORT, not asserted] step token 3 == prefill token 3: same
+    pass [REPORT, not asserted] h after 4 steps == h after the L=4 prefill: same
+    pass [REPORT, not asserted] conv window after 4 steps == prefill's: same
+
+  MAMBA-2 forward (corpus m2_base_b2_l4_d32, ref64 tolerance)
+    pass y has x's shape
+    pass buf_len after an L=4 prefill is 4 (one open chunk)
+    FAIL block output matches ref64 residual.out at the corpus tolerance -- worst excess 1.810e-04 over |dump-ref| <= 1e-06 + 1e-05*|ref| at flat index 112 (got 1.17406273, ref 1.17386902)
+    pass h_last_ (the REPORT state, contract section 5) matches ref64 ssd.h_last
+    pass the BOUNDARY h stays zero with no completed chunk -- h_last_ and the resumption state are different tensors
+
+  MAMBA-2 resumption (bitwise reported; fast tier)
+    pass buf_len after L-1 tokens is L-1
+    pass [REPORT, not asserted] the L-1 prefill's rows == the whole prefill's first L-1 rows (prefix property): same
+    pass buf_len after the step is L
+    pass [REPORT, not asserted] one decode step after L-1 == prefill token L-1 (DEVIATION 786: decode is prefill resumption): same
+    pass [REPORT, not asserted] the open-chunk xBC buffer round-trips (split == whole): same
+    pass [REPORT, not asserted] the open-chunk dt buffer round-trips (split == whole): same
+
+  MAMBA-3 forward (B2 L4 d32, fixture-scale inputs)
+    pass y has x's shape
+    pass y is finite
+    pass buf_len after an L=4 prefill is 4 (one working chunk, Q = 64)
+    pass pending stays False on a plain prefill
+    pass the SEALED boundary h stays zero with one working chunk (DEVIATION 832: h_last_ and the resumption h are different tensors)
+    pass theta advanced (the serial angle recurrence ran)
+    pass theta stays in [0, 2pi) (the S10 mod's invariant, surviving the round trip)
+    pass h_last_ report shape
+    pass k_last_ report shape
+    pass v_last_ report shape
+    pass theta_last_ report shape
+
+  MAMBA-3 forward (corpus m3_base_b2_l4_d32, ref64 tolerance)
+    pass y has x's shape
+    FAIL block output matches ref64 residual.out at the corpus tolerance -- worst excess 7.018e-05 over |dump-ref| <= 1e-06 + 1e-05*|ref| at flat index 199 (got 0.30340904, ref 0.303334828)
+    pass h_last_ (the REPORT state) matches ref64 ssd.h_last
+    FAIL k_last_ matches ref64 ssd.k_last -- worst excess 3.980e-07 over |dump-ref| <= 1e-06 + 1e-05*|ref| at flat index 151 (got -0.0214189123, ref -0.0214173001)
+
+  MAMBA-3 decode (bitwise reported; fast tier)
+    pass [REPORT, not asserted] step token 0 == prefill token 0: same
+    pass [REPORT, not asserted] step token 1 == prefill token 1: same
+    pass [REPORT, not asserted] step token 2 == prefill token 2: same
+    pass [REPORT, not asserted] step token 3 == prefill token 3: same
+    pass [REPORT, not asserted] after 4 steps == after the L=4 prefill: theta: same
+    pass [REPORT, not asserted] after 4 steps == after the L=4 prefill: the sealed boundary h: same
+    pass [REPORT, not asserted] after 4 steps == after the L=4 prefill: buffer_qrot rows [0, 4): same
+    pass [REPORT, not asserted] after 4 steps == after the L=4 prefill: buffer_krot rows [0, 4): same
+    pass [REPORT, not asserted] after 4 steps == after the L=4 prefill: buffer_v rows [0, 4): same
+    pass [REPORT, not asserted] after 4 steps == after the L=4 prefill: buffer_dt rows [0, 4): same
+    pass [REPORT, not asserted] after 4 steps == after the L=4 prefill: buffer_sig rows [0, 4): same
+    pass [REPORT, not asserted] after 4 steps == after the L=4 prefill: buffer_adt rows [0, 4): same
+
+  MAMBA-3 chunk-crossing resumption (bitwise reported; fast tier)
+    pass buf_len after L=70 is 6 (the last working chunk's rows; the buffer never empties)
+    pass the sealed boundary h is nonzero once a chunk sealed
+    pass buf_len after L=60 tokens is 60 (60 < Q, still one working chunk)
+    pass [REPORT, not asserted] the L=60 prefill's rows == the whole prefill's first 60 rows (prefix property): same
+    pass [REPORT, not asserted] step token 60 == prefill token 60 (decode is prefill resumption across the seal, DEVIATION 831): MOVED
+    pass [REPORT, not asserted] step token 61 == prefill token 61 (decode is prefill resumption across the seal, DEVIATION 831): MOVED
+    pass [REPORT, not asserted] step token 62 == prefill token 62 (decode is prefill resumption across the seal, DEVIATION 831): MOVED
+    pass [REPORT, not asserted] step token 63 == prefill token 63 (decode is prefill resumption across the seal, DEVIATION 831): MOVED
+    pass [REPORT, not asserted] step token 64 == prefill token 64 (decode is prefill resumption across the seal, DEVIATION 831): MOVED
+    pass [REPORT, not asserted] step token 65 == prefill token 65 (decode is prefill resumption across the seal, DEVIATION 831): MOVED
+    pass [REPORT, not asserted] step token 66 == prefill token 66 (decode is prefill resumption across the seal, DEVIATION 831): MOVED
+    pass [REPORT, not asserted] step token 67 == prefill token 67 (decode is prefill resumption across the seal, DEVIATION 831): MOVED
+    pass [REPORT, not asserted] step token 68 == prefill token 68 (decode is prefill resumption across the seal, DEVIATION 831): MOVED
+    pass [REPORT, not asserted] step token 69 == prefill token 69 (decode is prefill resumption across the seal, DEVIATION 831): MOVED
+    pass final buf_len: split == whole
+    pass [REPORT, not asserted] split == whole at token 70: theta: MOVED
+    pass [REPORT, not asserted] split == whole at token 70: the sealed boundary h: MOVED
+    pass [REPORT, not asserted] split == whole at token 70: buffer_qrot rows [0, 6): MOVED
+    pass [REPORT, not asserted] split == whole at token 70: buffer_krot rows [0, 6): MOVED
+    pass [REPORT, not asserted] split == whole at token 70: buffer_v rows [0, 6): MOVED
+    pass [REPORT, not asserted] split == whole at token 70: buffer_dt rows [0, 6): same
+    pass [REPORT, not asserted] split == whole at token 70: buffer_sig rows [0, 6): same
+    pass [REPORT, not asserted] split == whole at token 70: buffer_adt rows [0, 6): MOVED
+
+  MAMBA-3 Input_States continuation (repeat bitwise reported; fast tier)
+    pass set_input_states marks the pieces pending
+    pass pending is consumed by the call (DEVIATION 794)
+    pass the continuation REACHED the core: same x, different output than the fresh prefill [[mojotrees-verify-reach-not-output]]
+    pass [REPORT, not asserted] the same continuation through the binding twice is byte-identical: same
+    pass [REPORT, not asserted] continuation state, call 1 == call 2: theta: same
+    pass [REPORT, not asserted] continuation state, call 1 == call 2: the sealed boundary h: same
+    pass [REPORT, not asserted] continuation state, call 1 == call 2: buffer_qrot rows [0, 4): same
+    pass [REPORT, not asserted] continuation state, call 1 == call 2: buffer_krot rows [0, 4): same
+    pass [REPORT, not asserted] continuation state, call 1 == call 2: buffer_v rows [0, 4): same
+    pass [REPORT, not asserted] continuation state, call 1 == call 2: buffer_dt rows [0, 4): same
+    pass [REPORT, not asserted] continuation state, call 1 == call 2: buffer_sig rows [0, 4): same
+    pass [REPORT, not asserted] continuation state, call 1 == call 2: buffer_adt rows [0, 4): same
+    pass a pending continuation on a mid-sequence state is refused IN MOJO (set_input_states: Input_States only has upstream meaning on a fresh state)
+
+  102 checks, 4 failed
+
+test_mamba_surface: RED. 4 checks failed.

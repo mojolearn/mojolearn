@@ -75,11 +75,13 @@ computed: those attributes are `None`.
 
 The binding requires a rebuilt GBDT extension exporting
 `gbdt_fit_ordered_rmse`; older binaries fail with an explicit upgrade/build
-message. This source addition does not certify an installed wheel or extend
-the native AMD/NVIDIA evidence to Python. `test_ordered_rmse_surface.py`
+message. Frozen source `eb835021` now passes the real installed Python gate
+on AMD/NVIDIA in all three modes, with the complete IDENTICAL model and
+72 prediction cells matching; see the [installed lane record](../bench/results/resume/2026-09-06-installed-gap-closure/installed-lane-comparison.json).
+The full NVIDIA candidate still fails unrelated sequence jobs and is not
+release-qualified. `test_ordered_rmse_surface.py`
 checks buffer order, parameter forwarding and refusals without native work;
-installed fit/predict/save/load and cross-vendor bits require a separate GPU
-qualification. As with the other estimators, `numeric_mode` selects a compiled
+the real installed GPU record covers fit/predict/save/load separately. As with the other estimators, `numeric_mode` selects a compiled
 arithmetic tier; it does not enable general CatBoost feature parity.
 
 `tools/ordered_rmse_surface_check.py` is the real installed native gate (also
@@ -89,4 +91,9 @@ and requires repeat model/prediction identity in pinned modes. It reads mode
 and vendor from the actual binary and emits complete model text and prediction
 bits as `ORDERED_PYTHON_JSON`; AMD/NVIDIA IDENTICAL records must be compared
 separately. The controller sets `MOJOLEARN_NUMERIC_MODE` and CPU limits before
-launching it. No installed qualification is claimed until that gate runs.
+launching it. Follow-up `29a8c848` persists the effective numeric mode in saved
+models and restores it before binding, even with a changed process default.
+Old files without the optional mode field keep the historical default behavior;
+select their intended tier explicitly. The updated gate removes the manual
+mode reset and passes all three modes in a separate NVIDIA wrapper overlay.
+That wrapper follow-up still needs refreshed AMD/Apple and final-wheel qualification.

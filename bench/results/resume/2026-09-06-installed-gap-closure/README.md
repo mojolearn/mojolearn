@@ -1,6 +1,6 @@
 # Installed API gap closure — September 6, 2026
 
-Checkpoint: AMD complete; NVIDIA in progress. Main operator alone runs every
+Checkpoint: both GPU legs finished and deleted; final release remains blocked. Main operator alone runs every
 build, test and measurement. Agent contributions were static code edits only.
 
 Native/package source: `eb835021dcd79a59a7e8f78c754a75db3c1fea83`
@@ -46,7 +46,82 @@ paused the local controller and stopped only its upload SSH child, retaining
 the independent local and on-pod watchdogs. A direct GitHub fetch verified the
 same frozen commit in `/root/mojolearn-frozen`; the incomplete uploaded tree
 is not used. Builds are serial with CPU affinity 0–3, two compiler workers, and one BLAS/OpenMP thread.
-No NVIDIA installed qualification or cross-vendor claim is recorded yet.
+All 45 CUDA/sm_89 extensions build and pass ISA/readback checks. The same
+empty-directory repair issue is retained, with all 91 payload files unchanged
+by normalization. Normalized wheel SHA256:
+`805970b2bc44a002194cee66cbe378996f7e4a483aa3b6ca18a4f6da06060663`.
+The frozen NVIDIA candidate has **19 passing jobs and five failures**:
+Mamba FAST/DETERMINISTIC miss four reference tolerances each; Transformer
+stalls in all three modes. The main operator stopped those stalled jobs
+(SIGTERM, exit143) to continue the serial matrix within the lease. Original
+failure logs and interruption records remain retained. No tolerance changed.
+See [downloaded-artifact validation](nvidia-installed-validation.json).
+
+The redundant inner 35-minute timer was removed without changing the candidate
+process, source, compiler caps or one-hour deletion watchdog. A replacement
+continuation reserved time for fetching; its exact script, original137 wrapper
+exit, timestamps and final candidate failures are retained. The full build
+completed at10:22 UTC and the full installed matrix at10:31 UTC.
+
+## Installed UMAP and ordered identity
+
+The [separate lane comparison](installed-lane-comparison.json) validates local
+wheel RECORD/payload hashes, all45 build outputs, identical native and
+qualification source inventories, all24 original job statuses, and installed
+mode/binary provenance. All12 UMAP/ordered target jobs per vendor pass.
+Six IDENTICAL UMAP fixtures match in 24 input/embedding arrays. The complete
+OrderedRMSE model and all72 prediction cells match. The model SHA256 is
+`934825a771807002ec0a9c6743c032fb1d7453060b847b85ddfcf8a8b4937c46`.
+This diagnostic always keeps `overall_release_eligible:false`; the full
+NVIDIA failure remains visible. Existing release admission was not weakened.
+
+## Corrective source overlays
+
+After the frozen matrix finished, the main operator alone ran serial bounded
+follow-ups in a separate source tree. Full results and retained binary/log
+hashes are under `nvidia-installed/`; [local verification](followup-validation.json)
+checks every retained follow-up hash.
+
+- `sequence-followup` records the initial compiler invocation failure because
+  Pixi's environment was absent. It is not a native success.
+- `sequence-followup-env-fixed` builds all six Mamba/Transformer mode bindings.
+  The context lifetime pin removes Transformer stalls. IDENTICAL passes all
+  102 Mamba and44 Transformer checks. Full-FP32 Mamba projections remove all
+  three block-output accuracy misses in FAST/DETERMINISTIC; one Mamba3 k_last
+  mismatch remains in each. Transformer non-IDENTICAL still has two accuracy
+  misses before its matrix products are corrected.
+- `transformer-fp32-followup` applies full-FP32 to all nine Transformer matrix
+  products. FAST/DETERMINISTIC then pass all44 checks each. IDENTICAL was
+  tested with the preceding lifetime patch, not rebuilt after these final
+  compile-time dispatch arguments. A final-source full matrix remains pending.
+  `execution-command.sh` is the actual command; `command.sh` was copied from
+  the preceding six-binding script by its inherited recorder.
+- `mode-persistence-followup` installs the frozen wheel into a separate
+  environment and overlays only the Python serialization wrapper at29a8c848.
+  With the process default changed before load, all three real ordered gates
+  pass and retain the original model/prediction bits. This modified installed
+  Python payload is explicitly not a release-wheel qualification.
+
+The final native corrections are committed at3963a0fc. IDENTICAL retains its
+existing kernel plans; new cross-vendor backward certification is not inferred.
+Non-IDENTICAL AMD/Apple paths changed and require refreshed qualification.
+The remaining Mamba3 failure is flat151 of k_last: -0.0214189123 versus
+-0.0214173001, exceeding the existing tolerance by3.980e-7. Next inspect public
+theta_last across modes to distinguish angle arithmetic from BC normalization.
+
+## Teardown and retained artifacts
+
+All candidate and follow-up artifacts were fetched before release; local
+payload/hash checks completed before resuming the paused controller. NVIDIA
+DELETE returned204 and verification returned404. The final
+[cloud inventory](cloud-cleanup.json) confirms both named resources absent and
+both provider inventories empty. The pre-existing dirty AMD log was restored
+byte-for-byte from its original backup.
+
+Git retains the normalized NVIDIA wheel, all build/qualification proofs and
+logs, and follow-up binaries. Redundant raw/repaired NVIDIA wheels and the
+staged native set are retained locally; their hashes and repair provenance
+are recorded. AMD's earlier checkpoint also retains its original wheels.
 
 ## Scope and follow-up
 

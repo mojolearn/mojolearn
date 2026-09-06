@@ -3,7 +3,7 @@
 This is the only live project plan. Historical plans and handoffs are not
 current instructions; git history and `archive/` retain their evidence.
 
-## Installed API gap closure (2026-09-06, in progress)
+## Installed API gap closure (2026-09-06, release pending)
 
 The audit confirmed that source capabilities exceed the published artifacts:
 PyPI currently has macOS 0.5.0 and Linux 0.3.1, with no published 0.6.0.
@@ -14,8 +14,10 @@ Source `eb835021` adds the narrow public `OrderedRMSE` estimator, retaining
 explicit permutation, numeric RMSE, sample weights and IDENTICAL selection.
 It is distinct from general CatBoost ordered boosting. Thirty lightweight
 Python boundary checks pass. All 45 AMD extensions now build and all 24
-installed jobs pass, including the new ABI in every mode; matching NVIDIA
-qualification is in progress. Native backward does not expose Python Mamba backward.
+installed jobs pass, including the new ABI in every mode. NVIDIA builds all
+45 extensions but its frozen candidate has 19 passing jobs and five failures:
+Mamba FAST/DETERMINISTIC accuracy and three manually stopped Transformer stalls.
+The original failures remain retained. Native backward does not expose Python Mamba backward.
 
 The installed Linux gate now requires all 45 extensions, isolated package and
 binding hashes, 24 serial jobs, UMAP fit/transform and six expanded held-out
@@ -31,8 +33,52 @@ normalization removes only those entries and verifies all 91 payload files
 unchanged. The qualified AMD wheel SHA256 is
 `7c5f9af825cbcbd74a293adc75ad15670a30a179d3a9a8a8cfd993cd9476f7be`.
 AMD was deleted and confirmed absent before NVIDIA was created. Current
-candidates are not publication or universal identity claims. Results are retained under
+candidates are not publication or universal identity claims. Both rentals are
+deleted and both provider inventories are empty. Results are retained under
 `bench/results/resume/2026-09-06-installed-gap-closure/`.
+
+The independent installed-lane comparison matches all six IDENTICAL UMAP
+fixtures (24 raw input/embedding arrays) and the complete OrderedRMSE model
+plus 72 prediction cells across AMD/NVIDIA. Every target job passes in all
+three modes. This diagnostic explicitly keeps release eligibility false;
+it does not suppress the unrelated failures in the full NVIDIA qualification.
+
+Source follow-up `3963a0fc` retains the Transformer context through buffer
+teardown and uses existing full-FP32 kernels for sequence matrix products.
+Six rebuilt CUDA bindings were tested serially over the frozen wheel. The
+lifetime fix removes Transformer stalls, with IDENTICAL passing all 44
+checks. The subsequent full-FP32 Transformer FAST/DETERMINISTIC builds also
+pass all 44 checks. Mamba projections now pass their output tolerances, but
+Mamba3 k_last still misses one reference tolerance in FAST/DETERMINISTIC
+(flat151, got -0.0214189123 versus -0.0214173001). IDENTICAL passes all 102
+surface checks. No tolerance changed. These are source overlays, not a fresh
+full45 wheel qualification or new cross-vendor backward certificate.
+
+Next sequence work: inspect Mamba3's exposed theta_last at batch1/pair11
+across modes to distinguish angle arithmetic from BC normalization, then
+correct the identified operation and re-run AMD/NVIDIA plus current Apple
+qualification. Full-FP32 dispatch also changes non-IDENTICAL AMD/Apple paths;
+older candidate results do not certify that follow-up or its performance.
+
+## Saved arithmetic policy and release admission (2026-09-06)
+
+Follow-up `29a8c848` fixes GBDT/OrderedRMSE model serialization: save stores the
+current effective numeric tier, and load restores it before binding even if
+that process has a different default. Six lightweight archive/routing tests
+and the 30 OrderedRMSE boundary checks pass. The native save/load gate now
+changes the process default and requires restoration without manually resetting
+the loaded estimator. A separate NVIDIA native wrapper-overlay check passes
+all three modes and retains unchanged model/prediction bits; AMD/Apple
+follow-up is pending. This Python-wrapper follow-up is newer than the frozen
+`eb835021` candidate wheels; those wheel passes do not qualify these new bytes.
+
+Release admission `b7129905` requires the exact same combined Linux wheel SHA
+in both vendors' retained full installed qualifications, matching current
+native sources and recomputed UMAP/ordered comparisons. Eighteen lightweight
+admission/comparator tests pass; the real single-vendor AMD candidate is
+correctly refused as a combined release. Apple smoke now includes OrderedRMSE
+in every interpreter/mode job; its five orchestration checks pass, with the
+actual current Apple wheel run still pending.
 
 ## Remaining delivery gates
 

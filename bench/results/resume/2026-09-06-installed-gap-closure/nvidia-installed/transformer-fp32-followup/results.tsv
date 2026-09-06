@@ -1,0 +1,4 @@
+build	transformer	fast	0
+gate	transformer	fast	0
+build	transformer	deterministic	0
+gate	transformer	deterministic	0

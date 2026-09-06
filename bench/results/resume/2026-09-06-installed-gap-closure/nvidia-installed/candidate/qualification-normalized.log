@@ -1,0 +1,30 @@
+pid 5803's current affinity list: 0-3
+pid 5803's new affinity list: 0-3
+smoke	fast	0
+umap	fast	0
+umap-transform	fast	0
+umap-quality	fast	0
+ordered-rmse	fast	0
+mamba	fast	1
+Terminated
+transformer	fast	143
+arima	fast	0
+smoke	deterministic	0
+umap	deterministic	0
+umap-transform	deterministic	0
+umap-quality	deterministic	0
+ordered-rmse	deterministic	0
+mamba	deterministic	1
+Terminated
+transformer	deterministic	143
+arima	deterministic	0
+smoke	identical	0
+umap	identical	0
+umap-transform	identical	0
+umap-quality	identical	0
+ordered-rmse	identical	0
+mamba	identical	0
+Terminated
+transformer	identical	143
+arima	identical	0
+{"status": "FAILED", "reason": "Missing, duplicate or failed installed job"}

@@ -1,0 +1,16 @@
+{
+  "wheel": "/root/installed-candidate/candidate/dist/mojolearn-0.6.0-py3-none-linux_x86_64.whl",
+  "compressed_bytes": 22182162,
+  "compressed_mb": 22.18,
+  "pypi_limit_bytes": 104857600,
+  "over_limit": false,
+  "libs_layout": "shared mojolearn/.libs",
+  "sets": {
+    "cuda/sm_89": {
+      "extensions_bytes": 88386077,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    }
+  },
+  "tag": "py3-none-linux_x86_64"
+}

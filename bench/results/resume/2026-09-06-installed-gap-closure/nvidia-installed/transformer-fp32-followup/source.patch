@@ -1,0 +1,279 @@
+diff --git a/bindings/_mojolearn_transformer.mojo b/bindings/_mojolearn_transformer.mojo
+index df7c675e..8a9d739d 100644
+--- a/bindings/_mojolearn_transformer.mojo
++++ b/bindings/_mojolearn_transformer.mojo
+@@ -296,6 +296,8 @@ def _transformer_run(
+     _ = rope^
+     _ = stages^
+     _ = dx^
++    # Keep the context alive until every device allocation is destroyed.
++    _ = ctx^
+     return out_len
+ 
+ 
+diff --git a/gemm/checks/gemm_identical.mojo b/gemm/checks/gemm_identical.mojo
+index 4b861ab2..4c6056a4 100644
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -1340,7 +1340,7 @@ def identical_gemm_with_plan(
+     )
+ 
+ 
+-def identical_gemm_into(
++def identical_gemm_into[allow_vendor: Bool = True](
+     ctx: DeviceContext,
+     mut c: DeviceBuffer[DType.float32],
+     mut a: DeviceBuffer[DType.float32],
+@@ -1355,6 +1355,10 @@ def identical_gemm_into(
+     `choose_gemm_plan` picks. ASYNCHRONOUS: nothing here waits, and the
+     caller must keep every buffer alive past its own `ctx.synchronize()`.
+ 
++    `allow_vendor=False` retains full-FP32 operands in every mode by
++    bypassing the vendor path. The default preserves existing callers.
++    IDENTICAL never uses that path, regardless of this argument.
++
+     `ws` must hold at least `identical_gemm_workspace_max_floats(m, n, k)`
+     floats. **Sizing it for one plan and letting the dispatcher pick another
+     is an out-of-bounds write that a small shape will not show you** -- it
+@@ -1378,7 +1382,7 @@ def identical_gemm_into(
+     # arm declines return False and FALL THROUGH to the pinned plan exactly
+     # as 1876 does. Under IDENTICAL this branch is not compiled at all:
+     # bit-unchanged by construction.
+-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++    comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+         if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
+             return
+     identical_gemm_with_plan(
+@@ -1536,7 +1540,7 @@ def _fast_vendor_gemm(
+     return False
+ 
+ 
+-def identical_gemm(
++def identical_gemm[allow_vendor: Bool = True](
+     ctx: DeviceContext,
+     mut c: DeviceBuffer[DType.float32],
+     mut a: DeviceBuffer[DType.float32],
+@@ -1555,6 +1559,12 @@ def identical_gemm(
+     whether one was used** -- that is the point of the profile, and Phase 3
+     and Phase 4 call this form.
+ 
++    `allow_vendor=False` selects the existing full-FP32 kernel plans in
++    every mode. Mamba's public tolerance contract requires this: NVIDIA's
++    default vendor matmul reduces operand precision to TF32. This argument
++    is propagated to the workspace entry so fallback cannot re-enter the
++    vendor route. Other callers keep their existing default dispatch.
++
+     **THIS FORM SYNCHRONIZES BEFORE IT RETURNS, and it has to.**
+     `[[mojo-buffer-freed-at-last-use]]`: a `DeviceBuffer` created here is
+     dead at its `.unsafe_ptr()`, so a scratch buffer allocated inside this
+@@ -1568,13 +1578,13 @@ def identical_gemm(
+     # IDENTICAL this branch is not compiled at all. Read `_fast_vendor_gemm`
+     # before changing anything here; the `n == 1` clause in it is a
+     # correctness requirement and not an optimization.
+-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++    comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+         if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
+             return
+     var nws = identical_gemm_workspace_max_floats(m, n, k)
+     var ws = ctx.enqueue_create_buffer[DType.float32](nws)
+     ctx.synchronize()
+-    identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
++    identical_gemm_into[allow_vendor](ctx, c, a, b, ws, m, n, k, op)
+     ctx.synchronize()
+     _ = ws
+ 
+diff --git a/mamba/impl/mamba_ssm/modules/mamba2.mojo b/mamba/impl/mamba_ssm/modules/mamba2.mojo
+index 77d55db5..5e287dff 100644
+--- a/mamba/impl/mamba_ssm/modules/mamba2.mojo
++++ b/mamba/impl/mamba_ssm/modules/mamba2.mojo
+@@ -64,6 +64,8 @@ from std.sys.compile import is_defined
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from core.identity_trace import IdentityTrace
++# Public Mamba forward keeps full-FP32 projection operands in every mode.
++# False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
+ from gemm.checks.gemm_identical import identical_gemm
+ 
+ # ORIENTATION NUMBERING: gemm_oracle's OP_NT = 1 (OP_NN = 0, OP_TN = 2),
+@@ -902,7 +904,7 @@ def mamba2_block_forward(
+     )
+ 
+     # ---- S4: in_proj (mamba2.py:211), gemm v1 OP_NT, k = d_model.
+-    identical_gemm(
++    identical_gemm[False](
+         ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+     )
+     trace.record_device[DType.float32](
+@@ -1226,7 +1228,7 @@ def mamba2_block_forward(
+     )
+ 
+     # ---- S4: out_proj (mamba2.py:275), gemm v1 OP_NT, k = d_inner.
+-    identical_gemm(
++    identical_gemm[False](
+         ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
+     )
+     trace.record_device[DType.float32](
+diff --git a/mamba/impl/mamba_ssm/modules/mamba3.mojo b/mamba/impl/mamba_ssm/modules/mamba3.mojo
+index 41af0893..2c97b6eb 100644
+--- a/mamba/impl/mamba_ssm/modules/mamba3.mojo
++++ b/mamba/impl/mamba_ssm/modules/mamba3.mojo
+@@ -75,6 +75,8 @@ from std.sys.compile import is_defined
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from core.identity_trace import IdentityTrace
++# Public Mamba forward keeps full-FP32 projection operands in every mode.
++# False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
+ from gemm.checks.gemm_identical import identical_gemm
+ 
+ # ORIENTATION NUMBERING: gemm_oracle's OP_NT = 1 -- the numbering
+@@ -1137,7 +1139,7 @@ def mamba3_block_forward(
+     ctx.synchronize()
+ 
+     # ---- S4: in_proj (mamba3.py:176), gemm v1 OP_NT, k = d_model.
+-    identical_gemm(
++    identical_gemm[False](
+         ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+     )
+ 
+@@ -1372,7 +1374,7 @@ def mamba3_block_forward(
+ 
+     # ---- S4: out_proj (mamba3.py:277), gemm v1 OP_NT, k = d_inner. The
+     #      gate output IS the [M, d_inner] row (d = h*P + p, a copy).
+-    identical_gemm(
++    identical_gemm[False](
+         ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
+     )
+ 
+diff --git a/mamba/impl/transformers/models/mamba/modeling_mamba.mojo b/mamba/impl/transformers/models/mamba/modeling_mamba.mojo
+index 098d4857..22f4bd17 100644
+--- a/mamba/impl/transformers/models/mamba/modeling_mamba.mojo
++++ b/mamba/impl/transformers/models/mamba/modeling_mamba.mojo
+@@ -170,6 +170,8 @@ from std.sys.compile import is_defined
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from core.identity_trace import IdentityTrace
++# Public Mamba forward keeps full-FP32 projection operands in every mode.
++# False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
+ from gemm.checks.gemm_identical import identical_gemm
+ 
+ # ORIENTATION NUMBERING: this `OP_NT` is `gemm_oracle`'s, where
+@@ -1310,7 +1312,7 @@ def mamba_mixer_forward(
+     #      GEMM v1 OP_NT: C[M, 2di] = norm_out[M, dm] . w_in[2di, dm]^T.
+     #      `k = d_model <= 128` so `P == 1` -- gemm contract 7.1's serial
+     #      ascending chain with nothing to fold.
+-    identical_gemm(
++    identical_gemm[False](
+         ctx,
+         stages.in_proj,
+         stages.norm_out,
+@@ -1370,7 +1372,7 @@ def mamba_mixer_forward(
+ 
+     # ---- x_proj (:437). `nn.Linear(d_inner, dt_rank + 2*d_state,
+     #      bias=False)`. C[M, xr] = silu_out[M, di] . w_x[xr, di]^T.
+-    identical_gemm(
++    identical_gemm[False](
+         ctx, stages.x_proj, stages.silu_out, w.w_x, m, xr, di, _gemm_op_nt()
+     )
+     trace.record_device[DType.float32](
+@@ -1400,7 +1402,7 @@ def mamba_mixer_forward(
+     #      `k = dt_rank = 1` the gemm leaf is `ftz(fma(a, b, +0.0))`, so a
+     #      `-0.0`-valued product reaches this stage as `+0.0`. That is v1
+     #      gemm behavior and this profile inherits it UNCHANGED.
+-    identical_gemm(
++    identical_gemm[False](
+         ctx, stages.dt_proj, stages.dt_low, w.w_dt, m, di, r, _gemm_op_nt()
+     )
+     trace.record_device[DType.float32](
+@@ -1417,7 +1419,7 @@ def mamba_mixer_forward(
+ 
+     # ---- out_proj (:481). `nn.Linear(d_inner, d_model, bias=use_bias)` with
+     #      `use_bias` False. C[M, dm] = gate_out[M, di] . w_out[dm, di]^T.
+-    identical_gemm(
++    identical_gemm[False](
+         ctx,
+         stages.out_proj,
+         stages.gate_out,
+diff --git a/transformer/impl/transformers/models/llama/modeling_llama.mojo b/transformer/impl/transformers/models/llama/modeling_llama.mojo
+index a3661cb8..80ae1de5 100644
+--- a/transformer/impl/transformers/models/llama/modeling_llama.mojo
++++ b/transformer/impl/transformers/models/llama/modeling_llama.mojo
+@@ -2420,7 +2420,7 @@ def eager_attention_forward(
+                 block_dim=(LLAMA_TPB, 1, 1),
+             )
+             ctx.synchronize()
+-            identical_gemm(
++            identical_gemm[False](
+                 ctx,
+                 stages.sbh,
+                 stages.qbh,
+@@ -2593,7 +2593,7 @@ def eager_attention_forward(
+                     block_dim=(LLAMA_TPB, 1, 1),
+                 )
+                 ctx.synchronize()
+-                identical_gemm(
++                identical_gemm[False](
+                     ctx,
+                     stages.qbh,
+                     stages.sbh,
+@@ -2694,19 +2694,22 @@ def llama_attention_forward(
+     # ---- q_proj, k_proj, v_proj (:252-254). `nn.Linear(d_model, *,
+     #      bias=attention_bias)` with `attention_bias` False, so weight
+     #      only. GEMM v1 OP_NT: C[M, out] = norm1_out[M, dm] . W[out, dm]^T.
+-    identical_gemm(
++    # Retain FP32 operands in every tier. The vendor fast route can select
++    # TF32 projections, exceeding the block's unchanged accuracy contract.
++    # IDENTICAL already uses this plan; its arithmetic remains unchanged.
++    identical_gemm[False](
+         ctx, stages.q_proj, stages.norm1_out, w.w_q, m, qw, dm, _gemm_op_nt()
+     )
+     trace.record_device[DType.float32](
+         ctx, prefix + ".q_proj.out", stages.q_proj, m * qw
+     )
+-    identical_gemm(
++    identical_gemm[False](
+         ctx, stages.k_proj, stages.norm1_out, w.w_k, m, kw, dm, _gemm_op_nt()
+     )
+     trace.record_device[DType.float32](
+         ctx, prefix + ".k_proj.out", stages.k_proj, m * kw
+     )
+-    identical_gemm(
++    identical_gemm[False](
+         ctx, stages.v_proj, stages.norm1_out, w.w_v, m, kw, dm, _gemm_op_nt()
+     )
+     trace.record_device[DType.float32](
+@@ -2823,7 +2826,7 @@ def llama_attention_forward(
+     # ---- o_proj (:280). `nn.Linear(n_heads*head_dim, d_model,
+     #      bias=attention_bias)`, no bias.
+     #      C[M, dm] = ctx[M, qw] . w_o[dm, qw]^T, `k = n_heads*head_dim`.
+-    identical_gemm(
++    identical_gemm[False](
+         ctx, stages.o_proj, stages.ctxv, w.w_o, m, dm, qw, _gemm_op_nt()
+     )
+     trace.record_device[DType.float32](
+@@ -2858,7 +2861,7 @@ def llama_mlp_forward(
+     var it = dims.intermediate
+ 
+     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
+-    identical_gemm(
++    identical_gemm[False](
+         ctx,
+         stages.gate_proj,
+         stages.norm2_out,
+@@ -2871,7 +2874,7 @@ def llama_mlp_forward(
+     trace.record_device[DType.float32](
+         ctx, prefix + ".gate_proj.out", stages.gate_proj, m * it
+     )
+-    identical_gemm(
++    identical_gemm[False](
+         ctx,
+         stages.up_proj,
+         stages.norm2_out,
+@@ -2919,7 +2922,7 @@ def llama_mlp_forward(
+     #      profile; at `intermediate_size = 300` this one has `P = 3` with a
+     #      ragged 44-element last leaf and one carry (contract section 3).
+     #      Without that fixture the tree sits unexercised inside the block.
+-    identical_gemm(
++    identical_gemm[False](
+         ctx,
+         stages.down_proj,
+         stages.gated,

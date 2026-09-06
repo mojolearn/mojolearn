@@ -1,0 +1,104 @@
+{
+  "schema": "mojolearn.sequence-source-overlay.v1",
+  "scope": "Six rebuilt bindings over frozen CUDA candidate; not a full45 rebuilt/qualified release wheel",
+  "base_source_commit": "eb835021dcd79a59a7e8f78c754a75db3c1fea83",
+  "status": "FAILED",
+  "results": [
+    [
+      "build",
+      "mamba",
+      "fast",
+      "1"
+    ],
+    [
+      "build",
+      "transformer",
+      "fast",
+      "1"
+    ],
+    [
+      "build",
+      "mamba",
+      "deterministic",
+      "1"
+    ],
+    [
+      "build",
+      "transformer",
+      "deterministic",
+      "1"
+    ],
+    [
+      "build",
+      "mamba",
+      "identical",
+      "1"
+    ],
+    [
+      "build",
+      "transformer",
+      "identical",
+      "1"
+    ]
+  ],
+  "retained_hashes": {
+    "install.log": "b19bfb30db6788cdb0b3da9df3367f67f93d27dafeea6288f43d08e4060f127f",
+    "source.patch": "344ad996f9f30b0cf27b669cda461dad1a5d7dee89cc49ca202d1623648d3324",
+    "command.sh": "40dee92f0d873f6106dc6ea2dea8ad2643aaa10637d3c1e87b05ed48daaf7b30",
+    "base-build-provenance.json": "b7fb257355d3bf74cb67554ccbe9ce93f61015514b1eb86c92978676dd7cfb15",
+    "results.tsv": "16edde0cce62233dc573f9a0d61d37a1ada8ecc044e219eab1a65f222d89245d",
+    "fast-mamba-build.log": "e10eae53fc12bbc480ef6ff468a4ee441d84d6032593c251e52da34b9cf0ab94",
+    "fast-transformer-build.log": "648e1c589b4e60331d355236daf4b5b1560d60cbc8328328b12a0a24ad2b1732",
+    "deterministic-mamba-build.log": "e10eae53fc12bbc480ef6ff468a4ee441d84d6032593c251e52da34b9cf0ab94",
+    "deterministic-transformer-build.log": "648e1c589b4e60331d355236daf4b5b1560d60cbc8328328b12a0a24ad2b1732",
+    "identical-mamba-build.log": "e10eae53fc12bbc480ef6ff468a4ee441d84d6032593c251e52da34b9cf0ab94",
+    "identical-transformer-build.log": "648e1c589b4e60331d355236daf4b5b1560d60cbc8328328b12a0a24ad2b1732"
+  },
+  "installed_extension_hashes": {
+    "cuda/sm_89/_mojolearn.so": "6a3a3801c4b5ad23e4ed47c45050ba0636b0573e01a5ec52ec661029190cdc6b",
+    "cuda/sm_89/_mojolearn_arima.so": "19844b89ecf47c56541afbe9f7a6f153aba4faf2fdf29cf3c4c0dd816df7c0c0",
+    "cuda/sm_89/_mojolearn_estimators.so": "256699349d7908ad2e01658c56b9ee1470ead3824f5e9d543c74bf4408336c23",
+    "cuda/sm_89/_mojolearn_gbdt.so": "6c9d0f8b9794029429a792e4d1b56dd9affeef76d2d0059bb396943a719b5ec6",
+    "cuda/sm_89/_mojolearn_gp.so": "b408626f94bbca293992d98ab2d70a680d1c0c978833f8a41b2d4132e1c30e1d",
+    "cuda/sm_89/_mojolearn_linalg.so": "3d6847e6b5f19aed3b29ef27caa0b51ea082a204310e85216c9162dc6aad959c",
+    "cuda/sm_89/_mojolearn_mamba.so": "cfc34c7cf3f8524bfdf8a6137337cb5d62a464345009e12dbd4d865d8bbd45b5",
+    "cuda/sm_89/_mojolearn_metrics.so": "a9c7e3007feb0c9ffc46005f7fce8ada45c2af467861608e0094a8605720a940",
+    "cuda/sm_89/_mojolearn_rf.so": "db5f38e0e642557713f4d6306fcc554554bf0449ac4a59300d8cc183559f8085",
+    "cuda/sm_89/_mojolearn_solver.so": "9dbd11db4643fe80626c9e1a7016dfa166ec7aea5256d2b3767e0fbbae0abc9d",
+    "cuda/sm_89/_mojolearn_svm.so": "a5adf70df024a9da933be1ce70f3d6558e7cba3d0342b8bc52b9dbefb594603a",
+    "cuda/sm_89/_mojolearn_training.so": "56d22a6c55404185029c4653fb713ccd275347e9db5b54cadf3ca2852b8e1d26",
+    "cuda/sm_89/_mojolearn_transformer.so": "d8b91e3b3754892084d421000946743896bd3ad4cb4a57a02847b6ac20ee3e77",
+    "cuda/sm_89/_mojolearn_trees.so": "af1f0012abbc51092a6ca48b266cca51745f7476b750524c7c43d8b6b6031a29",
+    "cuda/sm_89/_mojolearn_tsa.so": "6697b6c2e8594a31d1ced516b2e95ba58619e98acd96570d006b522a48b4bef5",
+    "cuda/sm_89/deterministic/_mojolearn.so": "b2e8b7387a285e1045b50d83f71b8062851cce5d8e5a37bcf29689ec6586d22c",
+    "cuda/sm_89/deterministic/_mojolearn_arima.so": "d4cdd6580dd8ca91047e91208a23593bd0e46f119cd666afaca10c23ac6cf4e8",
+    "cuda/sm_89/deterministic/_mojolearn_estimators.so": "d7aa2143c354b9521260e9c198bb19376f944754ce8c551554ef755ea6d7755b",
+    "cuda/sm_89/deterministic/_mojolearn_gbdt.so": "a1ea953c48f56e3ced7e11b3577b5e9686ae3d00e619ba900cf998ff4aaaff2e",
+    "cuda/sm_89/deterministic/_mojolearn_gp.so": "3a1d7e0a689b5741df589c3fd406805ab9171dd33d4253c0d9431319f83a58e1",
+    "cuda/sm_89/deterministic/_mojolearn_linalg.so": "3c4c277f674a83b529d5af7ccc521c36486dd07a940daa2099d2d0971e01d18b",
+    "cuda/sm_89/deterministic/_mojolearn_mamba.so": "c6ec846b6889467ff5bf6fe469cd271133e2bcd93bcae20a19db1a6007dfae86",
+    "cuda/sm_89/deterministic/_mojolearn_metrics.so": "903e5cc2220a25f0147d23e346e394b501b6d9b6b4ca9a35a23ed17da7f6e364",
+    "cuda/sm_89/deterministic/_mojolearn_rf.so": "b81352361dd64824c4b98e1ef6a3e928243bf0a41b73a27d5a47fa40354dd5c3",
+    "cuda/sm_89/deterministic/_mojolearn_solver.so": "d2b3b1f39ff4d1eacd633d9e525aa929711990af4e257da627680d0f6aef30c3",
+    "cuda/sm_89/deterministic/_mojolearn_svm.so": "09d376843eca76395ef8d2861bdbd55b468cb1e185dd95eab45c5c50deec83df",
+    "cuda/sm_89/deterministic/_mojolearn_training.so": "3c24b38e5d898c690ecfbc09605917d5b4d3628fd425a4dffdd604939d58a604",
+    "cuda/sm_89/deterministic/_mojolearn_transformer.so": "f65aeea9a47378737fad80a5d4aae9a3962d566cff907703ce477dae0035aa2d",
+    "cuda/sm_89/deterministic/_mojolearn_trees.so": "f58f10837dd37967cece90e9fc83fea1a4073deaaaa7400be55f6daf066d6e44",
+    "cuda/sm_89/deterministic/_mojolearn_tsa.so": "3b7bd645cf53e825ebbc8bbcb9e4d66bb02a84097244960758d7308de24f296c",
+    "cuda/sm_89/identical/_mojolearn.so": "7fe4cac4c5960e35048065da9100c4f029480061fdc646907042102da867f918",
+    "cuda/sm_89/identical/_mojolearn_arima.so": "a756ad0830053daefab807dab00c2159b52396fea50e52a11ee1f92006f52e3d",
+    "cuda/sm_89/identical/_mojolearn_estimators.so": "0c12e4bfeaed10396ab349b600e3c63cc5f112b471ba8afecf99fea4cebeb6a8",
+    "cuda/sm_89/identical/_mojolearn_gbdt.so": "3a949b18ae6885600c0c073cf8455e20aeab2ac6f4b69b6702371c9d0108d56d",
+    "cuda/sm_89/identical/_mojolearn_gp.so": "0b10dcae06a5a389cde4c63086548302cee5cd0080d72b428cbede8f57c079aa",
+    "cuda/sm_89/identical/_mojolearn_linalg.so": "cd58a381fd94c45644daa359caa24f480714adcc09c40f3aec6cd1f356906bae",
+    "cuda/sm_89/identical/_mojolearn_mamba.so": "1cf68018f2c4e60ae6b4e952c8df3f0198e849b41940ee725db8cbed91021873",
+    "cuda/sm_89/identical/_mojolearn_metrics.so": "53555192cd01ea63ff4d0cc9366011ad2501aac69d523b213d079e5be17b3d29",
+    "cuda/sm_89/identical/_mojolearn_rf.so": "96de31781f997cd20bf71cdfd4278d276a5e2d7964ba4754c5b78275718c02a1",
+    "cuda/sm_89/identical/_mojolearn_solver.so": "18e541035e9e5b8b9560be19f326258930069fa233565b05c29b4d739a6f22b4",
+    "cuda/sm_89/identical/_mojolearn_svm.so": "5ddeba25f175b99ec2cb1fc5a9d26fadab8285b3a8e5a224f885d92cfc939e44",
+    "cuda/sm_89/identical/_mojolearn_training.so": "57498390ab6acdbfd831368024d6ca4fd9f1ef4ad85b11443efcbbcf9aac0ed6",
+    "cuda/sm_89/identical/_mojolearn_transformer.so": "eae5e6004df63e8a344e5316633c2f2f3a116e16076e8092ffde7278c642f493",
+    "cuda/sm_89/identical/_mojolearn_trees.so": "11fe7658bfbf8869e18454566a34db35e5b2e3886391b5e5863762ddb549297d",
+    "cuda/sm_89/identical/_mojolearn_tsa.so": "d60a72afbb38406972f6283dfeae3d8f3bb22478f74c3d6f408763f341104b2e"
+  }
+}

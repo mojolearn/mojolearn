@@ -1,0 +1,15 @@
+{
+  "removed_empty_directories": [
+    "mojolearn/",
+    "mojolearn/.libs/",
+    "mojolearn/cuda/",
+    "mojolearn/cuda/sm_89/",
+    "mojolearn/cuda/sm_89/deterministic/",
+    "mojolearn/cuda/sm_89/identical/",
+    "mojolearn-0.6.0.dist-info/",
+    "mojolearn-0.6.0.dist-info/licenses/"
+  ],
+  "unchanged_payload_files": 91,
+  "original_sha256": "cd7304301577be1aa5e2b729a2e9aa990c151e0e6a5b22dc4aacc511f7c214b6",
+  "normalized_sha256": "805970b2bc44a002194cee66cbe378996f7e4a483aa3b6ca18a4f6da06060663"
+}

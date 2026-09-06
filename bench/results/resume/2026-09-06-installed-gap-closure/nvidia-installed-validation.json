@@ -1,0 +1,40 @@
+{
+  "status": "FAILED",
+  "scope": "Frozen NVIDIA fullcandidate; binary build and archive validation pass but full installed qualification fails",
+  "wheel_sha256": "805970b2bc44a002194cee66cbe378996f7e4a483aa3b6ca18a4f6da06060663",
+  "source_sha256": "ade965b90496132596d8dda79860a87f472193c14129093c5c3a72f273b8159f",
+  "extensions_built": 45,
+  "unchanged_payload_files": 91,
+  "passed_jobs": 19,
+  "failed_jobs": [
+    [
+      "mamba",
+      "fast",
+      "1"
+    ],
+    [
+      "transformer",
+      "fast",
+      "143"
+    ],
+    [
+      "mamba",
+      "deterministic",
+      "1"
+    ],
+    [
+      "transformer",
+      "deterministic",
+      "143"
+    ],
+    [
+      "transformer",
+      "identical",
+      "143"
+    ]
+  ],
+  "qualification": {
+    "status": "FAILED",
+    "reason": "Missing, duplicate or failed installed job"
+  }
+}

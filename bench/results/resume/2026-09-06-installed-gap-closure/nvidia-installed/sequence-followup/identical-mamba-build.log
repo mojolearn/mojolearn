@@ -1,0 +1,707 @@
+Failed to initialize Crashpad.  Crash reporting will not be available.  Cause: while locating crashpad handler: unable to locate crashpad handler executable
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:3:1: error: unable to locate module 'std'
+"""CPython boundary for the Mamba-1, Mamba-2 and Mamba-3 block lanes.
+^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:3:1: error: 'std' is required for all normal mojo compiles.
+If you see this either:
+- Your mojo installation is broken and needs to be reinstalled or
+- You are a 'std' developer and are intentionally avoiding a pre-built 'std'
+"""CPython boundary for the Mamba-1, Mamba-2 and Mamba-3 block lanes.
+^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:135:6: error: unable to locate module 'std'
+from std.os import abort
+     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:136:6: error: unable to locate module 'std'
+from std.python import Python, PythonObject
+     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:137:6: error: unable to locate module 'std'
+from std.python._cpython import GILReleased
+     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:137:10: error: 'python' does not refer to a nested package
+from std.python._cpython import GILReleased
+         ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:138:6: error: unable to locate module 'std'
+from std.python.bindings import PythonModuleBuilder
+     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:138:10: error: 'python' does not refer to a nested package
+from std.python.bindings import PythonModuleBuilder
+         ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:140:6: error: unable to locate module 'max'
+from max.gpu.host import DeviceContext
+     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:140:10: error: 'gpu' does not refer to a nested package
+from max.gpu.host import DeviceContext
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:142:
+./core/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:142:
+./core/identity_trace.mojo:3:1: error: unable to locate module 'std'
+"""Stage hashes, so a cross-backend difference has an ADDRESS.
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:142:
+./core/identity_trace.mojo:165:22: error: use of unknown declaration 'Movable'
+struct IdentityTrace(Movable):
+                     ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:143:
+./checks/__init__.mojo:3:1: error: unable to locate module 'std'
+"""Files with NO CatBoost counterpart. Everything under catboost/ is a port; everything here is ours and must justify itself."""
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:143:
+./checks/numerics.mojo:3:1: error: unable to locate module 'std'
+"""What may vary between backends, and what may not."""
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:143:
+./checks/numerics.mojo:5:6: error: unable to locate module 'std'
+from std.sys.compile import is_defined
+     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:143:
+./checks/numerics.mojo:5:10: error: 'sys' does not refer to a nested package
+from std.sys.compile import is_defined
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:144:
+./checks/vendor.mojo:3:1: error: unable to locate module 'std'
+"""Which accelerator API this binary was COMPILED for, as a constant.
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:143:
+./checks/numerics.mojo:5:10: error: 'std' is required for all normal mojo compiles.
+If you see this either:
+- Your mojo installation is broken and needs to be reinstalled or
+- You are a 'std' developer and are intentionally avoiding a pre-built 'std'
+from std.sys.compile import is_defined
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:144:
+./checks/vendor.mojo:58:27: error: use of unknown declaration 'StaticString'
+comptime COMPILED_VENDOR: StaticString = (
+                          ^~~~~~~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:146:
+./mamba/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:146:
+./mamba/checks/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:147:
+./mamba/checks/mamba_fixture.mojo:3:1: error: unable to locate module 'std'
+"""Hashed fixtures for the Mamba-1 identity block. NOT A PORT.
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:147:
+./mamba/checks/mamba_fixture.mojo:44:19: error: unable to locate module 'std'
+comptime D_CONV = 4
+                  ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:147:
+./mamba/checks/mamba_fixture.mojo:43:20: error: unable to locate module 'std'
+comptime D_STATE = 16
+                   ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:147:
+./mamba/checks/mamba_fixture.mojo:50:18: error: use of unknown declaration 'Copyable'
+struct MambaDims(Copyable, Movable):
+                 ^~~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:147:
+./mamba/checks/mamba_fixture.mojo:66:21: error: use of unknown declaration 'Copyable'
+struct MambaWeights(Copyable, Movable):
+                    ^~~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:152:
+./mamba/impl/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:152:
+./mamba/impl/transformers/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:152:
+./mamba/impl/transformers/models/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:152:
+./mamba/impl/transformers/models/mamba/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:3:1: error: unable to locate module 'std'
+"""`transformers/models/mamba/modeling_mamba.py`: ONE Mamba-1 block, on the
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:169:6: error: unable to locate module 'std'
+from std.sys.compile import is_defined
+     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:169:10: error: 'sys' does not refer to a nested package
+from std.sys.compile import is_defined
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:546:26: error: use of unknown declaration 'Movable'
+struct MambaDeviceStages(Movable):
+                         ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:522:25: error: use of unknown declaration 'Movable'
+struct MambaDeviceState(Movable):
+                        ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:480:27: error: use of unknown declaration 'Movable'
+struct MambaDeviceWeights(Movable):
+                          ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:170:6: error: unable to locate module 'max'
+from max.gpu.host import DeviceBuffer, DeviceContext
+     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:170:10: error: 'gpu' does not refer to a nested package
+from max.gpu.host import DeviceBuffer, DeviceContext
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:1438:5: error: unable to locate module 'std'
+    ctx: DeviceContext,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:1443:8: error: use of unknown declaration 'Int'
+    b: Int,
+       ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:1443:5: error: unable to locate module 'std'
+    b: Int,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:1444:8: error: use of unknown declaration 'Int'
+    l: Int,
+       ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:1444:5: error: unable to locate module 'std'
+    l: Int,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:1446:13: error: use of unknown declaration 'String'
+    prefix: String,
+            ^~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:1446:5: error: unable to locate module 'std'
+    prefix: String,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:1447:9: error: unable to locate module 'std'
+) raises:
+        ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:449:5: error: unable to locate module 'std'
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:449:66: error: use of unknown declaration 'Int'
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+                                                                 ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:449:63: error: unable to locate module 'std'
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+                                                              ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:450:13: error: use of unknown declaration 'List'
+) raises -> List[Float32]:
+            ^~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:450:13: error: unable to locate module 'std'
+) raises -> List[Float32]:
+            ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:428:5: error: unable to locate module 'std'
+    ctx: DeviceContext, values: List[Float32]
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:428:33: error: use of unknown declaration 'List'
+    ctx: DeviceContext, values: List[Float32]
+                                ^~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:428:25: error: unable to locate module 'std'
+    ctx: DeviceContext, values: List[Float32]
+                        ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:429:13: error: unable to locate module 'std'
+) raises -> DeviceBuffer[DType.float32]:
+            ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:162:
+./mamba/checks/mamba2_fixture.mojo:3:1: error: unable to locate module 'std'
+"""Hashed fixtures for the Mamba-2 (SSD) identity block, profile
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:153:
+./mamba/impl/transformers/models/mamba/modeling_mamba.mojo:429:13: error: 'std' is required for all normal mojo compiles.
+If you see this either:
+- Your mojo installation is broken and needs to be reinstalled or
+- You are a 'std' developer and are intentionally avoiding a pre-built 'std'
+) raises -> DeviceBuffer[DType.float32]:
+            ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:162:
+./mamba/checks/mamba2_fixture.mojo:74:26: error: unable to locate module 'std'
+comptime M2_CHUNK_SIZE = 256
+                         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:162:
+./mamba/checks/mamba2_fixture.mojo:66:22: error: unable to locate module 'std'
+comptime M2_D_CONV = 4
+                     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:162:
+./mamba/checks/mamba2_fixture.mojo:64:23: error: unable to locate module 'std'
+comptime M2_D_STATE = 128
+                      ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:162:
+./mamba/checks/mamba2_fixture.mojo:70:23: error: unable to locate module 'std'
+comptime M2_HEADDIM = 64
+                      ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:162:
+./mamba/checks/mamba2_fixture.mojo:83:19: error: use of unknown declaration 'Copyable'
+struct Mamba2Dims(Copyable, Movable):
+                  ^~~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:162:
+./mamba/checks/mamba2_fixture.mojo:116:22: error: use of unknown declaration 'Copyable'
+struct Mamba2Weights(Copyable, Movable):
+                     ^~~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:169:
+./mamba/impl/mamba_ssm/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:169:
+./mamba/impl/mamba_ssm/modules/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:3:1: error: unable to locate module 'std'
+"""`mamba_ssm/modules/mamba2.py::Mamba2.forward`, the non-mem-eff arm
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:63:6: error: unable to locate module 'std'
+from std.sys.compile import is_defined
+     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:63:10: error: 'sys' does not refer to a nested package
+from std.sys.compile import is_defined
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:244:27: error: use of unknown declaration 'Movable'
+struct Mamba2DeviceStages(Movable):
+                          ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:204:26: error: use of unknown declaration 'Movable'
+struct Mamba2DeviceState(Movable):
+                         ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:172:28: error: use of unknown declaration 'Movable'
+struct Mamba2DeviceWeights(Movable):
+                           ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:64:6: error: unable to locate module 'max'
+from max.gpu.host import DeviceBuffer, DeviceContext
+     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:64:10: error: 'gpu' does not refer to a nested package
+from max.gpu.host import DeviceBuffer, DeviceContext
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:831:5: error: unable to locate module 'std'
+    ctx: DeviceContext,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:836:8: error: use of unknown declaration 'Int'
+    b: Int,
+       ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:836:5: error: unable to locate module 'std'
+    b: Int,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:837:8: error: use of unknown declaration 'Int'
+    l: Int,
+       ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:837:5: error: unable to locate module 'std'
+    l: Int,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:838:12: error: use of unknown declaration 'Float32'
+    dt_lo: Float32,
+           ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:838:5: error: unable to locate module 'std'
+    dt_lo: Float32,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:839:12: error: use of unknown declaration 'Float32'
+    dt_hi: Float32,
+           ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:839:5: error: unable to locate module 'std'
+    dt_hi: Float32,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:841:13: error: use of unknown declaration 'String'
+    prefix: String,
+            ^~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:841:5: error: unable to locate module 'std'
+    prefix: String,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:170:
+./mamba/impl/mamba_ssm/modules/mamba2.mojo:842:9: error: unable to locate module 'std'
+) raises:
+        ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:177:
+./mamba/checks/mamba3_fixture.mojo:3:1: error: unable to locate module 'std'
+"""Hashed fixtures for the Mamba-3 (SISO) identity block, profile
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:177:
+./mamba/checks/mamba3_fixture.mojo:90:26: error: unable to locate module 'std'
+comptime M3_CHUNK_SIZE = 64
+                         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:177:
+./mamba/checks/mamba3_fixture.mojo:81:23: error: unable to locate module 'std'
+comptime M3_D_STATE = 128
+                      ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:177:
+./mamba/checks/mamba3_fixture.mojo:85:23: error: unable to locate module 'std'
+comptime M3_HEADDIM = 64
+                      ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:177:
+./mamba/checks/mamba3_fixture.mojo:94:31: error: unable to locate module 'std'
+comptime M3_NUM_ROPE_ANGLES = 32
+                              ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:177:
+./mamba/checks/mamba3_fixture.mojo:111:19: error: use of unknown declaration 'Copyable'
+struct Mamba3Dims(Copyable, Movable):
+                  ^~~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:177:
+./mamba/checks/mamba3_fixture.mojo:171:22: error: use of unknown declaration 'Copyable'
+struct Mamba3Weights(Copyable, Movable):
+                     ^~~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:3:1: error: unable to locate module 'std'
+"""`mamba_ssm/modules/mamba3.py::Mamba3.forward` (:160-278, SISO arm at
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:74:6: error: unable to locate module 'std'
+from std.sys.compile import is_defined
+     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:74:10: error: 'sys' does not refer to a nested package
+from std.sys.compile import is_defined
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:309:27: error: use of unknown declaration 'Movable'
+struct Mamba3DeviceStages(Movable):
+                          ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:210:26: error: use of unknown declaration 'Movable'
+struct Mamba3DeviceState(Movable):
+                         ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:178:28: error: use of unknown declaration 'Movable'
+struct Mamba3DeviceWeights(Movable):
+                           ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:75:6: error: unable to locate module 'max'
+from max.gpu.host import DeviceBuffer, DeviceContext
+     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:75:10: error: 'gpu' does not refer to a nested package
+from max.gpu.host import DeviceBuffer, DeviceContext
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:1072:5: error: unable to locate module 'std'
+    ctx: DeviceContext,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:1077:8: error: use of unknown declaration 'Int'
+    b: Int,
+       ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:1077:5: error: unable to locate module 'std'
+    b: Int,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:1078:8: error: use of unknown declaration 'Int'
+    l: Int,
+       ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:1078:5: error: unable to locate module 'std'
+    l: Int,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:1080:13: error: use of unknown declaration 'String'
+    prefix: String,
+            ^~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:1080:5: error: unable to locate module 'std'
+    prefix: String,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:185:
+./mamba/impl/mamba_ssm/modules/mamba3.mojo:1081:9: error: unable to locate module 'std'
+) raises:
+        ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:193:20: error: use of unknown declaration 'Int'
+def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+                   ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:193:14: error: unable to locate module 'std'
+def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+             ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:193:35: error: use of unknown declaration 'MutPointer'
+def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+                                  ^~~~~~~~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:193:35: error: unable to locate module 'std'
+def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+                                  ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:199:21: error: use of unknown declaration 'Int'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+                    ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:199:15: error: unable to locate module 'std'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+              ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:199:29: error: use of unknown declaration 'Int'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+                            ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:199:26: error: unable to locate module 'std'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+                         ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:199:44: error: use of unknown declaration 'List'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+                                           ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:199:44: error: unable to locate module 'std'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+                                           ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:210:22: error: use of unknown declaration 'Int'
+def _write_f32(addr: Int, values: List[Float32]) raises:
+                     ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:210:16: error: unable to locate module 'std'
+def _write_f32(addr: Int, values: List[Float32]) raises:
+               ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:210:35: error: use of unknown declaration 'List'
+def _write_f32(addr: Int, values: List[Float32]) raises:
+                                  ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:210:27: error: unable to locate module 'std'
+def _write_f32(addr: Int, values: List[Float32]) raises:
+                          ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:210:56: error: unable to locate module 'std'
+def _write_f32(addr: Int, values: List[Float32]) raises:
+                                                       ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:217:44: error: unable to locate module 'std'
+def mamba_numeric_mode_binding() raises -> PythonObject:
+                                           ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:226:38: error: unable to locate module 'std'
+def mamba_vendor_binding() raises -> PythonObject:
+                                     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:239:20: error: use of unknown declaration 'List'
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+                   ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:239:17: error: unable to locate module 'std'
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+                ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:239:34: error: use of unknown declaration 'Int'
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+                                 ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:239:31: error: unable to locate module 'std'
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+                              ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:239:42: error: use of unknown declaration 'Int'
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+                                         ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:239:39: error: unable to locate module 'std'
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+                                      ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:239:51: error: use of unknown declaration 'Int'
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+                                                  ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:239:47: error: unable to locate module 'std'
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+                                              ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:239:62: error: unable to locate module 'std'
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+                                                             ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:298:19: error: unable to locate module 'std'
+def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                  ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:298:46: error: use of unknown declaration 'String'
+def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                             ^~~~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:298:40: error: unable to locate module 'std'
+def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                       ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:298:64: error: use of unknown declaration 'List'
+def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                                               ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:298:64: error: unable to locate module 'std'
+def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                                               ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:315:5: error: unable to locate module 'std'
+    addrs: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:316:5: error: unable to locate module 'std'
+    params: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:317:13: error: unable to locate module 'std'
+) raises -> PythonObject:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:369:5: error: unable to locate module 'std'
+    addrs: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:370:5: error: unable to locate module 'std'
+    params: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:371:13: error: unable to locate module 'std'
+) raises -> PythonObject:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:401:8: error: use of unknown declaration 'List'
+    a: List[Int],
+       ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:401:5: error: unable to locate module 'std'
+    a: List[Int],
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:402:8: error: use of unknown declaration 'Int'
+    b: Int,
+       ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:402:5: error: unable to locate module 'std'
+    b: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:403:8: error: use of unknown declaration 'Int'
+    l: Int,
+       ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:403:5: error: unable to locate module 'std'
+    l: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:404:9: error: use of unknown declaration 'Int'
+    dm: Int,
+        ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:404:5: error: unable to locate module 'std'
+    dm: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:405:9: error: use of unknown declaration 'Int'
+    q0: Int,
+        ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:405:5: error: unable to locate module 'std'
+    q0: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:406:12: error: use of unknown declaration 'Float32'
+    dt_lo: Float32,
+           ^~~~~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:406:5: error: unable to locate module 'std'
+    dt_lo: Float32,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:407:12: error: use of unknown declaration 'Float32'
+    dt_hi: Float32,
+           ^~~~~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:407:5: error: unable to locate module 'std'
+    dt_hi: Float32,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:408:13: error: use of unknown declaration 'Int'
+) raises -> Int:
+            ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:408:13: error: unable to locate module 'std'
+) raises -> Int:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:495:19: error: unable to locate module 'std'
+def _mamba2_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                  ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:495:46: error: use of unknown declaration 'String'
+def _mamba2_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                             ^~~~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:495:40: error: unable to locate module 'std'
+def _mamba2_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                       ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:495:64: error: use of unknown declaration 'List'
+def _mamba2_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                                               ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:495:64: error: unable to locate module 'std'
+def _mamba2_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                                               ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:512:5: error: unable to locate module 'std'
+    addrs: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:513:5: error: unable to locate module 'std'
+    params: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:514:13: error: unable to locate module 'std'
+) raises -> PythonObject:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:584:5: error: unable to locate module 'std'
+    addrs: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:585:5: error: unable to locate module 'std'
+    params: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:586:13: error: unable to locate module 'std'
+) raises -> PythonObject:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:8: error: use of unknown declaration 'List'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+       ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:5: error: unable to locate module 'std'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:22: error: use of unknown declaration 'Int'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+                     ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:19: error: unable to locate module 'std'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+                  ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:30: error: use of unknown declaration 'Int'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+                             ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:27: error: unable to locate module 'std'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+                          ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:39: error: use of unknown declaration 'Int'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+                                      ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:35: error: unable to locate module 'std'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+                                  ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:48: error: use of unknown declaration 'Int'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+                                               ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:44: error: unable to locate module 'std'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+                                           ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:59: error: use of unknown declaration 'Int'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+                                                          ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:621:53: error: unable to locate module 'std'
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+                                                    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:622:13: error: use of unknown declaration 'Int'
+) raises -> Int:
+            ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:622:13: error: unable to locate module 'std'
+) raises -> Int:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:737:19: error: unable to locate module 'std'
+def _mamba3_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                  ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:737:46: error: use of unknown declaration 'String'
+def _mamba3_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                             ^~~~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:737:40: error: unable to locate module 'std'
+def _mamba3_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                       ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:737:64: error: use of unknown declaration 'List'
+def _mamba3_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                                               ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:737:64: error: unable to locate module 'std'
+def _mamba3_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                                               ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:756:5: error: unable to locate module 'std'
+    addrs: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:757:5: error: unable to locate module 'std'
+    params: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:758:13: error: unable to locate module 'std'
+) raises -> PythonObject:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:847:5: error: unable to locate module 'std'
+    addrs: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:848:5: error: unable to locate module 'std'
+    params: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:849:13: error: unable to locate module 'std'
+) raises -> PythonObject:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_mamba.mojo:878:43: error: unable to locate module 'std'
+def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
+                                          ^
+/root/mojolearn-frozen/.pixi/envs/gbmbench/bin/mojo: error: failed to parse the provided Mojo source module

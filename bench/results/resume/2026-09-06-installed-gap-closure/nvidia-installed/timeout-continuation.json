@@ -1,0 +1,11 @@
+{
+  "utc": "2026-09-06T10:14:29.062629+00:00",
+  "action": "Remove only redundant inner timeout process; leave unchanged candidate running",
+  "timeout_pid": 416,
+  "candidate_pid": 417,
+  "candidate_deadline_utc": "2026-09-06T10:30:00Z",
+  "on_pod_delete_deadline_utc": "2026-09-06T10:41:47Z",
+  "compiler_workers": 2,
+  "cpu_affinity": "0-3",
+  "reason": "Serial NVIDIA compilation needs more than inner35min; original60min deletion watchdog unchanged"
+}

@@ -1,0 +1,35 @@
+{
+  "scope": "Main-only lightweight follow-up checks; no new wheel/native qualification inferred",
+  "source_commit": "29a8c848",
+  "checks": [
+    {
+      "name": "gbdt_mode_serialization",
+      "passed": 6
+    },
+    {
+      "name": "ordered_python_boundary_after_mode_fix",
+      "passed": 30
+    },
+    {
+      "name": "macos_ordered_smoke_orchestration",
+      "passed": 5
+    },
+    {
+      "name": "linux_release_admission_and_retained_comparators",
+      "passed": 18
+    },
+    {
+      "name": "real_amd_single_vendor_candidate_refused_final_release",
+      "status": "PASS"
+    },
+    {
+      "name": "shell_syntax_and_source_whitespace",
+      "status": "PASS"
+    },
+    {
+      "name": "installed_lane_comparison_controls",
+      "passed": 5
+    }
+  ],
+  "native_mode_overlay": "NVIDIA passes all3modes with unchanged model/prediction bits; AMD/Apple pending"
+}

@@ -1,0 +1,5 @@
+pid 5782's current affinity list: 0-3
+pid 5782's new affinity list: 0-3
+Traceback (most recent call last):
+  File "<stdin>", line 40, in <module>
+AssertionError: RECORD does not cover whole archive

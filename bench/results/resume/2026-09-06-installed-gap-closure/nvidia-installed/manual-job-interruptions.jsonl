@@ -1,0 +1,3 @@
+{"utc": "2026-09-06T10:27:51.120729+00:00", "job": "transformer-fast", "pid": 5935, "signal": "SIGTERM", "reason": "Stalled over2minutes, idleGPU/futex wait; retain nonzero result and continue serial jobs within hardlease"}
+{"utc": "2026-09-06T10:29:02.154771+00:00", "job": "transformer-deterministic", "pid": 6185, "signal": "SIGTERM", "reason": "Repeated stalled job; preserve failure and complete remaining serial modes within lease"}
+{"utc": "2026-09-06T10:30:37.016067+00:00", "job": "transformer-identical", "pid": 6352, "signal": "SIGTERM", "reason": "Same stalled Transformer process in thirdmode; preserve nonzero result for fullcandidate"}

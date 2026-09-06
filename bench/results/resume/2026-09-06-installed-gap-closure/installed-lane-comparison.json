@@ -1,0 +1,523 @@
+{
+  "schema": "mojolearn.linux.installed-lane-comparison.v1",
+  "lane_status": "MATCH",
+  "overall_release_eligible": false,
+  "scope": "UMAP and numeric OrderedRMSE lane evidence only; full qualification/release admission remains separate",
+  "source_sha256": "ade965b90496132596d8dda79860a87f472193c14129093c5c3a72f273b8159f",
+  "umap_fixtures": [
+    "cubic128_interleaved64_64",
+    "cubic256_interleaved128_128_seed3",
+    "cubic256_interleaved128_128_seed41",
+    "saddle_grid128_cellcenters105_seed11",
+    "saddle_grid128_cellcenters105_seed29",
+    "saddle_grid64_cellcenters49"
+  ],
+  "umap_compared_arrays": 24,
+  "ordered_prediction_cells": 72,
+  "ordered_model_sha256": "934825a771807002ec0a9c6743c032fb1d7453060b847b85ddfcf8a8b4937c46",
+  "candidates": [
+    {
+      "vendor": "hip",
+      "wheel_sha256": "7c5f9af825cbcbd74a293adc75ad15670a30a179d3a9a8a8cfd993cd9476f7be",
+      "source_sha256": "ade965b90496132596d8dda79860a87f472193c14129093c5c3a72f273b8159f",
+      "qualification_sources_sha256": "edfc091c6db00c401324d04ead05c4eceaf82fb9d2c4e148a4754db66abb9c9c",
+      "candidate_status": {
+        "status": "FAILED",
+        "phase": "qualify",
+        "exit_code": 1,
+        "finished_utc": "2026-09-06T09:31:23.466177+00:00",
+        "scope": "Single-vendor installed candidate; not publication or cross-vendor identity"
+      },
+      "qualification_status": {
+        "schema": "mojolearn.linux.installed-surfaces.v1",
+        "status": "PASSED",
+        "vendor": "hip",
+        "wheel_sha256": "7c5f9af825cbcbd74a293adc75ad15670a30a179d3a9a8a8cfd993cd9476f7be",
+        "source_sha256": "ade965b90496132596d8dda79860a87f472193c14129093c5c3a72f273b8159f",
+        "installed_records": {
+          "arima-deterministic": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "arima-fast": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "arima-identical": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "mamba-deterministic": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "mamba-fast": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "mamba-identical": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "ordered-rmse-deterministic": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "ordered-rmse-fast": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "ordered-rmse-identical": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "smoke-deterministic": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "smoke-fast": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "smoke-identical": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "transformer-deterministic": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "transformer-fast": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "transformer-identical": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "umap-deterministic": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "umap-fast": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "umap-identical": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "umap-quality-deterministic": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "umap-quality-fast": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "umap-quality-identical": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "umap-transform-deterministic": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "umap-transform-fast": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "umap-transform-identical": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc"
+        },
+        "evidence_sha256": {
+          "arima-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "arima-deterministic.log": "3d50facd03e370f91f1a295ed1fc2379e54a3eec21a82ddab1229bdf9b3ccdff",
+          "arima-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "arima-fast.log": "ef6d374aff6b5f012f5211b9cf2ac5afd5fa98c4630337293863121287589662",
+          "arima-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "arima-identical.log": "6e519dbcc0a612b35692d498ab9bd0bfba79eaf485abcc007c6372ab8e7b767f",
+          "dependency-check.log": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09",
+          "install.log": "497cbce5c83c59d3053b16225e961b98d1838dfe283ab520c4869c86771fda30",
+          "installed-dependencies.txt": "840aa56b9e1a479fc9fd07fd1c9d38b9057287e3a10cb197308cbd594eca29c8",
+          "mamba-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "mamba-deterministic.log": "d29e16484833c75b6b02cd3a50b690b1024c209b81bbe48bd1f4aa52b7e23353",
+          "mamba-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "mamba-fast.log": "efc09d087780603af20e75d1e9694c3a9e543b08f524a597f84885e10e1f211e",
+          "mamba-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "mamba-identical.log": "6a1194926319fc18629b01fa6d08f26fe8edccb5c146015580a4d9703077adc8",
+          "ordered-rmse-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "ordered-rmse-deterministic.log": "1137776c8fe3c33e01f2cf89c32062a47474dab5feea83b39405f8f04b428f6d",
+          "ordered-rmse-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "ordered-rmse-fast.log": "309df09d251af65ee17bf670c348533173d41eb0b7581e42422f4c9accbed079",
+          "ordered-rmse-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "ordered-rmse-identical.log": "2ba50b0b57708c5ecdff5b33265a42bc99827e2d8f50bcbef05fb46796490027",
+          "qualification-sources.json": "edfc091c6db00c401324d04ead05c4eceaf82fb9d2c4e148a4754db66abb9c9c",
+          "results.tsv": "2e3dd439a0a37c9320117193d8ef71f47e1da5477db105825b57b27237e8e2e9",
+          "run_installed.py": "5f5bf473b9c76ab733ec594c9a2a4c7af26a164362428b2b7eb9191d87e4a69c",
+          "smoke-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "smoke-deterministic.json": "da9f4a27d7fc0db4d26e24ed2d5813e44c8d767a36ef1013dea934263b3f87ab",
+          "smoke-deterministic.log": "45c06793dbe0f529c09737d2c836abf9c202932e1a99d9ad3258e683cdaaae2f",
+          "smoke-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "smoke-fast.json": "b022dde39f8a499c6517b43fc10bcb62a3043890116a55dbbdd93639f8db4161",
+          "smoke-fast.log": "161b303c7a830cf5752ba68702da2f7686c4b96fb68ebee0524330cc9a736fcf",
+          "smoke-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "smoke-identical.json": "d35d9e33c5000aa3419b15f0c9ef395f1ab7bfd59a0912f352debf5fd5f512ba",
+          "smoke-identical.log": "f8e5544f50a4ca084e1701783db0d08b2ff532917a0bbbf5efe44d3cd4f4c50c",
+          "transformer-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "transformer-deterministic.log": "b4c3a61630811e1ebeb542989f58180e979af4314712bcde20dc1b1cf0e3edde",
+          "transformer-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "transformer-fast.log": "3a0a04127106af1fc9759d10494825dbbb44c74a23f826832f727b9d9b18e1a5",
+          "transformer-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "transformer-identical.log": "1e97786aa2ae91f3a6b08f0aab177d03cc8276fcff705af9fe0a3c7dc73536fc",
+          "umap-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "umap-deterministic.log": "dee8ee4736466e858f868f1de3acaf299767c5d21146fbc0f8f7719a91bcd132",
+          "umap-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "umap-fast.log": "dbfa2b08ce92305c93fbc98f03f907aaaf8ab149d7d9c1f5a3a563ce04056feb",
+          "umap-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "umap-identical.log": "d3504d6ddeb2a99e0c380c802e46ac9bc8394062bc1fb6ff4a5c187a60466c2c",
+          "umap-quality-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "umap-quality-deterministic.json": "60f3f949ba5a768e6370cd5fdd297cc698a4ac7a3377be2f4b1093bb98aaa453",
+          "umap-quality-deterministic.log": "7fc1cf04846dc8a4070e398b98aba32a5471f03d9f219eee084d4077bba01c9d",
+          "umap-quality-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "umap-quality-fast.json": "fcf5b45d5fba0f1bd009a1d8900f1f5a8a018268f127e9a3129acfe8eb0a6083",
+          "umap-quality-fast.log": "d9f81c976fae1dfad9beaaa8bcf2f17775522b1c1c3fe84772c64bcc108c622f",
+          "umap-quality-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "umap-quality-identical.json": "d2698a4ceb2ca733072322d4871a0c5d7469718eb98dc41005b6fe0d7eca5c5b",
+          "umap-quality-identical.log": "22692405c0177ffe8f03713fcf0a7b7a2d645f5912538955214ae2bfcbcb13f9",
+          "umap-transform-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+          "umap-transform-deterministic.log": "69ee811e6da0d854242751568550ba366adef7ba570717c3998e40168560ca30",
+          "umap-transform-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+          "umap-transform-fast.log": "2248f1c517171957ecaf9f24c8caafaa44b087c6ebd22aabadb9b74f4a3a40ef",
+          "umap-transform-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+          "umap-transform-identical.log": "7e51607a5e8a3851e81283fa2f35f4a40811b623935ef40146f3fca9f46197d1",
+          "wheel-audit.json": "6386d8b2a7f94433000399566d040ba1f3ee36caef3057e306704e8f4903bf52"
+        },
+        "scope": "24 installed jobs; UMAP six held-out quality fixtures per mode; not universal identity"
+      },
+      "qualification_exit_code": 0,
+      "installed_exit_rows": [
+        {
+          "surface": "smoke",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-transform",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-quality",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "ordered-rmse",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "mamba",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "transformer",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "arima",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "smoke",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-transform",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-quality",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "ordered-rmse",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "mamba",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "transformer",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "arima",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "smoke",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-transform",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-quality",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "ordered-rmse",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "mamba",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "transformer",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "arima",
+          "mode": "identical",
+          "exit_code": 0
+        }
+      ],
+      "retained_evidence_sha256": {
+        "arima-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+        "arima-deterministic.log": "3d50facd03e370f91f1a295ed1fc2379e54a3eec21a82ddab1229bdf9b3ccdff",
+        "arima-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+        "arima-fast.log": "ef6d374aff6b5f012f5211b9cf2ac5afd5fa98c4630337293863121287589662",
+        "arima-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+        "arima-identical.log": "6e519dbcc0a612b35692d498ab9bd0bfba79eaf485abcc007c6372ab8e7b767f",
+        "dependency-check.log": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09",
+        "exit_code": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "install.log": "497cbce5c83c59d3053b16225e961b98d1838dfe283ab520c4869c86771fda30",
+        "installed-dependencies.txt": "840aa56b9e1a479fc9fd07fd1c9d38b9057287e3a10cb197308cbd594eca29c8",
+        "mamba-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+        "mamba-deterministic.log": "d29e16484833c75b6b02cd3a50b690b1024c209b81bbe48bd1f4aa52b7e23353",
+        "mamba-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+        "mamba-fast.log": "efc09d087780603af20e75d1e9694c3a9e543b08f524a597f84885e10e1f211e",
+        "mamba-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+        "mamba-identical.log": "6a1194926319fc18629b01fa6d08f26fe8edccb5c146015580a4d9703077adc8",
+        "ordered-rmse-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+        "ordered-rmse-deterministic.log": "1137776c8fe3c33e01f2cf89c32062a47474dab5feea83b39405f8f04b428f6d",
+        "ordered-rmse-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+        "ordered-rmse-fast.log": "309df09d251af65ee17bf670c348533173d41eb0b7581e42422f4c9accbed079",
+        "ordered-rmse-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+        "ordered-rmse-identical.log": "2ba50b0b57708c5ecdff5b33265a42bc99827e2d8f50bcbef05fb46796490027",
+        "qualification-sources.json": "edfc091c6db00c401324d04ead05c4eceaf82fb9d2c4e148a4754db66abb9c9c",
+        "qualification.json": "cfc898edc2610598c87262282acf29e580e33408b3cafab139e8c35f9732285f",
+        "results.tsv": "2e3dd439a0a37c9320117193d8ef71f47e1da5477db105825b57b27237e8e2e9",
+        "run_installed.py": "5f5bf473b9c76ab733ec594c9a2a4c7af26a164362428b2b7eb9191d87e4a69c",
+        "smoke-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+        "smoke-deterministic.json": "da9f4a27d7fc0db4d26e24ed2d5813e44c8d767a36ef1013dea934263b3f87ab",
+        "smoke-deterministic.log": "45c06793dbe0f529c09737d2c836abf9c202932e1a99d9ad3258e683cdaaae2f",
+        "smoke-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+        "smoke-fast.json": "b022dde39f8a499c6517b43fc10bcb62a3043890116a55dbbdd93639f8db4161",
+        "smoke-fast.log": "161b303c7a830cf5752ba68702da2f7686c4b96fb68ebee0524330cc9a736fcf",
+        "smoke-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+        "smoke-identical.json": "d35d9e33c5000aa3419b15f0c9ef395f1ab7bfd59a0912f352debf5fd5f512ba",
+        "smoke-identical.log": "f8e5544f50a4ca084e1701783db0d08b2ff532917a0bbbf5efe44d3cd4f4c50c",
+        "transformer-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+        "transformer-deterministic.log": "b4c3a61630811e1ebeb542989f58180e979af4314712bcde20dc1b1cf0e3edde",
+        "transformer-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+        "transformer-fast.log": "3a0a04127106af1fc9759d10494825dbbb44c74a23f826832f727b9d9b18e1a5",
+        "transformer-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+        "transformer-identical.log": "1e97786aa2ae91f3a6b08f0aab177d03cc8276fcff705af9fe0a3c7dc73536fc",
+        "umap-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+        "umap-deterministic.log": "dee8ee4736466e858f868f1de3acaf299767c5d21146fbc0f8f7719a91bcd132",
+        "umap-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+        "umap-fast.log": "dbfa2b08ce92305c93fbc98f03f907aaaf8ab149d7d9c1f5a3a563ce04056feb",
+        "umap-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+        "umap-identical.log": "d3504d6ddeb2a99e0c380c802e46ac9bc8394062bc1fb6ff4a5c187a60466c2c",
+        "umap-quality-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+        "umap-quality-deterministic.json": "60f3f949ba5a768e6370cd5fdd297cc698a4ac7a3377be2f4b1093bb98aaa453",
+        "umap-quality-deterministic.log": "7fc1cf04846dc8a4070e398b98aba32a5471f03d9f219eee084d4077bba01c9d",
+        "umap-quality-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+        "umap-quality-fast.json": "fcf5b45d5fba0f1bd009a1d8900f1f5a8a018268f127e9a3129acfe8eb0a6083",
+        "umap-quality-fast.log": "d9f81c976fae1dfad9beaaa8bcf2f17775522b1c1c3fe84772c64bcc108c622f",
+        "umap-quality-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+        "umap-quality-identical.json": "d2698a4ceb2ca733072322d4871a0c5d7469718eb98dc41005b6fe0d7eca5c5b",
+        "umap-quality-identical.log": "22692405c0177ffe8f03713fcf0a7b7a2d645f5912538955214ae2bfcbcb13f9",
+        "umap-transform-deterministic.installed.json": "77c9eecd1c6b5b6e18a8626d00b955d277a436fbde030a62acd72566037e7856",
+        "umap-transform-deterministic.log": "69ee811e6da0d854242751568550ba366adef7ba570717c3998e40168560ca30",
+        "umap-transform-fast.installed.json": "e3a396fbe4954c6ef90f394887f679b9df39b0a4a8cf7ac12060e0171281eb0e",
+        "umap-transform-fast.log": "2248f1c517171957ecaf9f24c8caafaa44b087c6ebd22aabadb9b74f4a3a40ef",
+        "umap-transform-identical.installed.json": "a95dd53d074d31edc5af11929ec69fa90e427906cef6da5c5e1ac49aedb45bdc",
+        "umap-transform-identical.log": "7e51607a5e8a3851e81283fa2f35f4a40811b623935ef40146f3fca9f46197d1",
+        "wheel-audit.json": "6386d8b2a7f94433000399566d040ba1f3ee36caef3057e306704e8f4903bf52"
+      }
+    },
+    {
+      "vendor": "cuda",
+      "wheel_sha256": "805970b2bc44a002194cee66cbe378996f7e4a483aa3b6ca18a4f6da06060663",
+      "source_sha256": "ade965b90496132596d8dda79860a87f472193c14129093c5c3a72f273b8159f",
+      "qualification_sources_sha256": "edfc091c6db00c401324d04ead05c4eceaf82fb9d2c4e148a4754db66abb9c9c",
+      "candidate_status": {
+        "status": "FAILED",
+        "phase": "qualify",
+        "exit_code": 1,
+        "finished_utc": "2026-09-06T10:24:01.621616+00:00",
+        "scope": "Single-vendor installed candidate; not publication or cross-vendor identity"
+      },
+      "qualification_status": {
+        "status": "FAILED",
+        "reason": "Missing, duplicate or failed installed job"
+      },
+      "qualification_exit_code": 1,
+      "installed_exit_rows": [
+        {
+          "surface": "smoke",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-transform",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-quality",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "ordered-rmse",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "mamba",
+          "mode": "fast",
+          "exit_code": 1
+        },
+        {
+          "surface": "transformer",
+          "mode": "fast",
+          "exit_code": 143
+        },
+        {
+          "surface": "arima",
+          "mode": "fast",
+          "exit_code": 0
+        },
+        {
+          "surface": "smoke",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-transform",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-quality",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "ordered-rmse",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "mamba",
+          "mode": "deterministic",
+          "exit_code": 1
+        },
+        {
+          "surface": "transformer",
+          "mode": "deterministic",
+          "exit_code": 143
+        },
+        {
+          "surface": "arima",
+          "mode": "deterministic",
+          "exit_code": 0
+        },
+        {
+          "surface": "smoke",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-transform",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "umap-quality",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "ordered-rmse",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "mamba",
+          "mode": "identical",
+          "exit_code": 0
+        },
+        {
+          "surface": "transformer",
+          "mode": "identical",
+          "exit_code": 143
+        },
+        {
+          "surface": "arima",
+          "mode": "identical",
+          "exit_code": 0
+        }
+      ],
+      "retained_evidence_sha256": {
+        "arima-deterministic.installed.json": "a28fc9da1193b422eade0442072e87b83c92fc0924fcc4422ebca2259f4604c5",
+        "arima-deterministic.log": "7c33c06a68620279d20bb53439dfff06181ae5e04c0cdcbc92f45885da78d5ea",
+        "arima-fast.installed.json": "fd109f4dce8fe9393cac976c203d758b8c303d1a898542672e785d64036c0a0e",
+        "arima-fast.log": "a34fad2442c2b1138ee0c8e12dedb85a34c7ff001fe325f55ae27f441abd0ffe",
+        "arima-identical.installed.json": "791c597e14e2b66535f81e598ebab6f1f0b334880fbffd3268b38d3a0b078a05",
+        "arima-identical.log": "5a786e630d3dc5bb0b4a81024e6c6f18b05b14d78dd4aecc47d575122588e8c3",
+        "dependency-check.log": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09",
+        "exit_code": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+        "install.log": "1657d748b26eebb184c47a934e9d7a52ac741524052b6781a819506a5110cb2a",
+        "installed-dependencies.txt": "b4433592885e0e8899907cd9aff01c0baea510cedd7a9fb6a0d1a4b78cbda02d",
+        "mamba-deterministic.installed.json": "a28fc9da1193b422eade0442072e87b83c92fc0924fcc4422ebca2259f4604c5",
+        "mamba-deterministic.log": "67f88992ae198532be789a7359301b9c0f3754c59535f49601d448cfa954d526",
+        "mamba-fast.installed.json": "fd109f4dce8fe9393cac976c203d758b8c303d1a898542672e785d64036c0a0e",
+        "mamba-fast.log": "69938d55bcf4557dc500cd265a6ce9a972afb864a797c682a18484a376e90d17",
+        "mamba-identical.installed.json": "791c597e14e2b66535f81e598ebab6f1f0b334880fbffd3268b38d3a0b078a05",
+        "mamba-identical.log": "16401b258bcbc128b03c19f6a67bc90b8cba6663a6540a7370c151b314a61536",
+        "ordered-rmse-deterministic.installed.json": "a28fc9da1193b422eade0442072e87b83c92fc0924fcc4422ebca2259f4604c5",
+        "ordered-rmse-deterministic.log": "2bcf5ae3a7122690642b8db2c2fde9f71324a02429cae1a506c79c2d84d5971a",
+        "ordered-rmse-fast.installed.json": "fd109f4dce8fe9393cac976c203d758b8c303d1a898542672e785d64036c0a0e",
+        "ordered-rmse-fast.log": "ad442c2baa47973c2dffe635785dec922fb7a78b024775f87a89bc66be3242a0",
+        "ordered-rmse-identical.installed.json": "791c597e14e2b66535f81e598ebab6f1f0b334880fbffd3268b38d3a0b078a05",
+        "ordered-rmse-identical.log": "5ae97ff0f88e4d5cc673af71ecbd73f6250c5f001448a3fd0e01496bae11954c",
+        "qualification-sources.json": "edfc091c6db00c401324d04ead05c4eceaf82fb9d2c4e148a4754db66abb9c9c",
+        "qualification.json": "d0804a7d1d60f9270333dce6fc7194303e9186c289988ebc5319d07623ee1ecc",
+        "results.tsv": "d089e9547651d9a3fae74e56eb4a079e29f3847c6b444bf5514c2952c426f150",
+        "run_installed.py": "5f5bf473b9c76ab733ec594c9a2a4c7af26a164362428b2b7eb9191d87e4a69c",
+        "smoke-deterministic.installed.json": "a28fc9da1193b422eade0442072e87b83c92fc0924fcc4422ebca2259f4604c5",
+        "smoke-deterministic.json": "a7acf26f5cebfdfea9cac536522e4e6e9035842ce09383fe167e1e61b1f452b7",
+        "smoke-deterministic.log": "fb351281a158c30c8ab396d8e80b54792b127d8ae4512f95b51829f0222371c3",
+        "smoke-fast.installed.json": "fd109f4dce8fe9393cac976c203d758b8c303d1a898542672e785d64036c0a0e",
+        "smoke-fast.json": "4037a71bf33cdcee3746f5319cda5a009e4f7041b799d1d167052d3ecdd1818e",
+        "smoke-fast.log": "bcf5ea448bc9a5d2625033a76656414facba1c1c4b690ef0511de84c252b4b9b",
+        "smoke-identical.installed.json": "791c597e14e2b66535f81e598ebab6f1f0b334880fbffd3268b38d3a0b078a05",
+        "smoke-identical.json": "84afb424a2dc9533fd2c769553765692d6e47ad10ec0a58c3e18cb95308826f0",
+        "smoke-identical.log": "0ca6732649360f115f1e727fd1d81bc75eb933d8dc17e2813cfdc445d82cc406",
+        "transformer-deterministic.installed.json": "a28fc9da1193b422eade0442072e87b83c92fc0924fcc4422ebca2259f4604c5",
+        "transformer-deterministic.log": "33c62d059a8e8f1876a54d4849467ca0fc50969482e3b9ffe5c1858fef2e2c89",
+        "transformer-fast.installed.json": "fd109f4dce8fe9393cac976c203d758b8c303d1a898542672e785d64036c0a0e",
+        "transformer-fast.log": "4745e0d1f94a77a9befd1461e107119122348480ea60777e9dfe10e1a0028212",
+        "transformer-identical.installed.json": "791c597e14e2b66535f81e598ebab6f1f0b334880fbffd3268b38d3a0b078a05",
+        "transformer-identical.log": "2cef216706d69dc0e6e05e361e52a55e35363c18617edd50155bcb95713462eb",
+        "umap-deterministic.installed.json": "a28fc9da1193b422eade0442072e87b83c92fc0924fcc4422ebca2259f4604c5",
+        "umap-deterministic.log": "85b0e3fec6f023ec3e595c4f3560d42dffa872246d1fd89464f3d2a629ed18cb",
+        "umap-fast.installed.json": "fd109f4dce8fe9393cac976c203d758b8c303d1a898542672e785d64036c0a0e",
+        "umap-fast.log": "97fc942d227dfcfd0d01bae2ce922afb8616d1b04ddf5d1974450861eca9c359",
+        "umap-identical.installed.json": "791c597e14e2b66535f81e598ebab6f1f0b334880fbffd3268b38d3a0b078a05",
+        "umap-identical.log": "895cb7a713e62a49b9995794f0e115ee1018109f6da28af1220f68983c71ad11",
+        "umap-quality-deterministic.installed.json": "a28fc9da1193b422eade0442072e87b83c92fc0924fcc4422ebca2259f4604c5",
+        "umap-quality-deterministic.json": "feab8f8c2e47dfe9fb287a3699be502a5a69f25cd156b13c8d10837b05e159f3",
+        "umap-quality-deterministic.log": "5297e26263f60b5fcb56843138dc01b60de104c200bc1482139400578a2d4693",
+        "umap-quality-fast.installed.json": "fd109f4dce8fe9393cac976c203d758b8c303d1a898542672e785d64036c0a0e",
+        "umap-quality-fast.json": "60db6f5ccaff510cdf7763bc90421c424a9e5be1c4ddfa3cbd63afcf0ee0ce1c",
+        "umap-quality-fast.log": "94485a69747b127fafc950824f2dae3a224a8a18293fa7d3a99138f399b8e81d",
+        "umap-quality-identical.installed.json": "791c597e14e2b66535f81e598ebab6f1f0b334880fbffd3268b38d3a0b078a05",
+        "umap-quality-identical.json": "469c68f563666889947f4576757c1b29f595c20dbfe2b348eec529ab323b674d",
+        "umap-quality-identical.log": "d64d5beb0b5de5e579a7cfdfc5e64eeffbbf0638eb5de31a32caf24e1bde9656",
+        "umap-transform-deterministic.installed.json": "a28fc9da1193b422eade0442072e87b83c92fc0924fcc4422ebca2259f4604c5",
+        "umap-transform-deterministic.log": "6dd2b6abd23bb7c6a3e090bb9456ff0886fe0ce05678abe3d3fe6fe29f46e580",
+        "umap-transform-fast.installed.json": "fd109f4dce8fe9393cac976c203d758b8c303d1a898542672e785d64036c0a0e",
+        "umap-transform-fast.log": "aebc9fd56152911dc4f3955065b7d78d313275eb3046e475a014c36686cf6369",
+        "umap-transform-identical.installed.json": "791c597e14e2b66535f81e598ebab6f1f0b334880fbffd3268b38d3a0b078a05",
+        "umap-transform-identical.log": "4ff4944d3ea84c95a571a55a03b40a0b33e88837b7e6897f80c14beb94d8fb03",
+        "wheel-audit.json": "96c609d245a121685cb95193cba5e9cfde12185c53332d02309f2b451a4388f1"
+      }
+    }
+  ]
+}

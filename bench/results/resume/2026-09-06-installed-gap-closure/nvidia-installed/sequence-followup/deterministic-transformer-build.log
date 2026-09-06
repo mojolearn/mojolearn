@@ -1,0 +1,383 @@
+Failed to initialize Crashpad.  Crash reporting will not be available.  Cause: while locating crashpad handler: unable to locate crashpad handler executable
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:3:1: error: unable to locate module 'std'
+"""CPython boundary for the transformer (Llama-shaped decoder) block lane.
+^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:3:1: error: 'std' is required for all normal mojo compiles.
+If you see this either:
+- Your mojo installation is broken and needs to be reinstalled or
+- You are a 'std' developer and are intentionally avoiding a pre-built 'std'
+"""CPython boundary for the transformer (Llama-shaped decoder) block lane.
+^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:120:6: error: unable to locate module 'std'
+from std.os import abort
+     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:121:6: error: unable to locate module 'std'
+from std.python import Python, PythonObject
+     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:122:6: error: unable to locate module 'std'
+from std.python._cpython import GILReleased
+     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:122:10: error: 'python' does not refer to a nested package
+from std.python._cpython import GILReleased
+         ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:123:6: error: unable to locate module 'std'
+from std.python.bindings import PythonModuleBuilder
+     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:123:10: error: 'python' does not refer to a nested package
+from std.python.bindings import PythonModuleBuilder
+         ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:125:6: error: unable to locate module 'max'
+from max.gpu.host import DeviceContext
+     ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:125:10: error: 'gpu' does not refer to a nested package
+from max.gpu.host import DeviceContext
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:127:
+./core/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:127:
+./core/identity_trace.mojo:3:1: error: unable to locate module 'std'
+"""Stage hashes, so a cross-backend difference has an ADDRESS.
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:127:
+./core/identity_trace.mojo:165:22: error: use of unknown declaration 'Movable'
+struct IdentityTrace(Movable):
+                     ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:128:
+./checks/__init__.mojo:3:1: error: unable to locate module 'std'
+"""Files with NO CatBoost counterpart. Everything under catboost/ is a port; everything here is ours and must justify itself."""
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:128:
+./checks/numerics.mojo:3:1: error: unable to locate module 'std'
+"""What may vary between backends, and what may not."""
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:128:
+./checks/numerics.mojo:5:6: error: unable to locate module 'std'
+from std.sys.compile import is_defined
+     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:128:
+./checks/numerics.mojo:5:10: error: 'sys' does not refer to a nested package
+from std.sys.compile import is_defined
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:129:
+./checks/vendor.mojo:3:1: error: unable to locate module 'std'
+"""Which accelerator API this binary was COMPILED for, as a constant.
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:128:
+./checks/numerics.mojo:5:10: error: 'std' is required for all normal mojo compiles.
+If you see this either:
+- Your mojo installation is broken and needs to be reinstalled or
+- You are a 'std' developer and are intentionally avoiding a pre-built 'std'
+from std.sys.compile import is_defined
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:129:
+./checks/vendor.mojo:58:27: error: use of unknown declaration 'StaticString'
+comptime COMPILED_VENDOR: StaticString = (
+                          ^~~~~~~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:137:
+./transformer/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:137:
+./transformer/checks/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:137:
+./transformer/checks/transformer_fixture.mojo:3:1: error: unable to locate module 'std'
+"""Hashed fixtures and adversarial bit plants for the IDENTICAL Transformer gate."""
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:137:
+./transformer/checks/transformer_fixture.mojo:17:19: error: use of unknown declaration 'Float32'
+comptime RMS_EPS: Float32 = 1e-6
+                  ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:137:
+./transformer/checks/transformer_fixture.mojo:20:22: error: use of unknown declaration 'Float32'
+comptime ROPE_THETA: Float32 = 10000.0
+                     ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:141:
+./transformer/impl/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:141:
+./transformer/impl/transformers/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:141:
+./transformer/impl/transformers/models/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:141:
+./transformer/impl/transformers/models/llama/__init__.mojo:3:1: error: unable to locate module 'std'
+
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3:1: error: unable to locate module 'std'
+"""`transformers/models/llama/modeling_llama.py`: ONE Llama-shaped decoder
+^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:275:6: error: unable to locate module 'std'
+from std.sys.compile import is_defined
+     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:275:10: error: 'sys' does not refer to a nested package
+from std.sys.compile import is_defined
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:1017:26: error: use of unknown declaration 'Movable'
+struct LlamaDeviceStages(Movable):
+                         ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:856:27: error: use of unknown declaration 'Movable'
+struct LlamaDeviceWeights(Movable):
+                          ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:771:18: error: use of unknown declaration 'Copyable'
+struct LlamaDims(Copyable, Movable):
+                 ^~~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:962:21: error: use of unknown declaration 'Movable'
+struct LlamaKVCache(Movable):
+                    ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:1358:23: error: use of unknown declaration 'Movable'
+struct LlamaRopeTable(Movable):
+                      ^~~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:276:6: error: unable to locate module 'max'
+from max.gpu.host import DeviceBuffer, DeviceContext
+     ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:276:10: error: 'gpu' does not refer to a nested package
+from max.gpu.host import DeviceBuffer, DeviceContext
+         ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:669:5: error: unable to locate module 'std'
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:669:66: error: use of unknown declaration 'Int'
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+                                                                 ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:669:63: error: unable to locate module 'std'
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+                                                              ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:670:13: error: use of unknown declaration 'List'
+) raises -> List[Float32]:
+            ^~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:670:13: error: unable to locate module 'std'
+) raises -> List[Float32]:
+            ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:648:5: error: unable to locate module 'std'
+    ctx: DeviceContext, values: List[Float32]
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:648:33: error: use of unknown declaration 'List'
+    ctx: DeviceContext, values: List[Float32]
+                                ^~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:648:25: error: unable to locate module 'std'
+    ctx: DeviceContext, values: List[Float32]
+                        ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:649:13: error: unable to locate module 'std'
+) raises -> DeviceBuffer[DType.float32]:
+            ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3174:5: error: unable to locate module 'std'
+    ctx: DeviceContext,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3180:8: error: use of unknown declaration 'Int'
+    b: Int,
+       ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3180:5: error: unable to locate module 'std'
+    b: Int,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3181:8: error: use of unknown declaration 'Int'
+    l: Int,
+       ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3181:5: error: unable to locate module 'std'
+    l: Int,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3182:11: error: use of unknown declaration 'Int'
+    pos0: Int,
+          ^~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3182:5: error: unable to locate module 'std'
+    pos0: Int,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3184:13: error: use of unknown declaration 'String'
+    prefix: String,
+            ^~~~~~
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3184:5: error: unable to locate module 'std'
+    prefix: String,
+    ^
+Imported from /root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:142:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:3185:9: error: unable to locate module 'std'
+) raises:
+        ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:154:20: error: use of unknown declaration 'Int'
+def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+                   ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:154:14: error: unable to locate module 'std'
+def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+             ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:154:35: error: use of unknown declaration 'MutPointer'
+def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+                                  ^~~~~~~~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:154:35: error: unable to locate module 'std'
+def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+                                  ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:160:21: error: use of unknown declaration 'Int'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+                    ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:160:15: error: unable to locate module 'std'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+              ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:160:29: error: use of unknown declaration 'Int'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+                            ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:160:26: error: unable to locate module 'std'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+                         ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:160:44: error: use of unknown declaration 'List'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+                                           ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:160:44: error: unable to locate module 'std'
+def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
+                                           ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:171:22: error: use of unknown declaration 'Int'
+def _write_f32(addr: Int, values: List[Float32]) raises:
+                     ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:171:16: error: unable to locate module 'std'
+def _write_f32(addr: Int, values: List[Float32]) raises:
+               ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:171:35: error: use of unknown declaration 'List'
+def _write_f32(addr: Int, values: List[Float32]) raises:
+                                  ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:171:27: error: unable to locate module 'std'
+def _write_f32(addr: Int, values: List[Float32]) raises:
+                          ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:171:56: error: unable to locate module 'std'
+def _write_f32(addr: Int, values: List[Float32]) raises:
+                                                       ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:178:50: error: unable to locate module 'std'
+def transformer_numeric_mode_binding() raises -> PythonObject:
+                                                 ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:187:44: error: unable to locate module 'std'
+def transformer_vendor_binding() raises -> PythonObject:
+                                           ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:201:8: error: use of unknown declaration 'List'
+    a: List[Int],
+       ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:201:5: error: unable to locate module 'std'
+    a: List[Int],
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:202:8: error: use of unknown declaration 'Int'
+    b: Int,
+       ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:202:5: error: unable to locate module 'std'
+    b: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:203:8: error: use of unknown declaration 'Int'
+    l: Int,
+       ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:203:5: error: unable to locate module 'std'
+    l: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:204:9: error: use of unknown declaration 'Int'
+    dm: Int,
+        ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:204:5: error: unable to locate module 'std'
+    dm: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:205:9: error: use of unknown declaration 'Int'
+    nh: Int,
+        ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:205:5: error: unable to locate module 'std'
+    nh: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:206:10: error: use of unknown declaration 'Int'
+    nkv: Int,
+         ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:206:5: error: unable to locate module 'std'
+    nkv: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:207:9: error: use of unknown declaration 'Int'
+    hd: Int,
+        ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:207:5: error: unable to locate module 'std'
+    hd: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:208:9: error: use of unknown declaration 'Int'
+    it: Int,
+        ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:208:5: error: unable to locate module 'std'
+    it: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:209:11: error: use of unknown declaration 'Int'
+    smax: Int,
+          ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:209:5: error: unable to locate module 'std'
+    smax: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:210:9: error: use of unknown declaration 'Int'
+    s0: Int,
+        ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:210:5: error: unable to locate module 'std'
+    s0: Int,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:211:13: error: use of unknown declaration 'Int'
+) raises -> Int:
+            ^~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:211:13: error: unable to locate module 'std'
+) raises -> Int:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:304:24: error: unable to locate module 'std'
+def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                       ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:304:51: error: use of unknown declaration 'String'
+def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                                  ^~~~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:304:45: error: unable to locate module 'std'
+def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:304:69: error: use of unknown declaration 'List'
+def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                                                    ^~~~
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:304:69: error: unable to locate module 'std'
+def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+                                                                    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:322:5: error: unable to locate module 'std'
+    addrs: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:323:5: error: unable to locate module 'std'
+    params: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:324:13: error: unable to locate module 'std'
+) raises -> PythonObject:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:403:5: error: unable to locate module 'std'
+    addrs: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:404:5: error: unable to locate module 'std'
+    params: PythonObject,
+    ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:405:13: error: unable to locate module 'std'
+) raises -> PythonObject:
+            ^
+/root/mojolearn-sequence-followup/bindings/_mojolearn_transformer.mojo:440:49: error: unable to locate module 'std'
+def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
+                                                ^
+/root/mojolearn-frozen/.pixi/envs/gbmbench/bin/mojo: error: failed to parse the provided Mojo source module
