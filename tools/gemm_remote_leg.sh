@@ -2634,7 +2634,7 @@ if [ "@NVIDIACAMPAIGN@" = 6 ]; then
         compact_rc=$?
     fi
     echo "byte_lm_resume_exit=$compact_rc" >> "$OUT/leg.txt"
-    echo "scope=compact diagnostic only; final local all-raw comparison mandatory" >> "$OUT/leg.txt"
+    echo "scope=compact diagnostic only; final root raw-file comparison mandatory" >> "$OUT/leg.txt"
     : > /root/gemm_leg.done
     echo REMOTE_BODY_DONE
     exit "$compact_rc"
