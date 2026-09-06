@@ -1,5 +1,0 @@
-{
-  "tools/qualify_umap_wheel.py": "cb240a8c84a953a8cb34cfe532e5b3f8a88f6c0964a05bed7cb741a430526431",
-  ".github/workflows/release-provenance.yml": "34d42af1a9e876366aff66dd08a0c3f1643e5fd5d1d4049ad221fe734d94c833",
-  "tools/test_release_qualification_command.py": "c7db7ae3b1a4a671f0d120d737a4d78b832deb79fa1ab5be4320900ddc9729a2"
-}

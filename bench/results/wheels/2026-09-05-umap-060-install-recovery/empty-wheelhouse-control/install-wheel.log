@@ -1,5 +1,0 @@
-Looking in links: /private/tmp/mojolearn-empty-dependency-wheelhouse
-Processing /Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/dist/mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl
-INFO: pip is looking at multiple versions of mojolearn to determine which version is compatible with other requirements. This could take a while.
-ERROR: Could not find a version that satisfies the requirement numpy>=1.24 (from mojolearn) (from versions: none)
-ERROR: No matching distribution found for numpy>=1.24

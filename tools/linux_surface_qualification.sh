@@ -11,17 +11,17 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ACTION=${1:?build or qualify}
 shift
 PY=${MOJOLEARN_QUALIFY_PYTHON:-python3}
-export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 NUMEXPR_NUM_THREADS=2
-export MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2 MOJOLEARN_CPU_THREADS=2
-cores=$("$PY" -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2 MOJOLEARN_CPU_THREADS=2
+cores=$("$PY" -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:4])))')
 taskset -pc "$cores" $$
 if [[ "$ACTION" = build || "$ACTION" = build-tier ]]; then
     DEST=${1:?artifact directory}
     mkdir -p "$DEST"
     DEST=$(cd "$DEST" && pwd)
     cd "$ROOT"
-    # build_sets only distinguishes <=1 versus >1; setting2 launches THREE
-    # tier jobs. Use1 for one compiler at a time, all45 outputs required.
+    # One compiler at a time; all 45 outputs are required for a full build.
+    [[ -z $(ls -A "$DEST") ]] || { echo 'Refusing reused build directory'; exit 2; }
     export MOJOLEARN_BUILD_JOBS=1
     unset MOJOLEARN_BUILD_SCRIPTS MOJOLEARN_BUILD_TIERS
     if [[ "$ACTION" = build-tier ]]; then
@@ -38,7 +38,7 @@ if [[ "$ACTION" = build || "$ACTION" = build-tier ]]; then
         echo "source_commit=$commit"
         echo 'expected_bindings_per_tier=15'
         echo "expected_tiers=${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
-        echo 'build_jobs=1 cpu_affinity=2'
+        echo 'build_jobs=1 cpu_affinity_max=4 compiler_jobs=2 blas_threads=1'
         echo "artifact=$ACTION vendor set; not a wheel or publication"
     } > "$DEST/source-provenance.txt"
     command -v objdump >/dev/null || { echo 'objdump required for CPU ISA qualification'; exit 2; }
@@ -74,6 +74,7 @@ record = dict(schema='mojolearn.linux.build-provenance.v1', source_commit=commit
               extensions=outputs, complete=(status == 0 and action == 'build' and len(outputs) == 45))
 (out / 'build-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
 assert status == 0, 'Build/staging failed; retained provenance is not admissible'
+assert len(outputs) == (45 if action == 'build' else 15), 'Incomplete build outputs'
 PYBUILT
     exit "$status"
 fi
@@ -84,7 +85,10 @@ PROVENANCE=${5:?build-provenance.json from the complete vendor build}
 WHEEL=$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")
 mkdir -p "$DEST"
 DEST=$(cd "$DEST" && pwd)
-[[ ! -e "$DEST/venv" ]] || { echo 'Refusing reused qualification venv'; exit 2; }
+[[ -z $(ls -A "$DEST") ]] || { echo 'Refusing nonempty qualification directory'; exit 2; }
+# An interrupted/preflight-failed run must never leave a successful marker.
+printf '1\n' > "$DEST/exit_code"
+"$PY" "$ROOT/tools/verify_linux_surface_qualification.py" snapshot "$ROOT" "$DEST"
 
 # Do not call a three-extension probe a complete vendor artifact.
 # Audit every RECORD hash and require each embedded architecture to have all
@@ -102,6 +106,7 @@ names = {'_mojolearn', '_mojolearn_gbdt', '_mojolearn_estimators', '_mojolearn_r
          '_mojolearn_tsa', '_mojolearn_linalg', '_mojolearn_arima', '_mojolearn_training',
          '_mojolearn_gp', '_mojolearn_mamba', '_mojolearn_transformer'}
 sets = {}
+extension_hashes = {}
 proof_path = pathlib.Path(provenance)
 proof = json.loads(proof_path.read_text())
 assert proof.get('schema') == 'mojolearn.linux.build-provenance.v1' and proof.get('complete') is True
@@ -134,6 +139,7 @@ with zipfile.ZipFile(wheel) as z:
         match = re.fullmatch(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so', p)
         if match:
             vendor, arch, mode, extension = match.groups()
+            extension_hashes[p.removeprefix('mojolearn/')] = hashlib.sha256(z.read(p)).hexdigest()
             if vendor == required_vendor:
                 assert p in proof['extensions'], ('Unproven extension', p)
                 assert hashlib.sha256(z.read(p)).hexdigest() == proof['extensions'][p], ('Built/wheel binary differs', p)
@@ -154,6 +160,7 @@ print(json.dumps({'sha256': expected, 'wheel': str(wheel),
                   'qualification_vendor': required_vendor,
                   'build_provenance_sha256': hashlib.sha256(proof_path.read_bytes()).hexdigest(),
                   'source_sha256': proof['source_sha256'],
+                  'extension_hashes': extension_hashes,
                   'sets': {'/'.join(k): len(v) for k, v in sorted(sets.items())}}, indent=2))
 PYAUDIT
 
@@ -161,11 +168,13 @@ timeout -k 10 60 "$PY" -m venv "$DEST/venv"
 VPY="$DEST/venv/bin/python"
 timeout -k 10 180 "$VPY" -m pip install --disable-pip-version-check --only-binary=:all: \
     "$WHEEL" > "$DEST/install.log" 2>&1
+"$VPY" -m pip check > "$DEST/dependency-check.log" 2>&1
 "$VPY" -m pip freeze > "$DEST/installed-dependencies.txt"
 
 cat > "$DEST/run_installed.py" <<'PYRUN'
 import hashlib, json, os, pathlib, runpy, sys
 import mojolearn
+audit = json.loads(pathlib.Path(os.environ['MOJOLEARN_WHEEL_AUDIT']).read_text())
 installed = pathlib.Path(mojolearn.__file__).resolve()
 assert installed.is_relative_to(pathlib.Path(sys.prefix).resolve()), ('Checkout shadowing', installed)
 assert 'site-packages' in installed.parts
@@ -188,29 +197,45 @@ for name in sorted(all_bindings):
     assert path.is_relative_to(installed.parent), ('Noninstalled extension', path)
     assert _backend.read_vendor(binding) == os.environ['MOJOLEARN_EXPECT_VENDOR']
     row = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+    member = path.relative_to(installed.parent).as_posix()
+    assert audit['extension_hashes'].get(member) == row['sha256'], ('Installed binary differs from wheel', member)
     if name in getters:
         row['mode_code'] = int(getattr(binding, getters[name])())
         assert row['mode_code'] == {'fast': 0, 'identical': 1, 'deterministic': 2}[os.environ['MOJOLEARN_NUMERIC_MODE']]
     else:
         row['mode_readback'] = 'unavailable; build provenance and functional gate required'
     readback[name] = row
-print(json.dumps({'installed_bindings': readback}), flush=True)
+record = {'package': str(installed), 'version': mojolearn.__version__,
+          'vendor': mojolearn.vendor(), 'mode': mojolearn.numeric_mode(),
+          'wheel_sha256': audit['sha256'], 'installed_bindings': readback}
+pathlib.Path(os.environ['MOJOLEARN_INSTALLED_RECORD']).write_text(json.dumps(record, indent=2) + '\n')
+print(json.dumps(record), flush=True)
 target = sys.argv[1]
 sys.argv = sys.argv[1:]
 runpy.run_path(target, run_name='__main__')
 PYRUN
 rc=0
 : > "$DEST/results.tsv"
-unset PYTHONPATH MOJOLEARN_ARIMA_GATE_QUICK MOJOLEARN_ARIMA_GATE_N_OBS
-export PYTHONNOUSERSITE=1 MOJOLEARN_EXPECT_VENDOR="$VENDOR" MOJOLEARN_REPO="$ROOT"
+unset PYTHONPATH PYTHONHOME MOJOLEARN_VENDOR MOJOLEARN_ARIMA_GATE_QUICK MOJOLEARN_ARIMA_GATE_N_OBS
+export MOJOLEARN_WHEEL_AUDIT="$DEST/wheel-audit.json"
+export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 MOJOLEARN_EXPECT_VENDOR="$VENDOR" MOJOLEARN_REPO="$ROOT"
 cd "$DEST"
 for mode in fast deterministic identical; do
     export MOJOLEARN_NUMERIC_MODE="$mode"
-    for surface in smoke umap mamba transformer arima; do
+    for surface in smoke umap umap-transform umap-quality ordered-rmse mamba transformer arima; do
+        export MOJOLEARN_INSTALLED_RECORD="$DEST/$surface-$mode.installed.json"
         args=()
         if [[ "$surface" = smoke ]]; then
             test="$ROOT/packaging/linux/smoke.py"
             args=(--vendor "$VENDOR" --json "$DEST/smoke-$mode.json")
+        elif [[ "$surface" = ordered-rmse ]]; then
+            test="$ROOT/tools/ordered_rmse_surface_check.py"
+        elif [[ "$surface" = umap-transform ]]; then
+            test="$ROOT/python/mojolearn/tests/test_umap_transform.py"
+        elif [[ "$surface" = umap-quality ]]; then
+            test="$ROOT/tools/umap_transform_quality_check.py"
+            args=(--mode "$mode" --device "${MOJOLEARN_QUALIFY_DEVICE:-$VENDOR}" --profile expanded
+                  --source-root "$ROOT" --output "$DEST/$surface-$mode.json")
         else
             test="$ROOT/python/mojolearn/tests/test_${surface}_surface.py"
         fi
@@ -221,5 +246,6 @@ for mode in fast deterministic identical; do
         [[ "$status" = 0 ]] || rc=1
     done
 done
+"$PY" "$ROOT/tools/verify_linux_surface_qualification.py" verify "$ROOT" "$DEST" || rc=1
 printf '%s\n' "$rc" > "$DEST/exit_code"
 exit "$rc"

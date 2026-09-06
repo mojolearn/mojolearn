@@ -7,6 +7,11 @@ set -o pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 STAMP=$(date -u +%Y-%m-%d_%H%M%S)
 VENDOR=${MOJOLEARN_MAMBA_CERT_VENDOR:-nvidia}
+PROFILE=${MOJOLEARN_MAMBA_CERT_PROFILE:-baseline-v1}
+case "$PROFILE" in
+    baseline-v1|long-sequence-v1) ;;
+    *) echo "MAMBA-BACKWARD-CERT REFUSED: unsupported profile '$PROFILE'" >&2; exit 2 ;;
+esac
 case "$VENDOR" in
     apple|nvidia|amd) ;;
     *)
@@ -71,6 +76,7 @@ SOURCE_SHA=$(python "$ROOT/tools/mamba_backward_identity.py" source "$ROOT") || 
     echo "host=$(hostname)"
     echo "kernel=$(uname -srm)"
     echo "mode=IDENTICAL"
+    echo "profile=$PROFILE"
     echo "vendor=$VENDOR"
     echo "mode_injector=tools/with_identical_mode.sh"
     echo "commit=$COMMIT"
@@ -110,6 +116,21 @@ run_family() {
         "$actual" "$oracle" "$family_out/native" "$SOURCE_SHA" \
         > "$family_out/capture.log" 2>&1
     capture_rc=$?
+    if [ "$gate_rc" -ne 0 ] || [ "$capture_rc" -ne 0 ]; then
+        # Retain all intermediate/reference bytes on a numerical refusal as
+        # well as an inventory refusal. Public leaves alone cannot diagnose
+        # a failing intermediate after the rental has been deleted.
+        mkdir -p "$family_out/failed-actual" "$family_out/failed-oracle"
+        cp -a "$actual/." "$family_out/failed-actual/" || RC=1
+        cp -a "$oracle/." "$family_out/failed-oracle/" || RC=1
+    elif [ "$family" = mamba3-l65 ]; then
+        # The long compositional contract uses forward operands and exact
+        # intermediate arithmetic. Retain that successful evidence as well
+        # as public leaves for independent replay and cross-vendor checks.
+        mkdir -p "$family_out/diagnostic-actual" "$family_out/diagnostic-oracle"
+        cp -a "$actual/." "$family_out/diagnostic-actual/" || capture_rc=1
+        cp -a "$oracle/." "$family_out/diagnostic-oracle/" || capture_rc=1
+    fi
     verdict=GREEN
     if [ "$gate_rc" -ne 0 ] || [ "$capture_rc" -ne 0 ]; then
         verdict=RED
@@ -121,6 +142,7 @@ run_family() {
         >> "$OUT/results.tsv"
 }
 
+if [ "$PROFILE" = baseline-v1 ]; then
 run_family mamba1 mamba-grad-m1-public \
     /tmp/mojolearn-mamba1-grad /tmp/mojolearn-mamba1-actual
 run_family mamba2 mamba-grad-m2-public \
@@ -131,6 +153,12 @@ run_family mamba2-l257 mamba-grad-m2-l257 \
     /tmp/mojolearn-mamba2-l257-grad /tmp/mojolearn-mamba2-l257-actual
 run_family mamba2-state mamba-grad-m2-initial-state \
     /tmp/mojolearn-mamba2-state-grad /tmp/mojolearn-mamba2-state-actual
+else
+run_family mamba1-l64 mamba-grad-m1-l64 \
+    /tmp/mojolearn-mamba1-l64-grad /tmp/mojolearn-mamba1-l64-actual
+run_family mamba3-l65 mamba-grad-m3-l65 \
+    /tmp/mojolearn-mamba3-l65-grad /tmp/mojolearn-mamba3-l65-actual
+fi
 
 FINAL_SOURCE_SHA=$(python "$ROOT/tools/mamba_backward_identity.py" source "$ROOT") || RC=1
 if [ "$FINAL_SOURCE_SHA" != "$SOURCE_SHA" ]; then

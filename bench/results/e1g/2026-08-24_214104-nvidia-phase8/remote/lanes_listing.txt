@@ -1,4 +1,0 @@
-mamba.fast.check.log
-mamba.fast.log
-mamba.identical.check.log
-mamba.identical.log

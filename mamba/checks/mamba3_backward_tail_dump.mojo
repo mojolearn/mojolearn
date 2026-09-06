@@ -5,6 +5,9 @@ from std.memory import bitcast
 from std.os import getenv
 
 from max.gpu.host import DeviceContext
+from checks.numerics import numeric_mode_name
+from std.gpu import block_idx, block_dim, thread_idx
+from mamba.impl.mamba_ssm.ops.mamba3_siso import m3_angle_rate
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
@@ -35,6 +38,7 @@ from mamba.impl.mamba_ssm.modules.mamba3 import (
     mamba3_block_forward,
 )
 from mamba.impl.mamba_ssm.modules.mamba3_backward import (
+    mamba3_beta_join_kernel,
     mamba3_backward_gate_skip_into,
     mamba3_backward_qkdot_into,
     mamba3_backward_s16_s15_into,
@@ -63,6 +67,18 @@ from mamba.impl.transformers.models.mamba.modeling_mamba import (
 )
 
 
+def _capture_angle_rate_kernel(
+    rate: MutPointer[Float32, MutAnyOrigin],
+    projection: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32, width_in: Int32, column_in: Int32,
+):
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell < Int(rows_in) * M3_NUM_ROPE_ANGLES:
+        var row = cell // M3_NUM_ROPE_ANGLES
+        var angle = cell % M3_NUM_ROPE_ANGLES
+        rate.unsafe_store(cell, m3_angle_rate(projection.unsafe_load(row * Int(width_in) + Int(column_in) + angle)))
+
+
 def _objective_cotangent(n: Int) -> List[Float32]:
     """Derivative of signed_dyadic_weight_v1, exactly representable in f32."""
     var out = List[Float32]()
@@ -84,6 +100,45 @@ def _write_f32(path: String, values: List[Float32]) raises:
         bytes.append(UInt8(Int((u >> UInt32(24)) & UInt32(0xFF))))
     with open(path, "w") as fh:
         fh.write_bytes(Span(bytes))
+
+
+def _check_scale_chain(ctx: DeviceContext) raises:
+    # Exact dyadic two-token VJP. The scale branch is live at token zero
+    # even though no shifted beta reaches it. The next token receives both.
+    var qdt_values: List[Float32] = [5, 7]
+    var qtrap_values: List[Float32] = [11, 13]
+    var scale_values: List[Float32] = [4, 8]
+    var dt_values: List[Float32] = [2, 3]
+    var sigma_values: List[Float32] = [0.25, 0.5]
+    var qdt = mamba_upload(ctx, qdt_values)
+    var qtrap = mamba_upload(ctx, qtrap_values)
+    var qgamma = mamba_zeros(ctx, 2)
+    var scale = mamba_upload(ctx, scale_values)
+    var beta = mamba_upload(ctx, scale_values)
+    var dt = mamba_upload(ctx, dt_values)
+    var sigma = mamba_upload(ctx, sigma_values)
+    var out_gamma = mamba_zeros(ctx, 2)
+    var out_dt = mamba_zeros(ctx, 2)
+    var out_trap = mamba_zeros(ctx, 2)
+    ctx.enqueue_function[mamba3_beta_join_kernel](
+        out_gamma.unsafe_ptr(), out_dt.unsafe_ptr(), out_trap.unsafe_ptr(),
+        qgamma.unsafe_ptr(), scale.unsafe_ptr(), qdt.unsafe_ptr(),
+        qtrap.unsafe_ptr(), beta.unsafe_ptr(), dt.unsafe_ptr(), sigma.unsafe_ptr(),
+        Int32(1), Int32(2), Int32(1), grid_dim=(1, 1, 1), block_dim=(32, 1, 1),
+    )
+    var got_dt = mamba_download(ctx, out_dt, 2)
+    var got_trap = mamba_download(ctx, out_trap, 2)
+    _ = qdt^
+    _ = qtrap^
+    _ = qgamma^
+    _ = scale^
+    _ = beta^
+    _ = dt^
+    _ = sigma^
+    _ = out_gamma^
+    if got_dt[0] != 6 or got_dt[1] != 13 or got_trap[0] != 12.5 or got_trap[1] != 16:
+        raise Error("Mamba3 scale/gamma chain-rule regression")
+    print("MAMBA3 SCALE CHAIN PASS: first-token gamma and shifted beta")
 
 
 def main() raises:
@@ -112,6 +167,7 @@ def main() raises:
     var dims = weights.dims.copy()
     var m = fixture.b * fixture.l
     var ctx = DeviceContext()
+    _check_scale_chain(ctx)
     var device_weights = Mamba3DeviceWeights(ctx, weights)
     var state = allocate_inference_cache(ctx, fixture.b, dims)
     var stages = Mamba3DeviceStages(ctx, fixture.b, fixture.l, 0, dims)
@@ -345,26 +401,32 @@ def main() raises:
     _write_f32(output + "/grad.C_norm.weight.f32",mamba_download(ctx,d_cw,M3_D_STATE))
     _write_f32(output + "/grad.B_bias.f32",mamba_download(ctx,d_bb,dims.nheads*M3_D_STATE))
     _write_f32(output + "/grad.C_bias.f32",mamba_download(ctx,d_cb,dims.nheads*M3_D_STATE))
-    if case_k == 5:
-        with open(output + "/dump_manifest.json", "w") as fh:
-            fh.write(
-                "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
-                + "\"family\":\"mamba3\",\"case\":\"" + case_name + "\","
-                + "\"objective\":\"signed_dyadic_weight_v1\","
-                + "\"mode\":\"partial-s17-recurrence-l65\","
-                + "\"tensors\":[\"partial.s17.state.direct\","
-                + "\"partial.s17.state.total\",\"partial.s17.initial_state\","
-                + "\"partial.s17.readout.rot.q\",\"partial.s17.readout.dacs\","
-                + "\"partial.s17.recur.kscale\",\"partial.s17.recur.value\","
-                + "\"partial.s17.recur.dacs\"]}\n"
-            )
-        return
+    # Retain exact forward operands for reduction attribution. These are
+    # forward values, separate from the named gradient inventory.
+    _write_f32(output + "/operand.rot.k.f32", mamba_download(ctx, stages.rotk_work, state_cells))
+    _write_f32(output + "/operand.bcnorm.B.f32", mamba_download(ctx, stages.bcnorm_b, m*M3_D_STATE))
+    _write_f32(output + "/operand.bcnorm.C.f32", mamba_download(ctx, stages.bcnorm_c, m*M3_D_STATE))
+    _write_f32(output + "/operand.B_bias.f32", mamba_download(ctx, device_weights.b_bias, dims.nheads*M3_D_STATE))
+    _write_f32(output + "/operand.C_bias.f32", mamba_download(ctx, device_weights.c_bias, dims.nheads*M3_D_STATE))
+    _write_f32(output + "/operand.dt.out.f32", mamba_download(ctx, stages.dt_work, head_cells))
+    _write_f32(output + "/operand.trap.sigma.f32", mamba_download(ctx, stages.sig_work, head_cells))
+    _write_f32(output + "/operand.angle.theta.f32", mamba_download(ctx, stages.theta_out, head_cells*M3_NUM_ROPE_ANGLES))
+    var captured_rate = mamba_zeros(ctx, m*M3_NUM_ROPE_ANGLES)
+    ctx.enqueue_function[_capture_angle_rate_kernel](
+        captured_rate.unsafe_ptr(), stages.in_proj.unsafe_ptr(),
+        Int32(m), Int32(dims.d_in_proj()), Int32(dims.col_angle()),
+        grid_dim=((m*M3_NUM_ROPE_ANGLES + 255)//256, 1, 1), block_dim=(256, 1, 1),
+    )
+    _write_f32(output + "/operand.angle.rate.f32", mamba_download(ctx, captured_rate, m*M3_NUM_ROPE_ANGLES))
+    _ = captured_rate^
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
             + "\"family\":\"mamba3\",\"case\":\"" + case_name + "\","
             + "\"objective\":\"signed_dyadic_weight_v1\","
-            + "\"mode\":\"complete-public-prefill-l4\","
+            + "\"mode\":\"complete-public-prefill\","
+            + "\"numeric_mode\":\"" + numeric_mode_name() + "\","
+            + "\"forward_operands\":[\"rot.k\",\"bcnorm.B\",\"bcnorm.C\",\"B_bias\",\"C_bias\",\"dt.out\",\"trap.sigma\",\"angle.theta\",\"angle.rate\"],"
             + "\"public_prefill_leaves\":[\"x\",\"block_norm.weight\","
             + "\"in_proj.weight\",\"dt_bias\",\"B_norm.weight\","
             + "\"C_norm.weight\",\"B_bias\",\"C_bias\",\"D\","

@@ -5,7 +5,7 @@
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from neighbors.estimator import knn_search
-from umap.graph import FuzzySimplicialGraph, fuzzy_simplicial_graph
+from umap.graph import FuzzySimplicialGraph, fuzzy_simplicial_graph, canonicalize_self_neighbors
 from umap.params import UMAPParams
 from umap.sparse_estimator import sparse_fit_transform
 
@@ -45,6 +45,7 @@ def fuzzy_graph_from_data(
     _ = hx^
     _ = hd^
     _ = hi^
+    canonicalize_self_neighbors(indices, distances, n_samples, params.n_neighbors)
     return fuzzy_simplicial_graph(
         indices^, distances^, n_samples, params.n_neighbors,
         params.set_op_mix_ratio,

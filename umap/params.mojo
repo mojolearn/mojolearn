@@ -14,6 +14,9 @@ struct UMAPParams(Copyable, Movable):
     var spread: Float32
     var n_epochs: Int
     var random_seed: UInt64
+    var learning_rate: Float32
+    var repulsion_strength: Float32
+    var negative_sample_rate: Int
 
     def __init__(
         out self,
@@ -25,6 +28,9 @@ struct UMAPParams(Copyable, Movable):
         spread: Float32 = Float32(1.0),
         n_epochs: Int = 0,
         random_seed: UInt64 = UInt64(0),
+        learning_rate: Float32 = Float32(1.0),
+        repulsion_strength: Float32 = Float32(1.0),
+        negative_sample_rate: Int = 5,
     ):
         self.n_neighbors = n_neighbors
         self.n_components = n_components
@@ -34,6 +40,9 @@ struct UMAPParams(Copyable, Movable):
         self.spread = spread
         self.n_epochs = n_epochs
         self.random_seed = random_seed
+        self.learning_rate = learning_rate
+        self.repulsion_strength = repulsion_strength
+        self.negative_sample_rate = negative_sample_rate
 
     def validate(self, n_samples: Int) raises:
         if n_samples < 2:
@@ -56,6 +65,12 @@ struct UMAPParams(Copyable, Movable):
             self.spread > Float32(0.0)
         ) or self.min_dist > self.spread:
             raise Error("UMAP requires 0 <= min_dist <= spread")
+        if not isfinite(self.learning_rate) or self.learning_rate <= Float32(0):
+            raise Error("UMAP learning_rate must be positive and finite")
+        if not isfinite(self.repulsion_strength) or self.repulsion_strength < Float32(0):
+            raise Error("UMAP repulsion_strength must be nonnegative and finite")
+        if self.negative_sample_rate < 0 or self.negative_sample_rate > 2147483647:
+            raise Error("UMAP negative_sample_rate must fit a nonnegative Int32")
         if self.n_epochs < 0:
             raise Error("UMAP n_epochs must be non-negative")
 

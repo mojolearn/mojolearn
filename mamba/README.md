@@ -125,8 +125,31 @@ comparison requires every semantic gate to be GREEN before comparing native
 bytes and provenance. Cross-device identity is established only when actual
 captures from the named hardware agree.
 
+**Mamba3 correction:** the L65 investigation found a missing
+`scale -> gamma -> dt/sigma` chain-rule contribution shared by the native
+backward join and its staged float32 reference. The historical Mamba3
+correctness claim below is superseded; byte equality alone did not catch it.
+At `eebd7c92`, corrected AMD and NVIDIA runs pass all five baseline gates and
+match all 54 native gradient tensors. Every public Mamba3 leaf additionally
+passes the independently differentiated whole float64 forward at unchanged
+tolerances. See the [corrected record](../bench/results/resume/2026-09-05-next-certification/corrected-backward-cross-device.json).
+Corrected Apple and installed-wheel qualification remain pending.
+
+The separate `long-sequence-v1` profile adds Mamba1 L64 and Mamba3 L65.
+At `eebd7c92`, Mamba1 passed on both GPUs and all 21 public tensors matched,
+but 13 direct intermediate comparisons kept the full profile RED. Source
+`395d9421` now passes both complete profiles on AMD MI325X and NVIDIA RTX
+4090 under the explicit [compositional arithmetic contract](BACKWARD_CERTIFICATION.md).
+All 54 baseline and 21 long-profile gradient tensors match by bits; the
+Mamba3 L65 diagnostic comparison additionally matches all 86 gradient tensors
+and nine forward operands. See the
+[retained record](../bench/results/resume/2026-09-06-ordered-mamba-knn/README.md). Every public gradient still requires the
+independent whole-forward float64 check. All 76 diagnostics remain required,
+and the 13 sensitive outputs must match their independently checked operands'
+prescribed float32 arithmetic by bits. Direct reference misses remain logged.
+
 At source commit `718495cd`, Apple M4 and NVIDIA RTX 4090 (driver
-580.159.04) passed all five semantic gates and matched all 54 captured native
+580.159.04) passed all five then-current gates and matched all 54 captured native
 gradient tensors bit for bit. The fixtures are Mamba1 `base_b2_l4_d8`,
 Mamba2 `m2_base_b2_l4_d32`, Mamba3 `m3_base_b2_l4_d32`, and the Mamba2
 `m2_base_b1_l257_d64` public/state gates. See the

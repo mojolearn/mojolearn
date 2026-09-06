@@ -378,19 +378,18 @@ mm = ens.GradientBoosting(loss="MultiClass", n_estimators=2, max_depth=3,
 mm.predict(X)
 mm.predict_proba(X)
 
-# MultiClassOneVsAll IS THE ROW THAT IS STILL REFUSED FROM PYTHON, and the
-# reason it was refused NO LONGER HOLDS. `ensemble.py` says its kernels do not
-# fit in the extension under any measured basename; the basename was never the
-# variable, and this artifact carries every gbdt kernel the module contains.
-# The assertion is kept only because reopening the loss means FITTING it under
-# a check, not deleting a `try/except`. It is an OPEN item, named in the build
-# script so it cannot be quietly forgotten.
-try:
-    ens.GradientBoosting(loss="MultiClassOneVsAll")
-except NotImplementedError:
-    pass
-else:
-    raise SystemExit("smoke: MultiClassOneVsAll was accepted from Python")
+# The public OVA surface is now implemented. Fit its own kernel family and
+# verify independent sigmoid probabilities, rather than expecting refusal.
+ova = ens.GradientBoosting(loss="MultiClassOneVsAll", n_estimators=2,
+                           max_depth=3, border_count=16,
+                           class_weights=[1., 2., 3.]).fit(X, yc)
+raw, probability = ova.predict(X), ova.predict_proba(X)
+if raw.shape != (512, 3) or probability.shape != raw.shape:
+    raise SystemExit("smoke: MultiClassOneVsAll returned wrong output shape")
+if not np.isfinite(raw).all() or not np.isfinite(probability).all():
+    raise SystemExit("smoke: MultiClassOneVsAll returned nonfinite values")
+np.testing.assert_allclose(probability, 1. / (1. + np.exp(-raw)),
+                           rtol=1e-5, atol=1e-6)
 
 # THE HELD-OUT PATH, which crosses two addresses and five parameters nothing
 # else here exercises. IT IS THE PATH THAT WAS BROKEN FOR USERS: the shipped
@@ -458,6 +457,10 @@ if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ]; then
 fi
 
 if ! kernels_plausible "$out" || ! minos_matches "$out" || ! run_smoke "$out"; then
+    if [ "$(uname)" != "Darwin" ]; then
+        echo "FAILED: GBDT runtime smoke gate; inspect the preceding exception." >&2
+        exit 1
+    fi
     printf '%s\n' \
       "" \
       "FAILED: the GBDT extension did not come out complete." \

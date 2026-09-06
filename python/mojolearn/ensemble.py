@@ -65,14 +65,11 @@ carries `k - 1`. Therefore:
                         predict_proba    (n, n_classes)      softmax
                         predict_classes  (n,)                class codes
 
-`MultiClassOneVsAll` is implemented and gated in the Mojo layer but is NOT
-reachable from Python. **The reason recorded here until 2026-08-21 was wrong**
--- it said the kernels did not fit in the extension under any measured
-basename, which was the basename theory archive/reference/PORTING.md 70 has since retracted.
-What actually blocks it is this wrapper: `predict_proba` would have to route
-through the elementwise sigmoid over `n_classes` INDEPENDENT approxes instead
-of MultiClass's softmax over `n_classes - 1`, and nothing gates that yet.
-Asking for it raises with that reason.
+`MultiClassOneVsAll` stores `n_classes` independent approxes. Its `predict`
+returns `(n, n_classes)` raw scores and `predict_proba` applies CatBoost's
+`MultiProbability` elementwise sigmoid, without renormalizing the columns.
+Both multiclass losses use the symmetric GPU trainer registered in
+`cuda/train_lib/multiclass.cpp:5-7` at the pinned upstream `54a8143a`.
 
 Dropping MultiClass's last probability column and renormalising the rest
 gives a different and wrong answer: the pinned class is a real class whose
@@ -94,7 +91,7 @@ import numpy as np
 # that reason turned out not to exist. See archive/reference/PORTING.md 70: the kernels were
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
-from . import _mojolearn_gbdt, _serialize
+from . import _backend, _mojolearn_gbdt, _serialize
 from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_colmajor
 
@@ -107,6 +104,7 @@ _MODEL_FORMAT = "mojolearn-gbdt-1"
 #: or kernel family is not ported.
 LOSSES = (
     "MultiClass",
+    "MultiClassOneVsAll",
     "RMSE",
     "Logloss",
     "CrossEntropy",
@@ -121,37 +119,9 @@ LOSSES = (
     "Huber",
 )
 
-#: `MultiClass` is the one loss here whose model is MULTI-DIMENSIONAL.
-#: Its labels are DENSE CLASS CODES 0..k-1 and the class count is derived
-#: from them, as their `TClassificationTargetHelper` derives it -- a count
-#: that disagreed with the data would be a wrong model rather than an
-#: error, so it is not a parameter.
-MULTI_OUTPUT_LOSSES = ("MultiClass",)
-
-#: `MultiClassOneVsAll` IS IMPLEMENTED AND GATED IN THE MOJO LAYER and is
-#: NOT REACHABLE FROM PYTHON. **The reason recorded here until 2026-08-21 was
-#: wrong**: it said the two kernels did not fit in the extension under any
-#: measured basename, which was the basename theory archive/reference/PORTING.md 70 has since
-#: retracted. The artifact carries every gbdt kernel the module contains.
-#:
-#: What actually blocks it is THIS FILE. `predict_proba` would have to route
-#: through the ELEMENTWISE sigmoid over `n_classes` independent approxes
-#: (`multiclass_targets.h:129-134`) instead of MultiClass's softmax over
-#: `n_classes - 1`, and nothing here gates that. Reopening it means FITTING
-#: it under a check, not deleting this entry.
-#:
-#: Named here rather than accepted and then failing inside Metal. Use it
-#: from Mojo (`gbdt/train.mojo`, `loss="MultiClassOneVsAll"`), where
-#: `check-multilogit` and `check-multiclass-train` gate it.
-_UNREACHABLE_LOSSES = {
-    "MultiClassOneVsAll": (
-        "it has no check on the Python surface yet: predict_proba would "
-        "have to route through the ELEMENTWISE sigmoid over n_classes "
-        "independent approxes rather than MultiClass's softmax over "
-        "n_classes - 1, and nothing here gates that. It works and is gated "
-        "from Mojo (gbdt/train.mojo, loss=\"MultiClassOneVsAll\")."
-    ),
-}
+#: Their GPU target keeps numClasses - 1 planes for MultiClass and
+#: numClasses for OneVsAll (`multiclass_targets.h:129-134`, 54a8143a).
+MULTI_OUTPUT_LOSSES = ("MultiClass", "MultiClassOneVsAll")
 
 #: `gbdt_predict_multi`'s transform, mirroring their `EPredictionType`
 #: (`libs/model/eval_processing.h:186-226`).
@@ -568,11 +538,6 @@ class GradientBoosting(NumericModeMixin):
         max_leaves=None,
         min_data_in_leaf=1,
     ):
-        if loss in _UNREACHABLE_LOSSES:
-            raise NotImplementedError(
-                f"mojolearn: {loss} is not reachable from Python -- "
-                f"{_UNREACHABLE_LOSSES[loss]}"
-            )
         if loss not in LOSSES:
             raise ValueError(
                 f"mojolearn: loss must be one of {LOSSES}, got {loss!r}"
@@ -738,9 +703,9 @@ class GradientBoosting(NumericModeMixin):
                 raise ValueError(
                     "mojolearn: class_weights is empty; pass None for none"
                 )
-            if any(float(w) < 0 for w in class_weights):
+            if any(not np.isfinite(float(w)) or float(w) < 0 for w in class_weights):
                 raise ValueError(
-                    "mojolearn: class_weights has negative entries"
+                    "mojolearn: class_weights must have finite nonnegative entries"
                 )
             if loss == "RMSE":
                 # `train` raises on this pair too; caught here so the
@@ -1006,6 +971,9 @@ class GradientBoosting(NumericModeMixin):
         Xa, Xcol, _ = as_f32_colmajor(X, "X")
         n_rows, n_features = Xa.shape
 
+        if n_rows == 0 or n_features == 0:
+            raise ValueError("mojolearn: fit requires at least one row and one feature")
+
         ya = np.ascontiguousarray(np.asarray(y).ravel(), dtype=np.float32)
         if ya.shape[0] != n_rows:
             raise ValueError(
@@ -1015,19 +983,10 @@ class GradientBoosting(NumericModeMixin):
         # `nan_mode='Forbidden'` MEANS "THERE ARE NO NaNs", AND IT HAS TO BE
         # CHECKED HERE OR IT MEANS NOTHING.
         #
-        # CatBoost raises on this pair. This port does not: `calc_quantization`
-        # (`gbdt/data/quantization.mojo:134-168`) takes the Forbidden branch,
-        # allocates no NaN bin, and `best_split` filters the NaNs out of the
-        # border search -- so the fit SUCCEEDS and every NaN silently lands in
-        # whichever bin the comparison happens to put it in. That is a
-        # different model than the caller asked for, delivered without a
-        # word, which is the exact failure this wrapper refuses to pass on.
-        #
-        # Checked at the Python surface because that is where the array is
-        # already materialised and one pass is cheap. **The Mojo `train` still
-        # does not enforce it** -- a Mojo caller passing Forbidden with NaNs
-        # gets the old silent behavior. That is an OPEN item and belongs in
-        # `gbdt/data/quantization.mojo`, beside their own CB_ENSURE.
+        # CatBoost raises on this pair. Filtering the NaNs during border
+        # search would otherwise silently route them into an ordinary bin.
+        # The native quantizer enforces the same upstream CB_ENSURE for
+        # direct Mojo callers; this guard avoids entering the GPU binding.
         if self.nan_mode == "Forbidden" and not np.isfinite(Xa).all():
             if np.isnan(Xa).any():
                 raise ValueError(
@@ -1035,6 +994,32 @@ class GradientBoosting(NumericModeMixin):
                     "CatBoost refuses this pair; this port would otherwise "
                     "bin the NaNs silently with no NaN bin. Use "
                     "nan_mode='Min' or 'Max', or clean the column."
+                )
+
+        if self.loss in MULTI_OUTPUT_LOSSES:
+            # Validate before native class-weight indexing. Upstream checks
+            # the class index before multiplication (54a8143a,
+            # private/libs/target/data_providers.cpp:162-168).
+            if (not ya.size or not np.isfinite(ya).all()
+                    or (ya < 0).any() or (ya != np.floor(ya)).any()):
+                raise ValueError(
+                    f"mojolearn: {self.loss} labels must be finite "
+                    "nonnegative integer class codes"
+                )
+            classes = np.unique(ya)
+            if classes.size < 2:
+                raise ValueError(
+                    f"mojolearn: {self.loss} needs at least two classes"
+                )
+            if classes[0] != 0 or classes[-1] != classes.size - 1:
+                raise ValueError(
+                    f"mojolearn: {self.loss} labels must be dense class "
+                    "codes 0..k-1; encode labels before fitting"
+                )
+            if self.class_weights is not None and len(self.class_weights) != classes.size:
+                raise ValueError(
+                    f"mojolearn: class_weights needs {classes.size} entries "
+                    f"for {self.loss}"
                 )
 
         flags = self._flags(n_features)
@@ -1053,13 +1038,22 @@ class GradientBoosting(NumericModeMixin):
                     f"mojolearn: sample_weight has {wa.shape[0]} entries "
                     f"for {n_rows} rows"
                 )
-            if (wa < 0).any():
+            if not np.isfinite(wa).all() or (wa < 0).any():
                 raise ValueError(
-                    "mojolearn: sample_weight has negative entries"
+                    "mojolearn: sample_weight must have finite nonnegative entries"
                 )
+            if not (wa > 0).any():
+                raise ValueError("mojolearn: sample_weight must have positive total weight")
             n_weights = n_rows
 
         Ecol, ea, n_eval_rows = self._eval_arrays(eval_set, n_features)
+        if n_eval_rows and self.loss in MULTI_OUTPUT_LOSSES:
+            if (not np.isfinite(ea).all() or (ea < 0).any()
+                    or (ea != np.floor(ea)).any() or (ea >= classes.size).any()):
+                raise ValueError(
+                    "mojolearn: eval_set labels must be integer class codes "
+                    "within the training class range"
+                )
 
         params = self._params(
             n_rows, n_features, n_flags, n_weights, n_eval_rows
@@ -1119,7 +1113,7 @@ class GradientBoosting(NumericModeMixin):
         self.n_classes_ = (
             self.approx_dim_ + 1
             if self.loss == "MultiClass"
-            else None
+            else self.approx_dim_ if self.loss == "MultiClassOneVsAll" else None
         )
         return self
 
@@ -1146,7 +1140,8 @@ class GradientBoosting(NumericModeMixin):
         approxes, with the LAST class's pinned at zero and therefore not
         returned. `predict_proba` is what turns those into `n_classes`
         columns; dropping the pinned class and renormalising the rest
-        would give a different answer.
+        would give a different answer. `MultiClassOneVsAll` returns
+        `(n_samples, n_classes)` with one raw score per independent head.
         """
         Xcol, n_rows = self._check_fitted(X)
 
@@ -1176,8 +1171,9 @@ class GradientBoosting(NumericModeMixin):
     def predict_proba(self, X):
         """Class probabilities, `(n_samples, n_classes)`.
 
-        Defined for the three losses that have a link: `Logloss` and
-        `CrossEntropy` (the sigmoid) and `MultiClass` (the softmax). It
+        Defined for `Logloss` and `CrossEntropy` (the sigmoid),
+        `MultiClass` (the softmax), and `MultiClassOneVsAll` (independent
+        sigmoids). It
         refuses every other loss rather than returning a number that looks
         like a probability. CatBoost's `prediction_type='Probability'` is
         the same transform over the same raw scores.
@@ -1200,7 +1196,10 @@ class GradientBoosting(NumericModeMixin):
         """
         if self.loss in MULTI_OUTPUT_LOSSES:
             Xcol, n_rows = self._check_fitted(X)
-            mode = _PREDICT_SOFTMAX
+            # 54a8143a libs/model/eval_processing.h:214-226:
+            # MultiProbability applies CalcSigmoid elementwise.
+            mode = (_PREDICT_SIGMOID if self.loss == "MultiClassOneVsAll"
+                    else _PREDICT_SOFTMAX)
             out = np.empty(n_rows * self.n_classes_, dtype=np.float32)
             width = self._bind("_mojolearn_gbdt").gbdt_predict_multi(
                 self.model_, _addr_ro(Xcol), _addr(out), [n_rows, mode]
@@ -1215,7 +1214,7 @@ class GradientBoosting(NumericModeMixin):
         if self.loss not in ("Logloss", "CrossEntropy"):
             raise ValueError(
                 f"mojolearn: predict_proba is defined for Logloss, "
-                f"CrossEntropy and MultiClass; this model was fitted with "
+                f"CrossEntropy, MultiClass and MultiClassOneVsAll; this model was fitted with "
                 f"{self.loss!r}. Use predict() and apply the link "
                 f"yourself."
             )
@@ -1249,6 +1248,66 @@ class GradientBoosting(NumericModeMixin):
             )
         return np.argmax(self.predict_proba(X), axis=1).astype(np.int64)
 
+    def _tree_metadata(self):
+        """Read host model metadata without selecting a GPU extension.
+
+        This is archive inspection, not a second model evaluator. Float
+        values come exclusively from the authoritative IEEE bits.
+        """
+        if self.model_ is None:
+            raise RuntimeError("mojolearn: tree inspection before fit()")
+        counts, dimensions, leaves = [], [], []
+        declared_trees = None
+        for line in str(self.model_).splitlines():
+            fields = line.split()
+            if not fields:
+                continue
+            if fields[0] == "trees":
+                declared_trees = int(fields[1])
+            elif fields[0] in ("tree", "ntree"):
+                if int(fields[1]) != len(counts):
+                    raise ValueError("mojolearn: invalid tree order in model metadata")
+                size, dim = int(fields[3]), int(fields[5])
+                if size < 0 or dim < 1 or (fields[0] == "tree" and size > 31):
+                    raise ValueError("mojolearn: invalid tree dimensions in model metadata")
+                counts.append((1 << size) if fields[0] == "tree" else size + 1)
+                dimensions.append(dim)
+                leaves.append([])
+            elif fields[0] == "leaf":
+                tree, index = int(fields[1]), int(fields[2])
+                if tree < 0 or tree >= len(leaves) or index != len(leaves[tree]):
+                    raise ValueError("mojolearn: invalid leaf order in model metadata")
+                bits = int(fields[3].split("/")[1], 16)
+                if not 0 <= bits <= 0xffffffff:
+                    raise ValueError("mojolearn: invalid leaf bits in model metadata")
+                leaves[tree].append(bits)
+        if declared_trees != len(counts) or any(
+            len(values) != count * dim
+            for values, count, dim in zip(leaves, counts, dimensions)
+        ):
+            raise ValueError("mojolearn: incomplete tree metadata")
+        return counts, leaves
+
+    def get_tree_leaf_counts(self):
+        """Return leaf counts per tree as uint32, as in CatBoost.
+
+        Reads fitted or loaded model metadata; does not launch GPU work.
+        """
+        counts, _ = self._tree_metadata()
+        return np.asarray(counts, dtype=np.uint32)
+
+    def get_leaf_values(self):
+        """Return tree-major, leaf-major stored values as float64.
+
+        Multiclass stores each leaf's dimensions consecutively. MultiClass
+        contains k-1 free dimensions; OneVsAll contains k dimensions.
+        Conversion from stored float32 bits to float64 is exact, including
+        signed zero. No decimal model text is used to recover the values.
+        """
+        _, leaves = self._tree_metadata()
+        bits = np.asarray([value for tree in leaves for value in tree], dtype=np.uint32)
+        return bits.view(np.float32).astype(np.float64)
+
     def save(self, path):
         """Write the fitted ensemble to `path` as an npz.
 
@@ -1263,6 +1322,10 @@ class GradientBoosting(NumericModeMixin):
         a border by index, which is why `gbdt_predict` takes only the text
         and raw feature rows.
 
+        The effective numeric mode is saved and restored independently of a
+        future process default. Legacy files without this field keep the
+        loader process default; select their desired tier explicitly.
+
         The curve attributes (`loss_curve_`, `test_loss_curve_`) are not
         reconstructed by `load`; a loaded model carries them as None. The
         model text does record per-iteration learn losses on its `loss`
@@ -1271,8 +1334,18 @@ class GradientBoosting(NumericModeMixin):
         """
         if self.model_ is None:
             raise RuntimeError("mojolearn: save() before fit()")
+        # Persist the tier prediction would use now, including an inherited
+        # process default. Saving None would let a different process silently
+        # turn an IDENTICAL model into FAST arithmetic after loading.
+        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
+        if not isinstance(mode, str) or mode.strip().lower() not in (
+            "fast", "deterministic", "identical"
+        ):
+            raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
+        mode = mode.strip().lower()
         arrays = {
             "format": np.asarray(_MODEL_FORMAT),
+            "numeric_mode": np.asarray(mode),
             "estimator": np.asarray(type(self).__name__),
             "loss": np.asarray(self.loss),
             "model": np.frombuffer(
@@ -1309,6 +1382,19 @@ class GradientBoosting(NumericModeMixin):
                 f"{cls.__name__}"
             )
         obj = cls.__new__(cls)
+        # Restore before even gbdt_model_dim binds an extension. Old format-1
+        # archives omitted this optional field and retain their historical
+        # process-default behavior; malformed new metadata must never fall
+        # back to that legacy interpretation.
+        obj.numeric_mode = None
+        if "numeric_mode" in arrays:
+            stored_mode = arrays["numeric_mode"]
+            if stored_mode.dtype.kind != "U" or stored_mode.size != 1:
+                raise ValueError("mojolearn: saved numeric_mode must be one string")
+            mode = str(stored_mode.reshape(-1)[0])
+            if mode not in ("fast", "deterministic", "identical"):
+                raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
+            obj.numeric_mode = mode
         obj.loss = _serialize.scalar_str(arrays, "loss")
         obj.model_ = bytes(
             _serialize.exact(arrays, "model", np.uint8)
@@ -1434,6 +1520,124 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         self.n_classes_ = None
         self.bias_ = 0.0
         self.best_iteration_ = 0
+        self.stopped_early_ = False
+        self.loss_curve_ = None
+        self.test_loss_curve_ = None
+        return self
+
+
+class OrderedRMSE(GradientBoosting):
+    """Numeric ordered RMSE with one explicit row permutation.
+
+    Fits symmetric trees using independent prefix approximation cursors and
+    one full-data cursor for exported leaves. Supports finite numeric X/y,
+    nonnegative sample weights, zero initial bias, Newton-1 leaves, and
+    depths 1..8. Categorical CTRs, other objectives, bootstrap and early
+    stopping are absent from this narrow API and rejected as unknown kwargs.
+    This is not the general CatBoost ``boosting_type="Ordered"`` interface.
+
+    Pass ``numeric_mode="identical"`` to select pinned arithmetic. Native
+    AMD/NVIDIA fixtures are certified; the Python binding needs independent
+    installed-artifact qualification. ``loss_curve_`` and
+    ``best_iteration_`` are None because this path does not track losses.
+    """
+
+    def __init__(
+        self, n_estimators=100, max_depth=6, learning_rate=0.03,
+        l2_leaf_reg=3.0, border_count=128,
+    ):
+        self._ordered_options(n_estimators, max_depth, border_count,
+                              learning_rate, l2_leaf_reg)
+        super().__init__(
+            loss="RMSE", n_estimators=n_estimators, max_depth=max_depth,
+            learning_rate=learning_rate, l2_leaf_reg=l2_leaf_reg,
+            border_count=border_count, boost_from_average=False,
+            nan_mode="Forbidden",
+        )
+
+    @staticmethod
+    def _ordered_options(n_estimators, max_depth, border_count,
+                         learning_rate, l2_leaf_reg):
+        for name, value, lower, upper in (
+            ("n_estimators", n_estimators, 1, 2**31 - 1),
+            ("max_depth", max_depth, 1, 8),
+            ("border_count", border_count, 1, 255),
+        ):
+            if (isinstance(value, (bool, np.bool_))
+                    or not isinstance(value, (int, np.integer))
+                    or not lower <= value <= upper):
+                raise ValueError(f"mojolearn: {name} must be an integer in {lower}..{upper}")
+        for name, value, positive in (
+            ("learning_rate", learning_rate, True),
+            ("l2_leaf_reg", l2_leaf_reg, False),
+        ):
+            if (isinstance(value, (bool, np.bool_))
+                    or not isinstance(value, (int, float, np.integer, np.floating))
+                    or not np.isfinite(value)
+                    or abs(value) > np.finfo(np.float32).max
+                    or value < 0 or (positive and np.float32(value) <= 0)):
+                raise ValueError(f"mojolearn: {name} must be finite float32 and "
+                                 + ("positive" if positive else "non-negative"))
+
+    def fit(self, X, y, *, permutation, sample_weight=None):
+        """Fit using a bijection of original row ids in ``permutation``.
+
+        X, y and weights remain in original row order; only permutation
+        defines ordered prefix membership. No host random shuffle is hidden.
+        """
+        self._ordered_options(self.n_estimators, self.max_depth,
+                              self.border_count, self.learning_rate,
+                              self.l2_leaf_reg)
+        Xa, Xcol, _ = as_f32_colmajor(X, "X")
+        n_rows, n_features = Xa.shape
+        if n_rows < 4 or n_rows > np.iinfo(np.uint32).max or n_features < 1:
+            raise ValueError("mojolearn: ordered RMSE requires >=4 rows and >=1 feature")
+        if not np.isfinite(Xa).all():
+            raise ValueError("mojolearn: ordered RMSE X must be finite")
+        ya = np.asarray(y)
+        if ya.ndim != 1 or ya.size != n_rows:
+            raise ValueError("mojolearn: y must be one-dimensional with one value per row")
+        ya = np.ascontiguousarray(ya, dtype=np.float32)
+        if not np.isfinite(ya).all():
+            raise ValueError("mojolearn: y must be finite")
+        order = np.asarray(permutation)
+        if (order.ndim != 1 or order.size != n_rows
+                or order.dtype.kind not in "iu"
+                or (order < 0).any() or (order >= n_rows).any()
+                or np.unique(order).size != n_rows):
+            raise ValueError("mojolearn: permutation must be an integer bijection of row ids")
+        order = np.ascontiguousarray(order, dtype=np.uint32)
+        if sample_weight is None:
+            weights = ya[:1]
+            n_weights = 0
+        else:
+            weights = np.asarray(sample_weight)
+            if weights.ndim != 1 or weights.size != n_rows:
+                raise ValueError("mojolearn: sample_weight must have one value per row")
+            weights = np.ascontiguousarray(weights, dtype=np.float32)
+            if not np.isfinite(weights).all() or (weights < 0).any():
+                raise ValueError("mojolearn: sample_weight must be finite and non-negative")
+            if not weights.sum(dtype=np.float64) > 0:
+                raise ValueError("mojolearn: sample_weight must have positive sum")
+            n_weights = n_rows
+        binding = self._bind("_mojolearn_gbdt")
+        if not hasattr(binding, "gbdt_fit_ordered_rmse"):
+            raise RuntimeError(
+                "mojolearn: this GBDT binary predates OrderedRMSE; "
+                "install or build a matching native extension"
+            )
+        model = binding.gbdt_fit_ordered_rmse(
+            _addr_ro(Xcol), _addr_ro(ya), _addr_ro(weights), _addr_ro(order),
+            [n_rows, n_features, n_weights, order.size,
+             int(self.n_estimators), int(self.max_depth), int(self.border_count),
+             float(self.learning_rate), float(self.l2_leaf_reg)],
+        )
+        self.model_ = model
+        self.n_features_in_ = n_features
+        self.approx_dim_ = 1
+        self.n_classes_ = None
+        self.bias_ = 0.0
+        self.best_iteration_ = None
         self.stopped_early_ = False
         self.loss_curve_ = None
         self.test_loss_curve_ = None

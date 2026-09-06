@@ -107,6 +107,33 @@ class UMAPSurfaceTests(unittest.TestCase):
                     np.testing.assert_array_equal(layout.view(np.uint32),
                                                   again.view(np.uint32))
 
+    def test_optimizer_controls(self):
+        baseline = self.estimator().fit_transform(self.x)
+        explicit = self.estimator(learning_rate=1.0, repulsion_strength=1.0,
+                                  negative_sample_rate=5).fit_transform(self.x)
+        self.assertEqual(baseline.tobytes(), explicit.tobytes())
+        for controls in (dict(learning_rate=0.5), dict(repulsion_strength=2.0),
+                         dict(negative_sample_rate=0)):
+            with self.subTest(**controls):
+                layout = self.estimator(**controls).fit_transform(self.x)
+                self.assertTrue(np.isfinite(layout).all())
+                self.assertNotEqual(layout.tobytes(), baseline.tobytes())
+                again = self.estimator(**controls).fit_transform(self.x)
+                self.assertEqual(layout.tobytes(), again.tobytes())
+
+    def test_invalid_optimizer_controls(self):
+        for field in ("learning_rate", "repulsion_strength"):
+            for value in (np.nan, np.inf, -np.inf, -1, 1e100):
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    UMAP(**{field: value})
+        for controls in (dict(learning_rate=0), dict(learning_rate=1e-100),
+                         dict(negative_sample_rate=-1),
+                         dict(negative_sample_rate=True),
+                         dict(negative_sample_rate=1.5),
+                         dict(negative_sample_rate=1 << 31)):
+            with self.subTest(**controls), self.assertRaises(ValueError):
+                UMAP(**controls)
+
     def test_nonfinite_input(self):
         for value in (np.nan, np.inf, -np.inf):
             with self.subTest(value=value):

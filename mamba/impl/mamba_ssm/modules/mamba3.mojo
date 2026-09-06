@@ -75,6 +75,8 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
+# Public Mamba forward keeps full-FP32 projection operands in every mode.
+# False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
 from gemm.checks.gemm_identical import identical_gemm
 
 # ORIENTATION NUMBERING: gemm_oracle's OP_NT = 1 -- the numbering
@@ -82,6 +84,8 @@ from gemm.checks.gemm_identical import identical_gemm
 from gemm.checks.gemm_oracle import OP_NT
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     ftz,
     identical_clamp,
     identical_div,
@@ -92,6 +96,7 @@ from checks.numerics import (
     identical_softplus,
     identical_tanh,
     portable_cosf,
+    portable_log1pf,
     portable_sinf,
 )
 from mamba.checks.mamba3_fixture import (
@@ -416,6 +421,24 @@ struct Mamba3DeviceStages(Movable):
 # ===========================================================================
 
 
+def m3_dt_softplus(x: Float32) -> Float32:
+    """S6 softplus with a stable small-dt FAST path.
+
+    Negative dt biases make exp(x) small. Rounding exp(x) + 1 before log
+    discards significant dt bits, which accumulate in S10's rotary angle
+    and can exceed the key-state tolerance after cancellation in rotation.
+    Retain FAST's vendor exp, but evaluate log1p directly in float32.
+    IDENTICAL and DETERMINISTIC keep their existing arithmetic verbatim.
+    """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        from std.math import exp
+
+        if x <= Float32(20.0):
+            return portable_log1pf(exp(x))
+        return x
+    return identical_softplus(x)
+
+
 def m3_a_dt_kernel(
     a_out: MutPointer[Float32, MutAnyOrigin],  # [M, H]
     dt_out: MutPointer[Float32, MutAnyOrigin],  # [M, H]
@@ -460,7 +483,7 @@ def m3_a_dt_kernel(
         ftz(in_proj.unsafe_load(t * dip + c_dt + hh))
         + ftz(dt_bias.unsafe_load(hh))
     )
-    dt_out.unsafe_store(cell, ftz(identical_softplus(biased)))
+    dt_out.unsafe_store(cell, ftz(m3_dt_softplus(biased)))
 
 
 # ===========================================================================
@@ -1137,7 +1160,7 @@ def mamba3_block_forward(
     ctx.synchronize()
 
     # ---- S4: in_proj (mamba3.py:176), gemm v1 OP_NT, k = d_model.
-    identical_gemm(
+    identical_gemm[False](
         ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
     )
 
@@ -1372,7 +1395,7 @@ def mamba3_block_forward(
 
     # ---- S4: out_proj (mamba3.py:277), gemm v1 OP_NT, k = d_inner. The
     #      gate output IS the [M, d_inner] row (d = h*P + p, a copy).
-    identical_gemm(
+    identical_gemm[False](
         ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
     )
 

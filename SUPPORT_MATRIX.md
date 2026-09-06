@@ -1,10 +1,20 @@
 # Support and certification
 
 This page covers the published mojolearn 0.5.0 artifact and the 0.6.0 source
-release candidate. The macOS 0.6.0 candidate passed installed-artifact qualification;
-publication and refreshed Linux wheels remain pending. It separates API availability, packaging, and numerical certification. A feature
+release candidate. The [older macOS 0.6.0 candidate](bench/results/wheels/2026-09-05-umap-060-install-recovery/README.md) passed its installed qualification;
+it predates OrderedRMSE and the latest sequence/serialization fixes. Publication
+and final combined Linux qualification remain pending. It separates API availability, packaging, and numerical certification. A feature
 being importable does not mean that every hardware column or numeric mode has
 been certified.
+
+The [September 6 Apple 0.6.0 candidate](bench/results/resume/2026-09-06-feature-finish/README.md)
+rebuilds all 45 extensions and passes all fifteen installed Python 3.10–3.14 /
+numeric-mode jobs. This includes UMAP transform, OrderedRMSE and saved numeric
+modes, plus all 102 Mamba and 44 Transformer surface checks per job. It is
+not published and does not qualify Linux. Corrected Apple native backward
+passes all five baseline cases and Mamba1 L64; Mamba3 L65 remains RED on one
+independent float32-reference intermediate despite matching the older AMD
+capture's 93 shared native arrays. Python zero-state IDENTICAL backward is now exposed; exact installed-artifact and broader backward qualification remain open.
 
 For the enforced identity surface, see the
 [identity-path ledger](IDENTITY_PATHS.md). Fresh certification artifacts name
@@ -33,9 +43,9 @@ device.
 
 | Platform | Status | Qualification |
 |---|---|---|
-| macOS arm64 / Apple silicon | Primary packaged platform | Built at the Apple M1 ISA floor. Current packaging inventory contains 15 extensions in each of three modes. The 0.5.0 wheel passed every Python 3.10–3.14/mode combination on Apple M4 and fresh PyPI-install API checks. The 0.6.0 macOS candidate passed installed checks; publication is pending. |
-| Linux x86-64 / NVIDIA CUDA | Source builds; refreshed wheel pending | Device code is architecture-specific. Certification on one NVIDIA architecture does not certify another. Release 0.3.0 had an AVX-512 host-code defect; it is historical and must not be used as current evidence. |
-| Linux x86-64 / AMD HIP | Source builds; refreshed wheel pending | Measured chiefly on `gfx942`. That is not evidence for every AMD architecture. |
+| macOS arm64 / Apple silicon | Primary packaged platform | Built at the Apple M1 ISA floor. Current packaging inventory contains 15 extensions in each of three modes. The 0.5.0 wheel passed every Python 3.10–3.14/mode combination on Apple M4 and fresh PyPI-install API checks. The older 0.6.0 macOS candidate passed its installed checks; current OrderedRMSE/sequence/serialization bytes need a fresh build and qualification. |
+| Linux x86-64 / NVIDIA CUDA | Frozen CUDA candidate built; full qualification failed | At `eb835021`, all 45 `sm_89` extensions build and 19/24 installed jobs pass; Mamba accuracy and Transformer stalls fail the full candidate. Source overlays fix Transformer, with one Mamba3 non-IDENTICAL tolerance gap remaining. Device code is architecture-specific. Certification on one NVIDIA architecture does not certify another. Release 0.3.0 had an AVX-512 host-code defect; it is historical and must not be used as current evidence. |
+| Linux x86-64 / AMD HIP | Frozen HIP candidate qualified; final release pending | At `eb835021`, all 45 `gfx942` extensions and all 24 installed jobs pass. Newer sequence/serialization fixes still need fresh AMD qualification. Measured chiefly on `gfx942`. That is not evidence for every AMD architecture. |
 | CPU-only and other accelerators | Unsupported | There is no CPU implementation. |
 
 Before publishing a release, validate the installed wheel rather than only the
@@ -50,21 +60,44 @@ cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
 
 | Surface | Public availability | Strongest retained identity evidence | Important open work |
 |---|---|---|---|
-| Gradient boosting | Beta | Three-vendor cards for recorded configurations | Complete ordered boosting and categorical/CTR coverage; improve FAST performance without weakening checks. |
+| Gradient boosting | Beta | Three-vendor cards for recorded configurations | Numeric single-permutation ordered RMSE passes AMD/NVIDIA at `6dd44ac5`, with 130 bitwise-matching records. Broader categorical/CTR coverage and external parity remain. |
 | Random Forest / Extra Trees | Beta | Three-vendor cards for recorded configurations | Keep sklearn `max_leaf_nodes` semantics distinct from cuML-style level-order `max_leaves`; extend NVIDIA performance coverage. |
-| k-means, k-NN, DBSCAN | Beta | Three-vendor cards for recorded fixtures | The newer k-NN selector is experimental and is not the normal dispatch; component and public identity gates do not imply an end-to-end speedup. |
+| k-means, DBSCAN | Beta | Three-vendor cards for recorded fixtures | Broaden shapes and public-surface wheel smoke. |
+| k-NN | Beta | Three-vendor cards; the completed AMD four-arm layout outputs also match retained NVIDIA outputs and Apple hashes | Selector and transposed-distance flags remain opt-in. Broaden distributions and installed/external comparisons before changing normal dispatch. |
 | PCA, truncated SVD, OLS, Ridge, logistic regression | Beta | Three-vendor matrix for recorded fixtures | Broaden shapes and public-surface wheel smoke. |
 | FP32 matrix multiplication | Beta | Three-vendor frozen-profile sweep | Shapes and plans outside the recorded profile remain uncertified. |
 | Isolation Forest | Beta | Three-vendor card for the recorded fixture | Re-run current bindings on NVIDIA architectures affected by earlier context-lifetime failures. |
-| ARIMA filtering | Beta | Three-vendor card for the recorded filter fixture | The newer fitted-estimator surface still needs NVIDIA and AMD qualification. |
+| ARIMA filtering | Beta | Three-vendor card for the recorded filter fixture | The fitted estimator passes the frozen AMD/NVIDIA installed candidates in all three modes; final release qualification remains. |
 | Holt-Winters and spectral/time-series helpers | Beta | Apple–AMD cards for recorded fixtures | NVIDIA column remains pending. |
 | Gaussian process | Experimental | Apple–AMD IDENTICAL card for recorded fixture | Complete current-wheel and NVIDIA qualification; no performance claim. |
-| Mamba 1 | Experimental | Three-vendor operator card and backward certificate at `718495cd` | Published macOS forward/state API gate passed; newer NVIDIA/AMD source API checks passed. Linux installed-wheel checks and Python backward exposure remain. |
-| Mamba 2 | Experimental | Three-vendor backward certificate at `718495cd`, including L257 and incoming state | Newer NVIDIA/AMD source forward/state checks passed, including the AMD binding fix. Broader fixtures, Linux installed-wheel checks and Python backward exposure remain. |
-| Mamba 3 | Experimental | Three-vendor backward certificate at `718495cd` | Newer NVIDIA/AMD source forward/state checks passed. Linux installed-wheel checks and Python backward exposure remain. |
-| Transformer block | Experimental | Three-vendor operator card for an earlier fixture | Newer AMD source API checks passed; NVIDIA Python API qualification and the independent corpus API oracle remain open. Native certificates do not close those gates. |
-| UMAP | Published 0.5.0: dense `fit`/`fit_transform`. Source 0.6.0 candidate: `transform` and CSR graph storage for public fitting | Original three-vendor fixture: 186 stage cells at `718495cd`; separate newer source transform fixtures match across three vendors | Integrated CSR fit/transform API passed all modes on Apple/NVIDIA/AMD; macOS 0.6.0 installed checks passed. Publication and Linux wheels remain pending. |
+| Mamba 1 | Experimental | Three-vendor operator/backward evidence at `718495cd`; baseline and L64 pass and match AMD/NVIDIA at `395d9421` | Frozen AMD installed checks pass all modes; NVIDIA IDENTICAL passes, with non-IDENTICAL sequence accuracy work remaining. Python zero-state IDENTICAL backward is now exposed; exact installed-artifact and broader backward qualification remain open. |
+| Mamba 2 | Experimental | Three-vendor backward certificate at `718495cd`; baseline, L257 and incoming state pass and match AMD/NVIDIA at `395d9421` | Newer NVIDIA/AMD source forward/state checks passed, including the AMD binding fix. Frozen AMD installed checks pass all modes and NVIDIA IDENTICAL passes. Python zero-state IDENTICAL backward is now exposed; broader fixtures and exact installed-artifact qualification remain open. |
+| Mamba 3 | Experimental | Baseline and L65 pass AMD/NVIDIA at `395d9421`; public gradients and complete retained diagnostics match by bits | L65 uses the explicit [compositional arithmetic contract](mamba/BACKWARD_CERTIFICATION.md), with independent whole-forward public gradients. Current Apple installed checks pass all modes/interpreters and corrected native baseline passes; Apple L65 remains RED as described above. Later NVIDIA source passes FAST/IDENTICAL surface checks; the frozen failing wheel is not relabeled. Zero-state IDENTICAL Python backward is exposed; final Linux wheel and broader backward qualification remain open. |
+| Transformer block | Experimental | Three-vendor operator card for an earlier fixture | Frozen AMD installed API checks pass. NVIDIA lifetime fix passes IDENTICAL; the subsequent full-FP32 patch passes FAST/DETERMINISTIC. The current Apple wheel passes the full surface in all fifteen interpreter/mode jobs. Final Linux qualification and an independent corpus API oracle remain pending. |
+| UMAP | Published 0.5.0: dense `fit`/`fit_transform`. Source 0.6.0 candidate: `transform` and CSR graph storage for public fitting | Original three-vendor fixtures; expanded six-case IDENTICAL inputs/embeddings and 876 native stage cells match AMD/NVIDIA at `d88c7883` | All six expanded quality cases pass in all modes on AMD/NVIDIA after the self-neighbor fix. The frozen Linux candidates pass all installed UMAP modes and match six IDENTICAL input/embedding fixtures. Publication, final combined-wheel qualification and larger-scale coverage remain pending. |
 | Training primitives and checkpointing | Experimental | Local correctness gates | Cross-vendor public-surface qualification remains open. |
+
+The [AMD k-NN layout record](bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/README.md)
+retains all four arms, correctness bytes, rotating timing rounds and the
+comparison with earlier NVIDIA and Apple evidence. Its speedups are scoped
+to those fixtures and devices, not a general dispatch or scalability claim.
+
+The [weighted CTR slice](bench/results/e1/2026-09-05_235251-amd-catboost-fixed-partition/README.md)
+passes on AMD, including the production leaf estimator on fixed occupied
+zero-mass partitions at L2=0 and L2=3. This is focused native correctness;
+the numeric single-permutation [ordered RMSE path](gbdt/ORDERED_RMSE.md) now
+passes both GPUs at `6dd44ac5`, including fresh weighted-CTR checks. The
+[comparison](bench/results/resume/2026-09-06-ordered-mamba-knn/cross-device-continued.json)
+also matches all 5,440 new adversarial kNN records in all four flag arms.
+
+The [installed comparison](bench/results/resume/2026-09-06-installed-gap-closure/installed-lane-comparison.json)
+adds six UMAP fixtures (24 arrays) and the full OrderedRMSE model plus 72
+prediction cells matching across AMD/NVIDIA at `eb835021`. Both complete
+candidate dispositions remain visible; lane agreement does not approve the
+failed NVIDIA candidate for release. GBDT/OrderedRMSE saves now persist the
+effective numeric mode at `29a8c848`, tested with changed process defaults in
+lightweight checks and a separate NVIDIA native wrapper overlay. That newer
+wrapper is not present in the frozen candidate wheels or current PyPI releases.
 
 ## What counts as certification
 
@@ -113,6 +146,15 @@ At `718495cd`, Apple M4, NVIDIA RTX 4090, and AMD MI300X matched all 54
 native Mamba backward gradient tensors across five cases and all 186 cells
 in the named UMAP fixture. See the [three-vendor record](bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json).
 These source certificates do not certify other shapes or installed artifacts.
+The Mamba3 correctness claim from that historical certificate is superseded:
+its staged reference shared a missing scale/gamma chain-rule contribution.
+The [corrected AMD/NVIDIA record](bench/results/resume/2026-09-05-next-certification/corrected-backward-cross-device.json)
+passes all five baseline cases and matches 54 gradient tensors, while requiring
+independent whole-forward gradients for every Mamba3 public leaf. Its long
+profile was RED on intermediate checks despite matching public tensors. The
+[September 6 certificate](bench/results/resume/2026-09-06-ordered-mamba-knn/README.md)
+now passes both profiles on AMD/NVIDIA under the documented compositional
+arithmetic policy, retaining all intermediate outputs and direct differences.
 The later AMD allocation fix has its own successful source Python API rerun;
 see the [AMD source qualification record](bench/results/e1/2026-09-05_134041-mojolearn-e2-amd/README.md).
 That later binding evidence is separate from the original native certificate.
@@ -157,3 +199,25 @@ and [exact macOS 0.6.0 candidate qualification](bench/results/wheels/2026-09-05-
 The flag-gated k-NN selector improved paired median native request times by
 2.99x/5.99x/18.86x on the named NVIDIA 32/128/1000-query fixtures; these are
 not cuML comparisons or a claim that every algorithm improved.
+
+## September 6 bounded follow-ups and alpha exposure
+
+The [public alpha guide](python/mojolearn/ALPHA_API.md) lists ordinary module
+imports, existing optimizers/losses, fixed trainers and required native bindings.
+Alpha exposure does not certify missing binaries or unfinished algorithms.
+Ordered RMSE is not a ranking objective; see the
+[tree feature inventory](docs/TREE_ALPHA_FEATURE_STATUS.md).
+
+The [NVIDIA MLP campaign](bench/results/resume/2026-09-06-root-training-nvidia/README.md)
+passed all 18 jobs at `8f6ed41`, including independent reference/edge checks,
+16-step learning and complete same-device checkpoint continuation. Cross-vendor
+MLP identity and the new two-block byte LM remain unqualified.
+
+The [NVIDIA digits experiment](bench/results/resume/2026-09-06-root-umap-nvidia/README.md)
+measured real-data neighborhood trustworthiness and retention against
+umap-learn, plus a separate matched cuML timing workload. All 15 jobs passed.
+This closes that bounded real-data experiment, not arbitrary dataset or
+cross-vendor coverage. The
+[missing-vendor inventory](docs/MISSING_VENDOR_EVIDENCE_QUEUE.md) distinguishes
+existing ARIMA fitted API passes and other smoke/timing results from the full
+identity cells still owed.

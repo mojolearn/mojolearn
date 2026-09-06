@@ -59,7 +59,7 @@ gpu_arch_how = _backend.gpu_arch_how
 from .cluster import KMeans
 from .decomposition import PCA, TruncatedSVD
 from .density import DBSCAN, KernelDensity
-from .ensemble import ExperimentalTwoLevelFeatureFreq, GradientBoosting
+from .ensemble import ExperimentalTwoLevelFeatureFreq, GradientBoosting, OrderedRMSE
 from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
 from .linear_model import LinearRegression, LogisticRegression, Ridge
 from .neighbors import (
@@ -98,13 +98,17 @@ from .randomforest import RandomForestClassifier, RandomForestRegressor
 # module resolves its binding on FIRST USE rather than at import. A partial
 # build therefore still yields an importable package whose missing pieces
 # raise BY NAME when touched, which is `_backend.py`'s whole design.
-from . import _linalg_impl as linalg
+from . import linalg
+from .linalg import matmul
 from . import _metrics_impl as metrics
 from ._hierarchy_impl import AgglomerativeClustering
 from ._iforest_impl import IsolationForest
 from ._solver_impl import ElasticNet, Lasso
 from ._spectral_impl import SpectralClustering
-from ._umap_impl import UMAP
+from . import umap
+from .umap import UMAP
+from .neural_network import SmallMLPTrainer
+from .language_model import SmallByteLanguageModelTrainer
 from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
@@ -150,12 +154,15 @@ from ._gp_impl import (
 # deleted. This module is NOT abandoned -- it drives a shipped binding and
 # has its own surface gate (`tests/test_training_surface.py`) -- so the
 # fix is the import, not a deletion. It is imported PRIVATELY and adds no
-# public name: training stays internal, exactly as the release notes and
-# the paper say, and `__all__` below is unchanged. The import is safe at
+# public optimizer/loss names historically. The alpha training module below
+# now exposes the explicit supported primitives; SmallMLPTrainer also composes
+# them internally. The import is safe at
 # package load because the module resolves its binding lazily through
 # `_backend`, so an unbuilt training extension still raises BY NAME when
 # touched rather than at import.
 from . import _training_impl as _training_impl  # noqa: F401  (private)
+from . import training
+from .training import SGD, Adam, AdamW, clip_grad_norm_, cross_entropy
 from . import mamba
 from ._mamba_impl import (
     Mamba1Block,
@@ -189,6 +196,9 @@ from . import transformer
 from ._transformer_impl import TransformerBlock, TransformerState
 
 __all__ = [
+    "SGD",
+    "Adam",
+    "AdamW",
     "ARIMA",
     "AgglomerativeClustering",
     "ConstantKernel",
@@ -203,6 +213,7 @@ __all__ = [
     "ElasticNet",
     "ExperimentalTwoLevelFeatureFreq",
     "GradientBoosting",
+    "OrderedRMSE",
     "ExponentialSmoothing",
     "IsolationForest",
     "KMeans",
@@ -230,16 +241,27 @@ __all__ = [
     "Ridge",
     "TruncatedSVD",
     "UMAP",
+    "SmallMLPTrainer",
+    "SmallByteLanguageModelTrainer",
     "kpss_test",
     "linalg",
+    "matmul",
     "mamba",
     "metrics",
+    "neural_network",
+    "language_model",
     "transformer",
+    "training",
+    "umap",
+    "clip_grad_norm_",
+    "cross_entropy",
     "select_d",
     "__version__",
     "numeric_mode",
     "set_numeric_mode",
     "vendor",
+    "gpu_arch",
+    "gpu_arch_how",
 ]
 
 # Named absences. Importing one of these raises with a reason rather than an

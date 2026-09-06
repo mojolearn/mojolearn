@@ -47,7 +47,7 @@ from gbdt.models.ctr_value_table import (
     expand_raw_columns,
 )
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
-from std.math import log2
+from std.math import isfinite, log2
 
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
 # go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
@@ -722,10 +722,22 @@ def train(
             " (pointwise_non_symmetric.cpp:5-29)"
         )
 
+    if n_rows < 1 or n_features < 1:
+        raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
         raise Error("x_colmajor size mismatch")
     if len(y) != n_rows:
         raise Error("y size mismatch")
+    # Validate dense class codes before class-weight indexing or allocating
+    # prediction planes. The later objective check was too late to protect
+    # MakeClassificationWeights (upstream data_providers.cpp:162-168).
+    if loss == "MultiClass" or loss == "MultiClassOneVsAll":
+        for r in range(n_rows):
+            var label = y[r]
+            if not isfinite(label) or label < 0 or label >= Float32(n_rows):
+                raise Error("multiclass labels must be finite dense class codes 0..k-1")
+            if Float32(Int(label)) != label:
+                raise Error("multiclass labels must be integer class codes")
     if len(cat_features) != 0 and len(cat_features) != n_features:
         raise Error(
             "cat_features has "
@@ -1794,6 +1806,67 @@ def train(
         ctr_column_count,
         ctr_tables^,
         TTensorCtrRegistry(len(fold_counts)),
+    )
+
+
+def train_ordered_rmse(
+    ctx: DeviceContext,
+    x_colmajor: List[Float32], y: List[Float32],
+    n_rows: Int, n_features: Int, permutation: List[UInt32],
+    n_estimators: Int = 100, max_depth: Int = 6,
+    border_count: Int = 128,
+    learning_rate: Float32 = Float32(0.03),
+    l2_leaf_reg: Float32 = Float32(3.0),
+    sample_weight: List[Float32] = List[Float32](),
+) raises -> TrainedModel:
+    """Train the supported numeric RMSE Ordered arm, with explicit ordering.
+
+    One GPU, one permutation, finite numeric columns, zero starting point,
+    Newton-1 leaves, no bootstrap or random score noise. Returns the usual
+    serializable/predictable model. Other objectives, categorical CTRs,
+    missing values and early stopping use distinct APIs; this entry does
+    not silently interpret those options as supported Ordered features.
+    """
+    from std.math import isfinite
+    from max.gpu.host.device_attribute import DeviceAttribute
+    from gbdt.methods.dynamic_boosting import fit_ordered_rmse
+
+    if n_rows != len(y) or n_features < 1 or len(x_colmajor) != n_rows * n_features:
+        raise Error("train_ordered_rmse input shape mismatch")
+    if border_count < 1 or border_count > 255:
+        raise Error("train_ordered_rmse supports 1..255 borders")
+    var borders = List[List[Float32]]()
+    var fold_counts = List[Int]()
+    var one_hot = List[Bool]()
+    var nan_treatment = List[Int]()
+    for f in range(n_features):
+        var column = List[Float32]()
+        for r in range(n_rows):
+            var value = x_colmajor[f * n_rows + r]
+            if not isfinite(value):
+                raise Error("train_ordered_rmse requires finite numeric features")
+            column.append(value)
+        var grid = best_split(column^, border_count)
+        fold_counts.append(len(grid))
+        borders.append(grid^)
+        one_hot.append(False)
+        nan_treatment.append(NAN_TREATMENT_AS_IS)
+    var layout = build_layout(fold_counts)
+    var cindex = _build_cindex_from_floats(ctx, x_colmajor, n_rows, borders, fold_counts)
+    var result = fit_ordered_rmse(
+        ctx, layout, cindex, y, sample_weight, permutation,
+        n_estimators, max_depth,
+        ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
+        learning_rate, l2_leaf_reg,
+    )
+    # Keep the aggregate intact while its fold/device cursors are destroyed.
+    # Moving this nested field alone leaves a partially consumed result in
+    # Mojo; the exported host model copy has no device-buffer ownership.
+    var exported_model = result.model.copy()
+    return TrainedModel(
+        exported_model^, fold_counts^, one_hot^, borders^, nan_treatment^,
+        List[Float64](), List[Float64](), -1, False, 0,
+        List[TCtrValueTable](), TTensorCtrRegistry(n_features),
     )
 
 

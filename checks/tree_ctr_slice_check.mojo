@@ -47,7 +47,9 @@ from gbdt.gpu_data.feature_blocks import blocks_for
 from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
-from gbdt.methods.doc_parallel_boosting import fit_two_level_feature_freq_tree
+from gbdt.methods.doc_parallel_boosting import (
+    fit_two_level_feature_freq_tree, two_level_weighted_leaf_value,
+)
 from gbdt.train import TrainedModel, predict_floats
 
 
@@ -510,11 +512,19 @@ def main() raises:
         production_columns, production_folds, production_one_hot,
         oracle_candidate^, fold_capacity=grid.border_count,
     )
-    var oracle_weights: List[Float32] = [0, 0, 1, 2, 3, 0]
+    # Unequal targets and unequal weights expose ignored weights even when
+    # the scorer chooses a shallow tree. Zero-mass estimation has a separate
+    # fixed-partition gate: an optimizer need not choose a zero-mass leaf.
+    var oracle_weights: List[Float32] = [0, 1, 2, 3, 4, 0]
+    var oracle_targets: List[Float32] = [7, 1, 2, 3, 5, -3]
+    var fixed_rows = ctx.enqueue_create_host_buffer[DType.uint32](6)
+    var fixed_order: List[UInt32] = [0, 5, 1, 2, 3, 4]
+    for r in range(6):
+        fixed_rows.unsafe_ptr().unsafe_store(r, fixed_order[r])
     for regularization in range(2):
         var oracle_l2 = Float32(3 * regularization)
         var weighted_fit = fit_two_level_feature_freq_tree(
-            ctx, oracle_initial, x, production_y, oracle_weights,
+            ctx, oracle_initial, x, oracle_targets, oracle_weights,
             production_base_cindex, production_columns, production_folds,
             production_one_hot, production_borders, 6, 3, grid,
             learning_rate=Float32(0.1), l2_leaf_reg=oracle_l2,
@@ -538,9 +548,8 @@ def main() raises:
         oracle_mass.resize(n_leaves, Float32(0.0))
         for r in range(6):
             var leaf = Int(memberships[r])
-            oracle_sums[leaf] += oracle_weights[r] * production_y[r]
+            oracle_sums[leaf] += oracle_weights[r] * oracle_targets[r]
             oracle_mass[leaf] += oracle_weights[r]
-        var saw_zero_weight_row_leaf = False
         for r in range(6):
             var leaf = Int(memberships[r])
             var expected = Float32(0.0)
@@ -549,8 +558,6 @@ def main() raises:
                     Float32(0.1) * oracle_sums[leaf]
                     / (oracle_mass[leaf] + oracle_l2)
                 )
-            else:
-                saw_zero_weight_row_leaf = True
             if not isfinite(actual[r]) or abs(actual[r] - expected) > Float32(1e-6):
                 raise Error(
                     "weighted tensor leaf differs from independent sum: row="
@@ -559,8 +566,22 @@ def main() raises:
                     + " expected=" + String(expected)
                     + " l2=" + String(oracle_l2)
                 )
-        if not saw_zero_weight_row_leaf:
-            raise Error("weighted tensor fixture did not cover a zero-weight leaf")
+        # Two real rows occupy the zero-mass partition; their nonzero
+        # targets sum to four, so ignoring weights cannot accidentally pass.
+        var zero_leaf = two_level_weighted_leaf_value(
+            oracle_targets, oracle_weights, fixed_rows, 0, 2,
+            Float32(0.5), oracle_l2,
+        )
+        var positive_leaf = two_level_weighted_leaf_value(
+            oracle_targets, oracle_weights, fixed_rows, 2, 4,
+            Float32(0.5), oracle_l2,
+        )
+        var want_positive = Float32(17.0) / (Float32(10.0) + oracle_l2)
+        if zero_leaf != Float32(0.0) or not isfinite(positive_leaf) or (
+            abs(positive_leaf - want_positive) > Float32(1e-6)
+        ):
+            raise Error("fixed occupied zero-mass/positive-mass leaf estimator failed")
+    print("WEIGHTED LEAF PASS: learned means; occupied zero-mass partition at L2=0 and 3")
     var sync_splits = List[TBinarySplit]()
     var reference_splits = List[TBinarySplit]()
     if not run_synchronized_symmetric_level(

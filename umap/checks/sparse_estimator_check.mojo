@@ -60,6 +60,9 @@ def fit_case(
     var curve = fit_umap_curve(params.min_dist, params.spread)
     var expected = optimize_layout(
         ctx, initial_dense^, dense.weights, n, params.n_components, epochs,
+        initial_learning_rate=params.learning_rate,
+        repulsion_strength=params.repulsion_strength,
+        negative_sample_rate=params.negative_sample_rate,
         a=curve.a, b=curve.b, seed=params.random_seed,
     )
     var actual = sparse_fit_transform(ctx, x, n, d, params)

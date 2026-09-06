@@ -59,30 +59,18 @@ or identical (cross-vendor identity within the certified profile and
 fixtures). `_extension()` checks the binary's compile-time mode against
 the requested tier.
 
-EVIDENCE SNAPSHOT, 2026-09-05. Native forward/backward certification and
-Python API qualification are separate. At source `718495cd`, Apple M4,
-NVIDIA RTX 4090 and AMD MI300X matched 54 native gradient tensors across
-five Mamba-1/2/3 cases; see
-`bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json`.
-The newer NVIDIA source/binding record at `b715b124` retained five native
-cases and 102 Python forward/state checks:
-`bench/results/e1g/2026-09-05_065820-nvidia-mamba/classification.json`.
-DigitalOcean AMD MI325X matched all 54 NVIDIA native gradient tensors at
-that same source; see
+EVIDENCE SNAPSHOT. Native certificates, public API checks and installed-wheel
+qualification are separate. Historical Apple/NVIDIA/AMD native comparisons
+covered five cases and 54 gradient tensors; see
+`bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json` and
 `bench/results/e1/2026-09-05_111524-mojolearn-e2-amd/comparisons.json`.
-
-The AMD Python binding at that baseline aborted with a GPU memory fault
-(exit 134). The state-allocation fix `6dc93269` has a retained Apple
-IDENTICAL API result: 102 checks, zero failures; see
-`bench/results/mamba/2026-09-05-state-allocation-fix/metadata.json`.
-Durable AMD and NVIDIA API qualification of that fix remains pending;
-an AMD supplemental pass without retained artifacts is not a certificate.
-The released macOS 0.5.0 wheel predates this fix. These source results do
-not certify a Linux wheel. Python backward is not exposed.
-
-The API gate is `python/mojolearn/tests/test_mamba_surface.py`; build
-with `bash bindings/build_mamba.sh` for the selected numeric mode.
-
+The retained September 6 NVIDIA run3 reports 102 forward/API checks passing
+in each of FAST and IDENTICAL, and five Mamba2/3 backward surface tests
+passing; see `bench/results/resume/2026-09-06-root-feature-nvidia/run3/remote/feature-finish/`.
+That source-run evidence does not certify an unbuilt alpha wheel or every
+vendor, shape and mode. All three classes expose zero-state IDENTICAL
+prefill backward. Current scope and packaging boundaries are documented in
+`mamba/PUBLIC_ALPHA_SURFACE.md`; older comments are not release certificates.
 """
 
 import math
@@ -311,6 +299,45 @@ class _MambaBase(NumericModeMixin):
                 )
         return mod
 
+    def _prefill_backward(self, x, grad_output, entry):
+        what = type(self).__name__ + ".backward"
+        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
+        if mode != "identical":
+            raise NotImplementedError(
+                f"mojolearn {what}: only IDENTICAL zero-state prefill is "
+                f"implemented; got numeric_mode={mode!r}"
+            )
+        x = _batch_tokens(x, what, self.d_model, False)
+        b, l, _ = x.shape
+        if b < 1 or l < 1:
+            raise ValueError(f"mojolearn {what}: B and L must be positive")
+        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
+                         what, "grad_output", x.shape)
+        if not np.isfinite(dy).all():
+            raise ValueError(f"mojolearn {what}: grad_output must be finite")
+        kwargs = {"dt_limit": self.dt_limit} if entry == "mamba2_backward" else {}
+        checked = type(self)(dict(zip(self._W_NAMES, self._w)),
+                             numeric_mode="identical", **kwargs)
+        if checked.d_model != self.d_model:
+            raise ValueError(f"mojolearn {what}: current weights changed d_model")
+        weights = checked._w
+        # Resolve before allocating gradients so an older binary fails clearly.
+        extension = self._extension()
+        native = getattr(extension, entry, None)
+        if native is None:
+            raise RuntimeError(
+                f"mojolearn {what}: loaded Mamba extension lacks {entry}; "
+                "rebuild bindings/build_mamba.sh in IDENTICAL mode"
+            )
+        gradients = [np.empty_like(x)] + [np.empty_like(w) for w in weights]
+        addresses = ([_addr_ro(x)] + [_addr_ro(w) for w in weights]
+                     + [_addr_ro(dy)] + [_addr(g) for g in gradients])
+        params = [b, l, self.d_model]
+        if entry == "mamba2_backward":
+            params.extend(checked.dt_limit)
+        native(addresses, params)
+        return dict(zip(("x",) + self._W_NAMES, gradients))
+
 
 class Mamba1Block(_MambaBase):
     """One Mamba-1 block on the GPU -- norm, mixer, residual
@@ -318,7 +345,8 @@ class Mamba1Block(_MambaBase):
     under profile `mojolearn.identical.mamba1.fp32.v1`
     (`mamba/IDENTICAL_MAMBA_CONTRACT.md`). The module evidence snapshot
     distinguishes native cross-vendor certificates from Python API checks;
-    the Python surface exposes forward and state continuation, not backward.
+    the Python surface exposes forward, state continuation and a zero-state
+    IDENTICAL prefill backward operation.
 
     WEIGHTS IN, AS GIVEN BITS. The constructor takes a dict keyed by the
     upstream parameter names (the corpus's names,
@@ -473,6 +501,52 @@ class Mamba1Block(_MambaBase):
         claim, at any L)."""
         return self._call(x, state, step=False)
 
+    def backward(self, x, grad_output):
+        """Return a zero-state prefill VJP as independent named float32 arrays.
+
+        The result contains ``x`` and the ten weight names accepted by the
+        constructor. ``grad_output`` has the same (B, L, d_model) shape as x.
+        Forward is recomputed with the current weights on every call; no
+        preceding forward call or cached activations are used. This operation
+        is synchronous and supports IDENTICAL only. Stateful/decode backward
+        and gradients of final recurrent state are not exposed.
+        """
+        what = "Mamba1Block.backward"
+        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
+        if mode != "identical":
+            raise NotImplementedError(
+                f"mojolearn {what}: only IDENTICAL zero-state prefill is "
+                f"implemented; got numeric_mode={mode!r}"
+            )
+        x = _batch_tokens(x, what, self.d_model, False)
+        b, l, _ = x.shape
+        if b < 1 or l < 1:
+            raise ValueError(f"mojolearn {what}: B and L must be positive")
+        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
+                         what, "grad_output", x.shape)
+        if not np.isfinite(dy).all():
+            raise ValueError(f"mojolearn {what}: grad_output must be finite")
+        # Revalidate current weight layouts before exposing raw addresses.
+        # In-place value changes are intentional; dtype/shape mutation is not.
+        checked = Mamba1Block(dict(zip(self._W_NAMES, self._w)),
+                              numeric_mode="identical")
+        if checked.d_model != self.d_model:
+            raise ValueError(f"mojolearn {what}: current weights changed d_model")
+        weights = checked._w
+        extension = self._extension()
+        native = getattr(extension, "mamba1_backward", None)
+        if native is None:
+            raise RuntimeError(
+                f"mojolearn {what}: loaded Mamba extension lacks mamba1_backward; "
+                "install a current alpha wheel with IDENTICAL Mamba backward support "
+                "or rebuild bindings/build_mamba.sh in IDENTICAL mode"
+            )
+        gradients = [np.empty_like(x)] + [np.empty_like(w) for w in weights]
+        addresses = ([_addr_ro(x)] + [_addr_ro(w) for w in weights]
+                     + [_addr_ro(dy)] + [_addr(g) for g in gradients])
+        native(addresses, [b, l, self.d_model])
+        return dict(zip(("x",) + self._W_NAMES, gradients))
+
     def step(self, x, state):
         """One decode token: `Mamba.step`'s semantics, the profile's
         spelling -- the SAME entry as `forward` at L = 1 with the state
@@ -500,7 +574,8 @@ class Mamba2Block(_MambaBase):
     the five-case Mamba-1/2/3 backward evidence described in the module
     snapshot. Python forward/state qualification of the state-allocation
     fix is retained on Apple; NVIDIA and AMD requalification is pending.
-    Python backward is not exposed.
+    All three blocks expose zero-state IDENTICAL prefill VJPs. Qualification
+    of these new Python entries is separate from historical forward-only results.
 
     WEIGHTS IN, AS GIVEN BITS, keyed by the corpus's names
     (`mamba/corpus/README.md`, Mamba-2 section). With d_inner =
@@ -703,6 +778,18 @@ class Mamba2Block(_MambaBase):
         construction; the identical tier's gates verify it)."""
         return self._call(x, state, step=False)
 
+    def backward(self, x, grad_output):
+        """Return the zero-state prefill VJP for x and all nine weights.
+
+        IDENTICAL float32 only. Forward is recomputed using current weights;
+        no previous forward or cached state is consumed or modified. Returns
+        independent arrays under the constructor's exact weight names plus
+        ``x``. Incoming-cache and final-state cotangents are not supported.
+        Retained NVIDIA fixture checks and outstanding wheel/vendor scopes are
+        listed in mamba/PUBLIC_ALPHA_SURFACE.md.
+        """
+        return self._prefill_backward(x, grad_output, "mamba2_backward")
+
     def step(self, x, state):
         """One decode token: `Mamba2.step`'s semantics, the profile's
         spelling -- PREFILL RESUMPTION at L = 1 through the same entry as
@@ -802,7 +889,9 @@ class Mamba3Block(_MambaBase):
     (`mamba/IDENTICAL_MAMBA3_CONTRACT.md`). The module evidence snapshot
     includes native three-vendor backward certification and qualified Apple
     Python forward/state checks. NVIDIA and AMD API requalification of
-    the state-allocation fix is pending. Python backward is not exposed.
+    the state-allocation fix is pending. All three blocks expose zero-state
+    IDENTICAL prefill VJPs; qualification of these new Python entries is
+    separate from historical forward-only results.
 
     DELTAS FROM Mamba2Block, in one breath (contract section 0): NO conv
     (in_proj feeds the core directly; v is the RAW x split); NO dt clamp
@@ -1038,6 +1127,18 @@ class Mamba3Block(_MambaBase):
         prefill that ran the whole sequence at once (DEVIATION 831's
         construction; the identical tier's gates verify it)."""
         return self._call(x, state, step=False)
+
+    def backward(self, x, grad_output):
+        """Return the zero-state prefill VJP for x and all nine weights.
+
+        IDENTICAL float32 only. Forward is recomputed using current weights;
+        no previous forward or cached state is consumed or modified. Returns
+        independent arrays under the constructor's exact weight names plus
+        ``x``. Incoming-cache and final-state cotangents are not supported.
+        Retained NVIDIA fixture checks and outstanding wheel/vendor scopes are
+        listed in mamba/PUBLIC_ALPHA_SURFACE.md.
+        """
+        return self._prefill_backward(x, grad_output, "mamba3_backward")
 
     def step(self, x, state):
         """One decode token: `Mamba3.step`'s semantics, the profile's

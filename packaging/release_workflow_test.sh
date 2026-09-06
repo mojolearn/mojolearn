@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The release workflow's three artifact-handling shell blocks, RUN, on the Mac.
+# File-only staging-plumbing fixtures for three release workflow shell blocks.
+# Root runs this test; no package/native or numerical qualification occurs.
 #
 #   bash packaging/release_workflow_test.sh
 #
@@ -20,6 +21,10 @@
 # published" steps VERBATIM, then drives them against fabricated wheels in a
 # temp directory. Nothing is compiled, downloaded, published or rented, and
 # the real `python/dist/` is never touched.
+# The installed-qualification verifier is an EXPLICIT TEST DOUBLE in each
+# temporary workspace. It checks its argv and records invocation; the real
+# verifier and stable workflow remain unchanged. These fake wheels cannot
+# establish installed compatibility or numerical proof.
 #
 # THE RULE THIS FILE LEARNED THE HARD WAY, twice. A refusal case that stops
 # refusing must FAIL, not disappear: `run_admit "$B" || ok "..."` scores
@@ -57,11 +62,31 @@ ok(){ echo "  PASS  $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL  $1  ($2)"; FAIL=$((FAIL+1)); }
 
 mkbox(){ # $1=version ; builds a fake workspace, echoes its path
-  local V="$1" B; B="$(mktemp -d)"
-  mkdir -p "$B/python/dist" "$B/stage"
+  local V="$1" B; B="$(mktemp -d "$SP/box.XXXXXX")"
+  mkdir -p "$B/python/dist" "$B/stage" "$B/tools"
   printf 'version = "%s"\n' "$V" > "$B/python/pyproject.toml"
   : > "$B/python/dist/mojolearn-$V-py3-none-macosx_11_0_arm64.whl"
   echo "macos body $V" > "$B/python/dist/mojolearn-$V-py3-none-macosx_11_0_arm64.whl"
+  cat > "$B/tools/check_linux_release_qualification.py" <<'VERIFIER_STUB'
+"""TEST DOUBLE ONLY: staging invocation, not installed/numerical qualification."""
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument('wheel', type=Path)
+parser.add_argument('--qualification-root', required=True, type=Path)
+parser.add_argument('--source-root', required=True, type=Path)
+args = parser.parse_args()
+root = Path.cwd().resolve()
+if (args.source_root.resolve() != root or args.qualification_root.resolve() != root / 'stage/qualification'
+        or args.wheel.parent.resolve() != root / 'stage' or not args.wheel.is_file()):
+    raise SystemExit('TEST VERIFIER: incorrect qualification invocation')
+with (root / 'verifier-invocation.json').open('x') as stream:
+    json.dump(dict(wheel=str(args.wheel), qualification_root=str(args.qualification_root),
+                   source_root=str(args.source_root), scope='test-double staging only'), stream)
+if (root / 'refuse-qualification').exists():
+    raise SystemExit('TEST VERIFIER: qualification refused')
+VERIFIER_STUB
   echo "$B"
 }
 stage(){ # $1=box $2=filename [$3=BAD to corrupt the sidecar]
@@ -71,12 +96,13 @@ stage(){ # $1=box $2=filename [$3=BAD to corrupt the sidecar]
   elif [ "${3:-}" = NOSIDE ]; then :
   else shasum -a 256 "$B/stage/$N" | sed "s#$B/stage/##" > "$B/stage/$N.sha256"; fi
 }
-run_admit(){ ( cd "$1" && MOJOLEARN_LINUX_WHEEL_DIR="$1/stage" GITHUB_OUTPUT="$1/gho.txt" bash "$SP/admit.sh" ) >"$1/admit.out" 2>&1; }
+run_admit(){ ( cd "$1" && MOJOLEARN_LINUX_WHEEL_DIR="$1/stage" GITHUB_WORKSPACE="$1" GITHUB_OUTPUT="$1/gho.txt" bash "$SP/admit.sh" ) >"$1/admit.out" 2>&1; }
 run_digest(){ ( cd "$1" && GITHUB_OUTPUT="$1/gho2.txt" bash "$SP/digest.sh" ) >"$1/digest.out" 2>&1; }
 
 echo "== admit =="
 B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"
 run_admit "$B" && [ -f "$B/python/dist/mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl" ] \
+  && [ -s "$B/verifier-invocation.json" ] \
   && ok "a good staged wheel is admitted" || no "a good staged wheel is admitted" "rc/copy"
 
 B=$(mkbox 0.3.0)   # empty stage dir
@@ -102,6 +128,14 @@ refuses "$B" "an UNAUDITED linux_x86_64 tag is REFUSED" "carries no manylinux ta
 B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"; stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_34_x86_64.whl"
 refuses "$B" "TWO staged wheels is REFUSED rather than guessed" "stage exactly one"
 
+B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"
+: > "$B/refuse-qualification"
+refuses "$B" "qualification-verifier refusal propagates" "TEST VERIFIER: qualification refused"
+[ -s "$B/verifier-invocation.json" ] \
+  && [ ! -e "$B/python/dist/mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl" ] \
+  && ok "refused qualification is witnessed and never copied" \
+  || no "refused qualification is witnessed and never copied" "missing invocation or copied wheel"
+
 echo "== digest =="
 B=$(mkbox 0.3.0); run_digest "$B" \
   && [ "$(grep -c 'macosx' "$B/gho2.txt")" -ge 1 ] \
@@ -110,6 +144,7 @@ B=$(mkbox 0.3.0); run_digest "$B" \
 
 B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"
 run_admit "$B" && run_digest "$B" \
+  && [ -s "$B/verifier-invocation.json" ] \
   && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 2 ] \
   && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -n 'macosx' | cut -d: -f1)" = 2 ] \
   && ok "two wheels, macOS FIRST in the manifest" \
@@ -121,7 +156,7 @@ echo "== publish =="
 pub(){ # $1=dir $2=EXPECTED_WHEEL $3=EXPECTED_SHA256 $4=manifest text
   ( cd "$1" && EXPECTED_WHEEL="$2" EXPECTED_SHA256="$3" EXPECTED_MANIFEST="$4" \
       bash "$SP/publish.sh" ) >"$1/pub.out" 2>&1; }
-pubbox(){ local D; D="$(mktemp -d)"; mkdir -p "$D/dist"
+pubbox(){ local D; D="$(mktemp -d "$SP/pub.XXXXXX")"; mkdir -p "$D/dist"
   echo "macos"  > "$D/dist/mojolearn-0.3.0-py3-none-macosx_11_0_arm64.whl"
   echo "linux"  > "$D/dist/mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"
   ( cd "$D/dist" && shasum -a 256 mojolearn-0.3.0-py3-none-macosx_11_0_arm64.whl \

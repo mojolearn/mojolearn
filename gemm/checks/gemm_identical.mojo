@@ -1340,7 +1340,7 @@ def identical_gemm_with_plan(
     )
 
 
-def identical_gemm_into(
+def identical_gemm_into[allow_vendor: Bool = True](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
@@ -1354,6 +1354,10 @@ def identical_gemm_into(
     """`C = op(A) . op(B)` into a CALLER-OWNED workspace, on the plan
     `choose_gemm_plan` picks. ASYNCHRONOUS: nothing here waits, and the
     caller must keep every buffer alive past its own `ctx.synchronize()`.
+
+    `allow_vendor=False` retains full-FP32 operands in every mode by
+    bypassing the vendor path. The default preserves existing callers.
+    IDENTICAL never uses that path, regardless of this argument.
 
     `ws` must hold at least `identical_gemm_workspace_max_floats(m, n, k)`
     floats. **Sizing it for one plan and letting the dispatcher pick another
@@ -1378,7 +1382,7 @@ def identical_gemm_into(
     # arm declines return False and FALL THROUGH to the pinned plan exactly
     # as 1876 does. Under IDENTICAL this branch is not compiled at all:
     # bit-unchanged by construction.
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
             return
     identical_gemm_with_plan(
@@ -1536,7 +1540,7 @@ def _fast_vendor_gemm(
     return False
 
 
-def identical_gemm(
+def identical_gemm[allow_vendor: Bool = True](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
@@ -1555,6 +1559,12 @@ def identical_gemm(
     whether one was used** -- that is the point of the profile, and Phase 3
     and Phase 4 call this form.
 
+    `allow_vendor=False` selects the existing full-FP32 kernel plans in
+    every mode. Mamba's public tolerance contract requires this: NVIDIA's
+    default vendor matmul reduces operand precision to TF32. This argument
+    is propagated to the workspace entry so fallback cannot re-enter the
+    vendor route. Other callers keep their existing default dispatch.
+
     **THIS FORM SYNCHRONIZES BEFORE IT RETURNS, and it has to.**
     `[[mojo-buffer-freed-at-last-use]]`: a `DeviceBuffer` created here is
     dead at its `.unsafe_ptr()`, so a scratch buffer allocated inside this
@@ -1568,13 +1578,13 @@ def identical_gemm(
     # IDENTICAL this branch is not compiled at all. Read `_fast_vendor_gemm`
     # before changing anything here; the `n == 1` clause in it is a
     # correctness requirement and not an optimization.
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
             return
     var nws = identical_gemm_workspace_max_floats(m, n, k)
     var ws = ctx.enqueue_create_buffer[DType.float32](nws)
     ctx.synchronize()
-    identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
+    identical_gemm_into[allow_vendor](ctx, c, a, b, ws, m, n, k, op)
     ctx.synchronize()
     _ = ws
 

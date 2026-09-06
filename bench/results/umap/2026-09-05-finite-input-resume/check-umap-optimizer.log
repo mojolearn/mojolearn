@@ -1,2 +1,0 @@
-✨ Pixi task (check-umap-optimizer in default): mojo run -I . umap/checks/optimizer_check.mojo
-UMAP deterministic optimizer PASS

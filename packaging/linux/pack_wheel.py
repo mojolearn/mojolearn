@@ -252,6 +252,7 @@ def main():
     entries["mojolearn_diagnostics.py"] = PY_DIR / "mojolearn_diagnostics.py"
     for py in sorted(PKG.glob("*.py")):
         entries[f"mojolearn/{py.name}"] = py
+    entries["mojolearn/ALPHA_API.md"] = PKG / "ALPHA_API.md"
     seen_vendor_libs = set()
     for vendor, arch, files, libs, _ in sets:
         for rel, p in files.items():

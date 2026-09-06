@@ -12,6 +12,7 @@ process memory or speed claim follows without main-lane measurements.
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from neighbors.estimator import knn_search
+from umap.graph import canonicalize_self_neighbors
 from umap.sparse_graph import SparseFuzzySimplicialGraph, sparse_fuzzy_simplicial_graph
 from umap.curve import fit_umap_curve
 from umap.sparse_optimizer import optimize_sparse_layout, validate_sparse_weights
@@ -55,6 +56,7 @@ def sparse_fuzzy_graph_from_data(
     _ = hx^
     _ = hd^
     _ = hi^
+    canonicalize_self_neighbors(indices, distances, n_samples, params.n_neighbors)
     return sparse_fuzzy_simplicial_graph(
         indices^, distances^, n_samples, params.n_neighbors,
         params.set_op_mix_ratio,
@@ -119,6 +121,9 @@ def sparse_fit_transform(
     var curve = fit_umap_curve(params.min_dist, params.spread)
     return optimize_sparse_layout(
         ctx, initial^, graph, n_samples, params.n_components, epochs,
+        initial_learning_rate=params.learning_rate,
+        negative_sample_rate=params.negative_sample_rate,
+        repulsion_strength=params.repulsion_strength,
         a=curve.a, b=curve.b,
         seed=params.random_seed,
     )

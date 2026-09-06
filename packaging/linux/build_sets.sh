@@ -21,13 +21,10 @@
 # target) or disagree with each other fails this script rather than producing
 # a set under a label somebody typed.
 #
-# THIRTY BUILDS, IN PARALLEL ACROSS TIERS. Measured 2026-08-29: ten bindings
-# times three tiers took about fifty minutes SERIALLY on a rented RTX 4090 and
-# blew a 54-minute work bound. The three tiers write to three different
-# directories and share nothing but the compiler cache, so they run as three
-# background jobs (MOJOLEARN_BUILD_JOBS, default 3). Whether that fits in a
-# lease on a given box is a measurement this file has not made; the per-build
-# logs carry timestamps so the next leg can read it.
+# Build tiers serially. Concurrent compilers previously multiplied worker counts
+# and memory pressure; MOJOLEARN_BUILD_JOBS must now be 1. The inherited Linux
+# affinity is capped at four CPUs, compiler workers at two, BLAS/OpenMP at one.
+# A partial timed-out build is retained as partial, never release-qualified.
 #
 # THE BUILD SCRIPTS ARE THE EXISTING ONES. bindings/build_*.sh already know
 # the tier define and the tier directory; this file runs them with the gates
@@ -42,7 +39,19 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO"
 mkdir -p "$DEST/build_logs" "$DEST/sets"
 PIXI_ENV="${MOJOLEARN_BUILD_PIXI_ENV:-gbmbench}"
-JOBS="${MOJOLEARN_BUILD_JOBS:-3}"
+JOBS="${MOJOLEARN_BUILD_JOBS:-1}"
+[[ "$JOBS" = 1 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1: wheel builds are serial' >&2; exit 2; }
+export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+if [[ "$(uname -s)" != Linux ]]; then
+    echo 'Linux vendor builds must run on the remote Linux GPU host' >&2
+    exit 2
+fi
+command -v taskset >/dev/null || { echo 'taskset required for CPU cap' >&2; exit 2; }
+BUILD_CPUS=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:4])))') || exit 2
+[[ -n "$BUILD_CPUS" ]] || { echo 'Empty CPU affinity' >&2; exit 2; }
+taskset -pc "$BUILD_CPUS" $$ || exit 2
 TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
 # THE TWO LISTS BELOW ARE THE LINUX WHEEL'S CONTENTS AND THEY GO STALE
 # SILENTLY. A binding missing from them is not a build error -- it is a wheel
@@ -91,17 +100,7 @@ build_tier() {
 
 T0=$(date +%s)
 BUILD_RC=0
-if [ "$JOBS" -le 1 ]; then
-  for tier in $TIERS; do build_tier "$tier" || BUILD_RC=1; done
-else
-  # One background job per tier (three), each writing its own directory.
-  pids=""
-  for tier in $TIERS; do
-    build_tier "$tier" &
-    pids="$pids $!"
-  done
-  for p in $pids; do wait "$p" || BUILD_RC=1; done
-fi
+for tier in $TIERS; do build_tier "$tier" || BUILD_RC=1; done
 say "builds finished in $(( $(date +%s) - T0 ))s (rc=$BUILD_RC)"
 
 # ---------------------------------------------------------------- read-back

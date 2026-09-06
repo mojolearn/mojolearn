@@ -1,5 +1,35 @@
 # Release runbook
 
+## Explicit alpha API exposure
+
+The user-authorized alpha route exposes implemented Python operations before
+completion of every numerical certificate. It is separate from the stable
+build-and-qualify route below and requires an explicit `X.Y.ZaN` version.
+`packaging/alpha_overlay.py` preserves the base wheel's native/runtime bytes,
+overlays current Python modules and the alpha guide, and records both source
+and native provenance. Missing native extensions remain unavailable; neither
+file presence nor successful imports certify numerical behavior.
+
+Root assembles each candidate from an identified base wheel, verifies the
+result with `packaging/verify_alpha_artifacts.py`, and retains compatibility
+checks separately. The candidate directory contains exactly its wheels and
+`alpha-manifest.json` (`mojolearn.alpha-release.v1`, alpha `version`, and a
+`files` mapping from each exact wheel basename to its SHA256).
+
+For publication, stage those exact files as assets of an `alpha-api-*` release
+tag. Dispatch the existing `release-provenance.yml` Trusted Publisher workflow
+with `alpha_candidate_tag`, the exact `alpha_manifest_sha256`, and `publish`.
+The alpha route uses Linux file verification capped at two CPU cores, checks
+the hashes again immediately before OIDC upload, and does not start the Apple
+build job. Stable publication retains its existing checks. A local candidate
+or a workflow source edit is not publication: verify the actual PyPI filenames
+and hashes before updating release status.
+
+The September 6 candidates and file/import evidence are retained under
+`bench/results/releases/2026-09-06-alpha-api/`. They currently expose the API
+using inherited macOS and AMD binaries; newly authored byte-LM native code
+needs a separate build. NVIDIA remains source-build-only for this candidate.
+
 Releases are built and published by
 `.github/workflows/release-provenance.yml`. Publishing uses GitHub Trusted
 Publisher OIDC; do not add an API token. The workflow is manual-only and its
@@ -125,6 +155,22 @@ UMAP fit/transform/held-out quality checks and digest gates must pass before
 publication. Never label that artifact as byte-equivalent to an earlier
 candidate without comparing the digests. The workflow retains the UMAP
 qualification manifest and rechecks wheel digests before upload.
+
+Immediately before recording upload digests, the workflow also checks that
+the macOS wheel matches the successful UMAP qualification digest, all nine
+installed GPU jobs and four setup jobs succeeded, the qualification sources
+are unchanged, and the wrapper and per-mode binding hashes match the wheel.
+This prevents a replaced candidate from acquiring a new upload digest after
+qualification. Retained evidence can be checked without GPU work:
+
+```sh
+python3 tools/verify_umap_qualification.py /path/to/candidate.whl \
+  --results /path/to/qualification/results.json \
+  --source-root . --expected-version 0.6.0
+```
+
+This reads the existing evidence and artifact only. It neither reruns the
+installed checks nor certifies a different source state or Linux wheel.
 
 ## 5. Close the release
 

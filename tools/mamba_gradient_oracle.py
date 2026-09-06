@@ -60,6 +60,91 @@ STATE_BOUNDARY_DIAGNOSTICS = {
 }
 
 
+# Native Mamba3 prefill exposes these diagnostics in addition to its ten
+# public leaves. Pin the inventory independently of both runtime manifests:
+# removing a failed tensor from either manifest must not turn the gate green.
+# The isolated beta-only oracle terms are not native outputs; their complete
+# contributions are checked through the current dt/trap joins instead.
+MAMBA3_PREFILL_DIAGNOSTICS = (
+    'stage.gate.out',
+    'stage.skip.out',
+    'stage.in_proj.z',
+    'partial.in_proj.x.from_skip',
+    'stage.qkdot.out',
+    'partial.qkdot.B_biased',
+    'partial.qkdot.C_biased',
+    'partial.qkdot.gamma',
+    'partial.qkdot.dt',
+    'partial.qkdot.trap_raw',
+    'partial.s16.rot.q',
+    'partial.s16.kscale',
+    'partial.s16.value',
+    'partial.s15.rot.k',
+    'partial.s15.scale',
+    'partial.value.total',
+    'partial.scale.gamma',
+    'partial.scale.beta',
+    'partial.rotary.C_biased',
+    'partial.rotary.B_biased',
+    'partial.rotary.theta',
+    'partial.B_biased.total',
+    'partial.C_biased.total',
+    'partial.gamma.total',
+    'partial.dt.current_total',
+    'partial.trap.current_total',
+    'partial.angle.raw',
+    'partial.angle.dt',
+    'partial.dt.available_total',
+    'partial.dt.raw',
+    'partial.dt_bias',
+    'partial.s16.seg.L',
+    'partial.seg.adt',
+    'partial.A.from_seg',
+    'partial.dt.from_seg',
+    'partial.dt.with_seg',
+    'partial.s17.state.direct',
+    'partial.s17.state.total',
+    'partial.s17.initial_state',
+    'partial.s17.readout.rot.q',
+    'partial.s17.readout.dacs',
+    'partial.s17.recur.kscale',
+    'partial.s17.recur.value',
+    'partial.s17.recur.dacs',
+    'partial.join.rot.q',
+    'partial.join.kscale',
+    'partial.join.value',
+    'partial.join.dacs',
+    'partial.join.s15.rot.k',
+    'partial.join.s15.scale',
+    'partial.join.rotary.C_biased',
+    'partial.join.rotary.B_biased',
+    'partial.join.rotary.theta',
+    'partial.join.adt.from_dacs',
+    'partial.join.adt.total',
+    'partial.join.A.from_adt',
+    'partial.join.A.raw',
+    'partial.join.dt.from_adt',
+    'partial.join.B_biased.total',
+    'partial.join.C_biased.total',
+    'partial.join.gamma.total',
+    'partial.join.dt.current_total',
+    'partial.join.trap.current_total',
+    'partial.join.angle.raw',
+    'partial.join.angle.dt',
+    'partial.join.dt.available_total',
+    'partial.join.dt.raw',
+    'partial.join.dt_bias',
+    'partial.join.B.raw',
+    'partial.join.C.raw',
+    'partial.join.B_norm.weight',
+    'partial.join.C_norm.weight',
+    'partial.join.B_bias',
+    'partial.join.C_bias',
+    'partial.join.in_proj.packed',
+    'stage.norm.out',
+)
+
+
 def _load_generator():
     spec = importlib.util.spec_from_file_location("mojolearn_mamba_corpus", GEN_PATH)
     if spec is None or spec.loader is None:
@@ -298,8 +383,8 @@ def generate(args):
         beta_dt[:,1:]=beta_grad[:,:-1]*(1-sig_stage[:,1:])
         dsig_shift=-beta_grad[:,:-1]*dt_stage[:,1:]
         beta_trap[:,1:]=dsig_shift*sig_stage[:,1:]*(1-sig_stage[:,1:])
-        dt_current=d_dt_qk+beta_dt.reshape_as(d_dt_qk)
-        intermediate_gradients.extend((("partial.beta.dt",beta_dt),("partial.beta.trap_raw",beta_trap),("partial.dt.current_total",dt_current),("partial.trap.current_total",d_sig_qk*sig_qk*(1-sig_qk)+beta_trap.reshape_as(d_sig_qk))))
+        dt_current=(d_dt_qk+dscale.reshape_as(d_dt_qk)*sig_qk)+beta_dt.reshape_as(d_dt_qk)
+        intermediate_gradients.extend((("partial.beta.dt",beta_dt),("partial.beta.trap_raw",beta_trap),("partial.dt.current_total",dt_current),("partial.trap.current_total",(d_sig_qk*sig_qk*(1-sig_qk)+((dscale.reshape_as(d_sig_qk)*dt_qk)*sig_qk)*(1-sig_qk))+beta_trap.reshape_as(d_sig_qk))))
         angle_raw=stages["in_proj.out"].detach()[:,-32:].reshape(bsz,length,32).requires_grad_(True);dt_angle=stages["dt.out"].detach().reshape(bsz,length,-1).requires_grad_(True)
         theta_state=torch.zeros(bsz,dt_angle.shape[-1],32,dtype=angle_raw.dtype,device=angle_raw.device);theta_rows=[]
         rate=torch.tanh(angle_raw)*torch.pi
@@ -356,7 +441,7 @@ def generate(args):
             lo=cc*qsize;hi=min(length,lo+qsize);dadt_dacs[:,lo:hi]=torch.flip(torch.cumsum(torch.flip(dj[:,lo:hi],dims=[1]),dim=1),dims=[1])
         dadt_join=dadt+dadt_dacs;a_join=stages["A.out"].detach().reshape_as(dadt_join).requires_grad_(True);dt_join=stages["dt.out"].detach().reshape_as(dadt_join).requires_grad_(True);da_join,ddt_join=torch.autograd.grad(((a_join*dt_join)*dadt_join.detach()).sum(),(a_join,dt_join));a_raw_join=stages["in_proj.out"].detach()[:,2*di+2*128+h:2*di+2*128+2*h].reshape_as(da_join).requires_grad_(True);a_ht_join=torch.where(a_raw_join>=0,1+a_raw_join,torch.reciprocal(1-a_raw_join));a_param_join=torch.clamp(-a_ht_join,max=-GEN.M3_A_FLOOR);da_raw_join=torch.autograd.grad((a_param_join*da_join.detach()).sum(),a_raw_join)[0];intermediate_gradients.extend((("partial.join.adt.from_dacs",dadt_dacs),("partial.join.adt.total",dadt_join),("partial.join.A.from_adt",da_join),("partial.join.A.raw",da_raw_join),("partial.join.dt.from_adt",ddt_join)))
         beta_join=dscj.reshape(bsz,length,-1);beta_dt_join=torch.zeros_like(beta_join);beta_trap_join=torch.zeros_like(beta_join);beta_dt_join[:,1:]=beta_join[:,:-1]*(1-sig_stage[:,1:]);dsig_join=-beta_join[:,:-1]*dt_stage[:,1:];beta_trap_join[:,1:]=dsig_join*sig_stage[:,1:]*(1-sig_stage[:,1:])
-        dt_current_join=d_dt_qk+beta_dt_join.reshape_as(d_dt_qk);trap_join=d_sig_qk*sig_qk*(1-sig_qk)+beta_trap_join.reshape_as(d_sig_qk);gamma_join=d_gamma+dscj.reshape_as(d_gamma)
+        dt_current_join=(d_dt_qk+dscj.reshape_as(d_dt_qk)*sig_qk)+beta_dt_join.reshape_as(d_dt_qk);trap_join=(d_sig_qk*sig_qk*(1-sig_qk)+((dscj.reshape_as(d_sig_qk)*dt_qk)*sig_qk)*(1-sig_qk))+beta_trap_join.reshape_as(d_sig_qk);gamma_join=d_gamma+dscj.reshape_as(d_gamma)
         angle_raw_join=stages["in_proj.out"].detach()[:,-32:].reshape(bsz,length,32).requires_grad_(True);dt_angle_leaf=stages["dt.out"].detach().reshape(bsz,length,-1).requires_grad_(True);theta_state_join=torch.zeros(bsz,dt_angle_leaf.shape[-1],32,dtype=angle_raw_join.dtype,device=angle_raw_join.device);theta_rows_join=[];rate_join=torch.tanh(angle_raw_join)*torch.pi
         for ti in range(length):
             theta_state_join=theta_state_join+rate_join[:,ti,None,:]*dt_angle_leaf[:,ti,:,None];theta_state_join=theta_state_join-2*torch.pi*torch.floor(theta_state_join/(2*torch.pi));theta_rows_join.append(theta_state_join)
@@ -445,8 +530,8 @@ def generate(args):
         reference32.update({"partial.B_biased.total":dk32_biased+dkr32raw,"partial.C_biased.total":dq32_biased+dqr32raw,"partial.gamma.total":dgamma32+dsc32.reshape_as(dgamma32)})
         bg32=dsc32.reshape(bsz,length,-1);dts32=stages["dt.out"].detach().to(torch.float32).reshape_as(bg32);sg32=stages["trap.sigma"].detach().to(torch.float32).reshape_as(bg32)
         bdt32=torch.zeros_like(bg32);btr32=torch.zeros_like(bg32);bdt32[:,1:]=bg32[:,:-1]*(1-sg32[:,1:]);dsg32=-bg32[:,:-1]*dts32[:,1:];btr32[:,1:]=dsg32*sg32[:,1:]*(1-sg32[:,1:])
-        dtcur32=ddt32_qk+bdt32.reshape_as(ddt32_qk)
-        reference32.update({"partial.beta.dt":bdt32,"partial.beta.trap_raw":btr32,"partial.dt.current_total":dtcur32,"partial.trap.current_total":dsig32_qk*sig32_qk*(1-sig32_qk)+btr32.reshape_as(dsig32_qk)})
+        dtcur32=(ddt32_qk+dsc32.reshape_as(ddt32_qk)*sig32_qk)+bdt32.reshape_as(ddt32_qk)
+        reference32.update({"partial.beta.dt":bdt32,"partial.beta.trap_raw":btr32,"partial.dt.current_total":dtcur32,"partial.trap.current_total":(dsig32_qk*sig32_qk*(1-sig32_qk)+((dsc32.reshape_as(dsig32_qk)*dt32_qk)*sig32_qk)*(1-sig32_qk))+btr32.reshape_as(dsig32_qk)})
         ar32=angle_raw.detach().to(torch.float32).requires_grad_(True);dta32=dt_angle.detach().to(torch.float32).requires_grad_(True);ts32=torch.zeros(bsz,dta32.shape[-1],32,dtype=torch.float32,device=ar32.device);trs32=[];rt32=torch.tanh(ar32)*torch.pi
         for ti in range(length):
             ts32=ts32+rt32[:,ti,None,:]*dta32[:,ti,:,None];ts32=ts32-2*torch.pi*torch.floor(ts32/(2*torch.pi));trs32.append(ts32)
@@ -477,7 +562,7 @@ def generate(args):
         for cc in range(chunks):
             lo=cc*qsize;hi=min(length,lo+qsize);dadc32[:,lo:hi]=torch.flip(torch.cumsum(torch.flip(dj32[:,lo:hi],dims=[1]),dim=1),dims=[1])
         dat32=dadt32+dadc32;aj32=stages["A.out"].detach().to(torch.float32).reshape_as(dat32).requires_grad_(True);dtaj32=stages["dt.out"].detach().to(torch.float32).reshape_as(dat32).requires_grad_(True);dajoin32,ddtjoin32=torch.autograd.grad(((aj32*dtaj32)*dat32.detach()).sum(),(aj32,dtaj32));arawj32=stages["in_proj.out"].detach().to(torch.float32)[:,2*di+2*128+h:2*di+2*128+2*h].reshape_as(dajoin32).requires_grad_(True);ahtj32=torch.where(arawj32>=0,1+arawj32,torch.reciprocal(1-arawj32));apj32=torch.clamp(-ahtj32,max=-GEN.M3_A_FLOOR);darawj32=torch.autograd.grad((apj32*dajoin32.detach()).sum(),arawj32)[0];reference32.update({"partial.join.adt.from_dacs":dadc32,"partial.join.adt.total":dat32,"partial.join.A.from_adt":dajoin32,"partial.join.A.raw":darawj32,"partial.join.dt.from_adt":ddtjoin32})
-        betaj32=dscj32.reshape(bsz,length,-1);bdtj32=torch.zeros_like(betaj32);btrj32=torch.zeros_like(betaj32);bdtj32[:,1:]=betaj32[:,:-1]*(1-sg32[:,1:]);dsgj32=-betaj32[:,:-1]*dts32[:,1:];btrj32[:,1:]=dsgj32*sg32[:,1:]*(1-sg32[:,1:]);dtcj32=ddt32_qk+bdtj32.reshape_as(ddt32_qk);trj32=dsig32_qk*sig32_qk*(1-sig32_qk)+btrj32.reshape_as(dsig32_qk);gmj32=dgamma32+dscj32.reshape_as(dgamma32)
+        betaj32=dscj32.reshape(bsz,length,-1);bdtj32=torch.zeros_like(betaj32);btrj32=torch.zeros_like(betaj32);bdtj32[:,1:]=betaj32[:,:-1]*(1-sg32[:,1:]);dsgj32=-betaj32[:,:-1]*dts32[:,1:];btrj32[:,1:]=dsgj32*sg32[:,1:]*(1-sg32[:,1:]);dtcj32=(ddt32_qk+dscj32.reshape_as(ddt32_qk)*sig32_qk)+bdtj32.reshape_as(ddt32_qk);trj32=(dsig32_qk*sig32_qk*(1-sig32_qk)+((dscj32.reshape_as(dsig32_qk)*dt32_qk)*sig32_qk)*(1-sig32_qk))+btrj32.reshape_as(dsig32_qk);gmj32=dgamma32+dscj32.reshape_as(dgamma32)
         arj32=angle_raw.detach().to(torch.float32).requires_grad_(True);dtlj32=dt_angle.detach().to(torch.float32).requires_grad_(True);tsj32=torch.zeros(bsz,dtlj32.shape[-1],32,dtype=torch.float32,device=arj32.device);trsj32=[];rtj32=torch.tanh(arj32)*torch.pi
         for ti in range(length):
             tsj32=tsj32+rtj32[:,ti,None,:]*dtlj32[:,ti,:,None];tsj32=tsj32-2*torch.pi*torch.floor(tsj32/(2*torch.pi));trsj32.append(tsj32)
@@ -1126,6 +1211,22 @@ def generate(args):
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    forward_operands = {}
+    if args.family == "mamba3":
+        for name, value in (
+            ("rot.k", stages["rot.k"]),
+            ("bcnorm.B", stages["bcnorm.B"]),
+            ("bcnorm.C", stages["bcnorm.C"]),
+            ("B_bias", params["B_bias"]),
+            ("C_bias", params["C_bias"]),
+            ("dt.out", stages["dt.out"]),
+            ("trap.sigma", stages["trap.sigma"]),
+            ("angle.theta", stages["angle.theta"]),
+            ("angle.rate", torch.tanh(stages["in_proj.out"][:, -32:]) * torch.pi),
+        ):
+            filename = "operand." + name + ".f64"
+            shape, digest = _write_array(out / filename, value)
+            forward_operands[name] = {"file": filename, "shape": shape, "sha256": digest}
     files = {}
     for name, grad in named_gradients:
         filename = "grad." + name + ".f64"
@@ -1189,6 +1290,7 @@ def generate(args):
         "finite_difference_worst_relative_scale_error": worst,
         "finite_difference": finite,
         "gradients": files,
+        "forward_operands": forward_operands,
         "environment": {
             "python": platform.python_version(), "torch": torch.__version__,
             "device": str(device), "cuda": torch.version.cuda,
@@ -1308,6 +1410,15 @@ def compare(args):
             f"manifest policy={family}.public_prefill_leaves."
             f"exact{len(canonical_public)}.v1"
         )
+    if args.require_public_prefill and manifest.get("family") == "mamba3":
+        for name in MAMBA3_PREFILL_DIAGNOSTICS:
+            if name not in manifest.get("gradients", {}):
+                failures.append(f"oracle lacks required Mamba3 diagnostic: {name}")
+            if name not in dump_manifest.get("tensors", []):
+                failures.append(f"dump lacks required Mamba3 diagnostic: {name}")
+        selected_policies.append(
+            "manifest policy=mamba3.public_prefill_diagnostics.exact76.v1"
+        )
     if args.require_state_boundary:
         family = manifest.get("family")
         canonical_state = list(STATE_BOUNDARY_LEAVES.get(family, ()))
@@ -1376,6 +1487,22 @@ def compare(args):
             failures.append(
                 f"provenance {key}: {dump_manifest.get(key)!r}, expected {expected_value!r}"
             )
+    mamba3_arithmetic_outputs = set()
+    if (args.require_public_prefill and manifest["family"] == "mamba3"
+            and manifest["case"] == "m3_base_b1_l65_d64"):
+        from mamba3_backward_arithmetic import OUTPUTS, audit
+        mamba3_arithmetic_outputs = set(OUTPUTS)
+        try:
+            operand_failures, operand_reports = audit(
+                oracle_dir, actual_dir, manifest, dump_manifest, args.rtol, args.atol)
+            failures.extend(operand_failures)
+            arithmetic_reports.extend(operand_reports)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            failures.append(f"Mamba3 arithmetic contract refused: {error}")
+        selected_policies.append(
+            "mamba3.l65.compositional_forward_and_gradient_operands_plus_exact_dag.v1; "
+            "all thirteen outputs checked by bits; independent whole-forward public leaves remain mandatory"
+        )
     for name, entry in manifest["gradients"].items():
         # This gate certifies one state API boundary, not all public parameter
         # contractions at L257. Those have their own strict public-prefill
@@ -1407,20 +1534,29 @@ def compare(args):
             # float64 and accept the same stem with an explicit .f32 suffix.
             path = actual_dir / entry["file"].replace(".f64", ".f32")
             if not path.exists():
-                if (
-                    args.require_public_prefill
-                    and (
-                        name in required_public
-                        or manifest["family"] in ("mamba1", "mamba2")
-                    )
-                ) or (
-                    not args.allow_partial and not args.require_public_prefill
-                ):
+                if args.require_public_prefill or not args.allow_partial:
                     failures.append(f"{name}: missing gradient dump")
                 continue
         dtype = "<f4" if path.suffix == ".f32" else "<f8"
+        if name in mamba3_arithmetic_outputs and dtype != "<f4":
+            failures.append(f"{name}: Mamba3 arithmetic output must be native float32")
         chosen_oracle = "float64"
         actual = np.fromfile(path, dtype=dtype).astype(np.float64)
+        # Mamba3's staged float32 reference previously repeated a missing
+        # scale->gamma chain-rule term from the native join. Require the
+        # independently differentiated whole forward as an additional gate;
+        # agreement between two staged backwards is not calculus evidence.
+        if (args.require_public_prefill and manifest["family"] == "mamba3"
+                and name in required_public and actual.size == expected.size):
+            semantic = expected.reshape(-1)
+            if not np.allclose(actual, semantic, rtol=args.rtol, atol=args.atol,
+                               equal_nan=False):
+                error = np.abs(actual - semantic)
+                failures.append(
+                    f"{name}: independent whole-forward float64 gradient FAILED; "
+                    f"maxabs={float(error.max()):.3e}, "
+                    f"bad={int((error > args.atol + args.rtol * np.abs(semantic)).sum())}"
+                )
         reduction_leaf = (
             dtype == "<f4"
             and manifest["family"] == "mamba2"
@@ -1432,7 +1568,9 @@ def compare(args):
             and manifest["family"] == "mamba2"
             and manifest["case"] == "m2_base_b1_l257_d64"
             and name == "in_proj.weight"
-        )
+        ) or name in mamba3_arithmetic_outputs
+        if name in mamba3_arithmetic_outputs:
+            policy = "mamba3.l65.compositional_operands_plus_exact_dag.v1"
         if dtype == "<f4" and "ref32_file" in entry and not compositional_leaf:
             expected = np.fromfile(
                 oracle_dir / entry["ref32_file"], dtype="<f4"

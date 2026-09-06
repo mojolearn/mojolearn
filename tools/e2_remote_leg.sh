@@ -17,6 +17,19 @@
 # Artifacts land in bench/results/e1/<stamp>-<host>/ beside the Mac's.
 set -uo pipefail
 
+# Bash may read later commands only after a long wait. Editing this file
+# during a repair window can otherwise move its read offset and skip the
+# fetch block. Execute an immutable sibling copy before reading credentials
+# or provisioning anything; keep the repository-relative paths unchanged.
+if [ "${MOJOLEARN_E2_FROZEN_CONTROLLER:-0}" != 1 ]; then
+  controller_copy=$(mktemp "$(dirname "${BASH_SOURCE[0]}")/.e2-controller.XXXXXX") || exit 2
+  cp "${BASH_SOURCE[0]}" "$controller_copy" || { rm -f "$controller_copy"; exit 2; }
+  controller_rc=0
+  MOJOLEARN_E2_FROZEN_CONTROLLER=1 bash "$controller_copy" "$@" || controller_rc=$?
+  rm -f "$controller_copy"
+  exit "$controller_rc"
+fi
+
 VENDOR="${1:?amd|nv}"
 TOKFILE="${2:?token file}"
 TOK="$(cat "$TOKFILE")"
@@ -421,6 +434,10 @@ if [ "$CLONE_OK" != 1 ]; then
   if [ "${E2_SOURCE_PROFILE:-}" = "umap-mamba" ]; then
     # Match the bounded RunPod certificate source, plus the DO bootstrap.
     # No old result trees or generated corpus payloads cross the network.
+    EXTRA_CERT_SOURCE=()
+    case " ${E2_EXTRA_CHECKS:-} " in
+      *" tree-ctr-slice "*|*" ordered-boosting "*) EXTRA_CERT_SOURCE=(gbdt) ;;
+    esac
     git -C "$REPO" archive --format=tar "$COMMIT" -- \
       .gitattributes pixi.toml pixi.lock umap neighbors spectral core metrics cluster \
       checks bindings python gemm/__init__.mojo gemm/checks \
@@ -432,12 +449,12 @@ if [ "$CLONE_OK" != 1 ]; then
       bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo \
       tools/knn_layout_dispatch_price.sh tools/knn_layout_do_diag.sh \
       mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py \
-      tools/mamba_backward_certify.sh tools/mamba_backward_identity.py \
-      tools/mamba_gradient_oracle.py tools/with_identical_mode.sh \
+      tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_backward_do_diag.sh \
+      tools/mamba_gradient_oracle.py tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py tools/with_identical_mode.sh \
       tools/with_build_lock.sh tools/umap_identity_compare.py \
       tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py \
       tools/umap_mamba_do_diag.sh tools/gpu_optimization_do_diag.sh tools/e1_bootstrap.sh \
-      bench/external/record_environment.sh | gzip > "$BUNDLE" \
+      bench/external/record_environment.sh "${EXTRA_CERT_SOURCE[@]}" | gzip > "$BUNDLE" \
       || { log "bounded archive failed"; exit 6; }
   else
     git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' \
@@ -529,6 +546,19 @@ for WAVE in "${WAVE_ARR[@]}"; do
   $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && MOJOLEARN_COMMIT='$COMMIT' MOJOLEARN_E1_PHASES='${MOJOLEARN_E1_PHASES:-}' MOJOLEARN_E1_LANES='$WAVE' MOJOLEARN_P9_BINDINGS='${MOJOLEARN_P9_BINDINGS:-}' MOJOLEARN_P9_LANES='${MOJOLEARN_P9_LANES:-}' ${MOJOLEARN_P9_TIERS:+MOJOLEARN_P9_TIERS='$MOJOLEARN_P9_TIERS'} MOJOLEARN_P9_BREAK='${MOJOLEARN_P9_BREAK:-0}' MOJOLEARN_P9_VENDOR='amd-mi325x' ${MOJOLEARN_P9_DIAG:+MOJOLEARN_P9_DIAG='$MOJOLEARN_P9_DIAG'} MOJOLEARN_P9_ONLY_DIAG='${MOJOLEARN_P9_ONLY_DIAG:-0}' MOJOLEARN_P9_DIAG_TIMEOUT='${MOJOLEARN_P9_DIAG_TIMEOUT:-2400}' ${MOJOLEARN_WHEEL_VERSION:+MOJOLEARN_WHEEL_VERSION='$MOJOLEARN_WHEEL_VERSION'} MOJOLEARN_WHEEL_INDEX='${MOJOLEARN_WHEEL_INDEX:-testpypi}' ${MOJOLEARN_GPU_ARCHS:+MOJOLEARN_GPU_ARCHS='$MOJOLEARN_GPU_ARCHS'} timeout -k 30 $WORK_SECONDS bash tools/e1_bootstrap.sh > /root/e2_run_w$WAVE_N.log 2>&1; echo \"WAVE-$WAVE_N-EXIT=\$?  (124 = hit the work bound)\"; tail -30 /root/e2_run_w$WAVE_N.log"
 done
 
+# Optional main-operator repair window. The guards stay armed and the fetch
+# reserve is honored. No remote test is running while the controller waits;
+# the main operator may run a serial, separately recorded frozen-source retry.
+if [ -n "${E2_RELEASE_FILE:-}" ]; then
+  log "main-operator repair window; release file: $E2_RELEASE_FILE"
+  while [ ! -f "$E2_RELEASE_FILE" ]; do
+    NOW=$(date +%s)
+    [ "$NOW" -ge $(( LEG_START + DEADMAN_SECONDS - FETCH_RESERVE - 60 )) ] && break
+    sleep 2
+  done
+  log "repair window closed; collecting and destroying within the lease"
+fi
+
 # EXTRA CHECKS: things phase 8 does not know about yet, run only when asked.
 # Named explicitly rather than swept, so this leg's payload is readable from
 # this file alone. Each gets its own slice of what is left, so one hang cannot
@@ -542,6 +572,13 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
     # construction. That is DEVIATION 1091 in a different costume.
     WRAP=1
     case "$chk" in
+      # Focused correctness only: two compiler workers, one child at a time,
+      # with a five-minute sub-budget inside the existing lease/fetch bound.
+      # These gates do not certify an end-to-end ordered CatBoost booster.
+      tree-ctr-slice)
+        CMD='env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 timeout -k 10 300 pixi run mojo run -j 2 -I . checks/tree_ctr_slice_check.mojo' ;;
+      ordered-boosting)
+        CMD='env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 timeout -k 10 300 pixi run mojo run -j 2 -I . checks/ordered_boosting_check.mojo' ;;
       gemm-backward) CMD='pixi run mojo run -I . gemm/checks/gemm_backward_check.mojo' ;;
       # THE SPEED LANE. Both sides run under ONE MAC cap so a row is either
       # measured on both arms or skipped on both; a full-shape vendor number
@@ -753,6 +790,15 @@ if [ -n "${MAC_REF_DIR:-}" ] && [ -d "$MAC_REF_DIR" ]; then
   rsync -az --include '*.model.npz' --include '*.json' --exclude '*' "$MAC_REF_DIR/" "root@$IP:/root/mac_ref/" \
     && $SSH 'export PATH=/root/.pixi/bin:$PATH; export MOJOLEARN_NUMERIC_MODE=identical; cd /root/mojolearn && OUT=$(ls -td bench/results/e1/*/ | head -1) && PYTHONPATH=python pixi run -e gbmbench python3 tools/e1_cross_infer.py /root/mac_ref "$OUT/cross_infer_mac_models_on_box.json" 2>&1 | tail -8' \
     || log "cross-infer on box FAILED (see above)"
+fi
+
+# Optional diagnostic retention for the named long-sequence campaign. Copy
+# temporary native/oracle bytes before collection and teardown even when a
+# numerical gate failed but its public byte inventory was complete.
+if [ "${E2_RETAIN_MAMBA_LONG:-0}" = 1 ]; then
+  log "retain long-sequence diagnostic bytes before teardown"
+  $SSH 'cd /root/mojolearn && OUT=$(ls -td bench/results/e1/*/ | head -1) && dest="$OUT/diag/followup/mamba-long-cert/mamba3-l65" && mkdir -p "$dest/diagnostic-actual" "$dest/diagnostic-oracle" && cp -a /tmp/mojolearn-mamba3-l65-actual/. "$dest/diagnostic-actual/" && cp -a /tmp/mojolearn-mamba3-l65-grad/. "$dest/diagnostic-oracle/"' \
+    || log "long-sequence diagnostic retention FAILED"
 fi
 
 log "fetch artifacts"
