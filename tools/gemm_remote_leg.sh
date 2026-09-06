@@ -860,6 +860,8 @@ fi
 NVIDIA_CAMPAIGN=${MOJOLEARN_NVIDIA_CAMPAIGN:-0}
 MAMBA_CERT_ONLY=${MOJOLEARN_MAMBA_CERT_ONLY:-0}
 case "$MAMBA_CERT_ONLY" in 0|1) ;; *) echo 'MOJOLEARN_MAMBA_CERT_ONLY must be 0 or 1' >&2; exit 2 ;; esac
+CONTINUED_CERT_CHECKS=${MOJOLEARN_CONTINUED_CERT_CHECKS:-0}
+case "$CONTINUED_CERT_CHECKS" in 0|1) ;; *) echo 'MOJOLEARN_CONTINUED_CERT_CHECKS must be 0 or 1' >&2; exit 2 ;; esac
 case "$NVIDIA_CAMPAIGN" in 0|1) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0 or 1" ;; esac
 if [ "$NVIDIA_CAMPAIGN" = 1 ]; then
     [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaign requires nvidia --payload mamba"
@@ -1149,7 +1151,7 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
 LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm original bindings python/mojolearn pixi.toml pixi.lock"
-LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks"
+LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
 # The certificate needs the Mamba implementation plus three small shared
 # numerical modules. The Python oracle imports the forward definitions from
 # mamba/corpus/gen_corpus.py, but it constructs fixtures directly and reads
@@ -1157,7 +1159,7 @@ LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mam
 # larger than the work payload itself.
 # Keep this a git-archive pathspec so every shipped byte still comes from the
 # pinned commit; do not replace it with a working-tree tar.
-LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks"
+LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
 if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
     _layout_paths="bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo tools/knn_layout_dispatch_price.sh"
@@ -2444,6 +2446,18 @@ if [ "$work_remaining" -gt 60 ]; then
   fi
 fi
 echo "followup_exit=$followup_rc" >> "$OUT/leg.txt"
+if [ "@CONTINUEDCERT@" = 1 ]; then
+  work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + work_started))
+  continued_rc=124
+  if [ "$work_remaining" -gt 60 ]; then
+    MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_CONTINUED_OUT="$OUT/continued" \
+      MOJOLEARN_CONTINUED_SECONDS="$work_remaining" \
+      timeout -k 30 "$work_remaining" bash tools/continued_cert_checks.sh \
+      > "$OUT/continued-console.log" 2>&1
+    continued_rc=$?
+  fi
+  echo "continued_exit=$continued_rc" >> "$OUT/leg.txt"
+fi
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
 tail -40 "$OUT/mamba_cert_console.log"
 : > /root/gemm_leg.done
@@ -3470,6 +3484,7 @@ leg_check_remote_body() {
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
         -e "s|@NVIDIACAMPAIGN@|$NVIDIA_CAMPAIGN|g" \
         -e "s|@MAMBACERTONLY@|$MAMBA_CERT_ONLY|g" \
+        -e "s|@CONTINUEDCERT@|$CONTINUED_CERT_CHECKS|g" \
         -e "s|@KNNLAYOUTONLY@|$KNN_LAYOUT_ONLY|g" \
         -e "s|@E1PHASES@|$E1_PHASES|g" \
         -e "s|@E1LANES@|$E1_LANES|g" \

@@ -437,7 +437,7 @@ if [ "$CLONE_OK" != 1 ]; then
       tools/knn_layout_dispatch_price.sh tools/knn_layout_do_diag.sh \
       mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py \
       tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_backward_do_diag.sh \
-      tools/mamba_gradient_oracle.py tools/with_identical_mode.sh \
+      tools/mamba_gradient_oracle.py tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py tools/with_identical_mode.sh \
       tools/with_build_lock.sh tools/umap_identity_compare.py \
       tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py \
       tools/umap_mamba_do_diag.sh tools/gpu_optimization_do_diag.sh tools/e1_bootstrap.sh \

@@ -17,7 +17,7 @@ import numpy as np
 from mamba3_join_diagnostics import ftz, pinned_join
 
 
-FORWARD_OPERANDS = ("rot.k", "bcnorm.B", "bcnorm.C", "B_bias", "C_bias", "dt.out", "trap.sigma", "angle.theta")
+FORWARD_OPERANDS = ("rot.k", "bcnorm.B", "bcnorm.C", "B_bias", "C_bias", "dt.out", "trap.sigma", "angle.theta", "angle.rate")
 GRADIENT_OPERANDS = (
     "stage.qkdot.out", "partial.qkdot.dt", "partial.s16.kscale",
     "partial.s17.recur.kscale", "partial.angle.dt", "partial.dt.from_seg",
@@ -34,6 +34,26 @@ OUTPUTS = (
 
 def mul(left, right):
     return ftz(ftz(left) * ftz(right))
+
+
+def serial_angles(rate, dt):
+    """Zero-state prefill profile: pinned mod after EVERY token, per batch.
+
+    Float32 division is correctly rounded, as in portable_divf. Keeping this
+    recurrence exact is essential: deferring the mod to a chunk or sequence
+    boundary is a different floating-point algorithm already refused by the
+    native Mamba3 forward sabotage gates.
+    """
+    batch, length, heads = dt.shape
+    rate = ftz(rate).reshape(batch, length, 32)
+    theta = np.zeros((batch, length, heads, 32), np.float32)
+    state = np.zeros((batch, heads, 32), np.float32)
+    tau = np.array([0x40c90fdb], dtype=np.uint32).view(np.float32)[0]
+    for token in range(length):
+        state = ftz(state + mul(rate[:, token, None, :], dt[:, token, :, None]))
+        state = ftz(state - mul(tau, np.floor(ftz(state / tau))))
+        theta[:, token] = state
+    return theta
 
 
 def serial_fma_dot(left, right):
@@ -127,7 +147,7 @@ def audit(oracle_dir, actual_dir, manifest, dump, rtol, atol):
         raise ValueError("Mamba3 arithmetic contract requires explicit IDENTICAL provenance")
     if (set(manifest.get("forward_operands", {})) != set(FORWARD_OPERANDS)
             or dump.get("forward_operands") != list(FORWARD_OPERANDS)):
-        raise ValueError("Mamba3 arithmetic contract requires all eight forward operands")
+        raise ValueError("Mamba3 arithmetic contract requires all nine forward operands")
     failures, reports = [], []
 
     def reference(entry, key="file", dtype="<f8", sha="sha256"):
@@ -154,8 +174,18 @@ def audit(oracle_dir, actual_dir, manifest, dump, rtol, atol):
     for name in FORWARD_OPERANDS:
         entry = manifest["forward_operands"][name]
         forward[name] = actual(name, entry, "operand")
-        if name != "rot.k":
+        if name not in ("rot.k", "angle.theta"):
             semantic(name, forward[name], reference(entry), "forward float64")
+    s16_shape = manifest["gradients"]["partial.s16.kscale"]["shape"]
+    if len(s16_shape) != 4 or s16_shape[-1] != 128:
+        raise ValueError("angle contract requires explicit [B,L,H,128] gradient shape")
+    angles = serial_angles(forward["angle.rate"], forward["dt.out"].reshape(s16_shape[:3]))
+    equal_angles = np.array_equal(angles.reshape(-1).view(np.uint32), forward["angle.theta"].reshape(-1).view(np.uint32))
+    if not equal_angles:
+        failures.append("angle.theta: exact per-token-mod recurrence failed")
+    theta_reference = reference(manifest["forward_operands"]["angle.theta"])
+    theta_delta = np.abs(forward["angle.theta"].astype(np.float64) - theta_reference)
+    reports.append(f"angle.theta: exact per-token-mod recurrence bitwise={equal_angles}; direct-float64 maxabs={float(theta_delta.max()):.3e} bad={int((theta_delta > atol + rtol * np.abs(theta_reference)).sum())}")
     # Rotation has cancellation around zero, after an accumulated angle.
     # Require independently correct base/bias/angle operands above, then
     # independently evaluate the rotation in float64 at those exact inputs.

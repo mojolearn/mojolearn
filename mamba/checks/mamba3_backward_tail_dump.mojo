@@ -6,6 +6,8 @@ from std.os import getenv
 
 from max.gpu.host import DeviceContext
 from checks.numerics import numeric_mode_name
+from std.gpu import block_idx, block_dim, thread_idx
+from mamba.impl.mamba_ssm.ops.mamba3_siso import m3_angle_rate
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
@@ -63,6 +65,18 @@ from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_upload,
     mamba_zeros,
 )
+
+
+def _capture_angle_rate_kernel(
+    rate: MutPointer[Float32, MutAnyOrigin],
+    projection: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32, width_in: Int32, column_in: Int32,
+):
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell < Int(rows_in) * M3_NUM_ROPE_ANGLES:
+        var row = cell // M3_NUM_ROPE_ANGLES
+        var angle = cell % M3_NUM_ROPE_ANGLES
+        rate.unsafe_store(cell, m3_angle_rate(projection.unsafe_load(row * Int(width_in) + Int(column_in) + angle)))
 
 
 def _objective_cotangent(n: Int) -> List[Float32]:
@@ -397,6 +411,14 @@ def main() raises:
     _write_f32(output + "/operand.dt.out.f32", mamba_download(ctx, stages.dt_work, head_cells))
     _write_f32(output + "/operand.trap.sigma.f32", mamba_download(ctx, stages.sig_work, head_cells))
     _write_f32(output + "/operand.angle.theta.f32", mamba_download(ctx, stages.theta_out, head_cells*M3_NUM_ROPE_ANGLES))
+    var captured_rate = mamba_zeros(ctx, m*M3_NUM_ROPE_ANGLES)
+    ctx.enqueue_function[_capture_angle_rate_kernel](
+        captured_rate.unsafe_ptr(), stages.in_proj.unsafe_ptr(),
+        Int32(m), Int32(dims.d_in_proj()), Int32(dims.col_angle()),
+        grid_dim=((m*M3_NUM_ROPE_ANGLES + 255)//256, 1, 1), block_dim=(256, 1, 1),
+    )
+    _write_f32(output + "/operand.angle.rate.f32", mamba_download(ctx, captured_rate, m*M3_NUM_ROPE_ANGLES))
+    _ = captured_rate^
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -404,7 +426,7 @@ def main() raises:
             + "\"objective\":\"signed_dyadic_weight_v1\","
             + "\"mode\":\"complete-public-prefill\","
             + "\"numeric_mode\":\"" + numeric_mode_name() + "\","
-            + "\"forward_operands\":[\"rot.k\",\"bcnorm.B\",\"bcnorm.C\",\"B_bias\",\"C_bias\",\"dt.out\",\"trap.sigma\",\"angle.theta\"],"
+            + "\"forward_operands\":[\"rot.k\",\"bcnorm.B\",\"bcnorm.C\",\"B_bias\",\"C_bias\",\"dt.out\",\"trap.sigma\",\"angle.theta\",\"angle.rate\"],"
             + "\"public_prefill_leaves\":[\"x\",\"block_norm.weight\","
             + "\"in_proj.weight\",\"dt_bias\",\"B_norm.weight\","
             + "\"C_norm.weight\",\"B_bias\",\"C_bias\",\"D\","
