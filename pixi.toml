@@ -1,0 +1,1465 @@
+[workspace]
+authors = ["Andrew Hendel <ajhendel@gmail.com>"]
+channels = ["https://conda.modular.com/max", "conda-forge"]
+name = "mojolearn"
+platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
+version = "0.1.0a1"
+
+# WHY THIS FILE APPEARED ON 2026-08-19, LATE.
+#
+# It did not exist. The repository had no manifest of any kind, so `mojo` was
+# not on PATH inside this directory and nothing here could be built from a
+# clean clone. Every build and every timing recorded in this repository so far
+# was produced by borrowing the SIBLING repository's environment, roughly
+#
+#     cd ../mojotrees && pixi run mojo run -I ../mojolearn ../mojolearn/probe_main.mojo
+#
+# which works only on a machine that happens to have mojotrees checked out
+# beside this one with its environment already solved. That is not a build.
+#
+# It also means `.github/workflows/gpu-validation.yml` could never have run.
+# Every one of its steps calls `pixi run mojo ...`, and on a runner with no
+# pixi.toml the first such step fails before it reaches a GPU. The workflow is
+# `workflow_dispatch` only and targets self-hosted runners that do not exist
+# yet, so nothing ever reported the failure. Read its jobs as UNVALIDATED
+# rather than as passing.
+#
+# Pins match what the sibling environment actually resolved to and what every
+# recorded result was therefore produced under, `mojo list` on 2026-08-19:
+# mojo 1.0.0, max 26.5.0. They are not aspirational.
+
+[dependencies]
+mojo = ">=1.0.0,<2"
+max = ">=26.5.0,<27"
+
+[tasks]
+# The whole correctness suite, end to end, on the GPU. This is the one command
+# that answers "does it still work". It builds and runs; there is no separate
+# build step to keep in sync.
+probe = "mojo run -I . probe_main.mojo"
+
+# ---------------------------------------------------------------------------
+# THE FAST SPEED LANE (bench/speed/README.md). Ours against the vendor's own
+# library, on the vendor's own silicon, in FAST mode.
+#
+# **DELIBERATELY NOT WRAPPED IN tools/with_identical_mode.sh.** This lane IS
+# the FAST arm and the whole point is that no `-D` define is passed. Every
+# driver prints the mode it COMPILED in, read from the comptime constant, and
+# the leg refuses a run whose `ours` header says IDENTICAL, so a mistake here
+# goes red rather than producing a correctly-labelled measurement of the wrong
+# arm.
+#
+# One lane per process, chosen by MOJOLEARN_SPEED_LANE. MOJOLEARN_SPEED_ROUNDS
+# sets the timed round count, MOJOLEARN_SPEED_SIZE=smoke selects the small
+# fixtures, and every printed line carries `size=` so a smoke number can never
+# be mistaken for a shipped one. In the shared checkout, run under
+# tools/with_build_lock.sh.
+#
+# THE VENDOR ARMS ARE NOT TASKS HERE, ON PURPOSE. cuml, cuvs and cudf are not
+# on conda-forge for osx-arm64 at all, and adding them would re-solve
+# pixi.lock for every environment -- the exact hazard [feature.skgpu]'s
+# comment was written about. A second reason stood here and is RETRACTED:
+# that they "cannot share an interpreter" with the prebuilt
+# python/mojolearn/*.so. The version claim under it -- "built
+# against 3.14 while RAPIDS ships for 3.10 through 3.13" -- is WRONG and was
+# measured wrong on 2026-09-03: the default environment is Python 3.13.15,
+# and the built `_mojolearn_gbdt.so` imports cleanly under BOTH 3.13 and the
+# `bench` feature's 3.14, so the binding is not pinned to one minor version.
+# The vendor arms stay on the pod's system python for the packaging reason
+# alone, not because of an ABI wall:
+#
+#   python3 tools/speed_gemm_arm.py            cuBLAS, both allow_tf32 arms
+#   python3 tools/speed_torch_seq.py           PyTorch and mamba-ssm
+#   python3 tools/speed_cuml_arm.py --lane L   cuML and cuVS
+#   python3 tools/speed_gbdt_arm.py --lane L   CatBoost, XGBoost, LightGBM
+#
+# and the table is built at home over the fetched logs:
+#
+#   python3 tools/fast_speed_table.py <run-dir> --out <table>.md
+speed-gemm = "mojo run -I . bench/speed/gemm_speed_main.mojo"
+speed-seq = "mojo run -I . bench/speed/seq_speed_main.mojo"
+speed-classical = "mojo run -I . bench/speed/classical_speed_main.mojo"
+
+# The ONLY check that compares against CatBoost rather than against a tally
+# written in this repository. Needs `bench/oracle.txt`, which is committed;
+# regenerate it with `oracle-gen` when a setting or the CatBoost version
+# moves, and read the diff, because that diff IS the behaviour change.
+oracle = "mojo run -I . oracle_main.mojo"
+
+# The DEPTH and FEATURE-COUNT sweep of the same differential: five depths by
+# three feature counts, both searchers, plus the four one-byte accumulators at
+# depth 8. Own main() because it is 38 cells and does NOT raise on a
+# disagreeing one -- `oracle` is the gate, this is the matrix, and a matrix
+# that stops at its first red cell reports one number instead of thirty. Ends
+# with a per-cell sabotage that must cost exactly one match at exactly
+# (tree 0, depth 0). A GPU, ~80 fits. archive/reference/PORTING.md 132-134.
+oracle-sweep = "mojo run -I . checks/oracle_sweep_main.mojo"
+
+# WHICH of the four one-byte accumulators each fixture actually enters,
+# observed rather than assumed: the four widths run one at a time into a zeroed
+# histogram, on the layout and folds the PRODUCT'S constructor built, and
+# exactly one may come back non-empty. A fixture that lands one bit width low
+# still matches CatBoost, because all four compute the same histogram -- so a
+# green differential is not a reach proof. archive/reference/PORTING.md 130-131.
+check-onebyte-reach = "mojo run -I . checks/onebyte_reach_check.mojo"
+
+# THE DEVIATION 134 HUNT. Runs the cell that produced the intermittent
+# hundreds of times in ONE process, both searchers, and reports the
+# DISTRIBUTION rather than a pass/fail -- every distinct loss either arm
+# produced, so a one-ULP reduction drift and a several-percent different tree
+# are told apart by reading them. A hundred clean runs of a one-in-a-hundred
+# event is a coin flip, which is why this exists instead of another green run.
+# MOJOLEARN_SOAK_REPS and MOJOLEARN_SOAK_FIXTURE override.
+soak-determinism = "mojo run -I . checks/determinism_soak.mojo"
+
+# ---------------------------------------------------------------------------
+# REGISTERED 2026-08-21, VERIFIED 2026-08-22. These 22 checks existed in
+# `checks/` with NO pixi task, which in this repository means nobody ran
+# them: there is no aggregate runner that globs the directory, so a file
+# without a line here is reachable only by someone who already knows it is
+# there. That is the same defect class as DEVIATION 114 one level up.
+#
+# WHEN FIRST REGISTERED, 21 OF THE 22 FAILED INSTANTLY with "module does not
+# define a `main` function" -- they are libraries of check functions driven by
+# `probe_main.mojo`, not programs, and they were registered without one of
+# them being run. Each now carries a `def main()` making exactly the calls
+# `probe_main` makes with the same arguments: a check run in a different
+# configuration than the one it was written for is not the same check.
+# `check-vendor-correctness` was the exception -- its driver already existed
+# as `vendor_main.mojo`, which also owns the `--transpose` arm and the exit-1
+# gate, and the task now points there instead of at the library.
+#
+# EVERY ONE HAS NOW BEEN RUN. 18 pass. THREE ARE RED AND STAY REGISTERED RED:
+# `check-hist`, `check-hist-dump` and `check-level` are stale call sites left
+# by d25adb4 (DEVIATION 95, the scale derived on the device), which moved
+# `fixed_scale` from a scalar to a device pointer, updated the shipped path,
+# and left the check and bench surface passing `Float32(1.0)` where the
+# kernels now take `MutPointer[Float32]`. `pixi run probe` has not compiled
+# since that commit and nothing reported it -- the same defect class as these
+# tasks, one level up. The fix pattern is `upload_scale(ctx, value)` per
+# `permuted_ids_check.mojo:198`, whose buffer must outlive the launch.
+#
+# A check that turns out to be superseded should be DELETED rather than left
+# registered and red. None of these is superseded; the red ones are red
+# because the code under them is broken, which is what registering them was
+# for.
+# ---------------------------------------------------------------------------
+check-bin-order = "mojo run -I . checks/bin_order_check.mojo"
+check-sample-indices = "mojo run -I . checks/sample_indices_check.mojo"
+# THE SMALLER-SIBLING TIE-BREAK (archive/reference/PORTING.md 136). Four crafted pairs, two of
+# them exact ties, through the shipped device planner against their `:1318`,
+# with an in-file inverted twin that must fail on exactly the ties. Also
+# MEASURES the blast radius: how many histogram cells the choice moves, and a
+# 24-tree fit fingerprint on a fixture where 632 of 744 sibling pairs tie.
+check-sibling-tiebreak = "mojo run -I . checks/sibling_tiebreak_check.mojo"
+# LOGLOSS'S TEN NEWTON ITERATIONS against CatBoost's own leaf values, per tree
+# and per leaf, at ten iterations and at one, plus a cross-arm control that
+# must differ and two leaf-PERMUTATION controls that must fail. The only gate
+# on the leaves-estimation walker that is not a comparison against a
+# reimplementation written in the same file. Needs
+# bench/oracle_logloss_leaves.txt; regenerate with `logloss-leaf-oracle-gen`.
+# EXPECTED RED: 3 cells of 96 diverge on the ten-iteration arm and archive/reference/PORTING.md
+# 140 is the reason -- their CPU walk freezes after six accepted steps where
+# ours takes eight. No allowance is granted, because an allowance sized to
+# today's divergence swallows tomorrow's regression.
+check-logloss-leaf-oracle = "mojo run -I . checks/logloss_leaf_oracle_check.mojo"
+check-binarization = "mojo run -I . checks/binarization_check.mojo"
+check-boosting-hist = "mojo run -I . checks/boosting_hist_check.mojo"
+check-bootstrap = "mojo run -I . checks/bootstrap_check.mojo"
+check-copy-histograms = "mojo run -I . checks/copy_histograms_check.mojo"
+check-early-stop = "mojo run -I . checks/early_stop_check.mojo"
+check-gram-splitk = "mojo run -I . checks/gram_splitk_check.mojo"
+check-hardware-matrix = "mojo run -I . checks/hardware_matrix_check.mojo"
+check-hist = "mojo run -I . checks/hist_check.mojo"
+check-hist-dump = "mojo run -I . checks/hist_dump_check.mojo"
+check-layout = "mojo run -I . checks/layout_check.mojo"
+check-level = "mojo run -I . checks/level_check.mojo"
+check-tree-ctr-sync-state = "mojo run -I . checks/tensor_sync_state_check.mojo"
+check-one-hot = "mojo run -I . checks/one_hot_check.mojo"
+check-options = "mojo run -I . checks/options_check.mojo"
+check-pack = "mojo run -I . checks/pack_check.mojo"
+check-partitions-reduce = "mojo run -I . checks/partitions_reduce_check.mojo"
+check-permuted-ids = "mojo run -I . checks/permuted_ids_check.mojo"
+check-reorder = "mojo run -I . checks/reorder_check.mojo"
+check-replicated-half-byte = "mojo run -I . checks/replicated_half_byte_check.mojo"
+check-searcher-parity-covtype = "mojo run -I . checks/searcher_parity_covtype_check.mojo"
+check-train-api = "mojo run -I . checks/train_api_check.mojo"
+# CHANGED 2026-08-22: the check module is a library; `vendor_main.mojo` is its
+# driver and always was. It also takes `--transpose` and exits 1 on a WRONG
+# verdict for a WIRED primitive, neither of which a bare `main()` would carry.
+check-vendor-correctness = "mojo run -I . vendor_main.mojo"
+
+# The control plane, which is host-side and has its own `main()` rather than
+# a function `probe_main` could call, so it runs as its own task instead of
+# being folded in. Until 2026-08-19 neither of these had ever been compiled.
+check-gpu-lib = "mojo run -I . checks/gpu_lib_check.mojo"
+
+# The fused two-stat one-byte family (hist_2, CatBoost's maxBins <= 128 arm)
+# against the PASS family on one dataset, exact cell-for-cell, with a family
+# fingerprint proving which kernel the dispatch launched. Own main() because
+# it launches the full histogram path many times over.
+check-hist2 = "mojo run -I . checks/hist2_check.mojo"
+
+# Border selection for CTR values. MinEntropy is what their GPU uses for
+# FeatureFreq simple ctrs, it is NOT the GreedyLogSum we use for numeric
+# features, and this compares our exact-DP port against CatBoost's own
+# borders over six budgets. Host-side, seconds, no GPU.
+check-minentropy = "mojo run -I . checks/min_entropy_check.mojo"
+
+# GreedyLogSum, the NUMERIC border default, against CatBoost on columns built
+# to tie. Budgets that cut a tier mid-way, plus budget 15 as the
+# order-invariant control. Host-side, seconds, no GPU.
+check-greedylogsum = "mojo run -I . checks/greedy_log_sum_check.mojo"
+
+# OUR apply against CATBOOST'S OWN trained model and CATBOOST'S OWN
+# predictions, both already committed in bench/oracle.txt -- the `pred`
+# record has been written since the oracle was created and no reader ever
+# had a branch for it. Gates binarize, the split predicate, leaf indexing
+# and the ensemble sum in one shot, against them rather than against a
+# tally we wrote.
+check-catboost-apply = "mojo run -I . checks/catboost_apply_check.mojo"
+# Model save and load. Trains, predicts, writes the file, reads it into a
+# fresh struct and requires BIT-IDENTICAL predictions out of both the host
+# apply and the device evaluator, plus field-by-field equality. Ends with
+# five deliberate sabotages that must each turn it red, because a check
+# never seen to fail is not evidence. Own main(): it trains three models and
+# runs 400,000 float round trips.
+check-model-io = "mojo run -I . checks/model_io_check.mojo"
+
+# A trained CATEGORICAL model saved, loaded and applied to RAW rows,
+# through the host apply AND the device evaluator, against an independent
+# host tally per row. Covers the CTR tables (their `ctr_data.hash_map`),
+# the split TYPE the model now carries, and the evaluator's XorMask
+# one-hot arm. Sweeps cardinality 1..255 across every `policy_for_fold_count`
+# step, and every sabotage is proved to turn it red.
+check-ctr-apply = "mojo run -I . checks/ctr_apply_check.mojo"
+check-gpu-lib-worker = "mojo run -I . checks/gpu_lib_worker_check.mojo"
+
+# The segmented scan the CTR calcers run on -- a device-wide exclusive scan
+# whose carry resets at a segment start. Four arms ({vector, scatter} x
+# {inclusive, exclusive}) against a host tally CELL BY CELL, on a fixture
+# that forces a segment at index 0, at a scan-block boundary, one past one,
+# at an emit-block boundary, and three starts in a row. A scan that ignored
+# the flags would still produce the right grand total, which is why nothing
+# here compares a total.
+check-segscan = "mojo run -I . checks/segmented_scan_check.mojo"
+
+# Every pointwise objective's Score/Der/Der2 against a float64 libm oracle
+# reached through `external_call`, per cell, on hashed scattered data, in
+# both plane layouts and both weightings -- plus Lq at q = 1, 1.5 and 2.5,
+# which are its three Der2 regimes. Ends with six sabotages that must each
+# turn it red, and PRINTS the worst honest relative gap beside the tolerance
+# so the tolerance is a measurement rather than a claim. Own main(); a GPU
+# and a few seconds.
+check-pointwise-target = "mojo run -I . checks/pointwise_target_check.mojo"
+
+# `ELeavesEstimation::Exact` -- CatBoost's DEFAULT leaf estimator for MAE,
+# MAPE and Quantile -- against an ANALYTIC weighted quantile computed on the
+# host by an O(n^2) insertion sort that shares no code with the device. Ten
+# ragged leaves including an EMPTY one, a one-row one and a 513-row one that
+# crosses the sort's block boundary; hashed non-uniform weights, because with
+# unit weights the weighted quantile degenerates to the ordinary one and a
+# defect in the weight scan would be invisible. Four alphas, then four
+# sabotages that each perturb the DEVICE side only. Own main(); a GPU and
+# seconds.
+check-exact-estimation = "mojo run -I . checks/exact_estimation_check.mojo"
+
+# MultiClass's two kernels -- the softmax value/gradient and one
+# lower-triangular Hessian row -- gated four ways: per cell against libm
+# through FFI over numClasses 2/3/7/12; the ZERO-SUM identity their oracle
+# relies on when it reconstructs the pinned class's gradient component; the
+# TWO-CLASS COLLAPSE against `cross_entropy_kernel`, which an outside oracle
+# already pinned; and the Hessian's sign structure. Rows with every free
+# approx at +-100 are planted, because that is where their `maxApprox = 0`
+# seed is load-bearing. Three sabotages; the fourth is recorded as
+# impossible rather than shipped unable to fire. Own main(); a GPU, seconds.
+check-multilogit = "mojo run -I . checks/multilogit_check.mojo"
+
+# The MultiClass oracle's rowSize > 1 arm -- the branches every pointwise
+# loss skips. Five gates, three of them ANALYTIC rather than a transcription
+# of the code under test: the gradient sums to zero across all numClasses,
+# every blocked-Hessian row sums to exactly lambda (which is algebra about
+# diag(p) - p p^T, and pins the fact that the Hessian is numClasses wide
+# INCLUDING the pinned class), the Hessian is symmetric cell for cell, the
+# first cursorDim gradient components match an independent per-leaf float64
+# tally, and the gauge projection is invariant to a common shift. Ragged
+# leaves including an empty one. Three sabotages, each perturbing the DEVICE
+# side only. Own main(); a GPU, seconds.
+check-multiclass-oracle = "mojo run -I . checks/multiclass_oracle_check.mojo"
+
+# The score kernel's MultiClass arm -- the extra leaf contribution that
+# stands for the PINNED class, whose gradient is not stored because it is
+# minus the sum of the others. Gated by two EXACT analytic identities rather
+# than by a reference: at two classes the arm multiplies the reported score
+# by exactly 2 (L2) or exactly sqrt(2) (Cosine) and must not move the argmax,
+# and the score is symmetric under permuting which class is pinned. Own
+# main(); a GPU, seconds.
+check-multiclass-score = "mojo run -I . checks/multiclass_score_check.mojo"
+
+# MultiClass END TO END: train, predict, serialize, reload. The gate the
+# kernel-level checks cannot reach is the CROSS-CHECK between the two apply
+# paths -- training walks PARTITIONS, prediction walks ROWS and re-derives
+# each leaf, and on the learn set the loss they produce must agree. That is
+# what catches a plane-major buffer read as bin-major. Plus: probabilities
+# sum to one, the model's dim is numClasses-1, a learnable label is learned
+# while a RANDOM control is not, and the multi-dimensional save/load round
+# trip is bit-identical. Two sabotages on the host expectation. numClasses
+# 2, 3 and 7. Own main(); a GPU, under a minute.
+check-multiclass-train = "mojo run -I . checks/multiclass_train_check.mojo"
+
+# The nine losses ported on 2026-08-21 against CATBOOST'S OWN CPU OUTPUT --
+# grid per cell, tree 0's splits and leaf values, all 48 splits with the
+# first divergent tree, every row, and their own objective on both fits.
+# Needs bench/oracle_losses.txt, which is committed; regenerate with
+# `loss-oracle-gen`. Ends with four sabotages. Own main(); a GPU, ~14 fits.
+check-loss-oracle = "mojo run -I . checks/loss_oracle_check.mojo"
+
+# The overfitting detector and the HELD-OUT cursor that feeds it. Its
+# centrepiece is an exact identity rather than a tolerance: train with the
+# eval set EQUAL to the learn set and the two loss curves must agree, since
+# one comes off the partition-wise apply and the other off the row-wise one.
+# Plus the detector's wait arithmetic at four waits, controls that must NOT
+# fire (a falling curve, None, no test set), an end-to-end fixture whose
+# held-out curve really turns while the learn curve does not, and a refusal
+# when od_type is asked for without an eval set. Own main(); a GPU, ~1 min.
+check-overfitting-detector = "mojo run -I . checks/overfitting_detector_check.mojo"
+
+# `permutation_count`: CatBoost builds four datasets differing only in their
+# permutation-dependent CTR columns, keeps a cursor per permutation, searches
+# the tree SHAPE on one of them and estimates the leaves on all of them. Two
+# gates carry it: an IDENTITY (one permutation equals four read at permutation
+# 0, bit for bit, with a control at permutation 1 that must differ), and an
+# ISOLATION (counts 3 and 4 read at est 2 fit identical leaves on identical
+# rows and can only differ through which permutation the structure came off).
+# Plus the numeric-only case, where `UpdateGpuSpecificDefaults` ASSIGNS 1 and
+# discards an explicit 4. Own main(); a GPU, ~2 min.
+check-permutation-count = "mojo run -I . checks/permutation_count_check.mojo"
+
+# Which leaf a row falls in, computed from the compressed index, against the
+# leaf the SEARCHER put it in by moving rows. Two paths that share only the
+# index and the split list, compared row by row over 4096 rows -- the second
+# path is what every permutation but the one the tree was grown on needs.
+# Two sabotages: a split's bin moved by one, and a reversed bit order, which
+# conserves every leaf SIZE and is why the gate is row-wise. Own main().
+check-leaf-partition = "mojo run -I . checks/leaf_partition_check.mojo"
+
+# `nan_mode`: NaN gets a bin of its own at one end of the grid, and CatBoost
+# does it entirely in quantization -- one border of the column's budget is
+# spent on a sentinel. Six gates: both modes isolate NaN rows on a fixture
+# whose NaN targets nothing else explains, the budget is unchanged (which is
+# what catches an insert-without-decrement), the sentinel is at the named
+# end, a clean column resolves to Forbidden whatever was asked, a saved
+# model routes NaN identically, and a NaN the learn pool never saw is
+# refused. Own main(); a GPU, ~2 min.
+check-nan-mode = "mojo run -I . checks/nan_mode_check.mojo"
+
+# The offset arithmetic of CatBoost's OTHER histogram family, the one both
+# of their oblivious searchers share (archive/reference/PORTING.md 91 B, rung 1). Six gates:
+# the fold stripe is a power-of-two rounding that a histogram offset does
+# NOT apply and conflating them is invisible at every power-of-two fold
+# count; the document-block multiplier against a hand trace including both
+# its exit conditions; the partial pass must read the SMALLER child while
+# writing the RIGHT one; and the bin prefix scan against a host prefix over
+# HASHED per-cell plants, with a separate gate on the stat axis because the
+# pointwise histogram is stat-MINOR where the greedy-subsets one is
+# stat-major and a transposed scan moves no total. Own main(); a GPU, ~20 s.
+check-pointwise-offsets = "mojo run -I . checks/pointwise_offsets_check.mojo"
+
+# archive/reference/PORTING.md 13 asserted that a shared-memory pointer cannot cross a function
+# boundary in Mojo, and that assertion is why every histogram kernel in
+# greedy_subsets_searcher/kernel/ carries its own copy of CatBoost's one
+# shared loop -- a duplication that already shipped one wrong-histogram bug.
+# It is false: stack_allocation yields MutUntrackedOrigin and a callee
+# annotated MutAnyOrigin rejects it because that is a different origin, not a
+# wildcard. Parameterize and it works. Gated PER SLOT, not on a total, so a
+# callee that wrote nothing or wrote the wrong slot fails. Own main(); a GPU,
+# a few seconds.
+check-shared-pointer = "mojo run -I . checks/shared_pointer_probe.mojo"
+
+# CatBoost's one pointwise histogram loop and the only thing it promises:
+# every point in [offset, offset+dsSize) reaches AddPoint exactly once, with
+# the bin its index gathers. That promise is carried by a head/tail alignment
+# peel with DIFFERENT quanta per entry point (32/32, 128/64, 128/128), a
+# blockIdx.x % BLOCKS_PER_FEATURE gate on the peels, and a strided body.
+# Gated PER BIN against a host tally over hashed plants -- a totals check
+# would pass a loop that delivered every point to the wrong bin. 160
+# (offset, size) cases per entry point, chosen to hit every branch, plus a
+# 4-block partition case. Own main(); a GPU, ~1 min.
+check-pointwise-loop = "mojo run -I . checks/pointwise_loop_check.mojo"
+
+# The pointwise cross-tree pool's reset contract (DEVIATION 143):
+# reset_subsets after two real splits over a different target must be
+# BIT-IDENTICAL to create_subsets fresh -- teeth first (every mutable
+# region must diverge before the reset counts), then 6k u32 + 4k f32
+# cells compared exactly; plus the hist state machine replaying a fresh
+# helper's plan sequence after reset(). Own main(); a GPU, seconds.
+check-pointwise-pool = "mojo run -I . checks/pointwise_pool_check.mojo"
+
+# The blind level loop's device winner fold (DEVIATION 207): the fold
+# kernels against the REAL host take_best in the host code's exact
+# nesting, hashed records plus every tie case planted by hand (earlier
+# helper, earlier block, unsigned sentinel, bin), and the pack kernel's
+# three outputs -- winner record, score_before (poison-seeded so a dead
+# write fails), split descriptor -- read back whole. The fit gates hold
+# the path end to end but their fixtures never tie and their feature
+# weights are ones, which is exactly where a wrong tie rule or a dead
+# write hides. Own main(); a GPU, seconds.
+check-pointwise-resolve = "mojo run -I . checks/pointwise_resolve_check.mojo"
+
+# DEVIATION 210: the greedy blind loop retires the per-level
+# `plan_level_kernel` launch by folding the smaller-sibling choice into
+# `update_partitions_after_split_kernel`'s border store, whose thread holds
+# both sizes in registers. This gate runs the incumbent two-launch pair and
+# the fused kernel on the same planted borders (ties, empty children, an
+# empty parent, strided leaves), compares every output word against an
+# independent host fold, and proves the comparison has teeth with the
+# pre-136 tie inversion as sabotage. Own main(); a GPU, seconds.
+check-plan-fusion = "mojo run -I . checks/plan_fusion_check.mojo"
+
+# The tripwire under archive/reference/PORTING.md 11 and 92. Two histogram families here run
+# one iteration count per BLOCK rather than CatBoost's per-thread counts,
+# because their AddPoint syncs an 8-lane tile and ours can only take a
+# threadgroup barrier. Item 11 says a divergent barrier was observed failing;
+# this probe runs that exact shape (512-thread block, warp 0 one iteration
+# and warps 1-15 zero) and it does NOT fail, at any of seven sizes. The
+# uniform path is therefore kept on SPECIFICATION, and this check exists to
+# notice if that ever stops being merely a specification matter. Own main();
+# a GPU, a few seconds.
+check-divergent-barrier = "mojo run -I . checks/divergent_barrier_probe.mojo"
+
+# The one-byte pointwise accumulators, 5/6/7 bit. They are not one kernel
+# with a mask: doubling the bins halves the private copies, doubling the
+# threads sharing one, so each has its own bin-to-slot map AND its own
+# collision scheme (4 copies / 8 threads / a plain pair of writes; 2 / 16 /
+# a writeFirst flag; 1 / 32 / a four-way turn-taking loop). EVERY GATE IS
+# PER CELL and none sums, because the mistakes this family invites --
+# transposing the stat axis, swapping weight with target, reading one bit
+# width's slot map onto another -- all leave every total identical.
+#
+# This is also the check that gates CONTENTION rather than coverage: 8 to 32
+# of its threads share an inner histogram copy and a barrier is the only
+# thing holding their writes apart. That is why it caught a divergent peel
+# loop which check-pointwise-loop passed at every block size, in both its
+# broken and its fixed form (archive/reference/PORTING.md 92). Own main(); a GPU, ~30 s.
+check-pointwise-hist2 = "mojo run -I . checks/pointwise_hist2_check.mojo"
+
+# The 8-bit pointwise accumulator, which is a different design rather than
+# the 5/6/7 progression continued: 64 threads share an inner copy, so
+# CatBoost drops the tile syncs, calls atomicAdd, and DEFERS -- a run of
+# equal bins accumulates in registers and only reaches shared memory when
+# the bin changes, which makes Reduce's pending flush load-bearing. Metal
+# has no threadgroup float atomics (probed), so ours holds Int32 fixed point
+# through the repo's one dithered quantizer (DEVIATION 93). Gated exactly at
+# scale 1.0 with integer stats, where the dither provably cannot move a
+# value, plus a two-sided-rounding gate that separates a dither from a
+# truncation and that scale-1.0 exactness cannot see. Own main(); a GPU,
+# ~20 s.
+check-pointwise-hist2-8bit = "mojo run -I . checks/pointwise_hist2_8bit_check.mojo"
+
+# TPointHistHalfByte: ONE accumulator serving BOTH of CatBoost's small-bin
+# pointwise kernels, which differ only in how they READ the reduced block --
+# half-byte takes one cell per (feature, fold), binary recovers a one-bit
+# feature by summing the eight nibble values whose bit is clear. Sixteen
+# threads share an inner copy and the thing that keeps them apart is a
+# ROTATION rather than a turn-taking flag, so a wrong rotation shuffles mass
+# between features and leaves the grand total intact. Gated per cell for
+# both readers, plus a same-group transposition detector for the binary bit
+# numbering (theirs is most-significant-first, and a transposed order is a
+# permutation within the group that no group total can see). Block 512 is a
+# FLOOR here, not just a budget -- their Reduce folds under
+# `threadIdx.x < 512`. Own main(); a GPU, ~20 s.
+check-pointwise-hist2-half-byte = "mojo run -I . checks/pointwise_hist2_half_byte_check.mojo"
+
+# The one-byte DRIVER: everything the accumulators are not -- slice the
+# feature array, pick the partition and histogram slot, REFUSE the blocks
+# belonging to another bit width, run the loop, write out. The dispatch is
+# the interesting part: every bit width's kernel is launched over every
+# block and each returns unless the block's WIDEST feature is in its range,
+# so the four partition the work at runtime with no host coordination. The
+# fixture has four feature groups whose maxima are 32, 128, 16 and 256, and
+# the gate asserts each width's claim set exactly -- group 2's max of 16
+# exists solely to pin `lowerBound = BITS > 5 ? upperBound / 2 : 15`, and
+# group 3 exists because without it the 8-bit fixed-point path was launched
+# and returned every time. Runs at scale 4, not 1, so the fixed-point
+# writeback's division is load-bearing. Own main(); a GPU, ~30 s.
+check-pointwise-driver = "mojo run -I . checks/pointwise_driver_check.mojo"
+
+# The BINARY and HALF-BYTE drivers: one accumulator, two writebacks. Binary
+# recovers a one-bit feature by summing the eight nibble values whose bit is
+# clear; half-byte reads its cells directly. E4 is the sharp one -- the two
+# readings of the SAME accumulator must agree, which is two independent
+# paths and the strongest check available without a second implementation.
+# E2 documents a measured redundancy rather than claiming coverage: the fold
+# guard and the abs()>1e-20 guard each suffice alone, so neither is
+# individually observable and only removing BOTH moves a cell. Own main(); a
+# GPU, ~20 s.
+check-pointwise-small-bin-driver = "mojo run -I . checks/pointwise_small_bin_driver_check.mojo"
+
+# TComputeHistogramsHelper's state machine, which decides the FULL-PASS flag
+# -- the single most consequential bit in the histogram family. True computes
+# every part; False computes only the smaller sibling of each pair and leaves
+# a subtraction to recover the other, so a wrong flag gives a histogram that
+# is right at one depth and quietly wrong after it. No GPU: every decision is
+# a pure function of the sequence of depths the helper is called with, so the
+# gate enumerates transitions a fit would take days to reach -- a second tree,
+# a skipped level, a re-entry at the same depth, and a policy with no
+# features (whose flag must NOT clear, because their assignment sits inside
+# `if (GetGridSize(Policy))`). Own main(); host only, instant.
+check-histograms-helper = "mojo run -I . checks/histograms_helper_check.mojo"
+
+# The pointwise host launch layer: TComputeHist2Kernel's fan-out, the three
+# per-policy launchers with their grid arithmetic and multiplier ladders,
+# UpdateFoldBins, UpdatePointwiseHistograms and the scan launch. This is the
+# first check in which the WHOLE family runs together -- binary, half-byte
+# and all four one-byte widths over one mixed fixture, 3,686 cells exact
+# after the scan. F2c is the subtle one: the multiplier's VALUE reaches
+# output through exactly one channel, the writeback (plain store at M == 1,
+# atomicAdd above), so the gate seeds the histogram to make those two
+# different programs. F6 pins that the 5-bit kernel's feature count spans
+# bits 4 AND 5 -- the host-side echo of `lowerBound = BITS > 5 ? ... : 15`.
+# Own main(); a GPU, ~6 s.
+check-pointwise-dispatch = "mojo run -I . checks/pointwise_dispatch_check.mojo"
+
+# The pointwise SCORER: all five calcers, the single-fold and both dynamic
+# split kernels, the gather-by-leaves transpose and the partition reducer.
+# KEEPS CATBOOST'S SIGN CONVENTION -- FLT_MAX sentinel, `gain < bestGain`,
+# lower is better -- which is the OPPOSITE of
+# greedy_subsets_searcher/kernel/compute_scores.mojo, whose host folds in a
+# negation. Anything wiring a searcher must not assume the two agree.
+# The dynamic gates run at foldCount 6, not 4, because at every POWER-OF-TWO
+# fold count the histogram offset and the data-partition offset coincide and
+# the offset-confusion sabotage measures green. Own main(); a GPU, ~2 s.
+check-pointwise-scores = "mojo run -I . checks/pointwise_scores_check.mojo"
+
+# TOptimizationSubsets and methods/helpers: CreateSubsets, Split,
+# UpdateSubsetsStats, TakeBest, ToSplit and the bit helpers. Two independent
+# per-cell tallies at every level, CONTENT (membership, offsets, sizes, stats,
+# the poisoned tail) and ORDER (positions, bins, gathered stats) -- because
+# making ReorderBins UNSTABLE moves 5,958 ORDER cells and exactly ZERO
+# CONTENT cells, and only the second tally can see it. Also carries a
+# `comptime assert` layout contract pinned against literals taken from the
+# call sites that hardcode the record, after a swap of PART_OFFSET/PART_SIZE
+# moved zero cells: the check had spelled the layout with the library's own
+# constants, so it was verifying self-consistency, which a swap preserves.
+# Own main(); a GPU, ~10 s.
+check-pointwise-subsets = "mojo run -I . checks/pointwise_subsets_check.mojo"
+
+# Does this tree's compressed index feed CatBoost's POINTWISE accumulators?
+# It must, and nothing downstream could tell you otherwise. The pointwise
+# family never reads TCFeature::Mask or ::Shift -- it HARDCODES the packing
+# (one-byte at 24-8k, half-byte at 28-4i, binary as nibble fid/4 bit
+# 3-(fid&3)) -- where the greedy-subsets family reads them per feature and
+# works with any layout. So a packing mismatch produces a perfectly
+# well-formed histogram OF THE WRONG FEATURES: every bin populated, every
+# total right, the tree splitting on the wrong columns. Host only, instant:
+# it compares two independently written formulas rather than running either.
+check-cindex-packing = "mojo run -I . checks/cindex_packing_check.mojo"
+
+# RUNG 1's GATE: two independent searchers, one fixture, the same tree.
+# The greedy-subsets searcher and the new pointwise one grow an oblivious
+# tree from the same compressed index and the same weak target, and every
+# split must agree feature for feature and bin for bin. They share the
+# cindex and NOTHING else -- different histogram layouts (stat-major against
+# stat-minor), different collision schemes, different reduce shapes,
+# OPPOSITE sign conventions (archive/reference/PORTING.md 94a), fixed-point on one side at 8
+# bits and none on the other. Agreement is two ports of one algorithm
+# arriving at one answer, not a tautology.
+#
+# It does NOT prove either matches CatBoost -- both could share a misreading;
+# tools/catboost_oracle.py is what compares against their own output. It DOES
+# prove the ~9,000 lines of the pointwise family compute the same splits as
+# an implementation gated against CatBoost's dumped decisions 48/48.
+# Own main(); a GPU, ~15 s.
+check-pointwise-vs-greedy = "mojo run -I . checks/pointwise_vs_greedy_check.mojo"
+
+# `fit` actually runs CatBoost's single-target symmetric learner. The last
+# wiring step: doc_parallel_boosting.fit takes use_pointwise_searcher, and
+# this fits the SAME data both ways. The two arms share the compressed
+# index, the weak target, the bootstrap, leaf estimation, the apply and the
+# loss -- they differ in the STRUCTURE SEARCHER and nothing else -- so the
+# loss curves must agree. A boosting loop amplifies: one different split at
+# iteration 3 changes every later residual, so twenty identical iterations
+# is a far stronger statement than one matching tree. W2a pins tree 0 alone
+# (splits, split types, every leaf value) so a failure names the tree rather
+# than the curve, and W3 changes the score function to prove the knob
+# actually reaches the searcher -- without it, W2 could pass because the
+# flag was ignored. Own main(); a GPU, ~40 s.
+check-fit-pointwise = "mojo run -I . checks/fit_pointwise_check.mojo"
+
+# The two measurements archive/reference/PORTING.md 98a and 106 said were a measurement's job.
+# Both interleave their arms and report the MIN of each, because another
+# session runs GPU work on this box and a sequential A-then-B measurement
+# here has drifted a result 4.5x invisibly before. Neither can change a
+# result: both reducers are gated correct and both fit arms are
+# bit-identical, so these decide speed only. Probes, not checks -- they
+# print numbers rather than pass or fail.
+probe-partition-reducer = "mojo run -I . checks/partition_reducer_probe.mojo"
+probe-pointwise-default = "mojo run -I . checks/pointwise_default_probe.mojo"
+
+# RUNG 2's core: the fold layout ordered boosting grows trees on. N tasks
+# become 2N partitions over one concatenated document array, LEARN at even
+# folds and TEST at odd ones -- and that pairing is why the dynamic scorer
+# (ported and gated before this file existed) reads folds (f, f+1) as
+# (estimate, test) and steps by two. Put the test half first and the scorer
+# evaluates every split against the wrong half of every fold, with finite
+# scores and a well-formed tree to show for it.
+#
+# G2 walks a per-document ownership array rather than comparing a sum,
+# because a layout that covers one range twice and skips another has exactly
+# the right total. G6 uses a fold count that is NOT a power of two on
+# purpose: at a power of two the striped and tight offsets coincide and
+# nothing downstream can tell them apart. Own main(); a GPU, ~5 s.
+check-fold-tasks = "mojo run -I . checks/fold_tasks_check.mojo"
+
+# The fold axis DRIVEN through the shared stack at FoldCount 12: subsets per
+# partition and per position, two splits at FoldBits 4 in order, compute_hist2
+# per cell at 4 leaves x 12 folds (where the partition stride 16 and the
+# histogram stride 12 finally differ), and the 3-of-7 dynamic dispatch. The
+# histogram family had never run with a fold axis before this. DEVIATION 125-129.
+check-ordered-boosting = "mojo run -I . checks/ordered_boosting_check.mojo"
+
+
+# RUNG 2's GATE, and it is an IDENTITY: the feature-parallel searcher must
+# reproduce the doc-parallel one to the bit at FoldBits == 0, plus a control
+# that must differ. Run at TWO row counts on purpose -- a compression block is
+# 8,192 documents, so two of its ten sabotages are invisible below that.
+# DEVIATION 120.
+check-feature-parallel-identity = "mojo run -I . checks/feature_parallel_identity_check.mojo"
+
+
+# CreateFolds and MinEstimationSize -- how many folds ordered boosting builds
+# and how long each is. Nested prefixes growing geometrically by
+# fold_len_multiplier from min_fold_size. HOST ONLY: the fold boundaries are
+# a closed form, so the gate compares against an independently written
+# formula rather than a fixture, and can sweep 3,400 series.
+#
+# Two things in their code that look like something else: their
+# NextQueryOffsetForLine is Min(line + 1, DocCount) with no groups, so it
+# does ARITHMETIC on the default path and every fold edge is one past the
+# geometric value; and MinEstimationSize has a hard CLIFF at 500 documents,
+# not a taper -- n=499 estimates on 2 documents and gives 8 folds, n=500
+# estimates on 11 and gives 6. Both verified against the source at merge.
+#
+# Carries an iteration bound their loop does not have, because two of its ten
+# sabotages turn the recurrence into a fixed point and the gate has to be able
+# to FAIL rather than hang. Own main(); no GPU, ~2 s.
+check-dynamic-boosting-folds = "mojo run -I . checks/dynamic_boosting_folds_check.mojo"
+
+# The LSD radix sort over (bin, permutation position). Gates STABILITY
+# separately from sortedness and prints both, because sortedness alone
+# cannot see a tie that moved -- and the tie order IS the second half of
+# the key the CTR block sorts by. Runs an even and an odd pass count, which
+# are the two sides of the ping-pong parity switch.
+check-radixsort = "mojo run -I . checks/radix_sort_check.mojo"
+# The CTR option surface and the two host calcers: the three-prior fan-out,
+# target binarization against CatBoost's own borders, FeatureFreq against
+# PLANTED category counts over eleven cardinalities, and the Borders ordered
+# target statistic against an independent O(n^2) tally. Host-side, seconds,
+# no GPU. Needs `bench/ctr_target_oracle.txt`, which is committed;
+# regenerate it with `ctr-target-oracle-gen`.
+check-ctr = "mojo run -I . checks/ctr_check.mojo"
+
+# IDENTITY_PATHS rows 9 and 10 on THIS backend: division, sqrt and the
+# two exact score-kernel expression shapes against correctly-rounded
+# references (one f64 op, one rounding -- exact for all five ops), plus
+# the a*b+c contraction canary judged against BOTH the fused and unfused
+# exact references. Run on every backend the kernel matrix carries.
+check-ieee-arith = "mojo run -I . checks/ieee_arith_check.mojo"
+
+# IDENTITY_PATHS row 12: the portable exp/log pair. Accuracy vs float64
+# stdlib (<= 4 ulp over 2^20 hashed inputs each), device bits == host
+# bits lane for lane, and a `sabotage` argv arm proving the compare can
+# fail. The printed device hash must be the SAME NUMBER on every vendor
+# column -- it is the cross-vendor certificate line. Run FIRST on any
+# new backend, right after check-ieee-arith.
+check-portable-translog = "mojo run -I . checks/portable_translog_check.mojo"
+
+# IDENTITY_PATHS row 10 (sqrt) + row 12 (cos, pow), the translog gate's
+# sibling: `std.math.sqrt` is NOT correctly rounded on NVIDIA (H100, E2
+# 2026-08-23: 180,714 of 2^20 one ulp off, 176,577 of them normal), so the
+# Cosine scores differed on that column alone. portable_sqrtf must match
+# the float64 reference EXACTLY (0 mismatches); cos <= 2 ulp on |x| <
+# 2pi; pow <= 64 ulp. The printed device hash is the certificate line,
+# the same number on every column. Run beside check-portable-translog.
+check-portable-sqrtcos = "mojo run -I . checks/portable_sqrtcos_check.mojo"
+# host-only: portable_log64 (Cephes double log) against the host libm, 2 ulp, + its own hash
+check-portable-log64 = "mojo run -I . checks/portable_log64_check.mojo"
+
+# IDENTITY_PATHS row 49 (DEVIATION 740): DIVISION characterized per class
+# on this backend -- 2^20 hashed (a, b) pairs in 13 classes (normals, each
+# operand subnormal, zeros, infs, NaNs, over/underflowing quotients, exact
+# quotients) judged bit for bit against the correctly rounded host quotient
+# (fp32 fdiv, cross-checked against the f64 route) and row 10's flush
+# model; `portable_divf` device == host on every lane, its hash the
+# certificate line (the same number on every column); the hardware rsqrt
+# intrinsic RECORDED, not used. Run on every column beside check-ieee-arith.
+check-division = "mojo run -I . checks/division_check.mojo"
+
+# IDENTITY_PATHS rows 50-54 (DEVIATIONS 741-745): the neural-block
+# primitives rsqrt / log1p / sigmoid / silu / softplus -- accuracy vs a
+# float64 libm reference over 2^20 hashed inputs each (rsqrt <= 1 ulp,
+# log1p <= 2, the three activations <= 4), every planted special value
+# by bit, device bits == host bits lane for lane, a `sabotage` arm that
+# runs the vendor spellings on the device and must fail the compare. The
+# printed `nn device hash` is the certificate line. Run beside
+# check-portable-translog on every column.
+check-portable-nn = "mojo run -I . checks/portable_nn_check.mojo"
+
+# DEVIATION 820: the RoPE trig pair. `check_cos_bits_did_not_move` runs first
+# because portable_cosf is CERTIFIED and its body moved into the shared
+# `_cephes_sincosf_core`; the AUTHORITATIVE proof is check-portable-sqrtcos
+# still printing 12295913102197186379, so run that one before this. Then sin's
+# planted specials BY SIGN BIT, oddness over 2^20 lanes, octant coverage, and
+# the RoPE 8192 domain ladder RECORDED rather than asserted (this spelling's
+# ulp bound has never been measured). Four `-D MOJOLEARN_TRIG_SABOTAGE_*` arms,
+# two of which are host-inert by construction and need Metal to bite.
+check-portable-trig = "mojo run -I . checks/portable_trig_check.mojo"
+
+# DEVIATIONS 821-824: tanh, erf and the TWO gelus. `check_two_gelus_disagree`
+# is a NEGATIVE control and is the point of the file: the erf gelu and the tanh
+# gelu must MEASURE as different functions, or a seam was copy-pasted. Plus
+# tanh(-0.0) = -0.0 by sign bit, which is a Cephes bug this lane fixed (the
+# sign cancels twice through the odd polynomial), and gelu(-inf) = NaN
+# ASSERTED rather than treated as a defect. Accuracy is recorded, never
+# asserted. The kernel also launches std.math.tanh and std.math.erf on the
+# device, which is what answers DEVIATION 821's open float64-lowering question;
+# if Metal refuses to compile, that refusal IS the answer.
+check-portable-gelu = "mojo run -I . checks/portable_gelu_check.mojo"
+
+# DEVIATION 825 + 826: softmax's row maximum. `check_fmax_fold_invariant` is
+# the point, because the consumer is a REDUCTION: one planted row folded left
+# to right, right to left and as a balanced tree must give ONE answer, and a
+# pairwise check structurally cannot see the row-13 defect. Also pins
+# identical_mul's signed zeros against all three pinned_mul copies in mamba/.
+# NOTE: this gate imports extratrees and mamba to catch copy drift, so it
+# compiles more than checks/.
+check-portable-fmax = "mojo run -I . checks/portable_fmax_check.mojo"
+
+# E2U: the unsupervised sub-feature matrix through the Python surface
+# (tools/e2u_README.md); append the out dir:
+#   pixi run e2u-matrix bench/results/e2u/<stamp>/fast1
+#   pixi run e2u-diff <dir1>:A <dir2>:B --write     (run-to-run control)
+e2u-matrix = "PYTHONPATH=python python3 tools/e2u_matrix_fit.py"
+e2u-matrix-identical = "MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python python3 tools/e2u_matrix_fit.py"
+e2u-diff = "python3 tools/e2_matrix_diff.py"
+
+# The DEVICE FeatureFreq calcer -- TWeightedBinFreqCalcerGpu and its
+# compute_simple_ctrs_device driver -- against the host driver PER CELL
+# (bit-equal: trivial weights make every float sum exact) and an
+# independent count/(n+1) tally, across the packing-policy cardinality
+# boundaries, both priors, the partCount==size dispatcher arm, a 100k
+# multi-block run, and a sabotage that must land exactly on the affected
+# categories. Closes archive/reference/PORTING.md deviation 52. Own main(); a GPU and
+# seconds.
+check-freq-ctr-device = "mojo run -I . checks/freq_ctr_device_check.mojo"
+
+# The CATEGORY HASH STACK -- their CityHash64 1.0 variant (which public
+# CityHash vectors do NOT match), CalcCatFeatureHash's low-32 truncation,
+# and the model-side CalcHash combination fold with its (ui64)(int) sign
+# extension -- against CatBoost's OWN util/digest/city.cpp compiled by
+# tools/cityhash_oracle/ into bench/cityhash_oracle.txt. Host-side,
+# seconds, no GPU.
+check-cityhash = "mojo run -I . checks/cityhash_check.mojo"
+
+# The CTR ESTIMATION PERMUTATION -- their TDataPermutation over MT19937-64 --
+# against CatBoost's OWN util/random/mersenne64.cpp, compiled by
+# tools/permutation_oracle/ into bench/permutation_oracle.txt. Compares the
+# raw 64-bit stream, Uniform(t) at a t where the rejection branch fires, and
+# whole orders cell by cell, plus the properties a cell compare cannot see
+# (bijection, identity iff id 0). Host-side, seconds, no GPU.
+check-permutation = "mojo run -I . checks/ctr_permutation_check.mojo"
+
+# The CTR block ON THE DEVICE: the radix-sorted bin ordering, the segmented
+# scan, THistoryBasedCtrCalcerGpu, and the permutation that decides what
+# "before" means. Compares the device answer against the host reference AND
+# against an independent O(n^2) tally that walks the permutation, then makes
+# ROW ORDER produce a measurably worse (label-leaking) estimator and asserts
+# on the difference in both directions. Ends with train() under CatBoost's
+# GPU default: four columns per categorical feature. Own main(); a GPU and
+# about a minute.
+check-ctr-device = "mojo run -I . checks/ctr_device_check.mojo"
+
+# The ten CTR elementwise kernels of `ctr_calcers.cu`, ENQUEUED on the
+# device and compared cell by cell against a host tally. Own main() because
+# it needs a DeviceContext and sixteen launches.
+check-ctr-kernels = "mojo run -I . checks/ctr_kernels_check.mojo"
+
+# The categorical path through `train()` itself, which is WIRING rather
+# than arithmetic: a target that is a pure function of category FREQUENCY,
+# fitted by the CTR arm and provably not by the same codes as an ordinary
+# numeric column, plus the four refusals.
+check-ctr-train = "mojo run -I . checks/ctr_train_check.mojo"
+
+# One-hot categoricals swept across every step of `policy_for_fold_count`.
+# Written to catch a shipped bug where the layout that WROTE the compressed
+# index and the layout that READ it disagreed by one fold, which made a
+# 16-category feature silently unlearnable. Trains 13 models; a minute.
+check-onehot-cardinality = "mojo run -I . checks/one_hot_cardinality_check.mojo"
+check-logloss-target = "mojo run -I . checks/logloss_target_check.mojo"
+check-newton-walker = "mojo run -I . checks/newton_walker_check.mojo"
+check-logloss-estimator = "mojo run -I . checks/logloss_estimator_check.mojo"
+check-logloss-train = "mojo run -I . checks/logloss_train_check.mojo"
+estimation-bench = "mojo run -I . checks/estimation_bench.mojo"
+
+# What `PolicyScoreHelper.__init__` ACTUALLY builds, read back off the device.
+# Two gates already plant one-hot flags for the scan kernel and both hand the
+# array in by hand, so the constructor that builds it in the product was a
+# hardcoded zero for as long as it existed. DEVIATION 114/115.
+check-one-hot-flags = "mojo run -I . checks/one_hot_flags_check.mojo"
+
+# TFeatureTensor: canonical form, the three-trap hash, order independence over
+# six build routes, 800-tensor collision sweep, and the batch builder at a
+# width that runs three groups. Oracle is CatBoost's own source compiled by
+# clang. DEVIATION 116-118.
+check-feature-tensor = "mojo run -I . checks/feature_tensor_check.mojo"
+
+
+# What the host toolchain actually resolved to. Worth recording beside any
+# number, because `--target-cpu` and `--target-features` default to the HOST,
+# so every `mojo run` above is already a native build and a result carries the
+# chip it was taken on whether or not anybody wrote it down.
+print-target = "mojo build --print-effective-target"
+
+# Elaborates every module, including ones no check imports, so it catches a
+# file that only compiles because nothing reaches it. Stricter than `probe`.
+build-pkg = "mkdir -p build && mojo precompile -I . gbdt -o build/gbdt.mojopkg"
+
+# `random_strength`, CatBoost's randomized-score noise, through a REAL fit
+# on both structure searchers. R1 the zero path is bit-identical; R2 the
+# doc-parallel arm's splits move; R2G the greedy arm's do NOT, because
+# `beforeSplitCalcer` draws the same normal and `gain = score - scoreBefore`
+# cancels it (`compute_scores.cu:85`, `:134`) -- that identity is the gate,
+# not a hole; R3 determinism; R4 the seed is `GlobalSeed + FeatureId`,
+# checked by predicting the WINNING FEATURE at every level from the host.
+check-random-strength = "mojo run -I . checks/random_strength_check.mojo"
+
+# ---- LOSSGUIDE LANE (leafwise growth). See archive/research/LOSSGUIDE.md. ----
+#
+# The Lossguide score kernel, `ComputeOptimalSplit` (`compute_scores.cu:393`),
+# against a host walk written from THEIR CUDA plus five teeth: G1 bit-exact
+# at 18 shapes and three grid widths; G2 the two block rows must score
+# DIFFERENT leaves and swapping the two scalar part ids must exchange the
+# records (that one line is the whole difference from the Depthwise kernel);
+# G3 `toZeroPartSplit` gives a gain of bitwise +0.0, not the sentinel; G4 the
+# poison record survives an all-skipped run; G5 an exact tie goes to the
+# smaller bin-feature id at five grid widths.
+#
+# G1 ALSO MEASURES IDENTITY_PATHS ROW 9 on this kernel: it compares the
+# device against the naive multiply-add chain AND against explicit `fma`,
+# and prints the tally. On an M4 at 2026-08-22 that tally is 15 naive / 3
+# fused IN ONE BUILD, which is the row-9 hazard caught in the act.
+check-leafwise-scores = "mojo run -I . checks/leafwise_scores_check.mojo"
+
+# The Lossguide LEAF-SELECTION policy, proved DIFFERENTIALLY against the
+# depthwise lane's own `select_leaves_to_split` on identical leaf lists.
+# HOST ONLY -- no DeviceContext, milliseconds, safe inside another lane's
+# timing window. P1 Lossguide takes one leaf where Depthwise takes four;
+# P2 on a list where every split makes the objective WORSE, Depthwise takes
+# none and Lossguide still takes the least-bad leaf (their Lossguide arm has
+# no sign test at all, `greedy_search_helper.cpp:319-324`); P3 an exact tie
+# goes to the first leaf id, re-planted to prove it follows the ID; P4 the
+# poison record is invisible to the argmin; P5 max_leaves and the `<=`
+# min_data_in_leaf boundary, which goes LIVE for non-symmetric policies;
+# P6 the `leavesToVisit.size() <= 2` contract the score kernel's two-scalar
+# signature rests on, replayed -- plus the poisoned-leaf state where THEIR
+# OWN CB_ENSURE would fire, pinned at three rather than papered over.
+check-lossguide-policy = "mojo run -I . checks/lossguide_policy_check.mojo"
+
+# `EGrowPolicy::Lossguide` END TO END on the depthwise lane's own fixture --
+# imported, not re-written, because a contrast is only worth something if
+# both arms saw the same rows. L1 it grows and the node/leaf counts agree;
+# L2/L3 it lands on EXACTLY `max_leaves` (2, 3, 5, 9 on demand) because
+# Lossguide adds exactly one leaf per iteration, which is the sharpest
+# observable difference from Depthwise and an exact integer rather than a
+# tendency; L4 the two policies produce DIFFERENT structures on identical
+# input, so the branch is proved reached; L5 `min_data_in_leaf` still stops
+# the tree before the leaf cap does; L6 the identity trace is reached AND
+# inert -- a traced fit emits records and grows a tree identical to the
+# untraced one.
+check-lossguide = "mojo run -I . checks/lossguide_check.mojo"
+
+# THE STAGE-HASH INSTRUMENT, writer and reader gated together.
+# `core/identity_trace.mojo` makes a fit emit named checkpoints, each an
+# FNV-1a64 over a buffer's raw bit patterns, and
+# `tools/identity_trace_diff.py` aligns two traces and names the FIRST stage
+# that differs -- which is how a cross-backend identity failure gets an
+# address instead of only "the models differ". The end-to-end step plants
+# +0.0 against the smallest denormal, the shape of a real Metal-vs-CUDA
+# divergence, and REQUIRES the differ to classify it as DENORMAL-vs-ZERO
+# rather than as ULP noise. Needs python3 for the reader half.
+check-identity-trace = "sh tools/check_identity_trace.sh"
+
+# THE UNSUPERVISED IDENTITY GATE, both modes, six files. `IDENTITY_PATHS.md`
+# rows 19-26 and `archive/research/UNSUPERVISED_IDENTITY.md`. One process is one mode
+# (`GLOBAL_NUMERIC_MODE` is comptime), so every check asserts something
+# DIFFERENT in each: under FAST that the shipped arm still behaves as
+# measured and that the upstream's non-reproducibility is REPORTED, under
+# IDENTICAL that the pins are reached, that the answer does not move with
+# the launch geometry, and that a truncated propagation raises. Running one
+# mode proves half of that and reads like the whole of it.
+#
+# The mode flip is session-local with a revert trap and must never be
+# committed (E1_RUNBOOK preconditions).
+check-unsupervised-identity = "sh tools/check_unsupervised_identity.sh"
+
+# THE COLUMN-INVARIANCE GATE (2026-08-23). The half of the cross-vendor debt
+# that does NOT need cross-vendor hardware: `TARGET_COLUMN` is a comptime
+# choice, so `-D MOJOLEARN_COLUMN_AMD` compiles this source against AMD's
+# block sizes, lane width, shared budget and core count on whatever device is
+# attached. This runs k-means, k-NN and DBSCAN under IDENTICAL at three
+# columns, twice each, and requires one card and one output hash across all
+# eighteen runs.
+#
+# WHAT IT PROVES: the vendor's CONSTANTS do not reach the answer -- most of
+# rows 8, 21, 22 and 23. WHAT IT CANNOT: contraction, denormal policy and
+# device transcendentals are the BACKEND's (rows 9, 10, 12), and every run
+# here is on one backend. E1 is still owed and this does not shorten it.
+#
+# It has teeth, measured rather than assumed: the same eighteen runs under
+# FAST do NOT agree -- three consecutive FAST k-NN runs on ONE column gave
+# three different sorted index sets.
+check-column-invariance = "sh tools/check_column_invariance.sh"
+
+# THE LINEAR-ALGEBRA IDENTITY GATE (IDENTITY_PATHS rows 27-31; DEVIATIONS
+# 520-526). The matrix products, PCA, truncated SVD and OLS, in BOTH modes.
+# Same shape as the unsupervised gate above and for the same reason: one
+# process is one mode, so a run of a single arm proves half the property and
+# reads like the whole of it. Every check prints the mode it COMPILED in.
+check-linalg-identity = "sh tools/check_linalg_identity.sh"
+
+# WHAT THAT GATE COSTS, in seconds rather than in argument. Alternates the
+# modes round by round (the M4's governor drifts up to 1.7x over twenty
+# minutes, so a block of A then a block of B measures the drift).
+price-linalg-identity = "sh tools/price_linalg_identity.sh"
+
+# The two identity checks this lane added, registered individually so a
+# reader can run one without the whole gate. A check with no line here is
+# reachable only by someone who already knows it is there.
+check-gemm-identity = "mojo run -I . core/gemm_identity_check.mojo"
+check-column-stats-identity = "mojo run -I . core/column_stats_identity_check.mojo"
+
+# THE COLUMN MAY NOT REACH THE PRODUCT (IDENTITY_PATHS rows 27-28). Compiles
+# bench/linalg_trace_main.mojo against the APPLE, NVIDIA and AMD comptime
+# columns on THIS machine under IDENTICAL and requires one card. The half of
+# the cross-vendor debt that needs no hardware; the sibling of
+# check-column-invariance, which does the same for rows 19-26.
+check-linalg-column-invariance = "sh tools/check_linalg_column_invariance.sh"
+
+# THE OLS IDENTITY CARD (IDENTITY_PATHS row 32, DEVIATION 527). Eleven stages
+# from the input bytes to the coefficients, so a cross-vendor diff names the
+# FIRST step that moved instead of reporting that the answer moved. Writes a
+# run-to-run control beside it.
+ols-card = "sh tools/ols_card.sh"
+
+# THE GEMM IDENTITY PROFILE, phases 0-1 (archive/plans/IDENTICAL_GEMM_PLAN.md's charter).
+# Host only, no GPU: the serial ascending-k oracle plus the adversarial
+# fixtures that SEPARATE serial from split-k, one partition count from
+# another, fused from unfused, FTZ from gradual underflow, a balanced fold
+# from a serial one, and the signed-zero and cancellation cases. Run in both
+# modes; two of its fixtures refused themselves before they worked.
+check-gemm-oracle = "mojo run -I . gemm/checks/gemm_oracle_check.mojo"
+
+
+# The three identity check files ALONE, in whatever mode the tree is
+# currently built for. For the loop while working on one of them; the gate
+# above is what a session should finish on.
+check-kmeans-identity = "mojo run -I . cluster/checks/kmeans_identity_check.mojo"
+check-knn-identity = "mojo run -I . neighbors/checks/knn_identity_check.mojo"
+check-dbscan-identity = "mojo run -I . dbscan/checks/dbscan_identity_check.mojo"
+
+# THE THREE ALGORITHM SUITES, which had no task of their own until now --
+# the same defect the block above this file's `check-bin-order` describes:
+# a check nobody can run by name is a check nobody runs.
+check-kmeans = "mojo run -I . cluster/kmeans_main.mojo"
+check-knn = "mojo run -I . neighbors/knn_main.mojo"
+# -O1 IS LOAD BEARING AND IS NOT A PERFORMANCE CHOICE. At the default -O3
+# this file does not COMPILE: the four weighted gates hit an LLVM pass
+# assertion, `DeadArgumentElimination surveyUse failed`, and that is why
+# `sample_weight` was IMPLEMENTED AND UNGATED from the day it landed until
+# 2026-09-01. Measured, one variable, on an Apple M4: -O3 and -O2 both
+# assert, -O1 and -O0 both build, and DeadArgumentElimination is an -O2-and-
+# above pass. No source construct was the cause -- four candidate rewrites
+# were tried and every one still asserted at -O3.
+#
+# WHY THIS IS NOT A WEAKENED GATE. With the four weighted gates disabled so
+# that -O3 can build at all, the -O1 and -O3 binaries print BYTE-IDENTICAL
+# output across all 13 remaining gates, including the float-heavy ones
+# (`check_fused_eps_agrees_with_materialized`, 31,950 cells against a float64
+# host oracle, and `check_dbscan_manhattan_neighborhood`, 22,500). The level
+# changes no number this lane asserts on. It is also only the HOST binary;
+# the Metal kernels are compiled by their own path.
+#
+# NO OTHER LANE TAKES THIS FLAG. If a second lane ever needs it, that is the
+# signal to report the assertion upstream rather than to spread the flag.
+check-dbscan = "mojo run -O1 -I . dbscan/dbscan_main.mojo"
+check-ball-cover = "mojo run -I . neighbors/ball_cover_main.mojo"
+check-radius = "mojo run -I . neighbors/radius_main.mojo"
+check-ball-cover-knn = "mojo run -I . neighbors/ball_cover_knn_main.mojo"
+check-ball-cover-knn-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/ball_cover_knn_main.mojo"
+
+# WHAT IDENTICAL COSTS, alternated process by process because the two modes
+# are two binaries and this box drifts up to 1.7x across twenty minutes.
+# `MOJOLEARN_PRICE_ROUNDS` (default 3) sets the rounds.
+price-unsupervised-identity = "sh tools/price_unsupervised_identity.sh"
+
+# The DEPTHWISE lane's gate: `EGrowPolicy::Depthwise`, seven claims.
+#
+#   1 the bin-feature lookup table (DEVIATION 351) agrees with the
+#     `resolve_split` walk it replaces, cell for cell;
+#   2 `TFlatTreeBuilder` on a hand-written ASYMMETRIC tree -- left subtree
+#     deeper than right, so `index + 1` and `index + left_subtree` are
+#     different node indices and a builder that confuses them still gets the
+#     leaf COUNT right; plus `VisitBins` round-tripping the paths and BOTH
+#     duplicate policies;
+#   3 a real depthwise tree: rows conserved, more than one non-empty leaf,
+#     and **two nodes carrying different (feature, bin)**. That last is the
+#     per-branch REACH PROOF for the leafwise score kernel -- an oblivious
+#     level gives every leaf the same split by construction, so a run that
+#     reached the wrong kernel fails here and nowhere else;
+#   4 the non-symmetric apply kernel routes every row to the bin growth
+#     partitioned it into, compared PER BIN (a swap conserves the total);
+#   5 `min_data_in_leaf` is live -- it is dead under SymmetricTree
+#     (`greedy_search_helper.cpp:685`) -- and its boundary is `<=`, probed
+#     at a leaf size that actually occurs;
+#   6 **THE CROSS-GPU CLAIM.** The same tree grown three times in one
+#     process at core counts {this device, 108, 1} must be BIT-IDENTICAL --
+#     nodes, split types and leaf-value bit patterns. The core count is the
+#     only machine-dependent input this algorithm has, and it is the input
+#     that was silently building different models on a 10-core M4 and a
+#     108-SM A100 until IDENTITY_PATHS row 7 was pinned;
+#   7 sabotage: one row's gradient changed must move the model.
+check-depthwise = "mojo run -I . checks/depthwise_check.mojo"
+
+# DEVIATION 259/260: grow_policy on train() and the Python surface -- seven
+# claims (three policies differ, budgets bind, NS model round-trips, the
+# hist-mode control after DEVIATION 261)
+check-grow-policy = "mojo run -I . checks/grow_policy_check.mojo"
+# The classical cuML-mirror lanes opened 2026-08-23 (orchestrator
+# cascadeprojects-a6, DEVIATIONS 600-699; IDENTITY_PATHS rows 40-48). One
+# task per check file, FAST; the IDENTICAL pass is the injector, exactly as
+# for every other gate here:  tools/with_identical_mode.sh pixi run check-cd
+check-cd = "mojo run -I . solver/checks/cd_check.mojo"
+cd-main = "mojo run -I . solver/cd_main.mojo"
+check-kde = "mojo run -I . kde/checks/kde_check.mojo"
+# THE METRIC LANE, 2026-09-01. `CosineExpanded`, `LpUnexpanded` and
+# `weights='distance'`: the eight ported DistanceType values against a
+# float32 second spelling and a float64 reference computed a third way,
+# the two norm/`metric_arg` reach sabotages, `knn_search` end to end
+# against a float64 brute force, and the weighted vote. The `-identical`
+# arm is the one that asserts BIT equality; the FAST arm reports.
+check-metric = "mojo run -I . neighbors/checks/metric_check.mojo"
+check-metric-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/checks/metric_check.mojo"
+check-linkage = "mojo run -I . hierarchy/checks/linkage_check.mojo"
+linkage-main = "mojo run -I . hierarchy/linkage_main.mojo"
+check-ivf = "mojo run -I . ivf/checks/ivf_check.mojo"
+ivf-card = "mojo run -I . ivf/ivf_main.mojo"
+check-cholesky = "mojo run -I . cholesky/checks/cholesky_check.mojo"
+cholesky-main = "mojo run -I . cholesky/cholesky_main.mojo"
+check-resample = "mojo run -I . resample/checks/resample_check.mojo"
+resample-card = "mojo run -I . resample/resample_main.mojo"
+check-hdbscan = "mojo run -I . hdbscan/checks/hdbscan_check.mojo"
+hdbscan-main = "mojo run -I . hdbscan/hdbscan_main.mojo"
+check-gaussian-process = "mojo run -I . gaussian_process/checks/gp_check.mojo"
+gaussian-process-main = "mojo run -I . gaussian_process/gp_main.mojo"
+check-kernel-methods = "mojo run -I . kernel_methods/checks/km_check.mojo"
+kernel-methods-main = "mojo run -I . kernel_methods/kernel_methods_main.mojo"
+check-mixture = "mojo run -I . mixture/checks/gmm_check.mojo"
+mixture-main = "mojo run -I . mixture/mixture_main.mojo"
+check-svm = "mojo run -I . svm/svc_main.mojo"
+check-svm-oracle = "mojo run -I . svm/svc_main.mojo -- oracle"
+check-metrics-labels = "mojo run -I . metrics/checks/label_metrics_check.mojo"
+check-metrics-regression = "mojo run -I . metrics/checks/regression_metrics_check.mojo"
+check-metrics-silhouette = "mojo run -I . metrics/checks/silhouette_check.mojo"
+check-metrics-trust = "mojo run -I . metrics/checks/trustworthiness_check.mojo"
+check-holtwinters = "mojo run -I . holtwinters/checks/hw_check.mojo"
+check-mamba-block = "mojo run -I . mamba/checks/mamba_check.mojo"
+check-mamba2-block = "mojo run -I . mamba/checks/mamba2_check.mojo"
+check-mamba3-block = "mojo run -I . mamba/checks/mamba3_check.mojo"
+# COMPILE ONLY, and the name says so. Builds the mamba backward's routing
+# layer AND, since 2026-09-03, its two kernel files
+# (mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo and
+# mamba/impl/transformers/models/mamba/modeling_mamba_backward.mojo).
+# **IT ASSERTS NOTHING ABOUT ANY GRADIENT**: no value is checked, no bits are
+# compared, no kernel is launched, and plan gates MB1-MB10 do not exist.
+#
+# RUN THE NINETEEN SABOTAGE ARMS TOO -- an untaken comptime branch is not
+# reliably elaborated, so the clean build type-checks only the profile half of
+# every arm. Each is `-D <name>=1`:
+#   routing   MOJOLEARN_MAMBA_SABOTAGE_BWD_PROJ_SWAP
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_WS_FROM_FORWARD
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_CONV_TAP_SLOT
+#   bwd scan  MOJOLEARN_MAMBA_SABOTAGE_BWD_S9B_FORWARD
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S9B_DA_OFFSET
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S9B_UNFUSED
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_T1_SEED_ADD
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_H_SUBTRACT
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S10_N_DESCENDING
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_DDELTA_TWO_FOLDS
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_DA_ASCENDING
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_DBDC_ATOMIC
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_PARAM_ATOMIC
+#   bwd block MOJOLEARN_MAMBA_SABOTAGE_BWD_S12_MUL_SIGMOID
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_SILU_DERIV_ALT_ASSOC
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S12B_ASSOC
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S14_DIVISION
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_JOIN_ORDER
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S13_TAPS_REVERSED
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S1B_FOLD_DESCENDING
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_RSTD3_POW
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_INNER_FROM_NRM
+# The two ATOMIC arms REFUSE BY NAME at their launcher on a kernel_matrix
+# column with no float atomicAdd; they compile everywhere.
+build-mamba-backward-probe = "mojo build -I . mamba/checks/mamba_backward_compile_probe.mojo -o /tmp/mojolearn_mb_probe"
+# Mamba-2 prefill backward dump. The default is the short smoke fixture; use
+# the dedicated L257 gate below for a non-vacuous cross-chunk recurrence.
+dump-mamba2-backward-tail = "work=/tmp/mojolearn-mamba2-mojo-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; MOJOLEARN_MAMBA_GRAD_DUMP=$work mojo run -I . mamba/checks/mamba2_backward_tail_dump.mojo"
+build-mamba2-ssd-backward-probe = "mojo build -I . mamba/checks/mamba2_ssd_backward_compile_probe.mojo -o /tmp/mojolearn_m2_ssd_bwd_probe"
+
+# BLOCK-LEVEL BATCH INVARIANCE (checks/batch_invariance_check.mojo). The
+# lift of `IDENTICAL_FP32_CONTRACT.md` section 6.1 -- "Why `L` may not depend
+# on `m` or `n`, this is the batch-invariance clause" -- from ONE GEMM up to
+# a whole Mamba block and a whole Llama decoder layer.
+#
+# It runs both blocks at B in {1, 17, 64} on THE SAME SEQUENCES with L held
+# fixed, and compares the block output PER TOKEN plus Mamba's post-call SSM
+# state per batch row. B = 17 is there because a non-power-of-two batch is
+# the one a tiled kernel has to pad; B = 64 because that is a batch a server
+# actually forms. Both existing clauses (mamba_check::clause_c,
+# transformer_check::clause_c_batch) top out at B = 3, and at B <= 3 several
+# of these GEMM shapes take the SAME execution plan -- so part of what they
+# assert is that one kernel run twice agrees with itself.
+#
+# THE TIER IS IDENTICAL AND ONLY IDENTICAL, for a mechanical reason:
+# identical_gemm's DEVIATION 1876 branch hands every projection to the vendor
+# kernel under FAST *and* under DETERMINISTIC, so the pinned k-partition
+# never runs there. The driver prints the tier it compiled in and REPORTS
+# rather than asserts under the lower two, so the IDENTICAL pass is the
+# injector as everywhere else:
+#
+#   tools/with_identical_mode.sh pixi run check-batch-invariance
+#
+# THE SABOTAGE (a gate nobody can falsify is not a gate):
+#
+#   tools/with_identical_mode.sh pixi run mojo run \
+#       -D MOJOLEARN_BATCHINV_SABOTAGE_NORM_CHUNK_FROM_M=1 \
+#       -I . batch_invariance_main.mojo
+#
+# splits RMSNorm's per-row sum of squares into chunks whose WIDTH IS DERIVED
+# FROM m = B*L -- contract 6.1's forbidden `L = f(k, m)`, one layer up. One
+# `-D` arms both blocks and the check refuses a run where only one of them
+# took it. It is bitwise INERT at m < 64, so every gate this tree has today
+# is blind to it and this one is not; a run with it armed that moves NO bit
+# RAISES rather than being credited ([[reached-but-inert]]).
+#
+# THE SAME `-D` MAKES THE TWO LANE GATES REFUSE, and both refusals are
+# correct rather than bugs to fix: `check-mamba-block` raises "IS ARMED AND
+# MOVED NO BIT" at its default B=1,L=4 (m=4, where the arm IS inert), and
+# `transformer/checks/transformer_check.mojo` (which has no task of its own
+# in this file) raises from `arm_expectation` because this arm is not one of
+# that contract's thirteen. A gate that does not own an arm should refuse to
+# score it.
+check-batch-invariance = "mojo run -I . batch_invariance_main.mojo"
+
+# THE TRANSFORMER GATES, WHICH HAD NO TASK AT ALL UNTIL 2026-08-31.
+# Both files carry their own `def main`, so they were always runnable -- but
+# only by someone who already knew the path. A gate that cannot be named is a
+# gate that does not get run, and these two are what the batch-invariance
+# work above leans on.
+check-transformer = "mojo run -I . transformer/checks/transformer_check.mojo"
+check-transformer-backward = "mojo run -I . transformer/checks/transformer_backward_check.mojo"
+# Independent CPU float64 references for Transformer backward, cross-entropy,
+# SGD/AdamW, and embedding gradients. Run in the skgpu environment because
+# PyTorch is intentionally not a core dependency. The generated NPZ is an
+# interchange artifact; no mojolearn implementation is imported here.
+independent-gradient-oracles = "python tools/independent_gradient_oracles.py"
+
+# THE TRAINING-LOOP GATES, which had no task at all until 2026-09-03 --
+# TRAINING_LOOP_PLAN.md section 12 item 7 is exactly this, and the 2026-08-28
+# Apple and AMD legs drove the gate by path because there was nothing to name.
+#
+# `check-train-checkpoint` is WRITTEN AND HAS NEVER RUN, along with
+# `training/checkpoint.mojo` and `training/CHECKPOINT_FORMAT.md`
+# (DEVIATIONS 2050-2069). It is the FILE form of the resume that
+# `train_step_check`'s clause (d) can only do inside one process. Its
+# cross-vendor use is two legs and a `cmp`:
+#   MOJOLEARN_TRAIN_STEPS=8 MOJOLEARN_TRAIN_CKPT_FILE=/tmp/<box>.ckptbin \
+#     pixi run check-train-checkpoint
+#   cmp -l /tmp/apple.ckptbin /tmp/amd.ckptbin
+#   MOJOLEARN_CKPT_COMPARE_A=... MOJOLEARN_CKPT_COMPARE_B=... \
+#     pixi run check-train-checkpoint
+# **A leg that writes the file and never has it compared against another
+# VENDOR'S is not a result.**
+check-train-step = "mojo run -I . training/checks/train_step_check.mojo"
+check-train-loop = "mojo run -I . training/checks/train_loop.mojo"
+check-train-checkpoint = "mojo run -I . training/checks/checkpoint_check.mojo"
+# The INDEPENDENT cross-check: torch float64 per-stage reference, the only
+# comparison in this lane whose other side is not our own code. TWO STEPS --
+# the dump is produced by the gate above, then compared:
+#   MOJOLEARN_MAMBA_CORPUS_CASE=1 MOJOLEARN_MAMBA_CORPUS_DUMP=<dir> pixi run check-mamba-block
+#   MOJOLEARN_MAMBA_CORPUS_DUMP=<dir> pixi run check-mamba-corpus
+# Tolerance is NOT arbitrary: 1e-7/1e-6 is what plain torch FP32 achieves
+# against the same float64 reference (tools/mamba_corpus_check.py --self-test),
+# two orders tighter than that tool's 1e-5 default. Use base_b2_l4_d8, NOT the
+# smaller b1_l1 case: at L=1 token-major and channel-major are the same bytes,
+# so the smaller case cannot certify the reindexing at all.
+check-mamba-corpus = "python tools/mamba_corpus_check.py mamba/corpus/base_b2_l4_d8 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-7 --atol 1e-6"
+# The mamba2 and mamba3 corpus gates (contracts' section 8g;
+# tools/mamba_corpus_check.py is family-agnostic -- it reads each case's own
+# manifest.json/ref64, so the SAME tool serves all three families). Both use
+# the B=2 L=4 case for the same reason mamba1 does: at L=1 token-major and
+# channel-major are the same bytes, so the smaller case cannot certify the
+# reindexing at all. Tolerances are the tool's defaults (1e-5/1e-6) until a
+# `--self-test` calibration run lands per family, exactly how mamba1 earned
+# its tighter 1e-7 -- that calibration is RUN OWED (README.md, "Tolerance
+# calibration"), and tightening these lines is that run's deliverable.
+# The mamba3 corpus FILES are RUN OWED too (gen_corpus.py --family mamba3);
+# until they exist this task refuses on the missing manifest, which is the
+# correct refusal, not a defect.
+check-mamba2-corpus = "python tools/mamba_corpus_check.py mamba/corpus/mamba2/m2_base_b2_l4_d32 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-5 --atol 1e-6"
+check-mamba3-corpus = "python tools/mamba_corpus_check.py mamba/corpus/mamba3/m3_base_b2_l4_d32 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-5 --atol 1e-6"
+# arima: BUILT AND GATED. This comment read "SOURCE ONLY, never built, expected
+# to FAIL" from 2026-08-23 and was overtaken the next day, then by four E1 cards
+# on two vendors. The lane is bit-identical Apple <-> AMD MI325X as of 2026-08-28
+# (137 card records, 0 differing). NVIDIA is owed and is a lane-selection gap.
+check-arima = "mojo run -I . arima/checks/arima_check.mojo"
+arima-card = "mojo run -I . arima/arima_main.mojo"
+# The PYTHON surface gate for `mojolearn.ARIMA` (fit/predict/forecast,
+# `python/mojolearn/tests/test_arima_surface.py`). DEVIATION 796
+# (arima/README.md, "Public estimator surface"): ONE TIER PER PROCESS --
+# the Python side freezes its numeric tier at import, so unlike
+# `check-arima` this task cannot cover both tiers in one run. Run it once
+# plain (FAST: bitwise arms RECORDED, not asserted) and once under
+# `MOJOLEARN_NUMERIC_MODE=identical` (bitwise arms ASSERTED), after
+# `bash bindings/build_arima.sh` in each mode. RUN 2026-09-02 AND GREEN IN
+# BOTH TIERS ON ONE APPLE M4, the task's own command line from `python/`,
+# one process per tier -- 88 checks and 0 failed in each. The identical run
+# printed the GREEN verdict (planted coefficients recovered, the canonical
+# NaN before d, the AR(1) closed-form forecast, and one series the same
+# BITS alone as inside a batch of six); the fast run printed "the fast arms
+# passed, AND NO BIT WAS CHECKED", which is what a FAST run is worth.
+# APPLE ONLY -- a second and third vendor through this surface is still
+# OPEN. The ordered ledger is in arima/README.md.
+check-arima-surface = "cd python && python3 -m mojolearn.tests.test_arima_surface"
+# spectral: SOURCE ONLY, no gate and no sabotage has ever run. The five sabotage arms written
+# 2026-08-23 have NEVER BEEN COMPILED, so a syntax error in them would break this build.
+check-spectral = "mojo run -I . spectral/checks/spectral_check.mojo"
+spectral-card = "mojo run -I . spectral/spectral_main.mojo"
+check-umap = "mojo run -I . umap/checks/graph_check.mojo"
+check-umap-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/graph_check.mojo"
+check-umap-spectral = "mojo run -I . umap/checks/spectral_init_check.mojo"
+check-umap-optimizer = "mojo run -I . umap/checks/optimizer_check.mojo"
+check-umap-estimator = "mojo run -I . umap/checks/estimator_check.mojo"
+check-umap-curve = "mojo run -I . umap/checks/curve_check.mojo"
+check-umap-finite-params = "mojo run -I . umap/checks/finite_params_check.mojo"
+check-umap-finite-optimizer = "mojo run -I . umap/checks/finite_optimizer_check.mojo"
+check-umap-finite-optimizer-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/finite_optimizer_check.mojo"
+check-umap-stage-identity = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/identity_check.mojo"
+check-umap-stage-identity-broader = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/identity_broader_check.mojo"
+bench-umap-optimizer = "mojo run -I . umap/bench/optimizer_bench.mojo"
+check-if = "mojo run -I . isolation_forest/checks/if_check.mojo"
+
+# The depthwise IDENTITY TRACE: one hash record per stage of a fit, so a
+# bitwise disagreement between two GPUs has an ADDRESS instead of only
+# "the models differ".
+#
+# IT USES `core/identity_trace.mojo`, THE LOSSGUIDE LANE'S FACILITY, and
+# does not re-implement it. This lane briefly had its own copy
+# (the former stage-digest check, commit e5cef46) because both lanes built
+# the same instrument inside the same hour without knowing; it is deleted.
+# Theirs is a strict superset -- generic over DType, `create_sub_buffer` for
+# a short read, raw dumps, tag-uniqueness enforcement, a format version, and
+# `tools/identity_trace_diff.py`, which aligns two traces on tag SEQUENCES
+# and classifies each differing cell (DENORMAL-vs-ZERO / SIGN / NAN-payload
+# / ULP<=n / LARGE). That classification is the DIAGNOSIS; a hash is only
+# the location.
+#
+# This probe writes three traces and answers two questions locally:
+#   CONTROL       the same configuration twice. Run-to-run noise and machine
+#                 dependence are indistinguishable without it, and under
+#                 FAST on a backend with float threadgroup atomics the
+#                 control is expected to FAIL.
+#   LOCALIZATION  this device's core count vs 108 (an A100's). The core
+#                 count is the only machine-dependent input the algorithm
+#                 has, so this is the cross-GPU question asked in one
+#                 process.
+# It also leaves the two traces on disk and prints the `identity_trace_diff`
+# command, which is the cross-MACHINE path.
+#
+# NOT A BENCHMARK and never to be one -- it drains and copies at every
+# record. Not a gate either; `check-depthwise` claim 6 is. This is what you
+# run when a gate has already gone red. On a new backend the order is
+# `check-ieee-arith`, then `check-depthwise`, then this.
+check-depthwise-trace = "mojo run -I . checks/depthwise_trace_probe.mojo"
+
+# E2 IDENTITY CARDS FOR THE TRAINING PATHS PYTHON CANNOT REACH. The sweep
+# driver (`tools/e2_matrix_fit.py`) emits a card per Python-reachable
+# configuration; four paths have no Python surface -- DEPTHWISE and
+# LOSSGUIDE growth (no `grow_policy` slot on `gbdt_fit`),
+# `MultiClassOneVsAll` (refused by name in `ensemble.py`) and the
+# feature-parallel searcher (no caller but its own check, archive/plans/UNWIRED.md) --
+# and this probe emits theirs: `<out_dir>/<name>.card`, ONE fit per file,
+# hashed fixtures that are pure functions of constants, machine-independent
+# tags, and a record-count floor per card so an unwired trace cannot pass
+# as agreement. The feature-parallel card is OUTPUT-LEVEL (splits +
+# docBins; the searcher has no trace plumbing). Takes `<out_dir>` and an
+# optional card-name filter; `tools/e2_mojo_cards.sh` runs it twice (the
+# run-to-run control) and writes `e2_mojo_cards.json`. NOT A BENCHMARK.
+e2-growth-cards = "mojo run -I . checks/e2_growth_cards.mojo"
+
+[feature.bench.tasks]
+# CatBoost's own Logloss leaf values at ten Newton iterations and at one,
+# with the leaf-order mapping proved twice inside the generator and written
+# into the fixture. Writes bench/oracle_logloss_leaves.txt.
+logloss-leaf-oracle-gen = "python tools/catboost_logloss_leaf_oracle.py"
+# Runs CatBoost itself. Writes bench/oracle.txt (read by `oracle`) and
+# bench/oracle.json (the same content, for humans and for diffing).
+# Runs CatBoost CPU for the nine losses ported 2026-08-21. Writes
+# bench/oracle_losses.txt (read by `check-loss-oracle`).
+loss-oracle-gen = "python tools/catboost_loss_oracle.py"
+oracle-gen = "python tools/catboost_oracle.py > bench/oracle.json"
+
+# The 5-bit and 6-bit one-byte fixtures. 24 folds lands in 16..32 and 48 in
+# 33..64, which are the ranges `pointwise_hist2_one_byte_templ.cuh:179-183`
+# gives those two accumulators; before these, neither had a differential
+# against CatBoost at all (archive/reference/PORTING.md 130).
+oracle24-gen = "ORACLE_BORDERS=24 ORACLE_OUT=bench/oracle24.txt python tools/catboost_oracle.py > bench/oracle24.json"
+oracle48-gen = "ORACLE_BORDERS=48 ORACLE_OUT=bench/oracle48.txt python tools/catboost_oracle.py > bench/oracle48.json"
+
+# Every fixture `oracle-sweep` reads. `bench/oracle_d4_f16.txt` must come out
+# BYTE-IDENTICAL to `bench/oracle.txt` -- that identity is the check that the
+# ORACLE_DEPTH / ORACLE_FEATS plumbing changed nothing at the defaults, and the
+# `cmp` at the end is what enforces it.
+oracle-sweep-gen = """
+for d in 1 2 4 6 8; do for f in 8 16 32; do
+  ORACLE_DEPTH=$d ORACLE_FEATS=$f ORACLE_OUT=bench/oracle_d${d}_f${f}.txt \
+    python tools/catboost_oracle.py > bench/oracle_d${d}_f${f}.json
+done; done
+for b in 24 48 100 254; do
+  ORACLE_DEPTH=8 ORACLE_BORDERS=$b ORACLE_OUT=bench/oracle_d8_b${b}.txt \
+    python tools/catboost_oracle.py > bench/oracle_d8_b${b}.json
+done
+cmp bench/oracle.txt bench/oracle_d4_f16.txt
+"""
+
+# CatBoost's OWN MinEntropy borders for the CTR TARGET grid, at budgets 1,
+# 2 and 3 over five target-shaped columns. Separate from
+# `bench/minentropy_oracle.txt` because budget 1 is a different code path:
+# `bins == 2` makes the DP's per-level loops run zero times and the answer
+# comes entirely from the last match, whose tie-break is the opposite of
+# theirs.
+ctr-target-oracle-gen = "python tools/ctr_target_oracle.py > bench/ctr_target_oracle.txt"
+
+# The root split recomputed in numpy from the oracle's own data, with no GPU
+# and no Mojo in the question. Its L2 line reproduces CatBoost's L2 root split
+# exactly, which is what makes its Cosine disagreement evidence.
+score-probe = "python tools/score_probe.py"
+
+# boost_from_average against CatBoost ITSELF: their get_scale_and_bias()
+# bias vs the bias our python surface reports, bit for bit, on hashed
+# fixtures -- every ported arm (RMSE/Logloss, weighted and not), BOTH
+# sides of their data-dependent default (unset RMSE auto-true, unset
+# Logloss stays zero -- Logloss is NOT on their adjust list, the misread
+# behind the 2026-08-22 higgs report), and a weighted-vs-unweighted
+# sabotage. Needs the rebuilt _mojolearn_gbdt.so; a GPU; seconds.
+check-bfa-oracle = "python tools/bfa_oracle_check.py"
+
+[feature.bench.dependencies]
+python = ">=3.11"
+numpy = "*"
+# The incumbent we are porting. `tools/catboost_reference.py` calls it to
+# produce the oracle values a check compares against, which is the only way a
+# port gets an answer it did not compute itself.
+catboost = ">=1.2"
+# Only for its DATASET LOADERS. covtype is 581012 x 54 of real data, which is
+# what a timing claim needs beside a synthetic one. Not used as an oracle for
+# the tree port; CatBoost is the oracle there.
+scikit-learn = "*"
+
+# THE GPU BASELINE ARM, added 2026-08-20. Its own feature, NOT added to
+# `bench`, and that separation is deliberate.
+#
+# `bench_sklearn.py` claimed in its docstring that scikit-learn has no GPU arm
+# on this machine. Checking that claim needs pytorch, and pytorch is a large
+# dependency that drags scipy and numpy solves with it. Adding it to `bench`
+# would re-solve the environment every recorded timing in this repository was
+# taken under, and a benchmark whose baseline moved is not a baseline.
+#
+# So `skgpu` is a SECOND environment. It resolves to the same sklearn 1.9.0,
+# numpy 2.5.2 and scipy 1.18.0 that `bench` already has (verified 2026-08-20),
+# which is what makes a number taken here comparable to one taken there. Those
+# three are pinned exactly rather than left open for that reason: if a future
+# solve moves them, the pin fails loudly instead of silently making the two
+# environments incomparable.
+[feature.skgpu.dependencies]
+python = "3.14.*"
+# Reaches Metal through torch's `mps` device. conda-forge's osx-arm64 build is
+# tagged `cpu_generic` but MPS is compiled in regardless; verified on
+# 2026-08-20 that `torch.backends.mps.is_available()` is True and a matmul
+# runs on device. Do not infer the answer from the build string.
+pytorch = ">=2.13"
+# Required by the verbatim upstream selective-scan and SSD references used by
+# the Mamba forward/gradient corpus. It stays in this PyTorch-only environment
+# rather than expanding the core Mojo environment.
+einops = ">=0.8"
+# Pinned to `bench`, not floating. See the note above.
+scikit-learn = "==1.9.0"
+numpy = "==2.5.2"
+scipy = "==1.18.0"
+
+[feature.skgpu.tasks]
+# scikit-learn CPU against scikit-learn MPS, same estimator both arms, so the
+# ratio is the device and nothing else. Prints REFUSED lines for the four
+# estimators that cannot reach the GPU at all, which is most of them.
+sklearn-gpu = "python bench/bench_sklearn_gpu.py"
+
+# Independent Mamba forward corpora and whole-block gradient oracles. Corpus
+# tasks write only to a fresh temporary directory; refreshing committed binary
+# fixtures remains an explicit, reviewed operation.
+mamba-corpus-m1 = "work=$(mktemp -d); python mamba/corpus/gen_corpus.py --family mamba1 --verify --out $work"
+mamba-corpus-m2 = "work=$(mktemp -d); python mamba/corpus/gen_corpus.py --family mamba2 --verify --out $work"
+mamba-corpus-m3 = "work=$(mktemp -d); python mamba/corpus/gen_corpus.py --family mamba3 --verify --out $work"
+mamba-grad-m1 = "work=/tmp/mojolearn-mamba1-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; python tools/mamba_gradient_oracle.py --family mamba1 --out $work"
+mamba-grad-m1-public = "oracle=/tmp/mojolearn-mamba1-grad && actual=/tmp/mojolearn-mamba1-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba1 --out $oracle && MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba_backward_device_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill"
+mamba-grad-m2 = "work=/tmp/mojolearn-mamba2-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; python tools/mamba_gradient_oracle.py --family mamba2 --out $work"
+mamba-grad-m2-public = "oracle=/tmp/mojolearn-mamba2-grad && actual=/tmp/mojolearn-mamba2-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba2 --out $oracle && MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba2_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill"
+mamba-grad-m2-l257 = "oracle=/tmp/mojolearn-mamba2-l257-grad && actual=/tmp/mojolearn-mamba2-l257-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba2 --case m2_base_b1_l257_d64 --out $oracle && MOJOLEARN_MAMBA2_GRAD_CASE=m2_base_b1_l257_d64 MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba2_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill"
+mamba-grad-m2-initial-state = "oracle=/tmp/mojolearn-mamba2-state-grad && actual=/tmp/mojolearn-mamba2-state-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba2 --case m2_base_b1_l257_d64 --out $oracle && MOJOLEARN_MAMBA2_GRAD_CASE=m2_base_b1_l257_d64 MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba2_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-state-boundary"
+mamba-grad-m3 = "work=/tmp/mojolearn-mamba3-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; python tools/mamba_gradient_oracle.py --family mamba3 --out $work"
+mamba-grad-m3-public = "oracle=/tmp/mojolearn-mamba3-grad && actual=/tmp/mojolearn-mamba3-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba3 --out $oracle && MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba3_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill"
+mamba-grad-m1-l64 = "oracle=/tmp/mojolearn-mamba1-l64-grad && actual=/tmp/mojolearn-mamba1-l64-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba1 --case base_b1_l64_d8 --out $oracle && MOJOLEARN_MAMBA1_GRAD_CASE=base_b1_l64_d8 MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba_backward_device_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill"
+mamba-grad-m3-l65 = "oracle=/tmp/mojolearn-mamba3-l65-grad && actual=/tmp/mojolearn-mamba3-l65-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba3 --case m3_base_b1_l65_d64 --out $oracle && MOJOLEARN_MAMBA3_GRAD_CASE=m3_base_b1_l65_d64 MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba3_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill"
+mamba-backward-cert-nvidia = "bash tools/mamba_backward_certify.sh"
+mamba-backward-cert-apple = "MOJOLEARN_MAMBA_CERT_VENDOR=apple bash tools/mamba_backward_certify.sh"
+mamba-backward-cert-amd = "MOJOLEARN_MAMBA_CERT_VENDOR=amd bash tools/mamba_backward_certify.sh"
+
+# Wheel building only. setuptools 77 is the floor for the PEP 639 `license`
+# expression in python/pyproject.toml; `build` is the PEP 517 frontend.
+# Separate from `bench` so a wheel build cannot perturb the environment every
+# recorded timing was taken under.
+[feature.pkg.dependencies]
+python = "3.14.*"
+setuptools = ">=77"
+wheel = "*"
+python-build = "*"
+twine = "*"
+
+# NVIDIA's gbm-bench harness (bench/external/), which needs pandas and
+# LightGBM on top of what `bench` has. A SEPARATE feature, not additions to
+# `bench`, for the same reason `skgpu` is: adding dependencies to `bench`
+# would re-solve the environment every recorded timing was taken under.
+# python is pinned to 3.14 because the prebuilt extension modules under
+# python/mojolearn/ were built against it (verified importing under 3.14.7).
+[feature.gbmbench.dependencies]
+python = "3.14.*"
+numpy = "*"
+pandas = "*"
+scikit-learn = "*"
+catboost = ">=1.2"
+lightgbm = "*"
+tqdm = ">=4.70.0,<5"
+
+[environments]
+bench = ["bench"]
+skgpu = ["skgpu"]
+pkg = ["pkg"]
+gbmbench = ["gbmbench"]

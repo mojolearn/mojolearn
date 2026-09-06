@@ -1,0 +1,59 @@
+{
+  "title": "mojolearn: GPU machine-learning algorithms in Mojo, portable to Apple Silicon",
+  "upload_type": "software",
+  "license": "Apache-2.0",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Hendel, Andrew",
+      "orcid": "0009-0000-9877-3623",
+      "affiliation": "Latent Archon"
+    }
+  ],
+  "description": "<p>Ports of GPU machine-learning algorithms into Mojo from the CUDA implementations that established them, targeting Apple Silicon via Metal first and CUDA and ROCm from the same source. Gradient-boosted oblivious (symmetric) trees mirror CatBoost; random forests, extremely randomized trees, DBSCAN, PCA, ridge and logistic regression, coordinate descent, support vector classification, kernel density estimation, single-linkage and spectral clustering, isolation forests, Holt-Winters and the scoring metrics mirror cuML; k-means and brute-force k-nearest-neighbors mirror cuVS; ordinary least squares, top-k selection and the MST and Lanczos primitives mirror RAFT. Every derivation is recorded per file in PORTED_MAP.tsv and the license obligations each carries are in NOTICE.</p><p>Each estimator runs in one of three numeric modes, selected per estimator or per process from Python: FAST promises speed only and its bits move run to run, DETERMINISTIC promises the same bits on every run of one box and says nothing about a second, and IDENTICAL promises both plus the same bits across vendors. All three ship in the one wheel. IDENTICAL pins the seams that make a GPU result depend on its vendor, and where a lane has been measured on three vendors its card is bit-identical across Metal, HIP and CUDA; the certificates are in E1_RESULTS.md, E2_RESULTS.md and E3_RESULTS.md, and the per-lane ledger is IDENTITY_PATHS.md. That measurement does not cover every lane: several have run on one Apple M4 and nowhere else, each such class says so, and FAST makes no cross-vendor claim anywhere.</p>",
+  "keywords": [
+    "machine learning",
+    "gpu",
+    "mojo",
+    "apple silicon",
+    "metal",
+    "cuda",
+    "rocm",
+    "gradient boosting",
+    "random forest",
+    "k-means",
+    "bitwise reproducibility"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/mojolearn/mojolearn",
+      "relation": "isSupplementTo",
+      "resource_type": "software",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/catboost/catboost",
+      "relation": "isDerivedFrom",
+      "resource_type": "software",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/rapidsai/cuvs",
+      "relation": "isDerivedFrom",
+      "resource_type": "software",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/rapidsai/cuml",
+      "relation": "isDerivedFrom",
+      "resource_type": "software",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/rapidsai/raft",
+      "relation": "isDerivedFrom",
+      "resource_type": "software",
+      "scheme": "url"
+    }
+  ]
+}

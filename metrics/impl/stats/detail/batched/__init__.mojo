@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""RAFT `cpp/include/raft/stats/detail/batched/` (the batched silhouette cuML's Python dispatch takes)."""

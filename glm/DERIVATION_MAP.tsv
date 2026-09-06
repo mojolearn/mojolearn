@@ -1,0 +1,73 @@
+# our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
+# cuML pinned at 00094f7 (branch-25.08, ~/CascadeProjects/upstream/cuml), RAFT at 661a3b8
+#   (branch-25.08, ~/CascadeProjects/upstream/raft). ONE cuML pin and ONE RAFT pin.
+# CORRECTED 2026-08-31. This line read "cuML pinned at 7e29955c (OLS) / 00094f7 (ridge, qn),
+#   RAFT at 9aa17e5 (lstsq) / 661a3b8 (svd, matrix)". BOTH extra commits were wrong and
+#   neither is on this machine. The evidence, read against every checkout that IS
+#   (cuml=00094f7, cuml-v26.08.00=265b9da, raft=661a3b8, raft-v26.08.00=ebf92684):
+#     ols.cuh:120 "cuML's OLS solver algo = 1" = `case 1: raft::linalg::lstsqEig(...)`
+#       -- 00094f7:120 EXACT; 265b9da:120 is an argument, `labels,`.
+#     ols.cuh:67 = `int algo = 0,` -- 00094f7:67 EXACT; 265b9da:67 is `if (fit_intercept) {`.
+#     ols.cuh:156 = `*intercept = math_t(0);` -- 00094f7:156 EXACT; 265b9da:156 is
+#       `void gemmPredict(`.
+#     preprocess.cuh:36 = `namespace GLM {` -- 00094f7:36 EXACT.
+#     So `7e29955c` was never the OLS pin; 00094f7 is, and it is the pin
+#     impl/glm/ols.mojo:5 already names.
+#     lstsq.cuh:315 "the eigDC call site" = `raft::linalg::eigDC(handle, covA, ...)`
+#       -- 661a3b8:315 EXACT; ebf92684:315 is a bare argument, `n_cols,`.
+#     eig.cuh:149-151 = the "eigensolver couldn't converge" ASSERT -- 661a3b8:149-151
+#       EXACT; ebf92684:149-151 is a cusolver-version branch.
+#     svd.cuh:146 = the eigDC call in svdEig -- 661a3b8:146 EXACT; ebf92684:146 is a
+#       make_device_matrix_view.
+#     So `9aa17e5` was never the lstsq pin either. impl/linalg/detail/lstsq.mojo:5 was
+#     already corrected to 661a3b8 by bench/results/LANE_dispatch-audit_2026-08-19.md;
+#     THIS HEADER was the copy that never got fixed. Note that audit's stated reason
+#     ("`git cat-file -t 9aa17e5` returns Not a valid object name") does not hold on its
+#     own -- every checkout here is SHALLOW, depth 1, so cat-file fails for any commit
+#     but HEAD. The conclusion stands because the LINE NUMBERS resolve at 661a3b8; the
+#     test that was run does not support it.
+#   forced-by-definition -- the correspondence is DICTATED by the algorithm,
+#                    not chosen. Parameter structs, enums, POD types, one-line
+#                    forwarders, and mathematical predicates with exactly one
+#                    correct form. A struct listing an algorithm's eleven
+#                    hyperparameters must list those eleven; the SMO upper-set
+#                    test has one right spelling. These files look identical to
+#                    the upstream because nothing else would be CORRECT, which
+#                    is not transliteration in any useful sense and must not be
+#                    counted as evidence of it. Added 2026-08-31, when it turned
+#                    out that nearly every row still labelled `transliterated`
+#                    was one of these.
+impl/linalg/detail/lstsq.mojo	raft cpp/include/raft/linalg/detail/lstsq.cuh	partial	lstsqEig only, which is cuML olsFit algo=1. Their two-stream overlap is not ported
+impl/linalg/detail/lstsq_min_norm.mojo	none	no-upstream	DEVIATION 550, ORIGINAL to mojolearn. The minimum-norm least squares w = A^T (A A^T)^+ b for n_cols > n_rows, where cuML has only lstsqSvdJacobi (cusolverDnGesvdj, a one-sided Jacobi SVD in a closed library). Nothing upstream corresponds: it is six of lstsq_eig's own steps with n_rows where that writes n_cols, plus w = A^T z. The old refusal's reason was right about A^T A and does not transfer to A A^T, which is n_rows x n_rows and nonsingular at full row rank. It squares the condition number exactly as lstsq_eig does on the tall side, so it is not an SVD-quality route and its docstring says which algorithm would be (LQ, or a one-sided Jacobi SVD of A^T)
+impl/glm/ols.mojo	cuml cpp/src/glm/ols.cuh	partial	olsFit's guards, its SAMPLE-WEIGHT block (ols.cuh:99-110 and 129-141, ported 2026-09-01: sqrt, the ROW-indexed scaling of A and b, and the exact restore of all three buffers) and its solver dispatch. fit_intercept/normalize still refused by name (preProcessData/postProcessData not called from here; the Python layer centers on the host, DEVIATION 517). THE DISPATCH DELIBERATELY DIFFERS FROM THEIRS at the two shapes ols.cuh:113 forces to algo 0: n_cols == 1 takes lstsq_eig (DEVIATION 551, their switch is an eigDC limitation their own Python names, and a 1x1 Gram has condition number 1) and n_cols > n_rows takes lstsq_min_norm (DEVIATION 550). An EXPLICIT algo 0/2/3 still raises by name. DEVIATION 527 added ols_fit_traced, the same dispatch carrying a stage card
+checks/ols_trace.mojo	none	mojo-only	DEVIATION 527. The OLS identity certificate: 11 named stages per fit, hashed as raw bytes through core/identity_trace.mojo. No upstream equivalent -- cuML ships one GPU backend and needs none
+impl/glm/ridge.mojo	cuml cpp/src/glm/ridge.cuh	partial	DEVIATION 545. ridgeSolve, ridgeEig, ridgeFit with their guards and dispatch; algo 0 (ridgeSVD), fit_intercept/normalize (host-centered in Python instead), sample_weight, n_alpha > 1 refused by name
+impl/linalg/detail/svd.mojo	raft cpp/include/raft/linalg/detail/svd.cuh	partial	svdEig only (ridgeEig's first call); the col_reverse/row_reverse is a host index sort applied by gather_columns_kernel because Jacobi does not order
+impl/matrix/math.mojo	raft cpp/include/raft/matrix/detail/math.cuh (+ linalg/detail/add.cuh addScalar, linalg/sqrt.cuh, linalg/power.cuh, linalg/map.cuh)	partial	setSmallValuesZero, power, seqRoot, matrixVectorBinaryDivSkipZero and matrixVectorBinaryMult in BOTH template instantiations (<false,true>, the vector indexed by COLUMN, which ridgeSolve/svdEig call; and <false,false>, indexed by ROW, which olsFit's sample-weight block calls -- the derivation of which is which is in the banner, because raft's own forwarder states the wrong vector length), plus elementwise sqrt/powerScalar and the two map_k lambdas olsFit applies to the targets, and the gather standing in for col_reverse/row_reverse; one thread per cell
+impl/linear_model/qn.mojo	cuml cpp/include/cuml/linear_model/qn.h	forced-by-definition	qn_params and qn_loss_type with their defaults || FORCED: a parameter struct: eleven L-BFGS hyperparameters, and there are eleven
+impl/glm/qn/qn.mojo	cuml cpp/src/glm/qn/qn.cuh	partial	qn_fit, qn_fit_x (ALL EIGHT loss ids with their C asserts and n_targets, 2026-08-23; sample_weight refused by name), qn_decision_function (n_targets arm, n_classes defaulted 1); qn_predict and the sparse entries not ported
+impl/glm/qn/glm_base.mojo	cuml cpp/src/glm/qn/glm_base.cuh	partial	linearFwd, linearBwd, GLMDims, getLossAndDZ (unweighted arm), loss_grad, GLMWithData; C = 1 kernel for kernel, C > 1 dispatched to glm_softmax.mojo's linear kernels (DEVIATION 706), loss dispatched on the id (DEVIATION 705); LOGISTIC-BITS AUDIT in the docstring. DEVIATION 547: mapThenSumReduce's float-atomic fold replaced by one pinned block
+impl/glm/qn/glm_logistic.mojo	cuml cpp/src/glm/qn/glm_logistic.cuh	partial	Lz, Dlz, gradNorm = nrmMax; exp/log through identical_exp/identical_log (row 12)  ||  RELABELLED 2026-08-31 (audit): PARTIAL, not transliterated -- this file carries logistic_lz (:53), logistic_dlz (:65) and logistic_loss_dz_kernel (:73) ONLY. gradNorm is NOT here: it is nrm_max, dispatched from impl/glm/qn/glm_base.mojo:478. The row used to claim it.
+impl/glm/qn/glm_regularizer.mojo	cuml cpp/src/glm/qn/glm_regularizer.cuh	reimplemented	Tikhonov (bias not penalized), RegularizedGLM's loss_grad composition (in glm_base.mojo's evaluate)  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- their mapThenSumReduce is a float-atomic arrival-order fold (:26); ours accumulates 0.5*l2*w*w left to right then folds through pinned_block_sum (:25). A pinned summation order is a different program.
+impl/glm/qn/qn_solvers.mojo	cuml cpp/src/glm/qn/qn_solvers.cuh	transliterated	min_lbfgs, update_and_check, min_owlqn and qn_minimize's l1 == 0.0 dispatch, statement by statement (DEVIATION 552, 2026-09-01; the five lines where min_owlqn is not min_lbfgs are marked OWL-QN in the body). update_pseudo is in qn_util.mojo, beside the operator it applies, because a launch calling get_pseudo_grad cannot live in dense.mojo without closing an import cycle. DEVIATION 548: per-iteration card stages
+impl/glm/qn/qn_linesearch.mojo	cuml cpp/src/glm/qn/qn_linesearch.cuh	transliterated	ls_success (all three arms), ls_backtrack, LSProjectedStep and ls_backtrack_projected (DEVIATION 552). The host fx_init + step*dg_test is an fma under IDENTICAL. min_owlqn's f_wrap lambda is owlqn_objective here rather than in qn_solvers.mojo: Mojo has no closure to hand across files and the projected line search is its other caller
+impl/glm/qn/qn_util.mojo	cuml cpp/src/glm/qn/qn_util.cuh	transliterated	LBFGSParam (both constructors, check_param), enums, check_convergence, lbfgs_search_dir, and the four OWL-QN operators project_orth/get_pseudo_grad/op_project/op_pseudo_grad with the two kernels that apply them and update_pseudo (DEVIATION 552). raft::sgn returns an INT, so sgn(x) * C is an exact +C or -C and sgn of a NaN is 0; copied that way rather than as a copysign
+impl/glm/qn/simple_mat/dense.mojo	cuml cpp/src/glm/qn/simple_mat/dense.hpp	partial	ax, axpy (in-place variants because Mojo refuses aliased launch args), dot, squaredNorm, nrmMax, nrm2, copy; one pinned block per reduction (DEVIATION 547); sparse.hpp not ported
+checks/ridge_check.mojo	none	mojo-only	DEVIATION 545's gates; four sabotages recorded in its header
+checks/logistic_check.mojo	none	no-upstream	DEVIATIONS 546-549's gates plus DEVIATION 552's two OWL-QN gates (check_owlqn_is_a_minimizer, subgradient optimality in float64 with the L2 solution as its negative control; check_owlqn_sparsifies, exact zeros under l1 and none under l2). Three sabotages performed and five owed, all recorded in its header
+impl/glm/qn/glm_softmax.mojo	cuml cpp/src/glm/qn/glm_softmax.cuh	partial	Softmax lz/dlz as one thread per row (DEVIATION 705: their WarpReduce/BlockReduce/atomicAdd folds replaced by a serial ascending walk and the shared pinned term sum; the max is a positional SELECTION, strict >, lower index wins) plus the C > 1 linearFwd/linearBwd kernels (DEVIATION 706); getDerivative=false arm not ported
+impl/glm/qn/glm_linear.mojo	cuml cpp/src/glm/qn/glm_linear.cuh	partial	SquaredLoss and AbsLoss lz/dlz/gradNorm, plus nrm1 from dense.hpp:313-321 placed here under this lane's file scope (DEVIATION 707, one pinned block; HAND-OFF: belongs in simple_mat/dense.mojo)  ||  RELABELLED 2026-08-31 (audit): PARTIAL, not transliterated -- squared/abs lz+dlz (:53-72) and nrm1 (:113, :132). The SquaredLoss gradNorm is nrm_max and lives in glm_base.mojo:478, not here; the row used to claim both gradNorms.
+impl/glm/qn/glm_svm.mojo	cuml cpp/src/glm/qn/glm_svm.cuh	reimplemented	SVCL1/SVCL2/SVRL1/SVRL2 lz/dlz/gradNorm (DEVIATION 708: pinned spellings, value-first clamps). DEVIATION 714: SVCL2Loss::Dlz is 2(z-s), the derivative of the lz they pair it with; theirs drops the 2 (measured by the float64 oracle against central differences)  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- DEVIATION 714 (:40, :102): svc_l2_dlz returns 2(z-s) where theirs returns z-s. That is different observable semantics, not a different spelling. gradNorm is not in this file either (glm_base.mojo:478).
+checks/multinomial_check.mojo	none	mojo-only	DEVIATIONS 709-711's gates for QN_LOSS_SOFTMAX: float64 oracle, host L-BFGS replay card, signed-zero selection fixture, launch/batch invariance; sabotages in its header
+checks/qn_losses_check.mojo	none	mojo-only	DEVIATIONS 712-713's gates for the six one-target losses: float64 oracle, host replay, planted hinge boundaries and signed zeros, launch/batch invariance; sabotages in its header
