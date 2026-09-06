@@ -34,6 +34,29 @@ AMD was deleted and confirmed absent before NVIDIA was created. Current
 candidates are not publication or universal identity claims. Results are retained under
 `bench/results/resume/2026-09-06-installed-gap-closure/`.
 
+## Remaining delivery gates
+
+- Qualify the final combined CUDA/HIP Linux wheel on both vendors; the two
+  separate candidate wheel certificates do not certify a subsequently assembled
+  archive. Bind publication admission to that exact wheel digest and retained
+  installed evidence, including UMAP and ordered RMSE IDENTICAL comparisons.
+- Rebuild the Apple candidate with the new OrderedRMSE ABI and exercise that
+  estimator in every installed numeric mode. Older Apple candidate evidence
+  predates this addition. Re-run corrected native Mamba3 backward separately.
+- Exercise the final Linux artifacts across the supported Python interpreter
+  matrix; a single-interpreter Linux qualification does not establish 3.10–3.14.
+- Expose Python Mamba backward through shared native launch helpers used by the
+  certification drivers. The initial bounded API is a synchronous zero-state
+  prefill VJP in IDENTICAL mode, recomputing with weights at call time and
+  returning independent input/weight gradient arrays. Stateful/decode backward
+  remains refused until separately certified. Re-run native certificates and
+  installed arbitrary-cotangent checks after extraction; forward-only installed
+  smoke is not evidence for Python backward.
+- Keep OrderedRMSE scoped to numeric single-permutation RMSE. Full categorical,
+  multiple-permutation and additional-objective CatBoost parity remains open.
+  UMAP supports dense Euclidean inputs and 2D/3D outputs; its internal CSR graph
+  does not imply sparse public input or approximate-neighbor scalability.
+
 ## Native certification continuation (2026-09-06)
 
 Mamba source `395d9421` passes all five baseline and both long cases on AMD

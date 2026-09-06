@@ -14,6 +14,9 @@
 # Every interpreter this passes on is a version the tag may claim; the
 # classifiers in pyproject.toml list exactly those and no others.
 set -eu
+# All interpreter/mode jobs remain serial; bound CPU math inside each job.
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 
 # --no-gpu: verify build, install and API on every interpreter, but do not
 # attempt a fit. For environments with no usable GPU, which on this project
@@ -62,7 +65,7 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
         if out=$(cd "$tmp" && MOJOLEARN_NUMERIC_MODE=$mode "$tmp/venv/bin/python" "$here/packaging/macos/smoke.py" $SMOKE_ARGS 2>&1); then
             echo "PASS $py [$mode]  $out"
         else
-            echo "FAIL $py [$mode]"; echo "$out" | tail -5; okmode=0
+            echo "FAIL $py [$mode]"; echo "$out"; okmode=0
         fi
     done
     [ "$okmode" -eq 1 ] || fails=$((fails+1))

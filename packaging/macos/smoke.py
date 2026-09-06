@@ -298,6 +298,14 @@ vendor = mojolearn.vendor()
 assert vendor == os.environ.get("MOJOLEARN_SMOKE_VENDOR", "metal"), vendor
 assert rf.vendor_used() == vendor, rf.vendor_used()
 
+# This new ABI must execute through the installed wheel in every requested
+# mode/interpreter. Keep full model/prediction evidence in the release log.
+_ordered_spec = importlib.util.spec_from_file_location(
+    "macos_ordered_smoke", Path(__file__).with_name("ordered_smoke.py"))
+_ordered_gate = importlib.util.module_from_spec(_ordered_spec)
+_ordered_spec.loader.exec_module(_ordered_gate)
+_ordered_gate.run_installed_ordered(Path(__file__).resolve().parents[2], mojolearn, mode, vendor)
+
 print(
     f"v{mojolearn.__version__} py{sys.version_info.major}.{sys.version_info.minor}"
     f" mode={mode} vendor={vendor} kmeans n_iter={km.n_iter_} knn tile={nn.used_query_tile_}"
