@@ -104,8 +104,9 @@ def main():
     with tempfile.TemporaryDirectory(prefix="mojolearn-ordered-") as directory:
         path = Path(directory) / "ordered.npz"
         first.save(path)
+        set_numeric_mode("fast" if mode != "fast" else "identical")
         restored = OrderedRMSE.load(path)
-        restored.numeric_mode = mode
+        require(restored.numeric_mode == mode, "saved numeric mode was not restored")
         restored_prediction = restored.predict(X)
         restored_query = restored.predict(query)
         require(str(restored.model_) == model_text, "serialized model text changed")

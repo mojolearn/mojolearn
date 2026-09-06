@@ -94,7 +94,7 @@ import numpy as np
 # that reason turned out not to exist. See archive/reference/PORTING.md 70: the kernels were
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
-from . import _mojolearn_gbdt, _serialize
+from . import _backend, _mojolearn_gbdt, _serialize
 from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_colmajor
 
@@ -1263,6 +1263,10 @@ class GradientBoosting(NumericModeMixin):
         a border by index, which is why `gbdt_predict` takes only the text
         and raw feature rows.
 
+        The effective numeric mode is saved and restored independently of a
+        future process default. Legacy files without this field keep the
+        loader process default; select their desired tier explicitly.
+
         The curve attributes (`loss_curve_`, `test_loss_curve_`) are not
         reconstructed by `load`; a loaded model carries them as None. The
         model text does record per-iteration learn losses on its `loss`
@@ -1271,8 +1275,18 @@ class GradientBoosting(NumericModeMixin):
         """
         if self.model_ is None:
             raise RuntimeError("mojolearn: save() before fit()")
+        # Persist the tier prediction would use now, including an inherited
+        # process default. Saving None would let a different process silently
+        # turn an IDENTICAL model into FAST arithmetic after loading.
+        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
+        if not isinstance(mode, str) or mode.strip().lower() not in (
+            "fast", "deterministic", "identical"
+        ):
+            raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
+        mode = mode.strip().lower()
         arrays = {
             "format": np.asarray(_MODEL_FORMAT),
+            "numeric_mode": np.asarray(mode),
             "estimator": np.asarray(type(self).__name__),
             "loss": np.asarray(self.loss),
             "model": np.frombuffer(
@@ -1309,6 +1323,19 @@ class GradientBoosting(NumericModeMixin):
                 f"{cls.__name__}"
             )
         obj = cls.__new__(cls)
+        # Restore before even gbdt_model_dim binds an extension. Old format-1
+        # archives omitted this optional field and retain their historical
+        # process-default behavior; malformed new metadata must never fall
+        # back to that legacy interpretation.
+        obj.numeric_mode = None
+        if "numeric_mode" in arrays:
+            stored_mode = arrays["numeric_mode"]
+            if stored_mode.dtype.kind != "U" or stored_mode.size != 1:
+                raise ValueError("mojolearn: saved numeric_mode must be one string")
+            mode = str(stored_mode.reshape(-1)[0])
+            if mode not in ("fast", "deterministic", "identical"):
+                raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
+            obj.numeric_mode = mode
         obj.loss = _serialize.scalar_str(arrays, "loss")
         obj.model_ = bytes(
             _serialize.exact(arrays, "model", np.uint8)
