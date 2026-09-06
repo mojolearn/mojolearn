@@ -166,7 +166,7 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False):
         metadata.set_payload(NOTICE.encode('utf-8') + b'\n\n' +
                              (body_parts[1] if len(body_parts) == 2 else b''))
         new_dist = 'mojolearn-' + version + '.dist-info'
-        replacements[new_dist + '/METADATA'] = metadata.as_bytes()
+        replacements[new_dist + '/METADATA'] = metadata.as_bytes(policy=policy.compat32.clone(max_line_length=0))
         native = {n: h for n, h in hashes.items() if n.endswith(('.so', '.dylib', '.dll', '.pyd')) or '.so.' in n}
         directories = sorted({str(PurePosixPath(n).parent) for n in native if PurePosixPath(n).name.startswith('_mojolearn')})
         missing = {d: [module for module in expected if not any(

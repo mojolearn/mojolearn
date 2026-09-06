@@ -70,6 +70,19 @@ class AlphaOverlayTests(unittest.TestCase):
                     raw = archive.read(name)
                     self.assertEqual((digest, size), (overlay.record_hash(hashlib.sha256(raw).digest()), str(len(raw))))
 
+    def test_long_summary_is_not_email_folded(self):
+        from email.parser import BytesParser
+        from email import policy
+        summary = 'GPU machine learning with explicit reproducibility profiles and portable arithmetic across Apple NVIDIA and AMD devices'
+        raw = self.files[self.dist + 'METADATA']
+        self.files[self.dist + 'METADATA'] = raw.replace(b'Name: mojolearn\n', b'Name: mojolearn\nSummary: ' + summary.encode() + b'\n')
+        self.write()
+        result = overlay.assemble(self.wheel, self.python, '0.6.0a1', self.root / 'out')
+        with zipfile.ZipFile(result) as archive:
+            metadata = BytesParser(policy=policy.compat32).parsebytes(archive.read('mojolearn-0.6.0a1.dist-info/METADATA'))
+        self.assertEqual(metadata['Summary'], summary)
+        self.assertNotIn('\n', metadata['Summary'])
+
     def test_changed_native_record_refused_before_output(self):
         self.write(corrupt=True)
         with self.assertRaisesRegex(ValueError, 'RECORD hash'):

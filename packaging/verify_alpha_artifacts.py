@@ -96,6 +96,9 @@ def verify_wheel(path, version, release_profile=None):
         require(metadata.get_all('Name') == ['mojolearn'] and metadata.get_all('Version') == [version]
                 and [v for v in metadata.get_all('Classifier', []) if v.startswith('Development Status ::')]
                     == ['Development Status :: 3 - Alpha'], 'alpha package metadata mismatch')
+        require(all('\n' not in value and '\r' not in value
+                    for value in metadata.get_all('Summary', [])),
+                'package Summary must be a single line')
         provenance = decode(small(dist + 'ALPHA_PROVENANCE.json'))
         require(provenance.get('schema') == 'mojolearn.alpha-overlay.v1'
                 and provenance.get('version') == version
