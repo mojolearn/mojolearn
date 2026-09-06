@@ -3,6 +3,30 @@
 This is the only live project plan. Historical plans and handoffs are not
 current instructions; git history and `archive/` retain their evidence.
 
+## Mamba3 intermediate investigation (2026-09-06)
+
+The strict Mamba3 prefill gate now requires all 76 native diagnostics as well
+as the ten public leaves. Removing a diagnostic from both manifests or
+deleting a declared file fails the gate. Sixteen small policy tests pass,
+including an independent-forward control that rejects a wrong public gradient
+even when the staged float32 reference agrees with it.
+
+A read-only analysis of the corrected `eebd7c92` AMD/NVIDIA L65 captures
+matches **all 86 tensors** by bytes and reproduces **17/17 joins** exactly
+from their native operands. Eight of the 13 failing intermediates are among
+those reproduced joins. In particular, both inputs to `partial.join.kscale`
+pass the float64 and float32 semantic comparisons, but cancellation leaves
+two output cells outside tolerance. This attribution is diagnostic evidence,
+not a waiver: replaying the tightened strict gate still fails the same 13
+comparisons on each vendor. See the [record](bench/results/resume/2026-09-06-mamba3-joins/README.md).
+
+Next, retain the exact forward `rot.k`, biased Q/K, dt and sigma operands
+alongside the existing gradients to trace S14/S15 reductions and the two
+current-dt joins. Check those operands independently before deciding on a
+numerical implementation or arithmetic contract. No native kernel changed
+in this checkpoint, and no new GPU execution or performance measurement was
+needed. The certification and remaining project priorities below still apply.
+
 ## Resumed implementation and identity checks (2026-09-05)
 
 **Mamba3 certification correction:** the L65 diagnostic investigation found
@@ -11,10 +35,41 @@ join. The staged float32 reference repeated it, so previous Mamba3 byte
 matches and staged-reference passes do not establish a correct full gradient.
 The independently differentiated float64 forward rejects the retained old
 `x`, `block_norm.weight`, `in_proj.weight` and `dt_bias` outputs. The native
-join and staged references are being corrected, and every public Mamba3
-leaf now also has to pass that independent whole-forward gate at unchanged
-tolerances. Corrective AMD/NVIDIA backward-only runs are required; Apple
-has not been rerun. Mamba1/2 and the completed UMAP/kNN evidence are separate.
+join and staged references are corrected at `eebd7c92`. AMD and NVIDIA now
+pass all five baseline cases and match all 54 native tensors, with every
+public Mamba3 leaf also checked against the independent whole float64 forward
+at unchanged tolerances. See the [corrected comparison](bench/results/resume/2026-09-05-next-certification/corrected-backward-cross-device.json).
+Apple has not been rerun for the correction. Historical Mamba3 byte equality
+is retained as evidence, but its old gradient-correctness claim is superseded.
+
+Mamba1 L64 passes on both GPUs. All ten Mamba3 L65 public gradients now pass
+the independent forward oracle, and the 21 long-case public tensors match
+across AMD/NVIDIA. The complete long certificate remains RED on 13
+intermediate comparisons; those failures are retained, not waived.
+
+UMAP's self-neighbor fix passes all six expanded quality fixtures in all
+three modes on both GPUs. Both native stage fixtures (186 and 690 cells) and
+all six IDENTICAL held-out embeddings match. See the [UMAP comparison](bench/results/resume/2026-09-05-next-certification/fixed-cross-device.json);
+its older Mamba3 gate results are superseded by the correction above.
+The [weighted CatBoost slice](bench/results/e1/2026-09-05_235251-amd-catboost-fixed-partition/README.md)
+now passes on AMD, including fixed occupied zero-mass leaf estimation at
+L2=0 and L2=3. A split optimizer is no longer required to choose that corner
+case for its estimator to receive coverage.
+
+Next work, with only the main operator testing/measuring and serial GPU jobs:
+
+1. Resolve Mamba3 L65's remaining intermediate reduction/operand checks,
+   using independent semantics and explicit arithmetic checks without wider
+   tolerances or omitted failing tensors. Re-run corrected Apple evidence
+   separately when that hardware is in scope.
+2. Broaden kNN layout/selector distributions, dimensions and installed/external
+   comparisons. The completed AMD four-arm campaign does not promote either
+   experimental flag to normal dispatch.
+3. Complete CatBoost ordered boosting: per-fold approximation cursors,
+   prefix-only gradients and leaf estimation. The passing fold-axis wiring
+   gate is not an end-to-end booster; keep comparator runs in plain mode.
+4. Keep 0.6.0 publication and Linux installed-wheel qualification separate
+   from these native/source certificates.
 
 - CatBoost's experimental two-level FeatureFreq fit now accepts sample
   weights. Native and Python checks cover unequal weights, unit-weight
@@ -61,7 +116,7 @@ Linux installed-wheel qualification remains separate.
 
 ## UMAP follow-up priority
 
-Current execution order after the crash (main operator only; serial GPU
+Resumed campaign after the crash (main operator only; serial GPU
 workloads; AMD on DigitalOcean, NVIDIA on RunPod):
 
 1. Close AMD's missing four-arm kNN layout qualification against the retained
@@ -86,24 +141,25 @@ L65 driver. Expanded UMAP passed all six IDENTICAL cases; the larger cubic
 fixtures failed in FAST and DETERMINISTIC because the raw same-data kNN result
 did not put self first. See the
 [retained failures](bench/results/e1g/2026-09-05_175405-nvidia-mamba/README.md).
-The fixes normalize UMAP's self slot in both graph adapters and expose the
-already-computed Mamba3 public gradients; fresh AMD/NVIDIA gates remain required.
+The first fixes normalized UMAP's self slot in both graph adapters and exposed
+the already-computed Mamba3 public gradients. The later independent-gradient
+investigation and corrective results are recorded above.
 AMD at `6a3a2d30` passed the self-neighbor regression and all six expanded
 UMAP cases in every mode, plus all five baseline backward cases. Its long
 certificate failed before execution because host `python` was absent from
-PATH; the launcher now runs inside pixi. The weighted CatBoost fixture did
-not exercise its required zero-weight leaf and remains RED; the fold-axis
+PATH; the launcher now runs inside pixi. The weighted CatBoost fixture
+did not exercise its required zero-weight leaf and was RED; the fold-axis
 gate passed. See the [AMD record](bench/results/e1/2026-09-05_223146-mojolearn-e2-amd/README.md).
-The next matching AMD/NVIDIA source snapshot is `d88c7883`; no numerical
-threshold was changed in response to either failure.
+The matching `d88c7883` campaign closed the expanded UMAP matrix and exposed
+the Mamba3 chain-rule defect. No numerical threshold was changed in response
+to either failure.
 The serial follow-up payload uses its former two-arm kNN timing slot for the
 long-sequence certificate; kNN timings belong to the dedicated four-arm leg.
 
 UMAP and sequence certification are the current feature focus; artifact
-publication remains a separate release gate. Extend the identity
-fixtures beyond the current 8x1 case to multidimensional data, 3D output,
-multiple seeds and parameter settings, alongside independent embedding-quality
-checks. Use RunPod for NVIDIA and **DigitalOcean for AMD**, with tests and
+publication remains a separate release gate. Extend beyond the recorded
+small fixtures alongside independent embedding-quality checks. Use RunPod
+for NVIDIA and **DigitalOcean for AMD**, with tests and
 measurements in the main lane only.
 
 The 0.6.0 source candidate now implements fitted-state `transform` and CSR

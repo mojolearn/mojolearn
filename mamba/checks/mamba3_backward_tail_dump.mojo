@@ -386,12 +386,22 @@ def main() raises:
     _write_f32(output + "/grad.C_norm.weight.f32",mamba_download(ctx,d_cw,M3_D_STATE))
     _write_f32(output + "/grad.B_bias.f32",mamba_download(ctx,d_bb,dims.nheads*M3_D_STATE))
     _write_f32(output + "/grad.C_bias.f32",mamba_download(ctx,d_cb,dims.nheads*M3_D_STATE))
+    # Retain exact forward operands for reduction attribution. These are
+    # forward values, separate from the named gradient inventory.
+    _write_f32(output + "/operand.rot.k.f32", mamba_download(ctx, stages.rotk_work, state_cells))
+    _write_f32(output + "/operand.bcnorm.B.f32", mamba_download(ctx, stages.bcnorm_b, m*M3_D_STATE))
+    _write_f32(output + "/operand.bcnorm.C.f32", mamba_download(ctx, stages.bcnorm_c, m*M3_D_STATE))
+    _write_f32(output + "/operand.B_bias.f32", mamba_download(ctx, device_weights.b_bias, dims.nheads*M3_D_STATE))
+    _write_f32(output + "/operand.C_bias.f32", mamba_download(ctx, device_weights.c_bias, dims.nheads*M3_D_STATE))
+    _write_f32(output + "/operand.dt.out.f32", mamba_download(ctx, stages.dt_work, head_cells))
+    _write_f32(output + "/operand.trap.sigma.f32", mamba_download(ctx, stages.sig_work, head_cells))
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
             + "\"family\":\"mamba3\",\"case\":\"" + case_name + "\","
             + "\"objective\":\"signed_dyadic_weight_v1\","
             + "\"mode\":\"complete-public-prefill\","
+            + "\"forward_operands\":[\"rot.k\",\"bcnorm.B\",\"bcnorm.C\",\"B_bias\",\"C_bias\",\"dt.out\",\"trap.sigma\"],"
             + "\"public_prefill_leaves\":[\"x\",\"block_norm.weight\","
             + "\"in_proj.weight\",\"dt_bias\",\"B_norm.weight\","
             + "\"C_norm.weight\",\"B_bias\",\"C_bias\",\"D\","

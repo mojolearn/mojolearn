@@ -117,6 +117,58 @@ class StrictGradientPolicyTests(unittest.TestCase):
             self.compare()
 
 
+class Mamba3DiagnosticPolicyTests(unittest.TestCase):
+    write_actual = StrictGradientPolicyTests.write_actual
+    compare = StrictGradientPolicyTests.compare
+
+    def setUp(self):
+        StrictGradientPolicyTests.setUp(self)
+        self.state = False
+        public = list(oracle.PUBLIC_PREFILL_LEAVES["mamba3"])
+        names = public + list(oracle.MAMBA3_PREFILL_DIAGNOSTICS)
+        self.manifest.update(family="mamba3", public_prefill_leaves=public, gradients={})
+        self.dump.update(family="mamba3", public_prefill_leaves=public, tensors=names)
+        for name in names:
+            self.manifest["gradients"][name] = {
+                "file": f"grad.{name}.f64", "shape": [1],
+            }
+            np.array([1.0], dtype="<f8").tofile(self.expected / f"grad.{name}.f64")
+            self.write_actual(name, 1.0)
+
+    def test_complete_inventory_passes(self):
+        self.compare(public=True)
+
+    def test_removing_diagnostic_from_both_manifests_fails(self):
+        for name in oracle.MAMBA3_PREFILL_DIAGNOSTICS:
+            with self.subTest(name=name):
+                entry = self.manifest["gradients"].pop(name)
+                self.dump["tensors"].remove(name)
+                with self.assertRaises(SystemExit):
+                    self.compare(public=True)
+                self.manifest["gradients"][name] = entry
+                self.dump["tensors"].append(name)
+
+    def test_missing_declared_diagnostic_file_fails(self):
+        name = "partial.join.s15.scale"
+        (self.actual / f"grad.{name}.f32").unlink()
+        with self.assertRaises(SystemExit):
+            self.compare(public=True)
+
+    def test_bad_diagnostic_still_fails(self):
+        self.write_actual("partial.join.s15.scale", 3.0)
+        with self.assertRaises(SystemExit):
+            self.compare(public=True)
+
+    def test_matching_staged_reference_cannot_hide_wrong_public_gradient(self):
+        name = "in_proj.weight"
+        self.write_actual(name, 3.0)
+        filename = f"grad.{name}.ref32.f32"
+        np.array([3.0], dtype="<f4").tofile(self.expected / filename)
+        self.manifest["gradients"][name]["ref32_file"] = filename
+        with self.assertRaises(SystemExit):
+            self.compare(public=True)
+
+
 class CompositionalReductionTests(unittest.TestCase):
     write_actual = StrictGradientPolicyTests.write_actual
     compare = StrictGradientPolicyTests.compare
