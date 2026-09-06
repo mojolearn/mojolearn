@@ -93,17 +93,20 @@ def test_sum_rows_exercises_ordered_cancellation(native):
 
 @pytest.mark.parametrize('operation', ['bias', 'sum'])
 def test_finite_inputs_with_overflow_are_refused(native, operation):
+    # Mojo Error crosses the native Python boundary as a plain Exception.
+    # Require the exact refusal so unrelated binding/device failures cannot pass.
+    refusal = '^small MLP operation has nonfinite input or output$'
     maximum = np.finfo(np.float32).max
     if operation == 'bias':
         values = np.asarray([[maximum]], np.float32)
         bias = np.asarray([maximum], np.float32)
         output = np.empty_like(values)
-        with pytest.raises((RuntimeError, ValueError), match='nonfinite'):
+        with pytest.raises(Exception, match=refusal):
             native.mlp_bias_activation(address(values), address(bias), address(output), [1, 1, 0])
     else:
         values = np.asarray([[maximum], [maximum]], np.float32)
         output = np.empty(1, np.float32)
-        with pytest.raises((RuntimeError, ValueError), match='nonfinite'):
+        with pytest.raises(Exception, match=refusal):
             native.mlp_sum_rows(address(values), address(output), [2, 1])
 
 
