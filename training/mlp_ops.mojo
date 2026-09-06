@@ -37,8 +37,11 @@ def _mlp_kernel(
     source: MutPointer[Float32, MutAnyOrigin],
     other: MutPointer[Float32, MutAnyOrigin],
     output: MutPointer[Float32, MutAnyOrigin],
-    rows: Int, cols: Int, operation: Int,
+    rows_arg: Int32, cols_arg: Int32, operation_arg: Int32,
 ):
+    var rows = Int(rows_arg)
+    var cols = Int(cols_arg)
+    var operation = Int(operation_arg)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if operation == 3:
         if i >= cols:
@@ -92,7 +95,7 @@ def _mlp_host(
     ctx.synchronize()
     ctx.enqueue_function[_mlp_kernel](
         source.unsafe_ptr(), other.unsafe_ptr(), output.unsafe_ptr(),
-        rows, cols, operation,
+        Int32(rows), Int32(cols), Int32(operation),
         grid_dim=((out_count + 127) // 128, 1, 1), block_dim=(128, 1, 1),
     )
     ctx.synchronize()

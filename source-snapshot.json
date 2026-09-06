@@ -1522,7 +1522,7 @@
     "training/checks/train_step_check.mojo": "d90b75e9b6844ce46741fc0e994923708389932724f6ac542d8ee3818455dc2a",
     "training/corpus/tinyshakespeare/README.md": "83d2fd13647b44288928fe6442ad1461f13209b450013e4d054f1673f8432a6d",
     "training/estimator.mojo": "c4a132694ce96c52a7492a43248505612c3c37a14fa29e9333a6cb253c88d0bc",
-    "training/mlp_ops.mojo": "6aab8d85e1f962f8b63f7ea014a6e669468849b90e9a82bd7cc9a47d9b08f4ab",
+    "training/mlp_ops.mojo": "6ef88f796ffc5379aada67ec7dd5ce004d782a2e473da88f7eebf69e0ef67718",
     "transformer/DERIVATION_MAP.tsv": "4a24ba787bb4ddb3f4628b705c84c397e1d2a5fc6b52c18dd340f2238ff96406",
     "transformer/IDENTICAL_TRANSFORMER_CONTRACT.md": "dca5aed8a84e8bed272ddd2ecdc0e60ff7c10083d3cbb250cb6ba89ea84971e7",
     "transformer/NOT_IMPLEMENTED.tsv": "1340c9b737e92facdc63fa6df3ece113081ee83d15d8c4530e00e3a520808ab5",
@@ -1592,6 +1592,6 @@
     "umap/transform.mojo": "411588423a90c4208d8ed85c5308896f58e0e1253e25cd0f6ab21a4a7df34870",
     "vendor_main.mojo": "5b5a55fea41772f259468849687f900d201a183af2c21dd32c344f8c0189f1c0"
   },
-  "parent_snapshot": "f30670da6f91c58347ec445c6ef358fb37e45fd1",
-  "scope": "root remote training candidate: capture ownership repair, shared NVIDIA/AMD transport and visible-node AMD guard; unqualified"
+  "parent_snapshot": "201e5ebcf58b388573426a2df77b1d5161fd156a",
+  "scope": "fixed-width MLP GPU argument repair; root remote training validation candidate; unqualified"
 }
