@@ -2248,22 +2248,32 @@ def predict(
         total_leaves += (
             (1 << model.weak_models[t].structure.get_depth()) * approx_dim
         )
-    if total_levels == 0:
+    if model.size() == 0:
         ctx.synchronize()
         return
 
-    var d_off = ctx.enqueue_create_buffer[DType.uint32](total_levels)
-    var d_shift = ctx.enqueue_create_buffer[DType.uint32](total_levels)
-    var d_mask = ctx.enqueue_create_buffer[DType.uint32](total_levels)
-    var d_bin = ctx.enqueue_create_buffer[DType.uint32](total_levels)
-    var d_eq = ctx.enqueue_create_buffer[DType.uint8](total_levels)
+    # Constant trees have one leaf and no split records. Keep a valid
+    # placeholder origin for the kernel's unused split pointers when the
+    # entire ensemble is constant. Positive-depth packing stays unchanged.
+    var split_capacity = max(total_levels, 1)
+    var d_off = ctx.enqueue_create_buffer[DType.uint32](split_capacity)
+    var d_shift = ctx.enqueue_create_buffer[DType.uint32](split_capacity)
+    var d_mask = ctx.enqueue_create_buffer[DType.uint32](split_capacity)
+    var d_bin = ctx.enqueue_create_buffer[DType.uint32](split_capacity)
+    var d_eq = ctx.enqueue_create_buffer[DType.uint8](split_capacity)
     var d_vals = ctx.enqueue_create_buffer[DType.float32](total_leaves)
-    var h_off = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
-    var h_shift = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
-    var h_mask = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
-    var h_bin = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
-    var h_eq = ctx.enqueue_create_host_buffer[DType.uint8](total_levels)
+    var h_off = ctx.enqueue_create_host_buffer[DType.uint32](split_capacity)
+    var h_shift = ctx.enqueue_create_host_buffer[DType.uint32](split_capacity)
+    var h_mask = ctx.enqueue_create_host_buffer[DType.uint32](split_capacity)
+    var h_bin = ctx.enqueue_create_host_buffer[DType.uint32](split_capacity)
+    var h_eq = ctx.enqueue_create_host_buffer[DType.uint8](split_capacity)
     var h_vals = ctx.enqueue_create_host_buffer[DType.float32](total_leaves)
+    if total_levels == 0:
+        h_off.unsafe_ptr().unsafe_store(0, UInt32(0))
+        h_shift.unsafe_ptr().unsafe_store(0, UInt32(0))
+        h_mask.unsafe_ptr().unsafe_store(0, UInt32(0))
+        h_bin.unsafe_ptr().unsafe_store(0, UInt32(0))
+        h_eq.unsafe_ptr().unsafe_store(0, UInt8(0))
 
     var lvl = 0
     var leaf = 0
@@ -2335,25 +2345,27 @@ def predict(
     for t in range(model.size()):
         ref weak = model.weak_models[t]
         var depth = weak.structure.get_depth()
-        # a depth-0 tree still packed one leaf slot above, so the offsets
-        # advance whether or not a kernel launches
-        if depth > 0:
-            ctx.enqueue_function[compute_bins_and_add_kernel](
-                cindex.unsafe_ptr(),
-                d_off.unsafe_ptr() + lvl,
-                d_shift.unsafe_ptr() + lvl,
-                d_mask.unsafe_ptr() + lvl,
-                d_bin.unsafe_ptr() + lvl,
-                d_eq.unsafe_ptr() + lvl,
-                Int32(depth),
-                d_vals.unsafe_ptr() + leaf,
-                Int32(n_rows),
-                cursor.unsafe_ptr(),
-                Int32(approx_dim),
-                Int32(n_rows),
-                grid_dim=(wide, approx_dim, 1),
-                block_dim=(256, 1, 1),
-            )
+        # With depth zero the existing kernel's level loop is empty and
+        # leaf remains zero: apply the constant, including inside a mixed
+        # ensemble. Use offset zero for unused pointers to avoid a trailing
+        # constant forming a one-past-end split pointer.
+        var split_offset = lvl if depth > 0 else 0
+        ctx.enqueue_function[compute_bins_and_add_kernel](
+            cindex.unsafe_ptr(),
+            d_off.unsafe_ptr() + split_offset,
+            d_shift.unsafe_ptr() + split_offset,
+            d_mask.unsafe_ptr() + split_offset,
+            d_bin.unsafe_ptr() + split_offset,
+            d_eq.unsafe_ptr() + split_offset,
+            Int32(depth),
+            d_vals.unsafe_ptr() + leaf,
+            Int32(n_rows),
+            cursor.unsafe_ptr(),
+            Int32(approx_dim),
+            Int32(n_rows),
+            grid_dim=(wide, approx_dim, 1),
+            block_dim=(256, 1, 1),
+        )
         lvl += depth
         leaf += (1 << depth) * approx_dim
     ctx.synchronize()

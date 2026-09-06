@@ -16,7 +16,7 @@ There is no host gradient/leaf reduction or alternate CPU training path.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite
-from checks.numerics import identical_mul, identical_mul_add
+from checks.numerics import ftz, identical_mul, identical_mul_add
 from checks.fixed_point import choose_scale
 from core.identity_trace import IdentityTrace
 from gbdt.methods.dynamic_boosting_folds import TFold, EBoostingType, IQueriesGrouping, create_folds
@@ -56,7 +56,7 @@ def _ordered_target_kernel(
         var row = Int(permutation.unsafe_load(i))
         var w = weights.unsafe_load(row)
         out_w.unsafe_store(offset + i, w)
-        out_g.unsafe_store(offset + i, identical_mul(w, y.unsafe_load(row) - cursor.unsafe_load(i)))
+        out_g.unsafe_store(offset + i, ftz(identical_mul(w, y.unsafe_load(row) - cursor.unsafe_load(i))))
 
 
 def _ordered_gather_kernel(
