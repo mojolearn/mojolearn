@@ -16,6 +16,9 @@ def main():
     args = parser.parse_args()
     actual = args.case / "diagnostic-actual"
     oracle = args.case / "diagnostic-oracle"
+    if not actual.exists():
+        actual = args.case / "failed-actual"
+        oracle = args.case / "failed-oracle"
     manifest = json.loads((oracle / "manifest.json").read_text())
     dump = json.loads((actual / "dump_manifest.json").read_text())
     records = []

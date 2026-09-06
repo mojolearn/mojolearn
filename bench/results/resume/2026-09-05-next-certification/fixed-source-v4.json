@@ -1,0 +1,11 @@
+{
+  "source_commit": "f6e551935c5d9e9f687f8c186c8a36e8e195b625",
+  "implementation_commit": "8fd87a35c64ce2132ba15b6a16a50639d07ec137",
+  "all_non_result_tracked_files_match": true,
+  "amd_reuse": {
+    "controller_pid": 68159,
+    "droplet": 598113981,
+    "guards_remain_armed": true,
+    "outcome": "Reuse did not execute: DELETE was already sent before the pause. Controller resumed and HTTP 404 confirmed. Fresh AMD leg required."
+  }
+}

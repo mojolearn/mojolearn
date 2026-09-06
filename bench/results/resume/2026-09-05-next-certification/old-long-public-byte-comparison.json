@@ -1,0 +1,17 @@
+{
+  "source_commit": "d88c788374a06597c9ebd457666afc7e4054d0d9",
+  "certified": false,
+  "reason": "Mamba3 gate is RED; independent whole-forward check exposed a chain-rule omission shared by both native vendors and the staged reference",
+  "cases": [
+    {
+      "case": "mamba1-l64",
+      "public_tensors": 11,
+      "native_bytes_match": true
+    },
+    {
+      "case": "mamba3-l65",
+      "public_tensors": 10,
+      "native_bytes_match": true
+    }
+  ]
+}

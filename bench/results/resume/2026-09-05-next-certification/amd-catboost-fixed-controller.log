@@ -1,0 +1,26 @@
+From https://github.com/mojolearn/mojolearn
+ * branch              d0c9fe949b51eb8bfe1dfe977c7b02bae9e9b8df -> FETCH_HEAD
+Warning: you are leaving 1 commit behind, not connected to
+any of your branches:
+
+  05b5fa2a Weighted CTR fixture: occupied zero-mass leaf
+
+If you want to keep it by creating a new branch, this may be a good time
+to do so with:
+
+ git branch <new-branch-name> 05b5fa2a
+
+HEAD is now at d0c9fe94 Weighted CTR: fixed-partition leaf estimator regression
+ARTIFACT_DIR=bench/results/e1/2026-09-05_235251-amd-catboost-fixed-partition
+                               ^
+Included from /root/mojolearn/checks/tree_ctr_slice_check.mojo:39:
+/root/mojolearn/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:4802:32: warning: assignment to 'reorder_launches' was never used; assign to '_' instead?
+        var reorder_launches = 0
+                               ^
+Included from /root/mojolearn/checks/tree_ctr_slice_check.mojo:39:
+Included from /root/mojolearn/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:209:
+/root/mojolearn/gbdt/methods/greedy_subsets_searcher/kernel/split_points.mojo:1242:23: warning: assignment to 'dst' was never used; assign to '_' instead?
+            var dst = 0
+                      ^
+WEIGHTED LEAF PASS: learned means; occupied zero-mass partition at L2=0 and 3
+tree CTR slice: deterministic pair FeatureFreq + text round trip PASS

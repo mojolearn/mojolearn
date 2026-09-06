@@ -1,0 +1,10 @@
+✨ Pixi task (mamba-grad-m3-public in skgpu): oracle=/tmp/mojolearn-mamba3-grad && actual=/tmp/mojolearn-mamba3-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba3 --out $oracle && MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba3_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba3/m3_base_b2_l4_d32 gradients to /tmp/mojolearn-mamba3-grad
+finite-difference worst relative-scale error: 2.698e-10
+/root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:107:50: error: aliasing values passed mutably to 'args' argument and passed mutably to 'args' argument in 'enqueue_function' call
+    ctx.enqueue_function[mamba3_beta_join_kernel](
+                                                 ^
+/root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:107:50: note: 'origin_of(scale)' memory accessed through reference embedded in value of type 'Pointer[Float32, origin_of(scale)]'
+    ctx.enqueue_function[mamba3_beta_join_kernel](
+                                                 ^
+mojo: error: failed to parse the provided Mojo source module

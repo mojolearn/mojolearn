@@ -1,0 +1,13 @@
+partial.qkdot.gamma f64_bad= 0 ref32_bad= 1
+partial.s15.scale f64_bad= 2 ref32_bad= 3
+partial.scale.gamma f64_bad= 2 ref32_bad= 3
+partial.scale.beta f64_bad= 2 ref32_bad= 3
+partial.gamma.total f64_bad= 3 ref32_bad= 2
+partial.dt.current_total f64_bad= 2 ref32_bad= 1
+partial.dt.available_total f64_bad= 2 ref32_bad= 1
+partial.dt.with_seg f64_bad= 2 ref32_bad= 1
+partial.join.kscale f64_bad= 2 ref32_bad= 2
+partial.join.s15.scale f64_bad= 3 ref32_bad= 3
+partial.join.gamma.total f64_bad= 1 ref32_bad= 1
+partial.join.dt.current_total f64_bad= 4 ref32_bad= 3
+partial.join.dt.available_total f64_bad= 2 ref32_bad= 2

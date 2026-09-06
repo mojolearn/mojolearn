@@ -1,0 +1,54 @@
+[19:40:05 amd] dead-man timer pid 73492 (3600 s, keyed by tag e2 + name mojolearn-e2-amd)
+[19:40:05 amd] creating mojolearn-e2-amd (gpu-mi325x1-256gb, tor1)
+[19:40:07 amd] droplet id 598115608
+[19:40:51 amd] active at 167.99.185.233
+[19:41:18 amd] arming a second dead-man ON THE DROPLET (3600s), which the local one cannot guarantee
+[amd] ON_DROPLET_DEADMAN_ARMED
+[amd gpu] GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+[19:41:43 amd] ssh settled after 3 probe(s)
+[19:41:43 amd] cloning eebd7c9206cef7a5fbc32f7f0ca9f71bdc68ec63 ON THE BOX from https://github.com/mojolearn/mojolearn.git (bench/results excluded), attempt 1
+CLONE-COMMIT-OK eebd7c9206cef7a5fbc32f7f0ca9f71bdc68ec63
+1
+[19:41:49 amd] wave 1: phases=9 lanes=all, bound 3076s
+WAVE-1-EXIT=0  (124 = hit the work bound)
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 23:41:56
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: tools/mamba_backward_do_diag.sh === 23:41:56
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+    pid 3150's current affinity list: 0-19
+    pid 3150's new affinity list: 0-3
+
+=== done === 23:44:02
+artifacts in /root/mojolearn/bench/results/e1/2026-09-05_234154-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+[19:44:02 amd] main-operator repair window; release file: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-05-next-certification/amd-repair.release
+[19:54:47 amd] repair window closed; collecting and destroying within the lease
+[19:54:47 amd] fetch artifacts
+[19:55:14 amd] fetched: 2026-09-05_235251-amd-catboost-fixed-partition
+[19:55:19 amd] leg done; destroying
+[19:55:19 amd] teardown (rc=0)
+[19:55:21 amd] DELETE droplet 598115608 -> HTTP 204
+[19:55:22 amd] post-destroy GET droplet 598115608 -> HTTP 200
+[19:55:27 amd] post-destroy GET droplet 598115608 -> HTTP 200
+[19:55:33 amd] post-destroy GET droplet 598115608 -> HTTP 404
+[19:55:33 amd] dead-man timer cancelled

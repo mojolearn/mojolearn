@@ -1,0 +1,26 @@
+From https://github.com/mojolearn/mojolearn
+ * branch              05b5fa2a15b7231de8eea185d2570bba476d1ebd -> FETCH_HEAD
+Warning: you are leaving 1 commit behind, not connected to
+any of your branches:
+
+  eebd7c92 Mamba3 scale regression: disjoint device buffers
+
+If you want to keep it by creating a new branch, this may be a good time
+to do so with:
+
+ git branch <new-branch-name> eebd7c92
+
+HEAD is now at 05b5fa2a Weighted CTR fixture: occupied zero-mass leaf
+ARTIFACT_DIR=bench/results/e1/2026-09-05_234756-amd-catboost-zero-mass
+Included from /root/mojolearn/checks/tree_ctr_slice_check.mojo:39:
+/root/mojolearn/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:4802:32: warning: assignment to 'reorder_launches' was never used; assign to '_' instead?
+        var reorder_launches = 0
+                               ^
+Included from /root/mojolearn/checks/tree_ctr_slice_check.mojo:39:
+Included from /root/mojolearn/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:209:
+/root/mojolearn/gbdt/methods/greedy_subsets_searcher/kernel/split_points.mojo:1242:23: warning: assignment to 'dst' was never used; assign to '_' instead?
+            var dst = 0
+                      ^
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: weighted tensor fixture did not cover a zero-weight leaf
+mojo: error: execution exited with a non-zero result: 1

@@ -1,0 +1,192 @@
+✨ Pixi task (mamba-grad-m1-l64 in skgpu): oracle=/tmp/mojolearn-mamba1-l64-grad && actual=/tmp/mojolearn-mamba1-l64-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba1 --case base_b1_l64_d8 --out $oracle && MOJOLEARN_MAMBA1_GRAD_CASE=base_b1_l64_d8 MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba_backward_device_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba1/base_b1_l64_d8 gradients to /tmp/mojolearn-mamba1-l64-grad
+finite-difference worst relative-scale error: 4.889e-10
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:9:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:9:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:9:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+MAMBA1 BACKWARD DEVICE WHOLE PASS: emitted all 11 external-oracle gradients plus diagnostic dB/dC
+Mamba gradient public-prefill comparison passed: 11 tensors
+  selected manifest policy=mamba1.public_prefill_leaves.exact11.v1
+✨ Pixi task (mamba-grad-m3-l65 in skgpu): oracle=/tmp/mojolearn-mamba3-l65-grad && actual=/tmp/mojolearn-mamba3-l65-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba3 --case m3_base_b1_l65_d64 --out $oracle && MOJOLEARN_MAMBA3_GRAD_CASE=m3_base_b1_l65_d64 MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba3_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba3/m3_base_b1_l65_d64 gradients to /tmp/mojolearn-mamba3-l65-grad
+finite-difference worst relative-scale error: 1.587e-09
+/root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:93:46: error: no matching function in initialization
+    var qdt = mamba_upload(ctx, List[Float32](5, 7))
+                                ~~~~~~~~~~~~~^~~~~~
+oss/modular/mojo/stdlib/std/collections/list.mojo:428:1: note: candidate not viable: unexpected argument
+def __init__(out self)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:435:1: note: candidate not viable: missing required argument: 'capacity'
+def __init__(out self, *, capacity: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:450:1: note: candidate not viable: missing required argument: 'length'
+def __init__(out self, *, length: Int, fill: T) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:463:1: note: candidate not viable: missing required argument: '__list_literal__'
+def __init__(out self, var *values: T, *, __list_literal__: NoneType)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:483:1: note: candidate not viable: unexpected argument
+def __init__[IterableType: Iterable](out self: List[IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element], ref iterable: IterableType) where conforms_to(IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:505:1: note: candidate not viable: missing required argument: 'unsafe_uninit_length'
+def __init__(out self, *, unsafe_uninit_length: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:519:1: note: candidate not viable: missing required argument: 'copy'
+def __init__(out self, *, copy: Self) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:160:1: note: candidate not viable: missing required argument: 'move'
+def __init__(out self, *, deinit move: Self)    # note - generated function
+^
+/root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:94:48: error: no matching function in initialization
+    var qtrap = mamba_upload(ctx, List[Float32](11, 13))
+                                  ~~~~~~~~~~~~~^~~~~~~~
+oss/modular/mojo/stdlib/std/collections/list.mojo:428:1: note: candidate not viable: unexpected argument
+def __init__(out self)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:435:1: note: candidate not viable: missing required argument: 'capacity'
+def __init__(out self, *, capacity: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:450:1: note: candidate not viable: missing required argument: 'length'
+def __init__(out self, *, length: Int, fill: T) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:463:1: note: candidate not viable: missing required argument: '__list_literal__'
+def __init__(out self, var *values: T, *, __list_literal__: NoneType)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:483:1: note: candidate not viable: unexpected argument
+def __init__[IterableType: Iterable](out self: List[IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element], ref iterable: IterableType) where conforms_to(IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:505:1: note: candidate not viable: missing required argument: 'unsafe_uninit_length'
+def __init__(out self, *, unsafe_uninit_length: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:519:1: note: candidate not viable: missing required argument: 'copy'
+def __init__(out self, *, copy: Self) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:160:1: note: candidate not viable: missing required argument: 'move'
+def __init__(out self, *, deinit move: Self)    # note - generated function
+^
+/root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:96:48: error: no matching function in initialization
+    var scale = mamba_upload(ctx, List[Float32](4, 8))
+                                  ~~~~~~~~~~~~~^~~~~~
+oss/modular/mojo/stdlib/std/collections/list.mojo:428:1: note: candidate not viable: unexpected argument
+def __init__(out self)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:435:1: note: candidate not viable: missing required argument: 'capacity'
+def __init__(out self, *, capacity: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:450:1: note: candidate not viable: missing required argument: 'length'
+def __init__(out self, *, length: Int, fill: T) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:463:1: note: candidate not viable: missing required argument: '__list_literal__'
+def __init__(out self, var *values: T, *, __list_literal__: NoneType)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:483:1: note: candidate not viable: unexpected argument
+def __init__[IterableType: Iterable](out self: List[IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element], ref iterable: IterableType) where conforms_to(IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:505:1: note: candidate not viable: missing required argument: 'unsafe_uninit_length'
+def __init__(out self, *, unsafe_uninit_length: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:519:1: note: candidate not viable: missing required argument: 'copy'
+def __init__(out self, *, copy: Self) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:160:1: note: candidate not viable: missing required argument: 'move'
+def __init__(out self, *, deinit move: Self)    # note - generated function
+^
+/root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:97:45: error: no matching function in initialization
+    var dt = mamba_upload(ctx, List[Float32](2, 3))
+                               ~~~~~~~~~~~~~^~~~~~
+oss/modular/mojo/stdlib/std/collections/list.mojo:428:1: note: candidate not viable: unexpected argument
+def __init__(out self)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:435:1: note: candidate not viable: missing required argument: 'capacity'
+def __init__(out self, *, capacity: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:450:1: note: candidate not viable: missing required argument: 'length'
+def __init__(out self, *, length: Int, fill: T) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:463:1: note: candidate not viable: missing required argument: '__list_literal__'
+def __init__(out self, var *values: T, *, __list_literal__: NoneType)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:483:1: note: candidate not viable: unexpected argument
+def __init__[IterableType: Iterable](out self: List[IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element], ref iterable: IterableType) where conforms_to(IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:505:1: note: candidate not viable: missing required argument: 'unsafe_uninit_length'
+def __init__(out self, *, unsafe_uninit_length: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:519:1: note: candidate not viable: missing required argument: 'copy'
+def __init__(out self, *, copy: Self) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:160:1: note: candidate not viable: missing required argument: 'move'
+def __init__(out self, *, deinit move: Self)    # note - generated function
+^
+/root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:98:48: error: no matching function in initialization
+    var sigma = mamba_upload(ctx, List[Float32](0.25, 0.5))
+                                  ~~~~~~~~~~~~~^~~~~~~~~~~
+oss/modular/mojo/stdlib/std/collections/list.mojo:428:1: note: candidate not viable: unexpected argument
+def __init__(out self)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:435:1: note: candidate not viable: missing required argument: 'capacity'
+def __init__(out self, *, capacity: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:450:1: note: candidate not viable: missing required argument: 'length'
+def __init__(out self, *, length: Int, fill: T) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:463:1: note: candidate not viable: missing required argument: '__list_literal__'
+def __init__(out self, var *values: T, *, __list_literal__: NoneType)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:483:1: note: candidate not viable: unexpected argument
+def __init__[IterableType: Iterable](out self: List[IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element], ref iterable: IterableType) where conforms_to(IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:505:1: note: candidate not viable: missing required argument: 'unsafe_uninit_length'
+def __init__(out self, *, unsafe_uninit_length: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:519:1: note: candidate not viable: missing required argument: 'copy'
+def __init__(out self, *, copy: Self) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:160:1: note: candidate not viable: missing required argument: 'move'
+def __init__(out self, *, deinit move: Self)    # note - generated function
+^
+mojo: error: failed to parse the provided Mojo source module
+schema=mojolearn.mamba.backward-certificate.amd.v2
+created_utc=2026-09-05T23:29:49Z
+host=mojolearn-e2-amd
+kernel=Linux 6.8.0-59-generic x86_64
+mode=IDENTICAL
+profile=long-sequence-v1
+vendor=amd
+mode_injector=tools/with_identical_mode.sh
+commit=6cbebbbdd67c3b27e8c113a09d7a41ec41e3e48a
+source_sha256=448e377793e5684417d645ca644b2e332b5765a611590baedc224b42f62d9c40
+
+
+============================ ROCm System Management Interface ============================
+====================================== Product Info ======================================
+GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+GPU[0]		: Card Model: 		0x74b9
+GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[0]		: Card SKU: 		M3250101
+GPU[0]		: Subsystem ID: 	0x74a5
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Node ID: 		1
+GPU[0]		: GUID: 		43855
+GPU[0]		: GFX Version: 		gfx942
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+family	verdict	rc	oracle_manifest_sha256	dump_manifest_sha256
+mamba1-l64	GREEN	0	6bf3c7800daae3b55f666d1edaf9060ea9bc234cb08273c59f6dd87a20ea8442	4a3e56ae8aefb5964fbe4ba299e6b36232d10780a065dfe64bbcd5b6fc8ffeab
+mamba3-l65	RED	1	cf576311fa118f04998c0aff5e5744c4ddfb9c99e2b9564c120270563194050d	missing
+MAMBA-BACKWARD-CERT artifacts=/root/mojolearn/bench/results/e1/2026-09-05_232835-mojolearn-e2-amd/diag/followup/mamba-long-cert

@@ -1,0 +1,110 @@
+{
+  "case": "m3_base_b2_l4_d32",
+  "family": "mamba3",
+  "mode": "IDENTICAL",
+  "objective": "signed_dyadic_weight_v1",
+  "public_prefill_leaves": [
+    "x",
+    "block_norm.weight",
+    "in_proj.weight",
+    "dt_bias",
+    "B_norm.weight",
+    "C_norm.weight",
+    "B_bias",
+    "C_bias",
+    "D",
+    "out_proj.weight"
+  ],
+  "schema": "mojolearn.mamba.backward-bytes.v1",
+  "source_sha256": "eddea833c2131211d7ce5d81526c331e01b6f5096a0b6efed24cd914e48ed090",
+  "state_boundary_leaves": [],
+  "state_boundary_policy": null,
+  "tensors": {
+    "B_bias": {
+      "dtype": "<f4",
+      "file": "grad.B_bias.f32",
+      "sha256": "b4d02c6de965d306a8100bbe256946094b00203e32148f2612ef85042dd41aa8",
+      "shape": [
+        1,
+        128
+      ]
+    },
+    "B_norm.weight": {
+      "dtype": "<f4",
+      "file": "grad.B_norm.weight.f32",
+      "sha256": "eacc1bf662fb69c987f43911b355abef1c90f0409d60cff888f13039beb37622",
+      "shape": [
+        128
+      ]
+    },
+    "C_bias": {
+      "dtype": "<f4",
+      "file": "grad.C_bias.f32",
+      "sha256": "94fda27e0ca06b74305d708ec6c3cbd18d10e65c8c347bff6369650558599af8",
+      "shape": [
+        1,
+        128
+      ]
+    },
+    "C_norm.weight": {
+      "dtype": "<f4",
+      "file": "grad.C_norm.weight.f32",
+      "sha256": "d5d9b82cf00778761122fd68740e7bac3d5f6b877f39fbf9d2c7d805d3197775",
+      "shape": [
+        128
+      ]
+    },
+    "D": {
+      "dtype": "<f4",
+      "file": "grad.D.f32",
+      "sha256": "eaaab3edab2f86e12b49d67b55095d2dc1c18987273be57c45e678a50fd8fc8f",
+      "shape": [
+        1
+      ]
+    },
+    "block_norm.weight": {
+      "dtype": "<f4",
+      "file": "grad.block_norm.weight.f32",
+      "sha256": "b0935c9fd7123258085dd8f925df4a9d1c7ce759d2c4b911065e8088ad8ece5d",
+      "shape": [
+        32
+      ]
+    },
+    "dt_bias": {
+      "dtype": "<f4",
+      "file": "grad.dt_bias.f32",
+      "sha256": "9dd7df8e9a46688b75f0fa0e75a722400cc8a458c7436b215b554b0fedad3e31",
+      "shape": [
+        1
+      ]
+    },
+    "in_proj.weight": {
+      "dtype": "<f4",
+      "file": "grad.in_proj.weight.f32",
+      "sha256": "3673bc8983c87c11aa73b84fa344c4ea537d742757d064ad0a307cb80edad65a",
+      "shape": [
+        419,
+        32
+      ]
+    },
+    "out_proj.weight": {
+      "dtype": "<f4",
+      "file": "grad.out_proj.weight.f32",
+      "sha256": "29484639c32f6d1f14a67e11f50aa084ef8d90a5eec108f382f6649b12e6637e",
+      "shape": [
+        32,
+        64
+      ]
+    },
+    "x": {
+      "dtype": "<f4",
+      "file": "grad.x.f32",
+      "sha256": "8fecb48f8531b932277b7873faa859bf7285cb34b9706e30272b9c7fd9d5d4d0",
+      "shape": [
+        2,
+        4,
+        32
+      ]
+    }
+  }
+}
