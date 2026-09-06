@@ -17,6 +17,19 @@
 # Artifacts land in bench/results/e1/<stamp>-<host>/ beside the Mac's.
 set -uo pipefail
 
+# Bash may read later commands only after a long wait. Editing this file
+# during a repair window can otherwise move its read offset and skip the
+# fetch block. Execute an immutable sibling copy before reading credentials
+# or provisioning anything; keep the repository-relative paths unchanged.
+if [ "${MOJOLEARN_E2_FROZEN_CONTROLLER:-0}" != 1 ]; then
+  controller_copy=$(mktemp "$(dirname "${BASH_SOURCE[0]}")/.e2-controller.XXXXXX") || exit 2
+  cp "${BASH_SOURCE[0]}" "$controller_copy" || { rm -f "$controller_copy"; exit 2; }
+  controller_rc=0
+  MOJOLEARN_E2_FROZEN_CONTROLLER=1 bash "$controller_copy" "$@" || controller_rc=$?
+  rm -f "$controller_copy"
+  exit "$controller_rc"
+fi
+
 VENDOR="${1:?amd|nv}"
 TOKFILE="${2:?token file}"
 TOK="$(cat "$TOKFILE")"
