@@ -1,0 +1,37 @@
+{
+  "source": "eb835021dcd79a59a7e8f78c754a75db3c1fea83",
+  "scope": "Main-only lightweight checks; no native GPU claim",
+  "checks": [
+    {
+      "name": "ordered_python_boundary",
+      "passed": 30,
+      "failed": 0,
+      "python": "temporary Python3.12 venv",
+      "threads": 1
+    },
+    {
+      "name": "linux_build_resource_controls",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "name": "linux_qualification_evidence",
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "name": "extension_inventory",
+      "bindings_per_mode": 15,
+      "status": "PASS"
+    },
+    {
+      "name": "shell_syntax_and_diff_whitespace",
+      "status": "PASS"
+    },
+    {
+      "name": "nvidia_phase9_controller_rehearsal",
+      "status": "PASS",
+      "rentals": 0
+    }
+  ]
+}

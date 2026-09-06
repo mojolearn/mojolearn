@@ -1,0 +1,80 @@
+pid 3381's current affinity list: 0-3
+pid 3381's new affinity list: 0-3
+pid 3390's current affinity list: 0-3
+pid 3390's new affinity list: 0-3
+[09:14:59 build_sets] repo /root/mojolearn, dest /root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/build, tiers: fast deterministic identical, jobs: 1
+[09:14:59 build_sets] pixi env: gbmbench
+[09:30:53 build_sets] builds finished in 954s (rc=0)
+[09:30:55 build_sets] vendor read-back per binary:
+    fast _mojolearn hip
+    fast _mojolearn_gbdt hip
+    fast _mojolearn_estimators hip
+    fast _mojolearn_rf hip
+    fast _mojolearn_trees hip
+    fast _mojolearn_svm hip
+    fast _mojolearn_solver hip
+    fast _mojolearn_metrics hip
+    fast _mojolearn_tsa hip
+    fast _mojolearn_linalg hip
+    fast _mojolearn_arima hip
+    fast _mojolearn_training hip
+    fast _mojolearn_gp hip
+    fast _mojolearn_mamba hip
+    fast _mojolearn_transformer hip
+    deterministic _mojolearn hip
+    deterministic _mojolearn_gbdt hip
+    deterministic _mojolearn_estimators hip
+    deterministic _mojolearn_rf hip
+    deterministic _mojolearn_trees hip
+    deterministic _mojolearn_svm hip
+    deterministic _mojolearn_solver hip
+    deterministic _mojolearn_metrics hip
+    deterministic _mojolearn_tsa hip
+    deterministic _mojolearn_linalg hip
+    deterministic _mojolearn_arima hip
+    deterministic _mojolearn_training hip
+    deterministic _mojolearn_gp hip
+    deterministic _mojolearn_mamba hip
+    deterministic _mojolearn_transformer hip
+    identical _mojolearn hip
+    identical _mojolearn_gbdt hip
+    identical _mojolearn_estimators hip
+    identical _mojolearn_rf hip
+    identical _mojolearn_trees hip
+    identical _mojolearn_svm hip
+    identical _mojolearn_solver hip
+    identical _mojolearn_metrics hip
+    identical _mojolearn_tsa hip
+    identical _mojolearn_linalg hip
+    identical _mojolearn_arima hip
+    identical _mojolearn_training hip
+    identical _mojolearn_gp hip
+    identical _mojolearn_mamba hip
+    identical _mojolearn_transformer hip
+[09:30:56 build_sets] GPU architectures embedded, per binary:
+         45 gfx942
+[09:30:56 build_sets] architecture set: gfx942 
+[09:30:56 build_sets] architecture: gfx942 (requested: the box GPU itself)
+[09:30:56 build_sets] vendor: hip
+[09:31:16 build_sets] CPU ISA baseline: clean at x86-64-v3 (45 binaries)
+[09:31:16 build_sets] patchelf: /root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/tool-venv/bin/patchelf
+[09:31:16 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/gbmbench/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 60.8 MB, runtime libraries 3.2 MB, uncompressed set 64.0 MB
+vendor=hip
+arch=gfx942
+gpu_archs_requested=
+build_rc=0 stage_rc=0
+build_seconds=978
+set_fast_count=15
+set_fast_bytes=20807775
+set_deterministic_count=15
+set_deterministic_bytes=20803799
+set_identical_count=15
+set_identical_bytes=19228175
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=15879396

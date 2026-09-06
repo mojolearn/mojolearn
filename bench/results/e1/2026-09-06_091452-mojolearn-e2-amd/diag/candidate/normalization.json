@@ -1,0 +1,15 @@
+{
+  "removed_empty_directories": [
+    "mojolearn/",
+    "mojolearn/.libs/",
+    "mojolearn/hip/",
+    "mojolearn/hip/gfx942/",
+    "mojolearn/hip/gfx942/deterministic/",
+    "mojolearn/hip/gfx942/identical/",
+    "mojolearn-0.6.0.dist-info/",
+    "mojolearn-0.6.0.dist-info/licenses/"
+  ],
+  "unchanged_payload_files": 91,
+  "original_sha256": "84ca554c55e1746f73e941d08998be29bb0ba0160d9ec5a742e318126d6d1d75",
+  "normalized_sha256": "7c5f9af825cbcbd74a293adc75ad15670a30a179d3a9a8a8cfd993cd9476f7be"
+}

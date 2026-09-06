@@ -1,0 +1,130 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  mojolearn.identical.gemm.fp32.v1
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  phase8   (tools/e1_bootstrap.sh; phase 8 is seven lanes)
+   mode:     dry  (nothing is rented; --rent opts in)
+   gpu:      NVIDIA GeForce RTX 4090
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      bench/results/e1g/2026-09-06_052420-nvidia-phase8-dryrun
+
+   commit:   eb835021 parent 6dd44ac5
+
+== step 1: the Apple reference column ==
+   The phase8 payload builds NOTHING on this Mac. Its reference is an
+   Apple bootstrap directory that already exists, and the comparison
+   is made by tools/e3_round_judge.sh once the box's directory lands
+   beside it -- this leg does not diff phase-8 cards.
+   lanes (read out of tools/e3_round_judge.sh section 7): gemm cd kde linkage svm metrics mamba mamba2 mamba3 iforest transformer arima cholesky embedding gp hdbscan holtwinters ivf kernelmethods gmm resample spectral training-loss training-optimizer training-step tsa
+   phase 8 is NOT in MOJOLEARN_E1_PHASES=9, so no lane cards
+   are written and no Apple reference column is required.
+
+== dry run: every path except the paid ones ==
+   A PATH THAT HAS NEVER RUN IS A PATH NOBODY HAS TESTED. This
+   repository has four separate scars from guard bugs that were
+   found only by running the guard, so these are executed on every
+   dry run rather than described in a comment.
+
+  ok    LAYOUT1 a fetched empty console with successful status is valid
+  ok    LAYOUT2 a missing console is refused
+  ok    LAYOUT3 a failed payload is refused even with a console
+  ok    LAYOUT4 a missing payload status is refused
+  ok    A1 an unknown vendor is refused by name (exit 2)
+  ok    A2 two vendors in one leg are refused
+  ok    A3 --minutes 90 is refused before anything else is checked
+  ok    A4 --rent without a key refuses and rents nothing
+  ok    A4-layout-vendor layout-only refuses AMD
+  ok    A4-layout-payload layout-only refuses a non-mamba transport
+  ok    A4-layout-conflict layout-only refuses NVIDIA campaign
+  ok    A5 an unknown payload is refused by name (exit 2)
+  ok    A6 --column-sweep is refused under phase8 rather than ignored
+  ok    A7 --local-card is refused under phase8 rather than ignored
+  ok    B1 the paid call is fenced: a rehearsal child cannot create a pod
+  ok    C1 runpod_guard.sh arm REFUSES without a key
+  ok    C2 runpod_guard.sh check calls an unknown pod UNGUARDED
+  ok    C3 runpod_guard.sh reap refuses without a key
+  ok    C4 leg_arm turns the guard's refusal into a refusal, not a pass
+  ok    C5 'reap --force' with no pod id is REFUSED (it used to reap every lease)
+  ok    C5b 'reap --force --all' is ACCEPTED by the form check (it stops at the key)
+  ok    C6 reap refuses an unknown option and two pod ids, both by name
+  ok    C7 'reap --force <pod-id>' terminates THAT POD AND NOTHING ELSE
+  ok    C7b '--force --all' still selects every lease (the scoping is not just always-one)
+  ok    C8 a plain reap takes the EXPIRED lease and leaves the live one alone
+  ok    C9 a truncated lease file is SKIPPED and does not inherit the previous pod
+  ok    C10 arm: the key travels on ssh STDIN and appears in NO argv, on either machine
+  ok    C11 reap: the key is in a 0600 curl config and in NO argv
+  ok    F1 the remote body substitutes cleanly and passes a POSIX sh check
+  ok    F2 the leftover-placeholder detector sees a planted @LEFTOVER@
+  ok    F3 a body that stopped writing the poll sentinel is refused, by name
+  ok    M1 the dead-man composes, substitutes cleanly and passes sh -n
+  ok    M2 the dead-man's key is in a 0600 curl config, and in no script and no argv
+  ok    M3 the dead-man's leftover-placeholder detector sees a planted @LEFTOVER@
+  ok    M4 the dead-man fires: DELETEs its pod by id on both endpoints, keeps the key out of every argv, and removes the credential afterwards
+  ok    M5 the dead-man's by-name lookup finds ITS pod and no other lane's
+  ok    P1 the lane list is READ OUT OF tools/e3_round_judge.sh (gemm cd kde linkage svm metrics mamba mamba2 mamba3 iforest transformer arima cholesky embedding gp hdbscan holtwinters ivf kernelmethods gmm resample spectral training-loss training-optimizer training-step tsa)
+  ok    P2 the judge's own label_of reads 2026-09-06_052420-runpod-nvidia as NVIDIA
+  ok    P3 a lane whose run reports [IDENTICAL] is accepted (the guard is not just always-red)
+  ok    P4 an IDENTICAL card whose run reports [FAST] is CONTAMINATED
+  ok    P5 a lane with no banner is called UNWITNESSED, not passed and not failed (linkage and mamba are both like this)
+  ok    P6 a lane with no IDENTICAL card is named, and the judge's MISSING is predicted
+  ok    P7 a column with no lanes/ directory at all is caught
+  ok    P8 a body that stopped running tools/e1_bootstrap.sh is refused, by name
+  ok    P9 a body that stopped unsetting the mamba shape is refused, by name
+  ok    K1 a 0600 key file outside the repo passes the hygiene check
+  ok    K2 a world-readable key file is refused by mode
+  ok    K3 a key file inside the checkout is refused
+  ok    K4 the key is in the 0600 config file and not in curl's argv
+  ok    K5 the ps detector finds a planted key and finds none in the real dump
+  ok    L1 the Apple column exists at this commit ()
+  ok    G0a an unknown --source-ref refuses before rental
+  ok    G0b --source-ref refuses other payloads
+  ok    G1 git archive extracts and hashes to a 64-hex source sha (42ac84f8b618e58f...)
+  ok    G2 the archive contains everything the phase8 payload runs (tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/checks/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/checks/mamba_check.mojo)
+  ok    G3 the working tree is clean for every path that reaches the bits
+
+  56 passed, 0 failed, 0 blocking this box from being rented
+
+== what --rent WOULD do, in order ==
+   1. list leases here and pods there; refuse if either is occupied
+   1b. ARM A DETACHED DEAD-MAN HERE, before the create: it ends a
+      pod named mojolearn-gemm-nvidia-<stamp> after
+      4500s even if this process is killed
+   2. POST https://rest.runpod.io/v1/pods  ->  a NVIDIA GeForce RTX 4090 pod named
+      mojolearn-gemm-nvidia-<stamp>   [THE BILL STARTS HERE]
+   3. wait up to 600s for ssh; time out -> TERMINATE
+   4. tools/runpod_guard.sh arm <pod> '<ssh>' 60
+      refusal -> TERMINATE, no work, no card
+   5. key to the pod on stdin (0600), then read the pod's ps back
+   6. git archive eb835021dcd79a59a7e8f78c754a75db3c1fea83 -> the box; compare source sha both ways
+   7. bash tools/e1_bootstrap.sh, DETACHED and polled, bounded at
+      3000s so the fetch keeps its reserve. PHASE 8 IS NOT
+      IN MOJOLEARN_E1_PHASES=9, so NO lanes/*.card is written
+      and nothing here is a cross-vendor claim.
+      READ THIS BEFORE RENTING: phase 9 builds EVERY tier it compares
+      -- fast, deterministic and identical -- because a phase subset
+      skips phase 3 and a baseline-less middle tier answers nothing.
+      That is 4 bindings x 3 tiers of builds. Thirty builds
+      took FIFTY MINUTES on a rented RTX 4090 and about three on the
+      M4: build time on a pod is not build time on the Mac, and the
+      3000s bound is what stands between that and a lease
+      spent entirely compiling. bootstrap_exit=124 in remote/leg.txt
+      says so if it fires.
+      bindings: build.sh build_gbdt.sh build_estimators.sh build_linalg.sh
+      lanes:    <all of them>
+      A LANE WHOSE BINDING IS NOT IN THAT SET REPORTS REFUSED, which
+      is a result and not a silence -- but it is not a measurement,
+      so the two lists have to name the same thing.
+   8. fetch the bootstrap directory to
+      bench/results/e1/2026-09-06_052420-runpod-nvidia; rewrite its commit.txt
+      from the pinned sha; read stability/*.txt back
+   9. NO SECOND COLUMN NEEDED. The question is whether ONE box agrees
+      with itself, and the box answered it.
+  10. reap, verify by asking the API, print the lease remaining
+
+   the command:
+     export RUNPOD_API_KEY=...   # or MOJOLEARN_RUNPOD_KEY_FILE
+     tools/gemm_remote_leg.sh nvidia --payload phase8 --rent --minutes 60
+
+DRY RUN: GREEN, and nothing was rented. That is a statement about
+THIS SCRIPT'S plumbing, not about cross-vendor identity, which no
+dry run can say anything about at all.

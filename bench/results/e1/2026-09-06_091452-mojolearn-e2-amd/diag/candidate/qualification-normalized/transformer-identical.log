@@ -1,0 +1,77 @@
+{"package": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/__init__.py", "version": "0.6.0", "vendor": "hip", "mode": "identical"}
+{"package": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/__init__.py", "version": "0.6.0", "vendor": "hip", "mode": "identical", "wheel_sha256": "7c5f9af825cbcbd74a293adc75ad15670a30a179d3a9a8a8cfd993cd9476f7be", "installed_bindings": {"_mojolearn": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn.so", "sha256": "ef7d5a1f7da1e79102d17bde8eac7fd7b91b6497475d0997b69d5aac91f38d76", "mode_code": 1}, "_mojolearn_arima": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_arima.so", "sha256": "32c5c9b0076c04f2441135f58dc8f8485af972afe59a59f4344baa1a7d8f7490", "mode_code": 1}, "_mojolearn_estimators": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_estimators.so", "sha256": "4438af08debe782bbfcd202c9558884382341fa1636965ead1671493d8a5a3d9", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_gbdt": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_gbdt.so", "sha256": "d810149ddf701a05f21a0940d839a11adae74357005a20ae9723a2ba0ad322c4", "mode_code": 1}, "_mojolearn_gp": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_gp.so", "sha256": "345cadbe4f7ac7673203e0efc8daee08f0e71e99644d805d9b0fc36cf34b61d8", "mode_code": 1}, "_mojolearn_linalg": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_linalg.so", "sha256": "677d9ae6286ac1da6afd0fc80f0aa08759e6555b3606e3af6a152f26572e807b", "mode_code": 1}, "_mojolearn_mamba": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_mamba.so", "sha256": "e13cc66cf508a0c3ed5327a3943fe0c13d6afa8865b0deb7290dd93ea78be691", "mode_code": 1}, "_mojolearn_metrics": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_metrics.so", "sha256": "51ece3664fc900554fff18888e29a9a6660a39f95a561264779b0bad3f6ae6ae", "mode_code": 1}, "_mojolearn_rf": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_rf.so", "sha256": "81b60d89082272db8c62a0bef5909aa13097258ef94ba7ae8772b69e771e66fa", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_solver": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_solver.so", "sha256": "e7fc98c9b0026ad0c972064596b5544ee5208ef7220eb285e23ad6d4d836119e", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_svm": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_svm.so", "sha256": "fcc28fe50176efa879418886b70c434082f010e4589ad555a56af6c06d5ab8ec", "mode_code": 1}, "_mojolearn_training": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_training.so", "sha256": "ba676b76aef535bbce168922da343b3c1132c9732bcbf4b90535918558bea601", "mode_code": 1}, "_mojolearn_transformer": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_transformer.so", "sha256": "8eb6202829f00b8541700eb0ad9287027cca17f7e4675eec661c163d82a81ffc", "mode_code": 1}, "_mojolearn_trees": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_trees.so", "sha256": "c42559a485aaee105e9741afe8f828d5beb3fed25584a53b2b03dbbbf84bc49c", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_tsa": {"path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_tsa.so", "sha256": "797f4ad938871caf25d6db5626136ab98a2d9d5b470d5eee1c5c0c2c3ca5a46e", "mode_readback": "unavailable; build provenance and functional gate required"}}}
+
+  REFUSALS (Python side, no device)
+    pass a float64 x is refused BY NAME (no silent downcast)
+    pass the refusal message names bfloat16 (a reduced-precision profile ships under its own version, contract section 11)
+    pass a 2-D x is refused for forward (only step squeezes)
+    pass an x whose d_model is not the weights' is refused
+    pass a multi-token step is refused
+    pass step without a state is refused
+    pass a float64 weight is refused by its own name
+    pass q_proj/o_proj are square at every legal config, so their transpose is shape-indistinguishable (NAMED LIMIT: no exact-shape check can see it; the trap is asserted on the non-square k_proj below)
+    pass a transposed projection cannot cross as a plausible buffer (exact-shape refusal; the OP_NT trap's Python face)
+    pass a missing weight name is refused (no silent zero weight)
+    pass d_model = 32 with n_heads = 3 is refused (d_model == n_heads*head_dim; LlamaDims.validate carries the same rule)
+    pass a wrong-shape state buffer is refused by name
+    pass a state allocated for another batch size is refused
+
+  REFERENCE (contract float64, config A: n_kv 1, n_rep 2, it 64)
+    pass y has x's shape
+    pass y is finite
+    pass block output matches the contract's float64 reference at the adopted anchor tolerance (rtol 1e-5, atol 1e-6; header says how to recalibrate honestly if accuracy alone fails it)
+
+  REFERENCE (contract float64, config B: n_kv 2, n_rep 1, it 300)
+    pass y has x's shape
+    pass block output matches the reference with n_rep 1 and the k = 300 down_proj (the GEMM's P = 3 ragged fold inside the composition, contract section 3)
+
+  STATE (cached_tokens and the packed cache)
+    pass cached_tokens after an L=4 prefill is 4
+    pass a carried-state prefill == the stateless prefill (the discarded cache is not an input)
+    pass keys() hands back the packed used region's shape
+    pass values() hands back the packed used region's shape
+    pass the key cache is nonzero after a prefill (the state really came back)
+
+  DECODE (bitwise ASSERTED)
+    pass step token 0 == prefill token 0
+    pass step token 1 == prefill token 1
+    pass step token 2 == prefill token 2
+    pass step token 3 == prefill token 3
+    pass cached_tokens after 4 steps is 4
+    pass the packed key cache after 4 steps == the prefill's
+    pass the packed value cache after 4 steps == the prefill's
+
+  RESUMPTION (bitwise ASSERTED)
+    pass cached_tokens after L-1 tokens is L-1
+    pass the L-1 prefill's rows == the whole prefill's first L-1 rows (prefix property)
+    pass cached_tokens after the step is L
+    pass one decode step after L-1 == prefill token L-1 (contract 7.2: one spelling serves both paths)
+    pass split == whole: the packed key cache
+    pass split == whole: the packed value cache
+
+  DETERMINISM (repeat call bitwise ASSERTED)
+    pass the same fresh prefill through the binding twice is byte-identical
+
+  MOJO REFUSALS (reached from Python, refused by name)
+    pass a step past max_tokens is refused IN MOJO by name (the cache would grow past its capacity)
+    pass max_tokens past 8192 is refused IN MOJO by name (DEVIATION 812's absolute-position ceiling)
+    pass cached_tokens outside [0, max_tokens] is refused BY NAME at the binding boundary (DEVIATION 795(iv): the two sides disagree about the state)
+    pass a NaN in x is refused IN MOJO under the upstream name (llama_refuse_bad_call; payloads are vendor-shaped)
+    pass an odd head_dim is refused IN MOJO by name (RoPE pairs halves; LlamaDims.validate)
+
+  CORPUS DEBT (transformer/corpus)
+    pass transformer/corpus found walking up from this file
+    pass [OWED, recorded debt -- no comparison ran] corpus tolerance arm: transformer/corpus holds a generator and no case data (the lane's phase 7 row: gen_corpus.py has never been executed). The float64 reference above is this file's own transcription, not an independent artifact. This row FAILS once case data appears, until the ref64 arm is wired
+
+  44 checks, 0 failed
+
+test_transformer_surface: GREEN. The block reproduces the
+contract's float64 reference at the anchor tolerance through
+the Python surface on both GQA configs, decode equals prefill
+bit for bit per token through this path, a split prefill
+resumes bit for bit through the explicit caller-owned KV cache,
+the packed cache round-trips exactly, a repeated call is
+byte-identical, and every guard on the path fires by name --
+the Mojo-side refusals included. One box, one vendor: the
+cross-vendor statement belongs to the lane's cards, not to this
+file.

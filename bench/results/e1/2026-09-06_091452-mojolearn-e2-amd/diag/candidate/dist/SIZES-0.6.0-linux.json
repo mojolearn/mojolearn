@@ -1,0 +1,16 @@
+{
+  "wheel": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/dist/mojolearn-0.6.0-py3-none-linux_x86_64.whl",
+  "compressed_bytes": 16238717,
+  "compressed_mb": 16.24,
+  "pypi_limit_bytes": 104857600,
+  "over_limit": false,
+  "libs_layout": "shared mojolearn/.libs",
+  "sets": {
+    "hip/gfx942": {
+      "extensions_bytes": 60839749,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    }
+  },
+  "tag": "py3-none-linux_x86_64"
+}

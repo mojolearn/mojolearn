@@ -1,0 +1,8 @@
+{
+  "status": "PASSED",
+  "vendor": "hip",
+  "wheel_sha256": "7c5f9af825cbcbd74a293adc75ad15670a30a179d3a9a8a8cfd993cd9476f7be",
+  "source_sha256": "ade965b90496132596d8dda79860a87f472193c14129093c5c3a72f273b8159f",
+  "installed_jobs": 24,
+  "umap_fixtures": 6
+}

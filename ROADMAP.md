@@ -3,6 +3,37 @@
 This is the only live project plan. Historical plans and handoffs are not
 current instructions; git history and `archive/` retain their evidence.
 
+## Installed API gap closure (2026-09-06, in progress)
+
+The audit confirmed that source capabilities exceed the published artifacts:
+PyPI currently has macOS 0.5.0 and Linux 0.3.1, with no published 0.6.0.
+UMAP transform and CSR fitting therefore remain delivery priorities even
+though their named native/source checks pass.
+
+Source `eb835021` adds the narrow public `OrderedRMSE` estimator, retaining
+explicit permutation, numeric RMSE, sample weights and IDENTICAL selection.
+It is distinct from general CatBoost ordered boosting. Thirty lightweight
+Python boundary checks pass. All 45 AMD extensions now build and all 24
+installed jobs pass, including the new ABI in every mode; matching NVIDIA
+qualification is in progress. Native backward does not expose Python Mamba backward.
+
+The installed Linux gate now requires all 45 extensions, isolated package and
+binding hashes, 24 serial jobs, UMAP fit/transform and six expanded held-out
+quality fixtures in every mode, ordered RMSE, Mamba, Transformer and fitted
+ARIMA. A retained comparison checks IDENTICAL UMAP input/embedding bytes
+across AMD/NVIDIA. Missing statuses, changed sources and incomplete evidence
+are refusals, never inferred passes. Six synthetic evidence checks pass.
+
+The main operator alone builds/tests/measures: one GPU rental at a time,
+CPU affinity at most four, compiler workers two, BLAS/OpenMP one, and no
+parallel tier builds. The repaired AMD wheel added eight empty ZIP directories outside RECORD;
+normalization removes only those entries and verifies all 91 payload files
+unchanged. The qualified AMD wheel SHA256 is
+`7c5f9af825cbcbd74a293adc75ad15670a30a179d3a9a8a8cfd993cd9476f7be`.
+AMD was deleted and confirmed absent before NVIDIA was created. Current
+candidates are not publication or universal identity claims. Results are retained under
+`bench/results/resume/2026-09-06-installed-gap-closure/`.
+
 ## Native certification continuation (2026-09-06)
 
 Mamba source `395d9421` passes all five baseline and both long cases on AMD

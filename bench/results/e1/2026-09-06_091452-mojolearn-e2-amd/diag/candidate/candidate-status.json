@@ -1,0 +1,7 @@
+{
+  "status": "FAILED",
+  "phase": "qualify",
+  "exit_code": 1,
+  "finished_utc": "2026-09-06T09:31:23.466177+00:00",
+  "scope": "Single-vendor installed candidate; not publication or cross-vendor identity"
+}

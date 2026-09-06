@@ -1,0 +1,2 @@
+mojolearn @ file:///root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/normalized/mojolearn-0.6.0-py3-none-manylinux_2_35_x86_64.whl#sha256=7c5f9af825cbcbd74a293adc75ad15670a30a179d3a9a8a8cfd993cd9476f7be
+numpy==2.5.2

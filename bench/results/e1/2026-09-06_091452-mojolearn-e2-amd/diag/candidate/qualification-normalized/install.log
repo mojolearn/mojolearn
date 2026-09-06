@@ -1,0 +1,8 @@
+Processing ./bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/normalized/mojolearn-0.6.0-py3-none-manylinux_2_35_x86_64.whl
+Collecting numpy>=1.24 (from mojolearn==0.6.0)
+  Downloading numpy-2.5.2-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Downloading numpy-2.5.2-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 229.4 MB/s  0:00:00
+Installing collected packages: numpy, mojolearn
+
+Successfully installed mojolearn-0.6.0 numpy-2.5.2

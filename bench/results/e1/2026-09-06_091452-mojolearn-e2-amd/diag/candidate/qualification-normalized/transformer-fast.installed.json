@@ -1,0 +1,84 @@
+{
+  "package": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/__init__.py",
+  "version": "0.6.0",
+  "vendor": "hip",
+  "mode": "fast",
+  "wheel_sha256": "7c5f9af825cbcbd74a293adc75ad15670a30a179d3a9a8a8cfd993cd9476f7be",
+  "installed_bindings": {
+    "_mojolearn": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn.so",
+      "sha256": "cb9a9ca8c42649b0d3f2b50fa3a17c69980b270c481f1db370a43de4a4ace7f1",
+      "mode_code": 0
+    },
+    "_mojolearn_arima": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_arima.so",
+      "sha256": "fb59e58404c4e341a93e9aacf64d4835e0ac120f4a7a21fa40d6cfa41b1d5102",
+      "mode_code": 0
+    },
+    "_mojolearn_estimators": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_estimators.so",
+      "sha256": "574f53e1ca3ff72a62aa1746da7e8c7c5474d640c8d67a24ea58da4344aa6674",
+      "mode_readback": "unavailable; build provenance and functional gate required"
+    },
+    "_mojolearn_gbdt": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_gbdt.so",
+      "sha256": "c57a44bb8023c64303d2fca591605227cd206ca62a7babcda6b054a4a06246ba",
+      "mode_code": 0
+    },
+    "_mojolearn_gp": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_gp.so",
+      "sha256": "91ce3ff40449cb9821b603756cabebe8af9761d123de95695beac840f2bc14f2",
+      "mode_code": 0
+    },
+    "_mojolearn_linalg": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_linalg.so",
+      "sha256": "80aefa7fc51fbf35dae071e8c0421edc9868fbdbab1b9ede1e3fad458e2d65cd",
+      "mode_code": 0
+    },
+    "_mojolearn_mamba": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_mamba.so",
+      "sha256": "3c7464db805fc3afc415ef35f4c778c9fcdda82d9e04ce331cccd5de4649ea5c",
+      "mode_code": 0
+    },
+    "_mojolearn_metrics": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_metrics.so",
+      "sha256": "c2bdc10652eb3d0888c569f71fb2b2ea4767fe1750fec5439f759693edfc3eba",
+      "mode_code": 0
+    },
+    "_mojolearn_rf": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_rf.so",
+      "sha256": "699c0e27761658deb539bbd14434abbe15157d7052cf15fc1306f6a56f0fd4c8",
+      "mode_readback": "unavailable; build provenance and functional gate required"
+    },
+    "_mojolearn_solver": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_solver.so",
+      "sha256": "84fef0a49076aa5f52645b824db8c27fe074244fc8ff2b7eb31d3fd5fb04bc96",
+      "mode_readback": "unavailable; build provenance and functional gate required"
+    },
+    "_mojolearn_svm": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_svm.so",
+      "sha256": "ae036568535181b8ce8b307195e2eee99ef3cefecf710111815773de4eac3464",
+      "mode_code": 0
+    },
+    "_mojolearn_training": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_training.so",
+      "sha256": "8d7f92094f634c5b964ab5ce413bf61a363bddbcc8a286918e94d57759215d19",
+      "mode_code": 0
+    },
+    "_mojolearn_transformer": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_transformer.so",
+      "sha256": "27b3ab0e92ee0c90718b88606801509fe5968d776dccf68695afb54cad363663",
+      "mode_code": 0
+    },
+    "_mojolearn_trees": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_trees.so",
+      "sha256": "61affb6efedc0140637361adebf660210926af3e4d78c5caea0d6db1f212af34",
+      "mode_readback": "unavailable; build provenance and functional gate required"
+    },
+    "_mojolearn_tsa": {
+      "path": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/qualification-normalized/venv/lib/python3.14/site-packages/mojolearn/hip/gfx942/_mojolearn_tsa.so",
+      "sha256": "c81c2d72fc71a51ea232079d9900316f8a0ba59479bf4fc270192235bb576982",
+      "mode_readback": "unavailable; build provenance and functional gate required"
+    }
+  }
+}
