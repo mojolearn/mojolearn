@@ -3,6 +3,30 @@
 This is the only live project plan. Historical plans and handoffs are not
 current instructions; git history and `archive/` retain their evidence.
 
+## Mamba3 intermediate investigation (2026-09-06)
+
+The strict Mamba3 prefill gate now requires all 76 native diagnostics as well
+as the ten public leaves. Removing a diagnostic from both manifests or
+deleting a declared file fails the gate. Sixteen small policy tests pass,
+including an independent-forward control that rejects a wrong public gradient
+even when the staged float32 reference agrees with it.
+
+A read-only analysis of the corrected `eebd7c92` AMD/NVIDIA L65 captures
+matches **all 86 tensors** by bytes and reproduces **17/17 joins** exactly
+from their native operands. Eight of the 13 failing intermediates are among
+those reproduced joins. In particular, both inputs to `partial.join.kscale`
+pass the float64 and float32 semantic comparisons, but cancellation leaves
+two output cells outside tolerance. This attribution is diagnostic evidence,
+not a waiver: replaying the tightened strict gate still fails the same 13
+comparisons on each vendor. See the [record](bench/results/resume/2026-09-06-mamba3-joins/README.md).
+
+Next, retain the exact forward `rot.k`, biased Q/K, dt and sigma operands
+alongside the existing gradients to trace S14/S15 reductions and the two
+current-dt joins. Check those operands independently before deciding on a
+numerical implementation or arithmetic contract. No native kernel changed
+in this checkpoint, and no new GPU execution or performance measurement was
+needed. The certification and remaining project priorities below still apply.
+
 ## Resumed implementation and identity checks (2026-09-05)
 
 **Mamba3 certification correction:** the L65 diagnostic investigation found

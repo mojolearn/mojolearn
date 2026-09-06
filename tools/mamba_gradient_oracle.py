@@ -60,6 +60,91 @@ STATE_BOUNDARY_DIAGNOSTICS = {
 }
 
 
+# Native Mamba3 prefill exposes these diagnostics in addition to its ten
+# public leaves. Pin the inventory independently of both runtime manifests:
+# removing a failed tensor from either manifest must not turn the gate green.
+# The isolated beta-only oracle terms are not native outputs; their complete
+# contributions are checked through the current dt/trap joins instead.
+MAMBA3_PREFILL_DIAGNOSTICS = (
+    'stage.gate.out',
+    'stage.skip.out',
+    'stage.in_proj.z',
+    'partial.in_proj.x.from_skip',
+    'stage.qkdot.out',
+    'partial.qkdot.B_biased',
+    'partial.qkdot.C_biased',
+    'partial.qkdot.gamma',
+    'partial.qkdot.dt',
+    'partial.qkdot.trap_raw',
+    'partial.s16.rot.q',
+    'partial.s16.kscale',
+    'partial.s16.value',
+    'partial.s15.rot.k',
+    'partial.s15.scale',
+    'partial.value.total',
+    'partial.scale.gamma',
+    'partial.scale.beta',
+    'partial.rotary.C_biased',
+    'partial.rotary.B_biased',
+    'partial.rotary.theta',
+    'partial.B_biased.total',
+    'partial.C_biased.total',
+    'partial.gamma.total',
+    'partial.dt.current_total',
+    'partial.trap.current_total',
+    'partial.angle.raw',
+    'partial.angle.dt',
+    'partial.dt.available_total',
+    'partial.dt.raw',
+    'partial.dt_bias',
+    'partial.s16.seg.L',
+    'partial.seg.adt',
+    'partial.A.from_seg',
+    'partial.dt.from_seg',
+    'partial.dt.with_seg',
+    'partial.s17.state.direct',
+    'partial.s17.state.total',
+    'partial.s17.initial_state',
+    'partial.s17.readout.rot.q',
+    'partial.s17.readout.dacs',
+    'partial.s17.recur.kscale',
+    'partial.s17.recur.value',
+    'partial.s17.recur.dacs',
+    'partial.join.rot.q',
+    'partial.join.kscale',
+    'partial.join.value',
+    'partial.join.dacs',
+    'partial.join.s15.rot.k',
+    'partial.join.s15.scale',
+    'partial.join.rotary.C_biased',
+    'partial.join.rotary.B_biased',
+    'partial.join.rotary.theta',
+    'partial.join.adt.from_dacs',
+    'partial.join.adt.total',
+    'partial.join.A.from_adt',
+    'partial.join.A.raw',
+    'partial.join.dt.from_adt',
+    'partial.join.B_biased.total',
+    'partial.join.C_biased.total',
+    'partial.join.gamma.total',
+    'partial.join.dt.current_total',
+    'partial.join.trap.current_total',
+    'partial.join.angle.raw',
+    'partial.join.angle.dt',
+    'partial.join.dt.available_total',
+    'partial.join.dt.raw',
+    'partial.join.dt_bias',
+    'partial.join.B.raw',
+    'partial.join.C.raw',
+    'partial.join.B_norm.weight',
+    'partial.join.C_norm.weight',
+    'partial.join.B_bias',
+    'partial.join.C_bias',
+    'partial.join.in_proj.packed',
+    'stage.norm.out',
+)
+
+
 def _load_generator():
     spec = importlib.util.spec_from_file_location("mojolearn_mamba_corpus", GEN_PATH)
     if spec is None or spec.loader is None:
@@ -1308,6 +1393,15 @@ def compare(args):
             f"manifest policy={family}.public_prefill_leaves."
             f"exact{len(canonical_public)}.v1"
         )
+    if args.require_public_prefill and manifest.get("family") == "mamba3":
+        for name in MAMBA3_PREFILL_DIAGNOSTICS:
+            if name not in manifest.get("gradients", {}):
+                failures.append(f"oracle lacks required Mamba3 diagnostic: {name}")
+            if name not in dump_manifest.get("tensors", []):
+                failures.append(f"dump lacks required Mamba3 diagnostic: {name}")
+        selected_policies.append(
+            "manifest policy=mamba3.public_prefill_diagnostics.exact76.v1"
+        )
     if args.require_state_boundary:
         family = manifest.get("family")
         canonical_state = list(STATE_BOUNDARY_LEAVES.get(family, ()))
@@ -1407,15 +1501,7 @@ def compare(args):
             # float64 and accept the same stem with an explicit .f32 suffix.
             path = actual_dir / entry["file"].replace(".f64", ".f32")
             if not path.exists():
-                if (
-                    args.require_public_prefill
-                    and (
-                        name in required_public
-                        or manifest["family"] in ("mamba1", "mamba2")
-                    )
-                ) or (
-                    not args.allow_partial and not args.require_public_prefill
-                ):
+                if args.require_public_prefill or not args.allow_partial:
                     failures.append(f"{name}: missing gradient dump")
                 continue
         dtype = "<f4" if path.suffix == ".f32" else "<f8"

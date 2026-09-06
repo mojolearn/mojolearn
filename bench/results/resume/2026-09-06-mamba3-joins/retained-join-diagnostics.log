@@ -1,0 +1,5 @@
+Native tensor byte matches: 86/86
+left: exact joins 17/17; unchanged direct failures 13
+left: failing outputs reproduced from native inputs: partial.scale.gamma, partial.scale.beta, partial.gamma.total, partial.dt.available_total, partial.dt.with_seg, partial.join.kscale, partial.join.gamma.total, partial.join.dt.available_total
+right: exact joins 17/17; unchanged direct failures 13
+right: failing outputs reproduced from native inputs: partial.scale.gamma, partial.scale.beta, partial.gamma.total, partial.dt.available_total, partial.dt.with_seg, partial.join.kscale, partial.join.gamma.total, partial.join.dt.available_total
