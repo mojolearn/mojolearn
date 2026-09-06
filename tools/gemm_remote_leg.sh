@@ -1570,7 +1570,23 @@ leg_mamba_artifacts() {
         echo "  UMAP/Mamba follow-up failed or is incomplete."
         _bad=1
     }
+    if [ "$CONTINUED_CERT_CHECKS" = 1 ]; then
+        leg_continued_artifacts || _bad=1
+    fi
     return "$_bad"
+}
+
+leg_continued_artifacts() {
+    grep -q '^continued_exit=0$' "$OUT/remote/leg.txt" 2>/dev/null || {
+        echo "  continued native checks failed or are incomplete."
+        return 1
+    }
+    if [ "$(cat "$OUT/remote/continued/commit.txt" 2>/dev/null)" != "$COMMIT" ]; then
+        echo "  continued native checks do not match the pinned source."
+        return 1
+    fi
+    python3 tools/continued_cert_compare.py "$OUT/remote/continued" \
+        --out "$OUT/continued-validation.json"
 }
 
 leg_phase8_artifacts() {

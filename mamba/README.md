@@ -136,10 +136,17 @@ tolerances. See the [corrected record](../bench/results/resume/2026-09-05-next-c
 Corrected Apple and installed-wheel qualification remain pending.
 
 The separate `long-sequence-v1` profile adds Mamba1 L64 and Mamba3 L65.
-Mamba1 passes on both GPUs. Mamba3's ten public gradients now pass the
-independent forward oracle, and all 21 public tensors match across vendors,
-but 13 intermediate comparisons keep that complete profile RED. The strict
-comparator refuses it; those failing diagnostic bytes and references are retained.
+At `eebd7c92`, Mamba1 passed on both GPUs and all 21 public tensors matched,
+but 13 direct intermediate comparisons kept the full profile RED. Source
+`395d9421` now passes both complete profiles on AMD MI325X and NVIDIA RTX
+4090 under the explicit [compositional arithmetic contract](BACKWARD_CERTIFICATION.md).
+All 54 baseline and 21 long-profile gradient tensors match by bits; the
+Mamba3 L65 diagnostic comparison additionally matches all 86 gradient tensors
+and nine forward operands. See the
+[retained record](../bench/results/resume/2026-09-06-ordered-mamba-knn/README.md). Every public gradient still requires the
+independent whole-forward float64 check. All 76 diagnostics remain required,
+and the 13 sensitive outputs must match their independently checked operands'
+prescribed float32 arithmetic by bits. Direct reference misses remain logged.
 
 At source commit `718495cd`, Apple M4 and NVIDIA RTX 4090 (driver
 580.159.04) passed all five then-current gates and matched all 54 captured native

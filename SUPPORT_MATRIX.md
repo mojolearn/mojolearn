@@ -50,7 +50,7 @@ cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
 
 | Surface | Public availability | Strongest retained identity evidence | Important open work |
 |---|---|---|---|
-| Gradient boosting | Beta | Three-vendor cards for recorded configurations | Complete ordered boosting and categorical/CTR coverage; improve FAST performance without weakening checks. |
+| Gradient boosting | Beta | Three-vendor cards for recorded configurations | Numeric single-permutation ordered RMSE passes AMD/NVIDIA at `6dd44ac5`, with 130 bitwise-matching records. Broader categorical/CTR coverage and external parity remain. |
 | Random Forest / Extra Trees | Beta | Three-vendor cards for recorded configurations | Keep sklearn `max_leaf_nodes` semantics distinct from cuML-style level-order `max_leaves`; extend NVIDIA performance coverage. |
 | k-means, DBSCAN | Beta | Three-vendor cards for recorded fixtures | Broaden shapes and public-surface wheel smoke. |
 | k-NN | Beta | Three-vendor cards; the completed AMD four-arm layout outputs also match retained NVIDIA outputs and Apple hashes | Selector and transposed-distance flags remain opt-in. Broaden distributions and installed/external comparisons before changing normal dispatch. |
@@ -60,9 +60,9 @@ cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
 | ARIMA filtering | Beta | Three-vendor card for the recorded filter fixture | The newer fitted-estimator surface still needs NVIDIA and AMD qualification. |
 | Holt-Winters and spectral/time-series helpers | Beta | Apple–AMD cards for recorded fixtures | NVIDIA column remains pending. |
 | Gaussian process | Experimental | Apple–AMD IDENTICAL card for recorded fixture | Complete current-wheel and NVIDIA qualification; no performance claim. |
-| Mamba 1 | Experimental | Three-vendor operator/backward evidence at `718495cd`; newer L64 case passes and matches native bytes on AMD/NVIDIA | Linux installed-wheel checks and Python backward exposure remain. The combined long profile is still RED because of Mamba3 intermediates. |
-| Mamba 2 | Experimental | Three-vendor backward certificate at `718495cd`, including L257 and incoming state | Newer NVIDIA/AMD source forward/state checks passed, including the AMD binding fix. Broader fixtures, Linux installed-wheel checks and Python backward exposure remain. |
-| Mamba 3 | Experimental | Corrected native baseline passes and matches AMD/NVIDIA at `eebd7c92`, including independent whole-forward float64 gradients | L65 public gradients pass, but 13 intermediate checks keep the long certificate RED. Corrected Apple rerun, Linux installed-wheel checks and Python backward exposure remain. |
+| Mamba 1 | Experimental | Three-vendor operator/backward evidence at `718495cd`; baseline and L64 pass and match AMD/NVIDIA at `395d9421` | Linux installed-wheel checks and Python backward exposure remain. Both named native profiles now pass AMD/NVIDIA. |
+| Mamba 2 | Experimental | Three-vendor backward certificate at `718495cd`; baseline, L257 and incoming state pass and match AMD/NVIDIA at `395d9421` | Newer NVIDIA/AMD source forward/state checks passed, including the AMD binding fix. Broader fixtures, Linux installed-wheel checks and Python backward exposure remain. |
+| Mamba 3 | Experimental | Baseline and L65 pass AMD/NVIDIA at `395d9421`; public gradients and complete retained diagnostics match by bits | L65 uses the explicit [compositional arithmetic contract](mamba/BACKWARD_CERTIFICATION.md), with independent whole-forward public gradients. Corrected Apple, installed-wheel checks and Python backward remain. |
 | Transformer block | Experimental | Three-vendor operator card for an earlier fixture | Newer AMD source API checks passed; NVIDIA Python API qualification and the independent corpus API oracle remain open. Native certificates do not close those gates. |
 | UMAP | Published 0.5.0: dense `fit`/`fit_transform`. Source 0.6.0 candidate: `transform` and CSR graph storage for public fitting | Original three-vendor fixtures; expanded six-case IDENTICAL inputs/embeddings and 876 native stage cells match AMD/NVIDIA at `d88c7883` | All six expanded quality cases pass in all modes on AMD/NVIDIA after the self-neighbor fix. Publication, Linux wheels and larger-scale coverage remain pending. |
 | Training primitives and checkpointing | Experimental | Local correctness gates | Cross-vendor public-surface qualification remains open. |
@@ -75,7 +75,10 @@ to those fixtures and devices, not a general dispatch or scalability claim.
 The [weighted CTR slice](bench/results/e1/2026-09-05_235251-amd-catboost-fixed-partition/README.md)
 passes on AMD, including the production leaf estimator on fixed occupied
 zero-mass partitions at L2=0 and L2=3. This is focused native correctness;
-end-to-end ordered boosting and a fresh NVIDIA run of that slice remain open.
+the numeric single-permutation [ordered RMSE path](gbdt/ORDERED_RMSE.md) now
+passes both GPUs at `6dd44ac5`, including fresh weighted-CTR checks. The
+[comparison](bench/results/resume/2026-09-06-ordered-mamba-knn/cross-device-continued.json)
+also matches all 5,440 new adversarial kNN records in all four flag arms.
 
 ## What counts as certification
 
@@ -129,8 +132,10 @@ its staged reference shared a missing scale/gamma chain-rule contribution.
 The [corrected AMD/NVIDIA record](bench/results/resume/2026-09-05-next-certification/corrected-backward-cross-device.json)
 passes all five baseline cases and matches 54 gradient tensors, while requiring
 independent whole-forward gradients for every Mamba3 public leaf. Its long
-profile remains RED on intermediate checks even though all 21 public tensors
-match and Mamba3's public gradients pass the independent oracle.
+profile was RED on intermediate checks despite matching public tensors. The
+[September 6 certificate](bench/results/resume/2026-09-06-ordered-mamba-knn/README.md)
+now passes both profiles on AMD/NVIDIA under the documented compositional
+arithmetic policy, retaining all intermediate outputs and direct differences.
 The later AMD allocation fix has its own successful source Python API rerun;
 see the [AMD source qualification record](bench/results/e1/2026-09-05_134041-mojolearn-e2-amd/README.md).
 That later binding evidence is separate from the original native certificate.

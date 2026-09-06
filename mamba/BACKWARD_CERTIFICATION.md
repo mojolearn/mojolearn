@@ -64,3 +64,8 @@ operands. Failed attempts retain `failed-actual` and `failed-oracle`.
 vendors without re-executing a model. These native prefill/state fixtures do
 not imply installed Python backward, decode/cache backward, arbitrary shapes
 or corrected Apple evidence beyond the hardware actually rerun.
+
+At `395d9421`, both profiles pass on AMD MI325X and NVIDIA RTX 4090:
+54 baseline and 21 long-profile public gradient tensors match by bits.
+The L65 retained diagnostics additionally match all 86 gradient tensors and
+nine forward operands. See the [evidence record](../bench/results/resume/2026-09-06-ordered-mamba-knn/README.md).

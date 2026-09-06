@@ -1438,3 +1438,121 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         self.loss_curve_ = None
         self.test_loss_curve_ = None
         return self
+
+
+class OrderedRMSE(GradientBoosting):
+    """Numeric ordered RMSE with one explicit row permutation.
+
+    Fits symmetric trees using independent prefix approximation cursors and
+    one full-data cursor for exported leaves. Supports finite numeric X/y,
+    nonnegative sample weights, zero initial bias, Newton-1 leaves, and
+    depths 1..8. Categorical CTRs, other objectives, bootstrap and early
+    stopping are absent from this narrow API and rejected as unknown kwargs.
+    This is not the general CatBoost ``boosting_type="Ordered"`` interface.
+
+    Pass ``numeric_mode="identical"`` to select pinned arithmetic. Native
+    AMD/NVIDIA fixtures are certified; the Python binding needs independent
+    installed-artifact qualification. ``loss_curve_`` and
+    ``best_iteration_`` are None because this path does not track losses.
+    """
+
+    def __init__(
+        self, n_estimators=100, max_depth=6, learning_rate=0.03,
+        l2_leaf_reg=3.0, border_count=128,
+    ):
+        self._ordered_options(n_estimators, max_depth, border_count,
+                              learning_rate, l2_leaf_reg)
+        super().__init__(
+            loss="RMSE", n_estimators=n_estimators, max_depth=max_depth,
+            learning_rate=learning_rate, l2_leaf_reg=l2_leaf_reg,
+            border_count=border_count, boost_from_average=False,
+            nan_mode="Forbidden",
+        )
+
+    @staticmethod
+    def _ordered_options(n_estimators, max_depth, border_count,
+                         learning_rate, l2_leaf_reg):
+        for name, value, lower, upper in (
+            ("n_estimators", n_estimators, 1, 2**31 - 1),
+            ("max_depth", max_depth, 1, 8),
+            ("border_count", border_count, 1, 255),
+        ):
+            if (isinstance(value, (bool, np.bool_))
+                    or not isinstance(value, (int, np.integer))
+                    or not lower <= value <= upper):
+                raise ValueError(f"mojolearn: {name} must be an integer in {lower}..{upper}")
+        for name, value, positive in (
+            ("learning_rate", learning_rate, True),
+            ("l2_leaf_reg", l2_leaf_reg, False),
+        ):
+            if (isinstance(value, (bool, np.bool_))
+                    or not isinstance(value, (int, float, np.integer, np.floating))
+                    or not np.isfinite(value)
+                    or abs(value) > np.finfo(np.float32).max
+                    or value < 0 or (positive and np.float32(value) <= 0)):
+                raise ValueError(f"mojolearn: {name} must be finite float32 and "
+                                 + ("positive" if positive else "non-negative"))
+
+    def fit(self, X, y, *, permutation, sample_weight=None):
+        """Fit using a bijection of original row ids in ``permutation``.
+
+        X, y and weights remain in original row order; only permutation
+        defines ordered prefix membership. No host random shuffle is hidden.
+        """
+        self._ordered_options(self.n_estimators, self.max_depth,
+                              self.border_count, self.learning_rate,
+                              self.l2_leaf_reg)
+        Xa, Xcol, _ = as_f32_colmajor(X, "X")
+        n_rows, n_features = Xa.shape
+        if n_rows < 4 or n_rows > np.iinfo(np.uint32).max or n_features < 1:
+            raise ValueError("mojolearn: ordered RMSE requires >=4 rows and >=1 feature")
+        if not np.isfinite(Xa).all():
+            raise ValueError("mojolearn: ordered RMSE X must be finite")
+        ya = np.asarray(y)
+        if ya.ndim != 1 or ya.size != n_rows:
+            raise ValueError("mojolearn: y must be one-dimensional with one value per row")
+        ya = np.ascontiguousarray(ya, dtype=np.float32)
+        if not np.isfinite(ya).all():
+            raise ValueError("mojolearn: y must be finite")
+        order = np.asarray(permutation)
+        if (order.ndim != 1 or order.size != n_rows
+                or order.dtype.kind not in "iu"
+                or (order < 0).any() or (order >= n_rows).any()
+                or np.unique(order).size != n_rows):
+            raise ValueError("mojolearn: permutation must be an integer bijection of row ids")
+        order = np.ascontiguousarray(order, dtype=np.uint32)
+        if sample_weight is None:
+            weights = ya[:1]
+            n_weights = 0
+        else:
+            weights = np.asarray(sample_weight)
+            if weights.ndim != 1 or weights.size != n_rows:
+                raise ValueError("mojolearn: sample_weight must have one value per row")
+            weights = np.ascontiguousarray(weights, dtype=np.float32)
+            if not np.isfinite(weights).all() or (weights < 0).any():
+                raise ValueError("mojolearn: sample_weight must be finite and non-negative")
+            if not weights.sum(dtype=np.float64) > 0:
+                raise ValueError("mojolearn: sample_weight must have positive sum")
+            n_weights = n_rows
+        binding = self._bind("_mojolearn_gbdt")
+        if not hasattr(binding, "gbdt_fit_ordered_rmse"):
+            raise RuntimeError(
+                "mojolearn: this GBDT binary predates OrderedRMSE; "
+                "install or build a matching native extension"
+            )
+        model = binding.gbdt_fit_ordered_rmse(
+            _addr_ro(Xcol), _addr_ro(ya), _addr_ro(weights), _addr_ro(order),
+            [n_rows, n_features, n_weights, order.size,
+             int(self.n_estimators), int(self.max_depth), int(self.border_count),
+             float(self.learning_rate), float(self.l2_leaf_reg)],
+        )
+        self.model_ = model
+        self.n_features_in_ = n_features
+        self.approx_dim_ = 1
+        self.n_classes_ = None
+        self.bias_ = 0.0
+        self.best_iteration_ = None
+        self.stopped_early_ = False
+        self.loss_curve_ = None
+        self.test_loss_curve_ = None
+        return self
