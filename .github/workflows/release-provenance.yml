@@ -1,0 +1,598 @@
+# Build the wheel and publish it to TestPyPI or PyPI through a Trusted
+# Publisher. No API token exists anywhere in this repository and none should.
+#
+# REWRITTEN 2026-08-20. This file was a verbatim copy of mojotrees' and could
+# never have run here: it globbed `python/dist/mojotrees-*.whl`, called
+# `packaging/macos/build_release_wheel.sh` before that script existed, and ran
+# on `[self-hosted, macos, arm64, metal]` while this repository has zero
+# registered runners. Its header also stated "The environments exist", which
+# was true of mojotrees and false here -- `testpypi` and `pypi` were created
+# on 2026-08-20 and were absent until then, which alone would have made every
+# OIDC claim unacceptable.
+#
+# WHERE IT RUNS, AND WHY IT IS NOT A HOSTED RUNNER.
+#
+# This built on `macos-15` for exactly one release and that release was
+# BROKEN. GitHub's hosted macOS runner compiles the host half of the extension
+# and silently emits no Metal shader code at all -- `mojo build` exits 0. Same
+# commit, two machines:
+#
+#                              local (M4)     hosted runner
+#     __TEXT/__const            692,543 B          49,039 B
+#     AIR / metallib markers           98                 0
+#
+# TestPyPI 0.1.0a2 was that wheel. It passed every gate, published, installed
+# cleanly from the index, and died on the first fit with "Failed to create
+# Metal function". packaging/macos/check_gpu_embedded.py now refuses such a
+# build, but refusing is not producing: a release needs a machine with a real
+# Apple GPU.
+#
+# So the build job runs on a SELF-HOSTED, EPHEMERAL runner labelled
+# `real-gpu`. Ephemeral means it accepts one job and exits, so nothing is left
+# listening on anyone's laptop; start it deliberately before dispatching a
+# release: `tools/release_runner.sh` registers exactly one such runner on the
+# M4, runs one job in the foreground, and removes the registration. The
+# step-by-step release procedure is docs/PYPI_RELEASE.md. That is a real cost
+# -- a release now depends on someone's machine being awake -- and it is the
+# cost of shipping a wheel that works.
+#
+# ONE WHEEL, NOT ONE PER INTERPRETER. The extension links no libpython, so
+# the wheel carries the `py3` tag (python/setup.py) and one artifact serves
+# python 3.10 through 3.14; the job below verifies that claim by installing
+# and running it under each of the five. An earlier sibling workflow,
+# release-macos.yml, built a cp310..cp314 matrix against a per-interpreter
+# pixi environment that this repository does not have; it was never runnable
+# (every action pinned to a placeholder, publish hard-disabled) and was the
+# second Trusted Publisher identity where an index can trust only one
+# workflow file, so it was deleted 2026-08-23 and this file is the only
+# release workflow.
+#
+# BECAUSE IT HAS A GPU, THIS WORKFLOW VERIFIES THAT THE WHEEL COMPUTES.
+# verify_wheel.sh runs with no flag, so every interpreter installs the wheel
+# into a clean venv and runs real fits. The hosted-runner version of this file
+# could only check that it imported.
+#
+# TRIGGERING. workflow_dispatch only. There is deliberately no `push` and no
+# `pull_request`: a pull request must never reach a job holding
+# `id-token: write`.
+
+name: Release provenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Where to publish. Build only unless changed.
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - testpypi
+          - pypi
+      alpha_candidate_tag:
+        description: Optional alpha-api-* release asset tag; selects prebuilt alpha exposure instead of Apple build.
+        required: false
+        default: ''
+        type: string
+      alpha_manifest_sha256:
+        description: SHA256 of the root-prepared alpha-manifest.json; required with alpha_candidate_tag.
+        required: false
+        default: ''
+        type: string
+
+# Deny by default. Every job adds back exactly what it needs, so a step that
+# starts wanting a token has to say so in a diff.
+permissions: {}
+
+# One release at a time. Two concurrent runs could publish two different
+# wheels under one version.
+concurrency:
+  group: release-provenance
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and verify the wheel
+    if: inputs.alpha_candidate_tag == ''
+    # Self-hosted and ephemeral. See the header: a hosted runner produces a
+    # wheel with no GPU kernels in it.
+    runs-on: [self-hosted, macos, arm64, metal, real-gpu]
+    # The release Mac has a slow uplink: the 0.6.0 candidate passed its
+    # gates but hit upload-artifact's five-minute chunk-progress timeout.
+    timeout-minutes: 90
+    env:
+      ACTIONS_ARTIFACT_UPLOAD_CONCURRENCY: '1'
+      ACTIONS_ARTIFACT_UPLOAD_TIMEOUT_MS: '1200000'
+    permissions:
+      contents: read
+    outputs:
+      wheel_name: ${{ steps.digest.outputs.wheel_name }}
+      wheel_sha256: ${{ steps.digest.outputs.wheel_sha256 }}
+      # Every wheel this release publishes, as `sha256  filename` lines, which
+      # is `shasum -c` format on purpose. The macOS wheel is always the first
+      # line; a Linux wheel staged on the runner adds a second. The publish
+      # job checks the artifact against THIS, not against a count.
+      wheel_manifest: ${{ steps.digest.outputs.wheel_manifest }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # A build job has no business holding a token that can write to
+          # this repository, and a self-hosted runner keeps the checkout's
+          # git credentials on a disk somebody else may use.
+          persist-credentials: false
+          # NOT fetch-tags: true. With a tag ref (`gh workflow run --ref
+          # v0.1.0`) and an annotated tag, actions/checkout fails with
+          # "Cannot fetch both <sha> and refs/tags/v0.1.0 to
+          # refs/tags/v0.1.0" (run 32639387919, 2026-08-23). The dispatched
+          # ref is fetched as refs/tags/<tag> anyway, which is all the
+          # Version agreement step needs.
+
+      # Refuse early on the wrong machine: the whole point of the label set is
+      # a native Apple silicon Mac with a real GPU, and a 60 minute build on
+      # anything else is a wasted hour and a wheel that has to be thrown away.
+      - name: Runner facts
+        run: |
+          test "$(uname -s)" = Darwin || { echo "::error::not macOS"; exit 1; }
+          test "$(uname -m)" = arm64  || { echo "::error::not arm64"; exit 1; }
+          test "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 0 \
+            || { echo "::error::running under Rosetta"; exit 1; }
+          echo "chip:  $(sysctl -n machdep.cpu.brand_string)"
+          echo "macOS: $(sw_vers -productVersion)"
+          xcodebuild -version 2>/dev/null || echo "xcodebuild: absent"
+
+      # The version is stated in two files on purpose (python/pyproject.toml
+      # says so) and a release where they disagree ships a wheel whose
+      # filename and `__version__` differ. If HEAD is already tagged, the tag
+      # must be that version; tagging after publishing is also allowed, which
+      # is why an untagged HEAD is not an error here.
+      - name: Version agreement
+        run: |
+          v_toml=$(sed -n 's/^version = "\(.*\)"$/\1/p' python/pyproject.toml | head -1)
+          v_py=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' python/mojolearn/_version.py | head -1)
+          echo "pyproject.toml: $v_toml"
+          echo "_version.py:    $v_py"
+          test -n "$v_toml" && test "$v_toml" = "$v_py" || {
+            echo "::error::python/pyproject.toml and python/mojolearn/_version.py disagree"
+            exit 1
+          }
+          if tag=$(git describe --exact-match --tags HEAD 2>/dev/null); then
+            echo "tag:            $tag"
+            test "$tag" = "v$v_toml" || {
+              echo "::error::HEAD is tagged $tag but the version is $v_toml"; exit 1; }
+          else
+            echo "tag:            (none at HEAD)"
+          fi
+
+      # NOT setup-pixi. This runner is a developer machine that already has
+      # pixi, and the action refuses with "Destination file path
+      # /Users/<user>/.pixi/bin/pixi already exists" rather than using it.
+      # The self-hosted runner is the one place pixi is guaranteed present,
+      # so the step verifies rather than installs -- and fails loudly if the
+      # version predates the lock file, which is the actual requirement.
+      - name: Use the machine's pixi
+        run: |
+          export PATH="$HOME/.pixi/bin:$PATH"
+          echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
+          command -v pixi || { echo "::error::pixi not on this runner"; exit 1; }
+          pixi --version
+          have=$(pixi --version | awk '{print $2}')
+          need=0.76.2
+          [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -1)" = "$need" ] || {
+            echo "::error::pixi $have predates the lock file (need >= $need)"
+            exit 1
+          }
+
+      # NOT setup-python, for the same reason as pixi above: on a self-hosted
+      # Mac the action writes its toolcache to /Users/runner, the hosted
+      # runner's home, and fails with "mkdir: /Users/runner: Permission
+      # denied" (first dispatch, run 32638952057, 2026-08-23). The runner
+      # machine carries the five interpreters (Homebrew python@3.10 through
+      # python@3.14); this step verifies each is on PATH and fails loudly if
+      # one is missing, because verify_wheel.sh would otherwise SKIP it and
+      # the "No interpreter may be skipped" step below would fail later with
+      # a less useful message.
+      - name: Use the machine's python 3.10 through 3.14
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          missing=0
+          for v in 3.10 3.11 3.12 3.13 3.14; do
+            if command -v "python$v" >/dev/null 2>&1; then
+              echo "python$v: $(command -v "python$v") ($("python$v" --version 2>&1))"
+            else
+              echo "::error::python$v is not on this runner (brew install python@$v)"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      # Builds at --target-cpu apple-m1 --target-accelerator metal:1, stages
+      # the MAX runtime dylibs, re-signs, checks the binary's minos against
+      # the wheel tag, and runs the ISA disassembly. Each of those refuses to
+      # continue rather than warning.
+      # build_release_wheel.sh builds all ten binaries (five extensions, two
+      # numeric modes), gates them, packs the wheel and then RUNS
+      # verify_wheel.sh itself: every interpreter installs the wheel into a
+      # clean venv and runs actual fits on every estimator family in both
+      # modes. NO --no-gpu; this runner has a real Apple GPU. The output is
+      # kept so the next step can refuse a SKIP, which is what a missing
+      # interpreter looks like and what "No interpreter may be skipped"
+      # exists to catch.
+      - name: Build the wheel, then install and RUN it on every claimed interpreter
+        run: |
+          set -o pipefail
+          ./packaging/macos/build_release_wheel.sh 2>&1 | tee build.log
+
+      - name: No interpreter may be skipped, in either numeric mode
+        run: |
+          grep -q '^SKIP' build.log && {
+            echo "::error::an interpreter the package claims was not tested"
+            exit 1
+          }
+          for v in 3.10 3.11 3.12 3.13 3.14; do
+            for mode in fast deterministic identical; do
+              grep -q "^PASS python$v \[$mode\]" build.log || {
+                echo "::error::python$v [$mode] is claimed but did not pass"; exit 1; }
+            done
+          done
+          grep -q '^all interpreters passed' build.log
+          rm -f build.log
+
+      - name: Qualify installed UMAP fit, transform and held-out quality
+        run: |
+          set -eu
+          set -- python/dist/mojolearn-*.whl
+          test "$#" -eq 1
+          test -f "$1"
+          wheel="$1"
+          set --
+          if [ -n "${MOJOLEARN_QUALIFICATION_WHEELHOUSE:-}" ]; then
+            set -- --wheelhouse "$MOJOLEARN_QUALIFICATION_WHEELHOUSE"
+          fi
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' python/mojolearn/_version.py)
+          python3 tools/qualify_umap_wheel.py "$wheel" "$@" \
+            --source-root "$GITHUB_WORKSPACE" --expected-version "$version" \
+            --output "$RUNNER_TEMP/umap-qualification-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+
+      - name: Retain installed UMAP qualification
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: umap-wheel-qualification
+          path: ${{ runner.temp }}/umap-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # THE LINUX WHEEL IS NOT BUILT HERE AND CANNOT BE. It is compiled on a
+      # rented CUDA box and a rented HIP box (`packaging/linux/leg.sh`),
+      # packed on the Mac by `packaging/linux/pack_wheel.py`, and retagged by
+      # `auditwheel` in docker (`packaging/linux/audit.sh`). All of that
+      # happens BEFORE a release is dispatched, and none of it can happen
+      # inside this job.
+      #
+      # So it is handed over on the runner's own disk, OUTSIDE the workspace,
+      # at $MOJOLEARN_LINUX_WHEEL_DIR (default ~/.mojolearn-linux-wheel). A
+      # checkout cannot write there and this workflow never puts anything
+      # there; staging it is a deliberate act by whoever ran the audit.
+      #
+      # It is admitted only if ALL of these hold, and each is an exit:
+      #   * exactly one .whl is staged (two would make "which one" a guess)
+      #   * a `<wheel>.sha256` sidecar sits beside it and matches, so a
+      #     half-copied or swapped file is caught here and not on PyPI
+      #   * its version equals the version this job just built
+      #   * its tag is a manylinux tag; `linux_x86_64` is what pack_wheel.py
+      #     writes on purpose and PyPI refuses it, so seeing it here means
+      #     the audit step never ran
+      #   * `twine check` passes on it
+      #   * qualification/{hip,cuda}/ under that same staging directory
+      #     retains 24 installed jobs per vendor plus build-provenance.json
+      #     from each build; BOTH runs installed this exact final wheel SHA
+      #   * current native source inventory, both vendor binary sets, and
+      #     retained UMAP/OrderedRMSE IDENTICAL comparisons all pass
+      # Separate HIP-only/CUDA-only candidate qualifications cannot admit a
+      # subsequently assembled or auditwheel-modified final release wheel.
+      # If the directory is absent or empty, this is a macOS-only release and
+      # the step says so and moves on. That is not a failure; it is what
+      # every release before 0.3.0 was.
+      - name: Admit a pre-built, pre-audited Linux wheel, if one is staged
+        id: linux
+        run: |
+          set -euo pipefail
+          DIR="${MOJOLEARN_LINUX_WHEEL_DIR:-$HOME/.mojolearn-linux-wheel}"
+          if [ ! -d "$DIR" ] || [ -z "$(ls -A "$DIR"/*.whl 2>/dev/null || true)" ]; then
+            echo "no Linux wheel staged at $DIR; this is a macOS-only release"
+            echo "staged=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          n=$(ls -1 "$DIR"/*.whl | wc -l | tr -d ' ')
+          test "$n" = 1 || { echo "::error::$n wheels staged in $DIR; stage exactly one"; exit 1; }
+          WHL=$(ls -1 "$DIR"/*.whl)
+          base=$(basename "$WHL")
+          test -f "$WHL.sha256" || { echo "::error::$base has no .sha256 sidecar"; exit 1; }
+          want=$(cut -d' ' -f1 < "$WHL.sha256" | tr -d '[:space:]')
+          got=$(shasum -a 256 "$WHL" | cut -d' ' -f1)
+          test "$want" = "$got" || { echo "::error::$base digest $got, sidecar says $want"; exit 1; }
+          v_toml=$(sed -n 's/^version = "\(.*\)"$/\1/p' python/pyproject.toml | head -1)
+          case "$base" in
+            "mojolearn-$v_toml-"*) ;;
+            *) echo "::error::$base is not version $v_toml"; exit 1 ;;
+          esac
+          case "$base" in
+            *-manylinux_*_x86_64.whl) ;;
+            *) echo "::error::$base carries no manylinux tag; packaging/linux/audit.sh has not run on it"; exit 1 ;;
+          esac
+          python3 tools/check_linux_release_qualification.py "$WHL" \
+            --qualification-root "$DIR/qualification" \
+            --source-root "$GITHUB_WORKSPACE"
+          cp "$WHL" python/dist/
+          echo "admitted $base ($got)"
+          echo "staged=$base" >> "$GITHUB_OUTPUT"
+
+      # ==================================================================
+      # THE TWO GATES THAT WERE MISSING WHEN 0.3.0 AND 0.3.2 SHIPPED.
+      # Both run on the ARTIFACT that is about to be uploaded, not on a
+      # build directory on a box that no longer exists.
+      # ==================================================================
+
+      # 1. THE LINUX ISA BASELINE, ON THE WHEEL.
+      #
+      # `packaging/linux/isa_baseline_linux.py` exists because 0.3.0's Linux
+      # wheel carried unconditional AVX-512 and died with SIGILL inside
+      # `cluster::estimator::kmeans_fit` on every host without it. It is
+      # invoked in exactly ONE place: `packaging/linux/build_sets.sh`, on the
+      # rented box, against the set directory. Nothing between that box and
+      # PyPI looks again -- not pack_wheel.py, not audit.sh, not the
+      # admission step above, which checks the digest, the version, the
+      # manylinux tag and twine and never opens a single .so. A set that
+      # skipped its leg's gate, or was fetched from a leg that predates the
+      # gate, walks straight through. So the gate runs HERE, on the bytes
+      # that ship.
+      #
+      # In docker because the disassembler must be GNU objdump on x86-64
+      # ELF; `audit.sh` already runs this image on this machine.
+      - name: The staged Linux wheel meets the x86-64-v3 baseline
+        if: steps.linux.outputs.staged != 'none'
+        run: |
+          set -euo pipefail
+          WHL="python/dist/${{ steps.linux.outputs.staged }}"
+          rm -rf "${RUNNER_TEMP:-/tmp}/isa" && mkdir -p "${RUNNER_TEMP:-/tmp}/isa"
+          python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
+            "$WHL" "${RUNNER_TEMP:-/tmp}/isa"
+          docker run --rm --cpus 2 --platform linux/amd64 \
+            -v "${RUNNER_TEMP:-/tmp}/isa:/w:ro" \
+            -v "$PWD/packaging/linux:/g:ro" \
+            "${MOJOLEARN_AUDIT_IMAGE:-quay.io/pypa/manylinux_2_28_x86_64}" \
+            python3 /g/isa_baseline_linux.py /w/mojolearn
+
+      # 2. NOTHING SHIPS THAT NOTHING IMPORTS.
+      #
+      # `mojolearn/torch_ops.py`, 49,809 bytes, was in the 0.2.x and 0.3.x
+      # wheels having never been imported, compiled or executed by anything
+      # (CHANGELOG.md, Removed, 2026-08-31). `packages = ["mojolearn"]`
+      # sweeps the directory, so no gate could have seen it. This walks the
+      # import graph of the package as it sits in the wheel.
+      - name: Nothing ships in the wheel that nothing imports
+        run: |
+          set -euo pipefail
+          WHL=$(ls python/dist/mojolearn-*-macosx_*.whl)
+          rm -rf "${RUNNER_TEMP:-/tmp}/inv" && mkdir -p "${RUNNER_TEMP:-/tmp}/inv"
+          python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
+            "$WHL" "${RUNNER_TEMP:-/tmp}/inv"
+          python3 packaging/wheel_ci.py inventory \
+            "${RUNNER_TEMP:-/tmp}/inv/mojolearn" \
+            "${RUNNER_TEMP:-/tmp}/inv/mojolearn_diagnostics.py"
+          python3 packaging/wheel_ci.py versions .
+      - name: Metadata check
+        run: pixi run -e pkg twine check python/dist/*.whl
+
+      - name: Verify qualified UMAP artifact before recording upload digests
+        run: |
+          set -euo pipefail
+          set -- python/dist/mojolearn-*-macosx_*.whl
+          test "$#" -eq 1
+          test -f "$1"
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' python/mojolearn/_version.py)
+          python3 tools/verify_umap_qualification.py "$1" \
+            --results "$RUNNER_TEMP/umap-qualification-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/results.json" \
+            --source-root "$GITHUB_WORKSPACE" --expected-version "$version"
+
+      # The digests are recorded so the artifacts that get published can be
+      # matched against the ones that were built, by anyone, later.
+      - name: Digest
+        id: digest
+        run: |
+          set -euo pipefail
+          WHEEL=$(ls python/dist/mojolearn-*-macosx_*.whl)
+          echo "wheel_name=$(basename "$WHEEL")" >> "$GITHUB_OUTPUT"
+          echo "wheel_sha256=$(shasum -a 256 "$WHEEL" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          # macOS first, then anything else, so the manifest's order is fixed.
+          ( cd python/dist && shasum -a 256 mojolearn-*-macosx_*.whl
+            { ls -1 mojolearn-*.whl | grep -v -- '-macosx_' || true; } | while read -r w; do
+              shasum -a 256 "$w"; done ) > manifest.txt
+          cat manifest.txt
+          {
+            echo "wheel_manifest<<MANIFEST_EOF"
+            cat manifest.txt
+            echo "MANIFEST_EOF"
+          } >> "$GITHUB_OUTPUT"
+          rm -f manifest.txt
+
+      - name: Upload the wheels
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mojolearn-wheel
+          path: python/dist/*.whl
+          if-no-files-found: error
+
+      - name: Say plainly what was not verified
+        run: |
+          {
+            echo "### ${{ steps.digest.outputs.wheel_name }}"
+            echo ""
+            echo "\`${{ steps.digest.outputs.wheel_sha256 }}\`"
+            echo ""
+            echo "Verified on a real Apple GPU: portable-baseline build, ISA"
+            echo "disassembly, minos/tag agreement, GPU kernels embedded, twine"
+            echo "metadata, and real fits on every claimed interpreter."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish to ${{ inputs.publish }}
+    needs: build
+    if: inputs.publish != 'none' && inputs.alpha_candidate_tag == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The environment name is what the Trusted Publisher on PyPI and TestPyPI
+    # was configured against, and it is also where a required reviewer can be
+    # attached. Both `testpypi` and `pypi` exist on this repository as of
+    # 2026-08-20; they did not before, and a publisher whose environment does
+    # not exist rejects every claim.
+    environment:
+      name: ${{ inputs.publish }}
+      url: ${{ inputs.publish == 'pypi' && 'https://pypi.org/p/mojolearn' || 'https://test.pypi.org/project/mojolearn/' }}
+    permissions:
+      # THE ONLY JOB IN THIS FILE WITH THIS PERMISSION. It mints the OIDC
+      # token the Trusted Publisher checks; there is no API token anywhere.
+      id-token: write
+    steps:
+      - name: Download the wheel that was built
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mojolearn-wheel
+          path: dist
+
+      # The two values from the build job arrive as environment variables
+      # rather than as `${{ }}` inside the script. They are a hash and a
+      # filename this workflow computed itself, but a job that holds an OIDC
+      # token should not have expression results spliced into a shell at all.
+      # A RELEASE MAY CARRY MORE THAN ONE WHEEL. Until 0.3.0 it was macOS
+      # alone and this step asserted `count = 1`; a Linux wheel made that
+      # assertion the thing standing between a correct artifact and PyPI.
+      # It is replaced by a STRONGER check, not a looser one: the build job
+      # emits a `sha256  filename` manifest of everything it is publishing,
+      # and both directions are checked here.
+      #   * every file named in the manifest is present and hashes to the
+      #     recorded value (`sha256sum -c`, which fails on either)
+      #   * the number of .whl files in dist equals the number of manifest
+      #     lines, so an EXTRA wheel that nobody built cannot ride along
+      #   * the macOS wheel is still checked by name and digest separately,
+      #     because that pair is what the build job's summary published and
+      #     what a reader outside this repository can verify against
+      - name: What is about to be published
+        env:
+          EXPECTED_WHEEL: ${{ needs.build.outputs.wheel_name }}
+          EXPECTED_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
+          EXPECTED_MANIFEST: ${{ needs.build.outputs.wheel_manifest }}
+        run: |
+          set -euo pipefail
+          ls -la dist
+          printf '%s\n' "$EXPECTED_MANIFEST" | sed '/^$/d' > manifest.txt
+          echo "the build job published these:"; cat manifest.txt
+          lines=$(wc -l < manifest.txt | tr -d ' ')
+          test "$lines" -ge 1 || { echo "::error::the build job named no wheels"; exit 1; }
+          count=$(find dist -type f -name '*.whl' | wc -l | tr -d ' ')
+          test "$count" = "$lines" || {
+            echo "::error::artifact holds $count wheels, the build job named $lines"; exit 1; }
+          ( cd dist && sha256sum -c ../manifest.txt ) || {
+            echo "::error::an artifact is missing or does not match its recorded digest"; exit 1; }
+          test -f "dist/$EXPECTED_WHEEL" || {
+            echo "::error::the macOS wheel $EXPECTED_WHEEL is not in the artifact"; exit 1; }
+          echo "expected macOS digest: $EXPECTED_SHA256"
+          test "$(sha256sum "dist/$EXPECTED_WHEEL" | cut -d' ' -f1)" = "$EXPECTED_SHA256" || {
+            echo "::error::the macOS wheel does not match the digest the build job recorded"
+            exit 1
+          }
+          rm -f manifest.txt
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        with:
+          repository-url: ${{ inputs.publish == 'pypi' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+          print-hash: true
+          # A filename collision means this exact version was already
+          # uploaded. Skipping it quietly is how two different artifacts end
+          # up believed to be the same one.
+          skip-existing: false
+
+  alpha_stage:
+    name: Admit explicitly alpha API artifacts
+    if: inputs.alpha_candidate_tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Download root-prepared candidate assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_TAG: ${{ inputs.alpha_candidate_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_TAG" =~ ^alpha-api-[A-Za-z0-9._-]+$ ]] || exit 2
+          mkdir dist
+          gh release download "$CANDIDATE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.whl' --pattern alpha-manifest.json --dir dist
+      - name: Check exact alpha artifact bytes without GPU execution
+        env:
+          EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+          timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
+            dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" > alpha-admission.json
+          cat alpha-admission.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mojolearn-alpha-wheel
+          path: |
+            dist/*.whl
+            dist/alpha-manifest.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mojolearn-alpha-admission
+          path: alpha-admission.json
+          if-no-files-found: error
+
+  publish_alpha:
+    name: Publish alpha API artifacts to ${{ inputs.publish }}
+    needs: alpha_stage
+    if: inputs.publish != 'none' && inputs.alpha_candidate_tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ inputs.publish }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: mojolearn-alpha-wheel
+          path: dist
+      - name: Recheck exact alpha bytes immediately before publishing
+        env:
+          EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+          timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
+            dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA"
+          rm dist/alpha-manifest.json
+      - name: Publish explicit prerelease without claiming numerical certification
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+        with:
+          repository-url: ${{ inputs.publish == 'pypi' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+          print-hash: true
+          skip-existing: false

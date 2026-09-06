@@ -1,5 +1,35 @@
 # Release runbook
 
+## Explicit alpha API exposure
+
+The user-authorized alpha route exposes implemented Python operations before
+completion of every numerical certificate. It is separate from the stable
+build-and-qualify route below and requires an explicit `X.Y.ZaN` version.
+`packaging/alpha_overlay.py` preserves the base wheel's native/runtime bytes,
+overlays current Python modules and the alpha guide, and records both source
+and native provenance. Missing native extensions remain unavailable; neither
+file presence nor successful imports certify numerical behavior.
+
+Root assembles each candidate from an identified base wheel, verifies the
+result with `packaging/verify_alpha_artifacts.py`, and retains compatibility
+checks separately. The candidate directory contains exactly its wheels and
+`alpha-manifest.json` (`mojolearn.alpha-release.v1`, alpha `version`, and a
+`files` mapping from each exact wheel basename to its SHA256).
+
+For publication, stage those exact files as assets of an `alpha-api-*` release
+tag. Dispatch the existing `release-provenance.yml` Trusted Publisher workflow
+with `alpha_candidate_tag`, the exact `alpha_manifest_sha256`, and `publish`.
+The alpha route uses Linux file verification capped at two CPU cores, checks
+the hashes again immediately before OIDC upload, and does not start the Apple
+build job. Stable publication retains its existing checks. A local candidate
+or a workflow source edit is not publication: verify the actual PyPI filenames
+and hashes before updating release status.
+
+The September 6 candidates and file/import evidence are retained under
+`bench/results/releases/2026-09-06-alpha-api/`. They currently expose the API
+using inherited macOS and AMD binaries; newly authored byte-LM native code
+needs a separate build. NVIDIA remains source-build-only for this candidate.
+
 Releases are built and published by
 `.github/workflows/release-provenance.yml`. Publishing uses GitHub Trusted
 Publisher OIDC; do not add an API token. The workflow is manual-only and its

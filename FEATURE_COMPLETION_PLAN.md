@@ -45,18 +45,87 @@ and [current campaign record](bench/results/resume/2026-09-06-root-feature-nvidi
 
 ## Near-term training milestone (active)
 
+### Alpha API exposure (user priority, September 6)
+
+Public API availability does not require completion of every numerical
+certificate. Expose implemented operations now, mark experimental limits,
+and continue NVIDIA/AMD validation independently. Never invent an API for an
+unimplemented algorithm or describe a missing native binary as available.
+
+- [ ] Add normal public `linalg`, `umap`, and training primitive modules.
+- [ ] Inventory Mamba 1/2/3 forward/backward and tree objective coverage in
+  installed alpha documentation; distinguish ordered boosting from ranking.
+- [ ] Assemble an explicitly prerelease alpha artifact with exact base-native
+  and updated-Python provenance. Preserve existing stable release checks;
+  an alpha overlay is not a fresh installed numerical certificate.
+- [ ] Validate package contents and selected remote NVIDIA/AMD callable
+  surfaces, publish through the existing Trusted Publisher identity, and
+  verify actual index filenames/hashes. No new Apple execution.
+- [ ] Implement missing ranking objectives and carried-state backward
+  separately; alpha exposure alone does not complete those algorithms.
+
+Root alone runs tests, builds and measurements, using at most three CPU
+cores (two remains the default). Subagents only author/review source.
+
+### Paper-gap execution queue (September 6 follow-up)
+
+- [ ] **Public neural training:** expose and validate a public FP32 complete
+  training step; existing fixed internal Transformer evidence is not a public
+  multi-block learning claim. Public optimizer/loss modules and the fixed MLP
+  and byte-LM trainers are authored; finish native integration and exact-wheel
+  callable checks. Mamba 1/2/3 zero-state IDENTICAL Python backward is already
+  exposed; finish shared-shape and installed-artifact validation rather than
+  describing the methods as absent.
+- [ ] **Mamba-3 long intermediate:** locate the reported Apple failure and
+  preserve its exact source/profile/intermediate. Reconcile it with the later
+  NVIDIA/AMD long-profile record at `395d9421` linked in
+  [backward certification](mamba/BACKWARD_CERTIFICATION.md). Its compositional
+  arithmetic policy does not claim that every intermediate passes a direct
+  whole-FP64 threshold, and it does not recertify Apple. Diagnose any remaining
+  failure under the actual declared policy; keep it outside paper claims
+  until supported by the appropriate evidence.
+- [x] **UMAP bounded real-data neighborhood preservation:** locate the retained
+  NVIDIA digits result. It measures k=10 trustworthiness **and retention**
+  against umap-learn on pinned 1,024 fit / 256 held-out rows, with controls;
+  all 15 campaign jobs passed. See [retained result](bench/results/resume/2026-09-06-root-umap-nvidia/README.md).
+  This specific experiment is measured, not synthetic-only or still unmeasured.
+- [ ] **UMAP broader coverage:** test additional declared real-data fixtures
+  and compare matching IDENTICAL outputs across NVIDIA/AMD. Do not infer
+  general dataset coverage from the digits result or bitwise equality to cuML.
+- [ ] **Actual cross-vendor checkpoint resume:** compile the authored driver,
+  produce same-source continuous and head checkpoints on NVIDIA/AMD, transfer
+  the actual files in both directions, continue training in fresh processes,
+  and compare complete state bytes with effective missing-moments controls.
+  Identical checkpoint bytes alone remain the narrower supported claim until
+  execution and admission finish. Follow
+  [root commands](training/PUBLIC_TRAINING_RESUME_COMMANDS.md).
+
 The immediate training target is a small neural network followed by a small
 language model that learns next-token prediction from real text. This extends
 item 4 and uses item 3's resume proof; it does not replace the six follow-ups.
 
 - [ ] Validate the public fixed FP32 8→16→3 MLP: forward, independent gradient
   reference, AdamW, complete state snapshots, and checkpoint continuation.
-  Implementation is authored; execution and qualification remain open.
-- [ ] Independently check the existing one-block Transformer gradients before
-  extending its arithmetic claim. The new capture/oracle is authored, unrun.
+  NVIDIA run 3 built the binding and passed all 20 surface/reference checks
+  and four numerical-edge checks. Two overflow assertions expected the wrong
+  Python exception type; both native calls correctly refused overflow. The
+  exact-message assertion repair passed in frozen run 4 (`8f6ed41`): all
+  18 jobs and admission passed, including 16-step learning and same-device
+  full-state checkpoint continuation. AMD comparison remains open.
+- [x] Independently check the existing one-block Transformer gradients before
+  extending its arithmetic claim. On NVIDIA at `201e5ebc`, all eleven tensors
+  and loss passed the preset FP64 gate; both deliberate-error controls were
+  effective. See [scoped evidence](bench/results/resume/2026-09-06-root-training-nvidia/README.md).
+  This does not qualify the new two-block model or cross-vendor training.
 - [ ] Implement a two-block byte-level decoder with vocabulary 256, width 32,
   context 32 and batch 2, using caller-supplied, pinned real-text token bytes.
   Expose the complete training step and explicit data continuation cursor.
+  Source is authored in `training/byte_lm.mojo` and the public
+  `SmallByteLanguageModelTrainer` API: 34,944 FP32 parameters, 20 tensors.
+  The remote profile 5 runner requires an explicit GPU architecture, checks
+  an independent one-step gradient/AdamW oracle before a fixed 128-step run,
+  and retains complete state plus root guard receipts. Compilation and
+  numerical qualification of this new model remain open.
 - [ ] Demonstrate learning with a predeclared held-out loss criterion and
   retained training trace. Fix train/validation split, initialization, token
   schedule and optimizer settings before execution; no selected lucky run.
@@ -208,6 +277,26 @@ and separately scoped timing records. See
 
 ## 5. Fill the missing hardware columns
 
+**OPEN — reaffirmed by the user on September 6.** No new hardware-column
+run is admitted by this queue update. First locate and audit retained results
+to avoid rerunning completed fixtures or promoting smoke tests into identity
+certificates. The user's “ARIMA fitter Apple only” note describes a gap to
+investigate: `SUPPORT_MATRIX.md` already points to fitted ARIMA smoke passes
+in frozen AMD/NVIDIA installed candidates. Those passes must be reconciled
+with the broader batched-fitter claim, rather than erased or assumed to
+certify it. Start with
+[installed gap-closure evidence](bench/results/resume/2026-09-06-installed-gap-closure/README.md).
+
+- [ ] Inventory exact ARIMA fitter, Holt-Winters, spectral and Gaussian-process
+  result paths, commits, devices, modes and shapes; distinguish filter-only,
+  fitted smoke, independent correctness and cross-device identity evidence.
+- [ ] Root alone schedules and executes any missing runs, serially, preferring
+  remote NVIDIA/AMD. Necessary MacBook runs are now permitted by the user,
+  with two CPU cores/threads by default (never above three), explicit memory
+  and time limits, and no concurrent tests/builds/measurements. CPU limits
+  alone do not bound GPU or unified-memory allocation; size those explicitly.
+  Subagents must never execute tests, builds, models or measurements.
+
 - [ ] **Batched ARIMA: NVIDIA and AMD.** Exercise the actual batched estimator
   fit/filter/predict shapes and declared options; retain separate evidence
   from existing single-fixture filtering and fitted smoke jobs.
@@ -259,14 +348,19 @@ and [current NVIDIA inventory](bench/NVIDIA_FEATURE_COVERAGE_2026-09-06.md).
 
 ## Added queue: Table 6 context and k-NN/GEMV optimization
 
-- [ ] Locate the current paper's Table 6 (reported page 7) and place the
+- [x] Locate the current paper's Table 6 (reported page 7) and place the
   explanation in the same column, directly beside the approximately 25×
   k-NN and 21× GEMV cost figures. Preserve the measured values and provenance.
-- [ ] Ground the adjacent sentence in the kernel investigation: the reported
+- [x] Ground the adjacent sentence in the kernel investigation: the reported
   slowdowns expose current implementation/operand-reuse optimization gaps in
   the named kernels; they do not establish an unavoidable cost of the
   identity contract. Distinguish established causes from hypotheses for
   each kernel. Root reviews the eventual rendered placement.
+  Implemented in the sibling `mlsys/paper/paper.tex` Table 6 caption;
+  root rebuilt named and anonymous PDFs serially with two-thread caps and
+  confirmed page 7 placement. k-NN's operand-reuse cause is stated; GEMV's
+  corresponding causal attribution remains unresolved. Measured ratios are
+  unchanged. This closes the editorial placement, not the optimization work.
 - [ ] Queue operand-reuse and dispatch improvements for the pinned distance
   and GEMV kernels, preserving exact operation/reduction order wherever the
   contract requires it. Root validates complete bytes before admitting speed.
