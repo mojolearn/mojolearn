@@ -67,10 +67,12 @@ builds them (`archive/reference/PORTING.md` 115 is the same shape of hole, found
 A fold-based tree now grows (DEVIATION 126, lifted 2026-09-03: the searcher
 constructed its calcer without a fold count, so the helpers were built at 1
 while the layout was built at 12). WHAT THIS FILE STILL DOES NOT GATE is
-ordered boosting itself: `TDynamicBoosting::Fit` has no definition anywhere
-in this tree -- no per-fold approximation cursors, no prefix-only gradient,
-no per-fold leaf estimation -- and no `boosting_type` exists at any public
-surface, so no fit can select it.
+ordered boosting itself. The separate `ordered_rmse_check.mojo` exercises
+`dynamic_boosting.fit_ordered_rmse` and the public
+`gbdt.train.train_ordered_rmse` entry: per-fold approximation cursors,
+prefix-only leaf estimation and a separately estimated exported model.
+That bounded numeric RMSE path has its own gate; this file remains the
+fold-axis gate and does not establish full CatBoost Ordered parity.
 """
 
 from max.gpu.host import DeviceContext, HostBuffer
