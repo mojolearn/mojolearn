@@ -1,0 +1,1421 @@
+{
+  "bytes_extensions": 60839749,
+  "bytes_staged_libs": 3200416,
+  "bytes_total_uncompressed": 64040165,
+  "driver_libs_not_staged": [],
+  "edges": [
+    {
+      "class": "staged",
+      "from": "_mojolearn.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_arima.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_arima.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_arima.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gp.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gp.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_gp.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_linalg.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_linalg.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_linalg.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_mamba.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_mamba.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_mamba.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_metrics.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_metrics.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_metrics.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_rf.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_rf.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_rf.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_solver.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_solver.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_solver.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_svm.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_svm.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_svm.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_training.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_training.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_training.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_transformer.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_transformer.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_transformer.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_trees.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_trees.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_trees.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_trees.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_tsa.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_tsa.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_tsa.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_arima.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_arima.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_arima.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gp.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gp.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_gp.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_linalg.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_linalg.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_linalg.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_mamba.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_mamba.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_mamba.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_metrics.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_metrics.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_metrics.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_rf.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_rf.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_rf.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_solver.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_solver.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_solver.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_svm.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_svm.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_svm.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_training.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_training.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_training.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_transformer.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_transformer.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_transformer.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_trees.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_trees.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_trees.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_trees.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_tsa.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_tsa.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_tsa.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_arima.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_arima.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_arima.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_estimators.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_gbdt.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gp.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_gp.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_gp.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_linalg.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_linalg.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_linalg.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_mamba.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_mamba.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_mamba.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_metrics.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_metrics.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_metrics.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_rf.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_rf.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_rf.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_solver.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_solver.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_solver.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_svm.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_svm.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_svm.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_training.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_training.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_training.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_transformer.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_transformer.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_transformer.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_trees.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_trees.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_trees.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_trees.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_tsa.so",
+      "needs": "libKGENCompilerRTShared.so"
+    },
+    {
+      "class": "staged",
+      "from": "_mojolearn_tsa.so",
+      "needs": "libAsyncRTMojoBindings.so"
+    },
+    {
+      "class": "system",
+      "from": "_mojolearn_tsa.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "system",
+      "from": "libKGENCompilerRTShared.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "libKGENCompilerRTShared.so",
+      "needs": "libstdc++.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "libKGENCompilerRTShared.so",
+      "needs": "libMSupportGlobals.so"
+    },
+    {
+      "class": "staged",
+      "from": "libKGENCompilerRTShared.so",
+      "needs": "libAsyncRTRuntimeGlobals.so"
+    },
+    {
+      "class": "system",
+      "from": "libKGENCompilerRTShared.so",
+      "needs": "libgcc_s.so.1"
+    },
+    {
+      "class": "system",
+      "from": "libKGENCompilerRTShared.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "system",
+      "from": "libKGENCompilerRTShared.so",
+      "needs": "ld-linux-x86-64.so.2"
+    },
+    {
+      "class": "system",
+      "from": "libAsyncRTMojoBindings.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "libAsyncRTMojoBindings.so",
+      "needs": "libstdc++.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "libAsyncRTMojoBindings.so",
+      "needs": "libMSupportGlobals.so"
+    },
+    {
+      "class": "staged",
+      "from": "libAsyncRTMojoBindings.so",
+      "needs": "libAsyncRTRuntimeGlobals.so"
+    },
+    {
+      "class": "system",
+      "from": "libAsyncRTMojoBindings.so",
+      "needs": "libgcc_s.so.1"
+    },
+    {
+      "class": "system",
+      "from": "libAsyncRTMojoBindings.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "system",
+      "from": "libAsyncRTMojoBindings.so",
+      "needs": "ld-linux-x86-64.so.2"
+    },
+    {
+      "class": "system",
+      "from": "libMSupportGlobals.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "libMSupportGlobals.so",
+      "needs": "libstdc++.so.6"
+    },
+    {
+      "class": "system",
+      "from": "libMSupportGlobals.so",
+      "needs": "libgcc_s.so.1"
+    },
+    {
+      "class": "system",
+      "from": "libMSupportGlobals.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "system",
+      "from": "libAsyncRTRuntimeGlobals.so",
+      "needs": "libm.so.6"
+    },
+    {
+      "class": "system",
+      "from": "libAsyncRTRuntimeGlobals.so",
+      "needs": "libstdc++.so.6"
+    },
+    {
+      "class": "staged",
+      "from": "libAsyncRTRuntimeGlobals.so",
+      "needs": "libMSupportGlobals.so"
+    },
+    {
+      "class": "system",
+      "from": "libAsyncRTRuntimeGlobals.so",
+      "needs": "libgcc_s.so.1"
+    },
+    {
+      "class": "system",
+      "from": "libAsyncRTRuntimeGlobals.so",
+      "needs": "libc.so.6"
+    },
+    {
+      "class": "system",
+      "from": "libAsyncRTRuntimeGlobals.so",
+      "needs": "ld-linux-x86-64.so.2"
+    }
+  ],
+  "env_lib": "/root/mojolearn/.pixi/envs/gbmbench/lib",
+  "extensions": [
+    {
+      "bytes": 1348881,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "cb9a9ca8c42649b0d3f2b50fa3a17c69980b270c481f1db370a43de4a4ace7f1",
+      "tier": "fast"
+    },
+    {
+      "bytes": 664089,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_arima.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "fb59e58404c4e341a93e9aacf64d4835e0ac120f4a7a21fa40d6cfa41b1d5102",
+      "tier": "fast"
+    },
+    {
+      "bytes": 1672633,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_estimators.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "574f53e1ca3ff72a62aa1746da7e8c7c5474d640c8d67a24ea58da4344aa6674",
+      "tier": "fast"
+    },
+    {
+      "bytes": 6071433,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_gbdt.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "c57a44bb8023c64303d2fca591605227cd206ca62a7babcda6b054a4a06246ba",
+      "tier": "fast"
+    },
+    {
+      "bytes": 984281,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_gp.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "91ce3ff40449cb9821b603756cabebe8af9761d123de95695beac840f2bc14f2",
+      "tier": "fast"
+    },
+    {
+      "bytes": 488329,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_linalg.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "80aefa7fc51fbf35dae071e8c0421edc9868fbdbab1b9ede1e3fad458e2d65cd",
+      "tier": "fast"
+    },
+    {
+      "bytes": 1295721,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_mamba.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "3c7464db805fc3afc415ef35f4c778c9fcdda82d9e04ce331cccd5de4649ea5c",
+      "tier": "fast"
+    },
+    {
+      "bytes": 1836345,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_metrics.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "c2bdc10652eb3d0888c569f71fb2b2ea4767fe1750fec5439f759693edfc3eba",
+      "tier": "fast"
+    },
+    {
+      "bytes": 1200825,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_rf.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "699c0e27761658deb539bbd14434abbe15157d7052cf15fc1306f6a56f0fd4c8",
+      "tier": "fast"
+    },
+    {
+      "bytes": 881993,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_solver.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "84fef0a49076aa5f52645b824db8c27fe074244fc8ff2b7eb31d3fd5fb04bc96",
+      "tier": "fast"
+    },
+    {
+      "bytes": 1156425,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_svm.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "ae036568535181b8ce8b307195e2eee99ef3cefecf710111815773de4eac3464",
+      "tier": "fast"
+    },
+    {
+      "bytes": 758793,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_training.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "8d7f92094f634c5b964ab5ce413bf61a363bddbcc8a286918e94d57759215d19",
+      "tier": "fast"
+    },
+    {
+      "bytes": 796017,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_transformer.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "27b3ab0e92ee0c90718b88606801509fe5968d776dccf68695afb54cad363663",
+      "tier": "fast"
+    },
+    {
+      "bytes": 1057473,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_trees.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "61affb6efedc0140637361adebf660210926af3e4d78c5caea0d6db1f212af34",
+      "tier": "fast"
+    },
+    {
+      "bytes": 594537,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "_mojolearn_tsa.so",
+      "runpath": "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs",
+      "sha256": "c81c2d72fc71a51ea232079d9900316f8a0ba59479bf4fc270192235bb576982",
+      "tier": "fast"
+    },
+    {
+      "bytes": 1348889,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "0e9d48a3b131c6442b401bb2cfcac74d8ebe647d0923285059207d2cf55dcc81",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 664097,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_arima.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "d0f5620d0d7726ed9ab911216f33e88a4900569c9b1651c3c6c3428ce31d8f8d",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 1672641,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_estimators.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "c4cef0a1dacd3b6f9447ed333f546f07ad10f8593c289c4ccc2eb5adea8d1899",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 6067345,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_gbdt.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "3fa6aae1a16abd6ddaa0140029c634a4b16bb6143dd097121040070b1173b4bf",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 984289,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_gp.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "dcd18db7bf5c0552a5ef3f16ab2546435bf40239e84ef7cab46c6485efa7d0e2",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 488337,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_linalg.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "fad97c4b7ff9145256f38319810669bfe9f6ff15e28c89f39ce31f88f3fccb01",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 1295729,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_mamba.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "beb28d3de71cac0e51efaa5320cfc99aa2d74f7c8a75c9da3e2d57e3097cacf1",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 1836353,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_metrics.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "7590173fd8ff9a6385bd5f2bd52e13bafcb8a2d6eecb0f22f3321e3a71986678",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 1200833,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_rf.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "cdb0c3c4764a412add5121de765b514bc505e9bd0915683612052af95a4dd51c",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 882001,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_solver.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "25786c4c52ba826e6d26a25947b61b422843ddc7b6485260f08e4178c2fb43ba",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 1156433,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_svm.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "b87d9b7bdfce07e770568d3d6ec8c68b63f1e31a74cf3ac4f057b821eea23fb2",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 758801,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_training.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "1c88b39e8dca0c1c417ff06ea22b06df2dc8c706612dee6b61bde5f5cbfc3f84",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 796025,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_transformer.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "82b656c765270c8fdd5b32285764bd49a9ac634d296b3146302b33a0868829a7",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 1057481,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_trees.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "bde0d3a41c6c83a8d5f281225e52f08c01edf8e0c9b06c6ca66040c2bcdd170d",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 594545,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "deterministic/_mojolearn_tsa.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "a9c3932a219745994e31c9dc086d0adeaa7515d5f8ca39ea089edc4ae3dc54db",
+      "tier": "deterministic"
+    },
+    {
+      "bytes": 1413977,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "ef7d5a1f7da1e79102d17bde8eac7fd7b91b6497475d0997b69d5aac91f38d76",
+      "tier": "identical"
+    },
+    {
+      "bytes": 676385,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_arima.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "32c5c9b0076c04f2441135f58dc8f8485af972afe59a59f4344baa1a7d8f7490",
+      "tier": "identical"
+    },
+    {
+      "bytes": 1819369,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_estimators.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "4438af08debe782bbfcd202c9558884382341fa1636965ead1671493d8a5a3d9",
+      "tier": "identical"
+    },
+    {
+      "bytes": 4744337,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_gbdt.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "d810149ddf701a05f21a0940d839a11adae74357005a20ae9723a2ba0ad322c4",
+      "tier": "identical"
+    },
+    {
+      "bytes": 889353,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_gp.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "345cadbe4f7ac7673203e0efc8daee08f0e71e99644d805d9b0fc36cf34b61d8",
+      "tier": "identical"
+    },
+    {
+      "bytes": 356481,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_linalg.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "677d9ae6286ac1da6afd0fc80f0aa08759e6555b3606e3af6a152f26572e807b",
+      "tier": "identical"
+    },
+    {
+      "bytes": 1196689,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_mamba.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "e13cc66cf508a0c3ed5327a3943fe0c13d6afa8865b0deb7290dd93ea78be691",
+      "tier": "identical"
+    },
+    {
+      "bytes": 1827713,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_metrics.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "51ece3664fc900554fff18888e29a9a6660a39f95a561264779b0bad3f6ae6ae",
+      "tier": "identical"
+    },
+    {
+      "bytes": 1217217,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_rf.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "81b60d89082272db8c62a0bef5909aa13097258ef94ba7ae8772b69e771e66fa",
+      "tier": "identical"
+    },
+    {
+      "bytes": 905849,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_solver.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "e7fc98c9b0026ad0c972064596b5544ee5208ef7220eb285e23ad6d4d836119e",
+      "tier": "identical"
+    },
+    {
+      "bytes": 1200753,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_svm.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "fcc28fe50176efa879418886b70c434082f010e4589ad555a56af6c06d5ab8ec",
+      "tier": "identical"
+    },
+    {
+      "bytes": 635137,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_training.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "ba676b76aef535bbce168922da343b3c1132c9732bcbf4b90535918558bea601",
+      "tier": "identical"
+    },
+    {
+      "bytes": 668313,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_transformer.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "8eb6202829f00b8541700eb0ad9287027cca17f7e4675eec661c163d82a81ffc",
+      "tier": "identical"
+    },
+    {
+      "bytes": 1061577,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_trees.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "c42559a485aaee105e9741afe8f828d5beb3fed25584a53b2b03dbbbf84bc49c",
+      "tier": "identical"
+    },
+    {
+      "bytes": 615025,
+      "needed": [
+        "libKGENCompilerRTShared.so",
+        "libAsyncRTMojoBindings.so",
+        "libc.so.6"
+      ],
+      "path": "identical/_mojolearn_tsa.so",
+      "runpath": "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+      "sha256": "797f4ad938871caf25d6db5626136ab98a2d9d5b470d5eee1c5c0c2c3ca5a46e",
+      "tier": "identical"
+    }
+  ],
+  "set": "/root/mojolearn/bench/results/e1/2026-09-06_091452-mojolearn-e2-amd/diag/candidate/build/sets/hip/gfx942",
+  "staged_libs": [
+    {
+      "bytes": 1222584,
+      "name": "libKGENCompilerRTShared.so",
+      "sha256": "731a617b519a7a7b7e35e6a30ecedc262d1ebffeb9484fdf392d93bc71047737",
+      "source": "/root/mojolearn/.pixi/envs/gbmbench/lib/libKGENCompilerRTShared.so"
+    },
+    {
+      "bytes": 1243456,
+      "name": "libAsyncRTMojoBindings.so",
+      "sha256": "ad566357627747cb6001f1b1a17483843b328b4b7a3a02febb882c695d8f8029",
+      "source": "/root/mojolearn/.pixi/envs/gbmbench/lib/libAsyncRTMojoBindings.so"
+    },
+    {
+      "bytes": 49200,
+      "name": "libMSupportGlobals.so",
+      "sha256": "8c91d4c4c36405f8feca1274d28dab1baa344fe47a00d2544166588c3c2e4264",
+      "source": "/root/mojolearn/.pixi/envs/gbmbench/lib/libMSupportGlobals.so"
+    },
+    {
+      "bytes": 685176,
+      "name": "libAsyncRTRuntimeGlobals.so",
+      "sha256": "849571b9373a423b2a4a010ecbf48d0371bbb167f1488d20ad90c7e16e7abf27",
+      "source": "/root/mojolearn/.pixi/envs/gbmbench/lib/libAsyncRTRuntimeGlobals.so"
+    }
+  ]
+}
