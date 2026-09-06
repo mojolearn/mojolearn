@@ -60,17 +60,22 @@ cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
 | ARIMA filtering | Beta | Three-vendor card for the recorded filter fixture | The newer fitted-estimator surface still needs NVIDIA and AMD qualification. |
 | Holt-Winters and spectral/time-series helpers | Beta | Apple–AMD cards for recorded fixtures | NVIDIA column remains pending. |
 | Gaussian process | Experimental | Apple–AMD IDENTICAL card for recorded fixture | Complete current-wheel and NVIDIA qualification; no performance claim. |
-| Mamba 1 | Experimental | Three-vendor operator card and backward certificate at `718495cd` | Published macOS forward/state API gate passed; newer NVIDIA/AMD source API checks passed. Linux installed-wheel checks and Python backward exposure remain. |
+| Mamba 1 | Experimental | Three-vendor operator/backward evidence at `718495cd`; newer L64 case passes and matches native bytes on AMD/NVIDIA | Linux installed-wheel checks and Python backward exposure remain. The combined long profile is still RED because of Mamba3 intermediates. |
 | Mamba 2 | Experimental | Three-vendor backward certificate at `718495cd`, including L257 and incoming state | Newer NVIDIA/AMD source forward/state checks passed, including the AMD binding fix. Broader fixtures, Linux installed-wheel checks and Python backward exposure remain. |
-| Mamba 3 | Experimental | Historical backward byte matches are superseded: a staged-reference omission hid a missing scale/gamma chain-rule contribution | Corrective native AMD/NVIDIA gates must include independent whole-forward gradients. Apple rerun, Linux installed-wheel checks and Python backward exposure remain. |
+| Mamba 3 | Experimental | Corrected native baseline passes and matches AMD/NVIDIA at `eebd7c92`, including independent whole-forward float64 gradients | L65 public gradients pass, but 13 intermediate checks keep the long certificate RED. Corrected Apple rerun, Linux installed-wheel checks and Python backward exposure remain. |
 | Transformer block | Experimental | Three-vendor operator card for an earlier fixture | Newer AMD source API checks passed; NVIDIA Python API qualification and the independent corpus API oracle remain open. Native certificates do not close those gates. |
-| UMAP | Published 0.5.0: dense `fit`/`fit_transform`. Source 0.6.0 candidate: `transform` and CSR graph storage for public fitting | Original three-vendor fixture: 186 stage cells at `718495cd`; separate newer source transform fixtures match across three vendors | Integrated CSR fit/transform API passed all modes on Apple/NVIDIA/AMD; macOS 0.6.0 installed checks passed. Publication and Linux wheels remain pending. |
+| UMAP | Published 0.5.0: dense `fit`/`fit_transform`. Source 0.6.0 candidate: `transform` and CSR graph storage for public fitting | Original three-vendor fixtures; expanded six-case IDENTICAL inputs/embeddings and 876 native stage cells match AMD/NVIDIA at `d88c7883` | All six expanded quality cases pass in all modes on AMD/NVIDIA after the self-neighbor fix. Publication, Linux wheels and larger-scale coverage remain pending. |
 | Training primitives and checkpointing | Experimental | Local correctness gates | Cross-vendor public-surface qualification remains open. |
 
 The [AMD k-NN layout record](bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/README.md)
 retains all four arms, correctness bytes, rotating timing rounds and the
 comparison with earlier NVIDIA and Apple evidence. Its speedups are scoped
 to those fixtures and devices, not a general dispatch or scalability claim.
+
+The [weighted CTR slice](bench/results/e1/2026-09-05_235251-amd-catboost-fixed-partition/README.md)
+passes on AMD, including the production leaf estimator on fixed occupied
+zero-mass partitions at L2=0 and L2=3. This is focused native correctness;
+end-to-end ordered boosting and a fresh NVIDIA run of that slice remain open.
 
 ## What counts as certification
 
@@ -119,6 +124,13 @@ At `718495cd`, Apple M4, NVIDIA RTX 4090, and AMD MI300X matched all 54
 native Mamba backward gradient tensors across five cases and all 186 cells
 in the named UMAP fixture. See the [three-vendor record](bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json).
 These source certificates do not certify other shapes or installed artifacts.
+The Mamba3 correctness claim from that historical certificate is superseded:
+its staged reference shared a missing scale/gamma chain-rule contribution.
+The [corrected AMD/NVIDIA record](bench/results/resume/2026-09-05-next-certification/corrected-backward-cross-device.json)
+passes all five baseline cases and matches 54 gradient tensors, while requiring
+independent whole-forward gradients for every Mamba3 public leaf. Its long
+profile remains RED on intermediate checks even though all 21 public tensors
+match and Mamba3's public gradients pass the independent oracle.
 The later AMD allocation fix has its own successful source Python API rerun;
 see the [AMD source qualification record](bench/results/e1/2026-09-05_134041-mojolearn-e2-amd/README.md).
 That later binding evidence is separate from the original native certificate.

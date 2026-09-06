@@ -1,0 +1,10 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+commit=eebd7c9206cef7a5fbc32f7f0ca9f71bdc68ec63
+started=2026-09-05T23:59:31Z
+pixi_install_exit=0
+umap_identity_exit=0
+mamba_cert_exit=0
+followup_exit=1
+finished=2026-09-06T00:04:10Z

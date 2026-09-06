@@ -1,0 +1,28 @@
+{
+  "source_commit": "eebd7c9206cef7a5fbc32f7f0ca9f71bdc68ec63",
+  "baseline": {
+    "status": "PASS",
+    "gradient_tensors": 54,
+    "comparison": "BITWISE PASS: bench/results/e1/2026-09-05_234154-mojolearn-e2-amd/diag/mamba-cert == bench/results/e1g/2026-09-05_195622-nvidia-mamba/remote/mamba-cert; devices=amd,nvidia; 54 gradient tensors"
+  },
+  "long_sequence": {
+    "status": "FAIL",
+    "reason": "13 intermediate gradient comparisons remain outside unchanged tolerances. Public byte equality does not override this failure.",
+    "cases": [
+      {
+        "case": "mamba1-l64",
+        "public_tensors": 11,
+        "native_bytes_match": true,
+        "case_gate": "GREEN"
+      },
+      {
+        "case": "mamba3-l65",
+        "public_tensors": 10,
+        "native_bytes_match": true,
+        "case_gate": "RED",
+        "independent_whole_forward_mamba3_public_gradients_pass": true
+      }
+    ]
+  },
+  "scope": "Corrected native AMD/NVIDIA cases; no refreshed Apple, installed-wheel or Python-backward API claim"
+}
