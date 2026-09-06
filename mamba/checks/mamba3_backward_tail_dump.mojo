@@ -5,6 +5,7 @@ from std.memory import bitcast
 from std.os import getenv
 
 from max.gpu.host import DeviceContext
+from checks.numerics import numeric_mode_name
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
@@ -401,6 +402,7 @@ def main() raises:
             + "\"family\":\"mamba3\",\"case\":\"" + case_name + "\","
             + "\"objective\":\"signed_dyadic_weight_v1\","
             + "\"mode\":\"complete-public-prefill\","
+            + "\"numeric_mode\":\"" + numeric_mode_name() + "\","
             + "\"forward_operands\":[\"rot.k\",\"bcnorm.B\",\"bcnorm.C\",\"B_bias\",\"C_bias\",\"dt.out\",\"trap.sigma\"],"
             + "\"public_prefill_leaves\":[\"x\",\"block_norm.weight\","
             + "\"in_proj.weight\",\"dt_bias\",\"B_norm.weight\","
