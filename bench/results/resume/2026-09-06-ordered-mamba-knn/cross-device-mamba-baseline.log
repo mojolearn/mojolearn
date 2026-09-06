@@ -1,0 +1,1 @@
+BITWISE PASS: bench/results/e1/2026-09-06_071735-mojolearn-e2-amd/diag/mamba-cert == bench/results/e1g/2026-09-06_033208-nvidia-mamba/remote/mamba-cert; devices=amd,nvidia; 54 gradient tensors

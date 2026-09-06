@@ -1,0 +1,1 @@
+Operator stopped the first continued harness after its baseline kNN process stalled in a futex wait after the first case. Corrected context scope and synchronized host-buffer allocation at source 6dd44ac5; all twelve build/check statuses pass in continued-lifetime. Original attempt is incomplete, not certified.

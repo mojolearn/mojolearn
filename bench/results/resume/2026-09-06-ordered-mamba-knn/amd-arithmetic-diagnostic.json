@@ -1,0 +1,21 @@
+{
+  "scope": "Diagnostic on capture source 93222bbc; numeric mode from native manifest; raw manifests unchanged",
+  "failures": [
+    "rot.k: independent forward float64 operand semantics failed"
+  ],
+  "reports": [
+    "partial.qkdot.gamma: reconstructed DAG bitwise=True; direct-float64 maxabs=5.485e-06 bad=0; direct-float32 maxabs=5.245e-06 bad=1",
+    "partial.s15.scale: reconstructed DAG bitwise=True; direct-float64 maxabs=4.389e-05 bad=2; direct-float32 maxabs=4.578e-05 bad=3",
+    "partial.scale.gamma: reconstructed DAG bitwise=True; direct-float64 maxabs=4.389e-05 bad=2; direct-float32 maxabs=4.578e-05 bad=3",
+    "partial.scale.beta: reconstructed DAG bitwise=True; direct-float64 maxabs=4.389e-05 bad=2; direct-float32 maxabs=4.578e-05 bad=3",
+    "partial.gamma.total: reconstructed DAG bitwise=True; direct-float64 maxabs=4.517e-05 bad=3; direct-float32 maxabs=4.578e-05 bad=2",
+    "partial.dt.current_total: reconstructed DAG bitwise=True; direct-float64 maxabs=1.625e-05 bad=2; direct-float32 maxabs=1.526e-05 bad=1",
+    "partial.dt.available_total: reconstructed DAG bitwise=True; direct-float64 maxabs=1.621e-05 bad=2; direct-float32 maxabs=1.526e-05 bad=1",
+    "partial.dt.with_seg: reconstructed DAG bitwise=True; direct-float64 maxabs=1.628e-05 bad=2; direct-float32 maxabs=1.526e-05 bad=1",
+    "partial.join.kscale: reconstructed DAG bitwise=True; direct-float64 maxabs=2.563e-06 bad=2; direct-float32 maxabs=2.503e-06 bad=2",
+    "partial.join.s15.scale: reconstructed DAG bitwise=True; direct-float64 maxabs=2.227e-05 bad=3; direct-float32 maxabs=2.289e-05 bad=3",
+    "partial.join.gamma.total: reconstructed DAG bitwise=True; direct-float64 maxabs=2.295e-05 bad=1; direct-float32 maxabs=2.384e-05 bad=1",
+    "partial.join.dt.current_total: reconstructed DAG bitwise=True; direct-float64 maxabs=1.660e-05 bad=4; direct-float32 maxabs=1.907e-05 bad=3",
+    "partial.join.dt.available_total: reconstructed DAG bitwise=True; direct-float64 maxabs=1.721e-05 bad=2; direct-float32 maxabs=1.717e-05 bad=2"
+  ]
+}

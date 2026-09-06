@@ -45,3 +45,7 @@ It refuses non-IDENTICAL builds and emits `ORDERED_BITS` records. Cross-vendor
 qualification requires those records to match, in addition to each native
 check passing. The older `ordered_boosting_check.mojo` remains a separate
 fold-axis wiring check.
+
+AMD MI325X and NVIDIA RTX 4090 pass this native gate at `6dd44ac5`, with
+all 130 ordered records matching by bits. Weighted CTR checks also pass.
+See the [comparison](../bench/results/resume/2026-09-06-ordered-mamba-knn/cross-device-continued.json).

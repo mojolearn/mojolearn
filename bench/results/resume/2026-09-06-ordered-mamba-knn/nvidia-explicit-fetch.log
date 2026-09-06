@@ -1,0 +1,2 @@
+bash: line 1: rsync: command not found
+rsync(32279): error: unexpected end of file

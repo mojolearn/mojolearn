@@ -1,0 +1,123 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     rent
+   gpu:      NVIDIA GeForce RTX 4090
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      bench/results/e1g/2026-09-06_033208-nvidia-mamba
+
+   commit:   395d9421 parent 10e44459
+   source:   archive of 395d9421adc40c37ed119895a353f67d37e8a20d; working-tree edits are not shipped
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and NVIDIA dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /Users/andrewhendel/CascadeProjects/mojolearn/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[03:32:10 nvidia] dead-man ARMED before the create: pid 23553, fires in 4500s, keyed by name mojolearn-gemm-nvidia-2026-09-06_033208
+[03:32:10 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 23553; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-23460
+[03:32:10 nvidia] creating mojolearn-gemm-nvidia-2026-09-06_033208 (NVIDIA GeForce RTX 4090, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[03:32:10 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[03:32:12 nvidia] pod 3raw0dqpzytezi created
+[03:32:47 nvidia] ssh target: -p 27208 root@47.47.180.12
+[03:32:49 nvidia] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[03:32:49 nvidia] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod 3raw0dqpzytezi ...
+    ARMED. Pod 3raw0dqpzytezi is TERMINATED through the API in 60 minutes.
+      lease: /Users/andrewhendel/CascadeProjects/mojolearn/tools/../bench/results/runpod_leases/3raw0dqpzytezi.lease
+      extend with: tools/runpod_guard.sh extend 3raw0dqpzytezi '-p 27208 root@47.47.180.12' <minutes>
+    3raw0dqpzytezi: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep  6 07:33 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[03:33:06 nvidia] shipping the COMMIT (395d9421adc40c37ed119895a353f67d37e8a20d), not the working tree
+[03:33:06 nvidia]   bounded Mamba source archive: 3285965 bytes compressed
+[03:33:06 nvidia]   archive source sha256: c58c737edc65db1e374270c2324b6a59
+[03:39:27 nvidia] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=296
+[03:39:31 nvidia]   remote pid 296; polling every 30s, giving up after 2640s
+[03:58:17 nvidia]   the payload finished (its sentinel is on the box)
+    mamba3	GREEN	0	e2683d009c8fd1e550629191ac5d23a55be28062f49644a1bef75314f94c7439	bbc7261ec2c1f02799797e7fdb6b4d7d7967f9225c5e1399f182ff7cbdf049ef
+    mamba2-l257	GREEN	0	25ba7ee161a0ca0835dc99cc2b9331b77a50f58a69349ae3b7681b715fcb5cc5	30e55cd47fa608873a1c26a03f2dfacdf9f4dfce2c0bc7a91b7d53d80ccfd3bd
+    mamba2-state	GREEN	0	25ba7ee161a0ca0835dc99cc2b9331b77a50f58a69349ae3b7681b715fcb5cc5	30e55cd47fa608873a1c26a03f2dfacdf9f4dfce2c0bc7a91b7d53d80ccfd3bd
+    MAMBA-BACKWARD-CERT artifacts=/root/gemm_leg_out/mamba-cert
+    REMOTE_BODY_DONE
+
+== step 7: fetch ==
+    source_sha256.txt
+    mamba-cert
+    followup
+    continued-console.log
+    continued-lifetime
+    uname.txt
+    pixi_env.log
+    continued
+    gpu.txt
+    cpu-affinity.log
+    pixi_install.log
+    mamba_cert_console.log
+    leg.txt
+    followup-console.log
+    umap.identity.log
+
+== step 8: what came home ==
+MAMBA BACKWARD BYTE CERTIFICATE VALID: bench/results/e1g/2026-09-06_033208-nvidia-mamba/remote/mamba-cert
+family	verdict	rc	oracle_manifest_sha256	dump_manifest_sha256
+mamba1	GREEN	0	77f419070858b02e27422647341eb5ee141673a373de7d1a4faf93aa724c8414	85a254b74bde291da380838c0d67980a34cec5de2fd5275972d013032ab03c60
+mamba2	GREEN	0	bb10dbefdd28418eab7fff23e3e81fbfd0269721aceed4aba463ef43eb61231d	ff1d04923df796262b955a9a1fd121d28cebca72b1a5f419a75336b6c12d1de5
+mamba3	GREEN	0	e2683d009c8fd1e550629191ac5d23a55be28062f49644a1bef75314f94c7439	bbc7261ec2c1f02799797e7fdb6b4d7d7967f9225c5e1399f182ff7cbdf049ef
+mamba2-l257	GREEN	0	25ba7ee161a0ca0835dc99cc2b9331b77a50f58a69349ae3b7681b715fcb5cc5	30e55cd47fa608873a1c26a03f2dfacdf9f4dfce2c0bc7a91b7d53d80ccfd3bd
+mamba2-state	GREEN	0	25ba7ee161a0ca0835dc99cc2b9331b77a50f58a69349ae3b7681b715fcb5cc5	30e55cd47fa608873a1c26a03f2dfacdf9f4dfce2c0bc7a91b7d53d80ccfd3bd
+PASS: 186 uint32 cells identical across 8 stages
+  source sha256 MATCHES on both ends (c58c737edc65db1e...)
+  gpu on the box:
+    NVIDIA GeForce RTX 4090, 580.159.04
+    vendor=nvidia
+    payload=mamba
+    knn_layout_only=0
+    commit=395d9421adc40c37ed119895a353f67d37e8a20d
+    started=2026-09-06T07:39:31Z
+    pixi_install_exit=0
+    umap_identity_exit=0
+    mamba_cert_exit=0
+    followup_exit=0
+    continued_exit=143
+    finished=2026-09-06T07:52:13Z
+
+== step 9: Mamba backward certificate ==
+  Strict backward results, manifests, and native gradient bytes:
+    bench/results/e1g/2026-09-06_033208-nvidia-mamba/remote/mamba-cert
+  This payload ran no training and produced no timing claim.
+
+== step 10: terminate at the end of the WORK ==
+  lease at exit:
+    3raw0dqpzytezi: 34 minutes left of a 60-minute lease
+  terminating 3raw0dqpzytezi (layer two, from this machine)
+    DELETE /v1/pods/3raw0dqpzytezi -> HTTP 204
+  VERIFIED: 3raw0dqpzytezi is gone (HTTP 404).
+
+artifacts: bench/results/e1g/2026-09-06_033208-nvidia-mamba
+the certificate: bench/results/e1g/2026-09-06_033208-nvidia-mamba/remote/mamba-cert
+read results.tsv, device.csv, commit.txt, and SHA256SUMS together.
+
+== teardown (exit 0) ==
+  lease at exit:
+    NO LEASE for 3raw0dqpzytezi -- it is unguarded.
+  dead-man cancelled (pid 23553)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-23460/gemm_remote_leg.sh: line 2051: 23553 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

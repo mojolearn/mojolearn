@@ -1,0 +1,13 @@
+From https://github.com/mojolearn/mojolearn
+ * branch              7d0d6156a9c150792d45a6641aad7bb57c5ae5cc -> FETCH_HEAD
+Warning: you are leaving 1 commit behind, not connected to
+any of your branches:
+
+  93222bbc Mamba3 exact forward operand capture source snapshot
+
+If you want to keep it by creating a new branch, this may be a good time
+to do so with:
+
+ git branch <new-branch-name> 93222bbc
+
+HEAD is now at 7d0d6156 Ordered RMSE and adversarial kNN source snapshot

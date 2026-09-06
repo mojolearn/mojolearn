@@ -1,0 +1,281 @@
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+/root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:2355:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            d_off.unsafe_ptr() + split_offset,
+            ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+/root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:2356:34: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            d_shift.unsafe_ptr() + split_offset,
+            ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+/root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:2357:33: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            d_mask.unsafe_ptr() + split_offset,
+            ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+/root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:2358:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            d_bin.unsafe_ptr() + split_offset,
+            ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+/root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:2359:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            d_eq.unsafe_ptr() + split_offset,
+            ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+/root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:2361:33: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            d_vals.unsafe_ptr() + leaf,
+            ~~~~~~~~~~~~~~~~~~~~^~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:11:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:11:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:11:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+/root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:817:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:11:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:11:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+/root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:357:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+/root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:382:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:177:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:182:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:182:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:182:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:185:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:988:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:1017:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:1023:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:745:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:752:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:359:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:432:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Imported from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:31:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:495:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:15:
+Imported from /root/mojolearn/gbdt/train.mojo:27:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:124:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    shared_borders[0] = borders.unsafe_load(0)
+    ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:15:
+Imported from /root/mojolearn/gbdt/train.mojo:27:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:126:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var borders_count = Int(shared_borders[0])
+                            ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:15:
+Imported from /root/mojolearn/gbdt/train.mojo:27:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:129:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        shared_borders[tid] = borders.unsafe_load(tid + 1)
+        ~~~~~~~~~~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:15:
+Imported from /root/mojolearn/gbdt/train.mojo:27:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:137:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:15:
+Imported from /root/mojolearn/gbdt/train.mojo:27:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:144:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var border_value = shared_borders[border]
+                           ~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:15:
+Imported from /root/mojolearn/gbdt/train.mojo:27:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:146:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:15:
+Imported from /root/mojolearn/gbdt/train.mojo:27:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:151:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:233:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:279:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:294:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:410:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:432:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:440:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:706:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:739:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:779:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:838:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/ordered_rmse_check.mojo:16:
+Imported from /root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:30:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:848:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Included from /root/mojolearn/checks/ordered_rmse_check.mojo:13:
+Included from /root/mojolearn/gbdt/methods/dynamic_boosting.mojo:25:
+Included from /root/mojolearn/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:102:
+/root/mojolearn/gbdt/methods/pointwise_optimization_subsets.mojo:481:24: warning: assignment to 'adapt_blocks' was never used; assign to '_' instead?
+        adapt_blocks = 1
+                       ^

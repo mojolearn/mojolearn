@@ -1,0 +1,12 @@
+ordered-build	0
+ordered-check	0
+ctr-build	0
+ctr-check	0
+knn-build-baseline	0
+knn-baseline	0
+knn-build-selector	0
+knn-selector	0
+knn-build-transpose	0
+knn-transpose	0
+knn-build-both	0
+knn-both	0

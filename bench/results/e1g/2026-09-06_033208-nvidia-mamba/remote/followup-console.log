@@ -1,0 +1,105 @@
+✨ Pixi task (mamba-grad-m1-l64 in skgpu): oracle=/tmp/mojolearn-mamba1-l64-grad && actual=/tmp/mojolearn-mamba1-l64-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba1 --case base_b1_l64_d8 --out $oracle && MOJOLEARN_MAMBA1_GRAD_CASE=base_b1_l64_d8 MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba_backward_device_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba1/base_b1_l64_d8 gradients to /tmp/mojolearn-mamba1-l64-grad
+finite-difference worst relative-scale error: 4.889e-10
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:9:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:9:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:9:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+MAMBA1 BACKWARD DEVICE WHOLE PASS: emitted all 11 external-oracle gradients plus diagnostic dB/dC
+Mamba gradient public-prefill comparison passed: 11 tensors
+  selected manifest policy=mamba1.public_prefill_leaves.exact11.v1
+✨ Pixi task (mamba-grad-m3-l65 in skgpu): oracle=/tmp/mojolearn-mamba3-l65-grad && actual=/tmp/mojolearn-mamba3-l65-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba3 --case m3_base_b1_l65_d64 --out $oracle && MOJOLEARN_MAMBA3_GRAD_CASE=m3_base_b1_l65_d64 MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba3_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba3/m3_base_b1_l65_d64 gradients to /tmp/mojolearn-mamba3-l65-grad
+finite-difference worst relative-scale error: 1.587e-09
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:13:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:13:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:13:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:13:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:13:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+MAMBA3 SCALE CHAIN PASS: first-token gamma and shifted beta
+  angle.theta: exact per-token-mod recurrence bitwise=True; direct-float64 maxabs=2.294e-06 bad=65
+  rot.k: compositional forward semantics; direct-float64 maxabs=7.527e-06 bad=38
+  partial.qkdot.gamma: reconstructed DAG bitwise=True; direct-float64 maxabs=5.485e-06 bad=0; direct-float32 maxabs=5.245e-06 bad=1
+  partial.s15.scale: reconstructed DAG bitwise=True; direct-float64 maxabs=4.389e-05 bad=2; direct-float32 maxabs=4.578e-05 bad=3
+  partial.scale.gamma: reconstructed DAG bitwise=True; direct-float64 maxabs=4.389e-05 bad=2; direct-float32 maxabs=4.578e-05 bad=3
+  partial.scale.beta: reconstructed DAG bitwise=True; direct-float64 maxabs=4.389e-05 bad=2; direct-float32 maxabs=4.578e-05 bad=3
+  partial.gamma.total: reconstructed DAG bitwise=True; direct-float64 maxabs=4.517e-05 bad=3; direct-float32 maxabs=4.578e-05 bad=2
+  partial.dt.current_total: reconstructed DAG bitwise=True; direct-float64 maxabs=1.625e-05 bad=2; direct-float32 maxabs=1.526e-05 bad=1
+  partial.dt.available_total: reconstructed DAG bitwise=True; direct-float64 maxabs=1.621e-05 bad=2; direct-float32 maxabs=1.526e-05 bad=1
+  partial.dt.with_seg: reconstructed DAG bitwise=True; direct-float64 maxabs=1.628e-05 bad=2; direct-float32 maxabs=1.526e-05 bad=1
+  partial.join.kscale: reconstructed DAG bitwise=True; direct-float64 maxabs=2.563e-06 bad=2; direct-float32 maxabs=2.503e-06 bad=2
+  partial.join.s15.scale: reconstructed DAG bitwise=True; direct-float64 maxabs=2.227e-05 bad=3; direct-float32 maxabs=2.289e-05 bad=3
+  partial.join.gamma.total: reconstructed DAG bitwise=True; direct-float64 maxabs=2.295e-05 bad=1; direct-float32 maxabs=2.384e-05 bad=1
+  partial.join.dt.current_total: reconstructed DAG bitwise=True; direct-float64 maxabs=1.660e-05 bad=4; direct-float32 maxabs=1.907e-05 bad=3
+  partial.join.dt.available_total: reconstructed DAG bitwise=True; direct-float64 maxabs=1.721e-05 bad=2; direct-float32 maxabs=1.717e-05 bad=2
+Mamba gradient public-prefill comparison passed: 86 tensors
+  selected manifest policy=mamba3.public_prefill_leaves.exact10.v1
+  selected manifest policy=mamba3.public_prefill_diagnostics.exact76.v1
+  selected mamba3.l65.compositional_forward_and_gradient_operands_plus_exact_dag.v1; all thirteen outputs checked by bits; independent whole-forward public leaves remain mandatory
+  selected partial.dt.available_total: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=1.621e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.dt.current_total: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=1.625e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.dt.with_seg: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=1.628e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.gamma.total: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=4.517e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.join.dt.available_total: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=1.721e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.join.dt.current_total: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=1.660e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.join.gamma.total: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=2.295e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.join.kscale: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=2.563e-06; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.join.s15.scale: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=2.227e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.qkdot.gamma: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=5.485e-06; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.s15.scale: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=4.389e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.scale.beta: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=4.389e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected partial.scale.gamma: policy=mamba3.l65.compositional_operands_plus_exact_dag.v1, direct-f64-reported-only maxabs=4.389e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+schema=mojolearn.mamba.backward-certificate.nvidia.v2
+created_utc=2026-09-06T07:45:36Z
+host=2f1dd08663a9
+kernel=Linux 6.8.0-117-generic x86_64
+mode=IDENTICAL
+profile=long-sequence-v1
+vendor=nvidia
+mode_injector=tools/with_identical_mode.sh
+commit=395d9421adc40c37ed119895a353f67d37e8a20d
+source_sha256=37e794f48b4cb7b724be3fedec5810013cf5ab57c5b8e1066cbc374181991029
+0, NVIDIA GeForce RTX 4090, GPU-01a12a86-b470-30ee-c81c-272e3b8fb6d7, 580.159.04
+family	verdict	rc	oracle_manifest_sha256	dump_manifest_sha256
+mamba1-l64	GREEN	0	b963baa7c8539e0f0a673abb2c25ca50dbd291080935a19d862f538085922dd5	4a3e56ae8aefb5964fbe4ba299e6b36232d10780a065dfe64bbcd5b6fc8ffeab
+mamba3-l65	GREEN	0	f745bb028f37e2fd4e2306f80ed0659f0a36734516412dc1977849a38cc3167b	3782cd0f68449149de2809e1f83667206935ffee4db7888aa3a067e22d86fa25
+MAMBA-BACKWARD-CERT artifacts=/root/gemm_leg_out/followup/mamba-long-cert

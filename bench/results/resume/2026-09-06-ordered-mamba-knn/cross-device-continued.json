@@ -1,0 +1,31 @@
+{
+  "left": {
+    "directory": "bench/results/e1/2026-09-06_080119-mojolearn-e2-amd/continued",
+    "commit": "6dd44ac53f178fa07fa91b13dadf749163df24f9",
+    "knn_cells": 5440,
+    "knn_arm_sha256": {
+      "baseline": "c6f9f42719b4f5de0b547823dadd84f4ac920c486f47f60d6286247cbec0e4b2",
+      "selector": "c6f9f42719b4f5de0b547823dadd84f4ac920c486f47f60d6286247cbec0e4b2",
+      "transpose": "c6f9f42719b4f5de0b547823dadd84f4ac920c486f47f60d6286247cbec0e4b2",
+      "both": "c6f9f42719b4f5de0b547823dadd84f4ac920c486f47f60d6286247cbec0e4b2"
+    },
+    "ordered_records": 130,
+    "ordered_sha256": "d5c410753f3efbc5848e0a525a263eb595357a2793fdb3b3965588dceae18ed1"
+  },
+  "status": "PASS",
+  "scope": "Native correctness; no timing or external CatBoost parity",
+  "right": {
+    "directory": "bench/results/e1g/2026-09-06_033208-nvidia-mamba/remote/continued-lifetime",
+    "commit": "6dd44ac53f178fa07fa91b13dadf749163df24f9",
+    "knn_cells": 5440,
+    "knn_arm_sha256": {
+      "baseline": "c6f9f42719b4f5de0b547823dadd84f4ac920c486f47f60d6286247cbec0e4b2",
+      "selector": "c6f9f42719b4f5de0b547823dadd84f4ac920c486f47f60d6286247cbec0e4b2",
+      "transpose": "c6f9f42719b4f5de0b547823dadd84f4ac920c486f47f60d6286247cbec0e4b2",
+      "both": "c6f9f42719b4f5de0b547823dadd84f4ac920c486f47f60d6286247cbec0e4b2"
+    },
+    "ordered_records": 130,
+    "ordered_sha256": "d5c410753f3efbc5848e0a525a263eb595357a2793fdb3b3965588dceae18ed1"
+  },
+  "cross_vendor_bitwise": true
+}

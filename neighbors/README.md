@@ -36,3 +36,9 @@ across the four flag combinations and named GPUs. See the
 [experiment record](checks/SMALLK_DISPATCH_EXPERIMENT.md) for earlier broader
 dispatch coverage and scoped timing evidence. These correctness checks do
 not establish that either optimization is faster for every workload/device.
+
+At frozen source `6dd44ac5`, AMD MI325X and NVIDIA RTX 4090 pass all four
+arms and match every one of those 5,440 records. The driver explicitly scopes
+its device context and synchronizes host allocation before pointer writes;
+this fixed a NVIDIA stall in the first stress-driver version. See the
+[retained comparison](../bench/results/resume/2026-09-06-ordered-mamba-knn/cross-device-continued.json).

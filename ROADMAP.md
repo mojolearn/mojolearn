@@ -3,29 +3,43 @@
 This is the only live project plan. Historical plans and handoffs are not
 current instructions; git history and `archive/` retain their evidence.
 
-## Mamba3 intermediate investigation (2026-09-06)
+## Native certification continuation (2026-09-06)
 
-The strict Mamba3 prefill gate now requires all 76 native diagnostics as well
-as the ten public leaves. Removing a diagnostic from both manifests or
-deleting a declared file fails the gate. Sixteen small policy tests pass,
-including an independent-forward control that rejects a wrong public gradient
-even when the staged float32 reference agrees with it.
+Mamba source `395d9421` passes all five baseline and both long cases on AMD
+MI325X and NVIDIA RTX 4090. All 54 baseline and 21 long-profile gradient
+tensors match by bits. Mamba3 L65 additionally matches all 86 diagnostics/public
+gradients and nine forward operands. Corrected continued-check source
+`6dd44ac5` passes ordered RMSE, weighted CTR and all four kNN flag combinations
+on both GPUs: 130 ordered records and 5,440 selected index/distance pairs per
+kNN arm match exactly. See the [complete record](bench/results/resume/2026-09-06-ordered-mamba-knn/README.md).
 
-A read-only analysis of the corrected `eebd7c92` AMD/NVIDIA L65 captures
-matches **all 86 tensors** by bytes and reproduces **17/17 joins** exactly
-from their native operands. Eight of the 13 failing intermediates are among
-those reproduced joins. In particular, both inputs to `partial.join.kscale`
-pass the float64 and float32 semantic comparisons, but cancellation leaves
-two output cells outside tolerance. This attribution is diagnostic evidence,
-not a waiver: replaying the tightened strict gate still fails the same 13
-comparisons on each vendor. See the [record](bench/results/resume/2026-09-06-mamba3-joins/README.md).
+Mamba3 L65 now retains all 76 diagnostics and ten public gradients. Every
+public gradient must pass the independent whole-forward float64 oracle.
+Thirteen intermediate outputs use an explicit compositional contract:
+independently validate their operands, reconstruct the prescribed float32
+wrapped-angle recurrence and FMA/reduction DAG, and require exact output
+bits. Direct reference differences remain visible; this does not claim
+that all intermediates satisfy direct whole-float64 tolerance. No tolerance
+was widened and no failing output was omitted. See the
+[contract](mamba/BACKWARD_CERTIFICATION.md).
 
-Next, retain the exact forward `rot.k`, biased Q/K, dt and sigma operands
-alongside the existing gradients to trace S14/S15 reductions and the two
-current-dt joins. Check those operands independently before deciding on a
-numerical implementation or arithmetic contract. No native kernel changed
-in this checkpoint, and no new GPU execution or performance measurement was
-needed. The certification and remaining project priorities below still apply.
+The native [ordered RMSE entry](gbdt/ORDERED_RMSE.md) now trains with
+independent per-fold approximation cursors, prefix-only leaf estimation,
+and a separate exported-model cursor. Its gate checks independent replay,
+weighted fit/predict, leakage controls, zero-mass prefixes, and constant-tree
+prediction. This closes the numeric single-permutation implementation;
+multiple categorical permutations and full external CatBoost parity remain.
+
+Both kNN compile-time flags work with IDENTICAL. The new adversarial gate
+checks 5,440 selected distance/index pairs across 32 cases, including
+non-dyadic data, duplicate rows, high offsets and odd dimensions. All four
+arms agree exactly on both GPUs. See [build usage](neighbors/README.md). These flags
+are compiler defines, not runtime Python settings or rebuilt wheel options.
+Existing UMAP expanded quality/identity evidence remains current for its
+recorded source; this continuation does not repeat that performance work.
+
+Only the main operator runs checks; GPU work is serial, remote CPU affinity
+is four cores, compiler jobs are limited, and BLAS/OpenMP use one thread.
 
 ## Resumed implementation and identity checks (2026-09-05)
 
@@ -44,8 +58,9 @@ is retained as evidence, but its old gradient-correctness claim is superseded.
 
 Mamba1 L64 passes on both GPUs. All ten Mamba3 L65 public gradients now pass
 the independent forward oracle, and the 21 long-case public tensors match
-across AMD/NVIDIA. The complete long certificate remains RED on 13
-intermediate comparisons; those failures are retained, not waived.
+across AMD/NVIDIA. At that historical source the complete long certificate was RED on 13
+intermediate comparisons. The explicit September 6 contract above supersedes
+that gate policy; the original direct differences remain retained.
 
 UMAP's self-neighbor fix passes all six expanded quality fixtures in all
 three modes on both GPUs. Both native stage fixtures (186 and 690 cells) and
@@ -58,16 +73,14 @@ case for its estimator to receive coverage.
 
 Next work, with only the main operator testing/measuring and serial GPU jobs:
 
-1. Resolve Mamba3 L65's remaining intermediate reduction/operand checks,
-   using independent semantics and explicit arithmetic checks without wider
-   tolerances or omitted failing tensors. Re-run corrected Apple evidence
-   separately when that hardware is in scope.
-2. Broaden kNN layout/selector distributions, dimensions and installed/external
-   comparisons. The completed AMD four-arm campaign does not promote either
-   experimental flag to normal dispatch.
-3. Complete CatBoost ordered boosting: per-fold approximation cursors,
-   prefix-only gradients and leaf estimation. The passing fold-axis wiring
-   gate is not an end-to-end booster; keep comparator runs in plain mode.
+1. Re-run corrected Apple Mamba evidence separately when that hardware is
+   in scope. The named AMD/NVIDIA native backward profiles are now closed.
+2. Complete kNN installed-artifact/external and larger-scale coverage. The
+   new adversarial distribution/dimension gate passes both GPUs, but neither
+   experimental flag is promoted to default dispatch by correctness alone.
+3. Extend the implemented numeric ordered RMSE path only with explicit
+   coverage for additional permutations, categorical CTR and objectives.
+   Keep general external comparator runs in plain mode until parity is scoped.
 4. Keep 0.6.0 publication and Linux installed-wheel qualification separate
    from these native/source certificates.
 
@@ -130,10 +143,9 @@ workloads; AMD on DigitalOcean, NVIDIA on RunPod):
    each at two additional seeds, 15 neighbors and min_dist 0.2. Retain the
    original thresholds and both correspondence-breaking controls. Compare
    IDENTICAL inputs and embeddings only after both hardware legs finish.
-4. Revisit CatBoost's weighted two-level FeatureFreq slice and ordered-boosting
-   gaps. The fold-axis gate is not an end-to-end ordered booster: per-fold
-   cursors, prefix-only gradients and leaf estimation remain implementation
-   work. Keep comparator runs pinned to plain boosting until then.
+4. The later September 6 continuation implements numeric ordered RMSE
+   with per-fold cursors and prefix-only leaf estimation. Remaining
+   categorical/permutation scope and external parity are still open.
 
 The first expanded NVIDIA run at `5658d28e` passed all five baseline Mamba
 cases and Mamba1 L64, but exposed an obsolete partial manifest in the Mamba3
@@ -283,9 +295,9 @@ path. Do not weaken IDENTICAL to make the comparison green.
 
 ## Algorithmic work after closure
 
-- Complete CatBoost ordered boosting: per-fold approximation cursors, weak
-  targets, leaf estimation, and model averaging. Until then, comparisons pin
-  CatBoost to plain boosting.
+- Extend the native single-permutation ordered RMSE implementation to the
+  remaining categorical/permutation and objective scope. General comparisons
+  still pin CatBoost to plain boosting; full parity is not established.
 - Complete tree CTR/feature-combination wiring if categorical parity remains
   a product priority.
 - Consider AutoARIMA/search only after the existing ARIMA fit is independently

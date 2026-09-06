@@ -1,0 +1,53 @@
+[02:34:36 amd] dead-man timer pid 94459 (3600 s, keyed by tag e2 + name mojolearn-e2-amd)
+[02:34:36 amd] creating mojolearn-e2-amd (gpu-mi325x1-256gb, tor1)
+[02:34:41 amd] droplet id 598180320
+[02:35:26 amd] active at 159.203.19.181
+[02:35:51 amd] arming a second dead-man ON THE DROPLET (3600s), which the local one cannot guarantee
+[amd] ON_DROPLET_DEADMAN_ARMED
+[amd gpu] GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+[02:36:14 amd] ssh settled after 3 probe(s)
+[02:36:14 amd] cloning 93222bbcf73ad159791937e359050789991de042 ON THE BOX from https://github.com/mojolearn/mojolearn.git (bench/results excluded), attempt 1
+CLONE-COMMIT-OK 93222bbcf73ad159791937e359050789991de042
+1
+[02:36:20 amd] wave 1: phases=9 lanes=all, bound 3076s
+WAVE-1-EXIT=0  (124 = hit the work bound)
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 06:36:26
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: tools/mamba_backward_do_diag.sh === 06:36:26
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+    pid 3174's current affinity list: 0-19
+    pid 3174's new affinity list: 0-3
+
+=== done === 06:38:34
+artifacts in /root/mojolearn/bench/results/e1/2026-09-06_063622-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+[02:38:34 amd] main-operator repair window; release file: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-ordered-mamba-knn/amd.release
+[03:14:05 amd] repair window closed; collecting and destroying within the lease
+tools/e2_remote_leg.sh: line 548: repair: command not found
+tools/e2_remote_leg.sh: line 548: E2_EXTRA_CHECKS: unbound variable
+[03:14:05 amd] teardown (rc=1)
+[03:14:07 amd] DELETE droplet 598180320 -> HTTP 204
+[03:14:08 amd] post-destroy GET droplet 598180320 -> HTTP 200
+[03:14:14 amd] post-destroy GET droplet 598180320 -> HTTP 200
+[03:14:20 amd] post-destroy GET droplet 598180320 -> HTTP 404
+[03:14:20 amd] dead-man timer cancelled

@@ -1,0 +1,15 @@
+From https://github.com/mojolearn/mojolearn
+ * branch              10e44459971a7089da9f2c945fee25354017f112 -> FETCH_HEAD
+Warning: you are leaving 1 commit behind, not connected to
+any of your branches:
+
+  cfe65b34 Frozen continuation certification source snapshot
+
+If you want to keep it by creating a new branch, this may be a good time
+to do so with:
+
+ git branch <new-branch-name> cfe65b34
+
+HEAD is now at 10e44459 Frozen continuation certification source snapshot
+mamba_exit=0
+continued_exit=0
