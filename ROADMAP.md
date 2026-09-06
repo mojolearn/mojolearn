@@ -80,6 +80,20 @@ correctly refused as a combined release. Apple smoke now includes OrderedRMSE
 in every interpreter/mode job; its five orchestration checks pass, with the
 actual current Apple wheel run still pending.
 
+The next Mamba3 state probe is `tools/mamba3_mode_state_probe.py`: run each
+mode serially in an isolated installed environment and retain theta/key bits,
+actual binding readback and fixture hashes. Syntax/import and all ten fixture
+file layouts are checked; no GPU result is claimed for this new diagnostic.
+
+A final provenance review found the old qualification fingerprint included
+Mamba1 but looked in nonexistent top-level directories for Mamba2/3. Their
+historical gates ran from the frozen commit, but those nested corpus files
+were not individually fingerprinted. The corrected snapshot now hashes all
+38/63/67 files and refuses missing corpora. Release admission requires these
+current hashes in both qualifications; old incomplete fingerprints cannot
+approve a new release. Twenty-six lightweight evidence tests pass. Historical
+manifests are preserved unchanged, and UMAP/ordered lane evidence is separate.
+
 ## Remaining delivery gates
 
 - Qualify the final combined CUDA/HIP Linux wheel on both vendors; the two

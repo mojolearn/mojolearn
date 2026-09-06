@@ -10,6 +10,8 @@ MODES = {'fast': 0, 'deterministic': 2, 'identical': 1}
 BINDINGS = {'_mojolearn' + suffix for suffix in ('', '_gbdt', '_estimators', '_rf', '_trees',
             '_svm', '_solver', '_metrics', '_tsa', '_linalg', '_arima', '_training', '_gp',
             '_mamba', '_transformer')}
+CORPUS_CASES = ('base_b2_l4_d8', 'mamba2/m2_base_b2_l4_d32',
+                'mamba3/m3_base_b2_l4_d32')
 SURFACES = ('smoke', 'umap', 'umap-transform', 'umap-quality', 'ordered-rmse', 'mamba', 'transformer', 'arima')
 FIXTURES = {
     'cubic128_interleaved64_64': (64, 64, 2),
@@ -36,8 +38,9 @@ def sources(root):
     paths.update((root / 'tools').glob('*.py'))
     paths.add(root / 'tools/linux_surface_qualification.sh')
     # The installed Mamba surface gate reads these committed reference operands.
-    for case in ('base_b2_l4_d8', 'm2_base_b2_l4_d32', 'm3_base_b2_l4_d32'):
+    for case in CORPUS_CASES:
         directory = root / 'mamba/corpus' / case
+        require((directory / 'x.f32').is_file(), 'Missing installed Mamba corpus: ' + case)
         paths.update(p for p in directory.rglob('*') if p.is_file())
     return {str(p.relative_to(root)): sha(p) for p in sorted(paths)}
 

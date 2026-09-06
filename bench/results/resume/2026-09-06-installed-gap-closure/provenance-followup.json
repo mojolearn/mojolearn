@@ -1,0 +1,12 @@
+{
+  "scope": "Main-only lightweight provenance/diagnostic validation, no GPU run",
+  "evidence_tests_passed": 26,
+  "corpus_files_hashed": {
+    "mamba1": 38,
+    "mamba2": 63,
+    "mamba3": 67
+  },
+  "diagnostic_fixture_file_layouts_checked": 10,
+  "diagnostic_gpu_run": "pending",
+  "historical_manifests_modified": false
+}

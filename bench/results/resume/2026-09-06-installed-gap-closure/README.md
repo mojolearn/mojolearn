@@ -130,3 +130,14 @@ boosting. Python Mamba backward, corrected Apple backward qualification,
 full categorical/ordered parity and release publication remain separate.
 These are exact candidate-wheel checks on named architectures, not universal
 GPU support or identity. PyPI has not been updated by this work.
+
+## Fingerprint follow-up
+
+The frozen qualification snapshot included the top-level Mamba1 corpus but
+used nonexistent top-level paths for the nested Mamba2/3 corpora. The gates
+ran from the frozen commit; their nested fixture files were not individually
+fingerprinted. This omission is retained as a limitation of the old records.
+Future snapshots include all38/63/67 files and refuse missing corpora. Final
+release admission now also requires these current corpus hashes. Historical
+manifests were not rewritten. The separate UMAP/ordered comparison does not
+make a Mamba corpus or release claim. See [local follow-up checks](provenance-followup.json).

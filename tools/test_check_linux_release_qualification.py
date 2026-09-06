@@ -161,12 +161,40 @@ class ReleaseAdmissionTests(unittest.TestCase):
                     patch.object(gate.surface, 'check_quality'), self.assertRaises(ValueError):
                 gate.check_vendor(out, 'hip', *args)
 
+    def test_nested_corpus_fingerprint_required_and_current(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            out = root / 'qualification'
+            out.mkdir()
+            snapshot = {}
+            for case in gate.surface.CORPUS_CASES:
+                corpus = root / 'mamba/corpus' / case
+                corpus.mkdir(parents=True)
+                for name in ('x.f32', 'reference.f64'):
+                    path = corpus / name
+                    path.write_bytes(b'fixture')
+                    snapshot[path.relative_to(root).as_posix()] = gate.digest_file(path)
+            record = out / 'qualification-sources.json'
+            write_json(record, snapshot)
+            gate.check_corpora(out, root)
+            for case in gate.surface.CORPUS_CASES[1:]:
+                missing = {p: h for p, h in snapshot.items()
+                           if not p.startswith('mamba/corpus/' + case + '/')}
+                write_json(record, missing)
+                with self.subTest(case=case), self.assertRaises(ValueError):
+                    gate.check_corpora(out, root)
+            write_json(record, snapshot)
+            (root / 'mamba/corpus/mamba3/m3_base_b2_l4_d32/reference.f64').write_bytes(b'changed')
+            with self.assertRaises(ValueError):
+                gate.check_corpora(out, root)
+
     def test_comparators_are_recomputed_and_failure_refuses(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             wheel = make_wheel(root)
             for fail in (False, True):
                 with self.subTest(fail=fail), patch.object(gate, 'check_vendor'), \
+                        patch.object(gate, 'check_corpora'), \
                         patch.object(gate.surface, 'compare', return_value={'status': 'PASSED'}) as umap, \
                         patch.object(gate.compare_ordered_python, 'compare', return_value={
                             'status': 'FAILED' if fail else 'PASSED'}) as ordered:

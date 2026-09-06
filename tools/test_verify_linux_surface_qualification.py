@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import struct
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -32,6 +33,35 @@ def quality():
 
 
 class AdmissionTests(unittest.TestCase):
+    def test_all_mamba_corpora_are_hashed_and_nested_mutations_detected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'tools').mkdir()
+            (root / 'tools/linux_surface_qualification.sh').write_text('# fixture driver')
+            for case in gate.CORPUS_CASES:
+                path = root / 'mamba/corpus' / case
+                path.mkdir(parents=True)
+                (path / 'x.f32').write_bytes(b'input')
+                (path / 'reference.f64').write_bytes(b'reference')
+            first = gate.sources(root)
+            for case in gate.CORPUS_CASES:
+                self.assertIn('mamba/corpus/' + case + '/x.f32', first)
+            changed = root / 'mamba/corpus/mamba2/m2_base_b2_l4_d32/reference.f64'
+            changed.write_bytes(b'changed reference')
+            self.assertNotEqual(first, gate.sources(root))
+
+    def test_missing_nested_mamba_corpus_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'tools').mkdir()
+            (root / 'tools/linux_surface_qualification.sh').write_text('# fixture driver')
+            for case in gate.CORPUS_CASES[:-1]:
+                path = root / 'mamba/corpus' / case
+                path.mkdir(parents=True)
+                (path / 'x.f32').write_bytes(b'input')
+            with self.assertRaisesRegex(ValueError, 'mamba3/m3_base'):
+                gate.sources(root)
+
     def test_complete_expanded_quality(self):
         gate.check_quality(quality(), 'identical', 'abc')
 

@@ -184,6 +184,19 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets):
     return qualification
 
 
+def check_corpora(directory, source_root):
+    """Refuse legacy fingerprints which silently omitted nested Mamba fixtures."""
+    snapshot = json.loads((directory / 'qualification-sources.json').read_text())
+    for case in surface.CORPUS_CASES:
+        corpus = source_root / 'mamba/corpus' / case
+        require((corpus / 'x.f32').is_file(), 'Missing current Mamba corpus: ' + case)
+        prefix = 'mamba/corpus/' + case + '/'
+        current = {p.relative_to(source_root).as_posix(): digest_file(p)
+                   for p in corpus.rglob('*') if p.is_file()}
+        recorded = {p: h for p, h in snapshot.items() if p.startswith(prefix)}
+        require(recorded == current, 'Missing or changed qualified Mamba corpus: ' + case)
+
+
 def check(wheel, qualification_root, source_root):
     wheel, qualification_root, source_root = map(Path, (wheel, qualification_root, source_root))
     wheel_sha = digest_file(wheel)
@@ -192,6 +205,7 @@ def check(wheel, qualification_root, source_root):
     directories = {v: qualification_root / v for v in ('hip', 'cuda')}
     for vendor, directory in directories.items():
         check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets)
+        check_corpora(directory, source_root)
     # Recompute comparators from retained inputs; a standalone PASS JSON is
     # not evidence. They independently admit hashes, fixtures and raw bits.
     umap = surface.compare(directories['hip'], directories['cuda'])

@@ -48,3 +48,8 @@ snapshot, as required by the retained comparators.
 Missing or stale evidence fails admission. With no Linux wheel staged, the
 existing macOS-only release path remains available. These checks perform no
 builds, GPU runs, or publication themselves.
+
+All files under the three installed Mamba corpus directories must also match
+current hashes in each `qualification-sources.json`. Mamba2 and Mamba3 are
+nested under `mamba/corpus/mamba2` and `mamba/corpus/mamba3`. Older snapshots
+which silently omitted those directories are refused for final publication.
