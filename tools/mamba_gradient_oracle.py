@@ -1221,6 +1221,7 @@ def generate(args):
             ("C_bias", params["C_bias"]),
             ("dt.out", stages["dt.out"]),
             ("trap.sigma", stages["trap.sigma"]),
+            ("angle.theta", stages["angle.theta"]),
         ):
             filename = "operand." + name + ".f64"
             shape, digest = _write_array(out / filename, value)

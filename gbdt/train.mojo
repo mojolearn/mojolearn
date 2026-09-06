@@ -1847,8 +1847,12 @@ def train_ordered_rmse(
         ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
         learning_rate, l2_leaf_reg,
     )
+    # Keep the aggregate intact while its fold/device cursors are destroyed.
+    # Moving this nested field alone leaves a partially consumed result in
+    # Mojo; the exported host model copy has no device-buffer ownership.
+    var exported_model = result.model.copy()
     return TrainedModel(
-        result.model^, fold_counts^, one_hot^, borders^, nan_treatment^,
+        exported_model^, fold_counts^, one_hot^, borders^, nan_treatment^,
         List[Float64](), List[Float64](), -1, False, 0,
         List[TCtrValueTable](), TTensorCtrRegistry(n_features),
     )
