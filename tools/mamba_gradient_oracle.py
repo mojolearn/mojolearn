@@ -1211,6 +1211,20 @@ def generate(args):
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    forward_operands = {}
+    if args.family == "mamba3":
+        for name, value in (
+            ("rot.k", stages["rot.k"]),
+            ("bcnorm.B", stages["bcnorm.B"]),
+            ("bcnorm.C", stages["bcnorm.C"]),
+            ("B_bias", params["B_bias"]),
+            ("C_bias", params["C_bias"]),
+            ("dt.out", stages["dt.out"]),
+            ("trap.sigma", stages["trap.sigma"]),
+        ):
+            filename = "operand." + name + ".f64"
+            shape, digest = _write_array(out / filename, value)
+            forward_operands[name] = {"file": filename, "shape": shape, "sha256": digest}
     files = {}
     for name, grad in named_gradients:
         filename = "grad." + name + ".f64"
@@ -1274,6 +1288,7 @@ def generate(args):
         "finite_difference_worst_relative_scale_error": worst,
         "finite_difference": finite,
         "gradients": files,
+        "forward_operands": forward_operands,
         "environment": {
             "python": platform.python_version(), "torch": torch.__version__,
             "device": str(device), "cuda": torch.version.cuda,
