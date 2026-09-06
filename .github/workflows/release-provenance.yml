@@ -274,6 +274,13 @@ jobs:
       #     writes on purpose and PyPI refuses it, so seeing it here means
       #     the audit step never ran
       #   * `twine check` passes on it
+      #   * qualification/{hip,cuda}/ under that same staging directory
+      #     retains 24 installed jobs per vendor plus build-provenance.json
+      #     from each build; BOTH runs installed this exact final wheel SHA
+      #   * current native source inventory, both vendor binary sets, and
+      #     retained UMAP/OrderedRMSE IDENTICAL comparisons all pass
+      # Separate HIP-only/CUDA-only candidate qualifications cannot admit a
+      # subsequently assembled or auditwheel-modified final release wheel.
       # If the directory is absent or empty, this is a macOS-only release and
       # the step says so and moves on. That is not a failure; it is what
       # every release before 0.3.0 was.
@@ -304,6 +311,9 @@ jobs:
             *-manylinux_*_x86_64.whl) ;;
             *) echo "::error::$base carries no manylinux tag; packaging/linux/audit.sh has not run on it"; exit 1 ;;
           esac
+          python3 tools/check_linux_release_qualification.py "$WHL" \
+            --qualification-root "$DIR/qualification" \
+            --source-root "$GITHUB_WORKSPACE"
           cp "$WHL" python/dist/
           echo "admitted $base ($got)"
           echo "staged=$base" >> "$GITHUB_OUTPUT"
