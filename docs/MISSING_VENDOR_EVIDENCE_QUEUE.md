@@ -1,6 +1,6 @@
 # Missing vendor evidence queue — read-only audit, 2026-09-06
 
-This inventory was authored by reading retained files and source. No validators, tests, builds, models, or measurements were executed. OPEN means the requested full evidence was not located in this checkout; it does not mean the implementation cannot run. Only root may execute the queued remote NVIDIA/AMD work. Historical Apple evidence below is archival, with no new Apple work authorized.
+This inventory was authored by reading retained files and source. No validators, tests, builds, models, or measurements were executed. OPEN means the requested full evidence was not located in this checkout; it does not mean the implementation cannot run. Only root may execute the queued remote NVIDIA/AMD work. Historical Apple evidence below is archival. The user subsequently allowed necessary MacBook runs with bounded CPU and memory usage; prefer remote NVIDIA/AMD, and keep all execution with root.
 
 ## Scope and queue
 
