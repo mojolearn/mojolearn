@@ -2580,11 +2580,13 @@ taskset -pc "$cores" $$ > "$OUT/cpu-affinity.log" 2>&1 || exit 9
 if [ "@NVIDIACAMPAIGN@" = 4 ] || [ "@NVIDIACAMPAIGN@" = 5 ] || [ "@NVIDIACAMPAIGN@" = 6 ]; then
     # Bound the runtime allocator as well as the external guard. A tiny
     # fixture must not let the default HIP pool reserve most of an MI300X.
-    # Explicit pool-only allocation refuses expansion beyond this 1 GiB pool.
-    export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE=1073741824
+    # CUDA's retained runtime allocates a 4 GiB block: a 1 GiB cache cap
+    # refuses even a 136.5 KiB request. HIP passed with the 1 GiB pool.
+    case "@VENDOR@" in nvidia) _pool_bytes=4294967296 ;; amd) _pool_bytes=1073741824 ;; *) exit 9 ;; esac
+    export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE=$_pool_bytes
     export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_ONLY=true
     export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_CHUNK_PERCENT=100
-    printf '%s\n' 'device_memory_pool_bytes=1073741824' 'device_memory_pool_only=true' \
+    printf '%s\n' "device_memory_pool_bytes=$_pool_bytes" 'device_memory_pool_only=true' \
         'device_memory_pool_chunk_percent=100' >> "$OUT/leg.txt"
     python3 tools/training_validation_admit.py --inventory-root "$ROOT" \
         > "$OUT/source_inventory.json" || exit 9
