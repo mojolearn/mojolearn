@@ -575,6 +575,8 @@ WHEEL_INDEX="${MOJOLEARN_WHEEL_INDEX:-testpypi}"
 # wheel that only runs on an H100. Recorded in leg.txt so a set's coverage is
 # a property of the leg record and not of somebody's shell history.
 GPU_ARCHS="${MOJOLEARN_GPU_ARCHS:-}"
+BYTE_LM_PYTHON=${MOJOLEARN_BYTE_LM_PYTHON:-python3}
+case "$BYTE_LM_PYTHON" in ''|*[!A-Za-z0-9_./-]*) echo 'Byte LM interpreter must be a literal executable path' >&2; exit 2 ;; esac
 PUBLIC_GITHUB_SOURCE=${MOJOLEARN_PUBLIC_GITHUB_SOURCE:-}
 case "$PUBLIC_GITHUB_SOURCE" in
     ''|mojolearn/mojolearn) ;;
@@ -862,7 +864,7 @@ if [ "$PAYLOAD" = "phase8" ]; then
     fi
 fi
 
-# The historical variable name is retained for compatibility. Profiles 4/5
+# The historical variable name is retained for compatibility. Profiles 4/5/6
 # are vendor-generic training (profiles 1..3 remain NVIDIA-only):
 #   MOJOLEARN_NVIDIA_CAMPAIGN=4 tools/gemm_remote_leg.sh amd --payload mamba ...
 #   MOJOLEARN_NVIDIA_CAMPAIGN=4 tools/gemm_remote_leg.sh nvidia --payload mamba ...
@@ -874,25 +876,44 @@ MAMBA_CERT_ONLY=${MOJOLEARN_MAMBA_CERT_ONLY:-0}
 case "$MAMBA_CERT_ONLY" in 0|1) ;; *) echo 'MOJOLEARN_MAMBA_CERT_ONLY must be 0 or 1' >&2; exit 2 ;; esac
 CONTINUED_CERT_CHECKS=${MOJOLEARN_CONTINUED_CERT_CHECKS:-0}
 case "$CONTINUED_CERT_CHECKS" in 0|1) ;; *) echo 'MOJOLEARN_CONTINUED_CERT_CHECKS must be 0 or 1' >&2; exit 2 ;; esac
-case "$NVIDIA_CAMPAIGN" in 0|1|2|3|4|5) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0, 1 (general), 2 (feature finish), 3 (UMAP finish), 4 (training validation), or 5 (byte LM validation)" ;; esac
+case "$NVIDIA_CAMPAIGN" in 0|1|2|3|4|5|6) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0, 1 (general), 2 (feature finish), 3 (UMAP finish), 4 (training validation), 5 (byte LM validation), or 6 (compact byte LM resume)" ;; esac
 if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
-    if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ]; then
-        # Historical variable name: profiles 4/5 are generic remote training.
-        [ "$PAYLOAD" = mamba ] || leg_die "Training profiles 4/5 require --payload mamba"
-        case "$VENDOR" in nvidia|amd) ;; *) leg_die "Training profiles 4/5 require nvidia or amd" ;; esac
+    if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+        # Historical variable name: profiles 4/5/6 are generic remote training.
+        [ "$PAYLOAD" = mamba ] || leg_die "Training profiles 4/5/6 require --payload mamba"
+        case "$VENDOR" in nvidia|amd) ;; *) leg_die "Training profiles 4/5/6 require nvidia or amd" ;; esac
     else
         [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaigns 1..3 require nvidia --payload mamba"
     fi
 fi
-if [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+if [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
     # Validate before any rental; never infer an AMD accelerator target.
-    case "$GPU_ARCHS" in ''|*[!A-Za-z0-9_]*) leg_die "Byte LM profile 5 requires one explicit MOJOLEARN_GPU_ARCHS target" ;; esac
+    case "$GPU_ARCHS" in ''|*[!A-Za-z0-9_]*) leg_die "Byte LM profiles 5/6 require one explicit MOJOLEARN_GPU_ARCHS target" ;; esac
     case "$VENDOR:$GPU_ARCHS" in
         nvidia:sm_[0-9]*|amd:gfx[0-9]*) ;;
-        *) leg_die "Byte LM profile 5 requires vendor-compatible sm_NN or gfxNNN architecture" ;;
+        *) leg_die "Byte LM profiles 5/6 require vendor-compatible sm_NN or gfxNNN architecture" ;;
     esac
     printf '%s\n' "$GPU_ARCHS" | grep -Eq '^(sm_[0-9]{2,3}[a-z]?|gfx[0-9][0-9a-f]{2,3})$' \
-        || leg_die "Byte LM profile 5 requires a single accelerator architecture name"
+        || leg_die "Byte LM profiles 5/6 require a single accelerator architecture name"
+fi
+BYTE_RESUME_ACTION=${MOJOLEARN_BYTE_LM_RESUME_ACTION:-head64}
+BYTE_BASE_DIR=${MOJOLEARN_BYTE_LM_BASELINE_HANDOFF_DIR:-}
+BYTE_BASE_SHA=${MOJOLEARN_BYTE_LM_BASELINE_HANDOFF_SHA256:-}
+BYTE_FOREIGN_DIR=${MOJOLEARN_BYTE_LM_FOREIGN_HANDOFF_DIR:-}
+BYTE_FOREIGN_SHA=${MOJOLEARN_BYTE_LM_FOREIGN_HANDOFF_SHA256:-}
+BYTE_CHECKPOINT_SHA=${MOJOLEARN_BYTE_LM_FOREIGN_SHA256:-}
+if [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+    case "$BYTE_RESUME_ACTION" in head64|resume128) ;; *) leg_die "Invalid compact resume action" ;; esac
+    printf '%s\n' "$BYTE_BASE_SHA" | grep -Eq '^[0-9a-f]{64}$' || leg_die "Root-pinned baseline handoff SHA required"
+    case "$VENDOR" in nvidia) _byte_vendor=cuda; _foreign_vendor=hip ;; amd) _byte_vendor=hip; _foreign_vendor=cuda ;; esac
+    python3 -B tools/byte_lm_handoff_transport.py check "$BYTE_BASE_DIR" --sha256 "$BYTE_BASE_SHA" --vendor "$_byte_vendor" --kind baseline128 || leg_die "Baseline handoff refused before rental"
+    if [ "$BYTE_RESUME_ACTION" = resume128 ]; then
+        printf '%s\n' "$BYTE_FOREIGN_SHA" | grep -Eq '^[0-9a-f]{64}$' || leg_die "Root-pinned foreign handoff SHA required"
+        printf '%s\n' "$BYTE_CHECKPOINT_SHA" | grep -Eq '^[0-9a-f]{64}$' || leg_die "Root-pinned foreign checkpoint SHA required"
+        python3 -B tools/byte_lm_handoff_transport.py check "$BYTE_FOREIGN_DIR" --sha256 "$BYTE_FOREIGN_SHA" --vendor "$_foreign_vendor" --kind head64 || leg_die "Foreign handoff refused before rental"
+    else
+        [ -z "$BYTE_FOREIGN_DIR$BYTE_FOREIGN_SHA$BYTE_CHECKPOINT_SHA" ] || leg_die "head64 refuses foreign inputs"
+    fi
 fi
 KNN_LAYOUT_ONLY=${MOJOLEARN_KNN_LAYOUT_ONLY:-0}
 case "$KNN_LAYOUT_ONLY" in 0|1) ;; *) leg_die "MOJOLEARN_KNN_LAYOUT_ONLY must be 0 or 1" ;; esac
@@ -921,6 +942,15 @@ if [ "$MODE" != "reap" ]; then
                 CUDA_VERSIONS="${MOJOLEARN_GEMM_LEG_CUDA:-}" ;;
     esac
     VLABEL=$(echo "$VENDOR" | tr '[:lower:]' '[:upper:]')
+    if [ "$VENDOR" = amd ] && [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+        # This campaign creates a venv with system-site-packages and inherits
+        # Torch from its interpreter. A plain ROCm SDK image is insufficient.
+        case "$IMAGE" in
+            rocm/pytorch:latest|rocm/pytorch:|rocm/pytorch) leg_die 'AMD byte LM requires an explicit pinned ROCm PyTorch image tag/digest, not latest' ;;
+            rocm/pytorch:*|rocm/pytorch@sha256:*) ;;
+            *) leg_die 'AMD byte LM profile 5 requires --image rocm/pytorch:<pinned-tag> (or digest) with HIP Torch; the plain ROCm development image is not sufficient' ;;
+        esac
+    fi
 fi
 
 STAMP=$(date +%Y-%m-%d_%H%M%S)
@@ -932,6 +962,9 @@ if [ "$MODE" = "dry" ]; then
     OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}${PSUF}-dryrun}"
 else
     OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}${PSUF}}"
+fi
+if [ "$NVIDIA_CAMPAIGN" = 6 ] && [ "$MODE" != reap ]; then
+    [ ! -e "$OUT" ] && [ ! -L "$OUT" ] || leg_die "Compact resume requires a new local output directory"
 fi
 if [ "$MODE" != "reap" ] && [ "$PAYLOAD" = "phase8" ]; then
     # WHERE THE JUDGE WILL LOOK. tools/e3_round_judge.sh takes one bootstrap
@@ -1209,10 +1242,16 @@ if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
     LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA tools/small_mlp_training_capture.py"
     LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA tools/small_mlp_training_capture.py"
 fi
-if [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+if [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
     _byte_lm_paths="training embedding gemm transformer/__init__.mojo transformer/checks transformer/impl tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
     LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_byte_lm_paths"
     LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_byte_lm_paths"
+fi
+
+if [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+    _compact_paths="tools/byte_lm_resume_compact_serial.sh tools/byte_lm_resume_handoff.py tools/byte_lm_handoff_transport.py tools/byte_lm_resume_transport_serial.sh tools/byte_lm_resume_transport_check.py"
+    LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_compact_paths"
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_compact_paths"
 fi
 
 leg_git_archive() {
@@ -1632,6 +1671,12 @@ leg_speed_artifacts() {
 }
 
 leg_mamba_artifacts() {
+    if [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+        grep -q '^byte_lm_resume_exit=0$' "$OUT/remote/leg.txt" || return 1
+        cmp "$OUT/source_inventory_local.json" "$OUT/remote/source_inventory.json" || return 1
+        python3 tools/byte_lm_resume_transport_check.py "$OUT/remote" --action "$BYTE_RESUME_ACTION" --vendor "$VENDOR" --baseline-sha "$BYTE_BASE_SHA" --foreign-sha "$BYTE_FOREIGN_SHA" --checkpoint-sha "$BYTE_CHECKPOINT_SHA"
+        return $?
+    fi
     if [ "$NVIDIA_CAMPAIGN" = 5 ]; then
         grep -q '^byte_lm_validation_exit=0$' "$OUT/remote/leg.txt" || return 1
         cmp "$OUT/source_inventory_local.json" "$OUT/remote/source_inventory.json" || return 1
@@ -1877,6 +1922,7 @@ leg_phase9_artifacts() {
 }
 
 leg_archive_required() {
+    if [ "$NVIDIA_CAMPAIGN" = 6 ]; then echo "$_compact_paths"; fi
     # What must be inside the archive for THIS payload to be worth shipping.
     # A word list on purpose, so the caller can iterate it.
     if [ "$PAYLOAD" = "speed" ]; then
@@ -1922,7 +1968,7 @@ leg_archive_required() {
             echo "tools/small_mlp_training_capture.py"
             echo "training/__init__.mojo training/mlp_ops.mojo training/estimator.mojo training/checks/train_loop.mojo training/checks/train_gradient_capture.mojo training/checks/optimizer.mojo training/checks/loss.mojo embedding/checks/embedding_identical.mojo gemm/host_entry.mojo tools/training_validation_serial.sh tools/training_validation_admit.py tools/transformer_training_gradient_oracle.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py python/mojolearn/_mlp_impl.py python/mojolearn/neural_network.py python/mojolearn/tests/test_small_mlp_surface.py python/mojolearn/tests/test_small_mlp_numerical_edges.py"
         fi
-        if [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+        if [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
             echo "training/byte_lm.mojo training/corpus/tinyshakespeare/input.txt training/corpus/tinyshakespeare/manifest.json embedding/checks/embedding_identical.mojo gemm/host_entry.mojo bindings/_mojolearn_byte_lm.mojo bindings/build_byte_lm.sh python/mojolearn/language_model.py python/mojolearn/_byte_lm_impl.py python/mojolearn/tests/test_byte_lm_surface.py tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
         fi
     else
@@ -2305,7 +2351,7 @@ if cuda:
     if not versions or not all(isinstance(version, str) for version in versions):
         raise ValueError("allowed CUDA versions must be nonempty strings")
     request["allowedCudaVersions"] = versions
-if vendor == "amd" and image.startswith("rocm/dev-"):
+if vendor == "amd" and (image.startswith("rocm/dev-") or image.startswith("rocm/pytorch:") or image.startswith("rocm/pytorch@")):
     request["dockerEntrypoint"] = ["/bin/bash", "-lc"]
     request["dockerStartCmd"] = [Path(bootstrap).read_text()]
 Path(output).write_text(json.dumps(request, indent=2) + "\n")
@@ -2531,7 +2577,15 @@ taskset -pc "$cores" $$ > "$OUT/cpu-affinity.log" 2>&1 || exit 9
   echo "commit=@COMMIT@"
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
-if [ "@NVIDIACAMPAIGN@" = 4 ] || [ "@NVIDIACAMPAIGN@" = 5 ]; then
+if [ "@NVIDIACAMPAIGN@" = 4 ] || [ "@NVIDIACAMPAIGN@" = 5 ] || [ "@NVIDIACAMPAIGN@" = 6 ]; then
+    # Bound the runtime allocator as well as the external guard. A tiny
+    # fixture must not let the default HIP pool reserve most of an MI300X.
+    # Explicit pool-only allocation refuses expansion beyond this 1 GiB pool.
+    export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE=1073741824
+    export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_ONLY=true
+    export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_CHUNK_PERCENT=100
+    printf '%s\n' 'device_memory_pool_bytes=1073741824' 'device_memory_pool_only=true' \
+        'device_memory_pool_chunk_percent=100' >> "$OUT/leg.txt"
     python3 tools/training_validation_admit.py --inventory-root "$ROOT" \
         > "$OUT/source_inventory.json" || exit 9
 fi
@@ -2553,11 +2607,38 @@ fi
 PATH="$HOME/.pixi/bin:$PATH"
 export PATH
 if [ "@NVIDIACAMPAIGN@" != 0 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
-    timeout -k 10 600 pixi install > "$OUT/pixi_env.log" 2>&1
+    if [ "@NVIDIACAMPAIGN@" = 6 ]; then
+        timeout -k 10 600 pixi install --locked > "$OUT/pixi_env.log" 2>&1 || exit 9
+    else
+        timeout -k 10 600 pixi install > "$OUT/pixi_env.log" 2>&1
+    fi
 else
 pixi install > "$OUT/pixi_env.log" 2>&1
 fi
 echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
+# Reuse a root-pinned retained binding; no model or compiler build in profile 6.
+if [ "@NVIDIACAMPAIGN@" = 6 ]; then
+    compact_rc=124
+    case "@VENDOR@" in nvidia) compact_vendor=cuda ;; amd) compact_vendor=hip ;; *) exit 9 ;; esac
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+    if [ "$work_remaining" -ge 180 ]; then
+        if [ "$work_remaining" -gt 2700 ]; then work_remaining=2700; fi
+        MOJOLEARN_BYTE_LM_EXPECT_VENDOR="$compact_vendor" MOJOLEARN_GPU_ARCHS="@GPUARCHS@" \
+        MOJOLEARN_BYTE_LM_RESUME_ACTION="@COMPACTACTION@" \
+        MOJOLEARN_BYTE_LM_BASELINE_HANDOFF_SHA256="@BASEHANDOFFSHA@" \
+        MOJOLEARN_BYTE_LM_FOREIGN_HANDOFF_SHA256="@FOREIGNHANDOFFSHA@" \
+        MOJOLEARN_BYTE_LM_FOREIGN_SHA256="@FOREIGNCHECKPOINTSHA@" \
+        MOJOLEARN_PYTHON="@BYTELMPYTHON@" MOJOLEARN_COMMIT="@COMMIT@" \
+        timeout -k 20 "$work_remaining" bash tools/byte_lm_resume_transport_serial.sh \
+            "$OUT/byte-lm-resume-setup" "$work_remaining" > "$OUT/byte-lm-resume-console.log" 2>&1
+        compact_rc=$?
+    fi
+    echo "byte_lm_resume_exit=$compact_rc" >> "$OUT/leg.txt"
+    echo "scope=compact diagnostic only; final local all-raw comparison mandatory" >> "$OUT/leg.txt"
+    : > /root/gemm_leg.done
+    echo REMOTE_BODY_DONE
+    exit "$compact_rc"
+fi
 # The byte LM has a separate oracle-gated workload and explicit GPU target.
 if [ "@NVIDIACAMPAIGN@" = 5 ]; then
     byte_rc=124
@@ -2568,6 +2649,7 @@ if [ "@NVIDIACAMPAIGN@" = 5 ]; then
         MOJOLEARN_BYTE_LM_VALIDATION_OUT="$OUT/byte-lm-validation" \
           MOJOLEARN_BYTE_LM_EXPECT_VENDOR="$byte_vendor" MOJOLEARN_COMMIT="@COMMIT@" \
           MOJOLEARN_GPU_ARCHS="@GPUARCHS@" MOJOLEARN_BYTE_LM_VALIDATION_SECONDS="$work_remaining" \
+          MOJOLEARN_PYTHON="@BYTELMPYTHON@" \
           timeout -k 10 "$work_remaining" bash tools/byte_lm_validation_serial.sh \
           > "$OUT/byte-lm-validation-console.log" 2>&1
         byte_rc=$?
@@ -3759,6 +3841,11 @@ leg_check_remote_body() {
         -e "s|@WHEELVERSION@|$WHEEL_VERSION|g" \
         -e "s|@WHEELINDEX@|$WHEEL_INDEX|g" \
         -e "s|@GPUARCHS@|$GPU_ARCHS|g" \
+        -e "s|@BYTELMPYTHON@|$BYTE_LM_PYTHON|g" \
+        -e "s|@COMPACTACTION@|$BYTE_RESUME_ACTION|g" \
+        -e "s|@BASEHANDOFFSHA@|$BYTE_BASE_SHA|g" \
+        -e "s|@FOREIGNHANDOFFSHA@|$BYTE_FOREIGN_SHA|g" \
+        -e "s|@FOREIGNCHECKPOINTSHA@|$BYTE_CHECKPOINT_SHA|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"
@@ -3887,7 +3974,7 @@ leg_ship_and_run() {
   this commit. Shipping it would rent a box to build nothing."
     done
     leg_source_sha_recipe "$TMPD/archive" > "$OUT/source_sha256_local.txt"
-    if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+    if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
         python3 "$TMPD/archive/tools/training_validation_admit.py" \
             --inventory-root "$TMPD/archive" > "$OUT/source_inventory_local.json" \
             || leg_die "Could not freeze the training source inventory"
@@ -3901,6 +3988,20 @@ leg_ship_and_run() {
         leg_ssh 'rm -rf /root/mojolearn /root/gemm_leg_out && mkdir -p /root/mojolearn' \
             > /dev/null
         leg_ssh 'cd /root/mojolearn && tar xzf -' < "$TMPD/src.tgz"
+    fi
+    if [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+        leg_ssh 'python3 /root/mojolearn/tools/training_validation_admit.py --inventory-root /root/mojolearn' > "$OUT/source_inventory_preship_remote.json" || leg_die "Remote compact source inventory unavailable"
+        cmp "$OUT/source_inventory_local.json" "$OUT/source_inventory_preship_remote.json" || leg_die "Compact source differs before data/model launch"
+        case "$VENDOR" in nvidia) _byte_vendor=cuda; _foreign_vendor=hip ;; amd) _byte_vendor=hip; _foreign_vendor=cuda ;; esac
+        python3 -B "$TMPD/archive/tools/byte_lm_handoff_transport.py" pack "$BYTE_BASE_DIR" --output "$TMPD/baseline.zip" --sha256 "$BYTE_BASE_SHA" --vendor "$_byte_vendor" --kind baseline128 || leg_die "Pinned baseline packing failed"
+        leg_ssh 'umask 077; mkdir /root/byte-lm-handoffs' || leg_die "Handoff destination already exists"
+        leg_ssh 'cat > /root/byte-lm-handoffs/baseline.zip' < "$TMPD/baseline.zip"
+        leg_ssh "python3 -B /root/mojolearn/tools/byte_lm_handoff_transport.py unpack /root/byte-lm-handoffs/baseline.zip --output /root/byte-lm-handoffs/baseline --sha256 $BYTE_BASE_SHA --vendor $_byte_vendor --kind baseline128" > "$OUT/baseline-transport.log" 2>&1 || leg_die "Remote baseline handoff refused"
+        if [ "$BYTE_RESUME_ACTION" = resume128 ]; then
+            python3 -B "$TMPD/archive/tools/byte_lm_handoff_transport.py" pack "$BYTE_FOREIGN_DIR" --output "$TMPD/foreign.zip" --sha256 "$BYTE_FOREIGN_SHA" --vendor "$_foreign_vendor" --kind head64 || leg_die "Pinned foreign packing failed"
+            leg_ssh 'cat > /root/byte-lm-handoffs/foreign.zip' < "$TMPD/foreign.zip"
+            leg_ssh "python3 -B /root/mojolearn/tools/byte_lm_handoff_transport.py unpack /root/byte-lm-handoffs/foreign.zip --output /root/byte-lm-handoffs/foreign --sha256 $BYTE_FOREIGN_SHA --vendor $_foreign_vendor --kind head64" > "$OUT/foreign-transport.log" 2>&1 || leg_die "Remote foreign handoff refused"
+        fi
     fi
     leg_ssh 'umask 022; cat > /root/gemm_leg.sh' < "$OUT/remote_body.sh"
     leg_run_payload
@@ -5410,6 +5511,9 @@ echo "== step 9: k-NN layout dispatch gates and prices =="
 echo "  Results: $OUT/remote/layout-price"
 echo "  Admission requires layout_exit=0 and source parity."
 echo "  Mamba and UMAP checks were not requested by this payload."
+elif [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+echo "== step 9: compact $VENDOR resume diagnostic =="
+echo "  Raw results: $OUT/remote/byte-lm-resume; final local all-raw comparison mandatory."
 elif [ "$NVIDIA_CAMPAIGN" = 5 ]; then
 echo "== step 9: bounded $VENDOR byte LM validation =="
 echo "  Results: $OUT/remote/byte-lm-validation"
@@ -5497,6 +5601,9 @@ if [ "$PAYLOAD" = "speed" ]; then
 elif [ "$KNN_LAYOUT_ONLY" = 1 ]; then
     echo "the layout results: $OUT/remote/layout-price"
     echo "read layout-console.log and layout_exit in remote/leg.txt together."
+elif [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+    echo "compact diagnostic only: $OUT/remote/byte-lm-resume"
+    echo "Final local all-raw comparison remains mandatory; no identity admission here."
 elif [ "$NVIDIA_CAMPAIGN" = 5 ]; then
     echo "the byte LM validation results: $OUT/remote/byte-lm-validation"
     echo "read byte-lm-validation-console.log and byte_lm_validation_exit together."

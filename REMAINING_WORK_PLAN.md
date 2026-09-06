@@ -23,30 +23,40 @@ and every failed/stopped attempt retains its original status and artifacts.
   source hashes. Initial `0.6.0a1` candidates passed file checks and bounded
   macOS import checks; they are retained but are not the requested final
   version number and have not been published.
-- [ ] Reassemble as **0.6.0**, explicitly opting into the `alpha-api` release
+- [x] Reassemble as **0.6.0**, explicitly opting into the `alpha-api` release
   profile and keeping the Alpha classifier. Validate both exact final wheels
   and the manifest; do not inherit numerical qualification from base wheels.
-- [ ] Stage exact assets and manifest, run the existing Trusted Publisher
+- [x] Stage exact assets and manifest, run the existing Trusted Publisher
   workflow's explicit alpha path, and verify PyPI filenames and SHA256 values.
   Keep NVIDIA Linux source-build-only for this artifact. Publishing an API
   does not assert that every feature, shape or cross-vendor certificate passes.
-- [ ] Update current installation/support wording only after index verification.
+- [x] Verify actual PyPI 0.6.0 filenames/SHA256 after workflow `34066704839`
+  succeeded; update current installation/support wording. The first upload
+  failed core-metadata validation before publication; repaired r2 bytes are
+  the published artifacts, with original failure retained.
 
 ## 2. Finish bounded neural training and real checkpoint resume
+
+Follow [the LM claim and acceptance plan](docs/LM_TRAINING_CLAIM_PLAN.md):
+NVIDIA, then AMD, then Apple; actual continuation and per-step state, followed
+by measured step cost. A three-vendor or priority claim requires its own proof.
 
 - [x] NVIDIA small MLP: all 18 jobs and admission passed at `8f6ed41`, including
   independent reference/edge checks, 16 steps and complete same-device
   checkpoint continuation. [Evidence](bench/results/resume/2026-09-06-root-training-nvidia/README.md).
 - [ ] Run the same frozen MLP numerical sources on AMD; compare complete
   per-step parameters, gradients, moments, flags, counters and loss bytes.
-- [ ] Rebuild the two-block, 34,944-parameter byte LM after the explicit
-  optimizer-copy repair. First NVIDIA attempt stopped at compilation, with
-  no model execution. [Evidence](bench/results/resume/2026-09-06-root-byte-lm-nvidia/README.md).
-- [ ] Pass its independent one-step FP64 gradient/AdamW oracle and controls
-  before attempting the predeclared 128-step held-out learning criterion.
-- [ ] Repeat on AMD from identical source, initialization and token bytes;
-  compare every retained step. This is a small language model, not LLM-scale
-  validation. Fresh Metal recertification is a separate bounded follow-up.
+- [x] NVIDIA two-block, 34,944-parameter byte LM: all 12 jobs and fetched
+  admission passed at `d921eade`, including the independent first-step FP64
+  gradient/AdamW oracle and controls, followed by 128 real-text training steps.
+  Held-out loss fell from 5.5412986 to 2.8436419 (ratio 0.51317).
+  [Evidence](bench/results/resume/2026-09-06-root-byte-lm-nvidia/README.md).
+  This closes single-vendor learning only; cross-vendor/resume remain open.
+- [x] AMD run 3 passed all 12 jobs and fetched admission from identical
+  numerical source at `d921eade`, with an explicit 1 GiB runtime pool. All
+  128 raw steps, heldout batches and final checkpoints match NVIDIA. This is
+  the continuous two-vendor result; full protocol admission awaits resume.
+- [ ] Add the separately guarded Metal column after NVIDIA/AMD resume passes.
 - [ ] Execute actual NVIDIA↔AMD checkpoint transfer/resume in fresh processes,
   comparing with continuous runs and requiring effective missing-moments
   controls. The native driver/comparator and
@@ -54,6 +64,17 @@ and every failed/stopped attempt retains its original status and artifacts.
   Matching checkpoint files alone does not close resume behavior.
 
 ## 3. Close Mamba and symmetric-tree feature gaps
+
+- [ ] After the active LM campaign, refresh the historical 209-case matrix
+  sequentially using [REFUSAL_SEQUENTIAL_EXECUTION.md](docs/REFUSAL_SEQUENTIAL_EXECUTION.md)
+  and [REFUSAL_PORT_PLAN.md](docs/REFUSAL_PORT_PLAN.md). The 27 old refusal rows
+  are not 27 current missing features: several are implemented and others
+  are invalid combinations or intentional algorithm refusals. Keep kd-tree
+  unsupported; retain the two explicit CPU tree rows as host evidence.
+- [ ] Validate additive PCA whitening binding exposure and bounded k-NN
+  k=257–1024 selector extension after source review. Existing distance-weighted
+  voting, Manhattan and cosine need current evidence, not duplicate ports.
+  Do not add these later edits to the already frozen 0.6.0 artifacts silently.
 
 - [ ] Validate installed Mamba1/2/3 forward and zero-state IDENTICAL Python
   backward on matching NVIDIA/AMD artifacts, including the shared B2/L8/D32

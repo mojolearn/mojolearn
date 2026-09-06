@@ -24,14 +24,18 @@ to configurations recorded in [the support matrix](SUPPORT_MATRIX.md).
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-pip install mojolearn
+pip install mojolearn==0.6.0
 ```
 
-Version 0.6.0 adds UMAP transformation and CSR graph storage. Its macOS
-wheel qualification covers Apple silicon, Python 3.10–3.14 and all three
-numeric modes, with additional installed UMAP fit/transform and quality
-checks on Python 3.12. Current NVIDIA/AMD qualification uses source builds;
-historical Linux wheels do not establish support for these additions.
+Version **0.6.0 is published on PyPI** as an alpha API release for macOS
+arm64 and AMD Linux x86-64 (`gfx942`). It exposes public `linalg`, `umap`,
+`training`, Mamba and Transformer APIs, including UMAP transform/CSR support.
+**NVIDIA Linux remains source-build-only.** The Linux wheel contains HIP
+binaries, not CUDA. New byte-LM native training needs a separate source build.
+The wheels preserve identified base native/runtime bytes; newer Python API
+exposure does not inherit every numerical certificate. See the
+[release evidence](bench/results/releases/2026-09-06-alpha-api/README.md) and
+[support matrix](SUPPORT_MATRIX.md) for exact artifacts and limits.
 There is no CPU fallback.
 Run the diagnostic command before depending on a new machine:
 

@@ -1,0 +1,20 @@
+{
+  "files": {
+    "mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl": "a44889df2990289658a232cab6f3b734268e4e274785b84039024025920847a7",
+    "mojolearn-0.6.0-py3-none-manylinux_2_35_x86_64.whl": "beeb02d2d41bb64421957bfbcd937860ed00c0aed5618840454e322f11a372b0"
+  },
+  "manifest_sha256": "6e7e4fe0f36d7922a943ac94e5363fd7f4702d571721e92e360a1440d210cb83",
+  "passed": true,
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-artifact-verification.v1",
+  "scope": "File integrity, alpha metadata and recorded overlay provenance only; no package execution, native compatibility or current numerical qualification",
+  "tags": {
+    "mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl": [
+      "py3-none-macosx_11_0_arm64"
+    ],
+    "mojolearn-0.6.0-py3-none-manylinux_2_35_x86_64.whl": [
+      "py3-none-manylinux_2_35_x86_64"
+    ]
+  },
+  "version": "0.6.0"
+}

@@ -1,6 +1,7 @@
 """Authored root-only mocked guards; no subprocess or GPU workload is launched."""
 import argparse
 import contextlib
+import json
 from pathlib import Path
 import signal
 import tempfile
@@ -140,6 +141,7 @@ class GuardTests(unittest.TestCase):
             stack.enter_context(patch.object(guard.time, 'monotonic', side_effect=[0, 11 if violation == 'deadline' else 1]))
             launch = stack.enter_context(patch.object(guard.subprocess, 'Popen', return_value=proc))
             stop = stack.enter_context(patch.object(guard, 'stop_group'))
+            printed = stack.enter_context(patch('builtins.print'))
             args = argparse.Namespace(command=['fake-command'], seconds=10, rss_gib=12)
             if violation == 'lock':
                 flock.side_effect = [None, BlockingIOError('NVIDIA job already active')]
@@ -159,6 +161,20 @@ class GuardTests(unittest.TestCase):
                     guard.run(args)
             else:
                 self.assertEqual(guard.run(args), 124)
+                terminal = json.loads(printed.call_args.args[0])
+                data = terminal['telemetry']
+                self.assertEqual(data['samples'], 1)
+                self.assertEqual(data['initial_vram_bytes'], 0)
+                self.assertEqual(data['initial_host_available_bytes'], 8 * guard.GIB)
+                self.assertEqual(data['peak_vram_bytes'], 15 * guard.GIB if violation == 'vram' else 0)
+                self.assertEqual(data['last_vram_bytes'], data['peak_vram_bytes'])
+                self.assertEqual(data['initial_rss_bytes'], 13 * guard.GIB if violation == 'rss' else 0)
+                self.assertEqual(data['last_rss_bytes'], data['initial_rss_bytes'])
+                self.assertEqual(data['peak_rss_bytes'], data['initial_rss_bytes'])
+                self.assertEqual(data['crossing_sample'], dict(
+                    reason=terminal['reason'], elapsed_seconds=11 if violation == 'deadline' else 1,
+                    vram_bytes=data['last_vram_bytes'], rss_bytes=data['last_rss_bytes'],
+                    host_available_bytes=(1 if violation == 'pressure' else 8) * guard.GIB))
             self.assertEqual([c.args[0] for c in opened.call_args_list], list(guard.LOCK_PATHS))
             stop.assert_called_once_with(4321)
             proc.wait.assert_called_once()

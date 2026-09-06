@@ -4,7 +4,9 @@
 
 The user-authorized alpha route exposes implemented Python operations before
 completion of every numerical certificate. It is separate from the stable
-build-and-qualify route below and requires an explicit `X.Y.ZaN` version.
+build-and-qualify route below. It normally requires `X.Y.ZaN`; the explicitly
+requested `0.6.0` uses `--allow-alpha-final-version` and the manifest
+`release_profile: "alpha-api"`, retaining the Alpha classifier.
 `packaging/alpha_overlay.py` preserves the base wheel's native/runtime bytes,
 overlays current Python modules and the alpha guide, and records both source
 and native provenance. Missing native extensions remain unavailable; neither
@@ -25,10 +27,10 @@ build job. Stable publication retains its existing checks. A local candidate
 or a workflow source edit is not publication: verify the actual PyPI filenames
 and hashes before updating release status.
 
-The September 6 candidates and file/import evidence are retained under
-`bench/results/releases/2026-09-06-alpha-api/`. They currently expose the API
-using inherited macOS and AMD binaries; newly authored byte-LM native code
-needs a separate build. NVIDIA remains source-build-only for this candidate.
+PyPI 0.6.0 was published and its exact two wheel hashes verified on September
+6. Evidence is retained under `bench/results/releases/2026-09-06-alpha-api/`.
+The published alpha API uses inherited macOS and AMD binaries; newly authored
+byte-LM native code needs a separate build. NVIDIA remains source-build-only.
 
 Releases are built and published by
 `.github/workflows/release-provenance.yml`. Publishing uses GitHub Trusted

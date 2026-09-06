@@ -74,6 +74,14 @@ def amd_device(root=Path('/sys/class/drm'), nodes=Path('/dev/dri')):
 
 
 def run(args):
+    """Guard one job; terminal telemetry contains bounded observed samples.
+
+    initial_vram_bytes is the prelaunch admission reading; initial_rss_bytes
+    is the first child-group sample (None if none was observed). Peaks are
+    sampled maxima, not continuous high-water marks. Last values are before
+    cleanup, not a claim that VRAM was released afterward. Monitor exceptions
+    retain the existing raise/cleanup behavior rather than emitting success.
+    """
     if sys.platform != 'linux' or not Path('/proc').is_dir():
         raise RuntimeError('Refusing local work: this guard requires remote Linux AMD')
     if not args.command or args.seconds < 1 or not 1 <= args.rss_gib <= 12:
@@ -105,6 +113,16 @@ def run(args):
         previous = {signum: signal.getsignal(signum) for signum in signals}
         proc = None
         reason = None
+        # Bounded diagnostic state only: reuse the admission reading and each
+        # existing monitor sample. No extra device queries or post-cleanup
+        # measurement. RSS is the child process group, VRAM the whole device.
+        telemetry = dict(initial_vram_bytes=used, peak_vram_bytes=used,
+                         last_vram_bytes=used, initial_rss_bytes=None,
+                         peak_rss_bytes=None, last_rss_bytes=None,
+                         initial_host_available_bytes=available,
+                         last_host_available_bytes=available,
+                         samples=0, last_elapsed_seconds=None,
+                         crossing_sample=None)
         try:
             for signum in signals:
                 signal.signal(signum, cancelled)
@@ -116,7 +134,17 @@ def run(args):
                 used, observed_total = gpu_memory(device)
                 if observed_total != total:
                     raise RuntimeError('AMD device VRAM total changed during job')
-                if time.monotonic() - started > args.seconds:
+                elapsed = time.monotonic() - started
+                telemetry['samples'] += 1
+                if telemetry['initial_rss_bytes'] is None:
+                    telemetry['initial_rss_bytes'] = rss
+                telemetry['peak_rss_bytes'] = max(telemetry['peak_rss_bytes'] or 0, rss)
+                telemetry['last_rss_bytes'] = rss
+                telemetry['peak_vram_bytes'] = max(telemetry['peak_vram_bytes'], used)
+                telemetry['last_vram_bytes'] = used
+                telemetry['last_host_available_bytes'] = available
+                telemetry['last_elapsed_seconds'] = elapsed
+                if elapsed > args.seconds:
                     reason = 'deadline exceeded'
                 elif rss > args.rss_gib * GIB:
                     reason = 'process-group RSS cap exceeded'
@@ -125,6 +153,10 @@ def run(args):
                 elif used > total * .85:
                     reason = 'GPU memory exceeds 85 percent'
                 if reason:
+                    telemetry['crossing_sample'] = dict(
+                        reason=reason, elapsed_seconds=elapsed,
+                        vram_bytes=used, rss_bytes=rss,
+                        host_available_bytes=available)
                     break
                 time.sleep(1)
         finally:
@@ -140,6 +172,7 @@ def run(args):
         print(json.dumps({'guard': 'amd-root-serial-v1', 'reason': reason,
                           'cpu_affinity': cores, 'thread_limit': 2,
                           'device_sysfs': str(device), 'vram_total_bytes': total,
+                          'telemetry': telemetry,
                           'returncode': proc.returncode}), flush=True)
         return 124 if reason else proc.returncode
 
