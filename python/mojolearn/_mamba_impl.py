@@ -59,32 +59,18 @@ or identical (cross-vendor identity within the certified profile and
 fixtures). `_extension()` checks the binary's compile-time mode against
 the requested tier.
 
-EVIDENCE SNAPSHOT, 2026-09-05. Native forward/backward certification and
-Python API qualification are separate. At source `718495cd`, Apple M4,
-NVIDIA RTX 4090 and AMD MI300X matched 54 native gradient tensors across
-five Mamba-1/2/3 cases; see
-`bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json`.
-The newer NVIDIA source/binding record at `b715b124` retained five native
-cases and 102 Python forward/state checks:
-`bench/results/e1g/2026-09-05_065820-nvidia-mamba/classification.json`.
-DigitalOcean AMD MI325X matched all 54 NVIDIA native gradient tensors at
-that same source; see
+EVIDENCE SNAPSHOT. Native certificates, public API checks and installed-wheel
+qualification are separate. Historical Apple/NVIDIA/AMD native comparisons
+covered five cases and 54 gradient tensors; see
+`bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json` and
 `bench/results/e1/2026-09-05_111524-mojolearn-e2-amd/comparisons.json`.
-
-The AMD Python binding at that baseline aborted with a GPU memory fault
-(exit 134). The state-allocation fix `6dc93269` has a retained Apple
-IDENTICAL API result: 102 checks, zero failures; see
-`bench/results/mamba/2026-09-05-state-allocation-fix/metadata.json`.
-Durable AMD and NVIDIA API qualification of that fix remains pending;
-an AMD supplemental pass without retained artifacts is not a certificate.
-The released macOS 0.5.0 wheel predates this fix. These source results do
-not certify a Linux wheel. Mamba1Block.backward now exposes the shared native zero-state IDENTICAL VJP;
-Mamba2/3 now expose zero-state IDENTICAL prefill VJPs as well. Qualification
-of these new Python entries is separate from historical forward-only results.
-
-The API gate is `python/mojolearn/tests/test_mamba_surface.py`; build
-with `bash bindings/build_mamba.sh` for the selected numeric mode.
-
+The retained September 6 NVIDIA run3 reports 102 forward/API checks passing
+in each of FAST and IDENTICAL, and five Mamba2/3 backward surface tests
+passing; see `bench/results/resume/2026-09-06-root-feature-nvidia/run3/remote/feature-finish/`.
+That source-run evidence does not certify an unbuilt alpha wheel or every
+vendor, shape and mode. All three classes expose zero-state IDENTICAL
+prefill backward. Current scope and packaging boundaries are documented in
+`mamba/PUBLIC_ALPHA_SURFACE.md`; older comments are not release certificates.
 """
 
 import math
@@ -547,10 +533,18 @@ class Mamba1Block(_MambaBase):
         if checked.d_model != self.d_model:
             raise ValueError(f"mojolearn {what}: current weights changed d_model")
         weights = checked._w
+        extension = self._extension()
+        native = getattr(extension, "mamba1_backward", None)
+        if native is None:
+            raise RuntimeError(
+                f"mojolearn {what}: loaded Mamba extension lacks mamba1_backward; "
+                "install a current alpha wheel with IDENTICAL Mamba backward support "
+                "or rebuild bindings/build_mamba.sh in IDENTICAL mode"
+            )
         gradients = [np.empty_like(x)] + [np.empty_like(w) for w in weights]
         addresses = ([_addr_ro(x)] + [_addr_ro(w) for w in weights]
                      + [_addr_ro(dy)] + [_addr(g) for g in gradients])
-        self._extension().mamba1_backward(addresses, [b, l, self.d_model])
+        native(addresses, [b, l, self.d_model])
         return dict(zip(("x",) + self._W_NAMES, gradients))
 
     def step(self, x, state):
@@ -791,7 +785,8 @@ class Mamba2Block(_MambaBase):
         no previous forward or cached state is consumed or modified. Returns
         independent arrays under the constructor's exact weight names plus
         ``x``. Incoming-cache and final-state cotangents are not supported.
-        This new binding requires separate NVIDIA API qualification.
+        Retained NVIDIA fixture checks and outstanding wheel/vendor scopes are
+        listed in mamba/PUBLIC_ALPHA_SURFACE.md.
         """
         return self._prefill_backward(x, grad_output, "mamba2_backward")
 
@@ -1140,7 +1135,8 @@ class Mamba3Block(_MambaBase):
         no previous forward or cached state is consumed or modified. Returns
         independent arrays under the constructor's exact weight names plus
         ``x``. Incoming-cache and final-state cotangents are not supported.
-        This new binding requires separate NVIDIA API qualification.
+        Retained NVIDIA fixture checks and outstanding wheel/vendor scopes are
+        listed in mamba/PUBLIC_ALPHA_SURFACE.md.
         """
         return self._prefill_backward(x, grad_output, "mamba3_backward")
 

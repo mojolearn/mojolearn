@@ -35,7 +35,7 @@ from training.checks.loss import (
 )
 from training.checks.loss_oracle import REDUCTION_MEAN, CeConfig
 from training.checks.optimizer import (
-    ANY_SABOTAGE as OPT_SABOTAGE, SAB_CHUNKS, identical_optimizer_step,
+    ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
     identical_optimizer_workspace_floats,
 )
 from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
@@ -240,8 +240,12 @@ struct ByteBuffers(Movable):
         self.grad = _zeros(ctx, n)
         self.m_state = _upload(ctx, initial_m)
         self.v_state = _upload(ctx, initial_v)
-        self.denom_out = _zeros(ctx, 1)
-        self.q_out = _zeros(ctx, 1)
+        # Recording kernels write one intermediate per parameter.
+        var record_n = 1
+        comptime if OPT_RECORD_INTERMEDIATES:
+            record_n = BYTE_N_TOTAL
+        self.denom_out = _zeros(ctx, record_n)
+        self.q_out = _zeros(ctx, record_n)
         self.sumsq = _zeros(ctx, BYTE_J)
         self.norms = _zeros(ctx, BYTE_J)
         self.total_cell = _zeros(ctx, 1)

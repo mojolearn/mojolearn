@@ -45,3 +45,22 @@ The adapter must require an adjacent versioned sidecar with the exact `BYTE_PROF
 4. Root only: validate same-device resume and opposite-vendor checkpoint transfer/continuation with missing-moments/restarted-step controls. The previous one-block 161008-byte resume harness deliberately refuses this 420112-byte profile and needs a separately versioned adapter. Cross-vendor agreement and language-model learning remain separate claims.
 
 The historical one-block loop and training bindings were not modified by this slice. This module reuses their allocation/copy/download helpers as well as existing numerical operators. Compilation, public integration, file persistence, the larger independent oracle, actual-text runs, learning evaluation, and numerical certification remain unperformed by the implementation subagent.
+
+## Standalone native binding (authored, not executed)
+
+`bindings/_mojolearn_byte_lm.mojo` exports `byte_lm_run(addresses, params)` plus `byte_lm_numeric_mode()`, `byte_lm_vendor()` and `byte_lm_profile()`. It opens no device at import. The Python wrapper must validate all witnesses before numerical work, own every contiguous array for the call, and commit only complete successful outputs.
+
+The address list is exactly `[in_param,in_m,in_v,in_flags_i32,in_ids_i32,out_param,out_m,out_v,out_grad,out_flags_i32,out_loss_f32]`. Parameters are exactly `[action,completed,kind,lr,beta1,beta2,eps,weight_decay,momentum,dampening,nesterov,max_norm]`. Kind 2 is AdamW. Action 1 trains and returns `completed+1`; action 0 evaluates, requires `out_grad=0`, and returns the unchanged completed step. The other output state buffers are required in both modes. Array counts are 34,944 FP32 for parameters/moments/gradients, 20 int32 flags, 66 int32 IDs, and one FP32 loss. Input flags must be exactly 0 or 1. Training admits `0 <= completed < 999999`; evaluation also admits the terminal completed step 999999.
+
+The binding validates bounded address spans, four-byte alignment, integer addition overflow and nulls before dereferencing. Outputs must be disjoint from every input and every other output. All input data is copied into owned host lists and admitted before constructing `DeviceContext`. Arbitrary pointer validity cannot be established from an integer address; correctly allocated/sized arrays remain a required caller contract. Evaluation downloads the actual post-operation device state and refuses any bit, flag or counter mutation rather than simply echoing the input state. Every result is validated and the device scope completes before writes to the fresh caller outputs. No native pointer or device state is retained across calls.
+
+`bindings/build_byte_lm.sh` is a Linux-only, IDENTICAL-only compiler script with exactly two compiler threads, an explicit single GPU architecture and x86-64-v3 host baseline. It never invokes a test, smoke run, import or model. It refuses existing output paths and publishes the new binary with an exclusive hard link. Root must run the script through its remote vendor guard, then separately read the mode/vendor/profile witnesses and retain successful guard exit evidence. For example, on NVIDIA with an actual compatible target:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_GPU_ARCHS=sm_90 \
+MOJOLEARN_BYTE_LM_OUTDIR=/artifacts/byte-lm-native-new \
+python3 tools/nvidia_serial_guard.py --seconds 900 --rss-gib 12 -- \
+  sh bindings/build_byte_lm.sh
+```
+
+Use the corresponding AMD guard and actual `gfx` target for AMD. No Apple execution. This source slice does not register the extension in shared backend or packaging tables; that integration is a separate owner task.

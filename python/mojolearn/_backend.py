@@ -165,6 +165,8 @@ _MODULES = (
     "_mojolearn_linalg",
     "_mojolearn_arima",
     "_mojolearn_training",
+    # Fixed two-block byte-LM trainer; source integration is not qualification.
+    "_mojolearn_byte_lm",
     # Added 2026-09-01 with the GaussianProcessRegressor exposure. The
     # binding itself (bindings/_mojolearn_gp.mojo + build_gp.sh) is OWED at
     # the time of this edit; listing the name FIRST is deliberate, because
@@ -1011,6 +1013,7 @@ def _build_script(name):
         "_mojolearn_linalg": "build_linalg.sh",
         "_mojolearn_arima": "build_arima.sh",
         "_mojolearn_training": "build_training.sh",
+        "_mojolearn_byte_lm": "build_byte_lm.sh",
         "_mojolearn_gp": "build_gp.sh",
         "_mojolearn_mamba": "build_mamba.sh",
         "_mojolearn_transformer": "build_transformer.sh",

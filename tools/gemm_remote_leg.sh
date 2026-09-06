@@ -857,25 +857,37 @@ if [ "$PAYLOAD" = "phase8" ]; then
     fi
 fi
 
-# The historical variable name is retained for compatibility. Profile 4 alone
-# is vendor-generic training (profiles 1..3 remain NVIDIA-only):
+# The historical variable name is retained for compatibility. Profiles 4/5
+# are vendor-generic training (profiles 1..3 remain NVIDIA-only):
 #   MOJOLEARN_NVIDIA_CAMPAIGN=4 tools/gemm_remote_leg.sh amd --payload mamba ...
 #   MOJOLEARN_NVIDIA_CAMPAIGN=4 tools/gemm_remote_leg.sh nvidia --payload mamba ...
+#   MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_NVIDIA_CAMPAIGN=5 tools/gemm_remote_leg.sh amd --payload mamba ...
+# Replace gfx942 with the actual rented GPU target; it is not autodetected.
 # Root runs either command through the existing leased transport/guards.
 NVIDIA_CAMPAIGN=${MOJOLEARN_NVIDIA_CAMPAIGN:-0}
 MAMBA_CERT_ONLY=${MOJOLEARN_MAMBA_CERT_ONLY:-0}
 case "$MAMBA_CERT_ONLY" in 0|1) ;; *) echo 'MOJOLEARN_MAMBA_CERT_ONLY must be 0 or 1' >&2; exit 2 ;; esac
 CONTINUED_CERT_CHECKS=${MOJOLEARN_CONTINUED_CERT_CHECKS:-0}
 case "$CONTINUED_CERT_CHECKS" in 0|1) ;; *) echo 'MOJOLEARN_CONTINUED_CERT_CHECKS must be 0 or 1' >&2; exit 2 ;; esac
-case "$NVIDIA_CAMPAIGN" in 0|1|2|3|4) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0, 1 (general), 2 (feature finish), 3 (UMAP finish), or 4 (training validation)" ;; esac
+case "$NVIDIA_CAMPAIGN" in 0|1|2|3|4|5) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0, 1 (general), 2 (feature finish), 3 (UMAP finish), 4 (training validation), or 5 (byte LM validation)" ;; esac
 if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
-    if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
-        # Historical variable name: profile 4 is generic remote training.
-        [ "$PAYLOAD" = mamba ] || leg_die "Training profile 4 requires --payload mamba"
-        case "$VENDOR" in nvidia|amd) ;; *) leg_die "Training profile 4 requires nvidia or amd" ;; esac
+    if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+        # Historical variable name: profiles 4/5 are generic remote training.
+        [ "$PAYLOAD" = mamba ] || leg_die "Training profiles 4/5 require --payload mamba"
+        case "$VENDOR" in nvidia|amd) ;; *) leg_die "Training profiles 4/5 require nvidia or amd" ;; esac
     else
         [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaigns 1..3 require nvidia --payload mamba"
     fi
+fi
+if [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+    # Validate before any rental; never infer an AMD accelerator target.
+    case "$GPU_ARCHS" in ''|*[!A-Za-z0-9_]*) leg_die "Byte LM profile 5 requires one explicit MOJOLEARN_GPU_ARCHS target" ;; esac
+    case "$VENDOR:$GPU_ARCHS" in
+        nvidia:sm_[0-9]*|amd:gfx[0-9]*) ;;
+        *) leg_die "Byte LM profile 5 requires vendor-compatible sm_NN or gfxNNN architecture" ;;
+    esac
+    printf '%s\n' "$GPU_ARCHS" | grep -Eq '^(sm_[0-9]{2,3}[a-z]?|gfx[0-9][0-9a-f]{2,3})$' \
+        || leg_die "Byte LM profile 5 requires a single accelerator architecture name"
 fi
 KNN_LAYOUT_ONLY=${MOJOLEARN_KNN_LAYOUT_ONLY:-0}
 case "$KNN_LAYOUT_ONLY" in 0|1) ;; *) leg_die "MOJOLEARN_KNN_LAYOUT_ONLY must be 0 or 1" ;; esac
@@ -1191,6 +1203,11 @@ if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
     LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_training_validation_paths"
     LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA tools/small_mlp_training_capture.py"
     LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA tools/small_mlp_training_capture.py"
+fi
+if [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+    _byte_lm_paths="training embedding gemm transformer/__init__.mojo transformer/checks transformer/impl tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
+    LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_byte_lm_paths"
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_byte_lm_paths"
 fi
 
 leg_git_archive() {
@@ -1525,6 +1542,12 @@ leg_speed_artifacts() {
 }
 
 leg_mamba_artifacts() {
+    if [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+        grep -q '^byte_lm_validation_exit=0$' "$OUT/remote/leg.txt" || return 1
+        cmp "$OUT/source_inventory_local.json" "$OUT/remote/source_inventory.json" || return 1
+        python3 tools/byte_lm_validation_admit.py "$OUT/remote/byte-lm-validation"
+        return $?
+    fi
     if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
         grep -q '^training_validation_exit=0$' "$OUT/remote/leg.txt" || return 1
         cmp "$OUT/source_inventory_local.json" "$OUT/remote/source_inventory.json" || return 1
@@ -1808,6 +1831,9 @@ leg_archive_required() {
         if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
             echo "tools/small_mlp_training_capture.py"
             echo "training/__init__.mojo training/mlp_ops.mojo training/estimator.mojo training/checks/train_loop.mojo training/checks/train_gradient_capture.mojo training/checks/optimizer.mojo training/checks/loss.mojo embedding/checks/embedding_identical.mojo gemm/host_entry.mojo tools/training_validation_serial.sh tools/training_validation_admit.py tools/transformer_training_gradient_oracle.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py python/mojolearn/_mlp_impl.py python/mojolearn/neural_network.py python/mojolearn/tests/test_small_mlp_surface.py python/mojolearn/tests/test_small_mlp_numerical_edges.py"
+        fi
+        if [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+            echo "training/byte_lm.mojo training/corpus/tinyshakespeare/input.txt training/corpus/tinyshakespeare/manifest.json embedding/checks/embedding_identical.mojo gemm/host_entry.mojo bindings/_mojolearn_byte_lm.mojo bindings/build_byte_lm.sh python/mojolearn/language_model.py python/mojolearn/_byte_lm_impl.py python/mojolearn/tests/test_byte_lm_surface.py tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
         fi
     else
         echo "gemm/checks/gemm_identical.mojo"
@@ -2415,7 +2441,7 @@ taskset -pc "$cores" $$ > "$OUT/cpu-affinity.log" 2>&1 || exit 9
   echo "commit=@COMMIT@"
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
-if [ "@NVIDIACAMPAIGN@" = 4 ]; then
+if [ "@NVIDIACAMPAIGN@" = 4 ] || [ "@NVIDIACAMPAIGN@" = 5 ]; then
     python3 tools/training_validation_admit.py --inventory-root "$ROOT" \
         > "$OUT/source_inventory.json" || exit 9
 fi
@@ -2442,6 +2468,27 @@ else
 pixi install > "$OUT/pixi_env.log" 2>&1
 fi
 echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
+# The byte LM has a separate oracle-gated workload and explicit GPU target.
+if [ "@NVIDIACAMPAIGN@" = 5 ]; then
+    byte_rc=124
+    case "@VENDOR@" in nvidia) byte_vendor=cuda ;; amd) byte_vendor=hip ;; *) exit 9 ;; esac
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+    if [ "$work_remaining" -ge 60 ]; then
+        if [ "$work_remaining" -gt 3000 ]; then work_remaining=3000; fi
+        MOJOLEARN_BYTE_LM_VALIDATION_OUT="$OUT/byte-lm-validation" \
+          MOJOLEARN_BYTE_LM_EXPECT_VENDOR="$byte_vendor" MOJOLEARN_COMMIT="@COMMIT@" \
+          MOJOLEARN_GPU_ARCHS="@GPUARCHS@" MOJOLEARN_BYTE_LM_VALIDATION_SECONDS="$work_remaining" \
+          timeout -k 10 "$work_remaining" bash tools/byte_lm_validation_serial.sh \
+          > "$OUT/byte-lm-validation-console.log" 2>&1
+        byte_rc=$?
+    fi
+    echo "byte_lm_validation_exit=$byte_rc" >> "$OUT/leg.txt"
+    echo "gpu_archs=@GPUARCHS@" >> "$OUT/leg.txt"
+    echo "scope=bounded @VENDOR@ byte LM validation; no cross-vendor or performance certificate" >> "$OUT/leg.txt"
+    : > /root/gemm_leg.done
+    echo REMOTE_BODY_DONE
+    exit "$byte_rc"
+fi
 # Training integration is a distinct bounded qualification, with no Apple
 # execution and no inherited Mamba/UMAP performance workload.
 if [ "@NVIDIACAMPAIGN@" = 4 ]; then
@@ -3750,7 +3797,7 @@ leg_ship_and_run() {
   this commit. Shipping it would rent a box to build nothing."
     done
     leg_source_sha_recipe "$TMPD/archive" > "$OUT/source_sha256_local.txt"
-    if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+    if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ]; then
         python3 "$TMPD/archive/tools/training_validation_admit.py" \
             --inventory-root "$TMPD/archive" > "$OUT/source_inventory_local.json" \
             || leg_die "Could not freeze the training source inventory"
@@ -5268,6 +5315,11 @@ echo "== step 9: k-NN layout dispatch gates and prices =="
 echo "  Results: $OUT/remote/layout-price"
 echo "  Admission requires layout_exit=0 and source parity."
 echo "  Mamba and UMAP checks were not requested by this payload."
+elif [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+echo "== step 9: bounded $VENDOR byte LM validation =="
+echo "  Results: $OUT/remote/byte-lm-validation"
+echo "  Admission requires retained root receipts and the independent oracle."
+echo "  This is not a cross-vendor identity or performance certificate."
 elif [ "$NVIDIA_CAMPAIGN" = 4 ]; then
 echo "== step 9: bounded $VENDOR training integration and independent gradients =="
 echo "  Results: $OUT/remote/training-validation"
@@ -5350,6 +5402,9 @@ if [ "$PAYLOAD" = "speed" ]; then
 elif [ "$KNN_LAYOUT_ONLY" = 1 ]; then
     echo "the layout results: $OUT/remote/layout-price"
     echo "read layout-console.log and layout_exit in remote/leg.txt together."
+elif [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+    echo "the byte LM validation results: $OUT/remote/byte-lm-validation"
+    echo "read byte-lm-validation-console.log and byte_lm_validation_exit together."
 elif [ "$NVIDIA_CAMPAIGN" = 4 ]; then
     echo "the training validation results: $OUT/remote/training-validation"
     echo "read training-validation-console.log and training_validation_exit together."
