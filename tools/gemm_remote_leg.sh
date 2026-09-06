@@ -1178,7 +1178,7 @@ leg_git_archive() {
         git archive --format=tar "$_archive_ref" -- $LEG_ARCHIVE_PATHS_MAMBA
     else
         git archive --format=tar "$_archive_ref" -- . \
-            ':!bench/results/e1' ':!bench/results/e1g' ':!bench/results/fast_speed'
+            ':!bench/results'
     fi
 }
 
@@ -3572,8 +3572,8 @@ leg_check_remote_body() {
             echo "  program than the one it is named after."
             return 1
         fi
-        if ! grep -q 'MOJOLEARN_E1_PHASES="8"' "$_body"; then
-            echo "  the phase8 body does not select bootstrap phase 8."
+        if [ -z "$E1_PHASES" ] || ! grep -Fq "MOJOLEARN_E1_PHASES=\"$E1_PHASES\"" "$_body"; then
+            echo "  the bootstrap body does not select the requested phases ($E1_PHASES)."
             echo "  An empty selector runs every phase and can exhaust the lease"
             echo "  before the requested cross-GPU cards are produced."
             return 1
