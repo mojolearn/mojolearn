@@ -14,8 +14,14 @@ reference-pinned Llama-shaped decoder layer -- input RMSNorm, eager
 self-attention with RoPE, GQA and a KV cache, residual, post-attention
 RMSNorm, SiLU-gated MLP, residual -- float32 in and out, weights handed
 in as given bits, with the recurrent state EXPLICIT and caller-owned
-(`TransformerState`: the KV cache as plain NumPy buffers that
-round-trip byte for byte, plus `cached_tokens`). Prefill, continuation
+(`TransformerState`: the KV cache as plain float32 buffers --
+`mojolearn.Array` as allocated, or any writable buffer-protocol object
+such as a NumPy array -- that round-trip byte for byte, plus
+`cached_tokens`). NumPy is NOT required (numpy-free-0.7, DEVIATION
+2436): every input is read through the buffer protocol and every
+output is a `mojolearn.Array`, zero-copy under `numpy.asarray`; the
+example below uses NumPy only because it is the array library a
+reader is likeliest to hold weights in. Prefill, continuation
 from a carried cache and single-token decode all run through the
 certified Mojo entry point the lane gates run (`transformer/checks/`);
 `numeric_mode=` selects the fast / deterministic / identical tier at

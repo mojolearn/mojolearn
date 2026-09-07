@@ -5,6 +5,16 @@ All forward, backward, loss and update arithmetic executes in the existing
 IDENTICAL GPU GEMM/training bindings. This is a small fixed architecture,
 not autograd, a general neural-network trainer, or a Llama checkpoint format.
 Composed cross-vendor identity requires its own retained qualification.
+
+NUMPY-FREE (numpy-free-0.7, DEVIATIONS 2423-2427). Inputs are read through
+the buffer protocol (`_buffer.view`): a NumPy array, an `array.array`, a
+`mojolearn.Array`. Every array this class hands back -- logits, gradients,
+the state snapshot -- is a `mojolearn.Array` (`numpy.asarray` on it is
+zero-copy). THE CHECKPOINT BYTES ARE UNCHANGED: the JSON/hex envelope,
+its canonical serialization and its SHA-256 are produced from the same
+little-endian `<f4` / `<i4` bytes the NumPy spelling emitted
+(`_bufcheck.le_bytes`), so a file written by 0.6.x loads here and a file
+written here loads there, byte for byte (see `_encode_array`).
 """
 import hashlib
 import json
@@ -12,13 +22,17 @@ import math
 import operator
 import os
 from pathlib import Path
+import struct
 import tempfile
 import threading
 
-import numpy as np
-
 from . import _backend, _linalg_impl, _training_impl
-from ._arrays import _addr, _addr_ro
+from ._buffer import (
+    addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes,
+)
+from ._bufcheck import (
+    flat_view, is_int32, is_integer, is_native_f32, le_bytes, probe,
+)
 
 _NAMES = ('weight1', 'bias1', 'weight2', 'bias2')
 _SHAPES = ((16, 8), (16,), (3, 16), (3,))
@@ -27,6 +41,8 @@ _MAX_STEP = (1 << 31) - 1
 _STATE_SCHEMA = 'mojolearn.small-mlp-trainer.v1'
 _FILE_SCHEMA = 'mojolearn.small-mlp-checkpoint.v1'
 _FILE_LIMIT = 32768
+#: `numpy.finfo(numpy.float32).max`, as a Python float.
+_F32_MAX = 3.4028234663852886e+38
 
 
 def _canonical(value):
@@ -71,16 +87,28 @@ def _schedule(value):
     return json.loads(encoded)
 
 
+def _is_bool(value):
+    # `bool` and NumPy's `bool_` (which is not a `bool` subclass), judged by
+    # name so that numpy need not be importable here.
+    return isinstance(value, bool) or type(value).__name__ == 'bool_'
+
+
+def _round_f32(value):
+    # DEVIATION 2423: `float(np.float32(value))` is one round-to-nearest-even
+    # to binary32 and back, which is exactly what `struct` does.
+    return struct.unpack('<f', struct.pack('<f', value))[0]
+
+
 def _scalar(value, name):
-    if isinstance(value, (bool, np.bool_)):
+    if _is_bool(value):
         raise ValueError('SmallMLPTrainer ' + name + ' must be a finite float32 scalar')
     try:
         value = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError('SmallMLPTrainer ' + name + ' must be a scalar') from exc
-    if not math.isfinite(value) or abs(value) > float(np.finfo(np.float32).max):
+    if not math.isfinite(value) or abs(value) > _F32_MAX:
         raise ValueError('SmallMLPTrainer ' + name + ' must be finite float32')
-    return float(np.float32(value))
+    return _round_f32(value)
 
 
 def _config(lr, betas, eps, weight_decay):
@@ -98,30 +126,63 @@ def _config(lr, betas, eps, weight_decay):
     return result
 
 
-def _array(value, shape, name, dtype=np.float32):
-    if not isinstance(value, np.ndarray) or value.dtype != dtype:
-        raise TypeError('SmallMLPTrainer ' + name + ' must be a NumPy ' + np.dtype(dtype).name + ' array')
-    if value.shape != shape:
+def _array(value, shape, name, dtype='<f4'):
+    """An OWNED, C-contiguous, exactly-shaped copy of `value` as a
+    `mojolearn.Array` (DEVIATION 2424). The dtype is judged from the
+    buffer's format and REFUSED rather than converted, as the NumPy
+    spelling refused a dtype mismatch; `_buffer.as_f32_c` / `as_i32_c`
+    then supply the layout, and a borrowed buffer is copied so that the
+    trainer never aliases caller memory."""
+    kind = 'float32' if dtype == '<f4' else 'int32'
+    try:
+        pb = probe(value)
+    except TypeError:
+        raise TypeError('SmallMLPTrainer ' + name + ' must be a ' + kind
+                        + ' array (a NumPy array, an array.array or a mojolearn Array)') from None
+    ok = is_native_f32(pb.format) if dtype == '<f4' else is_int32(pb.format, pb.itemsize)
+    if not ok:
+        raise TypeError('SmallMLPTrainer ' + name + ' must be a ' + kind
+                        + ' array (a NumPy array, an array.array or a mojolearn Array)')
+    if pb.shape != shape:
         raise ValueError('SmallMLPTrainer ' + name + ' must have shape ' + repr(shape))
-    if not np.isfinite(value).all():
+    convert = as_f32_c if dtype == '<f4' else as_i32_c
+    arr, copied = convert(value, ndim=len(shape), name=name)
+    if not copied:
+        arr = arr.copy()
+    if dtype == '<f4' and not all_finite(arr):
         raise ValueError('SmallMLPTrainer ' + name + ' must be finite')
-    return np.array(value, dtype=dtype, order='C', copy=True)
+    return arr
 
 
 def _batch(value):
-    if not isinstance(value, np.ndarray) or value.ndim != 2 or value.shape[1] != 8:
+    try:
+        pb = probe(value)
+    except TypeError:
+        raise ValueError('SmallMLPTrainer X must have shape (batch, 8)') from None
+    if pb.ndim != 2 or pb.shape[1] != 8:
         raise ValueError('SmallMLPTrainer X must have shape (batch, 8)')
-    if not 1 <= value.shape[0] <= 256:
+    if not 1 <= pb.shape[0] <= 256:
         raise ValueError('SmallMLPTrainer batch must be in [1, 256]')
-    return _array(value, value.shape, 'X')
+    return _array(value, pb.shape, 'X')
 
 
 def _targets(value, rows):
-    if not isinstance(value, np.ndarray) or value.dtype.kind not in 'iu':
-        raise TypeError('SmallMLPTrainer targets must be a NumPy integer array')
-    if value.shape != (rows,) or np.any(value < 0) or np.any(value >= 3):
+    try:
+        pb = probe(value)
+    except TypeError:
+        raise TypeError('SmallMLPTrainer targets must be an integer array') from None
+    if not is_integer(pb.format):
+        raise TypeError('SmallMLPTrainer targets must be an integer array')
+    if pb.shape != (rows,):
         raise ValueError('SmallMLPTrainer targets must have shape (batch,) with classes 0..2')
-    return np.array(value, dtype=np.int32, order='C', copy=True)
+    arr, copied = as_i32_c(value, ndim=1, name='targets')
+    if not copied:
+        arr = arr.copy()
+    # A C-level scan of at most 256 labels (the permitted O(rows) loop).
+    labels = flat_view(arr, 'i')
+    if min(labels) < 0 or max(labels) >= 3:
+        raise ValueError('SmallMLPTrainer targets must have shape (batch,) with classes 0..2')
+    return arr
 
 
 def _require_mode():
@@ -167,7 +228,7 @@ def _validate_state(state):
     opt = state['optimizer']
     if not isinstance(opt, dict) or set(opt) != {'kind', 'step', 'm', 'v', 'flags'} or opt['kind'] != 'AdamW':
         raise ValueError('SmallMLPTrainer state optimizer mismatch')
-    if isinstance(opt['step'], (bool, np.bool_)):
+    if _is_bool(opt['step']):
         raise ValueError('SmallMLPTrainer step must be an integer')
     try:
         step = operator.index(opt['step'])
@@ -177,8 +238,11 @@ def _validate_state(state):
         raise ValueError('SmallMLPTrainer step is outside its supported range')
     moments = dict(step=step, m=_array(opt['m'], (_TOTAL,), 'm'),
                    v=_array(opt['v'], (_TOTAL,), 'v'),
-                   flags=_array(opt['flags'], (4,), 'flags', np.int32))
-    if np.any(moments['v'] < 0) or np.any((moments['flags'] != 0) & (moments['flags'] != 1)):
+                   flags=_array(opt['flags'], (4,), 'flags', '<i4'))
+    # DEVIATION 2425: `np.any(v < 0)` and the binary-flags test are C-level
+    # min/max scans over 195 floats and 4 ints.
+    flags = flat_view(moments['flags'], 'i')
+    if min(flat_view(moments['v'], 'f')) < 0 or min(flags) < 0 or max(flags) > 1:
         raise ValueError('SmallMLPTrainer state requires nonnegative v and binary flags')
     return weights, moments, config, _schedule(state['data_schedule'])
 
@@ -186,10 +250,12 @@ def _validate_state(state):
 class SmallMLPTrainer:
     """Fixed FP32 8→16→3 ReLU, mean cross-entropy, AdamW trainer.
 
-    Supply weight1 (16,8), bias1 (16,), weight2 (3,16), bias2 (3,).
-    Parameters and inputs are copied. Batches contain 1..256 rows and labels
-    0..2. All neural arithmetic runs on the GPU, in process-selected IDENTICAL
-    mode; this class never changes that mode. There is no CPU fallback.
+    Supply weight1 (16,8), bias1 (16,), weight2 (3,16), bias2 (3,) as
+    float32 buffers (NumPy arrays or mojolearn Arrays). Parameters and
+    inputs are copied. Batches contain 1..256 rows and labels 0..2. All
+    neural arithmetic runs on the GPU, in process-selected IDENTICAL mode;
+    this class never changes that mode. There is no CPU fallback. Every
+    array returned is a `mojolearn.Array`.
 
     data_schedule is a bounded JSON descriptor supplied by the caller (for
     example dataset hash, sample order and batch size). It is retained exactly
@@ -252,24 +318,29 @@ class SmallMLPTrainer:
     def _matmul(a, b, **kwargs):
         _require_mode()
         result = _linalg_impl.matmul(a, b, identical=True, **kwargs)
-        if result.dtype != np.float32 or not np.isfinite(result).all():
+        # DEVIATION 2426: the product is a mojolearn.Array; finiteness via
+        # the native `all_finite` helper.
+        if result.dtype != '<f4' or not all_finite(result):
             raise RuntimeError('SmallMLPTrainer GEMM returned an invalid result')
         return result
 
     @staticmethod
     def _bias(binding, values, bias, relu):
-        result = np.empty_like(values, order='C')
-        written = binding.mlp_bias_activation(_addr_ro(values), _addr_ro(bias), _addr(result),
-                                             [values.shape[0], values.shape[1], int(relu)])
-        if written != result.size or not np.isfinite(result).all():
+        result = empty(values.shape, '<f4')
+        written = binding.mlp_bias_activation(
+            addr_ro(values, name='values'), addr_ro(bias, name='bias'),
+            addr(result, name='result'),
+            [values.shape[0], values.shape[1], int(relu)])
+        if written != result.size or not all_finite(result):
             raise RuntimeError('SmallMLPTrainer bias/activation returned an invalid result')
         return result
 
     @staticmethod
     def _sum(binding, values):
-        result = np.empty(values.shape[1], dtype=np.float32)
-        written = binding.mlp_sum_rows(_addr_ro(values), _addr(result), list(values.shape))
-        if written != result.size or not np.isfinite(result).all():
+        result = empty((values.shape[1],), '<f4')
+        written = binding.mlp_sum_rows(addr_ro(values, name='values'),
+                                       addr(result, name='result'), list(values.shape))
+        if written != result.size or not all_finite(result):
             raise RuntimeError('SmallMLPTrainer bias gradient returned an invalid result')
         return result
 
@@ -308,10 +379,11 @@ class SmallMLPTrainer:
             dw2 = self._matmul(dlogits, activation, transpose_a=True)
             db2 = self._sum(binding, dlogits)
             incoming = self._matmul(dlogits, weights[2])
-            dhidden = np.empty_like(activation, order='C')
-            written = binding.mlp_relu_backward(_addr_ro(activation), _addr_ro(incoming),
-                                                _addr(dhidden), list(activation.shape))
-            if written != dhidden.size or not np.isfinite(dhidden).all():
+            dhidden = empty(activation.shape, '<f4')
+            written = binding.mlp_relu_backward(
+                addr_ro(activation, name='activation'), addr_ro(incoming, name='incoming'),
+                addr(dhidden, name='dhidden'), list(activation.shape))
+            if written != dhidden.size or not all_finite(dhidden):
                 raise RuntimeError('SmallMLPTrainer ReLU gradient returned an invalid result')
             dw1 = self._matmul(dhidden, x, transpose_a=True)
             db1 = self._sum(binding, dhidden)
@@ -392,9 +464,18 @@ def _unique_object(pairs):
 
 
 def _encode_array(value):
-    dtype = '<i4' if value.dtype == np.int32 else '<f4'
+    """The on-disk tensor descriptor, BYTE-IDENTICAL to the NumPy spelling
+    (DEVIATION 2427). `np.asarray(value, dtype='<f4', order='C').tobytes()`
+    emitted the C-order LITTLE-ENDIAN bytes whatever the host;
+    `_bufcheck.le_bytes` emits the same bytes (a `byteswap` on a big-endian
+    host, a no-op elsewhere), so `hex`, the canonical JSON around it and
+    the SHA-256 over that JSON are unchanged. `value` is one of this
+    module's own Arrays (`<f4` or `<i4`), which is all the NumPy version
+    ever saw here too."""
+    integer = value.dtype == '<i4'
+    dtype = '<i4' if integer else '<f4'
     return dict(dtype=dtype, shape=list(value.shape),
-                hex=np.asarray(value, dtype=dtype, order='C').tobytes().hex())
+                hex=le_bytes(value, 'i' if integer else 'f').hex())
 
 
 def _encode_state(state):
@@ -418,8 +499,10 @@ def _decode_array(value, shape, dtype):
         raise ValueError('SmallMLPTrainer checkpoint tensor is not hexadecimal') from exc
     if len(raw) != cells * 4:
         raise ValueError('SmallMLPTrainer checkpoint tensor byte count mismatch')
-    native = np.int32 if dtype == '<i4' else np.float32
-    return np.frombuffer(raw, dtype=dtype).astype(native, copy=True).reshape(shape)
+    # `np.frombuffer(raw, dtype='<f4').astype(native, copy=True)`:
+    # `_buffer.frombytes` reads the little-endian bytes into a fresh
+    # native Array (DEVIATION 2427).
+    return frombytes(raw, dtype, tuple(shape))
 
 
 def _decode_state(payload):

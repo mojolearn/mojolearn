@@ -70,17 +70,35 @@ from cuML's gain as `(node_rows / tree_rows) * gain`, which is sklearn's
 `impurity_improvement` rearranged, in pinned float32 rather than float64.
 Both are gated by `extratrees/checks/bestfirst_check.mojo`.
 
-X IS COPIED TWICE PER FIT: once by NumPy to column-major float32 (the
-builder's layout, cuML's own) and once across the boundary into Mojo. On
-large matrices that is the dominant cost of the CALL and is named here so
-nobody times it as the fit.
+X IS COPIED TWICE PER FIT: once on the host to column-major float32 (the
+builder's layout, cuML's own; `_buffer.as_f32_colmajor`, zero-copy for a
+float32 F-order input) and once across the boundary into Mojo. On large
+matrices that is the dominant cost of the CALL and is named here so nobody
+times it as the fit.
+
+INPUTS AND OUTPUTS ARE NOT NumPy (DEVIATION 2343). `X` is anything the
+buffer protocol exposes -- an ndarray, an `array.array`, a
+`mojolearn.Array` -- or a nested list; `y` for the regressor likewise, and
+for the classifier any sequence of label objects. `predict_proba` and the
+regressor's `predict` return a float64 `mojolearn.Array`
+(`numpy.asarray(result)` is a zero-copy view for a caller who has NumPy).
+`classes_` is a PYTHON LIST of the caller's label objects in the order
+`_labels.py` defines (DEVIATION 2340: numbers by value, strings by code
+point, NaN refused), and the classifier's `predict` returns an int64 or
+float64 `Array` for numeric labels and a Python list for str labels.
+Nothing in this module imports NumPy.
 """
 
-import numpy as np
+import numbers
 
 from . import _mojolearn_trees, _serialize
+from ._array import Array
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty
+from ._labels import (
+    argmax_rows, classes_from_member, classes_member, decode_labels,
+    flatten_labels, is_bool, sorted_classes,
+)
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-extratrees-1"
@@ -142,8 +160,8 @@ def _max_features_slots(max_features):
             f"max_features={max_features!r} is not a recognised form; sklearn"
             " accepts 'sqrt', 'log2', None, a float fraction or an int count"
         )
-    if isinstance(max_features, (int, np.integer)) and not isinstance(
-        max_features, bool
+    if isinstance(max_features, numbers.Integral) and not is_bool(
+        max_features
     ):
         return int(max_features), 0.0
     return 0, float(max_features)
@@ -156,9 +174,9 @@ def _n_samples_bootstrap(n_rows, max_samples):
     check is sklearn's `_parameter_constraints` (`_forest.py:198-202`)."""
     if max_samples is None:
         return 0
-    if isinstance(max_samples, bool):
+    if is_bool(max_samples):
         raise ValueError("max_samples must be None, an int >= 1 or a float")
-    if isinstance(max_samples, (int, np.integer)):
+    if isinstance(max_samples, numbers.Integral):
         if max_samples < 1:
             raise ValueError(
                 f"max_samples={max_samples} must be >= 1 when an int"
@@ -214,34 +232,33 @@ class _ExtraTreesBase(NumericModeMixin):
             )
         self.device = device
 
-    def _fit_arrays(self, X, y, n_classes, fit_fn):
-        Xa = np.asarray(X)
-        if Xa.ndim != 2:
-            raise ValueError(
-                f"X must be 2-D, got {Xa.ndim}-D shape {Xa.shape}"
-            )
-        n_rows, n_features = Xa.shape
-        if len(y) != n_rows:
-            raise ValueError(
-                f"y has {len(y)} rows, X has {n_rows}"
-            )
+    def _fit_arrays(self, X, ya, n_classes, fit_fn):
         # Column-major is the builder's layout (cuML's `data` is
-        # column-major); asfortranarray is that copy, named in the module
-        # docstring.
-        Xf = np.asfortranarray(Xa, dtype=np.float32)
-        ya = np.ascontiguousarray(y, dtype=np.float32)
+        # column-major); `as_f32_colmajor` is that copy, named in the
+        # module docstring, and zero for a float32 F-order input
+        # (DEVIATION 2343). Its 2-D refusal reads "mojolearn: X must be
+        # 2-D, got ...", the wording `_arrays.py` used. `ya` arrives as
+        # a float32 `Array` from the caller.
+        Xf, _ = as_f32_colmajor(X, name="X")
+        n_rows, n_features = Xf.shape
+        if len(ya) != n_rows:
+            raise ValueError(
+                f"y has {len(ya)} rows, X has {n_rows}"
+            )
         params = _fit_params(
             n_rows, n_features, n_classes, self._cfg, self.device,
             self._criterion_code,
         )
-        out = fit_fn(_addr_ro(Xf), _addr_ro(ya), params)
+        out = fit_fn(addr_ro(Xf, name="X"), addr_ro(ya, name="y"), params)
         del Xf, ya  # the borrow ends with the call
         offsets, colid, quesval, left_child, leaves, meta = out
-        self._offsets = np.asarray(offsets, dtype=np.int32)
-        self._colid = np.asarray(colid, dtype=np.int32)
-        self._quesval = np.asarray(quesval, dtype=np.float32)
-        self._left_child = np.asarray(left_child, dtype=np.int32)
-        self._leaves = np.asarray(leaves, dtype=np.float32)
+        # The binding returns Python lists; packing them is the same
+        # O(nodes) conversion `np.asarray(list)` was.
+        self._offsets = Array.from_list([int(v) for v in offsets], "<i4")
+        self._colid = Array.from_list([int(v) for v in colid], "<i4")
+        self._quesval = Array.from_list([float(v) for v in quesval], "<f4")
+        self._left_child = Array.from_list([int(v) for v in left_child], "<i4")
+        self._leaves = Array.from_list([float(v) for v in leaves], "<f4")
         self.n_features_in_ = int(n_features)
         self._n_trees = int(meta[0])
         self._num_outputs = int(meta[1])
@@ -257,21 +274,21 @@ class _ExtraTreesBase(NumericModeMixin):
     def _vote(self, X):
         if not hasattr(self, "_offsets"):
             raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, "X")
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_features = Xa.shape
         if n_features != self.n_features_in_:
             raise ValueError(
                 f"X has {n_features} features, fit saw {self.n_features_in_}"
             )
-        out = np.empty(n_rows * self._num_outputs, dtype=np.float32)
+        out = empty((n_rows * self._num_outputs,), "<f4")
         wrote = self._bind("_mojolearn_trees").et_predict(
-            _addr_ro(self._offsets),
-            _addr_ro(self._colid),
-            _addr_ro(self._quesval),
-            _addr_ro(self._left_child),
-            _addr_ro(self._leaves),
-            _addr_ro(Xa),
-            _addr(out),
+            addr_ro(self._offsets, name="offsets"),
+            addr_ro(self._colid, name="colid"),
+            addr_ro(self._quesval, name="quesval"),
+            addr_ro(self._left_child, name="left_child"),
+            addr_ro(self._leaves, name="leaves"),
+            addr_ro(Xa, name="X"),
+            addr(out, name="predict output"),
             [int(n_rows), int(n_features), self._n_trees,
              self._num_outputs],
         )
@@ -279,7 +296,7 @@ class _ExtraTreesBase(NumericModeMixin):
             raise RuntimeError(
                 f"et_predict wrote {wrote} of {n_rows} rows"
             )
-        return out.reshape(n_rows, self._num_outputs)
+        return out.reshape((n_rows, self._num_outputs))
 
     def save(self, path):
         """Write the fitted forest to `path` as an npz.
@@ -293,29 +310,33 @@ class _ExtraTreesBase(NumericModeMixin):
         """
         if not hasattr(self, "_offsets"):
             raise RuntimeError("this estimator is not fitted yet")
+        # DEVIATION 2343: members are `Array`s and plain str (which
+        # `_serialize.write_npz` encodes as the `<U` scalar member
+        # `np.asarray(str)` gave); `classes` is `_labels.classes_member`
+        # (int64 / float64 `Array`, or the list of str for str labels).
         arrays = {
-            "format": np.asarray(_MODEL_FORMAT),
-            "estimator": np.asarray(type(self).__name__),
-            "device": np.asarray(self.device),
+            "format": _MODEL_FORMAT,
+            "estimator": type(self).__name__,
+            "device": self.device,
             "offsets": self._offsets,
             "colid": self._colid,
             "quesval": self._quesval,
             "left_child": self._left_child,
             "leaves": self._leaves,
-            "meta": np.asarray(
+            "meta": Array.from_list(
                 [
-                    self.n_features_in_,
-                    self._n_trees,
-                    self._num_outputs,
+                    int(self.n_features_in_),
+                    int(self._n_trees),
+                    int(self._num_outputs),
                     1 if self.depth_cap_bound_ else 0,
-                    self.max_depth_resolved_,
-                    self.max_features_,
+                    int(self.max_depth_resolved_),
+                    int(self.max_features_),
                 ],
-                dtype=np.int64,
+                "<i8",
             ),
         }
         if hasattr(self, "classes_"):
-            arrays["classes"] = np.asarray(self.classes_)
+            arrays["classes"] = classes_member(self.classes_)
         return _serialize.write_npz(path, arrays)
 
     @classmethod
@@ -332,20 +353,22 @@ class _ExtraTreesBase(NumericModeMixin):
             )
         obj = cls.__new__(cls)
         obj.device = _serialize.scalar_str(arrays, "device")
-        obj._offsets = _serialize.exact(arrays, "offsets", np.int32)
-        obj._colid = _serialize.exact(arrays, "colid", np.int32)
-        obj._quesval = _serialize.exact(arrays, "quesval", np.float32)
-        obj._left_child = _serialize.exact(arrays, "left_child", np.int32)
-        obj._leaves = _serialize.exact(arrays, "leaves", np.float32)
-        meta = _serialize.exact(arrays, "meta", np.int64)
+        obj._offsets = _serialize.exact(arrays, "offsets", "<i4")
+        obj._colid = _serialize.exact(arrays, "colid", "<i4")
+        obj._quesval = _serialize.exact(arrays, "quesval", "<f4")
+        obj._left_child = _serialize.exact(arrays, "left_child", "<i4")
+        obj._leaves = _serialize.exact(arrays, "leaves", "<f4")
+        meta = _serialize.exact(arrays, "meta", "<i8")
         obj.n_features_in_ = int(meta[0])
         obj._n_trees = int(meta[1])
         obj._num_outputs = int(meta[2])
-        obj.depth_cap_bound_ = bool(meta[3])
+        obj.depth_cap_bound_ = bool(int(meta[3]))
         obj.max_depth_resolved_ = int(meta[4])
         obj.max_features_ = int(meta[5])
         if "classes" in arrays:
-            obj.classes_ = arrays["classes"]
+            # a 0.6.x file's `classes` member loads too (int, float, bool
+            # or `<U` from `np.unique`); bool labels come back as ints
+            obj.classes_ = classes_from_member(arrays["classes"])
             obj.n_classes_ = int(len(obj.classes_))
         return obj
 
@@ -413,21 +436,30 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         )
 
     def fit(self, X, y):
-        ya = np.asarray(y)
-        self.classes_, codes = np.unique(ya, return_inverse=True)
+        # DEVIATION 2340: `classes_` is a Python list of the caller's
+        # label objects under `_labels.sorted_classes`'s order rule, and
+        # the codes are one dict lookup per row (the permitted O(rows)
+        # label-encoding loop). The codes cross as float32, as before.
+        self.classes_, codes = sorted_classes(flatten_labels(y))
         self.n_classes_ = int(len(self.classes_))
         return self._fit_arrays(
             X,
-            codes.astype(np.float32),
+            Array.from_list([float(c) for c in codes], "<f4"),
             self.n_classes_,
             self._bind("_mojolearn_trees").et_classifier_fit,
         )
 
     def predict_proba(self, X):
-        return self._vote(X).astype(np.float64)
+        """Averaged per-tree leaf distributions, `(n_samples,
+        n_classes)` float64 `Array` (exact widening of the float32 vote),
+        columns in `classes_` order."""
+        return self._vote(X).astype("<f8")
 
     def predict(self, X):
-        return self.classes_[np.argmax(self._vote(X), axis=1)]
+        """The argmax of the vote (first max wins) mapped through
+        `classes_`: an int64 or float64 `Array` for numeric labels, a
+        Python list for str labels (DEVIATION 2340)."""
+        return decode_labels(self.classes_, argmax_rows(self._vote(X)))
 
 
 class ExtraTreesRegressor(_ExtraTreesBase):
@@ -497,12 +529,16 @@ class ExtraTreesRegressor(_ExtraTreesBase):
             self._cfg["max_features"] = None
 
     def fit(self, X, y):
+        ya, _ = as_f32_c(y, ndim=1, name="y")
         return self._fit_arrays(
             X,
-            np.ascontiguousarray(y, dtype=np.float32),
+            ya,
             0,
             self._bind("_mojolearn_trees").et_regressor_fit,
         )
 
     def predict(self, X):
-        return self._vote(X)[:, 0].astype(np.float64)
+        """The forest mean per row, a float64 `Array` of `(n_samples,)`
+        (exact widening of the float32 vote)."""
+        vote = self._vote(X)  # (n_rows, 1): one output for the regressor
+        return vote.reshape((vote.shape[0],)).astype("<f8")

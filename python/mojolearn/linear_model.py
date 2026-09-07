@@ -1,20 +1,351 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """GPU linear models, mirroring cuML's `LinearRegression(algorithm='eig')`,
-`Ridge(solver='eig')` and `LogisticRegression(solver='qn')`."""
+`Ridge(solver='eig')` and `LogisticRegression(solver='qn')`.
 
+NUMPY-FREE SINCE DEVIATION 2360 (branch numpy-free-0.7). Inputs cross the
+boundary through `_buffer.as_f32_c` and friends, outputs are `_array.Array`,
+and the two host reductions this file owns -- the column means and the
+target mean that center an intercept fit -- run through the native
+`column_mean_f64` helper (bindings/_mojolearn.mojo, DEVIATION 2303/2324),
+whose accumulation order is written down. What is still Python here is
+named at each site: label encoding (permitted, O(rows)), and the
+elementwise centering and sqrt-weight rescale, which are O(rows * features)
+Python loops and are FLAGGED AS DEFECTS (DEVIATION 2362) until they get a
+native helper.
+"""
+
+import array
 import math
 
-import numpy as np
-
 from . import _mojolearn_estimators
+from ._array import Array
+from ._buffer import (
+    addr, addr_ro, all_finite, as_f32_c, as_f64_c, empty, view, zeros,
+)
+from ._labels import decode_labels, flatten_labels, sorted_classes
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
 
+
+# ---------------------------------------------------------------------------
+# Host helpers (DEVIATION 2360). Small on purpose; every one says what it
+# costs.
+# ---------------------------------------------------------------------------
+
+
+def _round_f32(v):
+    """`float(np.float32(v))`: ONE round-to-nearest-even of a Python float
+    (binary64) to binary32 and back. `array.array('f')` stores through the C
+    `(float)` cast, which is that rounding; an out-of-range value becomes
+    +-inf exactly as NumPy's `astype(float32)` makes it."""
+    return array.array("f", (float(v),))[0]
+
+
+def _shape_of(obj):
+    """The shape of an array-like WITHOUT converting it: `.shape` when the
+    object has one (ndarray, Array, memoryview), the nesting of a list or
+    tuple otherwise. Used only to raise the estimator's own message before
+    `_buffer` would raise its generic one."""
+    shape = getattr(obj, "shape", None)
+    if shape is not None:
+        return tuple(shape)
+    if isinstance(obj, (list, tuple)):
+        if obj and isinstance(obj[0], (list, tuple)):
+            return (len(obj), len(obj[0]))
+        return (len(obj),)
+    if hasattr(obj, "__len__"):
+        return (len(obj),)
+    return ()
+
+
+def _labels_1d(y):
+    """`y` as a Python list of scalars, plus its shape. Labels may be ints,
+    floats or strings, so this never goes through a float buffer; `tolist()`
+    (ndarray, Array, array.array) or plain iteration. O(rows), which is the
+    one Python loop the contract permits on labels."""
+    shape = _shape_of(y)
+    if len(shape) != 1:
+        return None, shape
+    return flatten_labels(y), shape
+
+
+# The `classes_` ORDER RULE and the label <-> code maps live in
+# `_labels.py` (DEVIATION 2340): `sorted_classes`, `decode_labels`. Every
+# classifier in the package orders `classes_` through that one spelling;
+# DEVIATION 2364 is this file's adoption of it (a Python list, int64 /
+# float64 Arrays out of `predict` for int / float labels, a list otherwise).
+
+
+def _flatten(obj):
+    """Every leaf of a nested list/tuple (or anything with `tolist()`) as
+    one flat Python list; a scalar is a one-element list."""
+    if hasattr(obj, "tolist"):
+        obj = obj.tolist()
+    if isinstance(obj, (list, tuple)):
+        out = []
+        for v in obj:
+            out.extend(_flatten(v))
+        return out
+    return [obj]
+
+
+#: struct-format codes of the integer buffer types.
+_INT_FORMATS = frozenset("bBhHiIlLqQnN")
+
+
+def _buffer_format(obj):
+    """The struct format code of a buffer-protocol object, byte-order prefix
+    stripped; None when `obj` exports no buffer (a list, a scalar)."""
+    if isinstance(obj, Array):
+        return {"<f4": "f", "<f8": "d", "<i4": "i", "<i8": "q", "<u4": "I",
+                "<u1": "B", "<f2": "e"}.get(obj.dtype)
+    try:
+        with view(obj) as buf:
+            return buf.format.lstrip("<>=@!|")
+    except TypeError:
+        return None
+
+
+def _is_integer_labels(y):
+    """`np.issubdtype(y.dtype, np.integer)`: True for a buffer whose format
+    is an integer code (bools are NOT integers here, as in NumPy), or a
+    list/tuple whose every leaf is a Python int (bools excluded)."""
+    fmt = _buffer_format(y)
+    if fmt is not None:
+        return fmt in _INT_FORMATS
+    leaves = _flatten(y)
+    return bool(leaves) and all(type(v) is int for v in leaves)
+
+
+def _dtype_name(y):
+    """What to print for `y`'s dtype in a refusal: the buffer format code
+    when it has one, the Python type name otherwise."""
+    fmt = _buffer_format(y)
+    if fmt is not None:
+        return f"buffer format {fmt!r}"
+    return f"type {type(y).__name__}"
+
+
+def _accuracy_host(pred, y):
+    """The fraction of rows where `pred == y`, a Python count over O(rows)
+    labels (DEVIATION 2365, a host reduction). `pred` is an Array or a
+    list, as the `predict` methods return."""
+    pred = pred.tolist() if isinstance(pred, Array) else list(pred)
+    labels, _ = _labels_1d(y)
+    if labels is None or len(labels) != len(pred):
+        raise ValueError(
+            "mojolearn: y must be 1-D with one entry per row of X"
+        )
+    hits = 0
+    for p, t in zip(pred, labels):
+        if p == t:
+            hits += 1
+    return hits / len(pred) if pred else float("nan")
+
+
+def _target_1d(y, n_rows, ndim_msg, length_msg):
+    """A 1-D C-contiguous float32 target of length `n_rows`, with the
+    estimator's own two messages raised before `_buffer`'s generic ones."""
+    if len(_shape_of(y)) != 1:
+        raise ValueError(ndim_msg)
+    t, _ = as_f32_c(y, ndim=1, name="y")
+    if t.shape[0] != n_rows:
+        raise ValueError(length_msg)
+    return t
+
+
+def _r2_sums(pred, y):
+    """`(SS_res, SS_tot)` for scikit-learn's R^2, from float32 predictions
+    and a float64 target, accumulated SEQUENTIALLY in Python float64: the
+    target mean first, then both sums of squares in one pass in row order.
+
+    A HOST REDUCTION, OUTSIDE THE IDENTITY CLAIM (DEVIATION 2365). This
+    used to be NumPy's pairwise `np.sum`; a sequential fold rounds
+    differently in the last bits, so a fixture that recorded a `score()`
+    value under the NumPy-era code is RE-BASELINE OWED. The predictions
+    themselves are untouched: this is a summary of the answer, not the
+    answer. Callers apply their own convention for `SS_tot == 0`.
+    """
+    t, _ = as_f64_c(y, ndim=1, name="y")
+    tl = t.tolist()
+    pl = pred.tolist()
+    n = len(tl)
+    total = 0.0
+    for v in tl:
+        total += v
+    mean = total / n
+    ss_res = 0.0
+    ss_tot = 0.0
+    for v, p in zip(tl, pl):
+        r = v - p
+        ss_res += r * r
+        d = v - mean
+        ss_tot += d * d
+    return ss_res, ss_tot
+
+
+def _r2_host(pred, y):
+    """`1 - SS_res / SS_tot`, and 0.0 for a constant target -- the linear
+    models' NumPy-era convention (`if denom else 0.0`). See `_r2_sums`."""
+    ss_res, ss_tot = _r2_sums(pred, y)
+    return 1.0 - ss_res / ss_tot if ss_tot else 0.0
+
+
+_NATIVE = {}
+
+
+def _native_column_mean():
+    """The base binding's `column_mean_f64`, resolved the way
+    `_buffer.all_finite` resolves its helpers: through `_backend.binding`
+    for the process's tier, once, and None when the binary is not built,
+    is the wrong tier, or predates the helper (`_backend` hands out a stub
+    whose attribute access raises ImportError, so a bare `getattr` default
+    would not do). The helper is host code with no device context and no
+    tier-dependent arithmetic, so any tier's binary gives the same bits."""
+    if "column_mean_f64" in _NATIVE:
+        return _NATIVE["column_mean_f64"]
+    try:
+        from . import _backend
+        fn = getattr(_backend.binding("_mojolearn"), "column_mean_f64")
+    except Exception:  # not built, wrong tier, no device: the Python path
+        fn = None
+    _NATIVE["column_mean_f64"] = fn
+    return fn
+
+
+def _column_means_f64(x, rows, cols):
+    """Per-column float64 means of a C-contiguous float32 `[rows, cols]`
+    buffer, in the ORDER `bindings/_mojolearn.mojo::column_mean_f64_binding`
+    defines (DEVIATION 2324): row by row, column by column, one binary64
+    round-to-nearest-even addition per element, then one division by
+    `rows`. Returns a Python list of `cols` floats.
+
+    DEVIATION 2361: when the loaded `_mojolearn` binary predates the helper
+    (an older build), the SAME arithmetic runs in Python below. It is the
+    definition, not an approximation, so the bits are the helper's bits; it
+    is only slow. A 1-D vector is a `[rows, 1]` matrix here, which is how
+    `_vector_mean` uses it.
+    """
+    fn = _native_column_mean()
+    if fn is not None:
+        out = empty((cols,), "<f8")
+        fn(addr_ro(x, name="X"), int(rows), int(cols),
+           addr(out, name="column means"))
+        return out.tolist()
+    acc = [0.0] * cols
+    flat = x.ravel().tolist()
+    base = 0
+    for _r in range(rows):
+        for c in range(cols):
+            acc[c] = acc[c] + flat[base + c]
+        base += cols
+    return [a / float(rows) for a in acc]
+
+
+def _weight_total(weights):
+    """`sum(w)` in float64, SEQUENTIAL (DEVIATION 2366; NumPy's was the
+    pairwise 1-D kernel, so the weighted-fit bits move and the weighted
+    OLS cards are RE-BASELINE OWED with the rest)."""
+    total = 0.0
+    for v in weights.tolist():
+        total += v
+    if total <= 0.0:
+        raise ValueError(
+            "mojolearn: sample_weight sums to zero, so the weighted mean "
+            "cuML's preProcessData forms is a division by zero"
+        )
+    return total
+
+
+def _column_means(x, weights):
+    """Column means in float64, narrowed to float32 -- weighted when
+    `weights` is not None. Returns a Python list of float32-valued floats.
+
+    Unweighted this is `column_mean_f64` over `x`: the sequential
+    row-order float64 accumulation the helper's docstring defines
+    (DEVIATION 2324). It REPLACES `x.mean(axis=0, dtype=np.float64)`, whose
+    blocked reduction had no order a second implementation could
+    reproduce; the OLS reference cards are RE-BASELINE OWED on all three
+    vendors for that reason (NUMPY_FREE_CONTRACT.md).
+
+    Weighted it is cuML's `raft::stats::weightedMean`, `sum_i w_i x_ij /
+    sum_i w_i` (`raft/stats/detail/weighted_mean.cuh:49-64`), in THIS
+    ORDER (DEVIATION 2366): (1) a float32 copy `wx_ij = fl32(x_ij * w_i)`
+    -- the float64 product of two float32 values is exact, so that is ONE
+    rounding per element; (2) `column_mean_f64` over `wx`, which yields
+    `sum_i wx_ij / rows` in the defined order; (3) `mean_j * rows / total`
+    in float64, `total` the sequential float64 sum of the weights; (4) one
+    narrowing to float32. The NumPy-era spelling kept the products in
+    float64 and summed with the pairwise kernel, so these bits DIFFER from
+    it: the weighted OLS cards are RE-BASELINE OWED. Theirs divides by the
+    SUM OF THE WEIGHTS and not by the row count, so a uniform weight of 2
+    leaves the mean unchanged, which is the property the gate checks.
+    """
+    rows, cols = x.shape
+    if weights is None:
+        mu = _column_means_f64(x, rows, cols)
+    else:
+        w = weights.tolist()
+        total = _weight_total(weights)
+        wx = Array.from_list(
+            [[v * wr for v in row] for wr, row in zip(w, x.tolist())], "<f4"
+        )
+        mu = [m * rows / total for m in _column_means_f64(wx, rows, cols)]
+    return [_round_f32(m) for m in mu]
+
+
+def _vector_mean(v, weights):
+    """The scalar float64 mean of the target, weighted when `weights` is
+    not None. The 1-D half of `_column_means` (a vector is a `[rows, 1]`
+    matrix to `column_mean_f64`); see that docstring for the order. This
+    REPLACES `v.mean(dtype=np.float64)`, NumPy's pairwise 1-D kernel, so the
+    intercept's bits move with the column means (RE-BASELINE OWED)."""
+    n = v.shape[0]
+    if weights is None:
+        return _column_means_f64(v, n, 1)[0]
+    total = _weight_total(weights)
+    wy = Array.from_list([a * b for a, b in zip(v.tolist(), weights.tolist())],
+                         "<f4")
+    return _column_means_f64(wy, n, 1)[0] * n / total
+
+
+def _center(x, mu32):
+    """`x - mu` in float32, one rounding per element: `fl32(x_ij - mu_j)`
+    with both operands float32 values. Computing the difference in float64
+    and rounding once is the correctly rounded float32 subtraction (double
+    rounding is innocuous for +, -, *, / and sqrt when the wide format has
+    at least 2p + 2 bits; 53 >= 50), so these are the bits NumPy's float32
+    subtract produced.
+
+    DEVIATION 2362 -- DEFECT, FLAGGED: this is an O(rows * features) PYTHON
+    LOOP in a fit path, which NUMPY_FREE_CONTRACT.md forbids. It stays
+    because no native elementwise helper exists yet; the fix is a
+    `center_f32(x, mu, out)` binding beside `column_mean_f64`. Same for
+    `_scale_rows` and `_shift`.
+    """
+    return Array.from_list(
+        [[v - m for v, m in zip(row, mu32)] for row in x.tolist()], "<f4"
+    )
+
+
+def _shift(v, mu32):
+    """The 1-D `_center`: `fl32(v_i - mu)`, `mu` already a float32 value."""
+    return Array.from_list([a - mu32 for a in v.tolist()], "<f4")
+
+
+def _scale_rows(x, root):
+    """Row `i` of `x` times `root[i]`, float32: `fl32(x_ij * r_i)`, one
+    rounding (the float64 product of two float32 values is exact). The
+    device's `ols_fit_weighted` performs the same multiply, which is the
+    bit-for-bit claim `check_ols_sample_weight_host_rescale_matches_device`
+    gates. DEVIATION 2362 applies (a Python O(rows * features) loop)."""
+    return Array.from_list(
+        [[v * r for v in row] for r, row in zip(root, x.tolist())], "<f4"
+    )
 
 
 def _check_sample_weight(sample_weight, n_rows, estimator):
-    """Validate `sample_weight` and return it as a C-order float32 vector,
+    """Validate `sample_weight` and return it as a C-order float32 Array,
     or None when there are no weights.
 
     cuML validates nothing here: `olsFit` takes a raw pointer and trusts it.
@@ -26,72 +357,30 @@ def _check_sample_weight(sample_weight, n_rows, estimator):
     """
     if sample_weight is None:
         return None
-    w = np.ascontiguousarray(np.asarray(sample_weight), dtype=np.float32)
-    if w.ndim != 1:
+    shape = _shape_of(sample_weight)
+    if len(shape) != 1:
         raise ValueError(
             f"mojolearn {estimator}: sample_weight must be 1-D, got "
-            f"{w.ndim} dimensions"
+            f"{len(shape)} dimensions"
         )
+    w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
     if w.shape[0] != n_rows:
         raise ValueError(
             f"mojolearn {estimator}: sample_weight has {w.shape[0]} entries "
             f"but X has {n_rows} rows"
         )
-    if not np.all(np.isfinite(w)):
+    if not all_finite(w):
         raise ValueError(
             f"mojolearn {estimator}: sample_weight contains a non-finite "
             "value; sqrt of it would poison every row of the fit"
         )
-    if np.any(w < 0.0):
+    if w.min() < 0.0:
         raise ValueError(
             f"mojolearn {estimator}: sample_weight has a negative entry; "
             "a weighted least squares scales rows by sqrt(w) (ols.cuh:100) "
             "and sqrt of a negative is a NaN"
         )
     return w
-
-
-def _column_means(x, weights):
-    """Column means in float64, narrowed to float32 -- weighted when
-    `weights` is not None.
-
-    Unweighted this is `x.mean(axis=0, dtype=np.float64)`, the reduction
-    this file has always used (a sequential row accumulation in numpy's C
-    kernel, not BLAS, not libm). Weighted it is cuML's
-    `raft::stats::weightedMean`: `sum_i w_i x_ij / sum_i w_i`, one division
-    by the same scalar for every column (`raft/stats/detail/weighted_mean
-    .cuh:49-64`). Note that theirs divides by the SUM OF THE WEIGHTS and not
-    by the row count, so a uniform weight of 2 leaves the mean unchanged --
-    which is the property that makes duplicating a row equal doubling its
-    weight, and is what the gate checks.
-    """
-    if weights is None:
-        return x.mean(axis=0, dtype=np.float64).astype(np.float32)
-    w64 = weights.astype(np.float64)
-    total = float(w64.sum())
-    if total <= 0.0:
-        raise ValueError(
-            "mojolearn: sample_weight sums to zero, so the weighted mean "
-            "cuML's preProcessData forms is a division by zero"
-        )
-    return ((x.astype(np.float64) * w64[:, None]).sum(axis=0) / total).astype(
-        np.float32
-    )
-
-
-def _vector_mean(v, weights):
-    """The scalar mean of the target, weighted when `weights` is not None.
-    The 1-D half of `_column_means`; see that docstring."""
-    if weights is None:
-        return float(v.mean(dtype=np.float64))
-    w64 = weights.astype(np.float64)
-    total = float(w64.sum())
-    if total <= 0.0:
-        raise ValueError(
-            "mojolearn: sample_weight sums to zero, so the weighted mean "
-            "cuML's preProcessData forms is a division by zero"
-        )
-    return float((v.astype(np.float64) * w64).sum() / total)
 
 
 class LinearRegression(NumericModeMixin):
@@ -146,14 +435,17 @@ class LinearRegression(NumericModeMixin):
     yet in place is a BINDING that can hand a weight pointer across
     (`bindings/_mojolearn_estimators.mojo::ols_fit_binding` takes a fixed
     `params` of length 2). Until it is, this class applies the same two
-    operations in numpy and calls the unweighted entry.
+    operations on the host and calls the unweighted entry.
 
     That is defensible where a host reimplementation usually is not, and the
-    reason is arithmetic rather than convenience: `np.sqrt` on float32 is
-    the IEEE correctly-rounded square root, the row multiply is one
-    float32 rounding, and both are the same operations the device kernels
-    perform. The two routes are therefore expected to agree BIT FOR BIT
-    except on denormals, where the device flushes and numpy does not, and
+    reason is arithmetic rather than convenience: `math.sqrt` of a float32
+    value in float64 followed by ONE float32 rounding IS the IEEE correctly
+    rounded float32 square root (double rounding is innocuous for sqrt when
+    the wide format carries at least 2p + 2 bits, and 53 >= 50), the row
+    multiply is one float32 rounding of an exact float64 product, and both
+    are the same operations the device kernels perform. The two routes are
+    therefore expected to agree BIT FOR BIT except on denormals, where the
+    device flushes and the host does not, and
     `check_ols_sample_weight_host_rescale_matches_device` in
     `glm/checks/ols_check.mojo` is the gate on that rather than this
     paragraph. `sample_weight` with `fit_intercept=True` uses WEIGHTED
@@ -166,7 +458,9 @@ class LinearRegression(NumericModeMixin):
     mean(y) - mu_X . coef; preprocess.cuh:98-176). The ported `ols_fit`
     REFUSES `fit_intercept` by name because those two are not ported
     (glm/impl/glm/ols.mojo). This class therefore does the centering here,
-    in numpy: column means and the y mean in float64, subtracted in float32,
+    on the host: column means and the y mean in float64 through the native
+    `column_mean_f64` helper (a sequential row-order accumulation whose
+    order is the helper's contract, DEVIATION 2324), subtracted in float32,
     and the intercept as `mean(y) - sum(mu_X * coef)` with `math.fsum`
     (exactly rounded; NO BLAS dot, which would be a platform-dependent host
     reduction -- E2's first finding). The device sees a centered design;
@@ -185,22 +479,22 @@ class LinearRegression(NumericModeMixin):
         self.fit_intercept = fit_intercept
 
     def fit(self, X, y, sample_weight=None):
-        x, self.input_copied_ = as_f32_c(X, "X")
-        target = np.asarray(y)
-        if target.ndim != 1:
-            raise ValueError("mojolearn LinearRegression currently requires one target")
-        if target.shape[0] != x.shape[0]:
-            raise ValueError("mojolearn LinearRegression X and y lengths differ")
-        target = np.ascontiguousarray(target, dtype=np.float32)
-        weights = _check_sample_weight(sample_weight, x.shape[0],
-                                       "LinearRegression")
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        rows, cols = x.shape
+        target = _target_1d(
+            y, rows,
+            "mojolearn LinearRegression currently requires one target",
+            "mojolearn LinearRegression X and y lengths differ",
+        )
+        weights = _check_sample_weight(sample_weight, rows, "LinearRegression")
         if self.fit_intercept:
             # float64 column means -> float32, then a float32 subtraction.
-            # numpy's axis-0 reduction over a C-order matrix is a sequential
-            # row accumulation and its 1-D reduction is the pairwise C
-            # kernel; neither goes through BLAS or libm. The dot below is
-            # the one place a BLAS call would have slipped in, so it is an
-            # exactly-rounded fsum instead.
+            # The means come from `column_mean_f64`, a sequential row-order
+            # float64 accumulation with a written-down order (DEVIATION
+            # 2324); the 1-D target mean is the same helper over a
+            # [rows, 1] view. Neither goes through BLAS or libm. The dot
+            # below is the one place a BLAS call would have slipped in, so
+            # it is an exactly-rounded fsum instead.
             #
             # WITH WEIGHTS THE MEANS ARE WEIGHTED, which is cuML's
             # preProcessData (`raft::stats::weightedMean`, sum(w*x)/sum(w),
@@ -208,55 +502,61 @@ class LinearRegression(NumericModeMixin):
             # applied to weighted rows. The two differ, and using the wrong
             # one puts the intercept in the wrong place without moving any
             # coefficient enough to notice.
-            self._x_mean = _column_means(x, weights)
+            mu32 = _column_means(x, weights)
+            self._x_mean = Array.from_list(mu32, "<f4")
             self._y_mean = _vector_mean(target, weights)
-            work_x = np.ascontiguousarray(x - self._x_mean, dtype=np.float32)
-            work_y = np.ascontiguousarray(target - self._y_mean, dtype=np.float32)
+            # NumPy narrowed the Python-float y mean to float32 BEFORE the
+            # float32 subtract (value-based / weak-scalar casting); the
+            # same order here so the centered bits are the same bits.
+            work_x = _center(x, mu32)
+            work_y = _shift(target, _round_f32(self._y_mean))
         else:
             work_x, work_y = x, target
-            self._x_mean = np.zeros(x.shape[1], dtype=np.float32)
+            self._x_mean = zeros((cols,), "<f4")
             self._y_mean = 0.0
         if weights is not None:
             # `olsFit`, ols.cuh:99-110, on the host. See SAMPLE WEIGHTS in
             # the class docstring for why this is here and not in the Mojo
             # layer, and for the bit-for-bit claim the gate checks.
-            root = np.sqrt(weights, dtype=np.float32)
-            work_x = np.ascontiguousarray(work_x * root[:, None],
-                                          dtype=np.float32)
-            work_y = np.ascontiguousarray(work_y * root, dtype=np.float32)
-        self.coef_ = np.empty(x.shape[1], dtype=np.float32)
+            root = [_round_f32(math.sqrt(v)) for v in weights.tolist()]
+            work_x = _scale_rows(work_x, root)
+            work_y = Array.from_list(
+                [v * r for v, r in zip(work_y.tolist(), root)], "<f4"
+            )
+        self.coef_ = empty((cols,), "<f4")
         self._bind("_mojolearn_estimators").ols_fit(
-            _addr_ro(work_x), _addr_ro(work_y), _addr(self.coef_),
-            [x.shape[0], x.shape[1]],
+            addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
+            addr(self.coef_, name="coef_"),
+            [rows, cols],
         )
         if self.fit_intercept:
             dot = math.fsum(
-                float(a) * float(b) for a, b in zip(self._x_mean, self.coef_)
+                float(a) * float(b)
+                for a, b in zip(self._x_mean.tolist(), self.coef_.tolist())
             )
             self.intercept_ = float(self._y_mean - dot)
         else:
             self.intercept_ = 0.0
-        self.n_features_in_ = x.shape[1]
+        self.n_features_in_ = cols
         return self
 
     def predict(self, X):
         if not hasattr(self, "coef_"):
             raise ValueError("mojolearn LinearRegression: call fit before predict")
-        x, _ = as_f32_c(X, "X")
+        x, _ = as_f32_c(X, ndim=2, name="X")
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn LinearRegression feature count differs from fit")
-        out = np.empty(x.shape[0], dtype=np.float32)
+        out = empty((x.shape[0],), "<f4")
         self._bind("_mojolearn_estimators").ols_predict(
-            _addr_ro(x), _addr_ro(self.coef_), _addr(out),
+            addr_ro(x, name="X"), addr_ro(self.coef_, name="coef_"),
+            addr(out, name="predictions"),
             [x.shape[0], x.shape[1], float(self.intercept_)],
         )
         return out
 
     def score(self, X, y):
-        target = np.asarray(y, dtype=np.float64)
-        residual = target - self.predict(X)
-        denom = np.sum((target - target.mean()) ** 2)
-        return 1.0 - float(np.sum(residual ** 2) / denom) if denom else 0.0
+        """R^2, a sequential float64 host reduction (DEVIATION 2365)."""
+        return _r2_host(self.predict(X), y)
 
 
 class Ridge(NumericModeMixin):
@@ -336,59 +636,63 @@ class Ridge(NumericModeMixin):
                 "(ridge.cuh:197-208; glm/NOT_IMPLEMENTED.tsv)"
             )
         self.solver_ = "eig"
-        x, self.input_copied_ = as_f32_c(X, "X")
-        target = np.asarray(y)
-        if target.ndim != 1:
-            raise ValueError("mojolearn Ridge currently requires one target")
-        if target.shape[0] != x.shape[0]:
-            raise ValueError("mojolearn Ridge X and y lengths differ")
-        target = np.ascontiguousarray(target, dtype=np.float32)
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        rows, cols = x.shape
+        target = _target_1d(
+            y, rows,
+            "mojolearn Ridge currently requires one target",
+            "mojolearn Ridge X and y lengths differ",
+        )
         if self.fit_intercept:
             # The same host centering as LinearRegression, for the same
-            # reasons; read that class's fit.
-            self._x_mean = x.mean(axis=0, dtype=np.float64).astype(np.float32)
-            self._y_mean = float(target.mean(dtype=np.float64))
-            work_x = np.ascontiguousarray(x - self._x_mean, dtype=np.float32)
-            work_y = np.ascontiguousarray(target - self._y_mean, dtype=np.float32)
+            # reasons; read that class's fit. `column_mean_f64` replaces
+            # `x.mean(axis=0, dtype=np.float64)` (DEVIATION 2361); the
+            # ridge cards are RE-BASELINE OWED with the OLS ones.
+            mu32 = _column_means(x, None)
+            self._x_mean = Array.from_list(mu32, "<f4")
+            self._y_mean = _vector_mean(target, None)
+            work_x = _center(x, mu32)
+            work_y = _shift(target, _round_f32(self._y_mean))
         else:
             work_x, work_y = x, target
-            self._x_mean = np.zeros(x.shape[1], dtype=np.float32)
+            self._x_mean = zeros((cols,), "<f4")
             self._y_mean = 0.0
-        self.coef_ = np.empty(x.shape[1], dtype=np.float32)
+        self.coef_ = empty((cols,), "<f4")
         self._bind("_mojolearn_estimators").ridge_fit(
-            _addr_ro(work_x), _addr_ro(work_y), _addr(self.coef_),
-            [x.shape[0], x.shape[1], float(self.alpha)],
+            addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
+            addr(self.coef_, name="coef_"),
+            [rows, cols, float(self.alpha)],
         )
         if self.fit_intercept:
             dot = math.fsum(
-                float(a) * float(b) for a, b in zip(self._x_mean, self.coef_)
+                float(a) * float(b)
+                for a, b in zip(self._x_mean.tolist(), self.coef_.tolist())
             )
             self.intercept_ = float(self._y_mean - dot)
         else:
             self.intercept_ = 0.0
-        self.n_features_in_ = x.shape[1]
+        self.n_features_in_ = cols
         return self
 
     def predict(self, X):
         if not hasattr(self, "coef_"):
             raise ValueError("mojolearn Ridge: call fit before predict")
-        x, _ = as_f32_c(X, "X")
+        x, _ = as_f32_c(X, ndim=2, name="X")
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn Ridge feature count differs from fit")
-        out = np.empty(x.shape[0], dtype=np.float32)
+        out = empty((x.shape[0],), "<f4")
         # The same gemv + intercept epilogue OLS predicts with
         # (`gemmPredict` upstream serves both, `base.pyx:134`).
         self._bind("_mojolearn_estimators").ols_predict(
-            _addr_ro(x), _addr_ro(self.coef_), _addr(out),
+            addr_ro(x, name="X"), addr_ro(self.coef_, name="coef_"),
+            addr(out, name="predictions"),
             [x.shape[0], x.shape[1], float(self.intercept_)],
         )
         return out
 
     def score(self, X, y):
-        target = np.asarray(y, dtype=np.float64)
-        residual = target - self.predict(X)
-        denom = np.sum((target - target.mean()) ** 2)
-        return 1.0 - float(np.sum(residual ** 2) / denom) if denom else 0.0
+        """R^2, a sequential float64 host reduction (DEVIATION 2365)."""
+        return _r2_host(self.predict(X), y)
 
 
 # cuML's `qn_params.loss` ids (cuml/linear_model/qn.h); the Python door maps
@@ -396,6 +700,16 @@ class Ridge(NumericModeMixin):
 _QN_OPT_RETCODE = {0: "OPT_SUCCESS", 1: "OPT_NUMERIC_ERROR",
                    2: "OPT_LS_FAILED", 3: "OPT_MAX_ITERS_REACHED",
                    4: "OPT_INVALID_ARGS"}
+
+
+def _log_or_inf(p):
+    """`np.log` on one probability: `log(p)` for `p > 0`, `-inf` at exactly
+    zero (NumPy's answer, minus its warning), NaN for a negative."""
+    if p > 0.0:
+        return math.log(p)
+    if p == 0.0:
+        return float("-inf")
+    return float("nan")
 
 
 class LogisticRegression(NumericModeMixin):
@@ -468,12 +782,12 @@ class LogisticRegression(NumericModeMixin):
     `qn_solvers.cuh:447`).
 
     OUTPUTS: `coef_` (1, n_features) float32, `intercept_` (1,) float32,
-    `classes_` (the two labels, sorted), `n_iter_` array([k]), plus
-    `objective_` (the final value of the objective the solver minimized)
-    and `retcode_` (cuML's OPT_RETCODE, 0 = converged). `predict` is
-    `classes_[score > 0]`, `predict_proba` is float64 (n, 2) through
-    `identical_exp64` on the host (DEVIATION 549; cuML computes it in
-    float32 on the device and stores float64).
+    `classes_` (the two labels, sorted, a Python LIST -- DEVIATION 2364),
+    `n_iter_` an int64 Array `[k]`, plus `objective_` (the final value of
+    the objective the solver minimized) and `retcode_` (cuML's OPT_RETCODE,
+    0 = converged). `predict` is `classes_[score > 0]`, `predict_proba` is
+    float64 (n, 2) through `identical_exp64` on the host (DEVIATION 549;
+    cuML computes it in float32 on the device and stores float64).
 
     IDENTITY: under MOJOLEARN_NUMERIC_MODE=identical every reduction in
     the objective, the gradient and the solver's dot products is a pinned
@@ -553,15 +867,18 @@ class LogisticRegression(NumericModeMixin):
                 "(GLMBase::add_sample_weights, glm_base.cuh:115; "
                 "glm/NOT_IMPLEMENTED.tsv)"
             )
-        x, self.input_copied_ = as_f32_c(X, "X")
-        target = np.asarray(y)
-        if target.ndim != 1:
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        rows, cols = x.shape
+        labels, shape = _labels_1d(y)
+        if labels is None:
             raise ValueError("mojolearn LogisticRegression requires a 1-D y")
-        if target.shape[0] != x.shape[0]:
+        if len(labels) != rows:
             raise ValueError("mojolearn LogisticRegression X and y lengths differ")
-        # LabelEncoder: sorted unique classes -> 0..k-1 (logistic_regression.py:383)
-        self.classes_ = np.unique(target)
-        n_classes = int(self.classes_.shape[0])
+        # LabelEncoder: sorted unique classes -> 0..k-1
+        # (logistic_regression.py:383), under the package-wide ORDER RULE
+        # (`_labels.sorted_classes`, DEVIATION 2340): a Python list.
+        self.classes_, codes = sorted_classes(labels)
+        n_classes = len(self.classes_)
         if n_classes > 2:
             raise NotImplementedError(
                 f"mojolearn LogisticRegression: {n_classes} classes need the "
@@ -570,58 +887,82 @@ class LogisticRegression(NumericModeMixin):
             )
         if n_classes < 2:
             raise ValueError("mojolearn LogisticRegression: y has one class")
-        y_enc = np.ascontiguousarray(
-            (target == self.classes_[1]).astype(np.float32))
+        # Label encoding, the permitted O(rows) Python loop: code 1 is
+        # `classes_[1]`, the class the solver maps to +1.
+        y_enc = Array.from_list([float(c) for c in codes], "<f4")
         l1, l2 = self._get_qn_params()
-        n_param = x.shape[1] + (1 if self.fit_intercept else 0)
-        w = np.zeros(n_param, dtype=np.float32)
-        info = np.zeros(2, dtype=np.float32)
+        n_param = cols + (1 if self.fit_intercept else 0)
+        w = zeros((n_param,), "<f4")
+        info = zeros((2,), "<f4")
         n_iter = self._bind("_mojolearn_estimators").qn_fit(
-            _addr_ro(x), _addr_ro(y_enc), _addr(w), _addr(info),
-            [x.shape[0], x.shape[1], n_classes,
+            addr_ro(x, name="X"), addr_ro(y_enc, name="y"),
+            addr(w, name="coef_"), addr(info, name="info"),
+            [rows, cols, n_classes,
              float(l1), float(l2), float(self.tol), float(self.tol * 0.01),
              int(self.max_iter), int(self.linesearch_max_iter),
              int(self.lbfgs_memory), 1 if self.fit_intercept else 0,
              1 if self.penalty_normalized else 0, 0],
         )
         self._w = w
-        self.coef_ = w[:x.shape[1]].reshape(1, -1).copy()
-        self.intercept_ = (w[x.shape[1]:x.shape[1] + 1].copy()
-                           if self.fit_intercept
-                           else np.zeros(1, dtype=np.float32))
-        self.n_iter_ = np.asarray([int(n_iter)])
+        # A slice of an Array COPIES (the _array contract), so these are
+        # detached from `_w` exactly as `.copy()` detached them before.
+        self.coef_ = w[:cols].reshape((1, cols))
+        self.intercept_ = (w[cols:cols + 1] if self.fit_intercept
+                           else zeros((1,), "<f4"))
+        self.n_iter_ = Array.from_list([int(n_iter)], "<i8")
         self.objective_ = float(info[0])
         self.retcode_ = int(info[1])
-        self.n_features_in_ = x.shape[1]
+        self.n_features_in_ = cols
         return self
 
     def decision_function(self, X):
         if not hasattr(self, "_w"):
             raise ValueError("mojolearn LogisticRegression: call fit first")
-        x, _ = as_f32_c(X, "X")
+        x, _ = as_f32_c(X, ndim=2, name="X")
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn LogisticRegression feature count differs from fit")
-        out = np.empty(x.shape[0], dtype=np.float32)
+        out = empty((x.shape[0],), "<f4")
         self._bind("_mojolearn_estimators").qn_decision_function(
-            _addr_ro(x), _addr_ro(self._w), _addr(out),
+            addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
+            addr(out, name="scores"),
             [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
         )
         return out
 
     def predict(self, X):
-        """`qn_predict`: `z > 0 ? 1 : 0` (qn.cuh:276), mapped to classes_."""
+        """`qn_predict`: `z > 0 ? 1 : 0` (qn.cuh:276), mapped to classes_.
+        An int64 / float64 Array for int / float labels, a Python list for
+        anything else (DEVIATION 2364)."""
         scores = self.decision_function(X)
-        return self.classes_[(scores > 0).astype(np.intp)]
+        return decode_labels(self.classes_,
+                             [1 if s > 0.0 else 0 for s in scores.tolist()])
 
     def predict_proba(self, X):
         scores = self.decision_function(X)
-        out = np.empty((scores.shape[0], 2), dtype=np.float64)
+        out = empty((scores.shape[0], 2), "<f8")
         self._bind("_mojolearn_estimators").qn_sigmoid(
-            _addr_ro(scores), _addr(out), [scores.shape[0]])
+            addr_ro(scores, name="scores"), addr(out, name="proba"),
+            [scores.shape[0]])
         return out
 
     def predict_log_proba(self, X):
-        return np.log(self.predict_proba(X))
+        """`log(predict_proba(X))`, float64 (n, 2), via `math.log` per
+        element, `-inf` at an exact zero as NumPy gave.
+
+        DEVIATION 2363 -- DEFECT, FLAGGED: this is an O(rows * 2) Python
+        loop over the probability matrix. Two columns keep it proportionate
+        to the O(rows) label loops the contract permits, but it is still a
+        host `log` in a predict path and belongs behind a binding
+        (`qn_sigmoid` could return the log form directly). Routed there
+        later; recorded here so it is not mistaken for a design.
+        """
+        return Array.from_list(
+            [[_log_or_inf(a), _log_or_inf(b)]
+             for a, b in self.predict_proba(X).tolist()],
+            "<f8",
+        )
 
     def score(self, X, y):
-        return float(np.mean(self.predict(X) == np.asarray(y)))
+        """Accuracy: the fraction of rows where `predict(X) == y`, a Python
+        count over O(rows) labels (DEVIATION 2365, a host reduction)."""
+        return _accuracy_host(self.predict(X), y)

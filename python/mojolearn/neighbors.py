@@ -9,11 +9,14 @@ regressor built on it.
 (`neighbors/impl/knn/knn.mojo`, `neighbors/impl/selection/knn.mojo`).
 """
 
-import numpy as np
+import math
 
 from . import _mojolearn
+from ._array import Array
+from ._buffer import addr, addr_ro, as_f32_c, as_i64_c, empty
+from ._labels import sorted_classes
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
+from .linear_model import _dtype_name, _is_integer_labels, _shape_of
 
 _DEFAULT_QUERY_TILE = 256
 
@@ -461,7 +464,7 @@ class NearestNeighbors(NumericModeMixin):
         compatibility.
         """
         self._check_refusals()
-        idx, _ = as_f32_c(X, "X")
+        idx, _ = as_f32_c(X, ndim=2, name="X")
         # Held on the instance so the memory outlives this call: the Mojo side
         # borrows the address at `kneighbors` time and owns nothing.
         self._index = idx
@@ -483,7 +486,7 @@ class NearestNeighbors(NumericModeMixin):
         if self._index is None:
             raise ValueError("mojolearn: call fit before kneighbors")
         k = self.n_neighbors if n_neighbors is None else n_neighbors
-        q, _ = as_f32_c(X, "X")
+        q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: X has {q.shape[1]} features, index has "
@@ -507,12 +510,12 @@ class NearestNeighbors(NumericModeMixin):
                 type(self).__name__, self.metric, self.p
             )
             idx = self._index
-            rind = np.empty((nq, k), dtype=np.int32)
-            rdist = np.empty((nq, k), dtype=np.float32)
+            rind = empty((nq, k), "<i4")
+            rdist = empty((nq, k), "<f4")
             self.n_candidate_distances_ = self._bind(
                 "_mojolearn"
             ).rbc_knn_search(
-                _addr_ro(idx), _addr_ro(q), _addr(rind), _addr(rdist),
+                addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr(rind, name="rind"), addr(rdist, name="rdist"),
                 # ORDER MATCHES bindings/_mojolearn.mojo::
                 # rbc_knn_search_binding. n_index, n_queries, n_features, k,
                 # metric, metric_arg
@@ -522,7 +525,7 @@ class NearestNeighbors(NumericModeMixin):
             # no meaning on this arm and is set to None rather than left
             # holding a stale value from a previous brute-force call.
             self.used_query_tile_ = None
-            if (rind < 0).any():
+            if rind.min() < 0:
                 raise RuntimeError(
                     "mojolearn NearestNeighbors(algorithm='rbc'): the query "
                     "returned an unfilled neighbour slot, which can only "
@@ -531,20 +534,20 @@ class NearestNeighbors(NumericModeMixin):
                     "arrays changed under the call."
                 )
             if return_distance:
-                return rdist, rind.astype(np.int64)
-            return rind.astype(np.int64)
+                return rdist, rind.astype("<i8")
+            return rind.astype("<i8")
 
-        dist = np.empty((nq, k), dtype=np.float32)
-        ind = np.empty((nq, k), dtype=np.uint32)
+        dist = empty((nq, k), "<f4")
+        ind = empty((nq, k), "<u4")
 
         # Every array named here stays in a local for the whole call. That is
-        # the contract `_arrays` documents and the reason it is spelled out.
+        # the contract `_buffer` documents and the reason it is spelled out.
         idx = self._index
         self.used_query_tile_ = self._bind("_mojolearn").knn_search(
-            _addr_ro(idx),
-            _addr_ro(q),
-            _addr(dist),
-            _addr(ind),
+            addr_ro(idx, name="idx"),
+            addr_ro(q, name="q"),
+            addr(dist, name="dist"),
+            addr(ind, name="ind"),
             # ORDER MATCHES bindings/_mojolearn.mojo::knn_search_binding.
             # n_index, n_queries, n_features, k, return_sqrt, query_tile
             [idx.shape[0], nq, idx.shape[1], k, 1, self.query_tile],
@@ -553,8 +556,8 @@ class NearestNeighbors(NumericModeMixin):
         )
 
         if return_distance:
-            return dist, ind.astype(np.int64)
-        return ind.astype(np.int64)
+            return dist, ind.astype("<i8")
+        return ind.astype("<i8")
 
 
 class KNeighborsClassifier(NearestNeighbors):
@@ -615,10 +618,12 @@ class KNeighborsClassifier(NearestNeighbors):
 
     Attributes
     ----------
-    classes_ : ndarray, or list of ndarray for a 2-D `y`
-        The sorted unique labels per output (`np.unique`, the pyx's
-        `cp.unique`). The Mojo side recomputes the same set with the ported
-        `getUniquelabels` and `predict` asserts the two agree.
+    classes_ : list, or list of lists for a 2-D `y`
+        The sorted unique labels per output, as Python ints (the pyx's
+        `cp.unique`; `_labels.sorted_classes`, DEVIATION 2340, a list
+        rather than an ndarray). The
+        Mojo side recomputes the same set with the ported `getUniquelabels`
+        and `predict` asserts the two agree.
     outputs_2d_ : bool
     """
 
@@ -652,34 +657,44 @@ class KNeighborsClassifier(NearestNeighbors):
     def fit(self, X, y):
         """Store the index and the labels. `y` is int, 1-D or 2-D."""
         super().fit(X)
-        y = np.asarray(y)
-        if y.ndim not in (1, 2):
+        shape = _shape_of(y)
+        if len(shape) not in (1, 2):
             raise ValueError(
-                f"mojolearn: y must be 1-D or 2-D, got {y.ndim}-D"
+                f"mojolearn: y must be 1-D or 2-D, got {len(shape)}-D"
             )
-        if y.shape[0] != self.n_samples_fit_:
+        if shape[0] != self.n_samples_fit_:
             raise ValueError(
-                f"mojolearn: y has {y.shape[0]} rows, X has "
+                f"mojolearn: y has {shape[0]} rows, X has "
                 f"{self.n_samples_fit_}"
             )
-        if not np.issubdtype(y.dtype, np.integer):
+        if not _is_integer_labels(y):
             raise ValueError(
-                f"mojolearn: y must be integer class labels, got dtype "
-                f"{y.dtype}; cuML converts to int32 (check_dtype=np.int32) "
-                "and so does this surface -- cast your labels"
+                f"mojolearn: y must be integer class labels, got "
+                f"{_dtype_name(y)}; cuML converts to int32 "
+                "(check_dtype=np.int32) and so does this surface -- cast "
+                "your labels"
             )
-        y2 = y.reshape(y.shape[0], -1)
-        if y2.dtype != np.int32:
-            if (y2 < np.iinfo(np.int32).min).any() or (
-                y2 > np.iinfo(np.int32).max
-            ).any():
-                raise ValueError("mojolearn: y does not fit int32")
-            y2 = y2.astype(np.int32)
+        ya, _ = as_i64_c(y, ndim=len(shape), name="y")
+        if ya.min() < -(1 << 31) or ya.max() > (1 << 31) - 1:
+            raise ValueError("mojolearn: y does not fit int32")
+        n = shape[0]
+        n_out = 1 if len(shape) == 1 else shape[1]
         # POLICY 6 (neighbors/estimator.mojo): the binding takes `n_outputs`
-        # CONTIGUOUS columns -- cuML's order='F' `y`. One transpose at fit.
-        self._y_cols = np.ascontiguousarray(y2.T)
-        self.outputs_2d_ = y.ndim == 2 and y.shape[1] != 1
-        self._classes_list = [np.unique(col) for col in self._y_cols]
+        # CONTIGUOUS columns -- cuML's order='F' `y`. One transpose at fit,
+        # through the O(rows * n_outputs) label loop the contract permits
+        # (DEVIATION 2374), which also narrows int64 -> int32 exactly after
+        # the range check above.
+        rows = ya.tolist() if n_out > 1 else None
+        if n_out == 1:
+            cols = [ya.reshape((n,)).tolist()]
+        else:
+            cols = [[row[j] for row in rows] for j in range(n_out)]
+        self._y_cols = Array.from_list(cols, "<i4")
+        self.outputs_2d_ = len(shape) == 2 and shape[1] != 1
+        # `np.unique` per column, under the package-wide classes_ ORDER
+        # RULE (`_labels.sorted_classes`, DEVIATION 2340): a Python list
+        # per output; int labels, so a sort by value.
+        self._classes_list = [sorted_classes(col)[0] for col in cols]
         return self
 
     @property
@@ -693,7 +708,7 @@ class KNeighborsClassifier(NearestNeighbors):
     def _predict(self, X, want_proba):
         if self._index is None or self._y_cols is None:
             raise ValueError("mojolearn: call fit before predict")
-        q, _ = as_f32_c(X, "X")
+        q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: X has {q.shape[1]} features, index has "
@@ -707,19 +722,19 @@ class KNeighborsClassifier(NearestNeighbors):
             )
         nq = q.shape[0]
         n_out = self._y_cols.shape[0]
-        n_classes = [int(c.shape[0]) for c in self._classes_list]
-        labels = np.empty((nq, n_out), dtype=np.int32)
-        proba = np.empty(nq * sum(n_classes), dtype=np.float32)
-        uniq = np.empty(sum(n_classes), dtype=np.int32)
+        n_classes = [len(c) for c in self._classes_list]
+        labels = empty((nq, n_out), "<i4")
+        proba = empty((nq * sum(n_classes),), "<f4")
+        uniq = empty((sum(n_classes),), "<i4")
         idx = self._index
         y_cols = self._y_cols
         self.used_query_tile_ = self._bind("_mojolearn").knn_classify(
-            _addr_ro(idx),
-            _addr_ro(q),
-            _addr_ro(y_cols),
-            _addr(labels),
-            _addr(proba),
-            _addr(uniq),
+            addr_ro(idx, name="idx"),
+            addr_ro(q, name="q"),
+            addr_ro(y_cols, name="y_cols"),
+            addr(labels, name="labels"),
+            addr(proba, name="proba"),
+            addr(uniq, name="uniq"),
             # ORDER MATCHES bindings/_mojolearn.mojo::knn_classify_binding.
             # n_index, n_queries, n_features, k, query_tile, n_outputs,
             # want_proba, then n_classes per output
@@ -728,14 +743,19 @@ class KNeighborsClassifier(NearestNeighbors):
             # metric, metric_arg, weights -- see _dist_triple there.
             self._dist_params(),
         )
-        # POLICY 7: the port's class set against ours, made visible.
-        got = np.split(uniq, np.cumsum(n_classes)[:-1])
-        for i, (a, b) in enumerate(zip(got, self._classes_list)):
-            if not np.array_equal(a, b):
+        # POLICY 7: the port's class set against ours, made visible. `uniq`
+        # is split at the running class counts (the old np.cumsum /
+        # np.split), in Python over O(classes) ints.
+        flat = uniq.tolist()
+        off = 0
+        for i, (count, b) in enumerate(zip(n_classes, self._classes_list)):
+            a = flat[off:off + count]
+            off += count
+            if a != b:
                 raise RuntimeError(
                     f"mojolearn: output {i}: the ported getUniquelabels found "
-                    f"classes {a.tolist()[:8]}..., np.unique found "
-                    f"{b.tolist()[:8]}...; the two class sets disagree"
+                    f"classes {a[:8]}..., the host sort found "
+                    f"{b[:8]}...; the two class sets disagree"
                 )
         return labels, proba, n_classes
 
@@ -744,18 +764,20 @@ class KNeighborsClassifier(NearestNeighbors):
         `(n_queries, n_outputs)` for a 2-D `y`. Original label values."""
         labels, _, _ = self._predict(X, want_proba=False)
         if self.outputs_2d_:
-            return labels.astype(np.int64)
-        return labels[:, 0].astype(np.int64)
+            return labels.astype("<i8")
+        # (nq, 1) -> (nq,) is a C-order reshape; int32 -> int64 is exact.
+        return labels.reshape((labels.shape[0],)).astype("<i8")
 
     def predict_proba(self, X):
         """Vote fractions per class, columns in `classes_` order; a list of
         arrays for a 2-D `y`."""
-        _, proba, n_classes = self._predict(X, want_proba=True)
-        nq = np.asarray(X).shape[0]
+        labels, proba, n_classes = self._predict(X, want_proba=True)
+        nq = labels.shape[0]
         out = []
         off = 0
         for n in n_classes:
-            out.append(proba[off:off + nq * n].reshape(nq, n).copy())
+            # A slice of an Array COPIES (the _array contract).
+            out.append(proba[off:off + nq * n].reshape((nq, n)))
             off += nq * n
         if self.outputs_2d_:
             return out
@@ -818,19 +840,32 @@ class KNeighborsRegressor(NearestNeighbors):
     def fit(self, X, y):
         """Store the index and the targets. `y` is float, 1-D or 2-D."""
         super().fit(X)
-        y = np.asarray(y)
-        if y.ndim not in (1, 2):
+        shape = _shape_of(y)
+        if len(shape) not in (1, 2):
             raise ValueError(
-                f"mojolearn: y must be 1-D or 2-D, got {y.ndim}-D"
+                f"mojolearn: y must be 1-D or 2-D, got {len(shape)}-D"
             )
-        if y.shape[0] != self.n_samples_fit_:
+        if shape[0] != self.n_samples_fit_:
             raise ValueError(
-                f"mojolearn: y has {y.shape[0]} rows, X has "
+                f"mojolearn: y has {shape[0]} rows, X has "
                 f"{self.n_samples_fit_}"
             )
-        y2 = y.reshape(y.shape[0], -1).astype(np.float32, copy=False)
-        self._y_cols = np.ascontiguousarray(y2.T)
-        self.outputs_2d_ = y.ndim == 2 and y.shape[1] != 1
+        ya, _ = as_f32_c(y, ndim=len(shape), name="y")
+        n = shape[0]
+        n_out = 1 if len(shape) == 1 else shape[1]
+        if n_out == 1:
+            # One column IS one contiguous row of the transposed layout: a
+            # reshape, no copy (as `ascontiguousarray(y2.T)` was for 1-D y).
+            self._y_cols = ya.reshape((1, n))
+        else:
+            # The transpose is a Python loop over O(rows * n_outputs)
+            # targets (DEVIATION 2374); the values are already float32, so
+            # `from_list` reproduces them exactly.
+            rows = ya.tolist()
+            self._y_cols = Array.from_list(
+                [[row[j] for row in rows] for j in range(n_out)], "<f4"
+            )
+        self.outputs_2d_ = len(shape) == 2 and shape[1] != 1
         return self
 
     def predict(self, X):
@@ -838,7 +873,7 @@ class KNeighborsRegressor(NearestNeighbors):
         `(n_queries, n_outputs)` for a 2-D `y`. float32."""
         if self._index is None or self._y_cols is None:
             raise ValueError("mojolearn: call fit before predict")
-        q, _ = as_f32_c(X, "X")
+        q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: X has {q.shape[1]} features, index has "
@@ -852,14 +887,14 @@ class KNeighborsRegressor(NearestNeighbors):
             )
         nq = q.shape[0]
         n_out = self._y_cols.shape[0]
-        out = np.empty((nq, n_out), dtype=np.float32)
+        out = empty((nq, n_out), "<f4")
         idx = self._index
         y_cols = self._y_cols
         self.used_query_tile_ = self._bind("_mojolearn").knn_regress(
-            _addr_ro(idx),
-            _addr_ro(q),
-            _addr_ro(y_cols),
-            _addr(out),
+            addr_ro(idx, name="idx"),
+            addr_ro(q, name="q"),
+            addr_ro(y_cols, name="y_cols"),
+            addr(out, name="out"),
             # ORDER MATCHES bindings/_mojolearn.mojo::knn_regress_binding.
             # n_index, n_queries, n_features, k, query_tile, n_outputs
             [idx.shape[0], nq, idx.shape[1], k, self.query_tile, n_out],
@@ -868,7 +903,7 @@ class KNeighborsRegressor(NearestNeighbors):
         )
         if self.outputs_2d_:
             return out
-        return out[:, 0]
+        return out.reshape((nq,))
 
 
 class RadiusNeighbors(NumericModeMixin):
@@ -965,7 +1000,7 @@ class RadiusNeighbors(NumericModeMixin):
                 "algorithm's own name -- are the two accepted. The "
                 "results are exact either way"
             )
-        if not np.isfinite(self.radius) or self.radius <= 0:
+        if not math.isfinite(self.radius) or self.radius <= 0:
             raise ValueError(
                 f"mojolearn RadiusNeighbors: radius={self.radius!r} is "
                 "refused; it must be positive and finite"
@@ -982,7 +1017,7 @@ class RadiusNeighbors(NumericModeMixin):
         in. `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner records it.
         """
         self._check_refusals()
-        idx, _ = as_f32_c(X, "X")
+        idx, _ = as_f32_c(X, ndim=2, name="X")
         self._index = idx
         self.n_samples_fit_ = idx.shape[0]
         self.n_features_in_ = idx.shape[1]
@@ -995,8 +1030,8 @@ class RadiusNeighbors(NumericModeMixin):
 
         Returns `(distances, indices)` when `return_distance` is True and
         `indices` alone otherwise, matching scikit-learn. Each element is a
-        1-D array; the arrays have different lengths, so the containers are
-        object-dtype arrays rather than a rectangular block.
+        1-D Array; the rows have different lengths, so the containers are
+        Python lists rather than a rectangular block (DEVIATION 2375).
 
         `X=None` queries the fitted data against itself, as scikit-learn
         does. Note that scikit-learn EXCLUDES each point from its own
@@ -1004,6 +1039,12 @@ class RadiusNeighbors(NumericModeMixin):
         the self-edge, DBSCAN counts on it, and dropping it here would make
         the Python surface disagree with the CSR every other consumer sees.
         That difference is named rather than papered over.
+
+        DEVIATION 2375: the two containers are Python LISTS of `Array`s
+        (int64 indices, float32 distances), one per query row, where they
+        were object-dtype ndarrays of ndarrays. Indexing with `[i]` and
+        `len()` read the same; `np.asarray(container)` does not (it was
+        never a rectangular block either).
         """
         if self._index is None:
             raise ValueError(
@@ -1011,7 +1052,7 @@ class RadiusNeighbors(NumericModeMixin):
                 "radius_neighbors()"
             )
         r = float(self.radius if radius is None else radius)
-        if not np.isfinite(r) or r <= 0:
+        if not math.isfinite(r) or r <= 0:
             raise ValueError(
                 f"mojolearn RadiusNeighbors: radius={radius!r} is refused; "
                 "it must be positive and finite"
@@ -1026,7 +1067,7 @@ class RadiusNeighbors(NumericModeMixin):
         if X is None:
             q = idx
         else:
-            q, _ = as_f32_c(X, "X")
+            q, _ = as_f32_c(X, ndim=2, name="X")
             if q.shape[1] != idx.shape[1]:
                 raise ValueError(
                     f"mojolearn RadiusNeighbors: X has {q.shape[1]} features "
@@ -1034,20 +1075,20 @@ class RadiusNeighbors(NumericModeMixin):
                 )
         nq = q.shape[0]
 
-        indptr = np.empty(nq + 1, dtype=np.int32)
+        indptr = empty((nq + 1,), "<i4")
         nnz = self._bind("_mojolearn").radius_neighbors_count(
-            _addr_ro(idx), _addr_ro(q), _addr(indptr),
+            addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr(indptr, name="indptr"),
             # ORDER MATCHES bindings/_mojolearn.mojo::
             # radius_neighbors_count_binding. n_index, n_queries, n_features,
             # radius, metric, metric_arg
             [idx.shape[0], nq, idx.shape[1], r,
              self._metric_value, self._metric_arg],
         )
-        cols = np.empty(nnz, dtype=np.int32)
-        dists = np.empty(nnz, dtype=np.float32)
+        cols = empty((nnz,), "<i4")
+        dists = empty((nnz,), "<f4")
         got = self._bind("_mojolearn").radius_neighbors_fill(
-            _addr_ro(idx), _addr_ro(q), _addr(indptr), _addr(cols),
-            _addr(dists),
+            addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr(indptr, name="indptr"), addr(cols, name="cols"),
+            addr(dists, name="dists"),
             # n_index, n_queries, n_features, radius, nnz_capacity,
             # return_sqrt, metric, metric_arg. The metric MUST be the same
             # value both passes saw: the index is built inside each call, so
@@ -1068,22 +1109,31 @@ class RadiusNeighbors(NumericModeMixin):
                 "this means the input arrays changed between them"
             )
 
-        ind = np.empty(nq, dtype=object)
-        dst = np.empty(nq, dtype=object)
+        # DEVIATION 2375 -- API CHANGE: the ragged containers are Python
+        # LISTS of Arrays (int64 indices, float32 distances), one per query
+        # row, where they were object-dtype ndarrays. Same per-row contents,
+        # indexed with `[i]` as before; `len()` is the query count.
+        ptr = indptr.tolist()
+        ind = []
+        dst = []
         for i in range(nq):
-            a, b = int(indptr[i]), int(indptr[i + 1])
-            row_i = cols[a:b].astype(np.int64)
+            a, b = ptr[i], ptr[i + 1]
+            row_i = cols[a:b].astype("<i8")
             row_d = dists[a:b]
             if sort_results:
                 # STABLE, and the stability is the point: the row arrives in
                 # ascending index order under `identical`, so ties in
                 # distance keep that order and the result is
                 # (distance, index) lexicographic without a second key.
-                order = np.argsort(row_d, kind="stable")
-                row_i = row_i[order]
-                row_d = row_d[order]
-            ind[i] = row_i
-            dst[i] = row_d
+                # Python's `sorted` is stable by definition, over O(row)
+                # items (it was `np.argsort(kind="stable")`).
+                d = row_d.tolist()
+                order = sorted(range(len(d)), key=d.__getitem__)
+                ii = row_i.tolist()
+                row_i = Array.from_list([ii[j] for j in order], "<i8")
+                row_d = Array.from_list([d[j] for j in order], "<f4")
+            ind.append(row_i)
+            dst.append(row_d)
         if return_distance:
             return dst, ind
         return ind

@@ -111,19 +111,36 @@ classifiers = [
 #   License :: ...                      PEP 639 forbids a license classifier
 #                                       beside the `license` expression.
 
-# numpy IS required, unlike mojotrees where it is optional. The boundary here
-# takes raw buffer addresses out of `__array_interface__`, and every estimator
-# returns arrays. There is no plain-sequence path to degrade to and pretending
-# otherwise would be a claim with nothing behind it.
-# 1.24 is a floor, not a measurement, and it is not a narrow one: numpy
-# publishes no arm64 wheel for 1.21 or 1.23 on any interpreter this package
-# supports (checked 2026-08-20 against py3.10 arm64, both refused with "no
-# matching distribution"), so nothing older is installable on the only
-# platform this wheel targets. The oldest actually verified is 1.26.4, on
-# python3.10, running the full smoke fit. The boundary uses only
-# `asarray`, `ascontiguousarray`, `empty`, `zeros`, `astype`, `.flags` and
-# `__array_interface__`, all of which long predate any of these.
-dependencies = ["numpy>=1.24"]
+# NUMPY IS NOT A DEPENDENCY (numpy-free-0.7, DEVIATION 2435). Until 0.6.1
+# this line read `dependencies = ["numpy>=1.24"]` and the paragraph above it
+# said the boundary "takes raw buffer addresses out of `__array_interface__`"
+# and had "no plain-sequence path to degrade to". The boundary is now the
+# BUFFER PROTOCOL (PEP 3118), which is CPython's, not NumPy's:
+#   * every input crosses through `python/mojolearn/_buffer.py`, which asks
+#     the object for its buffer (`PyObject_GetBuffer`), reads the format,
+#     shape, strides and writability off it, converts to float32 C order in
+#     pure Python + `array.array` where needed, and hands the Mojo side a
+#     raw address it borrows for the duration of ONE call. A NumPy array, an
+#     `array.array`, a `mojolearn.Array` or any other exporter is an input;
+#   * every output is a `mojolearn.Array` (`python/mojolearn/_array.py`),
+#     which owns its memory and exports BOTH the buffer protocol and
+#     `__array_interface__` version 3, so `numpy.asarray(result)` is a
+#     zero-copy view for a caller who has NumPy and a caller who does not
+#     never needs it;
+#   * the on-disk formats are unchanged byte for byte (a hand-written NPY
+#     v1.0 codec in `_serialize.py`; little-endian hex in the two trainers'
+#     JSON checkpoints), so 0.6.x files load here and these files load there.
+# The contract is `python/mojolearn/NUMPY_FREE_CONTRACT.md`. NumPy remains a
+# TEST and DIAGNOSTICS dependency only: the test suite compares against it,
+# `_verify.py` builds its fixture with it (and says "pip install
+# mojolearn[test]" when it is missing). 1.24 stays the floor there for the
+# reason it was the floor before: numpy publishes no arm64 wheel for 1.21 or
+# 1.23 on any interpreter this package supports (checked 2026-08-20), and the
+# oldest actually verified is 1.26.4 on python3.10.
+dependencies = []
+
+[project.optional-dependencies]
+test = ["numpy>=1.24"]
 
 [project.urls]
 Homepage = "https://github.com/mojolearn/mojolearn"

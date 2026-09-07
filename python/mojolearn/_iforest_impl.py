@@ -26,12 +26,21 @@ Two more things the lane says about itself and this class inherits:
     one number off a real NVIDIA GPU to close.
   * The card stages added on 2026-08-24 (`split.bounds`, `split.choice`,
     `rng.final`) HAD NOT BEEN COMPILED when this wrapper was written.
+
+INPUTS AND OUTPUTS ARE NOT NumPy (DEVIATION 2344). `X` is anything the
+buffer protocol exposes -- an ndarray, an `array.array`, a
+`mojolearn.Array` -- or a nested list, converted once by
+`_buffer.as_f32_c` (zero-copy for float32 C-order). `score_samples` and
+`decision_function` return a float32 `mojolearn.Array`, `predict` an int32
+one; `numpy.asarray(result)` is a zero-copy view for a caller who has
+NumPy. Nothing in this module imports NumPy.
 """
 
-import numpy as np
+import numbers
 
+from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._labels import is_bool
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
 
 # THE EXTENSION LOADER LIVES IN `_svm_impl`, NOT BECAUSE THESE TWO LANES
 # HAVE ANYTHING TO DO WITH EACH OTHER -- they do not -- but because both
@@ -81,7 +90,7 @@ class IsolationForest(NumericModeMixin):
                                   lines, so accepting it would be
                                   accepting-and-ignoring
         output_type     refused   a cuML-internal array-type selector; this
-                                  package returns NumPy
+                                  package returns `mojolearn.Array`
         estimators_     absent    the per-tree Python objects are
                                   scikit-learn's; the forest here is four
                                   flat device arrays (DEVIATION 685)
@@ -124,15 +133,18 @@ class IsolationForest(NumericModeMixin):
     Methods
     -------
     score_samples(X)
-        The negated anomaly score, cuML's `-paper_score`. LOWER is more
-        anomalous, which is scikit-learn's convention and theirs.
+        The negated anomaly score, cuML's `-paper_score`, a float32
+        `Array` of `(n_samples,)`. LOWER is more anomalous, which is
+        scikit-learn's convention and theirs.
     decision_function(X)
         `score_samples(X) - offset_`, in float32 as the Python layer
-        upstream computes it. Negative is predicted anomalous.
+        upstream computes it; a float32 `Array`. Negative is predicted
+        anomalous.
     predict(X)
-        -1 for an anomaly, 1 for an inlier, thresholded ON THE DEVICE by
-        cuML's own `score > threshold ? 1 : -1` at `threshold = -offset_`
-        and then negated, not re-derived from `decision_function`.
+        -1 for an anomaly, 1 for an inlier, an int32 `Array`, thresholded
+        ON THE DEVICE by cuML's own `score > threshold ? 1 : -1` at
+        `threshold = -offset_` and then negated, not re-derived from
+        `decision_function`.
     """
 
     def __init__(
@@ -170,12 +182,12 @@ class IsolationForest(NumericModeMixin):
             self._max_samples_mode = 0
             self._max_samples_int = 256
             self._max_samples_frac = 1.0
-        elif isinstance(max_samples, (bool, np.bool_)):
+        elif is_bool(max_samples):
             raise ValueError(
                 "mojolearn IsolationForest: max_samples must be 'auto', an "
                 "int, or a float, not a bool"
             )
-        elif isinstance(max_samples, (int, np.integer)):
+        elif isinstance(max_samples, numbers.Integral):
             if int(max_samples) <= 0:
                 raise ValueError(
                     "mojolearn IsolationForest: max_samples must be a "
@@ -206,12 +218,12 @@ class IsolationForest(NumericModeMixin):
                 )
 
         # max_features: 0 = float fraction (their default 1.0), 1 = int.
-        if isinstance(max_features, (bool, np.bool_)):
+        if is_bool(max_features):
             raise ValueError(
                 "mojolearn IsolationForest: max_features must be an int or a "
                 "float, not a bool"
             )
-        if isinstance(max_features, (int, np.integer)):
+        if isinstance(max_features, numbers.Integral):
             if int(max_features) < 1:
                 raise ValueError(
                     "mojolearn IsolationForest: max_features must be an int "
@@ -282,7 +294,7 @@ class IsolationForest(NumericModeMixin):
         if output_type is not None:
             raise NotImplementedError(
                 "mojolearn IsolationForest: output_type is a cuML-internal "
-                "array-type selector; this package returns NumPy"
+                "array-type selector; this package returns mojolearn Arrays"
             )
 
         self.n_estimators = n_estimators
@@ -328,7 +340,7 @@ class IsolationForest(NumericModeMixin):
         time, on the training matrix `fit` kept."""
         if not hasattr(self, "_x"):
             raise ValueError("mojolearn IsolationForest: call fit() first")
-        q, _ = as_f32_c(X, "X")
+        q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn IsolationForest: X has {q.shape[1]} features, fit "
@@ -336,15 +348,17 @@ class IsolationForest(NumericModeMixin):
             )
         n_query = q.shape[0]
         train = self._x  # kept in a local: the Mojo side borrows the address
-        values = np.empty(n_query, dtype=np.float32)
-        labels = np.empty(n_query, dtype=np.int32)
-        info = np.empty(3, dtype=np.float64)
+        # DEVIATION 2344: `_buffer.empty` output `Array`s; nothing here
+        # reads them on the host except the three-slot `info`.
+        values = empty((n_query,), "<f4")
+        labels = empty((n_query,), "<i4")
+        info = empty((3,), "<f8")
         _extension(getattr(self, 'numeric_mode', None)).iforest_run(
-            _addr_ro(train),
-            _addr_ro(q),
-            _addr(values),
-            _addr(labels),
-            _addr(info),
+            addr_ro(train, name="X (training)"),
+            addr_ro(q, name="X"),
+            addr(values, name="scores"),
+            addr(labels, name="labels"),
+            addr(info, name="info"),
             self._params(train.shape[0], train.shape[1], n_query, want),
         )
         self.offset_ = float(info[0])
@@ -362,10 +376,10 @@ class IsolationForest(NumericModeMixin):
                 "mojolearn IsolationForest: sample_weight is not supported "
                 "(cuML raises UnsupportedOnGPU for it too)"
             )
-        x, self.input_copied_ = as_f32_c(X, "X")
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         self._x = x  # kept alive; every scoring call refits from it
         self.n_features_in_ = x.shape[1]
-        self._run(x[:1], _WANT_SCORE_SAMPLES)
+        self._run(x[:1], _WANT_SCORE_SAMPLES)  # one row, an `Array` copy
         return self
 
     def score_samples(self, X):

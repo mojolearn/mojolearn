@@ -61,10 +61,13 @@ import math
 import os
 import sys
 
-import numpy as np
-
 from . import _backend
-from ._arrays import _addr, _addr_ro, as_f32_c
+from ._array import Array
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i64_c, empty
+from ._labels import sorted_classes
+from .linear_model import (
+    _buffer_format, _dtype_name, _flatten, _is_integer_labels, _shape_of,
+)
 
 __all__ = [
     "accuracy_score",
@@ -134,50 +137,65 @@ def _get_binding():
 
 
 # ---------------------------------------------------------------------------
-# Array handling. `_arrays.py` owns the 2-D float32 contract and is used for
-# X; these are its 1-D siblings, under the same rule: the returned array MUST
+# Array handling. `_buffer.py` owns the 2-D float32 contract and is used for
+# X; these are its 1-D siblings, under the same rule: the returned Array MUST
 # be kept alive in a local across the Mojo call, because the Mojo side takes
 # a raw address, borrows it, and holds nothing after the call returns.
+# NumPy-free since DEVIATION 2377: the shape and dtype questions are asked
+# of the caller's object through `_shape_of` / the buffer protocol BEFORE
+# it is converted, so every message below keeps its wording.
 # ---------------------------------------------------------------------------
 
 
-def _as_i32_1d(x, name):
-    a = np.asarray(x)
-    if a.ndim == 2 and a.shape[1] == 1:
-        a = a.ravel()
-    if a.ndim != 1:
+def _vector_shape(x, name):
+    """`(n, column)`: the length of a 1-D input, or of an `(n, 1)` column,
+    which is accepted and flattened as before; every other shape refused."""
+    shape = _shape_of(x)
+    column = len(shape) == 2 and shape[1] == 1
+    if len(shape) != 1 and not column:
         raise ValueError(
-            f"mojolearn metrics: {name} must be 1-D, got shape {a.shape}"
+            f"mojolearn metrics: {name} must be 1-D, got shape {shape}"
         )
-    if a.size == 0:
+    if shape[0] == 0:
         raise ValueError(f"mojolearn metrics: {name} is empty")
-    if not np.issubdtype(a.dtype, np.integer):
+    return shape, column
+
+
+def _is_float64(x):
+    """`np.asarray(x).dtype == np.float64`: a buffer of format 'd', or a
+    list/tuple with a Python float among its leaves (NumPy made float64 of
+    that too)."""
+    fmt = _buffer_format(x)
+    if fmt is not None:
+        return fmt == "d"
+    return any(type(v) is float for v in _flatten(x))
+
+
+def _as_i32_1d(x, name):
+    shape, column = _vector_shape(x, name)
+    if not _is_integer_labels(x):
         raise ValueError(
             f"mojolearn metrics: {name} must be an integer label array, got "
-            f"dtype {a.dtype}; the ported kernels take int32 labels"
+            f"{_dtype_name(x)}; the ported kernels take int32 labels"
         )
-    out = np.ascontiguousarray(a, dtype=np.int32)
-    if not np.array_equal(out.astype(a.dtype, copy=False), a):
+    a, _ = as_i64_c(x, ndim=len(shape), name=name)
+    if column:
+        a = a.reshape((shape[0],))
+    if a.min() < -(1 << 31) or a.max() > (1 << 31) - 1:
         raise ValueError(
             f"mojolearn metrics: {name} does not fit in int32; the ported "
             "kernels are the int32 instantiation (the int64 overload of "
             "adjusted_rand_index is the same code at a wider type and is "
             "not instantiated, metrics/NOT_IMPLEMENTED.tsv)"
         )
-    return out
+    # int64 -> int32 is `array.array`'s C item loop (`Array.astype`), exact
+    # after the range check above; no Python loop.
+    return a.astype("<i4")
 
 
 def _as_f32_1d(x, name, *, require_finite=True):
-    a = np.asarray(x)
-    if a.ndim == 2 and a.shape[1] == 1:
-        a = a.ravel()
-    if a.ndim != 1:
-        raise ValueError(
-            f"mojolearn metrics: {name} must be 1-D, got shape {a.shape}"
-        )
-    if a.size == 0:
-        raise ValueError(f"mojolearn metrics: {name} is empty")
-    if a.dtype == np.float64:
+    shape, column = _vector_shape(x, name)
+    if _is_float64(x):
         # Named rather than silent: cuML has a float64 overload of r2_score,
         # kl_divergence and silhouette_score and this port does not, because
         # Apple's GPU has no float64 (mojolearn-hardware-limits). The cast is
@@ -189,8 +207,10 @@ def _as_f32_1d(x, name, *, require_finite=True):
             "(no float64 on this GPU). Cast to float32 yourself so the "
             "precision you run at is the one you chose."
         )
-    out = np.ascontiguousarray(a, dtype=np.float32)
-    if require_finite and not np.isfinite(out).all():
+    out, _ = as_f32_c(x, ndim=len(shape), name=name)
+    if column:
+        out = out.reshape((shape[0],))
+    if require_finite and not all_finite(out):
         raise ValueError(
             f"mojolearn metrics: {name} contains NaN or infinity; refused "
             "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
@@ -232,10 +252,16 @@ def _prepare_cluster_labels(labels_true, labels_pred):
             f"mojolearn metrics: labels_true has {yt.shape[0]} entries and "
             f"labels_pred has {yp.shape[0]}; they must be the same length"
         )
-    classes = np.unique(np.concatenate([np.unique(yt), np.unique(yp)]))
-    yt = np.ascontiguousarray(np.searchsorted(classes, yt), dtype=np.int32)
-    yp = np.ascontiguousarray(np.searchsorted(classes, yp), dtype=np.int32)
-    return yt, yp, int(yt.shape[0]), 0, int(len(classes) - 1)
+    # `np.unique` of the union, then `np.searchsorted`: the package-wide
+    # order rule (`_labels.sorted_classes`, DEVIATION 2340) over the
+    # concatenation and a dict lookup, O(rows) label loops (DEVIATION 2377).
+    tl = yt.tolist()
+    pl = yp.tolist()
+    classes, _ = sorted_classes(tl + pl)
+    index = {c: i for i, c in enumerate(classes)}
+    yt = Array.from_list([index[v] for v in tl], "<i4")
+    yp = Array.from_list([index[v] for v in pl], "<i4")
+    return yt, yp, len(tl), 0, len(classes) - 1
 
 
 # ===========================================================================
@@ -286,7 +312,7 @@ def accuracy_score(y_true, y_pred, *, normalize=True, sample_weight=None):
     # n
     return float(
         _get_binding().accuracy_score(
-            _addr_ro(yt), _addr_ro(yp), [int(yt.shape[0])]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [int(yt.shape[0])]
         )
     )
 
@@ -312,7 +338,7 @@ def rand_score(labels_true, labels_pred):
     # n
     return float(
         _get_binding().rand_score(
-            _addr_ro(yt), _addr_ro(yp), [int(yt.shape[0])]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [int(yt.shape[0])]
         )
     )
 
@@ -340,7 +366,7 @@ def adjusted_rand_score(labels_true, labels_pred):
     # n
     return float(
         _get_binding().adjusted_rand_score(
-            _addr_ro(yt), _addr_ro(yp), [int(yt.shape[0])]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [int(yt.shape[0])]
         )
     )
 
@@ -379,7 +405,7 @@ def entropy(clustering, *, base=None):
     # n, lower_class_range, upper_class_range
     value = float(
         _get_binding().entropy(
-            _addr_ro(lab), [int(lab.shape[0]), lower, upper]
+            addr_ro(lab, name="lab"), [int(lab.shape[0]), lower, upper]
         )
     )
     if base is not None:
@@ -419,7 +445,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
     # n, lower_class_range, upper_class_range
     return float(
         _get_binding().mutual_info_score(
-            _addr_ro(yt), _addr_ro(yp), [n, lower, upper]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
         )
     )
 
@@ -437,7 +463,7 @@ def homogeneity_score(labels_true, labels_pred):
     # n, lower_class_range, upper_class_range
     return float(
         _get_binding().homogeneity_score(
-            _addr_ro(yt), _addr_ro(yp), [n, lower, upper]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
         )
     )
 
@@ -461,7 +487,7 @@ def completeness_score(labels_true, labels_pred):
     # n, lower_class_range, upper_class_range
     return float(
         _get_binding().completeness_score(
-            _addr_ro(yt), _addr_ro(yp), [n, lower, upper]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
         )
     )
 
@@ -482,7 +508,7 @@ def v_measure_score(labels_true, labels_pred, *, beta=1.0):
     # n, lower_class_range, upper_class_range, beta
     return float(
         _get_binding().v_measure_score(
-            _addr_ro(yt), _addr_ro(yp), [n, lower, upper, float(beta)]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper, float(beta)]
         )
     )
 
@@ -570,7 +596,7 @@ def r2_score(
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::r2_score_binding.
     # n
     return float(
-        _get_binding().r2_score(_addr_ro(y), _addr_ro(yh), [int(y.shape[0])])
+        _get_binding().r2_score(addr_ro(y, name="y"), addr_ro(yh, name="yh"), [int(y.shape[0])])
     )
 
 
@@ -593,7 +619,7 @@ def kl_divergence(P, Q):
     """
     p, q = _pair_1d(P, Q, "P", "Q", _as_f32_1d)
     for name, arr in (("P", p), ("Q", q)):
-        if (arr < 0).any():
+        if arr.min() < 0:
             raise ValueError(
                 f"mojolearn kl_divergence: {name} has a negative entry; "
                 "refused here (metrics/README.md HAND-OFF ask 3) rather "
@@ -603,7 +629,7 @@ def kl_divergence(P, Q):
     # n
     return float(
         _get_binding().kl_divergence(
-            _addr_ro(p), _addr_ro(q), [int(p.shape[0])]
+            addr_ro(p, name="p"), addr_ro(q, name="q"), [int(p.shape[0])]
         )
     )
 
@@ -625,8 +651,8 @@ def _silhouette(X, labels, metric, chunksize, caller):
             "'cosine', 'l1', 'manhattan' and 'sqeuclidean' are other "
             "distance kernels and are not in metrics/ (NOT_IMPLEMENTED.tsv)"
         )
-    x, _copied = as_f32_c(X, "X")
-    if not np.isfinite(x).all():
+    x, _copied = as_f32_c(X, ndim=2, name="X")
+    if not all_finite(x):
         raise ValueError(
             f"mojolearn {caller}: X contains NaN or infinity; refused here "
             "(metrics/README.md HAND-OFF ask 3), because a NaN distance "
@@ -640,23 +666,24 @@ def _silhouette(X, labels, metric, chunksize, caller):
         )
     # cuML's silhouette_score.pyx:99-101, mirrored: monotonic labels via
     # cp.unique(..., return_inverse=True), and n_labels is how many distinct
-    # labels there are.
-    unique_labels, inverse = np.unique(lab, return_inverse=True)
-    mapped = np.ascontiguousarray(inverse, dtype=np.int32)
-    n_labels = int(unique_labels.shape[0])
+    # labels there are. `_labels.sorted_classes` (DEVIATION 2340) gives
+    # both in one O(rows) pass (DEVIATION 2377).
+    unique_labels, codes = sorted_classes(lab.tolist())
+    mapped = Array.from_list(codes, "<i4")
+    n_labels = len(unique_labels)
     chunk = 40000 if chunksize is None else int(chunksize)
     if chunk < 1:
         raise ValueError(
             f"mojolearn {caller}: chunksize must be at least 1, got {chunk}"
         )
-    scores = np.empty(x.shape[0], dtype=np.float32)
+    scores = empty((x.shape[0],), "<f4")
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::silhouette_binding.
     # n_rows, n_cols, n_labels, chunksize
     mean = float(
         _get_binding().silhouette(
-            _addr_ro(x),
-            _addr_ro(mapped),
-            _addr(scores),
+            addr_ro(x, name="x"),
+            addr_ro(mapped, name="mapped"),
+            addr(scores, name="scores"),
             [int(x.shape[0]), int(x.shape[1]), n_labels, chunk],
         )
     )
@@ -679,7 +706,7 @@ def silhouette_score(
         X          honored   2-D float32 row-major, finite. float64 is
                              refused by name (no float64 on this GPU).
         labels     honored   any integer labels; they are mapped onto
-                             [0, n_labels - 1] with np.unique here, exactly
+                             [0, n_labels - 1] by a host sort here, exactly
                              as cuML's silhouette_score.pyx does. The kernel
                              asserts 2 <= n_labels <= n_rows - 1 and refuses
                              otherwise by name.
@@ -773,15 +800,15 @@ def trustworthiness(
             "'euclidean' is ported, and cuML's trustworthiness.pyx:86 "
             "refuses every other name too"
         )
-    x, _cx = as_f32_c(X, "X")
-    emb, _ce = as_f32_c(X_embedded, "X_embedded")
+    x, _cx = as_f32_c(X, ndim=2, name="X")
+    emb, _ce = as_f32_c(X_embedded, ndim=2, name="X_embedded")
     if x.shape[0] != emb.shape[0]:
         raise ValueError(
             f"mojolearn trustworthiness: X has {x.shape[0]} rows and "
             f"X_embedded has {emb.shape[0]}"
         )
     for name, arr in (("X", x), ("X_embedded", emb)):
-        if not np.isfinite(arr).all():
+        if not all_finite(arr):
             raise ValueError(
                 f"mojolearn trustworthiness: {name} contains NaN or "
                 "infinity; refused here (metrics/README.md HAND-OFF ask 3)"
@@ -795,8 +822,8 @@ def trustworthiness(
     # n, m, d, n_neighbors, batch_size
     return float(
         _get_binding().trustworthiness(
-            _addr_ro(x),
-            _addr_ro(emb),
+            addr_ro(x, name="x"),
+            addr_ro(emb, name="emb"),
             [
                 int(x.shape[0]),
                 int(x.shape[1]),

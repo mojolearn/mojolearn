@@ -49,11 +49,20 @@ import importlib.util
 import os
 import sys
 
-import numpy as np
+import math
 
 from . import _backend
+from ._array import Array
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
+from ._labels import decode_labels, sorted_classes
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
+from .linear_model import (
+    _accuracy_host,
+    _labels_1d,
+    _r2_sums,
+    _round_f32,
+    _shape_of,
+)
 
 # cuML's `KernelType` values (kernel_params.hpp). Only two are ported.
 _KERNEL_LINEAR = 0
@@ -175,33 +184,65 @@ def _extension(mode=None):
 
 
 def _as_labels(y):
-    """`y` as a 1-D float32 vector plus the two distinct labels in cuML's
-    order (sorted ascending). Raises the binary-only refusal HERE, before
-    any device work, because that is the most common way to reach this
-    class by mistake."""
-    a = np.asarray(y)
-    if a.ndim != 1:
+    """`y` as a 1-D float32 Array plus the two distinct labels in cuML's
+    order (sorted ascending), as a Python LIST under the package-wide
+    ORDER RULE (`_labels.sorted_classes`, DEVIATION 2340). Raises the
+    binary-only refusal HERE, before any device work, because that is the
+    most common way to reach this class by mistake."""
+    labels, shape = _labels_1d(y)
+    if labels is None:
         raise ValueError(
-            f"mojolearn SVC: y must be 1-D, got {a.ndim}-D shape {a.shape}"
+            f"mojolearn SVC: y must be 1-D, got {len(shape)}-D shape {shape}"
         )
-    classes = np.unique(a)
-    if classes.shape[0] != 2:
+    # A NaN label gets the DEVIATION 636 refusal BEFORE the order rule sees
+    # it, so the message a caller reads does not depend on which check ran.
+    if any(isinstance(v, float) and v != v for v in labels):
+        raise ValueError(
+            "mojolearn SVC: y contains a non-finite value (DEVIATION 636: a "
+            "NaN or inf cannot be fitted; a computed NaN carries a "
+            "vendor-specific payload and cannot sit in a hashed stage)"
+        )
+    classes, _codes = sorted_classes(labels)
+    if len(classes) != 2:
         raise NotImplementedError(
             "mojolearn SVC: only binary classification is implemented, got "
-            f"{classes.shape[0]} classes {classes.tolist()!r}. cuML's own C++ "
+            f"{len(classes)} classes {classes!r}. cuML's own C++ "
             "asserts the same thing (svc_impl.cuh: 'Only binary "
             "classification is implemented at the moment'); their multiclass "
             "is a Python-layer one-vs-one/one-vs-rest wrapper and is not "
             "ported (svm/NOT_IMPLEMENTED.tsv)"
         )
-    f = np.ascontiguousarray(a, dtype=np.float32)
-    if not np.isfinite(f).all():
+    f, _ = as_f32_c(y, ndim=1, name="y")
+    if not all_finite(f):
         raise ValueError(
             "mojolearn SVC: y contains a non-finite value (DEVIATION 636: a "
             "NaN or inf cannot be fitted; a computed NaN carries a "
             "vendor-specific payload and cannot sit in a hashed stage)"
         )
     return f, classes
+
+
+def _dual_times_sv(dual_coef, support_vectors):
+    """`dual_coef_ @ support_vectors_`: a `(1, n_support) x (n_support,
+    n_features)` product, accumulated SEQUENTIALLY over the support vectors
+    in Python float64 and rounded once to float32.
+
+    DEVIATION 2372 -- A HOST REDUCTION, OUTSIDE THE IDENTITY CLAIM. NumPy's
+    float32 matmul went through the platform BLAS (or NumPy's own blocked
+    loop), whose fold shape was the host's; this is one written-down order
+    instead, so the bits are the same on every host but MAY DIFFER from a
+    NumPy-era `coef_` in the last place. Only reachable on
+    `kernel='linear'`, and only through the `coef_` property. It is an
+    O(n_support * n_features) Python loop, FLAGGED AS A DEFECT: the right
+    home is a gemv binding.
+    """
+    d = dual_coef.tolist()[0]
+    n_features = support_vectors.shape[1]
+    acc = [0.0] * n_features
+    for a, row in zip(d, support_vectors.tolist()):
+        for j in range(n_features):
+            acc[j] += a * row[j]
+    return Array.from_list([acc], "<f4")
 
 
 class SVC(NumericModeMixin):
@@ -254,7 +295,7 @@ class SVC(NumericModeMixin):
         probability     refused   Platt scaling is not in cuML's C++ surface
                                   at all (svm/NOT_IMPLEMENTED.tsv)
         output_type     refused   a cuML-internal array-type selector; this
-                                  package returns NumPy
+                                  package returns mojolearn Arrays
         sample_weight   refused   in fit(); see class_weight
         sparse X        refused   `svcFitSparse` / `svcPredictSparse` and
                                   every CSR arm are unported; dense
@@ -302,24 +343,27 @@ class SVC(NumericModeMixin):
 
     Attributes
     ----------
-    classes_ : ndarray (2,)
-        The two distinct labels, sorted ascending, in the dtype of the `y`
-        that was passed. `classes_[1]` is the one the solver maps to +1
+    classes_ : list (2,)
+        The two distinct labels, sorted ascending, as Python scalars under
+        the package-wide order rule (`_labels.sorted_classes`, DEVIATION
+        2340; it was an ndarray in `y`'s dtype). `predict` returns an
+        int64 / float64 Array for int / float labels and a Python list
+        otherwise. `classes_[1]` is the one the solver maps to +1
         (`getOvrlabels(..., idx=1)`), so it fixes the sign of the decision
         function.
-    support_ : ndarray (n_SV,) int32
+    support_ : Array (n_SV,) int32
         Indices of the support vectors in the training matrix.
-    support_vectors_ : ndarray (n_SV, n_features) float32
-    dual_coef_ : ndarray (1, n_SV) float32
+    support_vectors_ : Array (n_SV, n_features) float32
+    dual_coef_ : Array (1, n_SV) float32
         scikit-learn's 2-D layout of cuML's 1-D `dual_coefs`.
-    intercept_ : ndarray (1,) float32
+    intercept_ : Array (1,) float32
     n_support_ : int
         cuML's scalar count. scikit-learn's attribute of this name is a
         per-class array; this one is not, and the difference is here
         rather than in a surprise.
     n_iter_ : int
         Total inner SMO iterations.
-    coef_ : ndarray (1, n_features) float32
+    coef_ : Array (1, n_features) float32
         `dual_coef_ @ support_vectors_`, and only for `kernel='linear'`;
         raises AttributeError otherwise, as scikit-learn does.
     n_features_in_ : int
@@ -380,7 +424,7 @@ class SVC(NumericModeMixin):
             gamma = "auto"
         else:
             gamma = float(gamma)
-            if not np.isfinite(gamma) or gamma < 0.0:
+            if not math.isfinite(gamma) or gamma < 0.0:
                 raise ValueError(
                     "mojolearn SVC: gamma must be finite and >= 0 for the RBF "
                     f"kernel, got {gamma!r} (DEVIATION 636; scikit-learn's own "
@@ -400,21 +444,21 @@ class SVC(NumericModeMixin):
                 "ported"
             )
         C = float(C)
-        if not np.isfinite(C):
+        if not math.isfinite(C):
             raise ValueError(
                 f"mojolearn SVC: C must be finite, got {C!r} (DEVIATION 636)"
             )
         if C <= 0.0:
             raise ValueError(f"mojolearn SVC: C must be positive, got {C!r}")
         tol = float(tol)
-        if not np.isfinite(tol):
+        if not math.isfinite(tol):
             raise ValueError(
                 f"mojolearn SVC: tol must be finite, got {tol!r} (DEVIATION 636)"
             )
         if tol <= 0.0:
             raise ValueError(f"mojolearn SVC: tol must be positive, got {tol!r}")
         cache_size = float(cache_size)
-        if not (cache_size > 0.0) or not np.isfinite(cache_size):
+        if not (cache_size > 0.0) or not math.isfinite(cache_size):
             raise ValueError(
                 "mojolearn SVC: cache_size is the prediction buffer here "
                 f"(DEVIATION 871) and must be a positive finite MiB, got "
@@ -442,7 +486,7 @@ class SVC(NumericModeMixin):
         if output_type is not None:
             raise NotImplementedError(
                 "mojolearn SVC: output_type is a cuML-internal array-type "
-                "selector; this package returns NumPy"
+                "selector; this package returns mojolearn Arrays"
             )
         if random_state is not None:
             raise NotImplementedError(
@@ -500,7 +544,7 @@ class SVC(NumericModeMixin):
                 "InitPenalty arm (C_vec = C * w) has no port "
                 "(svm/NOT_IMPLEMENTED.tsv). class_weight is the same refusal"
             )
-        x, self.input_copied_ = as_f32_c(X, "X")
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         labels, classes = _as_labels(y)
         n_rows, n_cols = x.shape
         if labels.shape[0] != n_rows:
@@ -510,17 +554,17 @@ class SVC(NumericModeMixin):
             )
         gamma = self._resolve_gamma(n_cols)
 
-        dual = np.empty(n_rows, dtype=np.float32)
-        support = np.empty(n_rows, dtype=np.int32)
-        sv = np.empty(n_rows * n_cols, dtype=np.float32)
-        info = np.empty(5, dtype=np.float64)
+        dual = empty((n_rows,), "<f4")
+        support = empty((n_rows,), "<i4")
+        sv = empty((n_rows * n_cols,), "<f4")
+        info = empty((5,), "<f8")
         n_support = _extension(getattr(self, 'numeric_mode', None)).svc_fit(
-            _addr_ro(x),
-            _addr_ro(labels),
-            _addr(dual),
-            _addr(support),
-            _addr(sv),
-            _addr(info),
+            addr_ro(x, name="x"),
+            addr_ro(labels, name="labels"),
+            addr(dual, name="dual"),
+            addr(support, name="support"),
+            addr(sv, name="sv"),
+            addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_fit_binding.
             # n_rows, n_features, kernel, gamma, C, tol, max_iter,
             # nochange_steps
@@ -528,31 +572,34 @@ class SVC(NumericModeMixin):
              self.max_iter, self.nochange_steps],
         )
         n_support = int(n_support)
-        b = np.float32(info[0])
-        label0 = np.float32(info[3])
-        label1 = np.float32(info[4])
+        # `np.float32(...)`: one rounding of the float64 slot to binary32.
+        b = _round_f32(info[0])
+        label0 = _round_f32(info[3])
+        label1 = _round_f32(info[4])
         # THE LABEL PAIR IS CHECKED, NOT ASSUMED. The solver finds the two
         # distinct labels with its own host sort and maps the LARGER to +1;
-        # if that disagreed with numpy's unique, `predict` would map the
-        # device's answer onto the wrong class and the error would look like
-        # a bad model rather than a bad boundary.
-        if label0 != np.float32(classes[0]) or label1 != np.float32(classes[1]):
+        # if that disagreed with this side's sorted unique, `predict` would
+        # map the device's answer onto the wrong class and the error would
+        # look like a bad model rather than a bad boundary.
+        if label0 != _round_f32(classes[0]) or label1 != _round_f32(classes[1]):
             raise RuntimeError(
                 "mojolearn SVC: the solver's label pair "
-                f"({float(label0)}, {float(label1)}) does not match numpy's "
-                f"unique ({float(classes[0])}, {float(classes[1])}); the "
-                "class mapping cannot be trusted"
+                f"({float(label0)}, {float(label1)}) does not match the "
+                f"host's sorted unique ({float(classes[0])}, "
+                f"{float(classes[1])}); the class mapping cannot be trusted"
             )
         self.classes_ = classes
         self.n_features_in_ = n_cols
         self.n_support_ = n_support
         self.n_iter_ = int(info[2])
-        self.intercept_ = np.array([b], dtype=np.float32)
-        self.support_ = np.ascontiguousarray(support[:n_support])
-        self.support_vectors_ = np.ascontiguousarray(
-            sv[: n_support * n_cols].reshape(n_support, n_cols)
-        )
-        self.dual_coef_ = np.ascontiguousarray(dual[:n_support]).reshape(1, n_support)
+        self.intercept_ = Array.from_list([b], "<f4")
+        # A slice of an Array COPIES (the _array contract), so these three
+        # are compact C-contiguous Arrays detached from the worst-case
+        # buffers above, exactly as `np.ascontiguousarray` detached them.
+        self.support_ = support[:n_support]
+        self.support_vectors_ = sv[:n_support * n_cols].reshape(
+            (n_support, n_cols))
+        self.dual_coef_ = dual[:n_support].reshape((1, n_support))
         self._gamma = gamma
         self._label0 = label0
         self._label1 = label1
@@ -567,29 +614,29 @@ class SVC(NumericModeMixin):
                 "mojolearn SVC: coef_ is only available for kernel='linear'"
             )
         if self.n_support_ == 0:
-            return np.zeros((1, self.n_features_in_), dtype=np.float32)
-        return np.ascontiguousarray(self.dual_coef_ @ self.support_vectors_)
+            return zeros((1, self.n_features_in_), "<f4")
+        return _dual_times_sv(self.dual_coef_, self.support_vectors_)
 
     def _run(self, X, predict_class):
         if not hasattr(self, "dual_coef_"):
             raise ValueError("mojolearn SVC: call fit() first")
-        q, _ = as_f32_c(X, "X")
+        q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn SVC: X has {q.shape[1]} features, fit saw "
                 f"{self.n_features_in_}"
             )
         n_rows = q.shape[0]
-        out = np.empty(n_rows, dtype=np.float32)
+        out = empty((n_rows,), "<f4")
         # Kept in locals so the arrays outlive the call; the Mojo side
-        # borrows these addresses and owns nothing (`_arrays.py`).
+        # borrows these addresses and owns nothing (`_buffer.py`).
         dual = self.dual_coef_
         sv = self.support_vectors_
         _extension(getattr(self, 'numeric_mode', None)).svc_predict(
-            _addr_ro(q),
-            _addr_ro(dual) if self.n_support_ > 0 else 0,
-            _addr_ro(sv) if self.n_support_ > 0 else 0,
-            _addr(out),
+            addr_ro(q, name="q"),
+            addr_ro(dual, name="dual") if self.n_support_ > 0 else 0,
+            addr_ro(sv, name="sv") if self.n_support_ > 0 else 0,
+            addr(out, name="out"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_predict_binding.
             # n_rows, n_features, n_support, b, classes[0], classes[1],
             # kernel, gamma, predict_class, cache_size_mib
@@ -610,7 +657,9 @@ class SVC(NumericModeMixin):
         chosen there by `val + b < 0 ? classes_[0] : classes_[1]` and this
         maps the float32 label it wrote back into `classes_`'s dtype."""
         raw = self._run(X, True)
-        return np.where(raw == self._label1, self.classes_[1], self.classes_[0])
+        label1 = self._label1
+        return decode_labels(self.classes_,
+                             [1 if v == label1 else 0 for v in raw.tolist()])
 
     def predict_proba(self, X):
         raise NotImplementedError(
@@ -620,7 +669,8 @@ class SVC(NumericModeMixin):
         )
 
     def score(self, X, y):
-        return float(np.mean(self.predict(X) == np.asarray(y)))
+        """Accuracy, a Python count over O(rows) labels (DEVIATION 2365)."""
+        return _accuracy_host(self.predict(X), y)
 
 
 def _as_targets(y, n_rows):
@@ -639,16 +689,17 @@ def _as_targets(y, n_rows):
     Python and therefore untestable. The house rule is to plumb the value
     through and let the named refusal fire.
     """
-    a = np.asarray(y)
-    if a.ndim != 1:
+    shape = _shape_of(y)
+    if len(shape) != 1:
         raise ValueError(
-            f"mojolearn SVR: y must be 1-D, got {a.ndim}-D shape {a.shape}"
+            f"mojolearn SVR: y must be 1-D, got {len(shape)}-D shape {shape}"
         )
+    a, _ = as_f32_c(y, ndim=1, name="y")
     if a.shape[0] != n_rows:
         raise ValueError(
             f"mojolearn SVR: y has {a.shape[0]} entries, X has {n_rows} rows"
         )
-    return np.ascontiguousarray(a, dtype=np.float32)
+    return a
 
 
 class SVR(NumericModeMixin):
@@ -719,7 +770,7 @@ class SVR(NumericModeMixin):
                                   accepting-and-ignoring
         output_type     refused   `_svm_impl.py`. A cuML-internal
                                   array-type selector; this package returns
-                                  NumPy
+                                  mojolearn Arrays
         shrinking       absent    NOT A PARAMETER OF THIS CLASS, so passing
                                   it is a TypeError naming it. It is
                                   scikit-learn's (libsvm's) shrinking
@@ -734,7 +785,7 @@ class SVR(NumericModeMixin):
                                   port (`svm/NOT_IMPLEMENTED.tsv`)
         sparse X        refused   `svrFitSparse` and every CSR arm are
                                   unported; dense row-major float32 only.
-                                  `_arrays.py::as_f32_c` is what refuses
+                                  `_buffer.py::as_f32_c` is what refuses
         non-finite X    refused   `svm/impl/svm/svr_impl.mojo` at fit and
                                   `svm/impl/svm/svc_impl.mojo` at predict
                                   name the flat index (DEVIATION 636)
@@ -796,19 +847,19 @@ class SVR(NumericModeMixin):
 
     Attributes
     ----------
-    support_ : ndarray (n_SV,) int32
+    support_ : Array (n_SV,) int32
         Indices of the support vectors in the training matrix.
-    support_vectors_ : ndarray (n_SV, n_features) float32
-    dual_coef_ : ndarray (1, n_SV) float32
+    support_vectors_ : Array (n_SV, n_features) float32
+    dual_coef_ : Array (1, n_SV) float32
         scikit-learn's 2-D layout of cuML's 1-D folded `dual_coefs`. Each
         entry is `alpha_i - alpha*_i` for one row, which is why there are
         `n_SV` of them and not `2 * n_SV`.
-    intercept_ : ndarray (1,) float32
+    intercept_ : Array (1,) float32
     n_support_ : int
         cuML's scalar count.
     n_iter_ : int
         Total inner SMO iterations.
-    coef_ : ndarray (1, n_features) float32
+    coef_ : Array (1, n_features) float32
         `dual_coef_ @ support_vectors_`, and only for `kernel='linear'`;
         raises AttributeError otherwise, as scikit-learn does.
     n_features_in_ : int
@@ -867,7 +918,7 @@ class SVR(NumericModeMixin):
             gamma = "auto"
         else:
             gamma = float(gamma)
-            if not np.isfinite(gamma) or gamma < 0.0:
+            if not math.isfinite(gamma) or gamma < 0.0:
                 raise ValueError(
                     "mojolearn SVR: gamma must be finite and >= 0 for the RBF "
                     f"kernel, got {gamma!r} (DEVIATION 636; scikit-learn's own "
@@ -887,14 +938,14 @@ class SVR(NumericModeMixin):
                 "ported"
             )
         C = float(C)
-        if not np.isfinite(C):
+        if not math.isfinite(C):
             raise ValueError(
                 f"mojolearn SVR: C must be finite, got {C!r} (DEVIATION 636)"
             )
         if C <= 0.0:
             raise ValueError(f"mojolearn SVR: C must be positive, got {C!r}")
         tol = float(tol)
-        if not np.isfinite(tol):
+        if not math.isfinite(tol):
             raise ValueError(
                 f"mojolearn SVR: tol must be finite, got {tol!r} (DEVIATION 636)"
             )
@@ -908,7 +959,7 @@ class SVR(NumericModeMixin):
         # is the same rule that keeps the non-finite-X refusal reachable.
         epsilon = float(epsilon)
         cache_size = float(cache_size)
-        if not (cache_size > 0.0) or not np.isfinite(cache_size):
+        if not (cache_size > 0.0) or not math.isfinite(cache_size):
             raise ValueError(
                 "mojolearn SVR: cache_size is the prediction buffer here "
                 f"(DEVIATION 871) and must be a positive finite MiB, got "
@@ -936,7 +987,7 @@ class SVR(NumericModeMixin):
         if output_type is not None:
             raise NotImplementedError(
                 "mojolearn SVR: output_type is a cuML-internal array-type "
-                "selector; this package returns NumPy"
+                "selector; this package returns mojolearn Arrays"
             )
         self.kernel = k
         self.degree = degree
@@ -967,7 +1018,7 @@ class SVR(NumericModeMixin):
                 "InitPenalty arm (C_vec = C * w) has no port "
                 "(svm/NOT_IMPLEMENTED.tsv)"
             )
-        x, self.input_copied_ = as_f32_c(X, "X")
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         targets = _as_targets(y, n_rows)
         gamma = self._resolve_gamma(n_cols)
@@ -979,18 +1030,18 @@ class SVR(NumericModeMixin):
         # `n_rows * n_cols` support-vector floats can ever be written. Every
         # size here is a function of `(n_rows, n_cols)` alone, which is what
         # lets this side allocate before the call.
-        dual = np.empty(n_rows, dtype=np.float32)
-        support = np.empty(n_rows, dtype=np.int32)
-        sv = np.empty(n_rows * n_cols, dtype=np.float32)
+        dual = empty((n_rows,), "<f4")
+        support = empty((n_rows,), "<i4")
+        sv = empty((n_rows * n_cols,), "<f4")
         # THREE, not SVC's five: slots 3 and 4 there are the class labels.
-        info = np.empty(3, dtype=np.float64)
+        info = empty((3,), "<f8")
         n_support = _extension(getattr(self, 'numeric_mode', None)).svr_fit(
-            _addr_ro(x),
-            _addr_ro(targets),
-            _addr(dual),
-            _addr(support),
-            _addr(sv),
-            _addr(info),
+            addr_ro(x, name="x"),
+            addr_ro(targets, name="targets"),
+            addr(dual, name="dual"),
+            addr(support, name="support"),
+            addr(sv, name="sv"),
+            addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_fit_binding.
             # n_rows, n_features, kernel, gamma, C, epsilon, tol, max_iter,
             # nochange_steps
@@ -998,17 +1049,17 @@ class SVR(NumericModeMixin):
              self.epsilon, self.tol, self.max_iter, self.nochange_steps],
         )
         n_support = int(n_support)
-        b = np.float32(info[0])
+        b = _round_f32(info[0])
 
         self.n_features_in_ = n_cols
         self.n_support_ = n_support
         self.n_iter_ = int(info[2])
-        self.intercept_ = np.array([b], dtype=np.float32)
-        self.support_ = np.ascontiguousarray(support[:n_support])
-        self.support_vectors_ = np.ascontiguousarray(
-            sv[: n_support * n_cols].reshape(n_support, n_cols)
-        )
-        self.dual_coef_ = np.ascontiguousarray(dual[:n_support]).reshape(1, n_support)
+        self.intercept_ = Array.from_list([b], "<f4")
+        # Slices COPY (the _array contract): compact, C-contiguous, detached.
+        self.support_ = support[:n_support]
+        self.support_vectors_ = sv[:n_support * n_cols].reshape(
+            (n_support, n_cols))
+        self.dual_coef_ = dual[:n_support].reshape((1, n_support))
         self._gamma = gamma
         return self
 
@@ -1021,8 +1072,8 @@ class SVR(NumericModeMixin):
                 "mojolearn SVR: coef_ is only available for kernel='linear'"
             )
         if self.n_support_ == 0:
-            return np.zeros((1, self.n_features_in_), dtype=np.float32)
-        return np.ascontiguousarray(self.dual_coef_ @ self.support_vectors_)
+            return zeros((1, self.n_features_in_), "<f4")
+        return _dual_times_sv(self.dual_coef_, self.support_vectors_)
 
     def predict(self, X):
         """`sum_j K(x, sv_j) dual_j + b`, one value per row, float32.
@@ -1034,23 +1085,23 @@ class SVR(NumericModeMixin):
         """
         if not hasattr(self, "dual_coef_"):
             raise ValueError("mojolearn SVR: call fit() first")
-        q, _ = as_f32_c(X, "X")
+        q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn SVR: X has {q.shape[1]} features, fit saw "
                 f"{self.n_features_in_}"
             )
         n_rows = q.shape[0]
-        out = np.empty(n_rows, dtype=np.float32)
+        out = empty((n_rows,), "<f4")
         # Kept in locals so the arrays outlive the call; the Mojo side
-        # borrows these addresses and owns nothing (`_arrays.py`).
+        # borrows these addresses and owns nothing (`_buffer.py`).
         dual = self.dual_coef_
         sv = self.support_vectors_
         _extension(getattr(self, 'numeric_mode', None)).svr_predict(
-            _addr_ro(q),
-            _addr_ro(dual) if self.n_support_ > 0 else 0,
-            _addr_ro(sv) if self.n_support_ > 0 else 0,
-            _addr(out),
+            addr_ro(q, name="q"),
+            addr_ro(dual, name="dual") if self.n_support_ > 0 else 0,
+            addr_ro(sv, name="sv") if self.n_support_ > 0 else 0,
+            addr(out, name="out"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_predict_binding.
             # n_rows, n_features, n_support, b, kernel, gamma,
             # cache_size_mib
@@ -1066,21 +1117,23 @@ class SVR(NumericModeMixin):
 
         Accumulated in FLOAT64 from float32 predictions, which is what
         scikit-learn does and is not part of any identity claim: it is a
-        summary of the answer, not the answer.
+        summary of the answer, not the answer. SEQUENTIALLY, in Python
+        (`linear_model._r2_sums`, DEVIATION 2365): the NumPy-era pairwise
+        sum could differ in the last bits, so a recorded R^2 is
+        RE-BASELINE OWED (test_svr_surface.py only thresholds it).
         """
-        pred = np.asarray(self.predict(X), dtype=np.float64)
-        t = np.asarray(y, dtype=np.float64)
-        if t.ndim != 1:
+        pred = self.predict(X)
+        shape = _shape_of(y)
+        if len(shape) != 1:
             raise ValueError(
-                f"mojolearn SVR: y must be 1-D, got {t.ndim}-D shape {t.shape}"
+                f"mojolearn SVR: y must be 1-D, got {len(shape)}-D shape {shape}"
             )
-        if t.shape[0] != pred.shape[0]:
+        if shape[0] != pred.shape[0]:
             raise ValueError(
-                f"mojolearn SVR: y has {t.shape[0]} entries, X has "
+                f"mojolearn SVR: y has {shape[0]} entries, X has "
                 f"{pred.shape[0]} rows"
             )
-        ss_res = float(np.sum((t - pred) ** 2))
-        ss_tot = float(np.sum((t - t.mean()) ** 2))
+        ss_res, ss_tot = _r2_sums(pred, y)
         if ss_tot == 0.0:
             # scikit-learn returns 1.0 for a perfect constant fit and 0.0
             # otherwise; the ratio is undefined and this is its convention.

@@ -48,15 +48,37 @@ wrong default. NOTE cuML's own caveat, measured by the ensemble lane: the
 forest is reproducible from its seed ON ONE GPU MODEL; cuML itself does not
 reproduce across GPU models below `n_sampled_rows > 4 * SM * 256`.
 
-X IS COPIED TWICE PER FIT (NumPy to column-major float32, then across the
-boundary); on large matrices that is the dominant cost of the CALL.
+X IS COPIED TWICE PER FIT (the host to column-major float32 through
+`_buffer.as_f32_colmajor`, zero-copy for a float32 F-order input, then
+across the boundary); on large matrices that is the dominant cost of the
+CALL.
+
+INPUTS AND OUTPUTS ARE NOT NumPy (DEVIATION 2341). `X` is anything the
+buffer protocol exposes -- an ndarray, an `array.array`, a
+`mojolearn.Array` -- or a nested list; `y` for the regressor likewise, and
+for the classifier any sequence of label objects. `predict_proba` and the
+regressor's `predict` return a `mojolearn.Array` (`numpy.asarray(result)`
+is a zero-copy view for a caller who has NumPy). `classes_` is a PYTHON
+LIST of the caller's label objects in the order `_labels.py` defines
+(DEVIATION 2340: numbers by value, strings by code point, NaN refused),
+and the classifier's `predict` returns an int64 or float64 `Array` for
+numeric labels and a Python list for str labels. Nothing in this module
+imports NumPy.
 """
 
-import numpy as np
+import math
+import numbers
 
 from . import _mojolearn_rf, _serialize
+from ._array import Array
+from ._buffer import (
+    addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, empty,
+)
+from ._labels import (
+    argmax_rows, classes_from_member, classes_member, decode_labels,
+    flat_view, flatten_labels, is_bool, sorted_classes,
+)
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
@@ -95,8 +117,9 @@ _MODEL_FORMAT = "mojolearn-randomforest-1"
 # orchestrator. The history above stands: the wrapper shipped 16 (first
 # under a name claiming it was cuML's, then, from the morning of
 # 2026-09-01, honestly as a named deviation) and the value below was 16
-# until the alignment later that same day. It is now
-# `np.iinfo(np.int32).max`, the exact value the pinned cuML substitutes
+# until the alignment later that same day. It is now 2147483647,
+# `np.iinfo(np.int32).max` spelled as the literal (DEVIATION 2341, the
+# NumPy-free boundary), the exact value the pinned cuML substitutes
 # for `None` (`randomforest_common.pyx:480-481`), so the constant
 # MATCHES the pin and both surfaces of the learner give one answer for
 # an unspecified depth: UNLIMITED, grow to purity. This IS a behaviour
@@ -121,7 +144,7 @@ _MODEL_FORMAT = "mojolearn-randomforest-1"
 # The other three constants below WERE re-read against the pin in the
 # same pass and are correct: `randomforest_common.pyx:319` is
 # `n_bins=128`, `:324` is `max_batch_size=4096`, `:326` is `n_streams=4`.
-_PORT_DEFAULT_MAX_DEPTH = np.iinfo(np.int32).max
+_PORT_DEFAULT_MAX_DEPTH = 2147483647
 _CUML_DEFAULT_N_BINS = 128
 _CUML_DEFAULT_N_STREAMS = 4
 _CUML_DEFAULT_MAX_BATCH = 4096
@@ -226,16 +249,34 @@ def _max_features_fraction(max_features, n_features):
         return 1.0
     if isinstance(max_features, str):
         if max_features == "sqrt":
-            return float(np.sqrt(n_features)) / n_features
+            # IEEE-754 requires sqrt correctly rounded: `math.sqrt`,
+            # `np.sqrt` and the Mojo side's `sqrt` cannot disagree.
+            return math.sqrt(n_features) / n_features
         if max_features == "log2":
-            return float(np.log2(max(2, n_features))) / n_features
+            # DEVIATION 2304 (contract): `math.log2` in float64, which is
+            # libm's `log2` -- the SAME oracle `ensemble/randomforest.mojo`
+            # `compute_max_features_log2` calls through `external_call`,
+            # where `np.log2` was NumPy's own loop. The binding takes the
+            # FRACTION (slot 6, `Float32`), not a count, so the fraction
+            # is kept; the kernel truncates `Int32(Float32(fraction) *
+            # Float32(n_cols))` (`n_sampled_cols`, `builder.cuh:240`).
+            # THE BOUNDARY CASE: the count moves only when `log2(n)` sits
+            # within about `n * 2**-24` of an integer AND the two log2s
+            # differ in the last bit there. `log2(n)` is an exact integer
+            # precisely at `n = 2**k`, where both are exact and `k / 2**k`
+            # is exact in float32, so no column count moves at any power
+            # of two; the Mojo side measured last-bit disagreement between
+            # libm and `std.math.log2` on 4051 of 4095 inputs in [2, 4096]
+            # and NO column count moving. `max(2, n)` keeps 1 feature from
+            # resolving to a zero fraction, as before.
+            return math.log2(max(2, n_features)) / n_features
         raise ValueError(
             f"max_features={max_features!r} is not a recognised form;"
             " accepted are 'sqrt', 'log2', None, a float fraction or an"
             " int count"
         )
-    if isinstance(max_features, (int, np.integer)) and not isinstance(
-        max_features, bool
+    if isinstance(max_features, numbers.Integral) and not is_bool(
+        max_features
     ):
         if not 1 <= int(max_features) <= n_features:
             raise ValueError(
@@ -262,8 +303,8 @@ def _max_leaves_slot(max_leaves):
     """
     if max_leaves is None:
         return -1
-    if isinstance(max_leaves, bool) or not isinstance(
-        max_leaves, (int, np.integer)
+    if is_bool(max_leaves) or not isinstance(
+        max_leaves, numbers.Integral
     ):
         raise ValueError(
             f"max_leaves={max_leaves!r} must be None, -1 (cuML's sentinel"
@@ -390,29 +431,29 @@ class _RandomForestBase(NumericModeMixin):
         ]
 
     def _fit_arrays(self, X, y_arr, n_classes, fit_fn):
-        Xa = np.asarray(X)
-        if Xa.ndim != 2:
-            raise ValueError(
-                f"X must be 2-D, got {Xa.ndim}-D shape {Xa.shape}"
-            )
-        n_rows, n_features = Xa.shape
+        # Column-major is the builder's layout (cuML's `data` is
+        # column-major); `as_f32_colmajor` is that copy, named in the
+        # module docstring, and zero for a float32 F-order input
+        # (DEVIATION 2341). Its 2-D refusal reads "mojolearn: X must be
+        # 2-D, got ...", the wording `_arrays.py` used.
+        Xf, _ = as_f32_colmajor(X, name="X")
+        n_rows, n_features = Xf.shape
         if len(y_arr) != n_rows:
             raise ValueError(f"y has {len(y_arr)} rows, X has {n_rows}")
-        # Column-major is the builder's layout (cuML's `data` is
-        # column-major); asfortranarray is that copy, named in the module
-        # docstring.
-        Xf = np.asfortranarray(Xa, dtype=np.float32)
         params = self._fit_params(n_rows, n_features, n_classes)
         out = fit_fn(
-            _addr_ro(Xf), _addr_ro(y_arr), params, self._cfg["criterion"]
+            addr_ro(Xf, name="X"), addr_ro(y_arr, name="y"), params,
+            self._cfg["criterion"],
         )
         del Xf  # the borrow ends with the call
         offsets, colid, quesval, left_child, leaves, meta = out
-        self._offsets = np.asarray(offsets, dtype=np.int32)
-        self._colid = np.asarray(colid, dtype=np.int32)
-        self._quesval = np.asarray(quesval, dtype=np.float32)
-        self._left_child = np.asarray(left_child, dtype=np.int32)
-        self._leaves = np.asarray(leaves, dtype=np.float32)
+        # The binding returns Python lists (`_forest_out`); packing them
+        # is the same O(nodes) conversion `np.asarray(list)` was.
+        self._offsets = Array.from_list([int(v) for v in offsets], "<i4")
+        self._colid = Array.from_list([int(v) for v in colid], "<i4")
+        self._quesval = Array.from_list([float(v) for v in quesval], "<f4")
+        self._left_child = Array.from_list([int(v) for v in left_child], "<i4")
+        self._leaves = Array.from_list([float(v) for v in leaves], "<f4")
         self.n_features_in_ = int(n_features)
         self._n_trees = int(meta[0])
         self._num_outputs = int(meta[1])
@@ -421,7 +462,7 @@ class _RandomForestBase(NumericModeMixin):
     def _check_predict_input(self, X):
         if not hasattr(self, "_offsets"):
             raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, "X")
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_features = Xa.shape
         if n_features != self.n_features_in_:
             raise ValueError(
@@ -441,26 +482,30 @@ class _RandomForestBase(NumericModeMixin):
         """
         if not hasattr(self, "_offsets"):
             raise RuntimeError("this estimator is not fitted yet")
+        # DEVIATION 2341: members are `Array`s and plain str (which
+        # `_serialize.write_npz` encodes as the `<U` scalar member
+        # `np.asarray(str)` gave); `classes` is `_labels.classes_member`
+        # (int64 / float64 `Array`, or the list of str for str labels).
         arrays = {
-            "format": np.asarray(_MODEL_FORMAT),
-            "estimator": np.asarray(type(self).__name__),
-            "device": np.asarray(self.device),
+            "format": _MODEL_FORMAT,
+            "estimator": type(self).__name__,
+            "device": self.device,
             "offsets": self._offsets,
             "colid": self._colid,
             "quesval": self._quesval,
             "left_child": self._left_child,
             "leaves": self._leaves,
-            "meta": np.asarray(
+            "meta": Array.from_list(
                 [
-                    self.n_features_in_,
-                    self._n_trees,
-                    self._num_outputs,
+                    int(self.n_features_in_),
+                    int(self._n_trees),
+                    int(self._num_outputs),
                 ],
-                dtype=np.int64,
+                "<i8",
             ),
         }
         if hasattr(self, "classes_"):
-            arrays["classes"] = np.asarray(self.classes_)
+            arrays["classes"] = classes_member(self.classes_)
         return _serialize.write_npz(path, arrays)
 
     @classmethod
@@ -477,17 +522,19 @@ class _RandomForestBase(NumericModeMixin):
             )
         obj = cls.__new__(cls)
         obj.device = _serialize.scalar_str(arrays, "device")
-        obj._offsets = _serialize.exact(arrays, "offsets", np.int32)
-        obj._colid = _serialize.exact(arrays, "colid", np.int32)
-        obj._quesval = _serialize.exact(arrays, "quesval", np.float32)
-        obj._left_child = _serialize.exact(arrays, "left_child", np.int32)
-        obj._leaves = _serialize.exact(arrays, "leaves", np.float32)
-        meta = _serialize.exact(arrays, "meta", np.int64)
+        obj._offsets = _serialize.exact(arrays, "offsets", "<i4")
+        obj._colid = _serialize.exact(arrays, "colid", "<i4")
+        obj._quesval = _serialize.exact(arrays, "quesval", "<f4")
+        obj._left_child = _serialize.exact(arrays, "left_child", "<i4")
+        obj._leaves = _serialize.exact(arrays, "leaves", "<f4")
+        meta = _serialize.exact(arrays, "meta", "<i8")
         obj.n_features_in_ = int(meta[0])
         obj._n_trees = int(meta[1])
         obj._num_outputs = int(meta[2])
         if "classes" in arrays:
-            obj.classes_ = arrays["classes"]
+            # a 0.6.x file's `classes` member loads too (int, float, bool
+            # or `<U` from `np.unique`); bool labels come back as ints
+            obj.classes_ = classes_from_member(arrays["classes"])
             obj.n_classes_ = int(len(obj.classes_))
         return obj
 
@@ -555,27 +602,32 @@ class RandomForestClassifier(_RandomForestBase):
         self.criterion = criterion
 
     def fit(self, X, y):
-        ya = np.asarray(y).ravel()
-        self.classes_, codes = np.unique(ya, return_inverse=True)
+        # DEVIATION 2340: `classes_` is a Python list of the caller's
+        # label objects under `_labels.sorted_classes`'s order rule, and
+        # the codes are one dict lookup per row (the permitted O(rows)
+        # label-encoding loop).
+        self.classes_, codes = sorted_classes(flatten_labels(y))
         self.n_classes_ = int(len(self.classes_))
         if self.n_classes_ < 2:
             raise ValueError("y has fewer than 2 classes")
-        y32 = np.ascontiguousarray(codes, dtype=np.int32)
+        y32 = Array.from_list(codes, "<i4")
         return self._fit_arrays(
             X, y32, self.n_classes_, self._bind("_mojolearn_rf").rf_classifier_fit
         )
 
     def predict_proba(self, X):
+        """Per-class vote fractions, `(n_samples, n_classes)` float32
+        `Array`, columns in `classes_` order."""
         Xa, n_rows, n_features = self._check_predict_input(X)
-        out = np.empty(n_rows * self._num_outputs, dtype=np.float32)
+        out = empty((n_rows * self._num_outputs,), "<f4")
         wrote = self._bind("_mojolearn_rf").rf_predict_proba(
-            _addr_ro(self._offsets),
-            _addr_ro(self._colid),
-            _addr_ro(self._quesval),
-            _addr_ro(self._left_child),
-            _addr_ro(self._leaves),
-            _addr_ro(Xa),
-            _addr(out),
+            addr_ro(self._offsets, name="offsets"),
+            addr_ro(self._colid, name="colid"),
+            addr_ro(self._quesval, name="quesval"),
+            addr_ro(self._left_child, name="left_child"),
+            addr_ro(self._leaves, name="leaves"),
+            addr_ro(Xa, name="X"),
+            addr(out, name="predict_proba output"),
             [int(n_rows), int(n_features), self._n_trees,
              self._num_outputs],
         )
@@ -583,10 +635,14 @@ class RandomForestClassifier(_RandomForestBase):
             raise RuntimeError(
                 f"rf_predict_proba wrote {wrote} of {n_rows} rows"
             )
-        return out.reshape(n_rows, self._num_outputs)
+        return out.reshape((n_rows, self._num_outputs))
 
     def predict(self, X):
-        return self.classes_[np.argmax(self.predict_proba(X), axis=1)]
+        """The argmax of `predict_proba` (first max wins, as cuML's
+        `randomforest.cuh:417-427`) mapped through `classes_`: an int64 or
+        float64 `Array` for numeric labels, a Python list for str labels
+        (DEVIATION 2340)."""
+        return decode_labels(self.classes_, argmax_rows(self.predict_proba(X)))
 
 
 class RandomForestRegressor(_RandomForestBase):
@@ -658,10 +714,18 @@ class RandomForestRegressor(_RandomForestBase):
         self.criterion = criterion
 
     def fit(self, X, y):
-        y32 = np.ascontiguousarray(np.asarray(y).ravel(), dtype=np.float32)
+        y32, _ = as_f32_c(y, ndim=1, name="y")
         code = self._cfg["criterion"]
+        # DEVIATION 2342: the deviance-domain checks are native
+        # finiteness plus builtin `min`/`max` over the storage view
+        # (C-driven, O(rows), no Python loop body). Poisson's "positive
+        # sum" is "some label positive" once every label is finite and
+        # non-negative, which is what the float64 sum tested; a NaN or
+        # inf label, which made that sum NaN or inf, is refused for all
+        # three criteria rather than passed to a deviance.
         if code == _REG_CRITERIA["poisson"]:
-            if np.any(y32 < 0) or not np.sum(y32, dtype=np.float64) > 0:
+            yv = flat_view(y32, "f")
+            if not all_finite(y32) or min(yv) < 0 or not max(yv) > 0:
                 raise ValueError(
                     "criterion='poisson' requires y >= 0 with a positive"
                     " sum: PoissonGain returns -max() for a non-positive"
@@ -670,7 +734,7 @@ class RandomForestRegressor(_RandomForestBase):
                 )
         elif code in (_REG_CRITERIA["gamma"],
                       _REG_CRITERIA["inverse_gaussian"]):
-            if np.any(y32 <= 0):
+            if not all_finite(y32) or min(flat_view(y32, "f")) <= 0:
                 raise ValueError(
                     f"criterion={self.criterion!r} requires y > 0: its"
                     " gain returns -max() for a non-positive label sum"
@@ -680,16 +744,17 @@ class RandomForestRegressor(_RandomForestBase):
         return self._fit_arrays(X, y32, 0, self._bind("_mojolearn_rf").rf_regressor_fit)
 
     def predict(self, X):
+        """The forest mean per row, a float32 `Array` of `(n_samples,)`."""
         Xa, n_rows, n_features = self._check_predict_input(X)
-        out = np.empty(n_rows, dtype=np.float32)
+        out = empty((n_rows,), "<f4")
         wrote = self._bind("_mojolearn_rf").rf_predict_reg(
-            _addr_ro(self._offsets),
-            _addr_ro(self._colid),
-            _addr_ro(self._quesval),
-            _addr_ro(self._left_child),
-            _addr_ro(self._leaves),
-            _addr_ro(Xa),
-            _addr(out),
+            addr_ro(self._offsets, name="offsets"),
+            addr_ro(self._colid, name="colid"),
+            addr_ro(self._quesval, name="quesval"),
+            addr_ro(self._left_child, name="left_child"),
+            addr_ro(self._leaves, name="leaves"),
+            addr_ro(Xa, name="X"),
+            addr(out, name="predict output"),
             [int(n_rows), int(n_features), self._n_trees, 1],
         )
         if wrote != n_rows:

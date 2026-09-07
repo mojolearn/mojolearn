@@ -4,15 +4,20 @@
 import math
 import operator
 
-import numpy as np
-
-from ._arrays import _addr, _addr_ro, as_f32_c
 from . import _backend
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
 from ._mode import NumericModeMixin
+from .linear_model import _round_f32
+
+#: `np.finfo(np.float32).max`, as a literal: the largest finite float32.
+_F32_MAX = 3.4028234663852886e+38
 
 
 def _integer(value, name, minimum, maximum=(1 << 63) - 1):
-    if isinstance(value, (bool, np.bool_)):
+    # A bool is an int to `operator.index` and is refused by name here; the
+    # NumPy bool scalar is caught by its type name so a caller who still
+    # passes one gets the same answer (DEVIATION 2370).
+    if isinstance(value, bool) or type(value).__name__ == "bool_":
         raise ValueError(f"UMAP {name} must be an integer")
     try:
         result = operator.index(value)
@@ -28,9 +33,10 @@ def _scalar(value, name):
         result = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"UMAP {name} must be a finite float32 value") from exc
-    if not math.isfinite(result) or abs(result) > float(np.finfo(np.float32).max):
+    if not math.isfinite(result) or abs(result) > _F32_MAX:
         raise ValueError(f"UMAP {name} must be a finite float32 value")
-    return float(np.float32(result))
+    # `float(np.float32(result))`: one round-to-nearest-even to binary32.
+    return _round_f32(result)
 
 
 class UMAP(NumericModeMixin):
@@ -56,6 +62,11 @@ class UMAP(NumericModeMixin):
     can change results. This path has its own qualification requirements;
     existing fit certificates do not certify transform or upstream RNG bits.
     Supervised UMAP and alternate metrics/init are unsupported.
+
+    `embedding_` and every returned embedding are `_array.Array`s of float32
+    (DEVIATION 2370; they were ndarrays). The private training copies are
+    plain copies rather than read-only views: an Array has no
+    `setflags`, and nothing outside this instance holds them.
     """
 
     _BINDING = "_mojolearn_metrics"
@@ -113,15 +124,15 @@ class UMAP(NumericModeMixin):
         if y is not None:
             raise ValueError("UMAP supervised targets are not supported")
         config = self._parameters()
-        x, copied = as_f32_c(X, "X")
-        if not np.isfinite(x).all():
+        x, copied = as_f32_c(X, ndim=2, name="X")
+        if not all_finite(x):
             raise ValueError("UMAP input coordinates must be finite")
         n, d = x.shape
         if config[0] > n:
             raise ValueError("UMAP n_neighbors exceeds n_samples")
         if n < 2 * config[1] + 4:
             raise ValueError("UMAP has too few samples for spectral initialization")
-        embedding = np.empty((n, config[1]), dtype=np.float32)
+        embedding = empty((n, config[1]), "<f4")
         # n_samples, n_features, n_neighbors, n_components, n_epochs,
         # min_dist, spread, set_op_mix_ratio, local_connectivity, random_state,
         # learning_rate, repulsion_strength, negative_sample_rate.
@@ -133,15 +144,14 @@ class UMAP(NumericModeMixin):
         # Preserve the legacy ABI for default controls and existing wheels.
         native_config = config[:8] if config[8:] == [1.0, 1.0, 5] else config
         columns = binding.umap_fit_transform(
-            _addr_ro(x), _addr(embedding), [n, d, *native_config])
-        if columns != config[1] or not np.isfinite(embedding).all():
+            addr_ro(x, name="X"), addr(embedding, name="embedding_"),
+            [n, d, *native_config])
+        if columns != config[1] or not all_finite(embedding):
             raise RuntimeError("UMAP returned an invalid embedding")
         # Prepare all retained state before publishing a successful fit. Copies
         # prevent caller edits of X or embedding_ from changing transform's model.
-        training = np.array(x, dtype=np.float32, order="C", copy=True)
+        training = x.copy()
         frozen_embedding = embedding.copy()
-        training.setflags(write=False)
-        frozen_embedding.setflags(write=False)
         self.embedding_ = embedding
         self.n_features_in_ = d
         self.input_copied_ = copied
@@ -167,25 +177,28 @@ class UMAP(NumericModeMixin):
         mode = (self.numeric_mode or _backend.default_mode()).strip().lower()
         if tuple(config) != self._transform_config or mode != self._transform_mode:
             raise ValueError("UMAP parameters or numeric mode changed after fit; refit before transform")
-        x, _ = as_f32_c(X, "X")
+        x, _ = as_f32_c(X, ndim=2, name="X")
         training = self._transform_training
         fitted_embedding = self._transform_embedding
         if x.shape[1] != training.shape[1]:
             raise ValueError("UMAP transform feature count differs from fitted data")
-        if not np.isfinite(x).all():
+        if not all_finite(x):
             raise ValueError("UMAP transform input coordinates must be finite")
+        # `Array.tobytes()` is the C-order bytes, so this byte compare is the
+        # one the NumPy-era code made.
         if x.shape == training.shape and x.tobytes() == training.tobytes():
             return fitted_embedding.copy()
         binding = self._bind()
         if binding.umap_numeric_mode() != {"fast": 0, "identical": 1,
                                            "deterministic": 2}[mode]:
             raise RuntimeError("UMAP binary numeric mode disagrees with fitted mode")
-        output = np.empty((x.shape[0], config[1]), dtype=np.float32)
+        output = empty((x.shape[0], config[1]), "<f4")
         native_config = config[:8] if config[8:] == [1.0, 1.0, 5] else config
         columns = binding.umap_transform(
-            [_addr_ro(training), _addr_ro(fitted_embedding), _addr_ro(x),
-             _addr(output)],
+            [addr_ro(training, name="training"),
+             addr_ro(fitted_embedding, name="embedding_"),
+             addr_ro(x, name="X"), addr(output, name="output")],
             [training.shape[0], x.shape[0], training.shape[1], *native_config])
-        if columns != config[1] or not np.isfinite(output).all():
+        if columns != config[1] or not all_finite(output):
             raise RuntimeError("UMAP transform returned an invalid embedding")
         return output

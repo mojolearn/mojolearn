@@ -42,7 +42,7 @@ hit the same wall: each entry point takes exactly TWO Python lists,
 and at the call site below in the same words) and `params` (the scalar
 list 22a5b550 spelled, unchanged to the word). EVERY ARRAY WHOSE ADDRESS
 GOES INTO `addrs` MUST BE BOUND TO A LOCAL for the duration of the call:
-an address inside a list keeps nothing alive (`_arrays.py`). The rest of
+an address inside a list keeps nothing alive (`_buffer.py`). The rest of
 the contract is unchanged: function names, and that the kernel spec MUST
 be rebuilt through `gaussian_process/checks/kernels.mojo`'s constructors
 so their refusals stay reachable. The three-tier build is still RUN
@@ -72,11 +72,11 @@ and this module does not claim one. The gp SPEED ladder is UNRUN
 speed claim.
 """
 
-import numpy as np
-
 from . import _backend
+from ._array import Array
+from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
+from .linear_model import _flatten, _r2_sums, _shape_of
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
@@ -101,9 +101,9 @@ def _as_length_scale(length_scale, what):
     are `gp_kernel_rbf` / `gp_kernel_matern` / `gp_validate_kernel`'s
     refusals (kernels.mojo), and a copy of them here would make the named
     Mojo refusal unreachable from Python and therefore untestable."""
-    if np.ndim(length_scale) == 0:
+    if not _shape_of(length_scale):
         return [float(length_scale)]
-    ls = [float(v) for v in np.asarray(length_scale).ravel()]
+    ls = [float(v) for v in _flatten(length_scale)]
     if len(ls) == 0:
         raise ValueError(
             f"mojolearn {what}: length_scale is an empty sequence; pass a "
@@ -265,7 +265,7 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   random numbers upstream, and sample_y is
                                   unported
         sparse X        refused   dense row-major float32 only
-                                  (_arrays.py::as_f32_c)
+                                  (_buffer.py::as_f32_c)
         2-D y           refused   by name; multi-target GP fits are not
                                   ported (single-target only)
         non-finite X/y  refused   on the HOST in Mojo, naming the flat index
@@ -315,14 +315,14 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     Attributes
     ----------
-    X_train_ : ndarray (n_train, n_features) float32
-    y_train_ : ndarray (n_train,) float32
+    X_train_ : Array (n_train, n_features) float32
+    y_train_ : Array (n_train,) float32
     kernel_ : Kernel
         The FITTED kernel, and it is the kernel you passed: there is no
         optimizer to clone-and-move it (DEVIATION 1761).
-    L_ : ndarray (n_train, n_train) float32
+    L_ : Array (n_train, n_train) float32
         Lower Cholesky factor of `K + alpha I`.
-    alpha_ : ndarray (n_train,) float32
+    alpha_ : Array (n_train,) float32
         The dual coefficients `(K + alpha I)^-1 y` -- sklearn's `alpha_`,
         which is NOT the constructor's `alpha` (the ridge). One name, one
         underscore apart, and the collision is scikit-learn's; both
@@ -464,14 +464,16 @@ class GaussianProcessRegressor(NumericModeMixin):
         gp_kernel_sum/prod -- which recompute them -- so that every
         constructor refusal stays reachable from this surface)."""
         nodes = self.kernel._nodes()
-        kinds = np.array([k for k, _, _ in nodes], dtype=np.int32)
-        params = np.array([p for _, p, _ in nodes], dtype=np.float32)
-        ls_len = np.array([len(ls) for _, _, ls in nodes], dtype=np.int32)
+        # `Array.from_list(..., '<f4')` rounds each Python float to binary32
+        # exactly as `np.array(dtype=np.float32)` did (DEVIATION 2376).
+        kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")
+        params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")
+        ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")
         table = [v for _, _, ls in nodes for v in ls]
         n_ls = len(table)
         # Never a zero-length buffer: mirror estimator.mojo's
         # _length_scale_table -- one unused 1.0 stands in, and n_ls says so.
-        ls = np.array(table if table else [1.0], dtype=np.float32)
+        ls = Array.from_list(table if table else [1.0], "<f4")
         return kinds, params, ls_len, ls, n_ls
 
     # -- fit ----------------------------------------------------------------
@@ -482,33 +484,33 @@ class GaussianProcessRegressor(NumericModeMixin):
         likelihood at the fitted kernel, all in one shot on the device via
         `gpr_fit_host`. Returns `self`. READ `info_` BEFORE YOU BELIEVE
         THE MODEL (class docstring, DEVIATION 1634)."""
-        x, self.input_copied_ = as_f32_c(X, "X")
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
-        t = np.asarray(y)
-        if t.ndim != 1:
+        shape = _shape_of(y)
+        if len(shape) != 1:
             raise ValueError(
                 "mojolearn GaussianProcessRegressor: y must be 1-D, got "
-                f"{t.ndim}-D shape {t.shape}; multi-target GP fits are not "
+                f"{len(shape)}-D shape {shape}; multi-target GP fits are not "
                 "ported (the n_targets refusal in __init__ is this same "
                 "boundary)"
-            )
-        if t.shape[0] != n_rows:
-            raise ValueError(
-                f"mojolearn GaussianProcessRegressor: y has {t.shape[0]} "
-                f"entries, X has {n_rows} rows"
             )
         # No finiteness check here: check the class table -- non-finite
         # cells are refused BY NAME on the Mojo host (DEVIATION 1768), and
         # a duplicate check here would make that refusal unreachable.
-        targets = np.ascontiguousarray(t, dtype=np.float32)
+        targets, _ = as_f32_c(y, ndim=1, name="y")
+        if targets.shape[0] != n_rows:
+            raise ValueError(
+                f"mojolearn GaussianProcessRegressor: y has {targets.shape[0]} "
+                f"entries, X has {n_rows} rows"
+            )
         kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays()
 
         # EVERY SIZE IS A FUNCTION OF (n_rows, n_cols) ALONE; nothing here
         # is a worst-case buffer (contrast SVR's DEVIATION 873 note).
-        l_out = np.empty(n_rows * n_rows, dtype=np.float32)
-        dual = np.empty(n_rows, dtype=np.float32)
+        l_out = empty((n_rows * n_rows,), "<f4")
+        dual = empty((n_rows,), "<f4")
         # info, nb, logdet, ydotalpha, lml -- in that order.
-        scalars = np.empty(5, dtype=np.float64)
+        scalars = empty((5,), "<f8")
         # TWO LISTS, NOT FOURTEEN ARGUMENTS (the module header's ABI note:
         # the positional spelling failed def_function elaboration, measured
         # 2026-09-01). Every array addressed below is bound to a local in
@@ -518,15 +520,15 @@ class GaussianProcessRegressor(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
             # x, y, kinds, kparams, ls_len, ls, l_out, dual_out, scalars_out
             [
-                _addr_ro(x),
-                _addr_ro(targets),
-                _addr_ro(kinds),
-                _addr_ro(kparams),
-                _addr_ro(ls_len),
-                _addr_ro(ls),
-                _addr(l_out),
-                _addr(dual),
-                _addr(scalars),
+                addr_ro(x, name="x"),
+                addr_ro(targets, name="targets"),
+                addr_ro(kinds, name="kinds"),
+                addr_ro(kparams, name="kparams"),
+                addr_ro(ls_len, name="ls_len"),
+                addr_ro(ls, name="ls"),
+                addr(l_out, name="l_out"),
+                addr(dual, name="dual"),
+                addr(scalars, name="scalars"),
             ],
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
             # n_train, n_features, n_nodes, n_ls, alpha
@@ -536,7 +538,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         self.y_train_ = targets
         self.kernel_ = self.kernel
         self.n_features_in_ = n_cols
-        self.L_ = l_out.reshape(n_rows, n_rows)
+        self.L_ = l_out.reshape((n_rows, n_rows))
         self.alpha_ = dual
         self.info_ = int(info)
         self.nb_ = int(scalars[1])
@@ -570,7 +572,7 @@ class GaussianProcessRegressor(NumericModeMixin):
                 "unfitted-prior arm of sklearn's predict is not ported: it "
                 "exists to serve sample_y, which is refused)"
             )
-        q, _ = as_f32_c(X, "X")
+        q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn GaussianProcessRegressor: X has {q.shape[1]} "
@@ -580,13 +582,13 @@ class GaussianProcessRegressor(NumericModeMixin):
         n_train = self.X_train_.shape[0]
         kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays()
 
-        mean = np.empty(n_star, dtype=np.float32)
-        var = np.empty(n_star, dtype=np.float32)
-        std = np.empty(n_star, dtype=np.float32)
-        clamped = np.empty(n_star, dtype=np.int32)
+        mean = empty((n_star,), "<f4")
+        var = empty((n_star,), "<f4")
+        std = empty((n_star,), "<f4")
+        clamped = empty((n_star,), "<i4")
         # Kept in locals so the arrays outlive the call; the Mojo side
         # borrows these addresses and owns nothing, and an address inside
-        # the list below keeps nothing alive on its own (_arrays.py). Two
+        # the list below keeps nothing alive on its own (_buffer.py). Two
         # lists, not fifteen arguments -- the module header's ABI note.
         xt = self.X_train_
         lf = self.L_
@@ -596,18 +598,18 @@ class GaussianProcessRegressor(NumericModeMixin):
             # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls,
             # mean_out, var_out, std_out, clamped_out
             [
-                _addr_ro(xt),
-                _addr_ro(lf),
-                _addr_ro(dual),
-                _addr_ro(q),
-                _addr_ro(kinds),
-                _addr_ro(kparams),
-                _addr_ro(ls_len),
-                _addr_ro(ls),
-                _addr(mean),
-                _addr(var),
-                _addr(std),
-                _addr(clamped),
+                addr_ro(xt, name="xt"),
+                addr_ro(lf, name="lf"),
+                addr_ro(dual, name="dual"),
+                addr_ro(q, name="q"),
+                addr_ro(kinds, name="kinds"),
+                addr_ro(kparams, name="kparams"),
+                addr_ro(ls_len, name="ls_len"),
+                addr_ro(ls, name="ls"),
+                addr(mean, name="mean"),
+                addr(var, name="var"),
+                addr(std, name="std"),
+                addr(clamped, name="clamped"),
             ],
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
             # n_train, n_features, n_star, n_nodes, n_ls, return_std, info
@@ -674,16 +676,17 @@ class GaussianProcessRegressor(NumericModeMixin):
         """R^2, scikit-learn's definition, accumulated in FLOAT64 from
         float32 predictions -- a summary of the answer, not the answer, so
         no part of any identity claim (the SVR.score rule)."""
-        pred = np.asarray(self.predict(X), dtype=np.float64)
-        t = np.asarray(y, dtype=np.float64)
-        if t.ndim != 1 or t.shape[0] != pred.shape[0]:
+        pred = self.predict(X)
+        shape = _shape_of(y)
+        if len(shape) != 1 or shape[0] != pred.shape[0]:
             raise ValueError(
                 "mojolearn GaussianProcessRegressor: y must be 1-D with one "
-                f"entry per row of X, got shape {t.shape} against "
+                f"entry per row of X, got shape {shape} against "
                 f"{pred.shape[0]} predictions"
             )
-        ss_res = float(np.sum((t - pred) ** 2))
-        ss_tot = float(np.sum((t - t.mean()) ** 2))
+        # Sequential Python float64 (`linear_model._r2_sums`, DEVIATION
+        # 2365): a host reduction outside the identity claim.
+        ss_res, ss_tot = _r2_sums(pred, y)
         if ss_tot == 0.0:
             return 1.0 if ss_res == 0.0 else 0.0
         return 1.0 - ss_res / ss_tot

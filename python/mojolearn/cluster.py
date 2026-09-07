@@ -2,11 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """k-means on the GPU, mirroring cuVS."""
 
-import numpy as np
-
 from . import _mojolearn
+from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes, zeros
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
 
 INIT_KMEANS_PLUS_PLUS = 0
 INIT_RANDOM = 1
@@ -56,8 +54,8 @@ class KMeans(NumericModeMixin):
 
     Attributes
     ----------
-    cluster_centers_ : ndarray (n_clusters, n_features)
-    labels_ : ndarray (n_samples,)
+    cluster_centers_ : Array (n_clusters, n_features) float32
+    labels_ : Array (n_samples,) int32
         The assignment against the FINAL centroids, not the last iteration's.
         A fit that returned the latter would be off by one iteration in a way
         no aggregate metric would reveal; cuVS and scikit-learn both run the
@@ -78,6 +76,10 @@ class KMeans(NumericModeMixin):
         The fixed-point accumulator multipliers chosen for your data. Exposed
         because a wrong answer in this algorithm comes from these two, and
         reproducing a result needs them.
+
+    NUMPY-FREE SINCE DEVIATION 2369: the two attributes above are
+    `_array.Array`s where they were ndarrays; `np.asarray(model.labels_)`
+    is a zero-copy view for a caller who has NumPy.
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -113,7 +115,7 @@ class KMeans(NumericModeMixin):
         else:
             init_code = int(self.init)
 
-        x, _ = as_f32_c(X, "X")
+        x, _ = as_f32_c(X, ndim=2, name="X")
         n, d = x.shape
         if self.n_clusters > n:
             raise ValueError(
@@ -121,20 +123,24 @@ class KMeans(NumericModeMixin):
                 f"n_samples={n}"
             )
 
-        centers = np.zeros((self.n_clusters, d), dtype=np.float32)
         if init_code == INIT_ARRAY:
             if self.init_centroids is None:
                 raise ValueError(
                     "mojolearn: init='array' needs init_centroids"
                 )
-            c0, _ = as_f32_c(self.init_centroids, "init_centroids")
+            c0, _ = as_f32_c(self.init_centroids, ndim=2,
+                             name="init_centroids")
             if c0.shape != (self.n_clusters, d):
                 raise ValueError(
                     f"mojolearn: init_centroids must be "
                     f"({self.n_clusters}, {d}), got {c0.shape}"
                 )
-            centers[:] = c0
-        labels = np.empty(n, dtype=np.uint32)
+            # A COPY, on purpose: the kernel writes the centroids in place
+            # and `c0` may be a zero-copy borrow of the caller's array.
+            centers = c0.copy()
+        else:
+            centers = zeros((self.n_clusters, d), "<f4")
+        labels = empty((n,), "<u4")
 
         if sample_weight is None:
             n_weights = 0
@@ -142,19 +148,21 @@ class KMeans(NumericModeMixin):
             # allocating an array of ones the Mojo side would ignore.
             w = x
         else:
-            w = np.ascontiguousarray(sample_weight, dtype=np.float32).ravel()
-            if w.size != n:
+            # DEVIATION 2369: a 1-D vector by contract (`ndim=1`); the
+            # NumPy-era `.ravel()` also accepted an (n, 1) column.
+            w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+            if w.shape[0] != n:
                 raise ValueError(
-                    f"mojolearn: sample_weight has {w.size} entries, X has "
-                    f"{n} rows"
+                    f"mojolearn: sample_weight has {w.shape[0]} entries, X "
+                    f"has {n} rows"
                 )
             n_weights = n
 
         inertia, n_iter, sum_scale, weight_scale = self._bind("_mojolearn").kmeans_fit(
-            _addr_ro(x),
-            _addr(centers),
-            _addr(labels),
-            _addr_ro(w),
+            addr_ro(x, name="X"),
+            addr(centers, name="cluster_centers_"),
+            addr(labels, name="labels_"),
+            addr_ro(w, name="sample_weight"),
             # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_fit_binding.
             # n_samples, n_features, n_clusters, n_weights, max_iter,
             # tol, seed, n_init, init, metric
@@ -166,7 +174,11 @@ class KMeans(NumericModeMixin):
         )
 
         self.cluster_centers_ = centers
-        self.labels_ = labels.astype(np.int32)
+        # The kernel writes uint32 cluster ids; scikit-learn's attribute is
+        # signed. Every id is below 2**31, so int32 is the SAME BYTES: one
+        # memcpy through `frombytes`, no Python loop (it was
+        # `labels.astype(np.int32)`, DEVIATION 2369).
+        self.labels_ = frombytes(labels.tobytes(), "<i4", (n,))
         self.inertia_ = inertia
         self.n_iter_ = n_iter
         self.sum_scale_ = sum_scale

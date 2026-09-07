@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Density-based clustering on the GPU, mirroring cuML's DBSCAN."""
 
-import numpy as np
-
 from . import _mojolearn_estimators
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
+from .linear_model import _shape_of
 
 EPS_NN_BRUTE_FORCE = 0
 EPS_NN_RBC = 1
@@ -234,8 +233,8 @@ class DBSCAN(NumericModeMixin):
                 "mojolearn DBSCAN max_iterations must be None (the fixed "
                 "point) or a positive cap"
             )
-        x, self.input_copied_ = as_f32_c(X, "X")
-        labels = np.empty(x.shape[0], dtype=np.int32)
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        labels = empty((x.shape[0],), "<i4")
         budget = 0 if self.max_mbytes_per_batch is None else int(self.max_mbytes_per_batch)
         if budget < 0:
             raise ValueError("mojolearn DBSCAN max_mbytes_per_batch cannot be negative")
@@ -249,28 +248,25 @@ class DBSCAN(NumericModeMixin):
         w = None
         weight_addr = 0
         if sample_weight is not None:
-            w = np.asarray(sample_weight)
-            if w.ndim != 1 or w.shape[0] != x.shape[0]:
+            shape = _shape_of(sample_weight)
+            if len(shape) != 1 or shape[0] != x.shape[0]:
                 raise ValueError(
                     "mojolearn DBSCAN: sample_weight must be one value per "
-                    f"row, got shape {w.shape} for {x.shape[0]} rows"
+                    f"row, got shape {shape} for {x.shape[0]} rows"
                 )
-            if not np.all(np.isfinite(w)):
+            w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+            if not all_finite(w):
                 raise ValueError(
                     "mojolearn DBSCAN: sample_weight contains a NaN or an "
                     "infinity. The weighted core-point test is a float sum "
                     "compared against min_samples, and neither value gives "
                     "that comparison a meaning"
                 )
-            # `as_f32_c` is 2-D by contract and this is a vector, so the
-            # one-line equivalent is spelled out rather than reshaped
-            # through it twice.
-            w = np.ascontiguousarray(w, dtype=np.float32)
-            weight_addr = _addr_ro(w)
+            weight_addr = addr_ro(w, name="sample_weight")
 
         self.n_iter_ = self._bind("_mojolearn_estimators").dbscan_fit(
-            _addr_ro(x),
-            _addr(labels),
+            addr_ro(x, name="x"),
+            addr(labels, name="labels"),
             weight_addr,
             # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding.
             # n_rows, n_features, eps, min_samples, budget_mb, max_iter,
@@ -435,22 +431,24 @@ class KernelDensity(NumericModeMixin):
         self.algorithm = "auto"
 
     def fit(self, X, y=None, sample_weight=None):
-        x, self.input_copied_ = as_f32_c(X, "X")
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         self._x = x  # kept alive; score_samples reads it
         self.n_features_in_ = x.shape[1]
         self.n_samples_fit_ = x.shape[0]
         if sample_weight is not None:
-            w = np.ascontiguousarray(np.asarray(sample_weight, dtype=np.float32))
-            if w.ndim != 1 or w.shape[0] != x.shape[0]:
+            shape = _shape_of(sample_weight)
+            if len(shape) != 1 or shape[0] != x.shape[0]:
                 raise ValueError(
                     "mojolearn KernelDensity: sample_weight must be 1-D with "
-                    f"one entry per row of X, got shape {w.shape}"
+                    f"one entry per row of X, got shape {shape}"
                 )
-            if np.any(w < 0) or not np.isfinite(w).all():
+            w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+            if not all_finite(w) or w.min() < 0:
                 raise ValueError(
                     "mojolearn KernelDensity: sample_weight must be finite "
                     "and non-negative"
                 )
+            # `Array.sum()` is a host reduction; only its SIGN is read here.
             if float(w.sum()) <= 0.0:
                 raise ValueError(
                     "mojolearn KernelDensity: sample_weight must sum to > 0"
@@ -463,19 +461,19 @@ class KernelDensity(NumericModeMixin):
     def score_samples(self, X):
         if not hasattr(self, "_x"):
             raise ValueError("mojolearn KernelDensity: call fit() first")
-        q, _ = as_f32_c(X, "X")
+        q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn KernelDensity: X has {q.shape[1]} features, "
                 f"fit saw {self.n_features_in_}"
             )
-        out = np.empty(q.shape[0], dtype=np.float32)
+        out = empty((q.shape[0],), "<f4")
         w = self._w
         self._bind("_mojolearn_estimators").kde_score_samples(
-            _addr_ro(self._x),
-            _addr_ro(q),
-            _addr_ro(w) if w is not None else 0,
-            _addr(out),
+            addr_ro(self._x, name="_x"),
+            addr_ro(q, name="q"),
+            addr_ro(w, name="w") if w is not None else 0,
+            addr(out, name="out"),
             # ORDER MATCHES bindings/_mojolearn_estimators.mojo::kde_score_samples_binding.
             [
                 int(self._x.shape[0]),
@@ -490,7 +488,15 @@ class KernelDensity(NumericModeMixin):
         return out
 
     def score(self, X, y=None):
-        return float(np.sum(self.score_samples(X), dtype=np.float64))
+        """The total log density: the float32 per-row scores summed
+        SEQUENTIALLY in Python float64. A host reduction outside the
+        identity claim (DEVIATION 2365); it was NumPy's pairwise
+        `np.sum(dtype=float64)`, so the last bits may differ from a value
+        recorded under it."""
+        total = 0.0
+        for v in self.score_samples(X).tolist():
+            total += v
+        return total
 
     def sample(self, n_samples=1, random_state=None):
         raise NotImplementedError(

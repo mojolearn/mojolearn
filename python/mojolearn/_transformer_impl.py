@@ -23,7 +23,7 @@ each entry point takes `addrs` (every buffer address, order written in
 the binding docstring and at the call site below in the same words) and
 `params` (the scalars). EVERY ARRAY WHOSE ADDRESS GOES INTO `addrs` IS
 BOUND TO A LOCAL for the duration of the call: an address inside a list
-keeps nothing alive (`_arrays.py`).
+keeps nothing alive (`_buffer.py`).
 
 WHAT A BLOCK IS HERE. ONE Llama-shaped decoder layer -- input norm,
 eager self-attention with RoPE and a KV cache, residual, post-attention
@@ -60,6 +60,18 @@ are refused BY NAME on the device path (`llama_refuse_bad_call` per
 call for x/rope/cache; the weights once at upload, DEVIATION 1875) --
 and a Python-side copy would make those refusals unreachable.
 
+THE ARRAYS ARE BUFFERS, NOT NUMPY (numpy-free-0.7, DEVIATIONS 2411-2414).
+`x`, every weight and both cache buffers are read through the buffer
+protocol (`_buffer.view`): a NumPy array, an `array.array('f')`, a
+`mojolearn.Array` or any other float32 exporter is accepted and NumPy is
+not imported. What this module ALLOCATES -- `allocate_state`'s two cache
+buffers and the block output -- is a `mojolearn.Array`, on which
+`numpy.asarray` is zero-copy. The cache is updated IN PLACE through its
+own address, exactly as before, whatever object the caller allocated it
+as. ONE VISIBLE CHANGE: `TransformerState.keys()` / `.values()` hand
+back a COPY of the packed used region rather than a view into the cache
+(DEVIATION 2413), because the `Array` contract has no strided views.
+
 THE NUMERIC TIER IS THE LOADED BINARY'S, SELECTED AT BUILD TIME OF THE
 .so. `numeric_mode=` on the class (or the process default) picks which
 compiled set answers -- fast (no promise; the lane's own clause (d)
@@ -88,10 +100,10 @@ an independent artifact. The build is `bash bindings/build_transformer.sh`
 per tier, REBUILT before any run is believed.
 """
 
-import numpy as np
-
 from . import _backend
-from ._arrays import _addr, _addr_ro
+from ._array import Array
+from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
+from ._bufcheck import dtype_name, is_native_f32, probe
 from ._mode import NumericModeMixin
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
@@ -107,15 +119,26 @@ _MAX_ABS_POSITION = 8192
 
 
 def _f32_strict(a, what, name):
-    """`a` as a C-contiguous float32 ndarray, REFUSING every other dtype
+    """`a` as a C-contiguous float32 `Array`, REFUSING every other dtype
     BY NAME (module header: this surface certifies bits, so there is no
     convenience downcast). Layout may be fixed silently -- a copy to C
     order moves bytes untouched, so no output bit can move -- but the
-    dtype may not."""
-    a = np.asarray(a)
-    if a.dtype != np.float32:
+    dtype may not. DEVIATION 2411: the dtype is the buffer's FORMAT,
+    read through `_buffer.view`; `as_f32_c` is reached only by a float32
+    buffer, where its one job is the layout (a zero-copy borrow when the
+    buffer is already C-contiguous)."""
+    try:
+        pb = probe(a)
+    except TypeError:
         raise TypeError(
-            f"mojolearn {what}: {name} has dtype {a.dtype.name}; this "
+            f"mojolearn {what}: {name} is a {type(a).__name__}, which does "
+            "not support the buffer protocol; this surface is float32 ONLY "
+            "and takes a float32 array (a numpy array, an array.array('f') "
+            "or a mojolearn.Array). Convert yourself and pass float32."
+        ) from None
+    if not is_native_f32(pb.format):
+        raise TypeError(
+            f"mojolearn {what}: {name} has dtype {dtype_name(a, pb)}; this "
             "surface is float32 ONLY (the fp32 profile, "
             "transformer/IDENTICAL_TRANSFORMER_CONTRACT.md section 3). "
             "bfloat16 and float16 are refused BY NAME: the reference's "
@@ -126,7 +149,8 @@ def _f32_strict(a, what, name):
             "so the bits that ran are bits you made. Convert yourself "
             "and pass float32."
         )
-    return np.ascontiguousarray(a)
+    arr, _copied = as_f32_c(a, ndim=pb.ndim, name=name)
+    return arr
 
 
 def _want_shape(a, what, name, shape):
@@ -146,24 +170,32 @@ def _state_buf(a, what, name, shape):
     No silent fixups at all -- the state is read AND written in place
     (DEVIATION 792's rule), so a copy here would update the copy and the
     caller's next call would carry a stale state, which is a wrong
-    answer with no diagnostic."""
-    if not isinstance(a, np.ndarray):
+    answer with no diagnostic. DEVIATION 2412: "a buffer" is ANY object
+    supporting the buffer protocol -- the `mojolearn.Array` that
+    `allocate_state` hands out, a NumPy array, an `array.array('f')` --
+    judged through `_buffer.view`; the object itself is returned and its
+    address taken with `_buffer.addr` (writable required), so the
+    caller's own memory is what the kernel updates."""
+    try:
+        pb = probe(a)
+    except TypeError:
         raise TypeError(
             f"mojolearn {what}: state buffer {name} must be a numpy "
-            f"ndarray (it is read and written in place), got {type(a)!r}"
-        )
-    if a.dtype != np.float32:
+            "ndarray or a mojolearn Array -- any writable float32 buffer "
+            f"-- (it is read and written in place), got {type(a)!r}"
+        ) from None
+    if not is_native_f32(pb.format):
         raise TypeError(
             f"mojolearn {what}: state buffer {name} has dtype "
-            f"{a.dtype.name}, want float32 (the state is part of the "
+            f"{dtype_name(a, pb)}, want float32 (the state is part of the "
             "fp32 profile and round-trips byte for byte)"
         )
-    if a.shape != shape:
+    if pb.shape != shape:
         raise ValueError(
-            f"mojolearn {what}: state buffer {name} has shape {a.shape},"
+            f"mojolearn {what}: state buffer {name} has shape {pb.shape},"
             f" want {shape}"
         )
-    if not a.flags["C_CONTIGUOUS"] or not a.flags["WRITEABLE"]:
+    if not pb.c_contiguous or pb.readonly:
         raise ValueError(
             f"mojolearn {what}: state buffer {name} must be C-contiguous"
             " and writable; it is updated IN PLACE so the caller's array"
@@ -178,7 +210,7 @@ def _batch_tokens(x, what, d_model, step):
     (B, d_model) -- one token per row, same bytes."""
     x = _f32_strict(x, what, "x")
     if step and x.ndim == 2:
-        x = x.reshape(x.shape[0], 1, x.shape[1])
+        x = x.reshape((x.shape[0], 1, x.shape[1]))
     if x.ndim != 3:
         raise ValueError(
             f"mojolearn {what}: x must be (B, L, d_model)"
@@ -204,8 +236,9 @@ def _take(weights, what, names):
     unknown names so a typo cannot become a silently-untrained weight."""
     if not hasattr(weights, "keys"):
         raise TypeError(
-            f"mojolearn {what}: weights must be a dict of numpy arrays "
-            f"keyed by the upstream parameter names {names}"
+            f"mojolearn {what}: weights must be a dict of float32 arrays "
+            "(numpy arrays or mojolearn Arrays) keyed by the upstream "
+            f"parameter names {names}"
         )
     missing = [n for n in names if n not in weights]
     extra = [n for n in weights if n not in names]
@@ -244,8 +277,10 @@ class TransformerState:
     Zeros (and 0) before the first token. Both buffers are read at entry
     and written back whole by `forward` and `step` (`cached_tokens`
     reassigned); serialize them however you like, the bytes round-trip
-    exactly. `keys()` / `values()` hand back the packed used region in
-    its natural shape."""
+    exactly. They are `mojolearn.Array` when `allocate_state` made them
+    and may be ANY writable float32 buffer (a NumPy array included) when
+    you did. `keys()` / `values()` hand back the packed used region in
+    its natural shape, as a COPY (DEVIATION 2413)."""
 
     def __init__(self, batch_size, n_kv_heads, head_dim, max_tokens,
                  k_cache, v_cache, cached_tokens=0):
@@ -258,21 +293,29 @@ class TransformerState:
         self.cached_tokens = int(cached_tokens)
 
     def _packed(self, buf):
+        # DEVIATION 2413: a COPY of the first n elements, whatever object
+        # `buf` is (`Array.from_buffer` borrows any buffer-protocol
+        # exporter; the slice copies per the Array contract), reshaped
+        # to the natural 4-D shape. It used to be a NumPy VIEW; the
+        # `Array` contract has no views, so a snapshot is what exists.
         n = (self.batch_size * self.n_kv_heads * self.cached_tokens
              * self.head_dim)
-        return buf[:n].reshape(
+        flat = buf if isinstance(buf, Array) else Array.from_buffer(buf)
+        return flat[:n].reshape((
             self.batch_size, self.n_kv_heads, self.cached_tokens,
             self.head_dim,
-        )
+        ))
 
     def keys(self):
         """The key cache's packed used region, as a
-        `(B, n_kv_heads, cached_tokens, head_dim)` VIEW into `k_cache`
-        (valid until the next call updates the state)."""
+        `(B, n_kv_heads, cached_tokens, head_dim)` COPY of `k_cache`'s
+        first elements, taken at the moment of the call (DEVIATION
+        2413; it was a view until numpy-free-0.7)."""
         return self._packed(self.k_cache)
 
     def values(self):
-        """The value cache's packed used region, the `keys()` shape."""
+        """The value cache's packed used region, the `keys()` shape, a
+        copy likewise."""
         return self._packed(self.v_cache)
 
 
@@ -471,10 +514,11 @@ class TransformerBlock(NumericModeMixin):
                 f"positive, got {max_tokens!r}"
             )
         n = b * self.n_kv_heads * smax * self.head_dim
+        # DEVIATION 2414: two `mojolearn.Array`s.
         return TransformerState(
             b, self.n_kv_heads, self.head_dim, smax,
-            np.zeros((n,), dtype=np.float32),
-            np.zeros((n,), dtype=np.float32),
+            zeros((n,), "<f4"),
+            zeros((n,), "<f4"),
             0,
         )
 
@@ -502,11 +546,12 @@ class TransformerBlock(NumericModeMixin):
         # disagreement the binding refuses by name; growth past the
         # capacity and the 8192 ceiling are refused by name in Mojo
         # (DEVIATION 795(iv)); all three go down unjudged.
-        y = np.empty((b, l, self.d_model), dtype=np.float32)
+        y = empty((b, l, self.d_model), "<f4")
         # TWO LISTS, NOT THIRTEEN ARGUMENTS (DEVIATION 791). Every array
         # addressed below is bound in this frame -- x, the nine entries
         # of self._w (alive on self), kc, vc, y -- which is what keeps
-        # the addresses alive (_arrays.py).
+        # the addresses alive (_buffer.py). `addr` (writable) for the
+        # cache and the output, `addr_ro` for x and the weights.
         w = self._w
         ext = self._extension()
         addrs = (
@@ -516,9 +561,10 @@ class TransformerBlock(NumericModeMixin):
             # k_proj.weight, v_proj.weight, o_proj.weight,
             # gate_proj.weight, up_proj.weight, down_proj.weight,
             # k_cache, v_cache, y_out
-            [_addr_ro(x)]
-            + [_addr_ro(a) for a in w]
-            + [_addr(kc), _addr(vc), _addr(y)]
+            [addr_ro(x, name="x")]
+            + [addr_ro(a, name="weight") for a in w]
+            + [addr(kc, name="k_cache"), addr(vc, name="v_cache"),
+               addr(y, name="y")]
         )
         if step:
             # B, d_model, n_heads, n_kv_heads, head_dim, intermediate,

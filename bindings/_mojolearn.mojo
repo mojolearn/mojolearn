@@ -66,9 +66,20 @@ that would block every other Python thread for the whole fit for no reason:
 nothing inside touches a Python object, and the caller's arrays are kept alive
 by the wrapper on the Python side. The pattern matches mojotrees'
 `buffer_has_infinite`.
+
+THREE HOST HELPERS WITH NO DEVICE CONTEXT (DEVIATION 2303, 2026-09-07)
+-----------------------------------------------------------------------
+`all_finite_f32`, `all_finite_f64` and `column_mean_f64` at the bottom of
+this file run on the CPU over the caller's buffer and never construct a
+`DeviceContext`. They exist so the NumPy-free Python layer
+(`python/mojolearn/NUMPY_FREE_CONTRACT.md`) has somewhere other than a
+Python loop to put a per-element scan. `column_mean_f64` is the DEFINITION
+of the centering order OLS/ridge now use, and its docstring states that
+order because callers rely on it.
 """
 
 from std.os import abort
+from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -589,6 +600,141 @@ def rbc_knn_search_binding(
     return PythonObject(n_dists)
 
 
+# ===========================================================================
+# HOST HELPERS FOR THE NUMPY-FREE PYTHON LAYER (DEVIATION 2303).
+#
+# DEVIATION 2320: these three take their scalars POSITIONALLY rather than
+# in a `params` list. The list convention above exists because
+# `def_function` cannot infer an arity past roughly nine; two and four
+# arguments are well inside that, and a positional `Int(py=...)` is the
+# shape `bindings/_mojolearn_gbdt.mojo::gbdt_sigmoid_binding` already uses
+# for exactly this kind of host loop.
+#
+# None of them constructs a `DeviceContext`: the work is a single pass over
+# a host buffer. The GIL is still released around the pass (the
+# `var result: Int` / `with GILReleased(Python())` shape of
+# `knn_search_binding`) because nothing inside touches a Python object and
+# a caller scanning a million rows should not stall its other threads.
+# ===========================================================================
+
+
+def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
+    """A caller's float64 buffer, borrowed, never owned; `_f32_ptr`'s twin
+    (DEVIATION 2321). The same helper, spelled the same way, sits in
+    `bindings/_mojolearn_gbdt.mojo`, `_mojolearn_estimators.mojo`,
+    `_mojolearn_svm.mojo` and `_mojolearn_gp.mojo`."""
+    if addr == 0:
+        raise Error("mojolearn: null buffer address")
+    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def all_finite_f32_binding(
+    addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """1 if every one of the `n` float32 values at `addr` is finite, else 0
+    (DEVIATION 2322). `n == 0` is 1: an empty buffer has no non-finite
+    element. A negative `n` is refused rather than read.
+
+    NaN, +inf and -inf all fail; subnormals PASS, because they are finite
+    numbers and `isfinite` says so. This is the test
+    `bindings/_mojolearn_estimators.mojo::_pca_whiten_finite` applies,
+    one element at a time, with no SIMD width and no early-exit trick a
+    different backend could reorder: the FIRST non-finite element ends the
+    scan and the answer is the same whichever element it was.
+    """
+    var p = _f32_ptr(Int(py=addr))
+    var count = Int(py=n)
+    if count < 0:
+        raise Error(
+            "all_finite_f32: n must be non-negative, got " + String(count)
+        )
+    var ok: Int = 1
+    with GILReleased(Python()):
+        for i in range(count):
+            if not isfinite(p.unsafe_load(i)):
+                ok = 0
+                break
+    return PythonObject(ok)
+
+
+def all_finite_f64_binding(
+    addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """`all_finite_f32_binding` over float64 values (DEVIATION 2323); the
+    same rules, including subnormals passing and `n == 0` answering 1."""
+    var p = _f64_ptr(Int(py=addr))
+    var count = Int(py=n)
+    if count < 0:
+        raise Error(
+            "all_finite_f64: n must be non-negative, got " + String(count)
+        )
+    var ok: Int = 1
+    with GILReleased(Python()):
+        for i in range(count):
+            if not isfinite(p.unsafe_load(i)):
+                ok = 0
+                break
+    return PythonObject(ok)
+
+
+def column_mean_f64_binding(
+    x_addr: PythonObject,
+    rows: PythonObject,
+    cols: PythonObject,
+    out_addr: PythonObject,
+) raises -> PythonObject:
+    """Per-column mean of a C-contiguous float32 `[rows, cols]` matrix,
+    accumulated in float64 IN THIS EXACT ORDER, written to the caller's
+    float64 `out[cols]` (DEVIATION 2324). Returns 0.
+
+    THE ORDER IS THE DEFINITION. `python/mojolearn/linear_model.py` centers
+    OLS/ridge with this helper where it used NumPy's `mean(axis=0,
+    dtype=float64)`, whose blocked pairwise reduction has no defined order
+    a second implementation could reproduce. This one does, and a caller
+    checking a centering bit-for-bit reproduces it with:
+
+        acc = [0.0] * cols                      # float64 zeros
+        for r in range(rows):                   # row-major, row by row
+            for c in range(cols):               # column by column
+                acc[c] = acc[c] + float64(x[r * cols + c])
+        for c in range(cols):
+            out[c] = acc[c] / float64(rows)
+
+    Every `+` is one IEEE-754 binary64 round-to-nearest-even addition of
+    the widened float32 element onto the running column total, in row
+    order. There is NO pairwise tree, NO SIMD lane split, NO Kahan term and
+    NO fused multiply-add (there is no multiply to fuse). The float32 to
+    float64 widening is exact. A `math.fsum`-style correctly rounded sum is
+    a DIFFERENT number and is deliberately not what this computes:
+    `python/mojolearn/tests/test_native_helpers.py` plants a column whose
+    sequential total and correctly rounded total disagree, to keep anyone
+    from "fixing" this into fsum and moving every IDENTICAL OLS bit.
+
+    `rows` must be positive (a mean over zero rows is not a number this
+    helper will invent) and `cols` must be positive.
+    """
+    var xp = _f32_ptr(Int(py=x_addr))
+    var op = _f64_ptr(Int(py=out_addr))
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    if nr <= 0:
+        raise Error(
+            "column_mean_f64: rows must be positive, got " + String(nr)
+        )
+    if nc <= 0:
+        raise Error(
+            "column_mean_f64: cols must be positive, got " + String(nc)
+        )
+    with GILReleased(Python()):
+        var acc = List[Float64](length=nc, fill=Float64(0.0))
+        for r in range(nr):
+            for c in range(nc):
+                acc[c] += Float64(xp.unsafe_load(r * nc + c))
+        for c in range(nc):
+            op.unsafe_store(c, acc[c] / Float64(nr))
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
@@ -604,6 +750,10 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         )
         m.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
         m.def_function[rbc_knn_search_binding]("rbc_knn_search")
+        # DEVIATION 2325: the three host helpers of DEVIATION 2303.
+        m.def_function[all_finite_f32_binding]("all_finite_f32")
+        m.def_function[all_finite_f64_binding]("all_finite_f64")
+        m.def_function[column_mean_f64_binding]("column_mean_f64")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

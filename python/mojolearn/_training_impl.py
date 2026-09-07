@@ -1,7 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Neural-network training on the GPU: SGD, Adam, AdamW, global-norm
-gradient clipping and cross-entropy loss, over NumPy arrays.
+gradient clipping and cross-entropy loss, over float32 buffers.
+
+THE ARRAYS ARE BUFFERS, NOT NUMPY (numpy-free-0.7, DEVIATIONS 2402-2406).
+Every parameter, gradient, logits and targets argument is read through the
+buffer protocol (`_buffer.view`): a NumPy array, an `array.array`, a
+`mojolearn.Array` or any other exporter is accepted, and NumPy is not
+imported anywhere on this path. Everything this module ALLOCATES -- the
+optimizer moments, the per-row loss, the logits gradient -- is a
+`mojolearn.Array`, on which `numpy.asarray` is zero-copy. The in-place
+contract is unchanged: `step` and `clip_grad_norm_` write back into the
+very buffers you passed (`_unpack_into`), which is why those buffers must
+be WRITABLE and C-CONTIGUOUS (refused by name otherwise) -- a read-only or
+strided buffer cannot be written back without either a segfault or a copy
+that would make "in place" a lie.
 
 PRIVATE MODULE. The names are PyTorch's, because a caller reaching for an
 optimizer has `torch.optim.SGD`, `torch.optim.Adam`, `torch.optim.AdamW`,
@@ -84,10 +97,13 @@ so the refusal can run before any device work. Both are stated there rather
 than hidden, and both have a cheaper device-side form that is OWED.
 """
 
-import numpy as np
-
 from . import _backend
-from ._arrays import _addr, _addr_ro
+from ._array import Array
+from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
+from ._bufcheck import (
+    base_format, dtype_name, is_integer, is_native_f32, memcopy, memzero,
+    nelems, probe,
+)
 from ._mode import NumericModeMixin
 
 __all__ = [
@@ -216,17 +232,30 @@ def _load(mode=None):
 # the reference's own semantics, not a defect.
 
 
+def _is_buffer(x):
+    try:
+        probe(x)
+    except TypeError:
+        return False
+    return True
+
+
 def _as_seq(x, name, where):
     """A list of arrays from either one array or an iterable of them, the way
-    `torch.nn.utils.clip_grad_norm_` accepts either."""
-    if isinstance(x, np.ndarray):
+    `torch.nn.utils.clip_grad_norm_` accepts either. DEVIATION 2402: "an
+    array" means ANY object supporting the buffer protocol -- a NumPy
+    array, an `array.array`, a `mojolearn.Array` -- judged by
+    `_buffer.view` and not by `isinstance(x, np.ndarray)`."""
+    if _is_buffer(x):
         return [x]
     try:
         out = list(x)
     except TypeError:
         raise TypeError(
-            "mojolearn.%s: %s must be a numpy array or an iterable of them, "
-            "got %s" % (where, name, type(x).__name__)
+            "mojolearn.%s: %s must be a float32 array (a numpy array, an "
+            "array.array or a mojolearn.Array -- anything supporting the "
+            "buffer protocol) or an iterable of them, got %s"
+            % (where, name, type(x).__name__)
         )
     if not out:
         raise ValueError(
@@ -235,81 +264,117 @@ def _as_seq(x, name, where):
             "(training/estimator.mojo)" % (where, name)
         )
     for i, a in enumerate(out):
-        if not isinstance(a, np.ndarray):
+        if not _is_buffer(a):
             raise TypeError(
-                "mojolearn.%s: %s[%d] is %s, not a numpy array"
+                "mojolearn.%s: %s[%d] is %s, not an array (it does not "
+                "support the buffer protocol)"
                 % (where, name, i, type(a).__name__)
             )
     return out
 
 
-def _check_dtype(arrays, name, where):
-    """float32 or REFUSED BY NAME. Never cast.
+def _check_dtype(arrays, name, where, *, inplace):
+    """float32 or REFUSED BY NAME. Never cast. Returns the `Probe` of every
+    array, in order, for the callers that size and address them.
 
     A silent upcast from float16 would answer a float32 question and label it
     as a half-precision answer, which is the mixed-precision refusal this
-    module opens with. float64 is refused for the reason `_arrays.py` gives
+    module opens with. float64 is refused for the reason `_buffer.py` gives
     at the library boundary: there is no float64 on a Metal device and every
     kernel in this library is float32, so a float64 array here is a caller
     who believes something about the arithmetic that is not true.
+
+    `inplace=True` (parameters and gradients, which `_unpack_into` writes
+    BACK INTO) additionally requires the buffer to be C-CONTIGUOUS and
+    WRITABLE, refused by name (DEVIATION 2403). The NumPy spelling copied a
+    strided tensor on the way in and wrote it back element-wise on the way
+    out; without NumPy a strided write-back would be a Python element loop
+    over the model, which the numpy-free contract forbids on this path.
     """
+    probes = []
     for i, a in enumerate(arrays):
-        if a.dtype in (np.float16, getattr(np, "bfloat16", np.float16)):
+        pb = probe(a)
+        dn = dtype_name(a, pb)
+        if base_format(pb.format) == "e" or dn in ("float16", "bfloat16"):
             _refuse_out_of_scope("mixed precision", where)
-        if a.dtype != np.float32:
+        if not is_native_f32(pb.format):
             raise TypeError(
                 "mojolearn.%s: %s[%d] has dtype %s; this surface is float32 "
                 "only (loss contract section 1, optimizer contract section "
                 "1) and refuses rather than casts, because a cast changes "
                 "which arithmetic answered and leaves the label unchanged "
                 "(python/mojolearn/_training_impl.py)"
-                % (where, name, i, a.dtype)
+                % (where, name, i, dn)
             )
-        if a.size < 1:
+        if nelems(pb.shape) < 1:
             raise ValueError(
                 "mojolearn.%s: %s[%d] is empty, shape %r; an empty tensor is "
                 "REFUSED and not skipped -- the clip would fold a zero-length "
                 "GEMM, which no gate in this tree has run "
-                "(training/estimator.mojo)" % (where, name, i, a.shape)
+                "(training/estimator.mojo)" % (where, name, i, pb.shape)
             )
+        if inplace and (not pb.c_contiguous or pb.readonly):
+            raise ValueError(
+                "mojolearn.%s: %s[%d] must be C-contiguous and writable; it "
+                "is written back IN PLACE (the torch.optim contract, the "
+                "trailing underscore on clip_grad_norm_) and a strided or "
+                "read-only buffer cannot be. Pass np.ascontiguousarray(...) "
+                "of it, or a writable mojolearn.Array "
+                "(python/mojolearn/_training_impl.py, DEVIATION 2403)"
+                % (where, name, i)
+            )
+        probes.append(pb)
+    return probes
 
 
-def _offsets_for(arrays):
+def _offsets_for(probes):
     """`offsets[0 .. J]` as int32. `offsets[0]` is 0 and the entries are
     strictly ascending; `training/estimator.mojo::_offsets_from_ptr` refuses
     anything else BY NAME before any device work."""
-    off = np.zeros(len(arrays) + 1, dtype=np.int32)
-    total = 0
-    for j, a in enumerate(arrays):
-        total += a.size
-        off[j + 1] = total
-    return off
+    off = [0]
+    for pb in probes:
+        off.append(off[-1] + nelems(pb.shape))
+    return Array.from_list(off, "<i4")
 
 
-def _pack(arrays):
+def _pack(arrays, probes):
     """One flat C-contiguous float32 buffer holding every tensor in order.
 
     Returns `(flat, packed)`. `packed` is False for the ZERO-COPY case: a
-    single tensor that is already float32 and C-contiguous is borrowed, its
-    `ravel()` shares the caller's memory, and the device writes the caller's
-    array directly. Anything else is copied, and that copy is what the
-    `packed_` attribute on each optimizer reports.
+    single tensor -- already float32 and C-contiguous, `_check_dtype`
+    guaranteed both -- is borrowed as-is, and the device writes the
+    caller's buffer directly. Anything else is copied into a fresh
+    `mojolearn.Array` by `memmove` (DEVIATION 2403), and that copy is what
+    the `packed_` attribute on each optimizer reports.
     """
-    if len(arrays) == 1 and arrays[0].flags["C_CONTIGUOUS"]:
-        return arrays[0].reshape(-1), False
-    return np.concatenate([np.ascontiguousarray(a).reshape(-1)
-                           for a in arrays]), True
-
-
-def _unpack_into(flat, arrays):
-    """Write a flat buffer back into the caller's arrays, in place, so that
-    an optimizer step is visible on the objects the caller handed in -- which
-    is what `torch.optim` does and what a trailing underscore means."""
+    if len(arrays) == 1:
+        return arrays[0], False
+    total = sum(nelems(pb.shape) for pb in probes)
+    flat = empty((total,), "<f4")
+    base = addr(flat, name="flat")
     at = 0
-    for a in arrays:
-        n = a.size
-        a[...] = flat[at:at + n].reshape(a.shape)
-        at += n
+    for a, pb in zip(arrays, probes):
+        memcopy(base + at, addr_ro(a, name="tensor"), pb.nbytes)
+        at += pb.nbytes
+    return flat, True
+
+
+def _unpack_into(flat, arrays, probes):
+    """Write a flat buffer back into the caller's arrays, IN PLACE, so that
+    an optimizer step is visible on the objects the caller handed in -- which
+    is what `torch.optim` does and what a trailing underscore means.
+
+    DEVIATION 2403: a `memmove` per tensor from the flat buffer into the
+    caller's own memory. The destination address comes from `_buffer.addr`
+    (WRITABLE required -- it refuses a read-only exporter by name), never
+    `addr_ro`, and `_check_dtype(inplace=True)` has already required
+    C-contiguity, so one contiguous copy per tensor is exactly the write.
+    """
+    src = addr_ro(flat, name="flat")
+    at = 0
+    for a, pb in zip(arrays, probes):
+        memcopy(addr(a, name="tensor"), src + at, pb.nbytes)
+        at += pb.nbytes
 
 
 # ===================================================================
@@ -336,23 +401,24 @@ class _Optimizer(NumericModeMixin):
     def __init__(self, params, where):
         self._where = where
         self.params = _as_seq(params, "params", where)
-        _check_dtype(self.params, "params", where)
-        self.offsets = _offsets_for(self.params)
-        self.n_total = int(self.offsets[-1])
+        probes = _check_dtype(self.params, "params", where, inplace=True)
+        self.offsets = _offsets_for(probes)
+        self.n_total = sum(nelems(pb.shape) for pb in probes)
         #: `m` is Adam's `exp_avg` and SGD's `momentum_buffer`; `v` is Adam's
         #: `exp_avg_sq` and is UNREAD BY SGD. Both are allocated at `N`
         #: whatever the algorithm, because the certified entry takes one
         #: signature for both and one state pair means a checkpoint has one
-        #: shape (optimizer contract, `optimizer_step_oracle`).
-        self.exp_avg = np.zeros(self.n_total, dtype=np.float32)
-        self.exp_avg_sq = np.zeros(self.n_total, dtype=np.float32)
+        #: shape (optimizer contract, `optimizer_step_oracle`). Both are
+        #: `mojolearn.Array` (DEVIATION 2404).
+        self.exp_avg = zeros((self.n_total,), "<f4")
+        self.exp_avg_sq = zeros((self.n_total,), "<f4")
         #: SGD's per-tensor `buf_initialized` flag, contract 7.3b. 0 means
         #: this tensor's momentum buffer has never been written, so the first
         #: step COPIES the gradient into it instead of running the
         #: recurrence. It is CARRIED STATE and belongs in a checkpoint beside
         #: `exp_avg`; the flag flips once per TENSOR after that tensor's
         #: kernel, never per element.
-        self.buf_initialized = np.zeros(len(self.params), dtype=np.int32)
+        self.buf_initialized = zeros((len(self.params),), "<i4")
         #: ONE-BASED. The first step of a run is `t = 1`, and
         #: `training/estimator.mojo` refuses `t < 1` by name because at
         #: `t = 0` the bias correction `1 - beta^0` is exactly zero and the
@@ -386,12 +452,21 @@ class _Optimizer(NumericModeMixin):
         }
 
     def load_state_dict(self, state):
+        """DEVIATION 2404: the three arrays are taken through
+        `_buffer.as_f32_c` / `as_i32_c` (any buffer or nested list; a
+        float64 `exp_avg` is converted the way `np.ascontiguousarray(...,
+        dtype=np.float32)` converted it) and the optimizer then OWNS a copy
+        -- the NumPy spelling aliased a caller's float32 C-order array and
+        this one does not, so a later `step` can never write into the
+        dict you loaded from."""
         self.t = int(state["t"])
-        self.exp_avg = np.ascontiguousarray(state["exp_avg"], dtype=np.float32)
-        self.exp_avg_sq = np.ascontiguousarray(
-            state["exp_avg_sq"], dtype=np.float32)
-        self.buf_initialized = np.ascontiguousarray(
-            state["buf_initialized"], dtype=np.int32)
+        ea, c1 = as_f32_c(state["exp_avg"], ndim=1, name="exp_avg")
+        es, c2 = as_f32_c(state["exp_avg_sq"], ndim=1, name="exp_avg_sq")
+        bi, c3 = as_i32_c(state["buf_initialized"], ndim=1,
+                          name="buf_initialized")
+        self.exp_avg = ea if c1 else ea.copy()
+        self.exp_avg_sq = es if c2 else es.copy()
+        self.buf_initialized = bi if c3 else bi.copy()
         if self.exp_avg.size != self.n_total:
             raise ValueError(
                 "mojolearn.%s.load_state_dict: exp_avg holds %d floats, this "
@@ -402,9 +477,13 @@ class _Optimizer(NumericModeMixin):
     def zero_grad(self, grads):
         """`torch.optim.Optimizer.zero_grad`, over arrays the caller owns.
         Present so that a training loop written against torch reads the same;
-        it writes `+0.0` and nothing else."""
-        for g in _as_seq(grads, "grads", self._where):
-            g[...] = 0.0
+        it writes `+0.0` and nothing else -- as all-zero bytes through
+        `memset` on the buffer's own address (DEVIATION 2406), which is
+        `+0.0` in float32 and needs the buffer C-contiguous and writable."""
+        gs = _as_seq(grads, "grads", self._where)
+        probes = _check_dtype(gs, "grads", self._where, inplace=True)
+        for g, pb in zip(gs, probes):
+            memzero(addr(g, name="grads"), pb.nbytes)
 
     def step(self, grads, max_norm=None):
         """One step. `grads` matches `params` in count, shape and order.
@@ -429,18 +508,32 @@ class _Optimizer(NumericModeMixin):
         leaving its `clip.*` stages empty rather than filling them.
         """
         gs = _as_seq(grads, "grads", self._where)
-        _check_dtype(gs, "grads", self._where)
+        gprobes = _check_dtype(gs, "grads", self._where, inplace=True)
+        # Re-read every parameter buffer's shape and layout on EVERY step
+        # rather than trusting the constructor's reading: a caller can
+        # reshape or resize their own array between steps, and the
+        # registry's offsets would then address the wrong memory.
+        pprobes = _check_dtype(self.params, "params", self._where,
+                               inplace=True)
         if len(gs) != len(self.params):
             raise ValueError(
                 "mojolearn.%s.step: %d gradients for %d parameter tensors"
                 % (self._where, len(gs), len(self.params))
             )
-        for j, (p, g) in enumerate(zip(self.params, gs)):
-            if p.shape != g.shape:
+        for j, (pp, gp) in enumerate(zip(pprobes, gprobes)):
+            if pp.shape != gp.shape:
                 raise ValueError(
                     "mojolearn.%s.step: grads[%d] has shape %r, params[%d] "
-                    "has %r" % (self._where, j, g.shape, j, p.shape)
+                    "has %r" % (self._where, j, gp.shape, j, pp.shape)
                 )
+        if sum(nelems(pb.shape) for pb in pprobes) != self.n_total:
+            raise ValueError(
+                "mojolearn.%s.step: the parameter tensors hold %d floats now "
+                "and held %d when this optimizer was built; a parameter "
+                "buffer was resized underneath its registry"
+                % (self._where, sum(nelems(pb.shape) for pb in pprobes),
+                   self.n_total)
+            )
 
         cfg = self._config()
         max_norm_f = 0.0 if max_norm is None else float(max_norm)
@@ -452,10 +545,10 @@ class _Optimizer(NumericModeMixin):
                 % (self._where, max_norm)
             )
 
-        flat_p, packed_p = _pack(self.params)
-        flat_g, packed_g = _pack(gs)
+        flat_p, packed_p = _pack(self.params, pprobes)
+        flat_g, packed_g = _pack(gs, gprobes)
         self.packed_ = bool(packed_p or packed_g)
-        info = np.zeros(3, dtype=np.float32)
+        info = zeros((3,), "<f4")
         self.t += 1
 
         # `params` is, in this exact order (mirrored word for word in
@@ -502,22 +595,24 @@ class _Optimizer(NumericModeMixin):
         binding = _load(getattr(self, "numeric_mode", None))
         # Every array is held in a local across the call. The Mojo side takes
         # raw addresses, borrows and retains nothing, which is only sound
-        # while the owning objects are alive (`_arrays.py`).
+        # while the owning objects are alive (`_buffer.py`). `addr` (writable
+        # required) for everything the kernel writes; `addr_ro` for the
+        # offsets registry, which it only reads.
         binding.optimizer_step(
-            _addr(flat_p),
-            _addr(flat_g),
-            _addr(self.exp_avg),
-            _addr(self.exp_avg_sq),
-            _addr_ro(self.offsets),
-            _addr(self.buf_initialized),
-            _addr(info),
+            addr(flat_p, name="params"),
+            addr(flat_g, name="grads"),
+            addr(self.exp_avg, name="exp_avg"),
+            addr(self.exp_avg_sq, name="exp_avg_sq"),
+            addr_ro(self.offsets, name="offsets"),
+            addr(self.buf_initialized, name="buf_initialized"),
+            addr(info, name="info"),
             plist,
         )
 
         if packed_p:
-            _unpack_into(flat_p, self.params)
+            _unpack_into(flat_p, self.params, pprobes)
         if max_norm is not None and packed_g:
-            _unpack_into(flat_g, gs)
+            _unpack_into(flat_g, gs, gprobes)
 
         if info[0] != 0.0:
             self.total_norm_ = float(info[1])
@@ -529,7 +624,7 @@ class _Optimizer(NumericModeMixin):
 
 
 class SGD(_Optimizer):
-    """`torch.optim.SGD`, on the GPU, over NumPy arrays.
+    """`torch.optim.SGD`, on the GPU, over float32 buffers (NumPy arrays, `array.array`, `mojolearn.Array`; the buffer protocol is the boundary).
 
     Optimizer contract 7.3. Momentum, dampening, Nesterov and COUPLED L2
     weight decay -- coupled meaning the decay is folded into the GRADIENT and
@@ -610,7 +705,7 @@ class SGD(_Optimizer):
         float16/bfloat16 refused  MIXED PRECISION IS NOT COVERED; see
                                   `_NOT_COVERED` at the top of this file
         float64         refused   there is no float64 on a Metal device
-                                  (python/mojolearn/_arrays.py says the same
+                                  (python/mojolearn/_buffer.py says the same
                                   at the library boundary)
     """
 
@@ -657,7 +752,7 @@ class SGD(_Optimizer):
 
 
 class Adam(_Optimizer):
-    """`torch.optim.Adam`, on the GPU, over NumPy arrays.
+    """`torch.optim.Adam`, on the GPU, over float32 buffers (NumPy arrays, `array.array`, `mojolearn.Array`; the buffer protocol is the boundary).
 
     Optimizer contract 7.2, with COUPLED weight decay: the decay is folded
     into the GRADIENT, so it passes through `m` and `v` and is itself
@@ -764,7 +859,7 @@ class Adam(_Optimizer):
 
 
 class AdamW(Adam):
-    """`torch.optim.AdamW`, on the GPU, over NumPy arrays.
+    """`torch.optim.AdamW`, on the GPU, over float32 buffers (NumPy arrays, `array.array`, `mojolearn.Array`; the buffer protocol is the boundary).
 
     Optimizer contract 7.4: DECOUPLED weight decay. The decay multiplies the
     PARAMETER, as `p * (1 - lr*wd)`, and the gradient is untouched, so unlike
@@ -895,7 +990,7 @@ def _refuse_unknown(kwargs, where):
 
 def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
                     numeric_mode=None, **kwargs):
-    """`torch.nn.utils.clip_grad_norm_`, on the GPU, over NumPy arrays.
+    """`torch.nn.utils.clip_grad_norm_`, on the GPU, over float32 buffers (NumPy arrays, `array.array`, `mojolearn.Array`; the buffer protocol is the boundary).
     Scales the gradients IN PLACE and returns the PRE-CLIP total norm, which
     is what torch returns and why the name has a trailing underscore.
 
@@ -980,7 +1075,7 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
             "(python/mojolearn/_training_impl.py)"
         )
     gs = _as_seq(grads, "grads", "clip_grad_norm_")
-    _check_dtype(gs, "grads", "clip_grad_norm_")
+    probes = _check_dtype(gs, "grads", "clip_grad_norm_", inplace=True)
     mn = float(max_norm)
     if not (mn > 0.0):
         raise ValueError(
@@ -989,9 +1084,9 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
             "spelled by not calling it (training/estimator.mojo)" % (max_norm,)
         )
 
-    offsets = _offsets_for(gs)
-    flat, packed = _pack(gs)
-    info = np.zeros(2, dtype=np.float32)
+    offsets = _offsets_for(probes)
+    flat, packed = _pack(gs, probes)
+    info = zeros((2,), "<f4")
 
     # `params` is, in this exact order (mirrored word for word in
     # `bindings/_mojolearn_training.mojo::clip_grad_norm_binding`):
@@ -1002,10 +1097,11 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
 
     binding = _load(numeric_mode)
     binding.clip_grad_norm(
-        _addr(flat), _addr_ro(offsets), _addr(info), plist,
+        addr(flat, name="grads"), addr_ro(offsets, name="offsets"),
+        addr(info, name="info"), plist,
     )
     if packed:
-        _unpack_into(flat, gs)
+        _unpack_into(flat, gs, probes)
     return float(info[0])
 
 
@@ -1132,31 +1228,57 @@ def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
             "for it (training/estimator.mojo)"
         )
 
-    x = np.asarray(logits)
-    if x.ndim != 2:
+    # DEVIATION 2405: `logits` and `targets` are read through the buffer
+    # protocol; `logits` is refused unless it is a float32 buffer (as
+    # before: a float64 array was refused, not cast) and `targets` may be
+    # any integer buffer or a plain list of ints, converted to int32 the
+    # way `np.ascontiguousarray(y, dtype=np.int32)` converted it.
+    try:
+        xp = probe(logits)
+    except TypeError:
+        raise TypeError(
+            "mojolearn.cross_entropy: logits must be a float32 array (a "
+            "numpy array, an array.array or a mojolearn.Array -- anything "
+            "supporting the buffer protocol), got %s "
+            "(python/mojolearn/_training_impl.py)" % (type(logits).__name__,)
+        ) from None
+    if xp.ndim != 2:
         raise ValueError(
             "mojolearn.cross_entropy: logits must be 2-D (N, V), got %d-D "
-            "shape %r (python/mojolearn/_training_impl.py)" % (x.ndim, x.shape)
+            "shape %r (python/mojolearn/_training_impl.py)"
+            % (xp.ndim, xp.shape)
         )
-    _check_dtype([x], "logits", "cross_entropy")
-    x = np.ascontiguousarray(x)
+    _check_dtype([logits], "logits", "cross_entropy", inplace=False)
+    x, _ = as_f32_c(logits, ndim=2, name="logits")
     n_rows, vocab = x.shape
 
-    y = np.asarray(targets)
-    if y.ndim != 1:
+    if not _is_buffer(targets):
+        try:
+            targets = Array.from_list(targets, "<i8")
+        except Exception:
+            raise TypeError(
+                "mojolearn.cross_entropy: targets must be an integer array "
+                "of class INDICES (a numpy array, an array.array, a "
+                "mojolearn.Array or a list of ints), got %s "
+                "(python/mojolearn/_training_impl.py)"
+                % (type(targets).__name__,)
+            ) from None
+    yp = probe(targets)
+    if yp.ndim != 1:
         raise ValueError(
             "mojolearn.cross_entropy: targets must be 1-D (N,), got %d-D "
             "shape %r; class-PROBABILITY targets are a different forward with "
             "a different backward and are not in the contract "
-            "(python/mojolearn/_training_impl.py)" % (y.ndim, y.shape)
+            "(python/mojolearn/_training_impl.py)" % (yp.ndim, yp.shape)
         )
-    if y.dtype.kind not in "iu":
+    if not is_integer(yp.format):
         raise TypeError(
             "mojolearn.cross_entropy: targets has dtype %s; this surface "
             "takes class INDICES only, not probabilities "
-            "(python/mojolearn/_training_impl.py)" % (y.dtype,)
+            "(python/mojolearn/_training_impl.py)"
+            % (dtype_name(targets, yp),)
         )
-    y = np.ascontiguousarray(y, dtype=np.int32)
+    y, _ = as_i32_c(targets, ndim=1, name="targets")
     if y.shape[0] != n_rows:
         raise ValueError(
             "mojolearn.cross_entropy: logits has %d rows and targets has %d "
@@ -1167,15 +1289,15 @@ def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
     # The [0, 1) bound and the finiteness check are `ce_refuse_inputs`'s and
     # fire from Mojo by name; this is only the shape work.
 
-    loss_out = np.zeros(1, dtype=np.float32)
-    row_out = np.empty(n_rows, dtype=np.float32)
+    loss_out = zeros((1,), "<f4")
+    row_out = empty((n_rows,), "<f4")
     if return_grad:
-        grad_out = np.empty((n_rows, vocab), dtype=np.float32)
+        grad_out = empty((n_rows, vocab), "<f4")
     else:
         # NEVER a null address: `_f32_ptr` in the binding refuses one, and a
         # one-element placeholder is what the certified entry documents for
         # an unused output buffer.
-        grad_out = np.zeros(1, dtype=np.float32)
+        grad_out = zeros((1,), "<f4")
 
     # `params` is, in this exact order (mirrored word for word in
     # `bindings/_mojolearn_training.mojo::ce_loss_binding`):
@@ -1200,11 +1322,11 @@ def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
 
     binding = _load(numeric_mode)
     binding.ce_loss(
-        _addr(loss_out),
-        _addr(row_out),
-        _addr(grad_out),
-        _addr_ro(x),
-        _addr_ro(y),
+        addr(loss_out, name="loss"),
+        addr(row_out, name="row_loss"),
+        addr(grad_out, name="dlogits"),
+        addr_ro(x, name="logits"),
+        addr_ro(y, name="targets"),
         plist,
     )
 

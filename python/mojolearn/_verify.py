@@ -222,8 +222,18 @@ def build_fixture():
     The centroids are ROWS OF X, which is what `INIT_ARRAY` means upstream
     and what makes the start of the fit exact rather than sampled. Row
     `c * 37` for cluster c, exactly as the E1U driver picks them.
+
+    DEVIATION 2433: NumPy is a DIAGNOSTICS dependency only (the `test`
+    extra), imported here lazily; the library itself no longer requires
+    it (numpy-free-0.7), so its absence is reported with the install hint
+    rather than as a bare ImportError from inside the fixture builder.
     """
-    import numpy as np
+    try:
+        import numpy as np
+    except ImportError:
+        raise ImportError(
+            "mojolearn: diagnostics need numpy (pip install mojolearn[test])"
+        ) from None
 
     x = np.empty((KM_N, KM_D), dtype=np.float32)
     for i in range(KM_N):
