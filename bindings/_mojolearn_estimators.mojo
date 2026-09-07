@@ -8,6 +8,7 @@ device buffers and contexts live for one call and no pointer is retained.
 """
 
 from std.os import abort
+from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -21,7 +22,10 @@ from kde.estimator import kde_score_samples_host
 from decomposition.estimator import (
     inverse_transform_host,
     pca_fit_host,
+    pca_fit_full_host,
     pca_transform_host,
+    pca_whiten_transform_host,
+    pca_whiten_inverse_transform_host,
     tsvd_fit_host,
     tsvd_transform_host,
 )
@@ -33,6 +37,7 @@ from glm.estimator import (
     qn_sigmoid_host,
     ridge_fit_host,
 )
+from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -143,6 +148,39 @@ def pca_fit_binding(
     return PythonObject(noise)
 
 
+def pca_fit_full_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    mean_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    singular_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Additive R-SVD fit export; same five outputs as pca_fit.
+
+    This exposes existing arithmetic, not a new numerical certificate.
+    Validate its tall-matrix contract before creating a device context.
+    """
+    if len(params) != 3:
+        raise Error("pca_fit_full: params must contain n_rows, n_features, n_components")
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    pca_full_validate(nr, nf, nc)
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=components_addr))
+    var mp = _f32_ptr(Int(py=mean_addr))
+    var ep = _f32_ptr(Int(py=explained_addr))
+    var rp = _f32_ptr(Int(py=ratio_addr))
+    var sp = _f32_ptr(Int(py=singular_addr))
+    var noise = Float64(0.0)
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        noise = pca_fit_full_host(ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc)
+    return PythonObject(noise)
+
+
 def pca_transform_binding(
     x_addr: PythonObject,
     mean_addr: PythonObject,
@@ -163,6 +201,107 @@ def pca_transform_binding(
         var ctx = DeviceContext()
         pca_transform_host(ctx, xp, mp, cp, op, nr, nf, nc)
     return PythonObject(0)
+
+
+def _pca_whiten_pointer(
+    address: Int, count: Int,
+) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+    if address <= 0 or address % 4 != 0:
+        raise Error("PCA whitening requires positive aligned FP32 pointers")
+    if address > 9223372036854775807 - count * 4:
+        raise Error("PCA whitening pointer span overflows signed Int")
+    return _f32_ptr(address)
+
+
+def _pca_whiten_finite(
+    pointer: MutPointer[Float32, MutUntrackedOrigin], count: Int,
+) raises:
+    for i in range(count):
+        if not isfinite(pointer.unsafe_load(i)):
+            raise Error("PCA whitening requires finite inputs and outputs")
+
+
+def _pca_whiten_apply(
+    input_addr: PythonObject,
+    mean_addr: PythonObject,
+    components_addr: PythonObject,
+    singular_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+    inverse: Bool,
+) raises -> PythonObject:
+    # Additive ABI only: the unwhitened transform exports keep their arity
+    # and arithmetic. All host input checks precede the DeviceContext.
+    if len(params) != 4:
+        raise Error("PCA whitening params require rows, features, components, fit_rows")
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var nfit = Int(py=params[3])
+    if nr < 1 or nf < 2 or nc < 1 or nc > nf or nfit < 2:
+        raise Error("PCA whitening requires positive rows/components, features>=2 and fit_rows>=2")
+    if nr > 2147483647 or nf > 2147483647 or nc > 2147483647 or nfit > 2147483647:
+        raise Error("PCA whitening dimensions exceed Int32")
+    if nr > 2147483647 // nf or nc > 2147483647 // nf:
+        raise Error("PCA whitening matrix cell count exceeds Int32")
+    var input_count = nr * (nc if inverse else nf)
+    var output_count = nr * (nf if inverse else nc)
+    var xa = Int(py=input_addr)
+    var ma = Int(py=mean_addr)
+    var ca = Int(py=components_addr)
+    var sa = Int(py=singular_addr)
+    var oa = Int(py=out_addr)
+    var xp = _pca_whiten_pointer(xa, input_count)
+    var mp = _pca_whiten_pointer(ma, nf)
+    var cp = _pca_whiten_pointer(ca, nc * nf)
+    var sp = _pca_whiten_pointer(sa, nc)
+    var op = _pca_whiten_pointer(oa, output_count)
+    var starts = List[Int]()
+    starts.append(xa)
+    starts.append(ma)
+    starts.append(ca)
+    starts.append(sa)
+    var counts = List[Int]()
+    counts.append(input_count)
+    counts.append(nf)
+    counts.append(nc * nf)
+    counts.append(nc)
+    for i in range(4):
+        if oa < starts[i] + counts[i] * 4 and starts[i] < oa + output_count * 4:
+            raise Error("PCA whitening output must not overlap any input")
+    _pca_whiten_finite(xp, input_count)
+    _pca_whiten_finite(mp, nf)
+    _pca_whiten_finite(cp, nc * nf)
+    _pca_whiten_finite(sp, nc)
+    for i in range(nc):
+        if sp.unsafe_load(i) < Float32(0):
+            raise Error("PCA whitening singular values must be nonnegative")
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        if inverse:
+            pca_whiten_inverse_transform_host(ctx, xp, cp, sp, mp, op, nr, nf, nc, nfit)
+        else:
+            pca_whiten_transform_host(ctx, xp, mp, cp, sp, op, nr, nf, nc, nfit)
+    _pca_whiten_finite(op, output_count)
+    return PythonObject(0)
+
+
+def pca_whiten_transform_binding(
+    x_addr: PythonObject, mean_addr: PythonObject,
+    components_addr: PythonObject, singular_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    return _pca_whiten_apply(
+        x_addr, mean_addr, components_addr, singular_addr, out_addr, params, False)
+
+
+def pca_whiten_inverse_transform_binding(
+    scores_addr: PythonObject, components_addr: PythonObject,
+    singular_addr: PythonObject, mean_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    return _pca_whiten_apply(
+        scores_addr, mean_addr, components_addr, singular_addr, out_addr, params, True)
 
 
 def tsvd_fit_binding(
@@ -456,7 +595,10 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[dbscan_fit_binding]("dbscan_fit")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[pca_fit_binding]("pca_fit")
+        m.def_function[pca_fit_full_binding]("pca_fit_full")
         m.def_function[pca_transform_binding]("pca_transform")
+        m.def_function[pca_whiten_transform_binding]("pca_whiten_transform")
+        m.def_function[pca_whiten_inverse_transform_binding]("pca_whiten_inverse_transform")
         m.def_function[tsvd_fit_binding]("tsvd_fit")
         m.def_function[tsvd_transform_binding]("tsvd_transform")
         m.def_function[inverse_transform_binding]("inverse_transform")

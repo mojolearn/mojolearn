@@ -47,7 +47,7 @@ from gbdt.models.ctr_value_table import (
     expand_raw_columns,
 )
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
-from std.math import log2
+from std.math import isfinite, log2
 
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
 # go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
@@ -722,10 +722,22 @@ def train(
             " (pointwise_non_symmetric.cpp:5-29)"
         )
 
+    if n_rows < 1 or n_features < 1:
+        raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
         raise Error("x_colmajor size mismatch")
     if len(y) != n_rows:
         raise Error("y size mismatch")
+    # Validate dense class codes before class-weight indexing or allocating
+    # prediction planes. The later objective check was too late to protect
+    # MakeClassificationWeights (upstream data_providers.cpp:162-168).
+    if loss == "MultiClass" or loss == "MultiClassOneVsAll":
+        for r in range(n_rows):
+            var label = y[r]
+            if not isfinite(label) or label < 0 or label >= Float32(n_rows):
+                raise Error("multiclass labels must be finite dense class codes 0..k-1")
+            if Float32(Int(label)) != label:
+                raise Error("multiclass labels must be integer class codes")
     if len(cat_features) != 0 and len(cat_features) != n_features:
         raise Error(
             "cat_features has "

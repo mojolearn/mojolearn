@@ -140,7 +140,7 @@ from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 
 from mamba.checks.mamba_fixture import (
@@ -189,6 +189,17 @@ from mamba.impl.mamba_ssm.modules.mamba3 import (
     mamba3_block_forward,
 )
 
+
+from mamba.impl.mamba_ssm.modules.mamba2_prefill_backward import mamba2_prefill_backward
+from mamba.checks.mamba2_backward import ANY_BWD2_SABOTAGE
+from mamba.impl.mamba_ssm.modules.mamba3_prefill_backward import mamba3_prefill_backward
+from mamba.checks.mamba3_backward import ANY_BWD3_SABOTAGE
+from mamba.impl.transformers.models.mamba.modeling_mamba_prefill_backward import mamba1_prefill_backward
+from mamba.checks.mamba_backward import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
+from mamba.impl.transformers.models.mamba.modeling_mamba_backward import ANY_BWD_BLOCK_SABOTAGE
+from mamba.impl.mamba_ssm.ops.selective_scan_backward import ANY_BWD_SCAN_SABOTAGE
+from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
+from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     if addr == 0:
@@ -293,6 +304,68 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
     _ = dstages^
     _ = dx^
     _ = ctx^
+
+
+def _mamba1_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+    var dims = MambaDims.of(dm)
+    var di = dims.d_inner
+    var r = dims.dt_rank
+    var xr = dims.x_proj_rows()
+
+    # Host weights, THROUGH the lane's own struct (its field table is the
+    # upstream shape authority); values arrive as given bits, unjudged
+    # (the initializer rows of FEATURE_PARITY.md are REFUSED as bitwise
+    # claims; weights-in is what ships).
+    var w = MambaWeights(dims)
+    w.norm_w = _read_f32(a[1], dm)
+    w.w_in = _read_f32(a[2], 2 * di * dm)
+    w.conv_w = _read_f32(a[3], di * D_CONV)
+    w.conv_b = _read_f32(a[4], di)
+    w.w_x = _read_f32(a[5], xr * di)
+    w.w_dt = _read_f32(a[6], di * r)
+    w.b_dt = _read_f32(a[7], di)
+    w.a_log = _read_f32(a[8], di * D_STATE)
+    w.d_skip = _read_f32(a[9], di)
+    w.w_out = _read_f32(a[10], dm * di)
+
+    var gradients = mamba1_prefill_backward(
+        w, _read_f32(a[0], b * l * dm), _read_f32(a[11], b * l * dm), b, l,
+    )
+    _write_f32(a[12], gradients.x)
+    _write_f32(a[13], gradients.norm_weight)
+    _write_f32(a[14], gradients.in_proj_weight)
+    _write_f32(a[15], gradients.conv1d_weight)
+    _write_f32(a[16], gradients.conv1d_bias)
+    _write_f32(a[17], gradients.x_proj_weight)
+    _write_f32(a[18], gradients.dt_proj_weight)
+    _write_f32(a[19], gradients.dt_proj_bias)
+    _write_f32(a[20], gradients.A_log)
+    _write_f32(a[21], gradients.D)
+    _write_f32(a[22], gradients.out_proj_weight)
+
+
+def mamba1_backward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Zero-state synchronous IDENTICAL VJP. Addresses: x, ten weights in
+    forward order, grad_output, grad_x, ten weight gradients in forward
+    order (23 total). Scalars: B, L, d_model. No state/cache is accepted."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("mamba1 backward: only IDENTICAL zero-state prefill is implemented")
+    if len(addrs) != 23 or len(params) != 3:
+        raise Error("mamba1 backward: expected 23 addresses and B, L, d_model")
+    var b = Int(py=params[0])
+    var l = Int(py=params[1])
+    var dm = Int(py=params[2])
+    if b <= 0 or l <= 0 or dm <= 0:
+        raise Error("mamba1 backward: B, L and d_model must be positive")
+    var a = List[Int]()
+    for i in range(23):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("mamba1 backward: null buffer address at slot " + String(i))
+        a.append(address)
+    with GILReleased(Python()):
+        _mamba1_backward_run(a, b, l, dm)
+    return PythonObject(0)
 
 
 def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
@@ -874,12 +947,125 @@ def mamba3_decode_step_binding(
     return PythonObject(out_len)
 
 
+def _mamba2_backward_run(a: List[Int], b: Int, l: Int, dm: Int, dt_lo: Float32, dt_hi: Float32) raises:
+    var dims = Mamba2Dims.of(dm)
+    var di = dims.d_inner
+    var cd = dims.conv_dim()
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    var w = Mamba2Weights(dims)
+    w.norm_w = _read_f32(a[1], dm)
+    w.w_in = _read_f32(a[2], dip * dm)
+    w.conv_w = _read_f32(a[3], cd * M2_D_CONV)
+    w.conv_b = _read_f32(a[4], cd)
+    w.dt_bias = _read_f32(a[5], nh)
+    w.a_log = _read_f32(a[6], nh)
+    w.d_skip = _read_f32(a[7], nh)
+    w.gnorm_w = _read_f32(a[8], di)
+    w.w_out = _read_f32(a[9], dm * di)
+    var gradients = mamba2_prefill_backward(
+        w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l, dt_lo, dt_hi,
+    )
+    _write_f32(a[11], gradients.x)
+    _write_f32(a[12], gradients.block_norm_weight)
+    _write_f32(a[13], gradients.in_proj_weight)
+    _write_f32(a[14], gradients.conv1d_weight)
+    _write_f32(a[15], gradients.conv1d_bias)
+    _write_f32(a[16], gradients.dt_bias)
+    _write_f32(a[17], gradients.A_log)
+    _write_f32(a[18], gradients.D)
+    _write_f32(a[19], gradients.norm_weight)
+    _write_f32(a[20], gradients.out_proj_weight)
+
+
+def mamba2_backward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Zero-state IDENTICAL VJP: x, nine forward-order weights, grad_output,
+    grad_x, nine weight gradients (21 addresses); B, L, d_model, dt_lo, dt_hi."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("mamba2 backward: only IDENTICAL zero-state prefill is implemented")
+    if len(addrs) != 21 or len(params) != 5:
+        raise Error("mamba2 backward: expected 21 addresses and 5 scalars")
+    var b = Int(py=params[0])
+    var l = Int(py=params[1])
+    var dm = Int(py=params[2])
+    if b <= 0 or l <= 0 or dm <= 0:
+        raise Error("mamba2 backward: B, L and d_model must be positive")
+    var a = List[Int]()
+    for i in range(21):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("mamba2 backward: null buffer address at slot " + String(i))
+        a.append(address)
+    var dt_lo = Float32(Float64(py=params[3]))
+    var dt_hi = Float32(Float64(py=params[4]))
+    with GILReleased(Python()):
+        _mamba2_backward_run(a, b, l, dm, dt_lo, dt_hi)
+    return PythonObject(0)
+
+
+def _mamba3_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+    var dims = Mamba3Dims.of(dm)
+    var di = dims.d_inner
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    var w = Mamba3Weights(dims)
+    w.norm_w = _read_f32(a[1], dm)
+    w.w_in = _read_f32(a[2], dip * dm)
+    w.dt_bias = _read_f32(a[3], nh)
+    w.bnorm_w = _read_f32(a[4], M3_D_STATE)
+    w.cnorm_w = _read_f32(a[5], M3_D_STATE)
+    w.b_bias = _read_f32(a[6], nh * M3_D_STATE)
+    w.c_bias = _read_f32(a[7], nh * M3_D_STATE)
+    w.d_skip = _read_f32(a[8], nh)
+    w.w_out = _read_f32(a[9], dm * di)
+    var gradients = mamba3_prefill_backward(
+        w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l,
+    )
+    _write_f32(a[11], gradients.x)
+    _write_f32(a[12], gradients.block_norm_weight)
+    _write_f32(a[13], gradients.in_proj_weight)
+    _write_f32(a[14], gradients.dt_bias)
+    _write_f32(a[15], gradients.B_norm_weight)
+    _write_f32(a[16], gradients.C_norm_weight)
+    _write_f32(a[17], gradients.B_bias)
+    _write_f32(a[18], gradients.C_bias)
+    _write_f32(a[19], gradients.D)
+    _write_f32(a[20], gradients.out_proj_weight)
+
+
+def mamba3_backward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Zero-state IDENTICAL VJP: x, nine forward-order weights, grad_output,
+    grad_x, nine weight gradients (21 addresses); B, L, d_model."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("mamba3 backward: only IDENTICAL zero-state prefill is implemented")
+    if len(addrs) != 21 or len(params) != 3:
+        raise Error("mamba3 backward: expected 21 addresses and 3 scalars")
+    var b = Int(py=params[0])
+    var l = Int(py=params[1])
+    var dm = Int(py=params[2])
+    if b <= 0 or l <= 0 or dm <= 0:
+        raise Error("mamba3 backward: B, L and d_model must be positive")
+    var a = List[Int]()
+    for i in range(21):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("mamba3 backward: null buffer address at slot " + String(i))
+        a.append(address)
+    with GILReleased(Python()):
+        _mamba3_backward_run(a, b, l, dm)
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
     # DEVIATION 793's last clause: a sabotage arm exists to be run by a
     # gate and to FAIL; a Python surface that quietly served one would
     # be a wrong answer wearing a green label. Refuse to exist instead.
-    comptime if BLOCK_ANY_SABOTAGE or BLOCK2_ANY_SABOTAGE or BLOCK3_ANY_SABOTAGE:
+    comptime if (BLOCK_ANY_SABOTAGE or BLOCK2_ANY_SABOTAGE or BLOCK3_ANY_SABOTAGE
+                 or M1_ANY_BWD_SABOTAGE or ANY_BWD2_SABOTAGE or ANY_BWD3_SABOTAGE
+                 or ANY_BWD_BLOCK_SABOTAGE
+                 or ANY_BWD_SCAN_SABOTAGE or GEMM_ANY_BWD_SABOTAGE
+                 or GEMM_ANY_SABOTAGE):
         abort(
             String(
                 "_mojolearn_mamba: refusing to initialize -- a sabotage"
@@ -888,7 +1074,7 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
                 " binding; rebuild with bash bindings/build_mamba.sh and"
                 " no MOJOLEARN_MAMBA_SABOTAGE_*,"
                 " MOJOLEARN_MAMBA2_SABOTAGE_* or"
-                " MOJOLEARN_MAMBA3_SABOTAGE_* define."
+                " MOJOLEARN_MAMBA3_SABOTAGE_* or GEMM sabotage define."
             )
         )
     try:
@@ -896,9 +1082,12 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
         m.def_function[mamba_vendor_binding]("mamba_vendor")
         m.def_function[mamba_numeric_mode_binding]("mamba_numeric_mode")
         m.def_function[mamba1_forward_binding]("mamba1_forward")
+        m.def_function[mamba1_backward_binding]("mamba1_backward")
         m.def_function[mamba1_decode_step_binding]("mamba1_decode_step")
+        m.def_function[mamba2_backward_binding]("mamba2_backward")
         m.def_function[mamba2_forward_binding]("mamba2_forward")
         m.def_function[mamba2_decode_step_binding]("mamba2_decode_step")
+        m.def_function[mamba3_backward_binding]("mamba3_backward")
         m.def_function[mamba3_forward_binding]("mamba3_forward")
         m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         return m.finalize()

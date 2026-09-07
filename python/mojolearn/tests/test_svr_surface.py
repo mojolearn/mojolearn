@@ -297,7 +297,7 @@ def arm_provenance(rep):
     green run knows which arms were asserted.
     """
     arm = "PROVENANCE"
-    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower()
+    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower()
     try:
         ext = _svm_impl._extension(None)
     except Exception as exc:  # noqa: BLE001 - the whole run depends on this

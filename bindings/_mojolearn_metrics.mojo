@@ -605,9 +605,11 @@ def umap_fit_transform_binding(
 
     params order (mirrored in _umap_impl.py): n_samples, n_features,
     n_neighbors, n_components, n_epochs, min_dist, spread,
-    set_op_mix_ratio, local_connectivity, random_state.
+    set_op_mix_ratio, local_connectivity, random_state, then optional
+    learning_rate, repulsion_strength, negative_sample_rate.
     """
-    _want(String("umap_fit_transform"), params, 10)
+    if len(params) != 10:
+        _want(String("umap_fit_transform"), params, 13)
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var seed = Int(py=params[9])
@@ -621,6 +623,10 @@ def umap_fit_transform_binding(
         local_connectivity=Float32(Float64(py=params[8])),
         random_seed=UInt64(seed),
     )
+    if len(params) == 13:
+        config.learning_rate = Float32(Float64(py=params[10]))
+        config.repulsion_strength = Float32(Float64(py=params[11]))
+        config.negative_sample_rate = Int(py=params[12])
     config.validate(n)
     if (config.n_components != 2 and config.n_components != 3) or (
         n < 2 * config.n_components + 4
@@ -645,11 +651,13 @@ def umap_fit_transform_binding(
 def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """Addresses: training X, frozen embedding, query X, output.
 
-    Scalars: n_train, n_queries, n_features, then the eight fit parameters.
+    Scalars: n_train, n_queries, n_features, then the eight legacy fit parameters
+    and optional learning_rate, repulsion_strength, negative_sample_rate.
     The training arrays are read-only; only output is written.
     """
     _want(String("umap_transform addresses"), addrs, 4)
-    _want(String("umap_transform parameters"), params, 11)
+    if len(params) != 11:
+        _want(String("umap_transform parameters"), params, 14)
     var n = Int(py=params[0])
     var rows = Int(py=params[1])
     var d = Int(py=params[2])
@@ -663,6 +671,10 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
         set_op_mix_ratio=Float32(Float64(py=params[8])),
         local_connectivity=Float32(Float64(py=params[9])), random_seed=UInt64(seed),
     )
+    if len(params) == 14:
+        config.learning_rate = Float32(Float64(py=params[11]))
+        config.repulsion_strength = Float32(Float64(py=params[12]))
+        config.negative_sample_rate = Int(py=params[13])
     config.validate(n)
     if config.n_components != 2 and config.n_components != 3:
         raise Error("UMAP transform supports only 2D or 3D")

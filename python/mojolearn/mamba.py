@@ -1,53 +1,39 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`mojolearn.mamba`: the Mamba-1, Mamba-2 and Mamba-3 blocks, for
-cross-checking.
+"""Public FP32 Mamba-1, Mamba-2 and Mamba-3 block APIs for the alpha surface.
 
-The public face of `_mamba_impl.py`, which carries every contract detail
-on its classes; this module exists because `archive/evidence/mamba/FEATURE_PARITY.md`'s
-consumer table names `mojolearn.mamba` as the surface a downstream user
-imports, and because the block classes are not estimators -- they have no
-`fit`, so they live beside the sklearn-shaped names rather than among
-them (they ARE also re-exported from `mojolearn` itself).
+All six Block/State names are also exported from ``mojolearn``. Each block
+accepts caller-supplied weights and exposes ``forward(x, state=None)``,
+``step(x, state)``, ``allocate_state(...)`` and ``backward(x, grad_output)``.
+Forward supports fast/deterministic/identical modes; backward currently
+supports IDENTICAL zero-state prefill only and recomputes forward internally.
+Backward returns ``x`` plus every constructor weight gradient (11 leaves for
+Mamba1, 10 each for Mamba2 and Mamba3). No PyTorch dependency is required by
+these native-backed public methods.
 
-What is here, in one paragraph. `Mamba1Block`, `Mamba2Block` and
-`Mamba3Block` are ONE reference-pinned block each -- norm, mixer,
-residual -- float32 in and out, weights handed in as given bits, with
-the recurrent state EXPLICIT and caller-owned (`Mamba1State`,
-`Mamba2State`, `Mamba3State`: plain NumPy arrays that round-trip byte
-for byte). Prefill, continuation from a carried state, `initial_states`
-(Mamba-2) / `Input_States` (Mamba-3) and single-token decode all run
-through the certified Mojo entry points the lane gates run;
-`numeric_mode=` selects the fast / deterministic / identical tier at
-call time, per instance. Python backward is not exposed.
+Shapes and fixed architectural constants are documented on each class.
+FAST/DETERMINISTIC backward, carried-state or decode backward, final-state
+cotangents, automatic differentiation integration, and a complete Mamba model
+trainer are not exposed. The package requires a matching native extension
+for the selected vendor and numeric mode; Python symbols alone are not a
+working GPU wheel.
 
-Native and Python evidence have separate scopes. At `718495cd`, Apple,
-NVIDIA and AMD matched 54 native backward gradient tensors across five
-Mamba-1/2/3 cases; see
-`bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json`.
-At `b715b124`, NVIDIA retained five native cases and 102 Python API
-checks; see `bench/results/e1g/2026-09-05_065820-nvidia-mamba/classification.json`.
-DigitalOcean AMD MI325X matched those 54 NVIDIA native tensors at the
-same source; see
-`bench/results/e1/2026-09-05_111524-mojolearn-e2-amd/comparisons.json`.
-The baseline AMD Python path faulted (exit 134). The state-allocation fix
-`6dc93269` passed 102 Apple IDENTICAL API checks, retained in
-`bench/results/mamba/2026-09-05-state-allocation-fix/metadata.json`;
-durable NVIDIA/AMD qualification of that fix is pending. A supplemental
-AMD pass whose artifacts were not retained does not close that gate.
-These are fixture-scoped source checks, not universal identity or Linux
-wheel certification. The released macOS 0.5.0 wheel predates the fix.
+Evidence is fixture-scoped. Historical three-vendor native certificates and
+new Python API checks have separate scopes. The retained September 6 NVIDIA
+run3 reports 102 forward/API checks passing in each of FAST and IDENTICAL,
+and five Mamba2/3 backward surface tests passing. Those source-run results do
+not certify an unbuilt alpha wheel or every vendor/shape/mode. See
+``mamba/PUBLIC_ALPHA_SURFACE.md`` for the exact retained paths and outstanding
+wheel qualification.
 
+Example with correctly shaped FP32 ``weights``, ``x`` and ``dy``::
 
-    import numpy as np
-    from mojolearn.mamba import Mamba1Block
-
-    blk = Mamba1Block(weights)            # dict of float32 arrays,
-                                          # upstream parameter names
-    y = blk.forward(x)                    # (B, L, d_model) -> same shape
-    st = blk.allocate_state(batch_size=1)
-    for t in range(x.shape[1]):           # decode == prefill, per token
-        y_t = blk.step(x[:, t:t+1], st)   # st updated in place
+    from mojolearn.mamba import Mamba2Block
+    block = Mamba2Block(weights, numeric_mode="identical")
+    y = block.forward(x)
+    gradients = block.backward(x, dy)
+    state = block.allocate_state(batch_size=x.shape[0])
+    y0 = block.step(x[:, :1], state)
 """
 
 from ._mamba_impl import (

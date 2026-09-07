@@ -306,7 +306,7 @@ CAP = 8  # max_tokens for the carried-state arms
 
 def main(out=sys.stdout):
     rep = Report()
-    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower()
+    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower()
     assert_bits = mode == "identical"
     # The repeat-call arm alone is also asserted under `deterministic`:
     # same box, same bits run to run IS that tier's promise (header).

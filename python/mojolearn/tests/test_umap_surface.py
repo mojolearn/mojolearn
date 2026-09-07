@@ -36,7 +36,7 @@ class UMAPSurfaceTests(unittest.TestCase):
     def setUp(self):
         self.x = np.array([0, 1, 2.2, 4, 6.5, 10, 14.5, 20],
                           dtype=np.float32).reshape(-1, 1)
-        self.mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast")
+        self.mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical")
 
     def estimator(self, **kwargs):
         return UMAP(n_neighbors=3, n_epochs=4, random_state=19,
@@ -106,6 +106,33 @@ class UMAPSurfaceTests(unittest.TestCase):
                                  **config).fit_transform(x)
                     np.testing.assert_array_equal(layout.view(np.uint32),
                                                   again.view(np.uint32))
+
+    def test_optimizer_controls(self):
+        baseline = self.estimator().fit_transform(self.x)
+        explicit = self.estimator(learning_rate=1.0, repulsion_strength=1.0,
+                                  negative_sample_rate=5).fit_transform(self.x)
+        self.assertEqual(baseline.tobytes(), explicit.tobytes())
+        for controls in (dict(learning_rate=0.5), dict(repulsion_strength=2.0),
+                         dict(negative_sample_rate=0)):
+            with self.subTest(**controls):
+                layout = self.estimator(**controls).fit_transform(self.x)
+                self.assertTrue(np.isfinite(layout).all())
+                self.assertNotEqual(layout.tobytes(), baseline.tobytes())
+                again = self.estimator(**controls).fit_transform(self.x)
+                self.assertEqual(layout.tobytes(), again.tobytes())
+
+    def test_invalid_optimizer_controls(self):
+        for field in ("learning_rate", "repulsion_strength"):
+            for value in (np.nan, np.inf, -np.inf, -1, 1e100):
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    UMAP(**{field: value})
+        for controls in (dict(learning_rate=0), dict(learning_rate=1e-100),
+                         dict(negative_sample_rate=-1),
+                         dict(negative_sample_rate=True),
+                         dict(negative_sample_rate=1.5),
+                         dict(negative_sample_rate=1 << 31)):
+            with self.subTest(**controls), self.assertRaises(ValueError):
+                UMAP(**controls)
 
     def test_nonfinite_input(self):
         for value in (np.nan, np.inf, -np.inf):

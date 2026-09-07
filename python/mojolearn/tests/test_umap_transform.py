@@ -63,6 +63,22 @@ class UMAPTransformTests(unittest.TestCase):
         self.assertEqual(result.shape, (1, 3))
         self.assertTrue(np.isfinite(result).all())
 
+    def test_optimizer_controls_and_fitted_parameter_guard(self):
+        query = np.array([[0.5], [3], [17]], dtype=np.float32)
+        for controls in (dict(learning_rate=0.5), dict(repulsion_strength=2.0),
+                         dict(negative_sample_rate=0)):
+            with self.subTest(**controls):
+                model = self.model(**controls).fit(self.x)
+                result = model.transform(query)
+                self.assertTrue(np.isfinite(result).all())
+                self.assertEqual(result.tobytes(), model.transform(query).tobytes())
+                key, value = next(iter(controls.items()))
+                setattr(model, key, value + 1)
+                with self.assertRaisesRegex(ValueError, "changed after fit"):
+                    model.transform(query)
+                setattr(model, key, value)
+                self.assertEqual(result.tobytes(), model.transform(query).tobytes())
+
     def test_parameter_change_requires_refit_and_failed_fit_preserves_model(self):
         model = self.model().fit(self.x)
         query = np.array([[0.5], [3]], dtype=np.float32)

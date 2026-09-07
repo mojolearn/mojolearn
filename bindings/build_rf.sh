@@ -81,18 +81,18 @@ COLUMN_DEFINE=""
 # (checks/numerics.mojo reads it through is_defined, the same shape as
 # the column define) and lands the binary under python/mojolearn/identical/,
 # where python/mojolearn/_backend.py picks it up when the env var
-# MOJOLEARN_NUMERIC_MODE=identical is set at import. Default is fast and the
+# MOJOLEARN_NUMERIC_MODE=identical is set at import. Default is identical and the
 # default location. The build-time smoke gates import the FAST package, so
 # they are skipped for an identical build; tools/e2_matrix_fit.py is that
 # build's gate.
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
-if [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "identical" ]; then
+if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "identical" ]; then
     MODE_DEFINE="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
     OUTDIR="python/mojolearn/identical"
     mkdir -p "$OUTDIR"
     export MOJOLEARN_SKIP_BUILD_GATE=1
-elif [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "deterministic" ]; then
+elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "deterministic" ]; then
     # The MIDDLE tier: reproducible run to run on ONE device, with no
     # promise about a second one. It gets its own directory because it
     # is its own binary -- PIN_DETERMINISM is comptime, so a
@@ -102,7 +102,7 @@ elif [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "deterministic" ]; then
     OUTDIR="python/mojolearn/deterministic"
     mkdir -p "$OUTDIR"
     export MOJOLEARN_SKIP_BUILD_GATE=1
-elif [ "${MOJOLEARN_NUMERIC_MODE:-fast}" != "fast" ]; then
+elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" != "fast" ]; then
     echo "MOJOLEARN_NUMERIC_MODE must be fast, deterministic or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
     exit 2
 fi

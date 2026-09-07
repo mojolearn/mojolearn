@@ -315,7 +315,7 @@ def m3_state_bits(rep, arm, got_state, want_state, n_rows, what, assert_it):
 
 def main(out=sys.stdout):
     rep = Report()
-    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower()
+    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower()
     assert_bits = mode == "identical"
 
     # -- REFUSALS: every guard on THIS side, made to fire by name, before

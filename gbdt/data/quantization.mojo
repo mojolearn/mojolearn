@@ -141,6 +141,13 @@ def calc_quantization(
     Returns the borders WITH the sentinel already in them, and the mode the
     column RESOLVED to. `values` is consumed, as their `featureValues` is.
     """
+    # Upstream CalcQuantizationAndNanMode checks this BEFORE BestSplit
+    # filters NaNs (54a8143a, libs/data/quantization.cpp:315-320).
+    if nan_mode_option == NAN_MODE_FORBIDDEN and has_nans(values):
+        raise Error(
+            "There are nan factors and nan values for float features are"
+            " not allowed. Set nan_mode != Forbidden."
+        )
     var nan_mode = compute_nan_mode(values, nan_mode_option)
 
     var non_nan_border_count = border_count

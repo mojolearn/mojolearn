@@ -47,8 +47,9 @@ class PCA(NumericModeMixin):
                                 and sets `noise_variance_` (the mean of the
                                 discarded eigenvalues, cuML's
                                 truncCompExpVars)
-        whiten        honored   the transform's columns come out with unit
-                                variance and inverse_transform undoes it.
+        whiten        honored   nondegenerate fitted score columns have unit
+                                sample variance; inverse_transform applies
+                                the reverse component scaling.
                                 cuML's rescale of a COPY of the components
                                 (pca.cuh:292-302 and :232-243), in all three
                                 numeric modes, pinned at the seam through
@@ -117,6 +118,20 @@ class PCA(NumericModeMixin):
                                 which is UNRUN on every column and is
                                 recorded as owed rather than claimed
 
+    Whitening uses the fitted sample count, never the query batch count.
+    For ordinary singular values s, components are scaled by
+    sqrt(n_samples_-1)/s, equivalent in real arithmetic to
+    1/sqrt(explained_variance_). The order is pinned FP32 multiply, then
+    divide, with FTZ seams; it is not a promise to match another spelling's
+    rounded bits. Following the existing cuML-derived skip-zero contract,
+    s < float32(1e-10) skips the singular division (inverse skips its
+    multiplication), retaining the sample-count scale. Degenerate columns
+    therefore do not promise unit variance. Nonfinite data/model arrays and
+    negative singular values or explained variances are refused on this
+    whitening surface. Overflowed output is refused. These additive binding
+    exports require a rebuilt extension; source availability is not new
+    cross-vendor or installed-wheel qualification.
+
     Incremental fitting and sparse input are not implemented.
     """
 
@@ -153,7 +168,8 @@ class PCA(NumericModeMixin):
         failing with an arity message from the extension.
         """
         binding = self._bind("_mojolearn_estimators")
-        if not hasattr(binding, "pca_whiten_transform"):
+        if not all(callable(getattr(binding, name, None)) for name in
+                   ("pca_whiten_transform", "pca_whiten_inverse_transform")):
             raise NotImplementedError(
                 "mojolearn PCA: whiten=True needs the whitened transform pair "
                 "and this build of _mojolearn_estimators does not export it. "
@@ -162,11 +178,24 @@ class PCA(NumericModeMixin):
                 "decomposition/estimator.mojo::pca_whiten_transform_host and "
                 "pca_whiten_inverse_transform_host, "
                 "decomposition/checks/pca_check.mojo::check_whiten_*); what is "
-                "missing is the two def_function lines in "
-                "bindings/_mojolearn_estimators.mojo and a rebuild via "
+                "needed is a rebuild of this additive ABI via "
                 "bindings/build_estimators.sh"
             )
         return binding
+
+    def _validate_whiten_state(self):
+        for name, shape in (("components_", (self.n_components_, self.n_features_in_)),
+                            ("mean_", (self.n_features_in_,)),
+                            ("singular_values_", (self.n_components_,)),
+                            ("explained_variance_", (self.n_components_,))):
+            value = getattr(self, name, None)
+            if (not isinstance(value, np.ndarray) or value.dtype != np.float32
+                    or value.shape != shape or not value.flags.c_contiguous
+                    or not np.isfinite(value).all()):
+                raise ValueError(f"mojolearn PCA whitening requires finite C-order float32 {name} with shape {shape}")
+        if (self.n_samples_ < 2 or np.any(self.singular_values_ < 0)
+                or np.any(self.explained_variance_ < 0)):
+            raise ValueError("mojolearn PCA whitening requires fit rows >=2 and nonnegative singular values/variance")
 
     def _dense_binding(self):
         """The binding, checked for the dense arm.
@@ -186,9 +215,9 @@ class PCA(NumericModeMixin):
                 "(core/householder_qr.mojo, "
                 "decomposition/impl/linalg/detail/svd_full.mojo, "
                 "decomposition/estimator.mojo::pca_fit_full_host, "
-                "decomposition/checks/svd_full_check.mojo); what is missing "
-                "is the def_function line in "
-                "bindings/_mojolearn_estimators.mojo and a rebuild via "
+                "decomposition/checks/svd_full_check.mojo). The additive "
+                "export is in bindings/_mojolearn_estimators.mojo; this "
+                "installed extension needs a rebuild via "
                 "bindings/build_estimators.sh"
             )
         return binding
@@ -218,6 +247,8 @@ class PCA(NumericModeMixin):
         else:
             binding = self._bind("_mojolearn_estimators")
         x, self.input_copied_ = as_f32_c(X, "X")
+        if self.whiten and not np.isfinite(x).all():
+            raise ValueError("mojolearn PCA whitening requires finite X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn PCA requires at least 2 rows and 2 features")
         if dense and x.shape[0] < x.shape[1]:
@@ -252,6 +283,8 @@ class PCA(NumericModeMixin):
         self.n_components_ = nc
         self.n_features_in_ = x.shape[1]
         self.n_samples_ = x.shape[0]
+        if self.whiten:
+            self._validate_whiten_state()
         return self
 
     def transform(self, X):
@@ -262,6 +295,9 @@ class PCA(NumericModeMixin):
             raise ValueError("mojolearn PCA feature count differs from fit")
         out = np.empty((x.shape[0], self.n_components_), dtype=np.float32)
         if self.whiten:
+            self._validate_whiten_state()
+            if not np.isfinite(x).all():
+                raise ValueError("mojolearn PCA whitening requires finite X")
             # `n_samples_` and NOT `x.shape[0]`. DEVIATION 580: cuML's dense
             # path scales by the row count of THIS CALL (pca.pyx:770), so
             # their `transform(X[:100])` disagrees with `transform(X)[:100]`.
@@ -272,6 +308,8 @@ class PCA(NumericModeMixin):
                 _addr_ro(self.singular_values_), _addr(out),
                 [x.shape[0], x.shape[1], self.n_components_, self.n_samples_],
             )
+            if not np.isfinite(out).all():
+                raise ValueError("mojolearn PCA whitening produced nonfinite output")
             return out
         self._bind("_mojolearn_estimators").pca_transform(
             _addr_ro(x), _addr_ro(self.mean_), _addr_ro(self.components_),
@@ -283,11 +321,16 @@ class PCA(NumericModeMixin):
         return self.fit(X, y=y).transform(X)
 
     def inverse_transform(self, X):
+        if self.whiten and not hasattr(self, "components_"):
+            raise ValueError("mojolearn PCA: call fit before inverse_transform")
         z, _ = as_f32_c(X, "X")
         if z.shape[1] != self.n_components_:
             raise ValueError("mojolearn PCA component count differs from fit")
         out = np.empty((z.shape[0], self.n_features_in_), dtype=np.float32)
         if self.whiten:
+            self._validate_whiten_state()
+            if not np.isfinite(z).all():
+                raise ValueError("mojolearn PCA whitening requires finite scores")
             self._whiten_binding().pca_whiten_inverse_transform(
                 _addr_ro(z), _addr_ro(self.components_),
                 _addr_ro(self.singular_values_), _addr_ro(self.mean_),
@@ -295,6 +338,8 @@ class PCA(NumericModeMixin):
                 [z.shape[0], self.n_features_in_, self.n_components_,
                  self.n_samples_],
             )
+            if not np.isfinite(out).all():
+                raise ValueError("mojolearn PCA whitening produced nonfinite output")
             return out
         self._bind("_mojolearn_estimators").inverse_transform(
             _addr_ro(z), _addr_ro(self.components_), _addr_ro(self.mean_),
