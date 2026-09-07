@@ -83,9 +83,16 @@ def build(legs):
             kv = parse_kv(rest)
             lane = kv.get("lane")
             arm = kv.get("arm")
+            # DEVIATION 2212: the compiled classical driver prints arm=ours;
+            # when the leg ran it beside the Python-API ours arm it wrote the
+            # driver's log as `*.ours-native.log`, and that is the arm name.
+            if arm == "ours" and fname.endswith(".ours-native.log"):
+                arm = "ours-native"
             if kind == "FSPEED-HEADER":
                 headers[(lane, arm)] = {"mode": kv.get("mode"),
                                        "device": kv.get("device"),
+                                       "family": kv.get("family"),
+                                       "size": kv.get("size"),
                                        "rounds": int(kv.get("rounds", 0)),
                                        "log": fname, "leg": leg["dir"]}
             elif kind == "FSPEED":
@@ -137,6 +144,7 @@ def build(legs):
             mode = "VENDOR-DEFAULT"
         out_cells.append({
             "lane": lane, "shape": shape, "arm": arm,
+            "family": h.get("family"), "size": h.get("size"),
             "mode": mode, "device": h.get("device"),
             "rounds": len(ms),
             "median_ms": statistics.median(ms) if ms else None,

@@ -282,7 +282,12 @@ def _select_top_k(
         # `:180` in this file is the row-24 DISTANCE dispatch and stays
         # keyed to identical: a vendor matmul's k-split is per-vendor,
         # not per-run.
-        ctx.enqueue_function[radix_topk_identical_kernel](
+        # DEVIATION 2211: the kernel is parametric on its rank capacity and
+        # must be bound at the launch, as knn_brute_force.mojo:726 does;
+        # the unbound spelling never compiled because this branch only
+        # exists under the identical define and no leg built the classical
+        # driver with it before 2026-09-07. `k > SELECT_BLOCK` raises above.
+        ctx.enqueue_function[radix_topk_identical_kernel[SELECT_BLOCK]](
             in_val.unsafe_ptr(),
             out_val.unsafe_ptr(),
             out_idx.unsafe_ptr(),

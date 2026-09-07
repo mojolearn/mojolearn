@@ -1310,7 +1310,8 @@ for line in sys.stdin:
         # narrower. Anything a payload needs from those paths must be added
         # back here, never copied from the working tree.
         git archive --format=tar "$_archive_ref" -- . \
-            ':!bench/results' ':!mamba/corpus' ':!bench/oracle_*' \
+            ':!bench/results' ':!mamba/corpus/mamba1' ':!mamba/corpus/mamba2' \
+            ':!mamba/corpus/mamba3' ':!bench/oracle_*' \
             ':!bench/minentropy_oracle.txt'
     fi
 }
@@ -3796,17 +3797,18 @@ classical)
             umap) runarm "classical.$L.ours.log" \
                       python3 bench/speed/umap_speed_arm.py --rounds "@SPEEDROUNDS@" ;;
             *)
-                # DEVIATION 2160: ours through the PUBLIC PYTHON API first,
-                # called from Python exactly as the vendor arm is, on the
-                # bindings this leg built. Only when that arm refuses for
-                # want of a Python surface does the compiled Mojo driver
-                # run for the lane, so a (lane, shape) never has two
-                # `arm=ours` cells.
-                runarm "classical.$L.ours.log" \
-                    python3 bench/speed/classical_py_speed_arm.py --lane "$L" --rounds "@SPEEDROUNDS@"
-                if grep -q 'NO-PYTHON-SURFACE' "$LOGS/classical.$L.ours.log" 2>/dev/null; then
+                # DEVIATION 2160/2212: the compiled Mojo driver runs FIRST at
+                # every tier it knows (it writes the lane's fixture dump that
+                # the dumped lanes' other arms read) and its cells are
+                # relabelled `ours-native` from the file name by the parser;
+                # then ours through the PUBLIC PYTHON API, called from Python
+                # exactly as the vendor arm is, as `ours`. `wide` is
+                # generated, never dumped, and the driver has no wide tier.
+                if [ "@SPEEDSIZE@" != "wide" ]; then
                     builtok classicalspeed && runarm "classical.$L.ours-native.log" "$OUT/bin_classicalspeed"
-                fi ;;
+                fi
+                runarm "classical.$L.ours.log" \
+                    python3 bench/speed/classical_py_speed_arm.py --lane "$L" --rounds "@SPEEDROUNDS@" ;;
         esac
         # NO --lane FLAG: tools/speed_cuml_arm.py takes its lane from
         # MOJOLEARN_SPEED_LANE, which is already exported above, and has no
