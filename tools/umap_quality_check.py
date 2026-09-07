@@ -52,7 +52,9 @@ def main():
         config = dict(n_neighbors=8, n_components=dimensions, n_epochs=200,
                       random_state=seed, min_dist=.1, spread=1.)
         before = x.copy()
-        layout = UMAP(numeric_mode=args.mode, **config).fit_transform(x)
+        # DEVIATION 2466: fit_transform returns mojolearn.Array; the zero-copy
+        # NumPy view carries the fancy indexing, astype and uint32 bits below.
+        layout = np.asarray(UMAP(numeric_mode=args.mode, **config).fit_transform(x))
         np.testing.assert_array_equal(x, before)
         if layout.shape != (64, dimensions) or not np.isfinite(layout).all():
             raise RuntimeError('Invalid layout ' + name)

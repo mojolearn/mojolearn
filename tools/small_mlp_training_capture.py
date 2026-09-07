@@ -56,6 +56,10 @@ def save_json(path, value):
 
 
 def witness(array):
+    # DEVIATION 2463: trainer buffers are mojolearn.Array; np.asarray is a
+    # zero-copy view with the same typestr and bytes as the ndarray it replaces.
+    import numpy as np
+    array = np.asarray(array)
     return dict(shape=list(array.shape), dtype=array.dtype.str,
                 raw_sha256=hashlib.sha256(array.tobytes(order='C')).hexdigest())
 

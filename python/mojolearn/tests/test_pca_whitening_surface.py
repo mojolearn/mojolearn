@@ -3,6 +3,10 @@
 
 Default cases use host binding sentinels, not numerical PCA implementations.
 The explicit opt-in cases require root-only remote CUDA/HIP IDENTICAL work.
+
+DEVIATION 2460: fitted attributes and transform outputs are `mojolearn.Array`;
+in-place mutation and NumPy reductions go through `np.asarray` (zero-copy,
+writable), so every assertion below tests exactly what it did before.
 """
 import ctypes
 import os
@@ -92,7 +96,7 @@ def test_plain_transform_abi_unchanged(fake):
     ('components_', np.nan), ('mean_', np.inf)])
 def test_invalid_whitening_state_refused_before_native(fake, name, value):
     model = PCA(2, whiten=True).fit(np.zeros((8, 2), dtype=np.float32))
-    getattr(model, name).flat[0] = value
+    np.asarray(getattr(model, name)).flat[0] = value
     with pytest.raises(ValueError, match='finite|nonnegative'):
         model.transform(np.zeros((1, 2), dtype=np.float32))
     assert len(fake.calls) == 1
@@ -100,8 +104,8 @@ def test_invalid_whitening_state_refused_before_native(fake, name, value):
 
 def test_zero_singular_values_are_admitted(fake):
     model = PCA(2, whiten=True).fit(np.zeros((8, 2), dtype=np.float32))
-    model.singular_values_[:] = 0
-    model.explained_variance_[:] = 0
+    np.asarray(model.singular_values_)[:] = 0
+    np.asarray(model.explained_variance_)[:] = 0
     assert np.isfinite(model.transform(np.zeros((1, 2), dtype=np.float32))).all()
 
 
@@ -160,7 +164,7 @@ def test_remote_fit_unit_variance_and_inverse():
     model = PCA(2, whiten=True, numeric_mode='identical').fit(x)
     components = model.components_.tobytes()
     actual = model.transform(x)
-    assert np.allclose(actual.astype(np.float64).var(axis=0, ddof=1), 1., rtol=2e-5, atol=2e-5)
+    assert np.allclose(np.asarray(actual).astype(np.float64).var(axis=0, ddof=1), 1., rtol=2e-5, atol=2e-5)
     assert model.transform(x[:3]).tobytes() == actual[:3].tobytes()
     assert np.allclose(model.inverse_transform(actual), x, rtol=2e-5, atol=2e-5)
     assert model.components_.tobytes() == components and x.tobytes() == original
@@ -178,6 +182,6 @@ def test_remote_strict_skip_threshold():
     model.singular_values_ = np.array([below, threshold], dtype=np.float32)
     model.explained_variance_ = np.square(model.singular_values_)
     actual = model.transform(np.eye(2, dtype=np.float32))
-    assert actual[0, 0].tobytes() == np.float32(1).tobytes()
+    assert np.asarray(actual)[0, 0].tobytes() == np.float32(1).tobytes()
     expected = np.float32(1) / threshold
-    assert actual[1, 1].tobytes() == expected.tobytes()
+    assert np.asarray(actual)[1, 1].tobytes() == expected.tobytes()

@@ -556,8 +556,10 @@ def main(out=sys.stdout):
     rep.check(arm, bool(np.any(st3.theta)),
               "theta advanced (the serial angle recurrence ran)")
     rep.check(arm,
-              bool((st3.theta >= 0.0).all()
-                   and (st3.theta < M3_TWO_PI_F32).all()),
+              # DEVIATION 2460: state buffers are mojolearn.Array (no
+              # comparison operators); the NumPy view is zero-copy.
+              bool((np.asarray(st3.theta) >= 0.0).all()
+                   and (np.asarray(st3.theta) < M3_TWO_PI_F32).all()),
               "theta stays in [0, 2pi) (the S10 mod's invariant, "
               "surviving the round trip)")
     rep.check(arm, blk3.h_last_.shape == (M3_B, h3n, 64, 128),

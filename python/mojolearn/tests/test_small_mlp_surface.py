@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pytest
 
+from mojolearn._array import Array
 from mojolearn import SmallMLPTrainer
 from mojolearn import _mlp_impl as impl
 
@@ -92,12 +93,15 @@ def host(monkeypatch):
         kb, n = b.shape[::-1] if transpose_b else b.shape
         assert k == kb
         fake.calls.append(('gemm', m, n, k))
-        return np.full((m, n), .125, dtype=np.float32)
+        # DEVIATION 2460: the real matmul returns mojolearn.Array and the
+        # trainer checks it with `_buffer.all_finite`, so the fake does too
+        # (a zero-copy view over the ndarray, same bytes as before).
+        return Array.from_buffer(np.full((m, n), .125, dtype=np.float32))
 
     def loss(logits, labels, **kwargs):
         assert kwargs == dict(reduction='mean', return_grad=True, numeric_mode='identical')
         fake.calls.append(('loss', len(labels)))
-        return .75, np.full_like(logits, .125)
+        return .75, Array.from_buffer(np.full(logits.shape, .125, np.float32))
     monkeypatch.setattr(impl._linalg_impl, 'matmul', gemm)
     monkeypatch.setattr(impl._training_impl, 'cross_entropy', loss)
     return fake
@@ -125,7 +129,9 @@ def test_host_copies_inputs_and_returns_all_gradients(host):
     assert list(result['gradients']) == list(impl._NAMES)
     for name, shape in zip(impl._NAMES, impl._SHAPES):
         assert result['gradients'][name].shape == shape
-        assert not np.shares_memory(result['gradients'][name], model.weights_[name])
+        # DEVIATION 2460: both are mojolearn.Array; np.asarray views them zero-copy
+        assert not np.shares_memory(np.asarray(result['gradients'][name]),
+                                    np.asarray(model.weights_[name]))
     assert before == (x.tobytes(), y.tobytes())
     assert ('gemm', 16, 8, 7) in host.calls
     assert ('gemm', 3, 16, 7) in host.calls
@@ -160,14 +166,16 @@ def test_host_state_snapshots_and_load_are_isolated(host):
     snapshot = model.state_dict()
     other = trainer().load_state_dict(snapshot)
     assert state_bytes(other) == state_bytes(model)
-    snapshot['weights']['weight1'][:] = 7
-    snapshot['optimizer']['m'][:] = 8
-    snapshot['optimizer']['v'][:] = 9
-    snapshot['optimizer']['flags'][:] = 0
+    # DEVIATION 2460: snapshot buffers are mojolearn.Array; np.asarray is a
+    # zero-copy writable view, so the isolation check tests the same bytes.
+    np.asarray(snapshot['weights']['weight1'])[:] = 7
+    np.asarray(snapshot['optimizer']['m'])[:] = 8
+    np.asarray(snapshot['optimizer']['v'])[:] = 9
+    np.asarray(snapshot['optimizer']['flags'])[:] = 0
     snapshot['data_schedule']['order'] = 'changed'
     assert state_bytes(other) == state_bytes(model)
     bad = model.state_dict()
-    bad['optimizer']['flags'][0] = 2
+    np.asarray(bad['optimizer']['flags'])[0] = 2
     before = state_bytes(other)
     with pytest.raises(ValueError):
         other.load_state_dict(bad)

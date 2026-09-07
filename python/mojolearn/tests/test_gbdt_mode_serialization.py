@@ -62,14 +62,14 @@ class GbdtModeSerializationTests(unittest.TestCase):
             for mode in ('identical', 'deterministic', 'fast'):
                 with self.subTest(cls=cls.__name__, mode=mode):
                     obj = fitted(cls, mode)
-                    expected = obj.predict(X).view(np.uint32).copy()
+                    expected = np.asarray(obj.predict(X)).view(np.uint32).copy()  # DEVIATION 2460
                     obj.save(self.path)
                     self.bound_modes.clear()
                     with patch.object(_backend, 'default_mode', return_value='fast' if mode != 'fast' else 'identical'):
                         restored = cls.load(self.path)
                         self.assertEqual(self.bound_modes, [mode])
                         self.assertEqual(restored.numeric_mode, mode)
-                        np.testing.assert_array_equal(restored.predict(X).view(np.uint32), expected)
+                        np.testing.assert_array_equal(np.asarray(restored.predict(X)).view(np.uint32), expected)
 
     def test_none_pins_effective_default_at_save(self):
         obj = fitted(OrderedRMSE, None)

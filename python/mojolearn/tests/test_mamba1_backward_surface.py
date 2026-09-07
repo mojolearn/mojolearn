@@ -53,8 +53,11 @@ class Mamba1BackwardSurface(unittest.TestCase):
         self.assertEqual(set(got), set(expected))
         for name, value in got.items():
             with self.subTest(gradient=name):
+                # DEVIATION 2460: gradients are mojolearn.Array; dtype and
+                # contiguity are read through the zero-copy NumPy view.
+                value = np.asarray(value)
                 self.assertEqual(value.dtype, np.float32)
-                self.assertTrue(value.flags.c_contiguous)
+                self.assertTrue(value.flags['C_CONTIGUOUS'])
                 np.testing.assert_allclose(value.reshape(expected[name].shape),
                                            expected[name], rtol=1e-5, atol=1e-6)
 
@@ -63,14 +66,15 @@ class Mamba1BackwardSurface(unittest.TestCase):
         self.assert_reference(got)
         buffers = [self.x, self.dy] + list(self.weights.values())
         for name, value in got.items():
+            value = np.asarray(value)  # DEVIATION 2460: zero-copy view of the Array
             for other in buffers:
-                self.assertFalse(np.shares_memory(value, other), name)
+                self.assertFalse(np.shares_memory(value, np.asarray(other)), name)
             buffers.append(value)
         again = self.block.backward(self.x, self.dy)
         for name in got:
-            np.testing.assert_array_equal(got[name].view(np.uint32),
-                                          again[name].view(np.uint32))
-            self.assertFalse(np.shares_memory(got[name], again[name]))
+            np.testing.assert_array_equal(np.asarray(got[name]).view(np.uint32),
+                                          np.asarray(again[name]).view(np.uint32))
+            self.assertFalse(np.shares_memory(np.asarray(got[name]), np.asarray(again[name])))
 
     def test_recomputes_after_weights_change(self):
         before = self.block.backward(self.x, self.dy)

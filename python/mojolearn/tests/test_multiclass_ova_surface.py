@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""OVA boundary and serialization checks; no GPU calls or native fitting."""
+"""OVA boundary and serialization checks; no GPU calls or native fitting.
+
+DEVIATION 2460: predictions are `mojolearn.Array`; dtype, row sums and the
+uint32 bit comparisons go through `np.asarray` (zero-copy), unchanged otherwise.
+"""
 import ctypes
 
 import numpy as np
@@ -64,9 +68,9 @@ def test_ova_dimensions_link_weights_and_saved_mode(classes, monkeypatch, tmp_pa
     assert model.n_classes_ == model.approx_dim_ == classes
     raw, probability = model.predict(X), model.predict_proba(X)
     assert raw.shape == probability.shape == (6, classes)
-    assert raw.dtype == probability.dtype == np.float32
+    assert np.asarray(raw).dtype == np.asarray(probability).dtype == np.float32
     assert binding.transforms == [0, 2]
-    assert not np.allclose(probability.sum(axis=1), 1)
+    assert not np.allclose(np.asarray(probability).sum(axis=1), 1)
     np.testing.assert_array_equal(model.predict_classes(X), np.full(6, classes - 1))
     path = tmp_path / "ova.npz"
     model.save(path)
@@ -76,8 +80,10 @@ def test_ova_dimensions_link_weights_and_saved_mode(classes, monkeypatch, tmp_pa
     assert restored.loss == "MultiClassOneVsAll"
     assert restored.numeric_mode == "identical"
     assert restored.n_classes_ == restored.approx_dim_ == classes
-    np.testing.assert_array_equal(restored.predict(X).view(np.uint32), raw.view(np.uint32))
-    np.testing.assert_array_equal(restored.predict_proba(X).view(np.uint32), probability.view(np.uint32))
+    np.testing.assert_array_equal(np.asarray(restored.predict(X)).view(np.uint32),
+                                  np.asarray(raw).view(np.uint32))
+    np.testing.assert_array_equal(np.asarray(restored.predict_proba(X)).view(np.uint32),
+                                  np.asarray(probability).view(np.uint32))
     assert selected_modes and set(selected_modes) == {"identical"}
 
 

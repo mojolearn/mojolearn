@@ -32,12 +32,15 @@ class UMAPTransformTests(unittest.TestCase):
         fitted = model.embedding_.copy()
         first = model.transform(original)
         self.assertEqual(first.tobytes(), fitted.tobytes())
-        self.assertFalse(np.shares_memory(first, model.embedding_))
+        # DEVIATION 2460: outputs are mojolearn.Array; np.asarray is a
+        # zero-copy writable view, so these mutations reach the same bytes
+        # they did before and the isolation checks are unchanged.
+        self.assertFalse(np.shares_memory(np.asarray(first), np.asarray(model.embedding_)))
         query = np.array([[0.5], [3], [17]], dtype=np.float32)
         before = model.transform(query)
         self.x[:] = 100
-        model.embedding_[:] = -999
-        first[:] = 999
+        np.asarray(model.embedding_)[:] = -999
+        np.asarray(first)[:] = 999
         self.assertEqual(model.transform(original).tobytes(), fitted.tobytes())
         np.testing.assert_array_equal(model.transform(query), before)
 
@@ -49,11 +52,12 @@ class UMAPTransformTests(unittest.TestCase):
         first = model.transform(query)
         second = model.transform(query)
         self.assertEqual(first.shape, (3, 2))
-        self.assertEqual(first.dtype, np.float32)
+        self.assertEqual(np.asarray(first).dtype, np.float32)
         self.assertTrue(np.isfinite(first).all())
         np.testing.assert_array_equal(first, second)
         np.testing.assert_array_equal(model.embedding_, saved_embedding)
-        self.assertFalse(np.shares_memory(first, second))
+        self.assertFalse(np.shares_memory(np.asarray(first), np.asarray(second)))
+        first = np.asarray(first)
         self.assertGreater(float(np.max(np.abs(first[0] - first[-1]))), 0)
 
     def test_three_dimensions_and_single_query(self):

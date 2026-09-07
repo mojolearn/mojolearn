@@ -539,7 +539,8 @@ def arm_orientation(rep):
         nn = linalg.matmul(a, b)
         nt = linalg.matmul(a, np.ascontiguousarray(b.T), transpose_b=True)
         tn = linalg.matmul(np.ascontiguousarray(a.T), b, transpose_a=True)
-        rep.check(arm, nn.shape == (m, n) and nn.dtype == np.float32,
+        # DEVIATION 2460: matmul returns mojolearn.Array; dtype via np.asarray
+        rep.check(arm, nn.shape == (m, n) and np.asarray(nn).dtype == np.float32,
                   "%-18s OP_NN returns (%d, %d) float32" % (name, m, n),
                   "%s %s" % (nn.shape, nn.dtype))
         rep.bits_equal(arm, nt, nn,
@@ -1212,7 +1213,7 @@ def arm_fast(rep):
                linalg.require_identical)
 
     got = linalg.matmul(a, b, identical=False)
-    rep.check(arm, got.shape == (6, 5) and got.dtype == np.float32,
+    rep.check(arm, got.shape == (6, 5) and np.asarray(got).dtype == np.float32,  # DEVIATION 2460
               "identical=False returns a (6, 5) float32 product",
               "%s %s" % (got.shape, got.dtype))
     rep.check(arm, np.isfinite(got).all(),

@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Alpha GPU optimizer and loss primitives over explicit NumPy arrays.
+"""Alpha GPU optimizer and loss primitives over explicit buffer-protocol
+arrays (`mojolearn.Array`, or NumPy arrays when the caller has NumPy;
+DEVIATION 2461: NumPy is no longer a dependency of this module).
 
 SGD, Adam and AdamW update supplied parameter arrays in place. Callers supply
 gradients in the same stable tensor order. ``clip_grad_norm_`` changes supplied

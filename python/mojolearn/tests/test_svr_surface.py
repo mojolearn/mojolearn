@@ -649,11 +649,13 @@ def arm_shapes(rep):
               str(est.support_vectors_.shape))
     rep.check(arm, est.intercept_.shape == (1,),
               "intercept_ is (1,)", str(est.intercept_.shape))
-    rep.check(arm, est.dual_coef_.dtype == np.float32
-              and est.support_vectors_.dtype == np.float32,
+    # DEVIATION 2460: fitted arrays are mojolearn.Array; dtype read through
+    # np.asarray (zero-copy), the same float32 / int32 requirement as before.
+    rep.check(arm, np.asarray(est.dual_coef_).dtype == np.float32
+              and np.asarray(est.support_vectors_).dtype == np.float32,
               "the model arrays are float32")
-    rep.check(arm, est.support_.dtype == np.int32,
-              "support_ is int32", str(est.support_.dtype))
+    rep.check(arm, np.asarray(est.support_).dtype == np.int32,
+              "support_ is int32", str(np.asarray(est.support_).dtype))
 
     idx = np.asarray(est.support_, dtype=np.int64)
     rep.check(arm, idx.size == 0 or (idx.min() >= 0 and idx.max() < PLANT_N),

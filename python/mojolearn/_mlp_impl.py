@@ -175,7 +175,12 @@ def _targets(value, rows):
         raise TypeError('SmallMLPTrainer targets must be an integer array')
     if pb.shape != (rows,):
         raise ValueError('SmallMLPTrainer targets must have shape (batch,) with classes 0..2')
-    arr, copied = as_i32_c(value, ndim=1, name='targets')
+    try:
+        arr, copied = as_i32_c(value, ndim=1, name='targets')
+    except OverflowError:
+        # DEVIATION 2467: a label outside int32 is a bad class, not a
+        # conversion accident; the documented refusal is this ValueError.
+        raise ValueError('SmallMLPTrainer targets must have shape (batch,) with classes 0..2') from None
     if not copied:
         arr = arr.copy()
     # A C-level scan of at most 256 labels (the permitted O(rows) loop).

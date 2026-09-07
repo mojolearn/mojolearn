@@ -48,17 +48,20 @@ class UMAPSurfaceTests(unittest.TestCase):
         layout = model.fit_transform(self.x)
         self.assertIs(layout, model.embedding_)
         self.assertEqual(layout.shape, (8, 2))
-        self.assertEqual(layout.dtype, np.float32)
+        # DEVIATION 2460: the layout is a mojolearn.Array; dtype and bits are
+        # read through np.asarray (zero-copy), the checks are unchanged.
+        self.assertEqual(np.asarray(layout).dtype, np.float32)
         self.assertTrue(np.isfinite(layout).all())
         self.assertFalse(model.input_copied_)
         self.assertEqual(model.n_features_in_, 1)
         self.assertEqual(model.numeric_mode_used(), self.mode)
         np.testing.assert_array_equal(before, self.x)
         if self.mode == "identical":
-            np.testing.assert_array_equal(layout.view(np.uint32), LAYOUT_BITS)
+            np.testing.assert_array_equal(np.asarray(layout).view(np.uint32), LAYOUT_BITS)
         if self.mode in ("identical", "deterministic"):
             again = self.estimator().fit_transform(self.x)
-            np.testing.assert_array_equal(layout.view(np.uint32), again.view(np.uint32))
+            np.testing.assert_array_equal(np.asarray(layout).view(np.uint32),
+                                          np.asarray(again).view(np.uint32))
 
     def test_conversion_readonly_and_fit(self):
         model = self.estimator()
@@ -98,14 +101,14 @@ class UMAPSurfaceTests(unittest.TestCase):
                 self.assertTrue(np.isfinite(layout).all())
                 self.assertGreater(float(np.ptp(layout)), 0.0)
                 if self.mode == "identical" and config["n_components"] == 3:
-                    np.testing.assert_array_equal(layout.view(np.uint32),
+                    np.testing.assert_array_equal(np.asarray(layout).view(np.uint32),
                                                   BROADER_LAYOUT_BITS)
                 np.testing.assert_array_equal(x, before)
                 if self.mode in ("identical", "deterministic"):
                     again = UMAP(n_epochs=12, numeric_mode=self.mode,
                                  **config).fit_transform(x)
-                    np.testing.assert_array_equal(layout.view(np.uint32),
-                                                  again.view(np.uint32))
+                    np.testing.assert_array_equal(np.asarray(layout).view(np.uint32),
+                                                  np.asarray(again).view(np.uint32))
 
     def test_optimizer_controls(self):
         baseline = self.estimator().fit_transform(self.x)
