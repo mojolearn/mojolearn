@@ -3385,6 +3385,12 @@ export MOJOLEARN_SPEED_SIZE="@SPEEDSIZE@"
 # DEVIATION 1898: the mode of OUR arm, explicit, before any binding is built
 # and before any arm imports the package. Read back on every header.
 export MOJOLEARN_NUMERIC_MODE="@OURSMODE@"
+# DEVIATION 2190: bindings/build_byte_lm.sh refuses without one explicit
+# accelerator architecture; the driving host's MOJOLEARN_GPU_ARCHS reaches
+# the box here (empty means unset, the build box's own device).
+MOJOLEARN_GPU_ARCHS="@GPUARCHS@"
+if [ -n "$MOJOLEARN_GPU_ARCHS" ]; then export MOJOLEARN_GPU_ARCHS; else unset MOJOLEARN_GPU_ARCHS; fi
+echo "gpu_archs=${MOJOLEARN_GPU_ARCHS:-none-build-box-device-only}" >> "$OUT/leg.txt"
 echo "ours_mode=@OURSMODE@" >> "$OUT/leg.txt"
 
 # THE DEVICE NAME ON THE HEADER LINE. `bench/speed/seq_speed_main.mojo` takes
