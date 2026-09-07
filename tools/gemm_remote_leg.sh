@@ -709,6 +709,7 @@ while [ $# -gt 0 ]; do
         --allow-concurrent) LEG_ALLOW_CONCURRENT=1 ;;
         --smoke)         SPEED_SIZE="smoke" ;;
         --large)         SPEED_SIZE="large" ;;
+        --wide)          SPEED_SIZE="wide" ;;   # DEVIATION 2130: 512-feature tier
         --apple-dir)     shift; APPLE_DIR="${1:-}" ;;
         --work-timeout)  shift; WORK_TIMEOUT="${1:-}" ;;
         -h|--help|help)  leg_usage; exit 0 ;;
@@ -821,8 +822,8 @@ if [ "$PAYLOAD" = "speed" ]; then
     # DRIVER is missing at this commit is refused earlier, by the archive
     # check, for nothing.
     case "$SPEED_FAMILY" in
-        gemmseq)   SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gemm transformer attention mlp rmsnorm mamba selective_scan}" ;;
-        classical) SPEED_LANES="${MOJOLEARN_SPEED_LANES:-kmeans dbscan pca ols knn cd kde linkage svm metrics ivf hdbscan cholesky gmm gp krr nystroem rbfsampler resample spectral holtwinters kpss}" ;;
+        gemmseq)   SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gemm transformer attention mlp rmsnorm mamba selective_scan mamba2 mamba3}" ;;
+        classical) SPEED_LANES="${MOJOLEARN_SPEED_LANES:-kmeans dbscan pca ols knn cd kde linkage svm metrics ivf hdbscan cholesky gmm gp krr nystroem rbfsampler resample spectral holtwinters kpss umap}" ;;
         forest)    SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gbdt-symmetric gbdt-depthwise gbdt-lossguide rf et iforest}" ;;
     esac
     case "$SPEED_FAMILY" in
@@ -2943,15 +2944,28 @@ runarm() {
 # silent absence, and the vendor arms must still run so the leg comes home
 # with half a table instead of none.
 BUILT=""
+# DEVIATION 1898: under MOJOLEARN_SPEED_OURS_MODE=identical the driver is
+# compiled with the identical define, so the mode the HEADER prints is the
+# mode the arm ran in; the driving host still refuses a header that says
+# otherwise. Under the default (fast) the list is empty and this is the
+# bare build the comment above describes.
+_MOJODEFS=""
+case "@OURSMODE@" in
+    identical)     _MOJODEFS="-D MOJOLEARN_NUMERIC_IDENTICAL=1" ;;
+    deterministic) _MOJODEFS="-D MOJOLEARN_NUMERIC_DETERMINISTIC=1" ;;
+esac
+echo "mojo_driver_defs=$_MOJODEFS" >> "$OUT/leg.txt"
 buildone() {
     _name="$1"; _src="$2"
     printf '
 === build %s ===
 ' "$_name" >> "$OUT/console.log"
+    # $_MOJODEFS is a deliberate word list (zero or two words).
+    # shellcheck disable=SC2086
     if command -v timeout > /dev/null 2>&1; then
-        timeout -k 30 @BUILDBUDGET@ pixi run mojo build -I . "$_src" -o "$OUT/bin_$_name"             > "$LOGS/build.$_name.log" 2>&1
+        timeout -k 30 @BUILDBUDGET@ pixi run mojo build $_MOJODEFS -I . "$_src" -o "$OUT/bin_$_name"             > "$LOGS/build.$_name.log" 2>&1
     else
-        pixi run mojo build -I . "$_src" -o "$OUT/bin_$_name" > "$LOGS/build.$_name.log" 2>&1
+        pixi run mojo build $_MOJODEFS -I . "$_src" -o "$OUT/bin_$_name" > "$LOGS/build.$_name.log" 2>&1
     fi
     _rc=$?
     echo "build_exit ${_name}=$_rc" >> "$OUT/leg.txt"
@@ -3128,6 +3142,11 @@ MMPROBE
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
         case "$L" in
             gemm) builtok gemmspeed && runarm "gemm.gemm.ours.log" "$OUT/bin_gemmspeed" ;;
+            # DEVIATION 2100: Mamba-2 and Mamba-3 have no lane in the Mojo
+            # driver; their ours arm runs through the public Python API on
+            # the bindings this leg built (mode from MOJOLEARN_NUMERIC_MODE).
+            mamba1|mamba2|mamba3) runarm "seq.$L.ours.log" \
+                python3 bench/speed/seq_py_speed_arm.py --lane "$L" --rounds "@SPEEDROUNDS@" ;;
             *)    builtok seqspeed  && runarm "seq.$L.ours.log"    "$OUT/bin_seqspeed" ;;
         esac
     done
@@ -3162,10 +3181,19 @@ MMPROBE
         sh tools/with_identical_mode.sh pixi run mojo run -I . \
             mamba/checks/mamba_check.mojo
     runarm "gemm.gemm.cublas.log" python3 tools/speed_gemm_arm.py --rounds "@SPEEDROUNDS@"
+    # The vendor's DOCUMENTED deterministic configuration, one process per
+    # arm so CUBLAS_WORKSPACE_CONFIG is set before the runtime initializes
+    # (DEVIATION 1898). The arm scripts own the names and the refusals.
+    runarm "gemm.gemm.cublas-deterministic.log" python3 tools/speed_gemm_arm.py \
+        --rounds "@SPEEDROUNDS@" --arm cublas-deterministic
     for L in @SPEEDLANES@; do
         [ "$L" = "gemm" ] && continue
+        _tl="$L"; [ "$L" = "mamba1" ] && _tl="mamba"
         runarm "seq.$L.torch.log" python3 tools/speed_torch_seq.py \
-            --lane "$L" --rounds "@SPEEDROUNDS@" --dump-dir "$MOJOLEARN_SPEED_DUMP"
+            --lane "$_tl" --rounds "@SPEEDROUNDS@" --dump-dir "$MOJOLEARN_SPEED_DUMP"
+        runarm "seq.$L.torch-deterministic.log" python3 tools/speed_torch_seq.py \
+            --lane "$_tl" --rounds "@SPEEDROUNDS@" --dump-dir "$MOJOLEARN_SPEED_DUMP" \
+            --arm torch-deterministic
     done
     ;;
 classical)
@@ -3176,13 +3204,38 @@ classical)
     buildone classicalspeed bench/speed/classical_speed_main.mojo
     for L in @SPEEDLANES@; do
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
-        builtok classicalspeed && runarm "classical.$L.ours.log" "$OUT/bin_classicalspeed"
+        case "$L" in
+            # DEVIATION 2130: umap has no lane in the Mojo driver; ours runs
+            # through the public Python API on the bindings this leg built.
+            umap) runarm "classical.$L.ours.log" \
+                      python3 bench/speed/umap_speed_arm.py --rounds "@SPEEDROUNDS@" ;;
+            *)
+                # DEVIATION 2160: ours through the PUBLIC PYTHON API first,
+                # called from Python exactly as the vendor arm is, on the
+                # bindings this leg built. Only when that arm refuses for
+                # want of a Python surface does the compiled Mojo driver
+                # run for the lane, so a (lane, shape) never has two
+                # `arm=ours` cells.
+                runarm "classical.$L.ours.log" \
+                    python3 bench/speed/classical_py_speed_arm.py --lane "$L" --rounds "@SPEEDROUNDS@"
+                if grep -q 'NO-PYTHON-SURFACE' "$LOGS/classical.$L.ours.log" 2>/dev/null; then
+                    builtok classicalspeed && runarm "classical.$L.ours-native.log" "$OUT/bin_classicalspeed"
+                fi ;;
+        esac
         # NO --lane FLAG: tools/speed_cuml_arm.py takes its lane from
         # MOJOLEARN_SPEED_LANE, which is already exported above, and has no
         # argparse at all. Passing a flag it does not know would abort the
         # arm on every lane.
         runarm "classical.$L.vendor.log" \
             python3 tools/speed_cuml_arm.py
+        # The vendor's documented deterministic configuration, or its
+        # documented words when there is none (DEVIATION 1898/2130).
+        # Explicit export and unset: `VAR=x func` persists past the call in
+        # dash, and this body runs under /bin/sh.
+        MOJOLEARN_SPEED_ARM=deterministic; export MOJOLEARN_SPEED_ARM
+        runarm "classical.$L.vendor-deterministic.log" \
+            python3 tools/speed_cuml_arm.py
+        unset MOJOLEARN_SPEED_ARM
     done
     ;;
 forest)
