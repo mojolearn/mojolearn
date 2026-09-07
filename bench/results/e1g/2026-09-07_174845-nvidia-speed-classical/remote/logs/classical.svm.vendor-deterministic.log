@@ -1,0 +1,5 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=svm arm=cuml-gpu-deterministic reason=NOT-OFFERED: cuML's SVC documents its seed as "random_state: int (default = None) Seed for random number generator (used only when probability=True)."; this lane fits with probability=False, so no deterministic configuration is documented for what is timed (https://docs.nvidia.com/cuml/latest/api/generated/cuml.svm.SVC/)

@@ -1,0 +1,18 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+4753 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x710dc0000000, nodemask=1)
+FSPEED-HEADER family=classical lane=spectral arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-NOTE lane=spectral arm=ours surface=python: this is the python/mojolearn/ ours arm (DEVIATION 2160); the Mojo driver's arm=ours rows time the entry points directly
+FSPEED-NOTE lane=spectral arm=ours tier read back from mojolearn.numeric_mode()=identical; MOJOLEARN_NUMERIC_MODE='identical' in the environment (DEVIATION 2162)
+FSPEED-NOTE lane=spectral arm=ours hash is sha256/16 over dtype+shape+bytes (hash_predictions), within-arm only, never gated (DEVIATION 2164)
+FSPEED-NOTE lane=spectral arm=ours binaries: vendor=cuda gpu_arch=None (read back from the loaded set)
+FSPEED-NOTE lane=spectral arm=ours affinity=nearest_neighbors n_neighbors=10 n_clusters=3 n_components=3 n_init=10 random_state=7, the vendor arm's knobs; eigen_tol is the class default 1e-05 (cuVS's struct default; 'auto' is refused, DEVIATION 890)
+FSPEED-NOTE lane=spectral arm=ours labels_ hashed here where the vendor prints hash=- (its reason, arbitrary label numbering, is cross-arm; this column is within-arm; DEVIATION 2170)
+FSPEED-WARMUP lane=spectral arm=ours shape=48x4c3 ms=796.157045
+FSPEED lane=spectral arm=ours shape=48x4c3 round=1 ms=7.329980 hash=6a7962c9fd5122e9
+FSPEED lane=spectral arm=ours shape=48x4c3 round=2 ms=7.228082 hash=6a7962c9fd5122e9
+FSPEED lane=spectral arm=ours shape=48x4c3 round=3 ms=7.125059 hash=6a7962c9fd5122e9
+FSPEED lane=spectral arm=ours shape=48x4c3 round=4 ms=7.155413 hash=6a7962c9fd5122e9
+FSPEED lane=spectral arm=ours shape=48x4c3 round=5 ms=7.204373 hash=6a7962c9fd5122e9

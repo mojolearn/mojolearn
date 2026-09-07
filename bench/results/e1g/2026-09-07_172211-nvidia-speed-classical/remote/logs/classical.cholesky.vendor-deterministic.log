@@ -1,0 +1,10 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=cholesky arm=torch-gpu-deterministic vendor's documented deterministic configuration: LIVE: torch.use_deterministic_algorithms(True): "Sets whether PyTorch operations must use "deterministic" algorithms. That is, algorithms which, given the same input, and when run on the same software and hardware, always produce the same output. When enabled, operations will use deterministic algorithms when available, and if only nondeterministic algorithms are available they will throw a RuntimeError when called." Neither torch.linalg.cholesky nor torch.cholesky_solve appears in either of that page's operation lists (https://docs.pytorch.org/docs/2.14/generated/torch.use_deterministic_algorithms.html)
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=cholesky arm=torch-gpu-deterministic reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/cholesky.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=cholesky pixi run mojo run -I . bench/speed/classical_speed_main.mojo')

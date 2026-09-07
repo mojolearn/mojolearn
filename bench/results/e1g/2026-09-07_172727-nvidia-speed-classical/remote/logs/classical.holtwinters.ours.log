@@ -1,0 +1,18 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+5013 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59e880000000, nodemask=2)
+FSPEED-HEADER family=classical lane=holtwinters arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=wide
+FSPEED-NOTE lane=holtwinters arm=ours surface=python: this is the python/mojolearn/ ours arm (DEVIATION 2160); the Mojo driver's arm=ours rows time the entry points directly
+FSPEED-NOTE lane=holtwinters arm=ours tier read back from mojolearn.numeric_mode()=identical; MOJOLEARN_NUMERIC_MODE='identical' in the environment (DEVIATION 2162)
+FSPEED-NOTE lane=holtwinters arm=ours hash is sha256/16 over dtype+shape+bytes (hash_predictions), within-arm only, never gated (DEVIATION 2164)
+FSPEED-NOTE lane=holtwinters arm=ours binaries: vendor=cuda gpu_arch=None (read back from the loaded set)
+FSPEED-NOTE lane=holtwinters arm=ours seasonal=additive seasonal_periods=12 start_periods=2 ts_num=512 eps=0.00224, all explicit, the vendor arm's; the fixture is series-major (ts_num x n), which is this class's own (ts_num, n) layout, so no transpose is needed
+FSPEED-NOTE lane=holtwinters arm=ours get_level() is hashed, as the vendor hashes cuML's get_level()
+FSPEED-WARMUP lane=holtwinters arm=ours shape=512x1200f12 ms=1828.226004
+FSPEED lane=holtwinters arm=ours shape=512x1200f12 round=1 ms=937.366733 hash=0388e3de484ab3af
+FSPEED lane=holtwinters arm=ours shape=512x1200f12 round=2 ms=937.272149 hash=0388e3de484ab3af
+FSPEED lane=holtwinters arm=ours shape=512x1200f12 round=3 ms=937.615529 hash=0388e3de484ab3af
+FSPEED lane=holtwinters arm=ours shape=512x1200f12 round=4 ms=929.606358 hash=0388e3de484ab3af
+FSPEED lane=holtwinters arm=ours shape=512x1200f12 round=5 ms=920.669904 hash=0388e3de484ab3af

@@ -1,0 +1,17 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+4774 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x710ac0000000, nodemask=1)
+FSPEED-HEADER family=classical lane=ols arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-NOTE lane=ols arm=ours surface=python: this is the python/mojolearn/ ours arm (DEVIATION 2160); the Mojo driver's arm=ours rows time the entry points directly
+FSPEED-NOTE lane=ols arm=ours tier read back from mojolearn.numeric_mode()=identical; MOJOLEARN_NUMERIC_MODE='identical' in the environment (DEVIATION 2162)
+FSPEED-NOTE lane=ols arm=ours hash is sha256/16 over dtype+shape+bytes (hash_predictions), within-arm only, never gated (DEVIATION 2164)
+FSPEED-NOTE lane=ols arm=ours binaries: vendor=cuda gpu_arch=None (read back from the loaded set)
+FSPEED-NOTE lane=ols arm=ours fit_intercept=False, the normal-equations eigen route (cuML's algorithm='eig', lstsqEig), matching the vendor arm's algorithm=eig fit_intercept=False
+FSPEED-WARMUP lane=ols arm=ours shape=4000000x32 ms=1023.727702
+FSPEED lane=ols arm=ours shape=4000000x32 round=1 ms=70.473436 hash=8b45452cadbedf38
+FSPEED lane=ols arm=ours shape=4000000x32 round=2 ms=65.782284 hash=8b45452cadbedf38
+FSPEED lane=ols arm=ours shape=4000000x32 round=3 ms=65.909728 hash=8b45452cadbedf38
+FSPEED lane=ols arm=ours shape=4000000x32 round=4 ms=70.051137 hash=8b45452cadbedf38
+FSPEED lane=ols arm=ours shape=4000000x32 round=5 ms=65.815099 hash=8b45452cadbedf38

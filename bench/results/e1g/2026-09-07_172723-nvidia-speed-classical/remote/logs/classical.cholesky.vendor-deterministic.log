@@ -1,0 +1,24 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=cholesky arm=torch-gpu-deterministic vendor's documented deterministic configuration: LIVE: torch.use_deterministic_algorithms(True): "Sets whether PyTorch operations must use "deterministic" algorithms. That is, algorithms which, given the same input, and when run on the same software and hardware, always produce the same output. When enabled, operations will use deterministic algorithms when available, and if only nondeterministic algorithms are available they will throw a RuntimeError when called." Neither torch.linalg.cholesky nor torch.cholesky_solve appears in either of that page's operation lists (https://docs.pytorch.org/docs/2.14/generated/torch.use_deterministic_algorithms.html)
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=cholesky arm=torch-gpu-deterministic size=wide fixture_source=splitmix64 shape=wide.4096x4096r4
+FSPEED-NOTE lane=cholesky arm=torch-gpu-deterministic torch.linalg.cholesky is cuSOLVER potrf and torch.cholesky_solve is potrs; the ridge, the logdet and the solve are all inside the clock on both sides
+FSPEED-HEADER family=classical lane=cholesky arm=torch-gpu-deterministic mode=DETERMINISTIC device=NVIDIA_H100_80GB_HBM3 rounds=5 size=wide
+FSPEED-NOTE lane=cholesky arm=torch-gpu-deterministic output is 67174404 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=cholesky arm=torch-gpu-deterministic shape=wide.4096x4096r4 ms=130.061422
+FSPEED-NOTE lane=cholesky arm=torch-gpu-deterministic output is 67174404 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=cholesky arm=torch-gpu-deterministic shape=wide.4096x4096r4 round=1 ms=4.100285 hash=-
+FSPEED-NOTE lane=cholesky arm=torch-gpu-deterministic output is 67174404 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=cholesky arm=torch-gpu-deterministic shape=wide.4096x4096r4 round=2 ms=3.734890 hash=-
+FSPEED-NOTE lane=cholesky arm=torch-gpu-deterministic output is 67174404 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=cholesky arm=torch-gpu-deterministic shape=wide.4096x4096r4 round=3 ms=3.722653 hash=-
+FSPEED-NOTE lane=cholesky arm=torch-gpu-deterministic output is 67174404 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=cholesky arm=torch-gpu-deterministic shape=wide.4096x4096r4 round=4 ms=3.734119 hash=-
+FSPEED-NOTE lane=cholesky arm=torch-gpu-deterministic output is 67174404 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=cholesky arm=torch-gpu-deterministic shape=wide.4096x4096r4 round=5 ms=3.736690 hash=-

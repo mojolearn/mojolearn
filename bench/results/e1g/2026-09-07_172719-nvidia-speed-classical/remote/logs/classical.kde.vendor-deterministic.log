@@ -1,0 +1,5 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=kde arm=cuml-gpu-deterministic reason=NOT-DOCUMENTED: cuML's KernelDensity documentation states nothing about determinism; its only random_state is documented on sample(), which is not what is timed (https://docs.nvidia.com/cuml/latest/api/generated/cuml.neighbors.KernelDensity/)

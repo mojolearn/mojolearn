@@ -1,0 +1,272 @@
+
+=== build gemmspeed ===
+
+=== build seqspeed ===
+
+=== pass 1: bindings/build.sh ===
+./neighbors/estimator.mojo:985:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_arima.sh ===
+/root/mojolearn/bindings/_mojolearn_arima.mojo:366:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_arima.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_byte_lm.sh ===
+byte LM: one explicit sm_NN or gfxNNN target required
+
+=== pass 1: bindings/build_estimators.sh ===
+./glm/impl/glm/qn/qn_solvers.mojo:458:15: warning: assignment to 'ret' was never used; assign to '_' instead?
+    var ret = OPT_MAX_ITERS_REACHED
+              ^
+built python/mojolearn/identical/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_gbdt.sh ===
+./gbdt/methods/pointwise_optimization_subsets.mojo:481:24: warning: assignment to 'adapt_blocks' was never used; assign to '_' instead?
+        adapt_blocks = 1
+                       ^
+built python/mojolearn/identical/_mojolearn_gbdt.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_gp.sh ===
+/root/mojolearn/bindings/_mojolearn_gp.mojo:585:21: warning: assignment to 'n_clamped' was never used; assign to '_' instead?
+    var n_clamped = 0
+                    ^
+built python/mojolearn/identical/_mojolearn_gp.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_linalg.sh ===
+1205 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x528e40000000, nodemask=1)
+built python/mojolearn/identical/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_mamba.sh ===
+/root/mojolearn/bindings/_mojolearn_mamba.mojo:944:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_mamba.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_metrics.sh ===
+/root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:198:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/identical/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_rf.sh ===
+/root/mojolearn/bindings/_mojolearn_rf.mojo:584:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/identical/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_solver.sh ===
+/root/mojolearn/bindings/_mojolearn_solver.mojo:204:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/identical/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_svm.sh ===
+/root/mojolearn/bindings/_mojolearn_svm.mojo:520:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/identical/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_training.sh ===
+./training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built python/mojolearn/identical/_mojolearn_training.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_transformer.sh ===
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:433:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_transformer.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_trees.sh ===
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+built python/mojolearn/identical/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_tsa.sh ===
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:267:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/identical/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build.sh ===
+./neighbors/estimator.mojo:985:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_arima.sh ===
+/root/mojolearn/bindings/_mojolearn_arima.mojo:366:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_arima.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_byte_lm.sh ===
+byte LM: one explicit sm_NN or gfxNNN target required
+
+=== pass 2: bindings/build_estimators.sh ===
+./glm/impl/glm/qn/qn_solvers.mojo:458:15: warning: assignment to 'ret' was never used; assign to '_' instead?
+    var ret = OPT_MAX_ITERS_REACHED
+              ^
+built python/mojolearn/identical/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_gbdt.sh ===
+./gbdt/methods/pointwise_optimization_subsets.mojo:481:24: warning: assignment to 'adapt_blocks' was never used; assign to '_' instead?
+        adapt_blocks = 1
+                       ^
+built python/mojolearn/identical/_mojolearn_gbdt.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_gp.sh ===
+/root/mojolearn/bindings/_mojolearn_gp.mojo:585:21: warning: assignment to 'n_clamped' was never used; assign to '_' instead?
+    var n_clamped = 0
+                    ^
+built python/mojolearn/identical/_mojolearn_gp.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_linalg.sh ===
+2294 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73c780000000, nodemask=1)
+built python/mojolearn/identical/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_mamba.sh ===
+/root/mojolearn/bindings/_mojolearn_mamba.mojo:944:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_mamba.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_metrics.sh ===
+/root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:198:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/identical/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_rf.sh ===
+/root/mojolearn/bindings/_mojolearn_rf.mojo:584:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/identical/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_solver.sh ===
+/root/mojolearn/bindings/_mojolearn_solver.mojo:204:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/identical/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_svm.sh ===
+/root/mojolearn/bindings/_mojolearn_svm.mojo:520:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/identical/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_training.sh ===
+./training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built python/mojolearn/identical/_mojolearn_training.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_transformer.sh ===
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:433:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_transformer.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_trees.sh ===
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+built python/mojolearn/identical/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_tsa.sh ===
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:267:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/identical/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+2929 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b5700000000, nodemask=2)
+mojolearn imports OK /root/mojolearn/python/mojolearn/__init__.py
+
+=== gemm.gemm.ours.log :: /root/gemm_leg_out/bin_gemmspeed ===
+FSPEED lane=gemm arm=ours shape=llama8b.lm_head.t512 round=3 ms=1055.791427 hash=5910de8ba5512131
+FSPEED lane=gemm arm=ours shape=llama8b.lm_head.t512 round=4 ms=1055.79705 hash=5910de8ba5512131
+FSPEED lane=gemm arm=ours shape=llama8b.lm_head.t512 round=5 ms=1055.79788 hash=5910de8ba5512131
+
+=== seq.transformer.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=transformer arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=6.824296 hash=4490b5d7d2f80963
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.transformer.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=transformer mode=IDENTICAL
+
+=== seq.transformer.ours-py.log :: python3 bench/speed/seq_py_speed_arm.py --lane transformer --rows large --rounds 5 ===
+FSPEED-NOTE lane=transformer arm=ours output witness shape=wide.b8_l1024_d2048 n=16777216 hash=fe01eb4a80cbd0a4
+FSPEED-NOTE lane=transformer arm=ours dump shape=wide.b8_l1024_d2048 n=16777216 path=/root/gemm_leg_out/dump/seq.transformer.wide.b8_l1024_d2048.f32.bin
+FSPEED-DONE lane=transformer arm=ours mode=IDENTICAL
+
+=== seq.attention.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=attention arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=1.808546 hash=25421ab8b713c275
+FSPEED-NOTE lane=attention arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.attention.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=attention mode=IDENTICAL
+
+=== seq.mlp.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=mlp arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=1.955926 hash=7a7c1c80a39fcc7a
+FSPEED-NOTE lane=mlp arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.mlp.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=mlp mode=IDENTICAL
+
+=== seq.rmsnorm.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=rmsnorm arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=0.43275 hash=7fe822dc61475447
+FSPEED-NOTE lane=rmsnorm arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.rmsnorm.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=rmsnorm mode=IDENTICAL
+
+=== verify.transformer_block.fast.log :: pixi run mojo run -I . transformer/checks/transformer_check.mojo ===
+clause (d): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_D=1). NOTE: two sabotage arms (S07_ROPE_RELATIVE_POSITION and S19_VALUE_SUM_VIA_GEMM) are falsifiable ONLY here, so a lane that never runs clause (d) has eleven arms and not thirteen.
+clause (e): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_E=1)
+SCOPE: this build, this column, FAST only. What is NOT closed by anything printed above: an INDEPENDENT reference (transformer/corpus/ does not exist, so every clause here is our device against our oracle and both are ours); FAST mode; every column that is not this one; and the twelve sabotage builds this binary is not. Contract section 11: nothing cross-vendor until a leg runs, and two backends agreeing closes nothing -- Apple and AMD agreed bit for bit through 302 GEMM stages while NVIDIA diverged at tree001.winners.scores.
+
+=== verify.mamba_block.fast.log :: pixi run mojo run -I . mamba/checks/mamba_check.mojo ===
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: mamba_check: FAST numerical accuracy FAILED on 1 stages; bit differences above are diagnostic, not themselves failures
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+
+=== verify.transformer_block.identical.log :: sh tools/with_identical_mode.sh pixi run mojo run -I . transformer/checks/transformer_check.mojo ===
+clause (d): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_D=1). NOTE: two sabotage arms (S07_ROPE_RELATIVE_POSITION and S19_VALUE_SUM_VIA_GEMM) are falsifiable ONLY here, so a lane that never runs clause (d) has eleven arms and not thirteen.
+clause (e): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_E=1)
+SCOPE: this build, this column, IDENTICAL only. What is NOT closed by anything printed above: an INDEPENDENT reference (transformer/corpus/ does not exist, so every clause here is our device against our oracle and both are ours); FAST mode; every column that is not this one; and the twelve sabotage builds this binary is not. Contract section 11: nothing cross-vendor until a leg runs, and two backends agreeing closes nothing -- Apple and AMD agreed bit for bit through 302 GEMM stages while NVIDIA diverged at tree001.winners.scores.
+
+=== verify.mamba_block.identical.log :: sh tools/with_identical_mode.sh pixi run mojo run -I . mamba/checks/mamba_check.mojo ===
+clause (d): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_D=1)
+clause (e): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_E=1)
+SCOPE: this shape, IDENTICAL: numerical accuracy and bitwise identity are both required. Optional clauses (c-e) retain their bitwise meanings.
+
+=== gemm.gemm.cublas.log :: python3 tools/speed_gemm_arm.py --rounds 5 ===
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=3 ms=1.358248 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=4 ms=1.350649 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=5 ms=1.358300 hash=-
+
+=== gemm.gemm.cublas-deterministic.log :: python3 tools/speed_gemm_arm.py --rounds 5 --arm cublas-deterministic ===
+FSPEED lane=gemm arm=cublas-tf32-deterministic shape=llama8b.lm_head.t512 round=3 ms=1.756608 hash=0fc07e64ae9fe7f0
+FSPEED lane=gemm arm=cublas-tf32-deterministic shape=llama8b.lm_head.t512 round=4 ms=1.754496 hash=0fc07e64ae9fe7f0
+FSPEED lane=gemm arm=cublas-tf32-deterministic shape=llama8b.lm_head.t512 round=5 ms=1.796331 hash=0fc07e64ae9fe7f0
+
+=== seq.transformer.torch.log :: python3 tools/speed_torch_seq.py --lane transformer --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'
+
+=== seq.transformer.torch-deterministic.log :: python3 tools/speed_torch_seq.py --lane transformer --rounds 5 --dump-dir /root/gemm_leg_out/dump --arm torch-deterministic ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'
+
+=== seq.attention.torch.log :: python3 tools/speed_torch_seq.py --lane attention --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'
+
+=== seq.attention.torch-deterministic.log :: python3 tools/speed_torch_seq.py --lane attention --rounds 5 --dump-dir /root/gemm_leg_out/dump --arm torch-deterministic ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'
+
+=== seq.mlp.torch.log :: python3 tools/speed_torch_seq.py --lane mlp --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'
+
+=== seq.mlp.torch-deterministic.log :: python3 tools/speed_torch_seq.py --lane mlp --rounds 5 --dump-dir /root/gemm_leg_out/dump --arm torch-deterministic ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'
+
+=== seq.rmsnorm.torch.log :: python3 tools/speed_torch_seq.py --lane rmsnorm --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'
+
+=== seq.rmsnorm.torch-deterministic.log :: python3 tools/speed_torch_seq.py --lane rmsnorm --rounds 5 --dump-dir /root/gemm_leg_out/dump --arm torch-deterministic ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'

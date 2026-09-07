@@ -1,0 +1,338 @@
+
+=== build classicalspeed ===
+
+=== pass 1: bindings/build.sh ===
+./neighbors/estimator.mojo:985:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_arima.sh ===
+/root/mojolearn/bindings/_mojolearn_arima.mojo:366:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_arima.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_byte_lm.sh ===
+byte LM: one explicit sm_NN or gfxNNN target required
+
+=== pass 1: bindings/build_estimators.sh ===
+./glm/impl/glm/qn/qn_solvers.mojo:458:15: warning: assignment to 'ret' was never used; assign to '_' instead?
+    var ret = OPT_MAX_ITERS_REACHED
+              ^
+built python/mojolearn/identical/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_gbdt.sh ===
+./gbdt/methods/pointwise_optimization_subsets.mojo:481:24: warning: assignment to 'adapt_blocks' was never used; assign to '_' instead?
+        adapt_blocks = 1
+                       ^
+built python/mojolearn/identical/_mojolearn_gbdt.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_gp.sh ===
+/root/mojolearn/bindings/_mojolearn_gp.mojo:585:21: warning: assignment to 'n_clamped' was never used; assign to '_' instead?
+    var n_clamped = 0
+                    ^
+built python/mojolearn/identical/_mojolearn_gp.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_linalg.sh ===
+1203 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7bf580000000, nodemask=2)
+built python/mojolearn/identical/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_mamba.sh ===
+/root/mojolearn/bindings/_mojolearn_mamba.mojo:944:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_mamba.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_metrics.sh ===
+/root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:198:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/identical/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_rf.sh ===
+/root/mojolearn/bindings/_mojolearn_rf.mojo:584:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/identical/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_solver.sh ===
+/root/mojolearn/bindings/_mojolearn_solver.mojo:204:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/identical/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_svm.sh ===
+/root/mojolearn/bindings/_mojolearn_svm.mojo:520:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/identical/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_training.sh ===
+./training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built python/mojolearn/identical/_mojolearn_training.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_transformer.sh ===
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:433:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_transformer.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_trees.sh ===
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+built python/mojolearn/identical/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_tsa.sh ===
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:267:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/identical/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build.sh ===
+./neighbors/estimator.mojo:985:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_arima.sh ===
+/root/mojolearn/bindings/_mojolearn_arima.mojo:366:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_arima.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_byte_lm.sh ===
+byte LM: one explicit sm_NN or gfxNNN target required
+
+=== pass 2: bindings/build_estimators.sh ===
+./glm/impl/glm/qn/qn_solvers.mojo:458:15: warning: assignment to 'ret' was never used; assign to '_' instead?
+    var ret = OPT_MAX_ITERS_REACHED
+              ^
+built python/mojolearn/identical/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_gbdt.sh ===
+./gbdt/methods/pointwise_optimization_subsets.mojo:481:24: warning: assignment to 'adapt_blocks' was never used; assign to '_' instead?
+        adapt_blocks = 1
+                       ^
+built python/mojolearn/identical/_mojolearn_gbdt.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_gp.sh ===
+/root/mojolearn/bindings/_mojolearn_gp.mojo:585:21: warning: assignment to 'n_clamped' was never used; assign to '_' instead?
+    var n_clamped = 0
+                    ^
+built python/mojolearn/identical/_mojolearn_gp.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_linalg.sh ===
+2304 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x798540000000, nodemask=2)
+built python/mojolearn/identical/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_mamba.sh ===
+/root/mojolearn/bindings/_mojolearn_mamba.mojo:944:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_mamba.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_metrics.sh ===
+/root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:198:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/identical/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_rf.sh ===
+/root/mojolearn/bindings/_mojolearn_rf.mojo:584:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/identical/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_solver.sh ===
+/root/mojolearn/bindings/_mojolearn_solver.mojo:204:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/identical/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_svm.sh ===
+/root/mojolearn/bindings/_mojolearn_svm.mojo:520:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/identical/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_training.sh ===
+./training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built python/mojolearn/identical/_mojolearn_training.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_transformer.sh ===
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:433:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_transformer.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_trees.sh ===
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+built python/mojolearn/identical/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_tsa.sh ===
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:267:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/identical/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+2920 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ab040000000, nodemask=2)
+mojolearn imports OK /root/mojolearn/python/mojolearn/__init__.py
+
+=== classical.linkage.ours-native.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=3 ms=0.978629 hash=5d3155fc940e61d2
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=4 ms=0.948858 hash=5d3155fc940e61d2
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=5 ms=0.948063 hash=5d3155fc940e61d2
+
+=== classical.linkage.ours.log :: python3 bench/speed/classical_py_speed_arm.py --lane linkage --rounds 5 ===
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=3 ms=0.982057 hash=09e157d91023ef86
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=4 ms=1.000833 hash=09e157d91023ef86
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=5 ms=0.976428 hash=09e157d91023ef86
+
+=== classical.linkage.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=linkage arm=cuml-gpu shape=blobs_dups.102x5 round=3 ms=2.284579 hash=1ff4250dd4aab576
+FSPEED lane=linkage arm=cuml-gpu shape=blobs_dups.102x5 round=4 ms=2.278067 hash=1ff4250dd4aab576
+FSPEED lane=linkage arm=cuml-gpu shape=blobs_dups.102x5 round=5 ms=2.257839 hash=1ff4250dd4aab576
+
+=== classical.linkage.vendor-deterministic.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=linkage arm=cuml-gpu-deterministic reason=NOT-DOCUMENTED: cuML's AgglomerativeClustering documentation states nothing about determinism (https://docs.nvidia.com/cuml/latest/api/generated/cuml.cluster.AgglomerativeClustering/)
+
+=== classical.svm.ours-native.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=3 ms=1.309562 hash=fabf0f0f1cd0456d
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=4 ms=1.266618 hash=fabf0f0f1cd0456d
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=5 ms=1.278062 hash=fabf0f0f1cd0456d
+
+=== classical.svm.ours.log :: python3 bench/speed/classical_py_speed_arm.py --lane svm --rounds 5 ===
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=3 ms=1.420740 hash=0bc196ace05addea
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=4 ms=1.414761 hash=0bc196ace05addea
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=5 ms=1.379590 hash=0bc196ace05addea
+
+=== classical.svm.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=3 ms=4.886784 hash=28f0580866fb9354
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=4 ms=4.863221 hash=28f0580866fb9354
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=5 ms=4.890427 hash=28f0580866fb9354
+
+=== classical.svm.vendor-deterministic.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=svm arm=cuml-gpu-deterministic reason=NOT-OFFERED: cuML's SVC documents its seed as "random_state: int (default = None) Seed for random number generator (used only when probability=True)."; this lane fits with probability=False, so no deterministic configuration is documented for what is timed (https://docs.nvidia.com/cuml/latest/api/generated/cuml.svm.SVC/)
+
+=== classical.metrics.ours-native.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=3 ms=1024.329642 hash=df217c98efb258e3
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=4 ms=1029.586158 hash=df217c98efb258e3
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=5 ms=1022.924502 hash=df217c98efb258e3
+
+=== classical.metrics.ours.log :: python3 bench/speed/classical_py_speed_arm.py --lane metrics --rounds 5 ===
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=3 ms=1401.480529 hash=db3a4a35013dd80f
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=4 ms=1382.090095 hash=db3a4a35013dd80f
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=5 ms=1400.865886 hash=db3a4a35013dd80f
+
+=== classical.metrics.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=metrics arm=cuml-gpu shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=3 ms=544.936255 hash=-
+FSPEED lane=metrics arm=cuml-gpu shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=4 ms=535.024762 hash=-
+FSPEED lane=metrics arm=cuml-gpu shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=5 ms=534.528267 hash=-
+
+=== classical.metrics.vendor-deterministic.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=metrics arm=cuml-gpu-deterministic reason=NOT-DOCUMENTED: cuML's metrics documentation states nothing about determinism (accuracy_score, trustworthiness, silhouette_score and kl_divergence pages read; none mentions it) (https://docs.nvidia.com/cuml/latest/api/generated/cuml.metrics.trustworthiness/)
+
+=== classical.ivf.ours-native.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=ivf arm=ours shape=512x8q64L8p3k8 round=3 ms=7.319045 hash=7817e2b00aed063f
+FSPEED lane=ivf arm=ours shape=512x8q64L8p3k8 round=4 ms=7.07215 hash=7817e2b00aed063f
+FSPEED lane=ivf arm=ours shape=512x8q64L8p3k8 round=5 ms=7.077984 hash=7817e2b00aed063f
+
+=== classical.ivf.ours.log :: python3 bench/speed/classical_py_speed_arm.py --lane ivf --rounds 5 ===
+FSPEED-REFUSED lane=ivf arm=ours reason=NO-PYTHON-SURFACE: looked for an IVF-Flat index in mojolearn.neighbors (NearestNeighbors accepts algorithm= 'brute'/'auto'/'rbc' only, all EXACT; no ivf_flat build/search is exported from bindings/_mojolearn.mojo); the Mojo driver covers ivf/
+
+=== classical.ivf.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=3 ms=10.853190 hash=cb8f1cef2816d70f
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=4 ms=10.772973 hash=cb8f1cef2816d70f
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=5 ms=10.697868 hash=cb8f1cef2816d70f
+
+=== classical.ivf.vendor-deterministic.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=ivf arm=cuvs-gpu-deterministic reason=NOT-DOCUMENTED: cuVS's IVF-Flat Python documentation (IndexParams: n_lists, metric, kmeans_n_iters, kmeans_trainset_fraction, add_data_on_build, adaptive_centers) states nothing about determinism and takes no seed (https://docs.nvidia.com/cuvs/api-reference/python-api-neighbors-ivf-flat)
+
+=== classical.hdbscan.ours-native.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=hdbscan arm=ours shape=blobs96.96x4 round=3 ms=1.290993 hash=8e1998063cb24ce6
+FSPEED lane=hdbscan arm=ours shape=blobs96.96x4 round=4 ms=1.241874 hash=8e1998063cb24ce6
+FSPEED lane=hdbscan arm=ours shape=blobs96.96x4 round=5 ms=1.238477 hash=8e1998063cb24ce6
+
+=== classical.hdbscan.ours.log :: python3 bench/speed/classical_py_speed_arm.py --lane hdbscan --rounds 5 ===
+FSPEED-REFUSED lane=hdbscan arm=ours reason=NO-PYTHON-SURFACE: looked for mojolearn.HDBSCAN and a cluster/density module class; none in __init__.__all__, no _hdbscan_impl.py; the Mojo driver covers hdbscan/
+
+=== classical.hdbscan.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=3 ms=4.420843 hash=5199770714da8525
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=4 ms=4.413281 hash=5199770714da8525
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=5 ms=4.432868 hash=5199770714da8525
+
+=== classical.hdbscan.vendor-deterministic.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=hdbscan arm=cuml-gpu-deterministic reason=DETERMINISTIC-BY-DEFAULT: "Note that while the algorithm is generally deterministic and should provide matching results between RAPIDS and the Scikit-learn Contrib versions, the construction of the k-nearest neighbors graph and minimum spanning tree can introduce differences between the two algorithms, especially when several nearest neighbors around a point might have the same distance." (https://docs.nvidia.com/cuml/latest/api/generated/cuml.cluster.hdbscan.HDBSCAN/)
+
+=== classical.cholesky.ours-native.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=3 ms=0.43718 hash=d8372f54cdacc140
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=4 ms=0.440093 hash=d8372f54cdacc140
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=5 ms=0.438385 hash=d8372f54cdacc140
+
+=== classical.cholesky.ours.log :: python3 bench/speed/classical_py_speed_arm.py --lane cholesky --rounds 5 ===
+FSPEED-REFUSED lane=cholesky arm=ours reason=NO-PYTHON-SURFACE: looked for mojolearn.linalg.cholesky / cho_solve; mojolearn.linalg exports matmul only (_linalg_impl.py), and the Cholesky the GP wraps is not reachable as a factorization; the Mojo driver covers cholesky/
+
+=== classical.cholesky.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=3 ms=0.176631 hash=1637da415921bd3f
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=4 ms=0.165679 hash=1637da415921bd3f
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=5 ms=0.177279 hash=1637da415921bd3f
+
+=== classical.cholesky.vendor-deterministic.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=cholesky arm=torch-gpu-deterministic shape=RBF.64x64r4 round=3 ms=0.395868 hash=1637da415921bd3f
+FSPEED lane=cholesky arm=torch-gpu-deterministic shape=RBF.64x64r4 round=4 ms=0.200238 hash=1637da415921bd3f
+FSPEED lane=cholesky arm=torch-gpu-deterministic shape=RBF.64x64r4 round=5 ms=0.341978 hash=1637da415921bd3f
+
+=== classical.gmm.ours-native.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=gmm arm=ours shape=SEPARATED.24x2K3 round=3 ms=2.466025 hash=b934e26ee2bc5277
+FSPEED lane=gmm arm=ours shape=SEPARATED.24x2K3 round=4 ms=2.477349 hash=b934e26ee2bc5277
+FSPEED lane=gmm arm=ours shape=SEPARATED.24x2K3 round=5 ms=2.4864 hash=b934e26ee2bc5277
+
+=== classical.gmm.ours.log :: python3 bench/speed/classical_py_speed_arm.py --lane gmm --rounds 5 ===
+FSPEED-REFUSED lane=gmm arm=ours reason=NO-PYTHON-SURFACE: looked for mojolearn.GaussianMixture; mixture/ has no _impl.py and no binding export; the Mojo driver covers mixture/
+
+=== classical.gmm.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED-REFUSED lane=gmm arm=cuml-gpu reason=RAPIDS ships no GaussianMixture; the arm below is scikit-learn on the CPU and is labeled sklearn-cpu
+FSPEED-NOTE lane=gmm arm=sklearn-cpu size=large fixture_source=mojo-dump shape=SEPARATED.24x2K3
+FSPEED-REFUSED lane=gmm arm=sklearn-cpu reason=GPU-PATH-ONLY: this box is a GPU vendor's box and sklearn-cpu is their CPU path. On NVIDIA and AMD we compare against the vendor's GPU arm only; the CPU arm is the MacBook's. This lane therefore has no legal opponent here, which is a fact about the vendor's GPU coverage and not a failure of this run.
+
+=== classical.gmm.vendor-deterministic.log :: python3 tools/speed_cuml_arm.py ===
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=gmm arm=cuml-gpu-deterministic reason=NOT-OFFERED: RAPIDS ships no GaussianMixture, so there is no GPU arm and no deterministic sibling of one; the CPU fallback arm is seeded by random_state in its default configuration and is GPU-PATH-ONLY refused on a GPU vendor's box (https://docs.nvidia.com/cuml/latest/api/)
+FSPEED-REFUSED lane=gmm arm=sklearn-cpu-deterministic reason=NOT-APPLICABLE: the sklearn-cpu arm passes random_state in its default configuration already and is a CPU library; there is no separate deterministic configuration to time
+
+=== classical.gp.ours-native.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=3 ms=0.429669 hash=d438720fd237beaf
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=4 ms=0.431093 hash=d438720fd237beaf
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=5 ms=0.431817 hash=d438720fd237beaf
+
+=== classical.gp.ours.log :: python3 bench/speed/classical_py_speed_arm.py --lane gp --rounds 5 ===
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=3 ms=0.505190 hash=d296d709ddff4203
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=4 ms=0.508007 hash=d296d709ddff4203
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=5 ms=0.499196 hash=d296d709ddff4203
+
+=== classical.gp.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED-NOTE lane=gp arm=sklearn-cpu optimizer=None and normalize_y=False on both sides: our gpr_fit_host implements no hyperparameter optimizer (DEVIATION 1761), so an arm that optimized would be doing different work
+FSPEED-NOTE lane=gp arm=sklearn-cpu scikit-learn works in float64 and we work in float32; that is a real difference in the amount of arithmetic and it cannot be turned off on their side
+FSPEED-REFUSED lane=gp arm=sklearn-cpu reason=GPU-PATH-ONLY: this box is a GPU vendor's box and sklearn-cpu is their CPU path. On NVIDIA and AMD we compare against the vendor's GPU arm only; the CPU arm is the MacBook's. This lane therefore has no legal opponent here, which is a fact about the vendor's GPU coverage and not a failure of this run.
+
+=== classical.gp.vendor-deterministic.log :: python3 tools/speed_cuml_arm.py ===
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=gp arm=cuml-gpu-deterministic reason=NOT-OFFERED: RAPIDS ships no Gaussian process regressor, so there is no GPU arm and no deterministic sibling of one; the CPU fallback arm is seeded by random_state in its default configuration and is GPU-PATH-ONLY refused on a GPU vendor's box (https://docs.nvidia.com/cuml/latest/api/)
+FSPEED-REFUSED lane=gp arm=sklearn-cpu-deterministic reason=NOT-APPLICABLE: the sklearn-cpu arm passes random_state in its default configuration already and is a CPU library; there is no separate deterministic configuration to time

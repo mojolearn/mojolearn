@@ -1,0 +1,17 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=pca arm=cuml-gpu size=wide fixture_source=splitmix64 shape=1000000x512c8
+FSPEED-NOTE lane=pca arm=cuml-gpu svd_solver=jacobi, algorithm-matched: their iterative eigendecomposition against our pca_fit, which forms the covariance and runs jacobi_eigh_device on it
+FSPEED-HEADER family=classical lane=pca arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=wide
+FSPEED-WARMUP lane=pca arm=cuml-gpu shape=1000000x512c8 ms=170.948359
+FSPEED lane=pca arm=cuml-gpu shape=1000000x512c8 round=1 ms=72.567537 hash=9dc3c9766b835a8e
+FSPEED lane=pca arm=cuml-gpu shape=1000000x512c8 round=2 ms=71.370558 hash=9dc3c9766b835a8e
+FSPEED lane=pca arm=cuml-gpu shape=1000000x512c8 round=3 ms=72.355041 hash=9dc3c9766b835a8e
+FSPEED lane=pca arm=cuml-gpu shape=1000000x512c8 round=4 ms=71.738929 hash=9dc3c9766b835a8e
+FSPEED lane=pca arm=cuml-gpu shape=1000000x512c8 round=5 ms=72.644263 hash=9dc3c9766b835a8e

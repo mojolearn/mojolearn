@@ -1,0 +1,1 @@
+FSPEED-REFUSED lane=gmm arm=ours reason=NO-PYTHON-SURFACE: looked for mojolearn.GaussianMixture; mixture/ has no _impl.py and no binding export; the Mojo driver covers mixture/

@@ -1,0 +1,6 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+5656 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x733040000000, nodemask=1)
+FSPEED-REFUSED lane=gp arm=ours reason=GaussianProcessRegressor bound under numeric_mode='identical': alpha (the Cholesky profile's jitter) must be +0.0 or 2**-20 (DEVIATION 1637, gp_validate_alpha); fixture gives 0.1 (DEVIATION 2169)

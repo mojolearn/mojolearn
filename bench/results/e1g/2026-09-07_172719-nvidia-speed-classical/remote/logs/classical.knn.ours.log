@@ -1,0 +1,18 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+5161 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x725a00000000, nodemask=1)
+FSPEED-HEADER family=classical lane=knn arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=wide
+FSPEED-NOTE lane=knn arm=ours surface=python: this is the python/mojolearn/ ours arm (DEVIATION 2160); the Mojo driver's arm=ours rows time the entry points directly
+FSPEED-NOTE lane=knn arm=ours tier read back from mojolearn.numeric_mode()=identical; MOJOLEARN_NUMERIC_MODE='identical' in the environment (DEVIATION 2162)
+FSPEED-NOTE lane=knn arm=ours hash is sha256/16 over dtype+shape+bytes (hash_predictions), within-arm only, never gated (DEVIATION 2164)
+FSPEED-NOTE lane=knn arm=ours binaries: vendor=cuda gpu_arch=None (read back from the loaded set)
+FSPEED-NOTE lane=knn arm=ours algorithm='brute' metric='euclidean' k=10; the search is the timed region and the index fit is outside it on both arms
+FSPEED-NOTE lane=knn arm=ours THIS SURFACE RETURNS EUCLIDEAN (sqrt) DISTANCES and casts the uint32 index to int64, both inside kneighbors and so inside the timer; the vendor arm's note that 'our arm returns SQUARED ones' describes the Mojo driver, not this one (DEVIATION 2166)
+FSPEED-WARMUP lane=knn arm=ours shape=200000x512q20000k10 ms=9807.817419
+FSPEED lane=knn arm=ours shape=200000x512q20000k10 round=1 ms=8729.434763 hash=9d99ecc57443ac8d
+FSPEED lane=knn arm=ours shape=200000x512q20000k10 round=2 ms=8733.661736 hash=9d99ecc57443ac8d
+FSPEED lane=knn arm=ours shape=200000x512q20000k10 round=3 ms=8721.265264 hash=9d99ecc57443ac8d
+FSPEED lane=knn arm=ours shape=200000x512q20000k10 round=4 ms=8717.234400 hash=9d99ecc57443ac8d
+FSPEED lane=knn arm=ours shape=200000x512q20000k10 round=5 ms=8720.153800 hash=9d99ecc57443ac8d

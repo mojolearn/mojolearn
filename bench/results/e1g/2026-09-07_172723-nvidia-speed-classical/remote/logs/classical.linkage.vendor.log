@@ -1,0 +1,18 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=linkage arm=cuml-gpu size=wide fixture_source=splitmix64 shape=wide.10000x512
+FSPEED-NOTE lane=linkage arm=cuml-gpu linkage=single connectivity=pairwise metric=euclidean; cuML implements single linkage only, which is the arm our single_linkage was ported from
+FSPEED-NOTE lane=linkage arm=cuml-gpu distance keyword on this build is metric=euclidean
+FSPEED-HEADER family=classical lane=linkage arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=wide
+FSPEED-WARMUP lane=linkage arm=cuml-gpu shape=wide.10000x512 ms=2694.528263
+FSPEED lane=linkage arm=cuml-gpu shape=wide.10000x512 round=1 ms=42.416230 hash=39023b656c529234
+FSPEED lane=linkage arm=cuml-gpu shape=wide.10000x512 round=2 ms=42.069033 hash=39023b656c529234
+FSPEED lane=linkage arm=cuml-gpu shape=wide.10000x512 round=3 ms=41.514322 hash=39023b656c529234
+FSPEED lane=linkage arm=cuml-gpu shape=wide.10000x512 round=4 ms=41.497018 hash=39023b656c529234
+FSPEED lane=linkage arm=cuml-gpu shape=wide.10000x512 round=5 ms=41.693963 hash=39023b656c529234

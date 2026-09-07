@@ -1,0 +1,6 @@
+pod=wgsvu59grm257o
+armed=1
+terminated=1
+deadman_pid=49990
+exit=0
+at=2026-09-07T21:46:56Z

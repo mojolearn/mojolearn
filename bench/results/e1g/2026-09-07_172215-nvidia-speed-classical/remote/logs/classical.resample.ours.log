@@ -1,0 +1,1 @@
+FSPEED-REFUSED lane=resample arm=ours reason=NO-PYTHON-SURFACE: looked for a bootstrap in mojolearn (resample/ has no Python door); the Mojo driver covers resample/

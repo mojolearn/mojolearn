@@ -1,0 +1,9 @@
+3459 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a9fc0000000, nodemask=2)
+wrote fixture dump /root/gemm_leg_out/dump/svm.fixture
+FSPEED-HEADER family=classical lane=svm arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large scale=fixed
+FSPEED-WARMUP lane=svm arm=ours shape=F2.xor.240x2 ms=408.85318
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=1 ms=1.277274 hash=fabf0f0f1cd0456d
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=2 ms=1.27797 hash=fabf0f0f1cd0456d
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=3 ms=1.309562 hash=fabf0f0f1cd0456d
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=4 ms=1.266618 hash=fabf0f0f1cd0456d
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=5 ms=1.278062 hash=fabf0f0f1cd0456d

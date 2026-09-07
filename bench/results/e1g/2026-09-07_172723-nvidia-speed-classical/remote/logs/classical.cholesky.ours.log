@@ -1,0 +1,1 @@
+FSPEED-REFUSED lane=cholesky arm=ours reason=NO-PYTHON-SURFACE: looked for mojolearn.linalg.cholesky / cho_solve; mojolearn.linalg exports matmul only (_linalg_impl.py), and the Cholesky the GP wraps is not reachable as a factorization; the Mojo driver covers cholesky/

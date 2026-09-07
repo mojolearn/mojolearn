@@ -1,0 +1,14 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=metrics arm=cuml-gpu size=wide fixture_source=splitmix64 shape=lab2000000.flt2000000.sil100000x512.tru50000x512
+FSPEED-NOTE lane=metrics arm=cuml-gpu ELEVEN metrics, the same eleven the Mojo lane times. rand_index is in neither pass: cuML ships no plain Rand index and an arm computing one more metric than the other is not a comparison
+FSPEED-NOTE lane=metrics arm=cuml-gpu hash=- for this lane: the eleven return values are Python floats of two different widths on the two sides and folding them would compare formatting, not answers
+FSPEED-HEADER family=classical lane=metrics arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=wide
+FSPEED-WARMUP lane=metrics arm=cuml-gpu shape=lab2000000.flt2000000.sil100000x512.tru50000x512 ms=8520.629358
+FSPEED lane=metrics arm=cuml-gpu shape=lab2000000.flt2000000.sil100000x512.tru50000x512 round=1 ms=1120.397270 hash=-
+FSPEED lane=metrics arm=cuml-gpu shape=lab2000000.flt2000000.sil100000x512.tru50000x512 round=2 ms=1121.168423 hash=-
+FSPEED lane=metrics arm=cuml-gpu shape=lab2000000.flt2000000.sil100000x512.tru50000x512 round=3 ms=1118.382156 hash=-
+FSPEED lane=metrics arm=cuml-gpu shape=lab2000000.flt2000000.sil100000x512.tru50000x512 round=4 ms=1119.728573 hash=-
+FSPEED lane=metrics arm=cuml-gpu shape=lab2000000.flt2000000.sil100000x512.tru50000x512 round=5 ms=1123.084120 hash=-

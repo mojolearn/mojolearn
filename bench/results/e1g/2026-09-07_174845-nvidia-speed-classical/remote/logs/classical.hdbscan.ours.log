@@ -1,0 +1,1 @@
+FSPEED-REFUSED lane=hdbscan arm=ours reason=NO-PYTHON-SURFACE: looked for mojolearn.HDBSCAN and a cluster/density module class; none in __init__.__all__, no _hdbscan_impl.py; the Mojo driver covers hdbscan/

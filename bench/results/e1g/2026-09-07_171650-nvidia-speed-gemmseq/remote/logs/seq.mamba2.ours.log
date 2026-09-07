@@ -1,0 +1,90 @@
+FSPEED-HEADER family=seq lane=mamba2 arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=mamba2 arm=ours entry=mojolearn.mamba.Mamba2Block(weights).forward(x) -> mamba/ via _mojolearn_mamba; our arm through the public Python API (DEVIATION 2100); cli_lane=mamba2 rows=all
+3173 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10aa80000000, nodemask=1)
+FSPEED-WEIGHTS lane=mamba2 shape=lane.b2_l4_d32 tensor=block_norm.weight n=32 hash=608105e3cd8195cf
+FSPEED-INPUT-SHA256 lane=mamba2 shape=lane.b2_l4_d32 tensor=block_norm.weight bytes=128 sha256=a3147ad1d2908dca09b7fe733e966f3fa294dca7cb085fd3699f38caecaab667
+FSPEED-WEIGHTS lane=mamba2 shape=lane.b2_l4_d32 tensor=in_proj.weight n=12320 hash=50592594c20a0b48
+FSPEED-INPUT-SHA256 lane=mamba2 shape=lane.b2_l4_d32 tensor=in_proj.weight bytes=49280 sha256=e565e61fd21e5b9c5e110352440bc2304fc61650b87c1ac79110c5d61bdef39e
+FSPEED-WEIGHTS lane=mamba2 shape=lane.b2_l4_d32 tensor=conv1d.weight n=1280 hash=d6c5b8509d802d0b
+FSPEED-INPUT-SHA256 lane=mamba2 shape=lane.b2_l4_d32 tensor=conv1d.weight bytes=5120 sha256=2293140819ec35676acb42653b38ffa613e6b710fbe4543528b5651a8b3c4aab
+FSPEED-WEIGHTS lane=mamba2 shape=lane.b2_l4_d32 tensor=conv1d.bias n=320 hash=bd5a14f7e7720eaf
+FSPEED-INPUT-SHA256 lane=mamba2 shape=lane.b2_l4_d32 tensor=conv1d.bias bytes=1280 sha256=922eae560ec06efeb0ce0ed0bb535fa029524da2b9f4fef3eb21ba0a8b329a96
+FSPEED-WEIGHTS lane=mamba2 shape=lane.b2_l4_d32 tensor=dt_bias n=1 hash=db6b5bc52d1d9e0a
+FSPEED-INPUT-SHA256 lane=mamba2 shape=lane.b2_l4_d32 tensor=dt_bias bytes=4 sha256=1244acbe9c98d2d4f3525d81611695130ff3a80b8a2e874b06284602439f9034
+FSPEED-WEIGHTS lane=mamba2 shape=lane.b2_l4_d32 tensor=A_log n=1 hash=9ac5913dfb999ede
+FSPEED-INPUT-SHA256 lane=mamba2 shape=lane.b2_l4_d32 tensor=A_log bytes=4 sha256=90b13d32b9e9da342f42234859300b7c40d2ec5c9cfc13ac52226dab54a6b75f
+FSPEED-WEIGHTS lane=mamba2 shape=lane.b2_l4_d32 tensor=D n=1 hash=bf1ad9ddaa9f65ef
+FSPEED-INPUT-SHA256 lane=mamba2 shape=lane.b2_l4_d32 tensor=D bytes=4 sha256=e4cb1faf5ae9ef599c16ab74045b639eb553975a02b23ac2fe3036899663e605
+FSPEED-WEIGHTS lane=mamba2 shape=lane.b2_l4_d32 tensor=norm.weight n=64 hash=c809904eb0d846b9
+FSPEED-INPUT-SHA256 lane=mamba2 shape=lane.b2_l4_d32 tensor=norm.weight bytes=256 sha256=ec392f8968dd8d7dfe064fa2f3deab2625260b29f23538fa4f20222d2067ebc6
+FSPEED-WEIGHTS lane=mamba2 shape=lane.b2_l4_d32 tensor=out_proj.weight n=2048 hash=b1b2daade2098ecb
+FSPEED-INPUT-SHA256 lane=mamba2 shape=lane.b2_l4_d32 tensor=out_proj.weight bytes=8192 sha256=aaa59d79ee3576f83aa61c64dff1cd4fb5410b1f9c9e81d64f66d09842dfa404
+FSPEED-WEIGHTS lane=mamba2 shape=lane.b2_l4_d32 tensor=x n=256 hash=495307116a2274fc
+FSPEED-INPUT-SHA256 lane=mamba2 shape=lane.b2_l4_d32 tensor=x bytes=1024 sha256=8968ba83df3ddef2a671721c9af901a8a7a63fcc6cde14c5ee7efa0b533284f4
+FSPEED-NOTE lane=mamba2 arm=ours binary read-back shape=lane.b2_l4_d32 numeric_mode_used=identical vendor_used=cuda entry=mojolearn.mamba.Mamba2Block(weights).forward(x) -> mamba/ via _mojolearn_mamba
+FSPEED-NOTE lane=mamba2 arm=ours one round at shape lane.b2_l4_d32 = one public forward() including the weight host-list copy + upload, the non-finite refusal scan and the output download; the return is the synchronization (DEVIATION 2111)
+FSPEED-WARMUP lane=mamba2 arm=ours shape=lane.b2_l4_d32 ms=893.471703
+FSPEED lane=mamba2 arm=ours shape=lane.b2_l4_d32 round=1 ms=3.790461 hash=1e7303ca2cdfd9e9
+FSPEED lane=mamba2 arm=ours shape=lane.b2_l4_d32 round=2 ms=2.998289 hash=1e7303ca2cdfd9e9
+FSPEED lane=mamba2 arm=ours shape=lane.b2_l4_d32 round=3 ms=2.694234 hash=1e7303ca2cdfd9e9
+FSPEED lane=mamba2 arm=ours shape=lane.b2_l4_d32 round=4 ms=3.016300 hash=1e7303ca2cdfd9e9
+FSPEED lane=mamba2 arm=ours shape=lane.b2_l4_d32 round=5 ms=2.769858 hash=1e7303ca2cdfd9e9
+FSPEED-NOTE lane=mamba2 arm=ours output witness shape=lane.b2_l4_d32 n=256 hash=53199106ccf0fe26
+FSPEED-NOTE lane=mamba2 arm=ours dump shape=lane.b2_l4_d32 n=256 path=/root/gemm_leg_out/dump/seq.mamba2.lane.b2_l4_d32.f32.bin
+FSPEED-WEIGHTS lane=mamba2 shape=narrow.b8_l4096_d512 tensor=block_norm.weight n=512 hash=078950daaf4bd8f8
+FSPEED-INPUT-SHA256 lane=mamba2 shape=narrow.b8_l4096_d512 tensor=block_norm.weight bytes=2048 sha256=0da4795cf2c81aae9f63761cf50400831852e6b0fa0374c7d9e5cde230b87e48
+FSPEED-WEIGHTS lane=mamba2 shape=narrow.b8_l4096_d512 tensor=in_proj.weight n=1187840 hash=80a0daf6a807b89f
+FSPEED-INPUT-SHA256 lane=mamba2 shape=narrow.b8_l4096_d512 tensor=in_proj.weight bytes=4751360 sha256=f8ceb7cae7e0de745ee5e1a6572f27f72331a1c8f2152499e57904642e05b271
+FSPEED-WEIGHTS lane=mamba2 shape=narrow.b8_l4096_d512 tensor=conv1d.weight n=5120 hash=21914d2b20c73c89
+FSPEED-INPUT-SHA256 lane=mamba2 shape=narrow.b8_l4096_d512 tensor=conv1d.weight bytes=20480 sha256=53dc25b0cddb5c14493d895de8ea04313e29d50fdec96115cba0ea9c0862522a
+FSPEED-WEIGHTS lane=mamba2 shape=narrow.b8_l4096_d512 tensor=conv1d.bias n=1280 hash=e9b62928f28c328a
+FSPEED-INPUT-SHA256 lane=mamba2 shape=narrow.b8_l4096_d512 tensor=conv1d.bias bytes=5120 sha256=7d24058aee9d32bc27fe72d349bc44f30747458701b4128237214366465fc1c4
+FSPEED-WEIGHTS lane=mamba2 shape=narrow.b8_l4096_d512 tensor=dt_bias n=16 hash=8fd51a5188d4328a
+FSPEED-INPUT-SHA256 lane=mamba2 shape=narrow.b8_l4096_d512 tensor=dt_bias bytes=64 sha256=2dfa322591079feb124b1ad24a6faf5b2ad59021a617f0ad5f4cfd863e9418c8
+FSPEED-WEIGHTS lane=mamba2 shape=narrow.b8_l4096_d512 tensor=A_log n=16 hash=bd996420eb173cec
+FSPEED-INPUT-SHA256 lane=mamba2 shape=narrow.b8_l4096_d512 tensor=A_log bytes=64 sha256=f86d8057d55e044a134dd58f1b2d99f57ce95c945931da8e171c9496a981cbda
+FSPEED-WEIGHTS lane=mamba2 shape=narrow.b8_l4096_d512 tensor=D n=16 hash=ec753610e20e8ca7
+FSPEED-INPUT-SHA256 lane=mamba2 shape=narrow.b8_l4096_d512 tensor=D bytes=64 sha256=46996dae6ca3a6472ed49b93582e728977ca43cd70881c54d006228daf8eb5ac
+FSPEED-WEIGHTS lane=mamba2 shape=narrow.b8_l4096_d512 tensor=norm.weight n=1024 hash=f89fe4cadcc6afac
+FSPEED-INPUT-SHA256 lane=mamba2 shape=narrow.b8_l4096_d512 tensor=norm.weight bytes=4096 sha256=d449dcdfdf40faf38feeeab312c2d4d1e97c1e243addb60c47e5952275154b89
+FSPEED-WEIGHTS lane=mamba2 shape=narrow.b8_l4096_d512 tensor=out_proj.weight n=524288 hash=a16bf9f9c3883bc2
+FSPEED-INPUT-SHA256 lane=mamba2 shape=narrow.b8_l4096_d512 tensor=out_proj.weight bytes=2097152 sha256=880cfe26ff921e55eb3361abf306785ccd5999281e23ba00fe818d1afa088e81
+FSPEED-WEIGHTS lane=mamba2 shape=narrow.b8_l4096_d512 tensor=x n=16777216 hash=f05ea05cee2b11c3
+FSPEED-NOTE lane=mamba2 arm=ours binary read-back shape=narrow.b8_l4096_d512 numeric_mode_used=identical vendor_used=cuda entry=mojolearn.mamba.Mamba2Block(weights).forward(x) -> mamba/ via _mojolearn_mamba
+FSPEED-NOTE lane=mamba2 arm=ours one round at shape narrow.b8_l4096_d512 = one public forward() including the weight host-list copy + upload, the non-finite refusal scan and the output download; the return is the synchronization (DEVIATION 2111)
+FSPEED-WARMUP lane=mamba2 arm=ours shape=narrow.b8_l4096_d512 ms=1118.196677
+FSPEED lane=mamba2 arm=ours shape=narrow.b8_l4096_d512 round=1 ms=900.247477 hash=9adfbc55ddb0312d
+FSPEED lane=mamba2 arm=ours shape=narrow.b8_l4096_d512 round=2 ms=873.595551 hash=9adfbc55ddb0312d
+FSPEED lane=mamba2 arm=ours shape=narrow.b8_l4096_d512 round=3 ms=872.999974 hash=9adfbc55ddb0312d
+FSPEED lane=mamba2 arm=ours shape=narrow.b8_l4096_d512 round=4 ms=869.994875 hash=9adfbc55ddb0312d
+FSPEED lane=mamba2 arm=ours shape=narrow.b8_l4096_d512 round=5 ms=897.496998 hash=9adfbc55ddb0312d
+FSPEED-NOTE lane=mamba2 arm=ours output witness shape=narrow.b8_l4096_d512 n=16777216 hash=7322d5d197e8f40b
+FSPEED-NOTE lane=mamba2 arm=ours dump shape=narrow.b8_l4096_d512 n=16777216 path=/root/gemm_leg_out/dump/seq.mamba2.narrow.b8_l4096_d512.f32.bin
+FSPEED-WEIGHTS lane=mamba2 shape=wide.b8_l1024_d2048 tensor=block_norm.weight n=2048 hash=ac2dfba33ea0ab2b
+FSPEED-INPUT-SHA256 lane=mamba2 shape=wide.b8_l1024_d2048 tensor=block_norm.weight bytes=8192 sha256=dac38daee1ef3d307a7481a2e46cc63ab77ff893acf2f7fcfd34b6bac1e4cce6
+FSPEED-WEIGHTS lane=mamba2 shape=wide.b8_l1024_d2048 tensor=in_proj.weight n=17432576 hash=1d2b773f1eb7febf
+FSPEED-WEIGHTS lane=mamba2 shape=wide.b8_l1024_d2048 tensor=conv1d.weight n=17408 hash=6c464fb690321d8d
+FSPEED-INPUT-SHA256 lane=mamba2 shape=wide.b8_l1024_d2048 tensor=conv1d.weight bytes=69632 sha256=6bd335e9d7bffbc4412da8aed83674a24184c9e9eb2fdc0267d0fd9d7390aa93
+FSPEED-WEIGHTS lane=mamba2 shape=wide.b8_l1024_d2048 tensor=conv1d.bias n=4352 hash=07421e5beac7214b
+FSPEED-INPUT-SHA256 lane=mamba2 shape=wide.b8_l1024_d2048 tensor=conv1d.bias bytes=17408 sha256=762b58a3be76b103c11f790b115ddaf7897bd58ac0fbbc6ecace98df4c842f2a
+FSPEED-WEIGHTS lane=mamba2 shape=wide.b8_l1024_d2048 tensor=dt_bias n=64 hash=8e8d6e3afe930a1b
+FSPEED-INPUT-SHA256 lane=mamba2 shape=wide.b8_l1024_d2048 tensor=dt_bias bytes=256 sha256=000a9880fbb3b1127616cdf037dfd62c6f8439f9d63b2a771ded19906901d981
+FSPEED-WEIGHTS lane=mamba2 shape=wide.b8_l1024_d2048 tensor=A_log n=64 hash=357a584c841ec7df
+FSPEED-INPUT-SHA256 lane=mamba2 shape=wide.b8_l1024_d2048 tensor=A_log bytes=256 sha256=8fdcbfeca4b908854956dc9b6ee2e880e199ee0123531da5d72b0170fa522acd
+FSPEED-WEIGHTS lane=mamba2 shape=wide.b8_l1024_d2048 tensor=D n=64 hash=baf398c1d3cce016
+FSPEED-INPUT-SHA256 lane=mamba2 shape=wide.b8_l1024_d2048 tensor=D bytes=256 sha256=872235b66786b770c891c518812c69d77b602eeabbfe7f30ebe392227c50f554
+FSPEED-WEIGHTS lane=mamba2 shape=wide.b8_l1024_d2048 tensor=norm.weight n=4096 hash=630b04df4fad7e12
+FSPEED-INPUT-SHA256 lane=mamba2 shape=wide.b8_l1024_d2048 tensor=norm.weight bytes=16384 sha256=0cd3b1455b23e113b28ea52e8fa2f6236540c9f8d91242ce2478b4e87f4e896e
+FSPEED-WEIGHTS lane=mamba2 shape=wide.b8_l1024_d2048 tensor=out_proj.weight n=8388608 hash=6c41d835f23dfa89
+FSPEED-WEIGHTS lane=mamba2 shape=wide.b8_l1024_d2048 tensor=x n=16777216 hash=f05ea05cee2b11c3
+FSPEED-NOTE lane=mamba2 arm=ours binary read-back shape=wide.b8_l1024_d2048 numeric_mode_used=identical vendor_used=cuda entry=mojolearn.mamba.Mamba2Block(weights).forward(x) -> mamba/ via _mojolearn_mamba
+FSPEED-NOTE lane=mamba2 arm=ours one round at shape wide.b8_l1024_d2048 = one public forward() including the weight host-list copy + upload, the non-finite refusal scan and the output download; the return is the synchronization (DEVIATION 2111)
+FSPEED-WARMUP lane=mamba2 arm=ours shape=wide.b8_l1024_d2048 ms=1314.994320
+FSPEED lane=mamba2 arm=ours shape=wide.b8_l1024_d2048 round=1 ms=1279.248662 hash=e4aa91c90b3a247b
+FSPEED lane=mamba2 arm=ours shape=wide.b8_l1024_d2048 round=2 ms=1294.969004 hash=e4aa91c90b3a247b
+FSPEED lane=mamba2 arm=ours shape=wide.b8_l1024_d2048 round=3 ms=1314.136337 hash=e4aa91c90b3a247b
+FSPEED lane=mamba2 arm=ours shape=wide.b8_l1024_d2048 round=4 ms=1301.002972 hash=e4aa91c90b3a247b
+FSPEED lane=mamba2 arm=ours shape=wide.b8_l1024_d2048 round=5 ms=1303.921014 hash=e4aa91c90b3a247b
+FSPEED-NOTE lane=mamba2 arm=ours output witness shape=wide.b8_l1024_d2048 n=16777216 hash=6498a5e03b19a484
+FSPEED-NOTE lane=mamba2 arm=ours dump shape=wide.b8_l1024_d2048 n=16777216 path=/root/gemm_leg_out/dump/seq.mamba2.wide.b8_l1024_d2048.f32.bin
+FSPEED-DONE lane=mamba2 arm=ours mode=IDENTICAL

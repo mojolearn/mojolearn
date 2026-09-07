@@ -1,0 +1,6 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=nystroem arm=cuml-gpu-deterministic reason=NOT-OFFERED: RAPIDS ships no Nystroem, so there is no GPU arm and no deterministic sibling of one; the CPU fallback arm is seeded by random_state in its default configuration and is GPU-PATH-ONLY refused on a GPU vendor's box (https://docs.nvidia.com/cuml/latest/api/)
+FSPEED-REFUSED lane=nystroem arm=sklearn-cpu-deterministic reason=NOT-APPLICABLE: the sklearn-cpu arm passes random_state in its default configuration already and is a CPU library; there is no separate deterministic configuration to time

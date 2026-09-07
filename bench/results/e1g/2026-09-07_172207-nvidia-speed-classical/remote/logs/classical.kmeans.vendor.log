@@ -1,0 +1,22 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=kmeans arm=cuml-gpu size=large fixture_source=splitmix64 shape=4000000x32k64i20
+FSPEED-HEADER family=classical lane=kmeans arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-NOTE lane=kmeans arm=cuml-gpu output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=kmeans arm=cuml-gpu shape=4000000x32k64i20 ms=3299.378335
+FSPEED-NOTE lane=kmeans arm=cuml-gpu output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu shape=4000000x32k64i20 round=1 ms=120.185884 hash=-
+FSPEED-NOTE lane=kmeans arm=cuml-gpu output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu shape=4000000x32k64i20 round=2 ms=118.819593 hash=-
+FSPEED-NOTE lane=kmeans arm=cuml-gpu output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu shape=4000000x32k64i20 round=3 ms=118.783953 hash=-
+FSPEED-NOTE lane=kmeans arm=cuml-gpu output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu shape=4000000x32k64i20 round=4 ms=118.858416 hash=-
+FSPEED-NOTE lane=kmeans arm=cuml-gpu output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu shape=4000000x32k64i20 round=5 ms=123.320257 hash=-

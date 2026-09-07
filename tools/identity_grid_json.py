@@ -77,6 +77,7 @@ def build(legs):
     refusals = {}    # (lane, arm) -> reason (shape-less: refusals carry no shape)
     headers = {}     # (lane, arm) -> {mode, device, rounds}
     notes = []
+    acc = []
     for leg in legs:
         for fname, line in leg["lines"]:
             kind, _, rest = line.partition(" ")
@@ -109,16 +110,19 @@ def build(legs):
                                            "leg": leg["dir"]})
                 c["warmup_ms"] = float(kv["ms"])
             elif kind == "FSPEED-ACC":
-                # ACC lines carry no shape; the log file is one (lane, shape),
-                # so attach to every cell of this lane in this file.
-                for key, c in cells.items():
-                    if key[0] == lane and key[2] == arm and c["log"] == fname:
-                        c["metrics"][kv["metric"]] = float(kv["value"])
+                # ACC lines carry no shape and may precede the first round
+                # (an initial-loss line); they are attached to every cell of
+                # this (lane, arm) in this file after the file is read.
+                acc.append((lane, arm, fname, kv["metric"], float(kv["value"])))
             elif kind == "FSPEED-REFUSED":
                 reason = rest.split("reason=", 1)[1] if "reason=" in rest else rest
                 refusals.setdefault((lane, arm, fname), reason)
             elif kind == "FSPEED-NOTE":
                 notes.append({"lane": lane, "log": fname, "text": rest})
+    for lane, arm, fname, metric, value in acc:
+        for key, c in cells.items():
+            if key[0] == lane and key[2] == arm and c["log"] == fname:
+                c["metrics"][metric] = value
     out_cells = []
     for (lane, shape, arm), c in sorted(cells.items()):
         h = headers.get((lane, arm), {})
@@ -138,7 +142,7 @@ def build(legs):
         # vendor's documented deterministic configuration.
         if arm == "ours":
             mode = h.get("mode")
-        elif arm.endswith("-deterministic"):
+        elif "-deterministic" in arm:
             mode = "VENDOR-DETERMINISTIC"
         else:
             mode = "VENDOR-DEFAULT"

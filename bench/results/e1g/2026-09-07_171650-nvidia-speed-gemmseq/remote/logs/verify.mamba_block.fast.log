@@ -1,0 +1,64 @@
+3481 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39b380000000, nodemask=2)
+Imported from /root/mojolearn/mamba/checks/mamba_check.mojo:439:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba_check.mojo:439:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba_check.mojo:439:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/mamba/checks/mamba_check.mojo:1673:30: warning: assignment to 'xr' was never used; assign to '_' instead?
+    var xr = dims.x_proj_rows()
+                             ^
+=== mamba block identity gate, profile mojolearn.identical.mamba1.fp32.v1
+mode FAST   block sabotage: none
+shape B=1 L=4 d_model=8 d_inner=16 dt_rank=1
+reach: S14's input lands in (10, 20] on 13 of 64 cells  (fixture F7's band; 0 would make S14_THRESHOLD_10 vacuous)
+FAST check: device vs host oracle by stagewise tolerance; bit differences are recorded separately:
+  OK    norm.sumsq  (4 cells)
+  MOVED norm.out  10 of 32 cells, first cell 2  a 0x3fabea56  b 0x3fabea57
+  MOVED in_proj.out  52 of 128 cells, first cell 0  a 0xbc38a0a9  b 0xbc38a0ab
+  MOVED A.out  108 of 256 cells, first cell 0  a 0xc003574a  b 0xc003574b
+  MOVED conv.out  36 of 64 cells, first cell 1  a 0xbc568355  b 0xbc568360
+  MOVED silu.out  36 of 64 cells, first cell 0  a 0x3cdff702  b 0x3cdff703
+  MOVED conv.window  26 of 64 cells, first cell 0  a 0xbc38a0a9  b 0xbc38a0ab
+  MOVED x_proj.out  94 of 132 cells, first cell 0  a 0x3c245ab0  b 0x3c245aad
+  MOVED dt_proj.out  43 of 64 cells, first cell 0  a 0xbc0afacf  b 0xbc0afacc
+  MOVED softplus.out  61 of 64 cells, first cell 0  a 0x3d0132d7  b 0x3d0132ea
+  MOVED scan.y  63 of 64 cells, first cell 0  a 0xb409982b  b 0xb4099840
+  MOVED scan.h  242 of 256 cells, first cell 0  a 0xb81dcb38  b 0xb81dcb76
+  MOVED skip.out  35 of 64 cells, first cell 0  a 0x3d0eca10  b 0x3d0eca11
+  MOVED gate.out  43 of 64 cells, first cell 0  a 0xbb2dda93  b 0xbb2dda95
+  MOVED out_proj.out  27 of 32 cells, first cell 0  a 0x3a0b0c72  b 0x3a0b0c73
+  OK    residual.out  (32 cells)
+card: 17 records, contract section 7 wants 17
+card: 17/17 tags in contract section 7's order, all unique
+  FAST  norm.sumsq  outside=0/4 bit_diff=0/4 max_abs=0.0 max_rel=0.0 rtol=4e-06 atol=2e-06
+  FAST  norm.out  outside=0/32 bit_diff=10/32 max_abs=1.1920929e-07 max_rel=1.6409673e-07 rtol=8e-06 atol=2e-06
+  FAST  in_proj.out  outside=0/128 bit_diff=52/128 max_abs=4.4703484e-08 max_rel=1.207286e-06 rtol=2e-05 atol=2e-06
+  FAST  A.out  outside=0/256 bit_diff=108/256 max_abs=1.9073486e-06 max_rel=1.2898633e-07 rtol=8e-06 atol=2e-06
+  FAST  conv.out  outside=0/64 bit_diff=36/64 max_abs=2.9802322e-08 max_rel=4.697632e-05 rtol=2e-05 atol=2e-06
+  FAST  silu.out  outside=0/64 bit_diff=36/64 max_abs=1.8626452e-08 max_rel=4.687936e-05 rtol=4e-05 atol=2e-06
+  FAST  conv.window  outside=26/64 bit_diff=26/64 max_abs=4.4703484e-08 max_rel=1.0692453e-06 rtol=0.0 atol=0.0
+  FAST  x_proj.out  outside=0/132 bit_diff=94/132 max_abs=4.656613e-09 max_rel=1.18945545e-05 rtol=4e-05 atol=2e-06
+  FAST  dt_proj.out  outside=0/64 bit_diff=43/64 max_abs=2.7939677e-09 max_rel=3.55577e-07 rtol=4e-05 atol=2e-06
+  FAST  softplus.out  outside=0/64 bit_diff=61/64 max_abs=9.536743e-07 max_rel=5.0176925e-05 rtol=4e-05 atol=2e-06
+  FAST  scan.y  outside=0/64 bit_diff=63/64 max_abs=1.7462298e-10 max_rel=6.7944356e-06 rtol=0.0001 atol=2e-06
+  FAST  scan.h  outside=0/256 bit_diff=242/256 max_abs=4.656613e-09 max_rel=4.8761274e-05 rtol=0.0001 atol=2e-06
+  FAST  skip.out  outside=0/64 bit_diff=35/64 max_abs=1.4901161e-08 max_rel=4.692196e-05 rtol=0.0001 atol=2e-06
+  FAST  gate.out  outside=0/64 bit_diff=43/64 max_abs=3.7252903e-09 max_rel=1.3528734e-05 rtol=0.0002 atol=2e-06
+  FAST  out_proj.out  outside=0/32 bit_diff=27/32 max_abs=9.313226e-10 max_rel=2.0408663e-05 rtol=0.0002 atol=2e-06
+  FAST  residual.out  outside=0/32 bit_diff=0/32 max_abs=0.0 max_rel=0.0 rtol=0.0002 atol=2e-06
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: mamba_check: FAST numerical accuracy FAILED on 1 stages; bit differences above are diagnostic, not themselves failures
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

@@ -1,0 +1,17 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=svm arm=cuml-gpu size=large fixture_source=mojo-dump shape=F2.xor.240x2
+FSPEED-NOTE lane=svm arm=cuml-gpu FIT ONLY. C, gamma, tol and nochange_steps are passed explicitly; cache_size is 0 on our side and left at cuML's default here because a cache size is a memory policy, not a parameter of the answer
+FSPEED-HEADER family=classical lane=svm arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-WARMUP lane=svm arm=cuml-gpu shape=F2.xor.240x2 ms=3505.662784
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=1 ms=4.943304 hash=28f0580866fb9354
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=2 ms=4.884139 hash=28f0580866fb9354
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=3 ms=4.886784 hash=28f0580866fb9354
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=4 ms=4.863221 hash=28f0580866fb9354
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=5 ms=4.890427 hash=28f0580866fb9354

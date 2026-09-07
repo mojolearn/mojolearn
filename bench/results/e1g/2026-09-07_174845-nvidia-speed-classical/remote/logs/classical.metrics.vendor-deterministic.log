@@ -1,0 +1,5 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=metrics arm=cuml-gpu-deterministic reason=NOT-DOCUMENTED: cuML's metrics documentation states nothing about determinism (accuracy_score, trustworthiness, silhouette_score and kl_divergence pages read; none mentions it) (https://docs.nvidia.com/cuml/latest/api/generated/cuml.metrics.trustworthiness/)

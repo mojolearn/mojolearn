@@ -1,0 +1,26 @@
+FSPEED-HEADER family=lm lane=lm-train arm=torch-deterministic mode=DETERMINISTIC device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=lm-train arm=torch-deterministic torch=2.4.1+cu124 build=CUDA 12.4 CUBLAS_WORKSPACE_CONFIG=:4096:8 (pre-import) use_deterministic_algorithms(True) cudnn.deterministic=True cudnn.benchmark=False; tf32 switches as found after configuration: {'matmul_allow_tf32': False, 'cudnn_allow_tf32': True, 'float32_matmul_precision': 'highest'}
+FSPEED-NOTE lane=lm-train arm=torch-deterministic model=mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1 definition=tools/byte_lm_gradient_oracle.py::reference ported to FP32 leaf tensors; loss_spelling=cross_entropy attention=eager
+FSPEED-NOTE lane=lm-train arm=torch-deterministic recipe init=u32-avalanche-index-xor-42595445-top8-centered128-div1024-norm1.v1 corpus_sha256=86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed initial_parameters_sha256=b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424 steps=128 optimizer=AdamW(lr=0.003000000026077032,betas=(0.8999999761581421, 0.9990000128746033),eps=9.99999993922529e-09,weight_decay=0.00999999977648
+FSPEED-NOTE lane=lm-train arm=torch-deterministic fixed tiny shape B2/L32/DM32/H4/KV2/FF64/V256 (34944 FP32 parameters): this is a LATENCY comparison of a launch-bound program, not a throughput comparison; no number here describes either side at a size that fills the device
+FSPEED-ACC lane=lm-train arm=torch-deterministic metric=heldout_loss_initial value=5.541299
+FSPEED-WARMUP lane=lm-train arm=torch-deterministic shape=bytelm-2x33-steps128 ms=3210.664
+FSPEED lane=lm-train arm=torch-deterministic shape=bytelm-2x33-steps128 round=1 ms=4030.636 hash=2a44b208aa117472
+FSPEED-NOTE lane=lm-train arm=torch-deterministic round=1 final_parameters_sha256=2a44b208aa1174720e47a7ca4b3618fd3e684c51d8c72b597f9ff70e162b4088
+FSPEED-NOTE lane=lm-train arm=torch-deterministic round=1 step_ms_median=31.4518 step_ms_min=29.7391 step_ms_max=38.0448
+FSPEED lane=lm-train arm=torch-deterministic shape=bytelm-2x33-steps128 round=2 ms=3888.588 hash=2a44b208aa117472
+FSPEED-NOTE lane=lm-train arm=torch-deterministic round=2 final_parameters_sha256=2a44b208aa1174720e47a7ca4b3618fd3e684c51d8c72b597f9ff70e162b4088
+FSPEED-NOTE lane=lm-train arm=torch-deterministic round=2 step_ms_median=31.3130 step_ms_min=22.7143 step_ms_max=35.0292
+FSPEED lane=lm-train arm=torch-deterministic shape=bytelm-2x33-steps128 round=3 ms=3853.252 hash=2a44b208aa117472
+FSPEED-NOTE lane=lm-train arm=torch-deterministic round=3 final_parameters_sha256=2a44b208aa1174720e47a7ca4b3618fd3e684c51d8c72b597f9ff70e162b4088
+FSPEED-NOTE lane=lm-train arm=torch-deterministic round=3 step_ms_median=31.3948 step_ms_min=23.2316 step_ms_max=35.2924
+FSPEED lane=lm-train arm=torch-deterministic shape=bytelm-2x33-steps128 round=4 ms=3854.375 hash=2a44b208aa117472
+FSPEED-NOTE lane=lm-train arm=torch-deterministic round=4 final_parameters_sha256=2a44b208aa1174720e47a7ca4b3618fd3e684c51d8c72b597f9ff70e162b4088
+FSPEED-NOTE lane=lm-train arm=torch-deterministic round=4 step_ms_median=31.1034 step_ms_min=23.1045 step_ms_max=36.6094
+FSPEED lane=lm-train arm=torch-deterministic shape=bytelm-2x33-steps128 round=5 ms=3725.255 hash=2a44b208aa117472
+FSPEED-NOTE lane=lm-train arm=torch-deterministic round=5 final_parameters_sha256=2a44b208aa1174720e47a7ca4b3618fd3e684c51d8c72b597f9ff70e162b4088
+FSPEED-NOTE lane=lm-train arm=torch-deterministic round=5 step_ms_median=29.6612 step_ms_min=19.5927 step_ms_max=33.8042
+FSPEED-NOTE lane=lm-train arm=torch-deterministic hash repeated across 5 rounds
+FSPEED-ACC lane=lm-train arm=torch-deterministic metric=heldout_loss_final value=2.843640
+FSPEED-ACC lane=lm-train arm=torch-deterministic metric=step_ms_median value=31.381440
+FSPEED-DONE lane=lm-train arm=torch-deterministic

@@ -1,0 +1,17 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=cholesky arm=torch-gpu size=large fixture_source=mojo-dump shape=RBF.64x64r4
+FSPEED-NOTE lane=cholesky arm=torch-gpu torch.linalg.cholesky is cuSOLVER potrf and torch.cholesky_solve is potrs; the ridge, the logdet and the solve are all inside the clock on both sides
+FSPEED-HEADER family=classical lane=cholesky arm=torch-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-WARMUP lane=cholesky arm=torch-gpu shape=RBF.64x64r4 ms=85.528456
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=1 ms=0.362609 hash=1637da415921bd3f
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=2 ms=0.194240 hash=1637da415921bd3f
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=3 ms=0.176631 hash=1637da415921bd3f
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=4 ms=0.165679 hash=1637da415921bd3f
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=5 ms=0.177279 hash=1637da415921bd3f

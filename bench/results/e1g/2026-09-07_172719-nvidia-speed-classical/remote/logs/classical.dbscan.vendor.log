@@ -1,0 +1,17 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=dbscan arm=cuml-gpu size=wide fixture_source=splitmix64 shape=20000x512
+FSPEED-NOTE lane=dbscan arm=cuml-gpu calc_core_sample_indices=False: our dbscan_fit_impl returns labels only, and computing their core-sample index array would be work our arm does not do
+FSPEED-HEADER family=classical lane=dbscan arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=wide
+FSPEED-WARMUP lane=dbscan arm=cuml-gpu shape=20000x512 ms=281.660443
+FSPEED lane=dbscan arm=cuml-gpu shape=20000x512 round=1 ms=25.638126 hash=ef2c70f2cc7cbf15
+FSPEED lane=dbscan arm=cuml-gpu shape=20000x512 round=2 ms=25.474607 hash=ef2c70f2cc7cbf15
+FSPEED lane=dbscan arm=cuml-gpu shape=20000x512 round=3 ms=25.267030 hash=ef2c70f2cc7cbf15
+FSPEED lane=dbscan arm=cuml-gpu shape=20000x512 round=4 ms=25.212021 hash=ef2c70f2cc7cbf15
+FSPEED lane=dbscan arm=cuml-gpu shape=20000x512 round=5 ms=24.702000 hash=ef2c70f2cc7cbf15

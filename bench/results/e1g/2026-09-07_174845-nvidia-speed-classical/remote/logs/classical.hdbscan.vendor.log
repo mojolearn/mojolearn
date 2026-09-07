@@ -1,0 +1,17 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=hdbscan arm=cuml-gpu size=large fixture_source=mojo-dump shape=blobs96.96x4
+FSPEED-NOTE lane=hdbscan arm=cuml-gpu min_samples, min_cluster_size, metric and cluster_selection_method are passed explicitly. At 96 rows both arms are dominated by launch latency; this is the fixture the lane ships and it has no size knob
+FSPEED-HEADER family=classical lane=hdbscan arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-WARMUP lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 ms=434.809171
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=1 ms=5.155217 hash=5199770714da8525
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=2 ms=4.769374 hash=5199770714da8525
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=3 ms=4.420843 hash=5199770714da8525
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=4 ms=4.413281 hash=5199770714da8525
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=5 ms=4.432868 hash=5199770714da8525

@@ -1,0 +1,23 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=kmeans arm=cuml-gpu-deterministic vendor's documented deterministic configuration: LIVE: "random_state int or None (default = None) If you want results to be the same when you restart Python, select a state."; the sibling passes random_state=7 and nothing else changes (https://docs.nvidia.com/cuml/latest/api/generated/cuml.cluster.KMeans/)
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=kmeans arm=cuml-gpu-deterministic size=large fixture_source=splitmix64 shape=4000000x32k64i20
+FSPEED-HEADER family=classical lane=kmeans arm=cuml-gpu-deterministic mode=DETERMINISTIC device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-NOTE lane=kmeans arm=cuml-gpu-deterministic output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=kmeans arm=cuml-gpu-deterministic shape=4000000x32k64i20 ms=203.517364
+FSPEED-NOTE lane=kmeans arm=cuml-gpu-deterministic output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu-deterministic shape=4000000x32k64i20 round=1 ms=120.810343 hash=-
+FSPEED-NOTE lane=kmeans arm=cuml-gpu-deterministic output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu-deterministic shape=4000000x32k64i20 round=2 ms=119.830532 hash=-
+FSPEED-NOTE lane=kmeans arm=cuml-gpu-deterministic output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu-deterministic shape=4000000x32k64i20 round=3 ms=119.765192 hash=-
+FSPEED-NOTE lane=kmeans arm=cuml-gpu-deterministic output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu-deterministic shape=4000000x32k64i20 round=4 ms=122.209471 hash=-
+FSPEED-NOTE lane=kmeans arm=cuml-gpu-deterministic output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu-deterministic shape=4000000x32k64i20 round=5 ms=120.095355 hash=-

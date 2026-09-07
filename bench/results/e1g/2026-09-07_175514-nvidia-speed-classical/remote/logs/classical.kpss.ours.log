@@ -1,0 +1,19 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+5647 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x324000000000, nodemask=1)
+FSPEED-HEADER family=classical lane=kpss arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-NOTE lane=kpss arm=ours surface=python: this is the python/mojolearn/ ours arm (DEVIATION 2160); the Mojo driver's arm=ours rows time the entry points directly
+FSPEED-NOTE lane=kpss arm=ours tier read back from mojolearn.numeric_mode()=identical; MOJOLEARN_NUMERIC_MODE='identical' in the environment (DEVIATION 2162)
+FSPEED-NOTE lane=kpss arm=ours hash is sha256/16 over dtype+shape+bytes (hash_predictions), within-arm only, never gated (DEVIATION 2164)
+FSPEED-NOTE lane=kpss arm=ours binaries: vendor=cuda gpu_arch=None (read back from the loaded set)
+FSPEED-NOTE lane=kpss arm=ours kpss_test at d=1 D=0 s=0 pval_threshold=0.05, the same batch of 8 series the vendor arm tests
+FSPEED-NOTE lane=kpss arm=ours the (n_obs, n_series) layout this surface takes is transposed back to series-major with a copy inside kpss_test, so that copy is inside the timer; it is a cost of this surface and it stays (DEVIATION 2168)
+FSPEED-NOTE lane=kpss arm=ours the hash is over the bool stationarity flags this function returns
+FSPEED-WARMUP lane=kpss arm=ours shape=8x520 ms=738.963083
+FSPEED lane=kpss arm=ours shape=8x520 round=1 ms=0.276247 hash=4f5ec958e2e698a6
+FSPEED lane=kpss arm=ours shape=8x520 round=2 ms=0.214047 hash=4f5ec958e2e698a6
+FSPEED lane=kpss arm=ours shape=8x520 round=3 ms=0.210994 hash=4f5ec958e2e698a6
+FSPEED lane=kpss arm=ours shape=8x520 round=4 ms=0.208186 hash=4f5ec958e2e698a6
+FSPEED lane=kpss arm=ours shape=8x520 round=5 ms=0.206838 hash=4f5ec958e2e698a6

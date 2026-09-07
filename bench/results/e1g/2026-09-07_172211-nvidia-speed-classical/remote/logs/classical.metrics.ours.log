@@ -1,0 +1,19 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+3642 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30d000000000, nodemask=1)
+3642 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a8e40000000, nodemask=2)
+FSPEED-HEADER family=classical lane=metrics arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-NOTE lane=metrics arm=ours surface=python: this is the python/mojolearn/ ours arm (DEVIATION 2160); the Mojo driver's arm=ours rows time the entry points directly
+FSPEED-NOTE lane=metrics arm=ours tier read back from mojolearn.numeric_mode()=identical; MOJOLEARN_NUMERIC_MODE='identical' in the environment (DEVIATION 2162)
+FSPEED-NOTE lane=metrics arm=ours hash is sha256/16 over dtype+shape+bytes (hash_predictions), within-arm only, never gated (DEVIATION 2164)
+FSPEED-NOTE lane=metrics arm=ours binaries: vendor=cuda gpu_arch=None (read back from the loaded set)
+FSPEED-NOTE lane=metrics arm=ours ELEVEN metrics, the same eleven the vendor arm and the Mojo lane time; rand_index is in neither
+FSPEED-NOTE lane=metrics arm=ours hashed here as one float64 vector of the eleven answers where the vendor prints hash=- (its reason is cross-arm width, and this column is within-arm; DEVIATION 2170)
+FSPEED-WARMUP lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 ms=2482.646577
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=1 ms=1426.326558 hash=8a7e73c7a0b7a683
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=2 ms=1452.581558 hash=8a7e73c7a0b7a683
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=3 ms=1415.351812 hash=8a7e73c7a0b7a683
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=4 ms=1411.820192 hash=8a7e73c7a0b7a683
+FSPEED lane=metrics arm=ours shape=lab2000000.flt2000000.sil100000x4.tru50000x6 round=5 ms=1423.964042 hash=8a7e73c7a0b7a683

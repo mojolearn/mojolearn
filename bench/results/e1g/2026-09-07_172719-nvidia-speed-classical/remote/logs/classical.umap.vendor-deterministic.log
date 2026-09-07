@@ -1,0 +1,19 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=umap arm=cuml-gpu-deterministic vendor's documented deterministic configuration: LIVE: "random_state int, RandomState instance or None, optional (default=None) Seed used by the random number generator for embedding initialization and optimizer sampling. Setting a random_state enables reproducible embeddings, but at the cost of slower training and increased memory usage. This is because high parallelism during optimization involves non-deterministic floating-point addition ordering. Note: Explicitly setting build_algo='nn_descent' will break reproducibility, as NN Descent produces non-deterministic KNN graphs."; the sibling passes random_state=7 and nothing else changes (https://docs.nvidia.com/cuml/latest/api/generated/cuml.manifold.UMAP/)
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:215: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=umap arm=cuml-gpu-deterministic size=wide fixture_source=splitmix64 shape=100000x512n15c2e200
+FSPEED-NOTE lane=umap arm=cuml-gpu-deterministic n_neighbors=15 n_components=2 min_dist=0.1 n_epochs=200 metric=euclidean init=spectral random_state=7 build_algo=auto
+FSPEED-HEADER family=classical lane=umap arm=cuml-gpu-deterministic mode=DETERMINISTIC device=NVIDIA_H100_80GB_HBM3 rounds=5 size=wide
+FSPEED-WARMUP lane=umap arm=cuml-gpu-deterministic shape=100000x512n15c2e200 ms=1525.007740
+FSPEED lane=umap arm=cuml-gpu-deterministic shape=100000x512n15c2e200 round=1 ms=1276.941491 hash=cfcb0c113aca3fde
+FSPEED lane=umap arm=cuml-gpu-deterministic shape=100000x512n15c2e200 round=2 ms=1267.443258 hash=cfcb0c113aca3fde
+FSPEED lane=umap arm=cuml-gpu-deterministic shape=100000x512n15c2e200 round=3 ms=1267.862023 hash=cfcb0c113aca3fde
+FSPEED lane=umap arm=cuml-gpu-deterministic shape=100000x512n15c2e200 round=4 ms=1263.429057 hash=cfcb0c113aca3fde
+FSPEED lane=umap arm=cuml-gpu-deterministic shape=100000x512n15c2e200 round=5 ms=1269.839467 hash=cfcb0c113aca3fde
+FSPEED-ACC lane=umap arm=cuml-gpu-deterministic metric=trustworthiness_k15_n10000 value=0.500392

@@ -1,0 +1,1 @@
+FSPEED-REFUSED lane=krr arm=ours reason=NO-PYTHON-SURFACE: looked for mojolearn.KernelRidge; kernel_methods/ has no Python class; the Mojo driver covers it
