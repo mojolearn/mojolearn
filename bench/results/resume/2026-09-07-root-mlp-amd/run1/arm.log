@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod te8216hat3pxi4 ...
+ARMED. Pod te8216hat3pxi4 is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/mojolearn-amd-mlp-20260907/tools/../bench/results/runpod_leases/te8216hat3pxi4.lease
+  extend with: tools/runpod_guard.sh extend te8216hat3pxi4 '-p 13190 root@213.173.96.55' <minutes>

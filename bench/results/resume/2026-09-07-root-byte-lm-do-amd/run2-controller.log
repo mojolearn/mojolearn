@@ -1,0 +1,5 @@
+{"time": 1788766078.304995, "event": "preparing", "output": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-07-root-byte-lm-do-amd/run2"}
+usage: do_byte_lm_leg.py [-h] --out OUT --python PYTHON [--image IMAGE]
+                         [--setup-script SETUP_SCRIPT] --ssh-key SSH_KEY
+                         [--token-file TOKEN_FILE] [--rent] [--head64]
+do_byte_lm_leg.py: error: protected token file required for --rent

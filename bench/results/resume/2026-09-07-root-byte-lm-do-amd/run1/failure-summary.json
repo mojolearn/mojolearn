@@ -1,0 +1,9 @@
+{
+  "status": "FAILED_BEFORE_MODEL",
+  "stage": "AMD guard device discovery",
+  "error": "Visible render node lacks vendor identity",
+  "model_started": false,
+  "dependencies_started": false,
+  "droplet": 598404569,
+  "deleted_and_verified": true
+}

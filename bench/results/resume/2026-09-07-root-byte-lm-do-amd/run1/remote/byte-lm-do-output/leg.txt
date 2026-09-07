@@ -1,0 +1,2 @@
+vendor=amd
+commit=d17c1aa1e977fb3831da2a8d2ca39de60c37b2c5

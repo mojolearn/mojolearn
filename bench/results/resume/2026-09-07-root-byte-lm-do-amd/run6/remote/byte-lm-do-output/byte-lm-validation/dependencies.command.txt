@@ -1,0 +1,1 @@
+python3 tools/amd_serial_guard.py --seconds 30 -- /root/mojolearn/.byte-lm-validation-venv/bin/python -c import\ numpy\,\ pytest\,\ torch\;\ print\(numpy.__version__\,\ pytest.__version__\,\ torch.__version__\) 

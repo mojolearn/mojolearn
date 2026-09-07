@@ -1,0 +1,29 @@
+{
+  "boundary": "Root-observed guard return status, including cleanup; file-only receipt writer",
+  "command": {
+    "bytes": 375,
+    "file": "zero-moments65.command.txt",
+    "sha256": "fb5b3031a83567796151755bbf6baf5f9275c2e41cc3a2d097a407902bbb571f"
+  },
+  "exit_code": 0,
+  "guard_log": {
+    "bytes": 110,
+    "file": "zero-moments65.log",
+    "sha256": "dd5b6a620b2f026b600b6af9016fd5b80872122c3359c673cbeb7ab26358295d"
+  },
+  "guard_terminal": {
+    "cpu_affinity": "0,1",
+    "guard": "nvidia-root-serial-v1",
+    "reason": null,
+    "returncode": 0,
+    "thread_limit": 2
+  },
+  "job_kind": "capture",
+  "result": {
+    "bytes": 5754,
+    "file": "zero-moments65/summary.json",
+    "sha256": "368e4f09bbb9c22289244ca87899e435233226267858721136429a1ac5c606dc"
+  },
+  "schema": "mojolearn.root-job-receipt.v1",
+  "vendor": "cuda"
+}

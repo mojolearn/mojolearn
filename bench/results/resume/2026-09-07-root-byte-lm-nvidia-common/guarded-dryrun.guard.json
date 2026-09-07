@@ -1,0 +1,27 @@
+{
+  "command": [
+    "bash",
+    "tools/gemm_remote_leg.sh",
+    "nvidia",
+    "--payload",
+    "mamba",
+    "--source-ref",
+    "34fb352f0754ba5ce281728b8bc510f992b62e08",
+    "--gpu",
+    "NVIDIA GeForce RTX 4090",
+    "--image",
+    "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+    "--minutes",
+    "60",
+    "--work-timeout",
+    "3000",
+    "--dry-run"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 32960,
+  "elapsed_seconds": 2.43027712500043,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

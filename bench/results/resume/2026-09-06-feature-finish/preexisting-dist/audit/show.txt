@@ -1,0 +1,23 @@
+INFO:auditwheel.wheel_abi:setting libc to glibc
+
+mojolearn-0.4.0-py3-none-linux_x86_64.whl is consistent with the
+following platform tag: "manylinux_2_35_x86_64".
+
+The wheel references external versioned symbols in these
+system-provided shared libraries: libc.so.6 with versions
+{'GLIBC_2.4', 'GLIBC_2.3', 'GLIBC_2.7', 'GLIBC_2.14', 'GLIBC_2.17',
+'GLIBC_2.15', 'GLIBC_2.2.5', 'GLIBC_2.33', 'GLIBC_2.32',
+'GLIBC_2.3.4', 'GLIBC_2.6', 'GLIBC_2.16', 'GLIBC_2.34'}, libm.so.6
+with versions {'GLIBC_2.2.5', 'GLIBC_2.23', 'GLIBC_2.29',
+'GLIBC_2.27'}, libstdc++.so.6 with versions {'GLIBCXX_3.4.14',
+'GLIBCXX_3.4.22', 'GLIBCXX_3.4.19', 'GLIBCXX_3.4.18', 'CXXABI_1.3.7',
+'GLIBCXX_3.4.21', 'GLIBCXX_3.4.9', 'CXXABI_1.3.9', 'GLIBCXX_3.4.11',
+'GLIBCXX_3.4.15', 'GLIBCXX_3.4', 'GLIBCXX_3.4.30', 'GLIBCXX_3.4.29',
+'CXXABI_1.3.5', 'CXXABI_1.3', 'GLIBCXX_3.4.20', 'GLIBCXX_3.4.17',
+'GLIBCXX_3.4.26', 'CXXABI_1.3.11'}, libgcc_s.so.1 with versions
+{'GCC_3.3', 'GCC_3.0'}
+
+This constrains the platform tag to "manylinux_2_35_x86_64". In order
+to achieve a more compatible tag, you would need to recompile a new
+wheel from source on a system with earlier versions of these
+libraries, such as a recent manylinux image.

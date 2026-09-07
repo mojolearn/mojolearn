@@ -1,0 +1,20 @@
+{
+  "CMAKE_BUILD_PARALLEL_LEVEL": "2",
+  "HOME": "/Users/andrewhendel",
+  "LC_ALL": "C",
+  "MAX_JOBS": "2",
+  "MKL_NUM_THREADS": "2",
+  "MODULAR_HOME": "/private/tmp/mojolearn-apple-byte-lm-attempt3-20260907/runtime",
+  "MOJOLEARN_COMPILE_JOBS": "2",
+  "MOJOLEARN_CPU_THREADS": "2",
+  "MOJOLEARN_NUMERIC_MODE": "identical",
+  "MOJOLEARN_TARGET_COLUMN": "apple",
+  "NUMEXPR_NUM_THREADS": "2",
+  "OMP_NUM_THREADS": "2",
+  "OPENBLAS_NUM_THREADS": "2",
+  "PATH": "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+  "PYTHONNOUSERSITE": "1",
+  "PYTHONPATH": "/private/tmp/mojolearn-byte-lm-metal-20260907/python",
+  "PYTHONUNBUFFERED": "1",
+  "VECLIB_MAXIMUM_THREADS": "2"
+}

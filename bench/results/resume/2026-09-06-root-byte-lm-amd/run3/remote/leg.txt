@@ -1,0 +1,13 @@
+vendor=amd
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=5
+commit=d921eade0da5454e39e0cd103b9a1799286b41b9
+started=2026-09-06T23:21:26Z
+device_memory_pool_bytes=1073741824
+device_memory_pool_only=true
+device_memory_pool_chunk_percent=100
+pixi_install_exit=0
+byte_lm_validation_exit=0
+gpu_archs=gfx942
+scope=bounded amd byte LM validation; no cross-vendor or performance certificate

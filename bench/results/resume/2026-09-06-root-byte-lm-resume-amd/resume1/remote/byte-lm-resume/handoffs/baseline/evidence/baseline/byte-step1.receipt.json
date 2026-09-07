@@ -1,0 +1,31 @@
+{
+  "boundary": "Root-observed guard return status, including cleanup; file-only receipt writer",
+  "command": {
+    "bytes": 224,
+    "file": "byte-step1.command.txt",
+    "sha256": "d3e6dca324aca9be8c8de272e14b8bdc8e5e9f65753751738f6030775efb304b"
+  },
+  "exit_code": 0,
+  "guard_log": {
+    "bytes": 403,
+    "file": "byte-step1.log",
+    "sha256": "0f2583311de15a104c6c522247e8e29d7bfeab71ebf1b52ff2afc97412d6c9f7"
+  },
+  "guard_terminal": {
+    "cpu_affinity": "0,1",
+    "device_sysfs": "/sys/devices/pci0000:20/0000:20:01.1/0000:21:00.0/0000:22:01.0/0000:24:00.0/0000:25:00.0/0000:26:00.0",
+    "guard": "amd-root-serial-v1",
+    "reason": null,
+    "returncode": 0,
+    "thread_limit": 2,
+    "vram_total_bytes": 206141652992
+  },
+  "job_kind": "capture",
+  "result": {
+    "bytes": 4588,
+    "file": "step1/summary.json",
+    "sha256": "89b886d9a461d512c2b68b9df867b5ead74061939c53f6c4c618a7b395344663"
+  },
+  "schema": "mojolearn.root-job-receipt.v1",
+  "vendor": "hip"
+}

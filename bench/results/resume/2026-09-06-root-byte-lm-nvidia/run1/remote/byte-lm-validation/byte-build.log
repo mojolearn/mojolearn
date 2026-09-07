@@ -1,0 +1,93 @@
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+./training/byte_lm.mojo:572:52: error: value of type 'OptimizerConfig' cannot be implicitly copied, it does not conform to 'ImplicitlyCopyable'
+        after_v^, after_flags^, loss, next_step, tr.optimizer,
+                                                 ~~^~~~~~~~~~
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+./training/byte_lm.mojo:572:52: note: consider transferring the value with '^'
+        after_v^, after_flags^, loss, next_step, tr.optimizer,
+                                                   ^
+                                                             ^
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+./training/byte_lm.mojo:572:52: note: you can copy it explicitly with '.copy()'
+        after_v^, after_flags^, loss, next_step, tr.optimizer,
+                                                   ^
+                                                             .copy()
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+./training/byte_lm.mojo:392:26: error: value of type 'OptimizerConfig' cannot be implicitly copied, it does not conform to 'ImplicitlyCopyable'
+        self.optimizer = optimizer
+                         ^~~~~~~~~
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+./training/byte_lm.mojo:392:26: note: consider transferring the value with '^'
+        self.optimizer = optimizer
+                         ^
+                                  ^
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+./training/byte_lm.mojo:392:26: note: you can copy it explicitly with '.copy()'
+        self.optimizer = optimizer
+                         ^
+                                  .copy()
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:11:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:11:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:11:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:503:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:508:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:512:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:513:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:515:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:515:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:518:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 1}

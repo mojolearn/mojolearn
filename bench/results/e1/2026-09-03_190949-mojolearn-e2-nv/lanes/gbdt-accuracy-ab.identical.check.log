@@ -1,0 +1,57 @@
+== DEVIATION 2043 accuracy A/B: lane gbdt-symmetric, higgs rows 1000000, 3 rounds -> bench/results/e1/2026-09-03_190949-mojolearn-e2-nv//gbdt_accuracy_ab ==
+date 2026-09-03T19:09:54Z
+head 9337912ac41eb87d660b68afa44c8680efc6c6f7
+host mojolearn-e2-nv
+lane gbdt-symmetric
+rows 1000000
+rounds 3
+ab_define MOJOLEARN_2043_FAST_FUSED_ONE_BYTE
+dataset higgs (UCI 00280/HIGGS.csv.gz) store /mnt/mojolearn-data/gbm-bench
+python pixi run -e gbmbench python ( WARN Skipped running the post-link scripts because `run-post-link-scripts` = `false`
+	- bin/.librsvg-pre-unlink.sh
+
+To enable them, run:
+	pixi config set --local run-post-link-scripts insecure
+
+More info:
+	https://pixi.sh/latest/reference/pixi_configuration/#run-post-link-scripts
+
+Python 3.14.7)
+mem used 668M avail 239011M; swap used 0M
+device NVIDIA H100 80GB HBM3, 81559 MiB, 580.173.02
+== build estimators (FAST) ==
+== build BASE  (FAST as shipped) ==
+== build PIN   (FAST, -D MOJOLEARN_2043_FAST_FUSED_ONE_BYTE=1) ==
+== build IDENT (IDENTICAL -> python/mojolearn/identical/) ==
+== rotation: 3 rounds x (base, pin, ident), one process each ==
+  base r1 exit=0 1 timed lines
+  pin r1 exit=0 1 timed lines
+  ident r1 exit=0 1 timed lines
+  base r2 exit=0 1 timed lines
+  pin r2 exit=0 1 timed lines
+  ident r2 exit=0 1 timed lines
+  base r3 exit=0 1 timed lines
+  pin r3 exit=0 1 timed lines
+  ident r3 exit=0 1 timed lines
+
+== per-arm lines (machine readable; one per arm) ==
+GACC arm=base mode=FAST lane=gbdt-symmetric rows=1000000 rounds=3 shape=higgs-1000000x28 med_s=0.9728 auc=0.800447 auc_n=3 auc_range=0.800447-0.800447 logloss=0.542247 hash=c3b1ab8c7f136526
+GACC arm=pin mode=FAST+2043 lane=gbdt-symmetric rows=1000000 rounds=3 shape=higgs-1000000x28 med_s=0.9349 auc=0.800538 auc_n=3 auc_range=0.800538-0.800538 logloss=0.542246 hash=9726a1decc8f60c0
+GACC arm=ident mode=IDENTICAL lane=gbdt-symmetric rows=1000000 rounds=3 shape=higgs-1000000x28 med_s=0.9195 auc=0.800716 auc_n=3 auc_range=0.800716-0.800716 logloss=0.542067 hash=dac2cf366e219cec
+
+== verdict (the gate is FASTER *and* ACCURACY NOT DEGRADED, never bits) ==
+base AUC over 3 round(s): median 0.800447, range 0.800447..0.800447  (tolerance 0.0005)
+GACC-VERDICT arm=pin vs=base time_ratio=0.9610 d_auc=+0.000091 d_logloss=-0.000001 gate=FLIP
+GACC-VERDICT arm=ident vs=base time_ratio=0.9452 d_auc=+0.000269 d_logloss=-0.000180 gate=REFERENCE (not a candidate default)
+
+arm	mode	shape	med_s	auc	logloss	hash
+base	FAST	higgs-1000000x28	0.9728	0.800447	0.542247	c3b1ab8c7f136526
+pin	FAST+2043	higgs-1000000x28	0.9349	0.800538	0.542246	9726a1decc8f60c0
+ident	IDENTICAL	higgs-1000000x28	0.9195	0.800716	0.542067	dac2cf366e219cec
+
+THE HASHES ARE EXPECTED TO DIFFER between base and pin and that is NOT a
+defect: the fused arm accumulates dithered fixed-point Int32 where the
+PASS(8) ladder accumulates warp-private float32. They are recorded, never
+gated. A ratio here is a result only on a row whose shape= says higgs.
+
+results in bench/results/e1/2026-09-03_190949-mojolearn-e2-nv//gbdt_accuracy_ab

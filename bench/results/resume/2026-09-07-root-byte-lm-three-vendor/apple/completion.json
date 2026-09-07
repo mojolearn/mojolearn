@@ -1,0 +1,7 @@
+{
+  "full128_executed": false,
+  "independent_metal_oracle": false,
+  "receipt": "step1.root-receipt.json",
+  "source_commit": "45cc2d9dcd2279646f9a9716fdfab9d598320535",
+  "status": "ONE_STEP_CAPTURED_NOT_QUALIFIED"
+}

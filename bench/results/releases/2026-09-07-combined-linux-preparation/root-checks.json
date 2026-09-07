@@ -1,0 +1,38 @@
+{
+  "status": "HOST_SOURCE_CHECKS_ONLY",
+  "records": {
+    "release061-packer": {
+      "receipt": "bench/results/resume/2026-09-07-root-byte-lm-do-amd/release061-packer.guard.json",
+      "sha256": "deefb94e20b696e3599180e2ee082a6cda53de56302d86d32aaffde088473f30",
+      "returncode": 0
+    },
+    "release061-admission": {
+      "receipt": "bench/results/resume/2026-09-07-root-byte-lm-do-amd/release061-admission.guard.json",
+      "sha256": "cd084b7a3f266a40d39b7231c4587c5c5f206ae081032eb7309d2804389c405d",
+      "returncode": 0
+    },
+    "release061-legacy-regression": {
+      "receipt": "bench/results/resume/2026-09-07-root-byte-lm-do-amd/release061-legacy-regression.guard.json",
+      "sha256": "5831b8c12aa529799c467c30e0fb921db7418f0ca98dc849e84e471d9788f5b1",
+      "returncode": 2
+    },
+    "release061-legacy-regression-r2": {
+      "receipt": "bench/results/resume/2026-09-07-root-byte-lm-do-amd/release061-legacy-regression-r2.guard.json",
+      "sha256": "9aadf8e3664a7628a2938c4c7fed19fe15979bf770ea929d99a685fe35b60275",
+      "returncode": 0
+    },
+    "release-check-dependency": {
+      "receipt": "bench/results/resume/2026-09-07-root-byte-lm-do-amd/release-check-dependency.guard.json",
+      "sha256": "8909269f8f792dd8a54390a813b8a1d599bf6f818912a38f7d7eb8f5ac4c0836",
+      "returncode": 0
+    },
+    "release061-publish-checks": {
+      "receipt": "bench/results/resume/2026-09-07-root-byte-lm-do-amd/release061-publish-checks.guard.json",
+      "sha256": "7b06b532fe14c4851c0639bf571c1a6aac5871ea8d7000b4183f7c82fd704fc3",
+      "returncode": 0
+    }
+  },
+  "version_candidate": "0.6.1",
+  "native_builds": false,
+  "published": false
+}

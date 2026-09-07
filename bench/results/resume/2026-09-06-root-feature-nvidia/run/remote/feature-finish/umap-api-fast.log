@@ -1,0 +1,7 @@
+3216 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x514980000000, nodemask=1)
+...............
+----------------------------------------------------------------------
+Ran 15 tests in 1.687s
+
+OK
+{"guard": "nvidia-root-serial-v1", "reason": null, "returncode": 0}

@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod bncobasb8l6l6w ...
+ARMED. Pod bncobasb8l6l6w is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/mojolearn-byte-lm-resume-20260906/tools/../bench/results/runpod_leases/bncobasb8l6l6w.lease
+  extend with: tools/runpod_guard.sh extend bncobasb8l6l6w '-p 43542 root@213.181.111.2' <minutes>

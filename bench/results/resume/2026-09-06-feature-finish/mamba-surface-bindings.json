@@ -1,0 +1,9 @@
+{
+  "scope": "Apple source bindings, not installed-wheel qualification",
+  "commit": "2e53699e5e5f51d445024d2b1ddfae4f3b56dd9c",
+  "sha256": {
+    "python/mojolearn/_mojolearn_mamba.so": "7fff7c1b26be5114dbf3faf86337abceb61d4ccde89e87fd501027f714ce866e",
+    "python/mojolearn/deterministic/_mojolearn_mamba.so": "d89acd43d2d44f7c2ec039e269f15bf753db37f732ac0441b69fc475fcff8063",
+    "python/mojolearn/identical/_mojolearn_mamba.so": "dda06ab225d30595bb49536aa840209d9041d8dd8464fb29434eaac7e5568b4c"
+  }
+}

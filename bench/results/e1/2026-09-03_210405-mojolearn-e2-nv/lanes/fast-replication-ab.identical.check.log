@@ -1,0 +1,32 @@
+===== A/B ARM MOJOLEARN_2044_FAST_NO_RIDX_ONLY =====
+== DEVIATION 2040 A/B: rows 1000000, lanes [gbdt rf et], 3 rounds -> bench/results/e1/2026-09-03_210405-mojolearn-e2-nv//fast_replication_ab/MOJOLEARN_2044_FAST_NO_RIDX_ONLY ==
+== build BASE (FAST, replication as ported) ==
+== build PIN  (FAST, -D MOJOLEARN_2044_FAST_NO_RIDX_ONLY=1) ==
+== A/B table (ratio = PIN / BASE; below 1.0 means the cap is FASTER) ==
+lane	base_med_s	pin_med_s	ratio	base_hash	pin_hash	verdict
+gbdt	0.718634313	0.680977137	0.948	0c712c77f0d20a35,	0c712c77f0d20a35,	bits equal
+rf	0.796677747	0.792325834	0.995	acfbdbde102e8c54,	acfbdbde102e8c54,	bits equal
+et	2.103538377	2.099401457	0.998	a4d03520b4584c37,	a4d03520b4584c37,	bits equal
+
+A ratio here is only a speed result on a row whose two hashes are EQUAL.
+===== A/B ARM MOJOLEARN_2045_FAST_NO_QUANT_HIST =====
+== DEVIATION 2040 A/B: rows 1000000, lanes [gbdt rf et], 3 rounds -> bench/results/e1/2026-09-03_210405-mojolearn-e2-nv//fast_replication_ab/MOJOLEARN_2045_FAST_NO_QUANT_HIST ==
+== build BASE (FAST, replication as ported) ==
+== build PIN  (FAST, -D MOJOLEARN_2045_FAST_NO_QUANT_HIST=1) ==
+== A/B table (ratio = PIN / BASE; below 1.0 means the cap is FASTER) ==
+lane	base_med_s	pin_med_s	ratio	base_hash	pin_hash	verdict
+gbdt	0.700591841	0.688667437	0.983	0c712c77f0d20a35,	0c712c77f0d20a35,	bits equal
+rf	0.803690839	0.788695226	0.981	acfbdbde102e8c54,	acfbdbde102e8c54,	bits equal
+et	2.164603048	2.161788446	0.999	a4d03520b4584c37,	a4d03520b4584c37,	bits equal
+
+A ratio here is only a speed result on a row whose two hashes are EQUAL.
+===== ALL ARMS =====
+MOJOLEARN_2044_FAST_NO_RIDX_ONLY	gbdt	ratio 0.948	bits
+MOJOLEARN_2044_FAST_NO_RIDX_ONLY	rf	ratio 0.995	bits
+MOJOLEARN_2044_FAST_NO_RIDX_ONLY	et	ratio 0.998	bits
+MOJOLEARN_2045_FAST_NO_QUANT_HIST	gbdt	ratio 0.983	bits
+MOJOLEARN_2045_FAST_NO_QUANT_HIST	rf	ratio 0.981	bits
+MOJOLEARN_2045_FAST_NO_QUANT_HIST	et	ratio 0.999	bits
+
+ratio = PIN / BASE. Below 1.0 means the arm made FAST faster.
+A ratio is only a speed result on a row whose two hashes are EQUAL.

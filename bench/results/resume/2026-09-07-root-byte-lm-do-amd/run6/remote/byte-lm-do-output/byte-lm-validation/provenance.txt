@@ -1,0 +1,4 @@
+source=eac39c367beeddb8ba4792551d154673e654ce21
+vendor=hip
+gpu_arch=gfx942
+scope=single-vendor real-byte training and independent gradient gate; no cross-vendor certificate

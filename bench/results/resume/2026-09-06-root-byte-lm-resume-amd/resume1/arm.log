@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod 4452jcpnumdud4 ...
+ARMED. Pod 4452jcpnumdud4 is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/mojolearn-byte-lm-resume-20260906/tools/../bench/results/runpod_leases/4452jcpnumdud4.lease
+  extend with: tools/runpod_guard.sh extend 4452jcpnumdud4 '-p 14352 root@213.173.96.55' <minutes>

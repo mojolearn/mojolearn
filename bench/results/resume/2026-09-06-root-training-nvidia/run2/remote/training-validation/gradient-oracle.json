@@ -1,0 +1,285 @@
+{
+  "actual_loss": 4.781259536743164,
+  "capture_manifest_sha256": "286deff2c2751d87bd76a0a03c442e74fe0550ce3353871396c43341b011a642",
+  "controls": {
+    "nonlinear": {
+      "embed": {
+        "cells": 2048,
+        "failed_cells": 447,
+        "max_absolute_error": 0.011281718364419284,
+        "max_excess": 0.01127856943636249,
+        "passed": false
+      },
+      "lm_head": {
+        "cells": 2048,
+        "failed_cells": 0,
+        "max_absolute_error": 2.7755575615628914e-17,
+        "max_excess": -2.0000875035431165e-06,
+        "passed": true
+      },
+      "norm1_w": {
+        "cells": 32,
+        "failed_cells": 32,
+        "max_absolute_error": 0.009618527308910649,
+        "max_excess": 0.009598066752487358,
+        "passed": false
+      },
+      "norm2_w": {
+        "cells": 32,
+        "failed_cells": 32,
+        "max_absolute_error": 0.011477133578362768,
+        "max_excess": 0.01147120661614867,
+        "passed": false
+      },
+      "w_down": {
+        "cells": 2048,
+        "failed_cells": 0,
+        "max_absolute_error": 2.949029909160572e-17,
+        "max_excess": -2.000968503109236e-06,
+        "passed": true
+      },
+      "w_gate": {
+        "cells": 2048,
+        "failed_cells": 2044,
+        "max_absolute_error": 0.014887374502605688,
+        "max_excess": 0.014874911684940248,
+        "passed": false
+      },
+      "w_k": {
+        "cells": 512,
+        "failed_cells": 512,
+        "max_absolute_error": 0.009938846497329649,
+        "max_excess": 0.009934123915475062,
+        "passed": false
+      },
+      "w_o": {
+        "cells": 1024,
+        "failed_cells": 1020,
+        "max_absolute_error": 0.01582829704360833,
+        "max_excess": 0.015793598467526444,
+        "passed": false
+      },
+      "w_q": {
+        "cells": 1024,
+        "failed_cells": 1020,
+        "max_absolute_error": 0.009536328591632597,
+        "max_excess": 0.009527550124520773,
+        "passed": false
+      },
+      "w_up": {
+        "cells": 2048,
+        "failed_cells": 0,
+        "max_absolute_error": 2.0816681711721685e-17,
+        "max_excess": -2.001716300797237e-06,
+        "passed": true
+      },
+      "w_v": {
+        "cells": 512,
+        "failed_cells": 512,
+        "max_absolute_error": 0.010096319580282107,
+        "max_excess": 0.010080607680524777,
+        "passed": false
+      }
+    },
+    "nonlinear_effective": true,
+    "nonlinear_forward": {
+      "cells": 1,
+      "failed_cells": 0,
+      "max_absolute_error": 0.0,
+      "max_excess": -1.1562519559893107e-05,
+      "passed": true
+    },
+    "sign": {
+      "embed": {
+        "cells": 2048,
+        "failed_cells": 448,
+        "max_absolute_error": 0.37790364487331013,
+        "max_excess": 0.3778638545083625,
+        "passed": false
+      },
+      "lm_head": {
+        "cells": 2048,
+        "failed_cells": 2047,
+        "max_absolute_error": 0.6707981820895071,
+        "max_excess": 0.670729102271338,
+        "passed": false
+      },
+      "norm1_w": {
+        "cells": 32,
+        "failed_cells": 32,
+        "max_absolute_error": 0.4108437407250354,
+        "max_excess": 0.4108006563528679,
+        "passed": false
+      },
+      "norm2_w": {
+        "cells": 32,
+        "failed_cells": 32,
+        "max_absolute_error": 0.12103150829775652,
+        "max_excess": 0.12101740514539183,
+        "passed": false
+      },
+      "w_down": {
+        "cells": 2048,
+        "failed_cells": 2048,
+        "max_absolute_error": 0.31090787630478606,
+        "max_excess": 0.310874785513598,
+        "passed": false
+      },
+      "w_gate": {
+        "cells": 2048,
+        "failed_cells": 2048,
+        "max_absolute_error": 0.1670325647001149,
+        "max_excess": 0.16701386144264946,
+        "passed": false
+      },
+      "w_k": {
+        "cells": 512,
+        "failed_cells": 512,
+        "max_absolute_error": 0.21464996656250968,
+        "max_excess": 0.21462650156374694,
+        "passed": false
+      },
+      "w_o": {
+        "cells": 1024,
+        "failed_cells": 1024,
+        "max_absolute_error": 0.41370693573048756,
+        "max_excess": 0.4136635650332104,
+        "passed": false
+      },
+      "w_q": {
+        "cells": 1024,
+        "failed_cells": 1023,
+        "max_absolute_error": 0.18171653662422046,
+        "max_excess": 0.18169636497004713,
+        "passed": false
+      },
+      "w_up": {
+        "cells": 2048,
+        "failed_cells": 2048,
+        "max_absolute_error": 0.22591271112313588,
+        "max_excess": 0.2258881198484374,
+        "passed": false
+      },
+      "w_v": {
+        "cells": 512,
+        "failed_cells": 512,
+        "max_absolute_error": 0.3294223545940621,
+        "max_excess": 0.32938741235861313,
+        "passed": false
+      }
+    },
+    "sign_effective": true
+  },
+  "cuda_version": "12.4",
+  "device": "NVIDIA GeForce RTX 4090",
+  "gradients": {
+    "embed": {
+      "cells": 2048,
+      "failed_cells": 0,
+      "max_absolute_error": 5.72421242298754e-08,
+      "max_excess": -1.9953992867134225e-06,
+      "passed": true
+    },
+    "lm_head": {
+      "cells": 2048,
+      "failed_cells": 0,
+      "max_absolute_error": 6.796219391771996e-08,
+      "max_excess": -1.9810791771064154e-06,
+      "passed": true
+    },
+    "norm1_w": {
+      "cells": 32,
+      "failed_cells": 0,
+      "max_absolute_error": 1.0651536701267172e-07,
+      "max_excess": -2.4921281475231805e-06,
+      "passed": true
+    },
+    "norm2_w": {
+      "cells": 32,
+      "failed_cells": 0,
+      "max_absolute_error": 1.534922441925879e-08,
+      "max_excess": -2.1618343764360076e-06,
+      "passed": true
+    },
+    "w_down": {
+      "cells": 2048,
+      "failed_cells": 0,
+      "max_absolute_error": 6.657755244332542e-08,
+      "max_excess": -1.977842247363818e-06,
+      "passed": true
+    },
+    "w_gate": {
+      "cells": 2048,
+      "failed_cells": 0,
+      "max_absolute_error": 2.5567319116015508e-08,
+      "max_excess": -1.9998209965936467e-06,
+      "passed": true
+    },
+    "w_k": {
+      "cells": 512,
+      "failed_cells": 0,
+      "max_absolute_error": 9.410044337146428e-08,
+      "max_excess": -1.998968085667924e-06,
+      "passed": true
+    },
+    "w_o": {
+      "cells": 1024,
+      "failed_cells": 0,
+      "max_absolute_error": 6.410293913738929e-08,
+      "max_excess": -1.994714621055353e-06,
+      "passed": true
+    },
+    "w_q": {
+      "cells": 1024,
+      "failed_cells": 0,
+      "max_absolute_error": 6.7162424469136e-08,
+      "max_excess": -1.9934902043483335e-06,
+      "passed": true
+    },
+    "w_up": {
+      "cells": 2048,
+      "failed_cells": 0,
+      "max_absolute_error": 3.586163838109613e-08,
+      "max_excess": -2.000308022056397e-06,
+      "passed": true
+    },
+    "w_v": {
+      "cells": 512,
+      "failed_cells": 0,
+      "max_absolute_error": 4.087277491460206e-08,
+      "max_excess": -1.992028030970371e-06,
+      "passed": true
+    }
+  },
+  "hip_version": null,
+  "loss": {
+    "cells": 1,
+    "failed_cells": 0,
+    "max_absolute_error": 2.4320338987138257e-07,
+    "max_excess": -1.1319316170021724e-05,
+    "passed": true
+  },
+  "parameters_moved": true,
+  "passed": true,
+  "reference_files": {
+    "nonlinear-control": {
+      "file": "gradient-oracle.json.nonlinear-control.npz",
+      "sha256": "43c8518a134e7f7150dc22b3e290572407191dbe01cf50e88241e2ed98988493"
+    },
+    "reference": {
+      "file": "gradient-oracle.json.reference.npz",
+      "sha256": "37a04c745b9f600161f84c79d67ee5bc1640101186439cd08480f01afea9b342"
+    }
+  },
+  "reference_loss": 4.781259779946554,
+  "schema": "mojolearn.training.gradient-oracle.v1",
+  "scope": "single fixed-profile step; FP64 tolerance correctness, not bitwise certification",
+  "tolerances": {
+    "grad_atol": 2e-06,
+    "grad_rtol": 0.0002,
+    "loss_atol": 2e-06,
+    "loss_rtol": 2e-06
+  },
+  "torch_version": "2.4.1+cu124",
+  "vendor": "cuda"
+}

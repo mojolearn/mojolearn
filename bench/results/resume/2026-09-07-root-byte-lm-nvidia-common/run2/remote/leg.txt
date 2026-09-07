@@ -1,0 +1,11 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=5
+commit=eac39c367beeddb8ba4792551d154673e654ce21
+started=2026-09-07T08:23:17Z
+device_memory_pool=qualified NVIDIA runtime defaults; external guard retained
+pixi_install_exit=0
+byte_lm_validation_exit=0
+gpu_archs=sm_89
+scope=bounded nvidia byte LM validation; no cross-vendor or performance certificate

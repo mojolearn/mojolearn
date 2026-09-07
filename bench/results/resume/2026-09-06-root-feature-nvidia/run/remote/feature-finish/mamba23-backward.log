@@ -1,0 +1,37 @@
+2349 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x507f80000000, nodemask=1)
+...EEs
+======================================================================
+ERROR: test_arbitrary_cotangent_all_public_leaves_and_repeat_bits (mojolearn.tests.test_mamba23_backward_surface.Mamba23BackwardNVIDIA.test_arbitrary_cotangent_all_public_leaves_and_repeat_bits) (family=2)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/tests/test_mamba23_backward_surface.py", line 158, in test_arbitrary_cotangent_all_public_leaves_and_repeat_bits
+    stages = forward(params, tx, self.torch.float64)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/mamba/corpus/gen_corpus.py", line 1323, in m2_forward
+    A_cumsum = torch.cumsum(dAp, dim=-1)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/utils/_device.py", line 79, in __torch_function__
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: cumsum_cuda_kernel does not have a deterministic implementation, but you set 'torch.use_deterministic_algorithms(True)'. You can turn off determinism just for this operation, or you can use the 'warn_only=True' option, if that's acceptable for your application. You can also file an issue at https://github.com/pytorch/pytorch/issues to help us prioritize adding deterministic support for this operation.
+
+======================================================================
+ERROR: test_arbitrary_cotangent_all_public_leaves_and_repeat_bits (mojolearn.tests.test_mamba23_backward_surface.Mamba23BackwardNVIDIA.test_arbitrary_cotangent_all_public_leaves_and_repeat_bits) (family=3)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/tests/test_mamba23_backward_surface.py", line 158, in test_arbitrary_cotangent_all_public_leaves_and_repeat_bits
+    stages = forward(params, tx, self.torch.float64)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/mamba/corpus/gen_corpus.py", line 2760, in m3_forward
+    dacs = torch.cumsum(adtq, dim=-1)                       # [B, H, C, Q]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/utils/_device.py", line 79, in __torch_function__
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: cumsum_cuda_kernel does not have a deterministic implementation, but you set 'torch.use_deterministic_algorithms(True)'. You can turn off determinism just for this operation, or you can use the 'warn_only=True' option, if that's acceptable for your application. You can also file an issue at https://github.com/pytorch/pytorch/issues to help us prioritize adding deterministic support for this operation.
+
+----------------------------------------------------------------------
+Ran 5 tests in 2.326s
+
+FAILED (errors=2, skipped=1)
+{"guard": "nvidia-root-serial-v1", "reason": null, "returncode": 1}

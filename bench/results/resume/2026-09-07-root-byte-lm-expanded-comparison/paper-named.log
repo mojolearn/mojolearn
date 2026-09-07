@@ -1,0 +1,8 @@
+wrote paper/numbers.tex with 247 macros
+
+1 macro(s) bound to \UNMEASURED and will render red:
+  \relVersionDOI
+Latexmk: Using bibtex to make bibliography file(s).
+==> built paper/paper_named.pdf (NAMED, never submit this one)
+==> refreshed endorsement_emails/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf
+NOTE: \UNMEASURED markers remain; they render red.

@@ -1,0 +1,299 @@
+{
+  "case": "base_b2_l4_d8",
+  "case_seed": "0x4D616D6261437F72",
+  "dtype": "float64",
+  "environment": {
+    "cuda": null,
+    "device": "cpu",
+    "hip": null,
+    "python": "3.14.7",
+    "torch": "2.13.0"
+  },
+  "family": "mamba1",
+  "finite_difference": [
+    {
+      "abs_error": 4.529815411657978e-11,
+      "autograd": -0.2508529280751414,
+      "finite_difference": -0.25085292802984327,
+      "flat_index": 0,
+      "relative_scale_error": 4.529815411657978e-11,
+      "tensor": "x"
+    },
+    {
+      "abs_error": 9.15857389927055e-11,
+      "autograd": 0.12756073455023265,
+      "finite_difference": 0.12756073464181839,
+      "flat_index": 32,
+      "relative_scale_error": 9.15857389927055e-11,
+      "tensor": "x"
+    },
+    {
+      "abs_error": 5.361146379619082e-13,
+      "autograd": 7.988244630921507e-10,
+      "finite_difference": 7.993605777301126e-10,
+      "flat_index": 0,
+      "relative_scale_error": 5.361146379619082e-13,
+      "tensor": "A_log"
+    },
+    {
+      "abs_error": 1.941570067665214e-11,
+      "autograd": 5.25966837690739e-09,
+      "finite_difference": 5.240252676230738e-09,
+      "flat_index": 128,
+      "relative_scale_error": 1.941570067665214e-11,
+      "tensor": "A_log"
+    },
+    {
+      "abs_error": 7.155770594124977e-11,
+      "autograd": 0.0008435420090730487,
+      "finite_difference": 0.0008435420806307546,
+      "flat_index": 0,
+      "relative_scale_error": 7.155770594124977e-11,
+      "tensor": "D"
+    },
+    {
+      "abs_error": 1.5043431344369251e-10,
+      "autograd": 0.002502109514578503,
+      "finite_difference": 0.0025021093641441894,
+      "flat_index": 8,
+      "relative_scale_error": 1.5043431344369251e-10,
+      "tensor": "D"
+    },
+    {
+      "abs_error": 1.629104490197264e-11,
+      "autograd": 0.032846411352290085,
+      "finite_difference": 0.03284641136858113,
+      "flat_index": 0,
+      "relative_scale_error": 1.629104490197264e-11,
+      "tensor": "conv1d.bias"
+    },
+    {
+      "abs_error": 6.277409148047752e-11,
+      "autograd": -0.02699930370002809,
+      "finite_difference": -0.026999303637254,
+      "flat_index": 8,
+      "relative_scale_error": 6.277409148047752e-11,
+      "tensor": "conv1d.bias"
+    },
+    {
+      "abs_error": 1.574957384561232e-11,
+      "autograd": 0.0005615344032139869,
+      "finite_difference": 0.0005615344189635607,
+      "flat_index": 0,
+      "relative_scale_error": 1.574957384561232e-11,
+      "tensor": "conv1d.weight"
+    },
+    {
+      "abs_error": 7.624621485395611e-11,
+      "autograd": -0.0018580699075748494,
+      "finite_difference": -0.0018580698313286346,
+      "flat_index": 32,
+      "relative_scale_error": 7.624621485395611e-11,
+      "tensor": "conv1d.weight"
+    },
+    {
+      "abs_error": 4.540131919529053e-11,
+      "autograd": -4.6008634538676765e-08,
+      "finite_difference": -4.5963233219481474e-08,
+      "flat_index": 0,
+      "relative_scale_error": 4.540131919529053e-11,
+      "tensor": "dt_proj.bias"
+    },
+    {
+      "abs_error": 5.97042237642143e-11,
+      "autograd": -1.768210280595157e-07,
+      "finite_difference": -1.7688073228327991e-07,
+      "flat_index": 8,
+      "relative_scale_error": 5.97042237642143e-11,
+      "tensor": "dt_proj.bias"
+    },
+    {
+      "abs_error": 8.325253803962252e-12,
+      "autograd": 4.968233846390311e-10,
+      "finite_difference": 4.884981308350689e-10,
+      "flat_index": 0,
+      "relative_scale_error": 8.325253803962252e-12,
+      "tensor": "dt_proj.weight"
+    },
+    {
+      "abs_error": 7.280136723649722e-11,
+      "autograd": 1.6161920920650973e-10,
+      "finite_difference": 8.881784197001251e-11,
+      "flat_index": 8,
+      "relative_scale_error": 7.280136723649722e-11,
+      "tensor": "dt_proj.weight"
+    },
+    {
+      "abs_error": 1.035274123373231e-11,
+      "autograd": -0.004961342724790674,
+      "finite_difference": -0.004961342714437933,
+      "flat_index": 0,
+      "relative_scale_error": 1.035274123373231e-11,
+      "tensor": "in_proj.weight"
+    },
+    {
+      "abs_error": 1.741771908994605e-10,
+      "autograd": -0.0019893399850924682,
+      "finite_difference": -0.001989340159269659,
+      "flat_index": 128,
+      "relative_scale_error": 1.741771908994605e-10,
+      "tensor": "in_proj.weight"
+    },
+    {
+      "abs_error": 3.060121904138735e-11,
+      "autograd": 0.0011800773829638536,
+      "finite_difference": 0.0011800774135650727,
+      "flat_index": 0,
+      "relative_scale_error": 3.060121904138735e-11,
+      "tensor": "norm.weight"
+    },
+    {
+      "abs_error": 5.809101637221925e-11,
+      "autograd": 0.003954984575753313,
+      "finite_difference": 0.003954984517662297,
+      "flat_index": 4,
+      "relative_scale_error": 5.809101637221925e-11,
+      "tensor": "norm.weight"
+    },
+    {
+      "abs_error": 1.7634126797672067e-11,
+      "autograd": 0.00957241838670898,
+      "finite_difference": 0.009572418369074853,
+      "flat_index": 0,
+      "relative_scale_error": 1.7634126797672067e-11,
+      "tensor": "out_proj.weight"
+    },
+    {
+      "abs_error": 1.3240946533654707e-11,
+      "autograd": -0.0037591102807503596,
+      "finite_difference": -0.003759110267509413,
+      "flat_index": 64,
+      "relative_scale_error": 1.3240946533654707e-11,
+      "tensor": "out_proj.weight"
+    },
+    {
+      "abs_error": 1.068909626500265e-11,
+      "autograd": -2.719633276350384e-09,
+      "finite_difference": -2.7089441800853815e-09,
+      "flat_index": 0,
+      "relative_scale_error": 1.068909626500265e-11,
+      "tensor": "x_proj.weight"
+    },
+    {
+      "abs_error": 6.854210681639187e-12,
+      "autograd": -2.834108795156283e-07,
+      "finite_difference": -2.8341773372630996e-07,
+      "flat_index": 264,
+      "relative_scale_error": 6.854210681639187e-12,
+      "tensor": "x_proj.weight"
+    }
+  ],
+  "finite_difference_step": 1e-05,
+  "finite_difference_worst_relative_scale_error": 1.741771908994605e-10,
+  "gradients": {
+    "A_log": {
+      "file": "grad.A_log.f64",
+      "sha256": "0c2a41cf4f3b9833593186e38f7b53b2bc36e17f3343904625ee25e2a09aedf8",
+      "shape": [
+        16,
+        16
+      ]
+    },
+    "D": {
+      "file": "grad.D.f64",
+      "sha256": "590d7d8cf764625c2b57c1011daf4ea4153bd87c682d5737d86bc40be3408e2d",
+      "shape": [
+        16
+      ]
+    },
+    "conv1d.bias": {
+      "file": "grad.conv1d.bias.f64",
+      "sha256": "51f67ae763122277a3f1fd6c5f2db10afd148f8d9f6d252385b50038552ae1fc",
+      "shape": [
+        16
+      ]
+    },
+    "conv1d.weight": {
+      "file": "grad.conv1d.weight.f64",
+      "sha256": "d46b70f483957b51f597d9a78977ddf5c39c1a007d7cbe3beb4abb178d5316b1",
+      "shape": [
+        16,
+        1,
+        4
+      ]
+    },
+    "dt_proj.bias": {
+      "file": "grad.dt_proj.bias.f64",
+      "sha256": "5e6a408fcb7943942179c0038cd36a9903fd1267bb90bcf269bda3f0d86bc1f3",
+      "shape": [
+        16
+      ]
+    },
+    "dt_proj.weight": {
+      "file": "grad.dt_proj.weight.f64",
+      "sha256": "ce7bea70dbc7c2bf697f6deef74fa6d6771c924a9a8e57835d0cee3b931a098c",
+      "shape": [
+        16,
+        1
+      ]
+    },
+    "in_proj.weight": {
+      "file": "grad.in_proj.weight.f64",
+      "sha256": "ae43f95d23e6d0131f1ae2c005baec4721ebe1491ff6be3ccaba9a7653431a61",
+      "shape": [
+        32,
+        8
+      ]
+    },
+    "norm.weight": {
+      "file": "grad.norm.weight.f64",
+      "sha256": "f75eb03b2c438f13f5ee47b20e34dd6f2ba785320ede1d99d68af92bed7c365c",
+      "shape": [
+        8
+      ]
+    },
+    "out_proj.weight": {
+      "file": "grad.out_proj.weight.f64",
+      "sha256": "703c992370b96ffa7a8fd3be763734d53a508fa87037bffad1126898bc3a9eb3",
+      "shape": [
+        8,
+        16
+      ]
+    },
+    "x": {
+      "file": "grad.x.f64",
+      "sha256": "270b12ee8c4b36a4b714e1bda9f5ec3780f0377420fa3c0bdba3cbb3b885787a",
+      "shape": [
+        2,
+        4,
+        8
+      ]
+    },
+    "x_proj.weight": {
+      "file": "grad.x_proj.weight.f64",
+      "sha256": "29d16a05e90a72d448441b6a9bc00783eeaedec02e189f5d317308e8d7ea76fe",
+      "shape": [
+        33,
+        16
+      ]
+    }
+  },
+  "independent_audit": "central finite difference",
+  "loss": 7.004331431717262,
+  "objective": "sum(flat(block_output) * signed_dyadic_weight_v1)",
+  "oracle": "PyTorch autograd over cited upstream forward transcription",
+  "public_prefill_leaves": [
+    "x",
+    "norm.weight",
+    "in_proj.weight",
+    "conv1d.weight",
+    "conv1d.bias",
+    "out_proj.weight",
+    "D",
+    "A_log",
+    "dt_proj.weight",
+    "dt_proj.bias",
+    "x_proj.weight"
+  ],
+  "schema": "mojolearn.mamba.gradient-oracle.v1"
+}

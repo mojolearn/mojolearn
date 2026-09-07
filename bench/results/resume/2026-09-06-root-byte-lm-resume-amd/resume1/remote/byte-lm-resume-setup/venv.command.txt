@@ -1,0 +1,1 @@
+/opt/conda/envs/py_3.10/bin/python tools/amd_serial_guard.py --seconds 60 --rss-gib 12 -- /opt/conda/envs/py_3.10/bin/python -m venv /root/byte-lm-resume-venv 

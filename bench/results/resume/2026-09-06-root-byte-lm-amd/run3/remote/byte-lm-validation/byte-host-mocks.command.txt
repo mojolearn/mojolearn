@@ -1,0 +1,1 @@
+python3 tools/amd_serial_guard.py --seconds 120 -- /root/mojolearn/.byte-lm-validation-venv/bin/python -m pytest -q python/mojolearn/tests/test_byte_lm_surface.py 

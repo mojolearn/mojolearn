@@ -1,0 +1,1 @@
+/opt/homebrew/opt/python@3.14/bin/python3.14 /private/tmp/mojolearn-apple-byte-lm-attempt3-20260907/macos_serial_guard.py --seconds 60 --rss-gib 2 --memory-policy user-tiny --report /private/tmp/mojolearn-apple-byte-lm-attempt3-20260907/sdk.guard.json -- /usr/bin/xcrun --sdk macosx --show-sdk-version

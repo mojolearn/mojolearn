@@ -1,0 +1,15 @@
+== bench/lanes_price_main.mojo [FAST] lane=et rounds=1 smoke=False ==
+LPRICE et FAST warmup 1000000x28.t20.d12.sqrt 2.126185666 a4d03520b4584c37
+LPRICE et FAST 1 1000000x28.t20.d12.sqrt 2.103538377 a4d03520b4584c37
+HASH-STABLE et FAST 2 rounds all a4d03520b4584c37
+== done [FAST] lane=et ==
+== bench/lanes_price_main.mojo [FAST] lane=et rounds=1 smoke=False ==
+LPRICE et FAST warmup 1000000x28.t20.d12.sqrt 2.135112273 a4d03520b4584c37
+LPRICE et FAST 1 1000000x28.t20.d12.sqrt 2.129488631 a4d03520b4584c37
+HASH-STABLE et FAST 2 rounds all a4d03520b4584c37
+== done [FAST] lane=et ==
+== bench/lanes_price_main.mojo [FAST] lane=et rounds=1 smoke=False ==
+LPRICE et FAST warmup 1000000x28.t20.d12.sqrt 2.106455082 a4d03520b4584c37
+LPRICE et FAST 1 1000000x28.t20.d12.sqrt 2.10003196 a4d03520b4584c37
+HASH-STABLE et FAST 2 rounds all a4d03520b4584c37
+== done [FAST] lane=et ==

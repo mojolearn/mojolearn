@@ -1,0 +1,41 @@
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 755, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 892, in get_code
+  File "<frozen importlib._bootstrap_external>", line 950, in get_data
+FileNotFoundError: [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'
+✨ Pixi task (mamba-grad-m3-public in skgpu): oracle=/tmp/mojolearn-mamba3-grad; actual=/tmp/mojolearn-mamba3-actual; mkdir -p $oracle $actual; find $oracle -maxdepth 1 -type f -delete; find $actual -maxdepth 1 -type f -delete; python tools/mamba_gradient_oracle.py --family mamba3 --out $oracle; MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba3_backward_tail_dump.mojo; python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/mamba_gradient_oracle.py", line 64, in <module>
+    GEN = _load_generator()
+  File "/root/mojolearn/tools/mamba_gradient_oracle.py", line 60, in _load_generator
+    spec.loader.exec_module(module)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 755, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 892, in get_code
+  File "<frozen importlib._bootstrap_external>", line 950, in get_data
+FileNotFoundError: [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'
+/root/mojolearn/tools/with_identical_mode.sh: 49: exec: /root/mojolearn/tools/with_build_lock.sh: not found
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/mamba_gradient_oracle.py", line 64, in <module>
+    GEN = _load_generator()
+  File "/root/mojolearn/tools/mamba_gradient_oracle.py", line 60, in _load_generator
+    spec.loader.exec_module(module)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 755, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 892, in get_code
+  File "<frozen importlib._bootstrap_external>", line 950, in get_data
+FileNotFoundError: [Errno 2] No such file or directory: '/root/mojolearn/mamba/corpus/gen_corpus.py'
+schema=mojolearn.mamba.backward-certificate.nvidia.v1
+created_utc=2026-09-05T06:35:20Z
+host=46b3fc69e6b4
+kernel=Linux 6.8.0-71-generic x86_64 GNU/Linux
+mode=IDENTICAL
+mode_injector=tools/with_identical_mode.sh
+commit=be61a391bdb69d74e8fbe189a2528047fe16fbf1
+0, NVIDIA GeForce RTX 4090, GPU-c7dff3d6-1967-6a1a-e7c6-ff946106683d, 570.169
+family	verdict	rc	oracle_manifest_sha256	dump_manifest_sha256
+mamba1	RED	1	missing	missing
+mamba2	RED	1	missing	missing
+mamba3	RED	1	missing	missing
+MAMBA-BACKWARD-CERT artifacts=/root/gemm_leg_out/mamba-cert
+REMOTE_BODY_DONE

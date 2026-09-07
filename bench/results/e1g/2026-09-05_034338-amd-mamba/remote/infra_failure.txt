@@ -1,0 +1,1 @@
+INFRA_FAILURE: detected ROCm6.1.40091 below required6.3.30000; stopped remaining tests.

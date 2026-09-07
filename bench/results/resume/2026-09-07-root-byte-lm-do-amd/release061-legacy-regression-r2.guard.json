@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/tmp/mojolearn-root-validation-20260906/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tools/test_check_linux_release_qualification.py",
+    "tools/test_release_qualification_command.py",
+    "tools/test_verify_linux_surface_qualification.py"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 47680,
+  "elapsed_seconds": 1.0817834999979823,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

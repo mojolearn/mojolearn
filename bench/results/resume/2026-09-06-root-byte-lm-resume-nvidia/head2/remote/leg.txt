@@ -1,0 +1,12 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=6
+commit=c9d1165dfbcde0a3931764ed3fe2aa3583f860c4
+started=2026-09-06T23:55:45Z
+device_memory_pool_bytes=4294967296
+device_memory_pool_only=true
+device_memory_pool_chunk_percent=100
+pixi_install_exit=0
+byte_lm_resume_exit=1
+scope=compact diagnostic only; final root raw-file comparison mandatory

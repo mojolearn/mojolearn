@@ -1,0 +1,7 @@
+5374 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x312880000000, nodemask=1)
+5451 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x519980000000, nodemask=1)
+{"ms": 1222.565136, "hashes": ["b783e9ae49288cd37215cb8c1653012849f2dbeacfb48441b7e7f3398ee98c1e"], "arm": "fast", "round": 0, "warmup": true}
+{"ms": 1163.690494, "hashes": ["998ee37b8e873518e481f1b3b937a9dacaed2f39a53d10be21b8dc63fef4a211"], "arm": "identical", "round": 0, "warmup": true}
+{"ms": 253.355726, "hashes": ["7ffdd1f8e59ae4bc1531c6a544863c0482cf874f01255480a54aa4b6764fc77d"], "arm": "external", "round": 0, "warmup": true}
+{"ms": 23.2531, "hashes": ["998ee37b8e873518e481f1b3b937a9dacaed2f39a53d10be21b8dc63fef4a211"], "arm": "identical", "round": 1, "warmup": false}
+{"guard": "nvidia-root-serial-v1", "reason": "GPU memory exceeds 85 percent", "returncode": -15}

@@ -1,0 +1,42 @@
+{
+  "name": "sklearn.datasets.load_digits",
+  "sklearn": "1.9.0",
+  "data_sha256": "faf2d98f61250c1cdc0b114323133d3c58da04f5c5d28bb78e4bde3c936a75b1",
+  "expected_data_sha256": null,
+  "pin_format": "C-order little-endian float32 pixels followed by int64 labels",
+  "pin_verified": false,
+  "scaling": "divide pixels by 16; no fitted preprocessing",
+  "split": "sklearn stratified train_test_split seed 19; 1024/256 disjoint rows",
+  "labels_used_for_embedding": false,
+  "train": {
+    "shape": [
+      1024,
+      64
+    ],
+    "dtype": "<f4",
+    "raw_c_order_sha256": "dfcf0ef9afb36886632c652c747eb632331ef7fdf913f41daa90eff4d607cf09"
+  },
+  "query": {
+    "shape": [
+      256,
+      64
+    ],
+    "dtype": "<f4",
+    "raw_c_order_sha256": "5e94ba19b2769c6a23e577ee2c796a4805a42981c15d905d047429e87bfd7087"
+  },
+  "train_indices": {
+    "shape": [
+      1024
+    ],
+    "dtype": "<i8",
+    "raw_c_order_sha256": "54842c3070a242cba8eca8e33a0daf472727e77f582e6314b3f7154df6eb4f77"
+  },
+  "query_indices": {
+    "shape": [
+      256
+    ],
+    "dtype": "<i8",
+    "raw_c_order_sha256": "60c1eb1135e1dc659356d41df38dcd7e4fa5b9fa37805b072bf39ede92575a9a"
+  },
+  "inputs_file_sha256": "ccc676f98a1017a8e8b5325e576dc2b91f5a16d8d656e69ef99bcedb9e4309a1"
+}

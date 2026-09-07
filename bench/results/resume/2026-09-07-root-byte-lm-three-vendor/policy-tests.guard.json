@@ -1,0 +1,17 @@
+{
+  "command": [
+    "/tmp/mojolearn-root-validation-20260906/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tools/tests/test_byte_lm_metal_receipt_policy.py",
+    "tools/test_macos_serial_guard.py"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 43296,
+  "elapsed_seconds": 0.2270396250023623,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

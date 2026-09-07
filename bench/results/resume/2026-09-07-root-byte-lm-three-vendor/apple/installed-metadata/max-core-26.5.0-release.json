@@ -1,0 +1,314 @@
+{
+  "arch": "arm64",
+  "build": "release",
+  "build_number": 0,
+  "depends": [
+    "mojo-compiler ==1.0.0"
+  ],
+  "license": "LicenseRef-Modular-Proprietary",
+  "md5": "24bbf832b1dc7d486b3e8b051b7c001c",
+  "name": "max-core",
+  "platform": "osx",
+  "run_exports": {},
+  "sha256": "774f2b368d1473553debbfb61566e2d1091951990f003340eb836fd4baeb50ea",
+  "size": 66719553,
+  "subdir": "osx-arm64",
+  "timestamp": 1786294908386,
+  "version": "26.5.0",
+  "fn": "max-core-26.5.0-release.conda",
+  "url": "https://conda.modular.com/max/osx-arm64/max-core-26.5.0-release.conda",
+  "channel": "https://conda.modular.com/max/",
+  "extracted_package_dir": "/Users/andrewhendel/Library/Caches/rattler/cache/pkgs/max-core-26.5.0-release",
+  "requested_specs": [],
+  "files": [
+    "include/max/c/common.h",
+    "include/max/c/context.h",
+    "include/max/c/device.h",
+    "include/max/c/model.h",
+    "include/max/c/safetensors.h",
+    "include/max/c/symbol_export.h",
+    "include/max/c/tensor.h",
+    "include/max/c/types.h",
+    "include/max/c/weights.h",
+    "lib/libAsyncRTMojoBindings.dylib",
+    "lib/libMGPRT.dylib",
+    "lib/libmax.dylib",
+    "lib/mojo/_cublas.mojoc",
+    "lib/mojo/_cudnn.mojoc",
+    "lib/mojo/_cufft.mojoc",
+    "lib/mojo/_hal.mojoc",
+    "lib/mojo/_miopen.mojoc",
+    "lib/mojo/_rocblas.mojoc",
+    "lib/mojo/algorithm.mojoc",
+    "lib/mojo/builtin_kernels.mojoc",
+    "lib/mojo/builtin_primitives.mojoc",
+    "lib/mojo/comm.mojoc",
+    "lib/mojo/extensibility.mojoc",
+    "lib/mojo/internal_utils.mojoc",
+    "lib/mojo/kv_cache.mojoc",
+    "lib/mojo/layout.mojoc",
+    "lib/mojo/linalg.mojoc",
+    "lib/mojo/machine.mojoc",
+    "lib/mojo/matmul_rs.mojoc",
+    "lib/mojo/max.mojoc",
+    "lib/mojo/mega_ffn.mojoc",
+    "lib/mojo/msa.mojoc",
+    "lib/mojo/nn.mojoc",
+    "lib/mojo/pipeline.mojoc",
+    "lib/mojo/profiling_range.mojoc",
+    "lib/mojo/quantization.mojoc",
+    "lib/mojo/shmem.mojoc",
+    "lib/mojo/state_space.mojoc",
+    "lib/mojo/structured_kernels.mojoc",
+    "lib/mojo/weights_registry.mojoc"
+  ],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": [
+      {
+        "_path": "include/max/c/common.h",
+        "path_type": "hardlink",
+        "sha256": "1f8a0dbb348816be8ae2f112b0c72459560f7c60a80e6f04d289a4e7be4cb769",
+        "size_in_bytes": 2581
+      },
+      {
+        "_path": "include/max/c/context.h",
+        "path_type": "hardlink",
+        "sha256": "afd9317011df1fe917c2f5bd2bed21aeb7adbaa0f202b9f6fb2095d59b6117c6",
+        "size_in_bytes": 5240
+      },
+      {
+        "_path": "include/max/c/device.h",
+        "path_type": "hardlink",
+        "sha256": "737a6cd01bf132c969c10d17516b6c3a96ca8b01411b39e90e2187032c74e52e",
+        "size_in_bytes": 3887
+      },
+      {
+        "_path": "include/max/c/model.h",
+        "path_type": "hardlink",
+        "sha256": "76548bb8a175e4460125f292ce2b4f510df7924b2830bb212520bbea4375ed65",
+        "size_in_bytes": 15404
+      },
+      {
+        "_path": "include/max/c/safetensors.h",
+        "path_type": "hardlink",
+        "sha256": "7160494c86fb59470444ca8425df4341b18434140c4b0774d9869e18136f0c9b",
+        "size_in_bytes": 7191
+      },
+      {
+        "_path": "include/max/c/symbol_export.h",
+        "path_type": "hardlink",
+        "sha256": "b0e39c36f6ceb8957e9ecf7e11732047d37c9ac76299b9d18c8dd95dc8db6ce0",
+        "size_in_bytes": 1103
+      },
+      {
+        "_path": "include/max/c/tensor.h",
+        "path_type": "hardlink",
+        "sha256": "075b25d3f5a666026e8fa049587040770b766bae300f5666189bfabbb62560b7",
+        "size_in_bytes": 9154
+      },
+      {
+        "_path": "include/max/c/types.h",
+        "path_type": "hardlink",
+        "sha256": "066cb23e89594275ff5c0e265768f669be211812a01877b276ce4a301d6f8bea",
+        "size_in_bytes": 8903
+      },
+      {
+        "_path": "include/max/c/weights.h",
+        "path_type": "hardlink",
+        "sha256": "8c1a61d2d45b1bd65e36a19a58b1f8728a25e61cc323f5b694019468df29b50b",
+        "size_in_bytes": 2396
+      },
+      {
+        "_path": "lib/libAsyncRTMojoBindings.dylib",
+        "path_type": "hardlink",
+        "sha256": "7cdc2170da4351c4b8fbf9d3c9570b44f345c103ee8c85d132e65d1d9c6e8380",
+        "size_in_bytes": 1138880
+      },
+      {
+        "_path": "lib/libMGPRT.dylib",
+        "path_type": "hardlink",
+        "sha256": "ff87a33f2e908647d992c069124e2febd70f6fac9cd48f46a0a01a2066c3c164",
+        "size_in_bytes": 38658720
+      },
+      {
+        "_path": "lib/libmax.dylib",
+        "path_type": "hardlink",
+        "sha256": "4e56780fa44c4f41e421390c684e6cf8f38e1472a3b81140c147bef46e6cd869",
+        "size_in_bytes": 134098384
+      },
+      {
+        "_path": "lib/mojo/_cublas.mojoc",
+        "path_type": "hardlink",
+        "sha256": "26605ebc9e28630df2861f798d0dbcc14625291b74ee2cece23bf15b4c7792f2",
+        "size_in_bytes": 283653
+      },
+      {
+        "_path": "lib/mojo/_cudnn.mojoc",
+        "path_type": "hardlink",
+        "sha256": "34119438415cf96be47a68a9b56e5e24819aa22d7b11b131dd10495a8b728912",
+        "size_in_bytes": 385122
+      },
+      {
+        "_path": "lib/mojo/_cufft.mojoc",
+        "path_type": "hardlink",
+        "sha256": "ed489423d1b0a7def8f0c8da5805010c86285e9467b764a6d7a1a6d46e1dd57a",
+        "size_in_bytes": 68029
+      },
+      {
+        "_path": "lib/mojo/_hal.mojoc",
+        "path_type": "hardlink",
+        "sha256": "6d8fd86f81d2bf80d87355ebaf6a016ddaf9361ac56b2a9cf1c787875c3e921d",
+        "size_in_bytes": 349331
+      },
+      {
+        "_path": "lib/mojo/_miopen.mojoc",
+        "path_type": "hardlink",
+        "sha256": "ca08603666c4ee0b52e53079c71f65374e5db2c4f88804f4a0fc469fa1d94d75",
+        "size_in_bytes": 72246
+      },
+      {
+        "_path": "lib/mojo/_rocblas.mojoc",
+        "path_type": "hardlink",
+        "sha256": "e80b7aa2cb99a32278505316b78dcf6353bb70edb9fbe4ee964aec1efdf57581",
+        "size_in_bytes": 434813
+      },
+      {
+        "_path": "lib/mojo/algorithm.mojoc",
+        "path_type": "hardlink",
+        "sha256": "d0d0e7905015af559e6173839c87e490a82515b3455a25e0e1aa46ac68802023",
+        "size_in_bytes": 249616
+      },
+      {
+        "_path": "lib/mojo/builtin_kernels.mojoc",
+        "path_type": "hardlink",
+        "sha256": "88dcb8f99b8791171a373660b75ed9ce86ee6d2a9e29a1fad180c2c3f5ad0ae8",
+        "size_in_bytes": 1631815
+      },
+      {
+        "_path": "lib/mojo/builtin_primitives.mojoc",
+        "path_type": "hardlink",
+        "sha256": "2b23584749ca6d7c19887f5cafb70a2199671b60f01b6f94f04995366a7ca8a4",
+        "size_in_bytes": 192435
+      },
+      {
+        "_path": "lib/mojo/comm.mojoc",
+        "path_type": "hardlink",
+        "sha256": "a0ef021704fc72f523cf6f4e2832b099b13eb0768d3cc598412a9c8e64342949",
+        "size_in_bytes": 402966
+      },
+      {
+        "_path": "lib/mojo/extensibility.mojoc",
+        "path_type": "hardlink",
+        "sha256": "8462796638692a03b65e527f5da4bed86b3e91228959d62d90d73cfde798a589",
+        "size_in_bytes": 163166
+      },
+      {
+        "_path": "lib/mojo/internal_utils.mojoc",
+        "path_type": "hardlink",
+        "sha256": "08b9bf9d92537293d513d4e7f1952f838be4e881f43f609ba9f18127a7d1cb22",
+        "size_in_bytes": 163544
+      },
+      {
+        "_path": "lib/mojo/kv_cache.mojoc",
+        "path_type": "hardlink",
+        "sha256": "2dcd3370bf7f5c8854fab67eaa11286d2d9e66a63fce24e52f1ef2db25728cae",
+        "size_in_bytes": 172306
+      },
+      {
+        "_path": "lib/mojo/layout.mojoc",
+        "path_type": "hardlink",
+        "sha256": "2d0eed57c1f2dde19b49e72c1bad385beeb2a1652640ee7fd6fcdfe018ae8f73",
+        "size_in_bytes": 1182385
+      },
+      {
+        "_path": "lib/mojo/linalg.mojoc",
+        "path_type": "hardlink",
+        "sha256": "7f60208b38a6c0c8094c23c6ca5c5dbd492fe411efff3ac60fcb8bf225477ee5",
+        "size_in_bytes": 4634544
+      },
+      {
+        "_path": "lib/mojo/machine.mojoc",
+        "path_type": "hardlink",
+        "sha256": "306f114f082b0d49467b4f3f1e5b3afdaa544bb0886bb6f23bc836846b0fcf0d",
+        "size_in_bytes": 39778
+      },
+      {
+        "_path": "lib/mojo/matmul_rs.mojoc",
+        "path_type": "hardlink",
+        "sha256": "e3fc7f53a931bba0c0a9864b7c87a17375b2e316b8338d6d6708b7611ddfe358",
+        "size_in_bytes": 185080
+      },
+      {
+        "_path": "lib/mojo/max.mojoc",
+        "path_type": "hardlink",
+        "sha256": "166b3c82d80995b78ec5000d755a236507bb75f59ab12e28539fc6d1d88419c8",
+        "size_in_bytes": 1063137
+      },
+      {
+        "_path": "lib/mojo/mega_ffn.mojoc",
+        "path_type": "hardlink",
+        "sha256": "52d1893be727973cc5ebcaea60b93e99cb7713914104fc431e0c32958d5ce17e",
+        "size_in_bytes": 288224
+      },
+      {
+        "_path": "lib/mojo/msa.mojoc",
+        "path_type": "hardlink",
+        "sha256": "15d5de9b3f18da751af4aed7c7dc82d02cfd4c9a5d98bda38de1ceeb27d942ed",
+        "size_in_bytes": 942760
+      },
+      {
+        "_path": "lib/mojo/nn.mojoc",
+        "path_type": "hardlink",
+        "sha256": "602338eff58fd55f5c2619d0402522731e334da377e9d31c6446036369dca26e",
+        "size_in_bytes": 6276992
+      },
+      {
+        "_path": "lib/mojo/pipeline.mojoc",
+        "path_type": "hardlink",
+        "sha256": "0ba1f84f3865c7af81a9c8e9150285e0e41578723c2d88728b2eeae7fe36e51c",
+        "size_in_bytes": 325482
+      },
+      {
+        "_path": "lib/mojo/profiling_range.mojoc",
+        "path_type": "hardlink",
+        "sha256": "2bfff5f574bcca99762c340e8b0e7009b3e9da17c4f166db83c389b00f04cd42",
+        "size_in_bytes": 37387
+      },
+      {
+        "_path": "lib/mojo/quantization.mojoc",
+        "path_type": "hardlink",
+        "sha256": "839447e1ad7263bd099d970decdce2bcc8c360c0cefeed3935104805089b39a9",
+        "size_in_bytes": 358338
+      },
+      {
+        "_path": "lib/mojo/shmem.mojoc",
+        "path_type": "hardlink",
+        "sha256": "937104e463fac87b875c894881eb775c0e6b60826bb4b5c3320b3ab492c0a575",
+        "size_in_bytes": 444135
+      },
+      {
+        "_path": "lib/mojo/state_space.mojoc",
+        "path_type": "hardlink",
+        "sha256": "1df324cf7d3d8a753c6f30be99d9febd0ab0d1f211923ad1bd1fa6db56b7c5c6",
+        "size_in_bytes": 765102
+      },
+      {
+        "_path": "lib/mojo/structured_kernels.mojoc",
+        "path_type": "hardlink",
+        "sha256": "f402e5c93f74de8a61616d7f476be794aaef86bde078c0717c75e35dd97c3e64",
+        "size_in_bytes": 327158
+      },
+      {
+        "_path": "lib/mojo/weights_registry.mojoc",
+        "path_type": "hardlink",
+        "sha256": "b4dabd5f0b11fceee87485eb3716d7bcc1c12fd91f141f74db5f0d9208bec49a",
+        "size_in_bytes": 34466
+      }
+    ]
+  },
+  "link": {
+    "source": "/Users/andrewhendel/Library/Caches/rattler/cache/pkgs/max-core-26.5.0-release",
+    "type": 1
+  }
+}

@@ -1,0 +1,1 @@
+python3 tools/amd_serial_guard.py --seconds 1424 -- /root/mojolearn/.byte-lm-validation-venv/bin/python tools/byte_lm_real_text_capture.py --output /root/byte-lm-do-output/byte-lm-validation/full128 --expected-vendor hip --steps 128 

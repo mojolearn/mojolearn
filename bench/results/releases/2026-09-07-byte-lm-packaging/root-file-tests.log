@@ -1,0 +1,49 @@
+.................................    [100%]
+=================================== FAILURES ===================================
+_ ReleaseAdmissionTests.test_runtime_architecture_requires_device_and_selection_in_every_job (defect=None) _
+
+self = <test_check_linux_release_qualification.ReleaseAdmissionTests testMethod=test_runtime_architecture_requires_device_and_selection_in_every_job>
+
+    def test_runtime_architecture_requires_device_and_selection_in_every_job(self):
+        for defect in (None, 'device_architecture', 'selected_architecture', 'architecture_override_absent'):
+            with self.subTest(defect=defect), tempfile.TemporaryDirectory() as directory:
+                out, qualification, *args = self.vendor_fixture(Path(directory))
+                audit_path = out / 'wheel-audit.json'
+                audit = json.loads(audit_path.read_text())
+                audit.update(assembly_profile='release-0.6.1', runtime_architecture='gfx942')
+                write_json(audit_path, audit)
+                for name in qualification['installed_records']:
+                    path = out / (name + '.installed.json')
+                    row = json.loads(path.read_text())
+                    row.update(device_architecture='gfx942', selected_architecture='gfx942',
+                               architecture_probe='synthetic topology witness', architecture_override_absent=True)
+                    if defect and name == 'smoke-fast':
+                        row[defect] = False if defect == 'architecture_override_absent' else 'gfx90a'
+                    write_json(path, row)
+                    qualification['installed_records'][name] = gate.digest_file(path)
+                with patch.object(gate.surface, 'retained', return_value=(qualification, {})), \
+                        patch.object(gate.surface, 'check_quality'):
+                    if defect:
+                        with self.assertRaises(ValueError):
+                            gate.check_vendor(out, 'hip', *args, arch='gfx942')
+                    else:
+>                       gate.check_vendor(out, 'hip', *args, arch='gfx942')
+
+tools/test_check_linux_release_qualification.py:159: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tools/check_linux_release_qualification.py:155: in check_vendor
+    require(set(qualification.get('installed_records', {})) == expected_records,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+condition = False
+message = 'Final admission requires the exact profile job inventory'
+
+    def require(condition, message):
+        if not condition:
+>           raise ValueError(message)
+E           ValueError: Final admission requires the exact profile job inventory
+
+tools/verify_linux_surface_qualification.py:114: ValueError
+=========================== short test summary info ============================
+SUBFAILED(defect=None) tools/test_check_linux_release_qualification.py::ReleaseAdmissionTests::test_runtime_architecture_requires_device_and_selection_in_every_job
+1 failed, 33 passed, 35 subtests passed in 1.68s

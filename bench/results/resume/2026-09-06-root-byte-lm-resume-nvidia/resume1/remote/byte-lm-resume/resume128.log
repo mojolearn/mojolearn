@@ -1,0 +1,5 @@
+{"completed_steps": 80, "loss": 2.903602123260498}
+{"completed_steps": 96, "loss": 2.8806047439575195}
+{"completed_steps": 112, "loss": 2.8825793266296387}
+{"completed_steps": 128, "loss": 2.9659969806671143}
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

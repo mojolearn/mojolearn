@@ -1,0 +1,1 @@
+/root/mojolearn/.byte-lm-validation-venv/bin/python tools/amd_serial_guard.py --seconds 563 --rss-gib 12 -- /root/mojolearn/.byte-lm-validation-venv/bin/python tools/byte_lm_real_text_capture.py --output /root/byte-lm-do-output/head64-campaign/head64 --expected-vendor hip --steps 128 --action head64 

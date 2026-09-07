@@ -1,0 +1,25 @@
+{"time": 1788765195.980382, "event": "preparing", "output": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-07-root-byte-lm-do-amd/run1"}
+{"time": 1788765196.6682692, "event": "api", "method": "GET", "path": "/droplets?per_page=200", "status": 200}
+{"time": 1788765196.7790122, "event": "local_watchdog_armed", "pid": 52364}
+{"time": 1788765196.77909, "event": "create_requested", "name": "mojolearn-byte-lm-1788765196669199000"}
+{"time": 1788765198.240183, "event": "api", "method": "POST", "path": "/droplets", "status": 202}
+{"time": 1788765198.2408562, "event": "droplet_created", "id": 598404569}
+{"time": 1788765199.093924, "event": "api", "method": "GET", "path": "/droplets/598404569", "status": 200}
+{"time": 1788765209.780354, "event": "api", "method": "GET", "path": "/droplets/598404569", "status": 200}
+{"time": 1788765220.4876642, "event": "api", "method": "GET", "path": "/droplets/598404569", "status": 200}
+{"time": 1788765231.334122, "event": "api", "method": "GET", "path": "/droplets/598404569", "status": 200}
+{"time": 1788765241.933755, "event": "api", "method": "GET", "path": "/droplets/598404569", "status": 200}
+{"time": 1788765259.834025, "event": "api", "method": "GET", "path": "/droplets/598404569", "status": 200}
+{"time": 1788765262.0177548, "event": "ssh_ready", "ip": "146.190.241.171"}
+{"time": 1788765275.319087, "event": "remote_watchdog_armed", "pid": 2272}
+{"time": 1788765277.329688, "event": "shipping_source", "bytes": 3416567}
+{"time": 1788765398.035997, "event": "guarded_payload_start", "remaining_seconds": 2798, "head64": true}
+{"time": 1788765402.231922, "event": "payload_exit", "status": "1"}
+{"time": 1788765402.232082, "event": "fetch_start"}
+{"time": 1788765404.5264142, "event": "destroy_start", "id": 598404569}
+{"time": 1788765405.385412, "event": "api", "method": "DELETE", "path": "/droplets/598404569", "status": 204}
+{"time": 1788765405.882533, "event": "api", "method": "GET", "path": "/droplets/598404569", "status": 200}
+{"time": 1788765411.276067, "event": "api", "method": "GET", "path": "/droplets/598404569", "status": 200}
+{"time": 1788765416.620959, "event": "api", "method": "GET", "path": "/droplets/598404569", "status": 404}
+{"time": 1788765416.622088, "event": "destroy_complete", "verified_http_404": true}
+Fetched artifacts require root extraction, source inventory and 12-job file admission; no automatic identity claim.

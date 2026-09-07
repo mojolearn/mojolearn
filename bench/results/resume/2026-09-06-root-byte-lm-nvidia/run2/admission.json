@@ -1,0 +1,86 @@
+{
+  "binding_sha256": "ebe19b94815f89930b5c84ed30ac7e48ee3c21fddf909b184fdd3400411b925a",
+  "completed_steps": 128,
+  "heldout_loss_ratio": 0.5131724651836634,
+  "independent_oracle": {
+    "guard": {
+      "command": {
+        "bytes": 286,
+        "file": "byte-gradient-oracle.command.txt",
+        "sha256": "6dad7dc06eab6f699b4511ebe26621662b8cbf6bedd7bccd8b44aedb275e6ac1"
+      },
+      "final": {
+        "cpu_affinity": "0,1",
+        "guard": "nvidia-root-serial-v1",
+        "reason": null,
+        "returncode": 0,
+        "thread_limit": 2
+      },
+      "guard_log_sha256": "dd5b6a620b2f026b600b6af9016fd5b80872122c3359c673cbeb7ab26358295d",
+      "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+      "receipt_sha256": "2de52a65f0c5b0148c774def8c775eb010ede2807d3f8b98f73e044cb1d98a16",
+      "result": {
+        "bytes": 38238,
+        "file": "gradient-oracle.json",
+        "sha256": "123d7ea6e19a856dc10adef7a62a1d277bc6669836ff3c560da19d04b575afc2"
+      }
+    },
+    "oracle_sha256": "123d7ea6e19a856dc10adef7a62a1d277bc6669836ff3c560da19d04b575afc2",
+    "reference": {
+      "file": "gradient-oracle.json.reference.npz",
+      "sha256": "091cea38fbdaafbceb36abdd683b70e3a5bfc277c778db3382106d359b5b391f"
+    },
+    "step": 1
+  },
+  "passed": true,
+  "receipts": {
+    "first": {
+      "command": {
+        "bytes": 228,
+        "file": "byte-step1.command.txt",
+        "sha256": "9cc8b8d6efdd1e60b3081b6533c59f3e5768e352a6aafa2904bd94ec3822f15e"
+      },
+      "final": {
+        "cpu_affinity": "0,1",
+        "guard": "nvidia-root-serial-v1",
+        "reason": null,
+        "returncode": 0,
+        "thread_limit": 2
+      },
+      "guard_log_sha256": "dd5b6a620b2f026b600b6af9016fd5b80872122c3359c673cbeb7ab26358295d",
+      "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+      "receipt_sha256": "e9ae0fd3a7d41dd3033961911ee8e4100f0979dd9f8eb13f66d8c485112aa352",
+      "result": {
+        "bytes": 4589,
+        "file": "step1/summary.json",
+        "sha256": "77ebaacf8c500f1bba6fa7cfecaa61842dd500e92f1c6bdb8b5d8413d09851c3"
+      }
+    },
+    "full": {
+      "command": {
+        "bytes": 233,
+        "file": "byte-full128.command.txt",
+        "sha256": "f2c665aa6f9b44d67061d69dc2fa6ecfcdf4b5f810a3ceb8a489f73f9a01d225"
+      },
+      "final": {
+        "cpu_affinity": "0,1",
+        "guard": "nvidia-root-serial-v1",
+        "reason": null,
+        "returncode": 0,
+        "thread_limit": 2
+      },
+      "guard_log_sha256": "2e9ae8fb6f7cf373e25ce270282b23d2c3df1a4549caa4355bb998314e9d4c38",
+      "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+      "receipt_sha256": "14b112ff5bcb777a96b314b811874844300dd1fbb0a809d9f9f21e4822ca5be8",
+      "result": {
+        "bytes": 28192,
+        "file": "full128/summary.json",
+        "sha256": "d546e42f4dc83c5a4435fcd5f587056898bf05c9391e35fb34e649cf895e72fb"
+      }
+    }
+  },
+  "schema": "mojolearn.byte-lm.single-vendor-admission.v1",
+  "scope": "fixed small real-text model: independent first-step FP64 correctness and 128-step heldout learning on this vendor; cross-vendor identity remains separate",
+  "source_commit": "d921eade0da5454e39e0cd103b9a1799286b41b9",
+  "vendor": "cuda"
+}

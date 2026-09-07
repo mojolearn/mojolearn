@@ -1,0 +1,1 @@
+python3 tools/amd_serial_guard.py --seconds 30 -- /opt/conda/envs/py_3.10/bin/python -m venv --system-site-packages /root/mojolearn/.byte-lm-validation-venv 

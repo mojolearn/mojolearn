@@ -1,0 +1,75 @@
+{
+  "build": "release",
+  "build_number": 0,
+  "depends": [
+    "python >=3.10"
+  ],
+  "license": "LicenseRef-Modular-Proprietary",
+  "md5": "4a27e1596a5c2d27330a2377090b12c5",
+  "name": "mojo-python",
+  "noarch": "python",
+  "run_exports": {},
+  "sha256": "fc449a47c7707ed96a794768e29d5d2b0bf7afab373e2a9751f281ed7c4f822c",
+  "size": 24040,
+  "subdir": "noarch",
+  "timestamp": 1785891558838,
+  "version": "1.0.0",
+  "fn": "mojo-python-1.0.0-release.conda",
+  "url": "https://conda.modular.com/max/noarch/mojo-python-1.0.0-release.conda",
+  "channel": "https://conda.modular.com/max/",
+  "extracted_package_dir": "/Users/andrewhendel/Library/Caches/rattler/cache/pkgs/mojo-python-1.0.0-release",
+  "requested_specs": [],
+  "files": [
+    "lib/python3.13/site-packages/mojo/_entrypoints.py",
+    "lib/python3.13/site-packages/mojo/_package_root.py",
+    "lib/python3.13/site-packages/mojo/importer.py",
+    "lib/python3.13/site-packages/mojo/notebook.py",
+    "lib/python3.13/site-packages/mojo/paths.py",
+    "lib/python3.13/site-packages/mojo/run.py"
+  ],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": [
+      {
+        "_path": "lib/python3.13/site-packages/mojo/_entrypoints.py",
+        "path_type": "hardlink",
+        "sha256": "d8bfda439a4feb9e53c44efb198370f17d70c8807ebbf1ff9e6561c8f283d176",
+        "size_in_bytes": 1186
+      },
+      {
+        "_path": "lib/python3.13/site-packages/mojo/_package_root.py",
+        "path_type": "hardlink",
+        "sha256": "7bf02fda2ec1c79525066f91dc564e8479b2d0fb89be67ca103b85f4afceeb59",
+        "size_in_bytes": 2553
+      },
+      {
+        "_path": "lib/python3.13/site-packages/mojo/importer.py",
+        "path_type": "hardlink",
+        "sha256": "cd89fa51732a9c321349afbb448900ef16396dc100be56b997dfc37b4d670481",
+        "size_in_bytes": 11859
+      },
+      {
+        "_path": "lib/python3.13/site-packages/mojo/notebook.py",
+        "path_type": "hardlink",
+        "sha256": "fc2a10fa60403ceb6556067b4de7fceffd518f07b8809808c7c79ec5f007f8e3",
+        "size_in_bytes": 3830
+      },
+      {
+        "_path": "lib/python3.13/site-packages/mojo/paths.py",
+        "path_type": "hardlink",
+        "sha256": "e0f4f96b134f131d0e3f56a602a557497a3ca1633ee49aa5d1d6db0aa9099fca",
+        "size_in_bytes": 4979
+      },
+      {
+        "_path": "lib/python3.13/site-packages/mojo/run.py",
+        "path_type": "hardlink",
+        "sha256": "cf4a52f5675de36f45c3b6e9aafa065f708520316cd70084b6710d2ecf891cdc",
+        "size_in_bytes": 2525
+      }
+    ]
+  },
+  "link": {
+    "source": "/Users/andrewhendel/Library/Caches/rattler/cache/pkgs/mojo-python-1.0.0-release",
+    "type": 1
+  }
+}

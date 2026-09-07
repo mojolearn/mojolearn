@@ -1,0 +1,2 @@
+{"status": "CAPTURED", "learning": {"status": "PASS", "policy": {"first_step": 1, "final_step": 16, "maximum_loss_ratio": 0.9}, "initial_loss": 1.1047444343566895, "final_loss": 0.04506960138678551}}
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

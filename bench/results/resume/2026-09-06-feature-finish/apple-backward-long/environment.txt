@@ -1,0 +1,10 @@
+schema=mojolearn.mamba.backward-certificate.apple.v2
+created_utc=2026-09-06T11:49:00Z
+host=MacBook-Air-1-terrabyte.local
+kernel=Darwin 25.5.0 arm64
+mode=IDENTICAL
+profile=long-sequence-v1
+vendor=apple
+mode_injector=tools/with_identical_mode.sh
+commit=2e53699e5e5f51d445024d2b1ddfae4f3b56dd9c
+source_sha256=9d1b6edd93a69a96b584994304d781698b86677025c3a533b824b868fa51f214

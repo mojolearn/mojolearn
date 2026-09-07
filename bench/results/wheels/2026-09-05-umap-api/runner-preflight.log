@@ -1,0 +1,20 @@
+runner already installed under /Users/andrewhendel/.mojolearn-runner (rm -rf it to reinstall)
+
+runner name:   m4-real-gpu-1788598202
+labels:        self-hosted (automatic), macos,arm64,metal,real-gpu
+repository:    https://github.com/mojolearn/mojolearn
+
+From ANOTHER terminal, dispatch exactly one run:
+  gh workflow run release-provenance.yml -f publish=none       # build only
+  gh workflow run release-provenance.yml -f publish=testpypi
+  gh workflow run release-provenance.yml -f publish=pypi
+then: gh run watch
+
+DRY RUN. Would now:
+  TOKEN=$(gh api -X POST repos/mojolearn/mojolearn/actions/runners/registration-token -q .token)
+  cd /Users/andrewhendel/.mojolearn-runner
+  ./config.sh --url https://github.com/mojolearn/mojolearn --token "$TOKEN" --name m4-real-gpu-1788598202 \
+      --labels macos,arm64,metal,real-gpu --ephemeral --unattended --replace --work _work
+  ./run.sh          # foreground; exits after one job (--ephemeral)
+  then remove the registration from GitHub if still present
+No token was requested and nothing was registered.

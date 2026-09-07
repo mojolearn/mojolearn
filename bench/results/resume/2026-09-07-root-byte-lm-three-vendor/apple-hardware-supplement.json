@@ -1,0 +1,31 @@
+{
+  "schema": "mojolearn.root-local-hardware-supplement.v1",
+  "observed_utc": "2026-09-07T15:56:44.776652+00:00",
+  "observations": [
+    {
+      "command": [
+        "/usr/sbin/sysctl",
+        "-n",
+        "machdep.cpu.brand_string"
+      ],
+      "stdout": "Apple M4"
+    },
+    {
+      "command": [
+        "/usr/sbin/sysctl",
+        "-n",
+        "hw.model"
+      ],
+      "stdout": "Mac16,12"
+    },
+    {
+      "command": [
+        "/usr/bin/uname",
+        "-a"
+      ],
+      "stdout": "Darwin MacBook-Air-1-terrabyte.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:26:22 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T8132 arm64"
+    }
+  ],
+  "binding_sha256": "260dc3e08ba9f01cda927707f29648f5c3769aecab2d072a30f8e722545e6af5",
+  "scope": "Root-observed local machine after same-session Metal capture; supplemental host witness, not metadata emitted by model capture itself"
+}

@@ -1,0 +1,31 @@
+{
+  "boundary": "Root-observed guard return status, including cleanup; file-only receipt writer",
+  "command": {
+    "bytes": 282,
+    "file": "byte-gradient-oracle.command.txt",
+    "sha256": "4d35c705d5cea9a85e96c28d8cfe04f8f245873898e30b100d83a3b0a1add986"
+  },
+  "exit_code": 0,
+  "guard_log": {
+    "bytes": 262,
+    "file": "byte-gradient-oracle.log",
+    "sha256": "e8440eb9d40cfec58f1e38f2aa15ae29ac6cd1d24534848f81e8b4ff2508e6df"
+  },
+  "guard_terminal": {
+    "cpu_affinity": "0,1",
+    "device_sysfs": "/sys/devices/pci0000:20/0000:20:01.1/0000:21:00.0/0000:22:01.0/0000:24:00.0/0000:25:00.0/0000:26:00.0",
+    "guard": "amd-root-serial-v1",
+    "reason": null,
+    "returncode": 0,
+    "thread_limit": 2,
+    "vram_total_bytes": 206141652992
+  },
+  "job_kind": "oracle",
+  "result": {
+    "bytes": 38258,
+    "file": "gradient-oracle.json",
+    "sha256": "30ebae30563f7002912002ddb762cc49639bd768b77f7ad511076743b334de8d"
+  },
+  "schema": "mojolearn.root-job-receipt.v1",
+  "vendor": "hip"
+}

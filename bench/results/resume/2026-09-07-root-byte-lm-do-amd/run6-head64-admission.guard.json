@@ -1,0 +1,13 @@
+{
+  "command": [
+    "/tmp/mojolearn-root-validation-20260906/bin/python",
+    "/tmp/mojolearn-do-head-admit.py"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 30208,
+  "elapsed_seconds": 3.8000933340008487,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

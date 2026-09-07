@@ -1,0 +1,9 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=4
+commit=8f6ed4112a3c140326011f908e8caf14c0dee4af
+started=2026-09-06T21:50:45Z
+pixi_install_exit=0
+training_validation_exit=0
+scope=bounded nvidia training integration and independent gradient checks; no cross-vendor or performance certificate

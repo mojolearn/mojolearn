@@ -1,0 +1,9 @@
+{
+  "exit_code": 0,
+  "reason": null,
+  "peak_rss_kib": 45488,
+  "deadline_seconds": 45,
+  "rss_cap_kib": 524288,
+  "thread_limits": 2,
+  "scope": "isolated alpha wheel import only; no GPU/model tests"
+}

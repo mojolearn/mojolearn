@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "/tmp/mojolearn-transitive-archive-check.py"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 25456,
+  "elapsed_seconds": 0.23978104199341033,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

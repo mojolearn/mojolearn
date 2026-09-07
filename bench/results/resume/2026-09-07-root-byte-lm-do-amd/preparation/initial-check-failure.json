@@ -1,0 +1,7 @@
+{
+  "status": "FAILED_BEFORE_RENTAL",
+  "failure": "Watchdog wrote readiness then exited: event(name, **fields) collided with name metadata",
+  "fix": "Rename event positional parameter to event_name",
+  "model_started": false,
+  "resources_created": false
+}

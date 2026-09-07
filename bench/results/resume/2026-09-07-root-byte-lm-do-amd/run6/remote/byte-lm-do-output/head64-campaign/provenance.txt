@@ -1,0 +1,7 @@
+action=head64
+vendor=hip
+gpu_arch=gfx942
+baseline=/root/byte-lm-do-output/byte-lm-validation
+foreign_head=
+expected_foreign_checkpoint_sha256=
+scope=retained fixed byte-LM continuation; qualification requires final file comparator

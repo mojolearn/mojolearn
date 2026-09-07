@@ -1,0 +1,1 @@
+/root/byte-lm-resume-venv/bin/python tools/amd_serial_guard.py --seconds 180 --rss-gib 12 -- /root/byte-lm-resume-venv/bin/python /root/gemm_leg_out/byte-lm-resume/compact_checks.py verify-head /root/mojolearn /root/byte-lm-handoffs/baseline a6a1faa0382f4ccedc4068399438e0ad5716a35ac8c77c8ab3721f5bdecf8220 /root/gemm_leg_out/byte-lm-resume hip head64 '' '' '' 

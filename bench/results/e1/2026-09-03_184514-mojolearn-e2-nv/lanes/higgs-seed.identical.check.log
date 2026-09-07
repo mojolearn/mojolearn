@@ -1,0 +1,24 @@
+ WARN Skipped running the post-link scripts because `run-post-link-scripts` = `false`
+	- bin/.librsvg-pre-unlink.sh
+
+To enable them, run:
+	pixi config set --local run-post-link-scripts insecure
+
+More info:
+	https://pixi.sh/latest/reference/pixi_configuration/#run-post-link-scripts
+
+higgs already present: /mnt/mojolearn-data/gbm-bench/higgs/HIGGS.csv.gz (2816.4 MB)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 1699, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 1647, in main
+    download(args.download)
+    ~~~~~~~~^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 688, in download
+    d = load_higgs("shipped")
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 579, in load_higgs
+    z = np.load(npz_path)
+  File "/root/mojolearn/.pixi/envs/gbmbench/lib/python3.14/site-packages/numpy/lib/_npyio_impl.py", line 463, in load
+    raise EOFError("No data left in file")
+EOFError: No data left in file

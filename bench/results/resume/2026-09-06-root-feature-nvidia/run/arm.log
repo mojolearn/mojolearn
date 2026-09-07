@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod re1alxuo0mwtm6 ...
+ARMED. Pod re1alxuo0mwtm6 is TERMINATED through the API in 60 minutes.
+  lease: /tmp/mojolearn-nvidia-feature-20260906/tools/../bench/results/runpod_leases/re1alxuo0mwtm6.lease
+  extend with: tools/runpod_guard.sh extend re1alxuo0mwtm6 '-p 40109 root@213.192.2.108' <minutes>

@@ -1,0 +1,16 @@
+commit=718495cd parent c8084b9f
+vendor=amd
+gpu_requested=AMD Instinct MI300X OAM
+image=runpod/pytorch:2.4.0-py3.10-rocm6.1.0-ubuntu22.04
+minutes=30
+mode=rent
+card_full=<unset>
+trace_dump=<unset>
+started=2026-09-05T07:43:38Z
+commit=718495cd parent c8084b9f
+vendor=amd
+payload=mamba
+pod=6p9qv7s47jxz1p
+gpu_requested=AMD Instinct MI300X OAM
+red=1
+finished=2026-09-05T07:46:57Z

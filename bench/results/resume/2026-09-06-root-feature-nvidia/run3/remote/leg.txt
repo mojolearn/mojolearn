@@ -1,0 +1,8 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+commit=4a271ae6d719c79e2e871f4776b74c9a12f380ee
+started=2026-09-06T16:57:01Z
+pixi_install_exit=0
+feature_finish_exit=1
+scope=feature-finish; see per-job results, not full backward certification

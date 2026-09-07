@@ -1,0 +1,20 @@
+{
+  "command": [
+    "/tmp/mojolearn-root-validation-20260906/bin/python",
+    "/tmp/mojolearn-amd-mlp-20260907/tools/small_mlp_training_capture.py",
+    "compare",
+    "--left",
+    "bench/results/resume/2026-09-06-root-training-nvidia/run4/remote/training-validation/mlp-continuous",
+    "--right",
+    "bench/results/resume/2026-09-07-root-mlp-amd/run1/remote/training-validation/mlp-continuous",
+    "--output",
+    "bench/results/resume/2026-09-07-root-mlp-amd/cuda-hip-comparison.json"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 35968,
+  "elapsed_seconds": 0.23428058299759869,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root file-only or mocked checks; no compiler/GPU/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

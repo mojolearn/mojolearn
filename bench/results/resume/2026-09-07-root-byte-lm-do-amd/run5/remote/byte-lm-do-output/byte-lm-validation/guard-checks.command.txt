@@ -1,0 +1,1 @@
+python3 tools/amd_serial_guard.py --seconds 60 -- /root/mojolearn/.byte-lm-validation-venv/bin/python -m unittest discover -s tools -p test_\*serial_guard.py 

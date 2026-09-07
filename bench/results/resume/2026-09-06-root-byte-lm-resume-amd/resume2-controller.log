@@ -1,0 +1,114 @@
+{"action": "check", "handoff_sha256": "a6a1faa0382f4ccedc4068399438e0ad5716a35ac8c77c8ab3721f5bdecf8220", "vendor": "hip", "kind": "baseline128", "identity_admitted": false}
+{"action": "check", "handoff_sha256": "5e4fed5e628589c8feba20e43f252fd6a31912d875b1e27a0acff455bbd80ed2", "vendor": "cuda", "kind": "head64", "identity_admitted": false}
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   amd    label in the diff: AMD
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     rent
+   gpu:      AMD Instinct MI300X OAM
+   image:    rocm/pytorch:rocm6.4.1_ubuntu22.04_py3.10_pytorch_release_2.6.0
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-resume-amd/resume2
+
+   commit:   d5893e2a parent 3d255241
+   source:   archive of d5893e2ae270236c629b00a198c2e017c26cb5af; working-tree edits are not shipped
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and AMD dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /private/tmp/mojolearn-byte-lm-resume-20260906/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[20:23:49 amd] dead-man ARMED before the create: pid 17326, fires in 4500s, keyed by name mojolearn-gemm-amd-2026-09-06_202348
+[20:23:49 amd]   cancel by hand only after the pod is confirmed gone:  kill 17326; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-17248
+[20:23:49 amd] creating mojolearn-gemm-amd-2026-09-06_202348 (AMD Instinct MI300X OAM, rocm/pytorch:rocm6.4.1_ubuntu22.04_py3.10_pytorch_release_2.6.0)
+[20:23:49 amd]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[20:23:51 amd] pod ocshz624wm2axa created
+[20:24:13 amd] ssh target: -p 14679 root@213.173.96.55
+[20:24:15 amd] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[20:24:15 amd] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod ocshz624wm2axa ...
+    ARMED. Pod ocshz624wm2axa is TERMINATED through the API in 60 minutes.
+      lease: /private/tmp/mojolearn-byte-lm-resume-20260906/tools/../bench/results/runpod_leases/ocshz624wm2axa.lease
+      extend with: tools/runpod_guard.sh extend ocshz624wm2axa '-p 14679 root@213.173.96.55' <minutes>
+    ocshz624wm2axa: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep  7 00:24 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[20:24:20 amd] shipping the COMMIT (d5893e2ae270236c629b00a198c2e017c26cb5af), not the working tree
+[20:24:20 amd]   bounded Mamba source archive: 4659591 bytes compressed
+[20:24:20 amd]   archive source sha256: 857aab6ae20ada194f6970ebd27ed0f3
+{"action": "pack", "handoff_sha256": "a6a1faa0382f4ccedc4068399438e0ad5716a35ac8c77c8ab3721f5bdecf8220", "vendor": "hip", "kind": "baseline128", "identity_admitted": false}
+{"action": "pack", "handoff_sha256": "5e4fed5e628589c8feba20e43f252fd6a31912d875b1e27a0acff455bbd80ed2", "vendor": "cuda", "kind": "head64", "identity_admitted": false}
+[20:27:06 amd] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=879
+[20:27:07 amd]   remote pid 879; polling every 30s, giving up after 3131s
+[20:28:10 amd]   the payload finished (its sentinel is on the box)
+    REMOTE_BODY_DONE
+
+== step 7: fetch ==
+    source_sha256.txt
+    uname.txt
+    pixi_env.log
+    gpu.txt
+    byte-lm-resume
+    cpu-affinity.log
+    byte-lm-resume-setup
+    source_inventory.json
+    pixi_install.log
+    byte-lm-resume-console.log
+    leg.txt
+
+== step 8: what came home ==
+{"status": "DIAGNOSTIC_COMPLETE", "action": "resume128", "vendor": "hip", "identity_admitted": false, "learning_admitted": false, "required_next": "Root local final comparator against all original and new raw arrays"}
+  source sha256 MATCHES on both ends (857aab6ae20ada19...)
+  gpu on the box:
+    
+    
+    ============================ ROCm System Management Interface ============================
+    ====================================== Product Info ======================================
+    vendor=amd
+    payload=mamba
+    knn_layout_only=0
+    nvidia_campaign=6
+    commit=d5893e2ae270236c629b00a198c2e017c26cb5af
+    started=2026-09-07T00:27:07Z
+    device_memory_pool_bytes=1073741824
+    device_memory_pool_only=true
+    device_memory_pool_chunk_percent=100
+    pixi_install_exit=0
+    byte_lm_resume_exit=0
+    scope=compact diagnostic only; final root raw-file comparison mandatory
+
+== step 9: compact amd resume diagnostic ==
+  Raw results: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-resume-amd/resume2/remote/byte-lm-resume; final local all-raw comparison mandatory.
+
+== step 10: terminate at the end of the WORK ==
+  lease at exit:
+    ocshz624wm2axa: 56 minutes left of a 60-minute lease
+  terminating ocshz624wm2axa (layer two, from this machine)
+    DELETE /v1/pods/ocshz624wm2axa -> HTTP 204
+  VERIFIED: ocshz624wm2axa is gone (HTTP 404).
+
+artifacts: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-resume-amd/resume2
+compact diagnostic only: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-resume-amd/resume2/remote/byte-lm-resume
+Final local all-raw comparison remains mandatory; no identity admission here.
+
+== teardown (exit 0) ==
+  lease at exit:
+    NO LEASE for ocshz624wm2axa -- it is unguarded.
+  dead-man cancelled (pid 17326)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-17248/gemm_remote_leg.sh: line 2275: 17326 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

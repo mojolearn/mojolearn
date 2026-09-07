@@ -1,0 +1,17 @@
+pid 803's current affinity list: 0-191
+pid 803's new affinity list: 0,1
+Initialized empty Git repository in /root/mojolearn-public-source.tleAo0/repo.git/
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: is subject to change. To configure the initial branch name to use in all
+hint: of your new repositories, which will suppress this warning, call:
+hint: 
+hint: 	git config --global init.defaultBranch <name>
+hint: 
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint: 
+hint: 	git branch -m <name>
+From https://github.com/mojolearn/mojolearn
+ * branch            d921eade0da5454e39e0cd103b9a1799286b41b9 -> FETCH_HEAD
+PUBLIC_SOURCE_COMMIT=d921eade0da5454e39e0cd103b9a1799286b41b9
+PUBLIC_SOURCE_INVENTORY=PASS

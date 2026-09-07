@@ -1,0 +1,1277 @@
+{
+  "scope": "Root file-only comparison of retained refusal IDs, specs and exact errors; no model execution or new numerical certificate",
+  "records": {
+    "r11_nv": {
+      "files": [
+        {
+          "path": "bench/results/e1/2026-08-23_165142-mojolearn-e2-nv/e2_cells.json",
+          "sha256": "170cf18bc6e33ecafa292cea99ad1a440e724a84c360c5a7515e728f7a239c04",
+          "commit": "144aa5b2040422f5a3360ed1f245c55e84262761"
+        },
+        {
+          "path": "bench/results/e1/2026-08-23_165142-mojolearn-e2-nv/e2u/e2u_cells.json",
+          "sha256": "3f933bc3daa9ab2304dd57e1ba3b8879da6dbf0cdedeadd525901984af94efc8",
+          "commit": "144aa5b2040422f5a3360ed1f245c55e84262761"
+        }
+      ],
+      "refusals": {
+        "et_clf_maxleaf": {
+          "kind": "et_clf",
+          "spec": {
+            "max_depth": 8,
+            "max_leaf_nodes": 64,
+            "n_estimators": 10,
+            "random_state": 7
+          },
+          "refused": "Exception: max_leaf_nodes is not ported under sklearn's semantics. sklearn's is a BEST-FIRST growth limit that changes the ORDER nodes are expanded in; cuML's max_leaves is a soft cap on a breadth-first frontier (builder.cuh:86-88) and stops pushing work once the counter is reached. They are different algorithms, so accepting the name would be accepting a different model. Use cuML's max_leaves through DecisionTreeParams if that is what you want."
+        },
+        "gbdt_multiclass_lossguide": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "grow_policy": "Lossguide",
+            "learning_rate": 0.3,
+            "loss": "MultiClass",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7
+          },
+          "refused": "NotImplementedError: mojolearn: Error: optimization scheme is not supported for GPU learning Loss=MultiClass;OptimizationScheme=Lossguide -- CatBoost's GPU registers a non-symmetric trainer for exactly eleven losses (pointwise_non_symmetric.cpp:7-29; train.cpp:279 is the refusal): ['CrossEntropy', 'Expectile', 'Huber', 'LogLinQuantile', 'Logloss', 'MAE', 'MAPE', 'Poisson', 'Quantile', 'RMSE', 'Tweedie']"
+        },
+        "gbdt_quantile_newton": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "leaf_estimation_method": "Newton",
+            "learning_rate": 0.3,
+            "loss": "Quantile",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7
+          },
+          "refused": "Exception: Newton leaves estimation method is not supported for Quantile loss function"
+        },
+        "gbdt_rmse_depthwise_pointwise": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "grow_policy": "Depthwise",
+            "learning_rate": 0.3,
+            "loss": "RMSE",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7,
+            "use_pointwise_searcher": true
+          },
+          "refused": "ValueError: mojolearn: use_pointwise_searcher=True is TDocParallelObliviousTreeSearcher, an OBLIVIOUS searcher; grow_policy='Depthwise' is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only (pointwise_non_symmetric.cpp:5-29)"
+        },
+        "gbdt_rmse_nan_forbidden_refused": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "learning_rate": 0.3,
+            "loss": "RMSE",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "nan_mode": "Forbidden",
+            "random_state": 7
+          },
+          "refused": "ValueError: mojolearn: nan_mode='Forbidden' but X contains NaN. CatBoost refuses this pair; this port would otherwise bin the NaNs silently with no NaN bin. Use nan_mode='Min' or 'Max', or clean the column."
+        },
+        "dbscan_algorithm_bad": {
+          "kind": "dbscan",
+          "spec": {
+            "algorithm": "kd_tree",
+            "eps": 0.3,
+            "min_samples": 5
+          },
+          "refused": "ValueError: mojolearn DBSCAN: algorithm='kd_tree' is refused; it must be one of ['brute', 'rbc'] ('rbc' is the ball-cover eps search, DEVIATION 35's default; 'brute' is cuML's default arm)"
+        },
+        "dbscan_chain_iter200": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.1875,
+            "max_iterations": 200,
+            "min_samples": 2
+          },
+          "refused": "Exception: weak_cc_batched: label propagation did not converge in 200 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations."
+        },
+        "dbscan_maxiter1": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "max_iterations": 1,
+            "min_samples": 5
+          },
+          "refused": "Exception: weak_cc_batched: label propagation did not converge in 1 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations."
+        },
+        "dbscan_metric_manhattan": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "metric": "manhattan",
+            "min_samples": 5
+          },
+          "refused": "ValueError: mojolearn DBSCAN: metric='manhattan' is refused; only 'euclidean' is ported (the eps kernels in dbscan/ported/neighbors/epsilon_neighborhood.mojo carry L2 only, and cuML's runner.cuh:152-156 downgrades every other metric to L2Sqrt as well)"
+        },
+        "dbscan_sw": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "min_samples": 5
+          },
+          "refused": "NotImplementedError: mojolearn DBSCAN: sample_weight is not ported (dbscan/estimator.mojo, WHAT IS NOT HERE YET)"
+        },
+        "kde_bw_scott_refused": {
+          "kind": "kde",
+          "spec": {
+            "bandwidth": "scott",
+            "kernel": "gaussian"
+          },
+          "refused": "NotImplementedError: mojolearn KernelDensity: bandwidth='scott' is refused; compute the rule on the host and pass the float (sklearn's scott is n ** (-1/(d+4)), silverman is (n (d+2) / 4) ** (-1/(d+4)))"
+        },
+        "kde_metric_cosine_refused": {
+          "kind": "kde",
+          "spec": {
+            "bandwidth": 8.0,
+            "kernel": "gaussian",
+            "metric": "cosine"
+          },
+          "refused": "Exception: kde: metric='cosine' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev"
+        },
+        "kmeans_init_bad": {
+          "kind": "kmeans",
+          "spec": {
+            "init": "pca-ish",
+            "n_clusters": 8,
+            "random_state": 7
+          },
+          "refused": "ValueError: mojolearn: init must be one of ['array', 'k-means++', 'random'], got 'pca-ish'"
+        },
+        "knn_algorithm_kd_tree": {
+          "kind": "knn",
+          "spec": {
+            "algorithm": "kd_tree",
+            "n_neighbors": 10
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: algorithm='kd_tree' is refused; this class is exact brute force ('brute', which 'auto' also means here) and ships no tree or graph index"
+        },
+        "knn_clf_weights_distance_refused": {
+          "kind": "knn_clf",
+          "spec": {
+            "n_neighbors": 5,
+            "weights": "distance"
+          },
+          "refused": "ValueError: mojolearn KNeighborsClassifier: weights='distance' is refused; only 'uniform' is ported. cuML refuses it too (kneighbors_classifier.pyx:191, 'Only uniform weighting strategy is supported currently') and the ported vote (neighbors/ported/selection/knn.mojo) carries no weight: a distance-weighted vote is a port, not a flag"
+        },
+        "knn_k300": {
+          "kind": "knn",
+          "spec": {
+            "n_neighbors": 300
+          },
+          "refused": "Exception: select_radix (IDENTICAL): k > 256 is refused. The rank pass gives one thread to each output slot; a larger k needs a loop, which is not written until something asks for it."
+        },
+        "knn_metric_cosine": {
+          "kind": "knn",
+          "spec": {
+            "metric": "cosine",
+            "n_neighbors": 10
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: metric='cosine' is refused; only Euclidean ('euclidean', 'l2', 'minkowski' with p=2) is ported. The brute-force kernels carry the expanded-L2 arm only (neighbors/ported/neighbors/detail/knn_brute_force.mojo): another metric is a port, not a flag"
+        },
+        "knn_metric_minkowski_p1": {
+          "kind": "knn",
+          "spec": {
+            "metric": "minkowski",
+            "n_neighbors": 10,
+            "p": 1
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: metric='minkowski' with p=1 is refused; only p=2 (Euclidean) is ported"
+        },
+        "logreg_l1_refused": {
+          "kind": "logreg",
+          "spec": {
+            "penalty": "l1"
+          },
+          "refused": "NotImplementedError: mojolearn LogisticRegression: penalty='l1' selects OWL-QN (min_owlqn, qn_solvers.cuh:246), which is NOT PORTED; penalty='l2' or None (L-BFGS) are the ported arms. See glm/UNPORTED.tsv"
+        },
+        "ols_onecol_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "Exception: olsFit: n_cols == 1 selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. cuML forces the same switch and says the eig solver does not support a single column (linear_regression.pyx:390). See glm/UNPORTED.tsv"
+        },
+        "ols_sw_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "NotImplementedError: mojolearn LinearRegression: sample_weight is not ported (ols.cuh:99-110; glm/UNPORTED.tsv)"
+        },
+        "ols_wide_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "Exception: olsFit: n_cols > n_rows selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. The normal-equations solver cannot be used here: A^T A is singular by construction. See glm/UNPORTED.tsv"
+        },
+        "pca_c8_wide": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 8
+          },
+          "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim."
+        },
+        "pca_solver_full": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 2,
+            "svd_solver": "full"
+          },
+          "refused": "ValueError: mojolearn PCA: svd_solver='full' is refused; only 'auto' / 'covariance_eigh' (cuML's covariance + device Jacobi arm) is ported; 'full', 'randomized' and 'arpack' are different algorithms (decomposition/UNPORTED.tsv)"
+        },
+        "pca_whiten": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 2,
+            "whiten": true
+          },
+          "refused": "NotImplementedError: mojolearn PCA: whiten=True is refused; the whitening rescale of the components (and its inverse on inverse_transform) is not ported, and an unwhitened transform returned for whiten=True would be a wrong answer"
+        },
+        "tsvd_c8_wide": {
+          "kind": "tsvd",
+          "spec": {
+            "n_components": 8
+          },
+          "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim."
+        },
+        "tsvd_randomized": {
+          "kind": "tsvd",
+          "spec": {
+            "algorithm": "randomized",
+            "n_components": 2
+          },
+          "refused": "ValueError: mojolearn TruncatedSVD: algorithm='randomized' is refused; only 'covariance_eigh' (the Gram + device Jacobi arm cuML's tsvdFit takes) is ported; 'arpack' and 'randomized' are different algorithms"
+        }
+      },
+      "count": 27
+    },
+    "r11_amd": {
+      "files": [
+        {
+          "path": "bench/results/e1/2026-08-23_172650-mojolearn-e2-amd/e2_cells.json",
+          "sha256": "41b6b5cc18756ad789d805d7bc8cd0ad003e55aaba00e61724d4105188685ff4",
+          "commit": "144aa5b2040422f5a3360ed1f245c55e84262761"
+        },
+        {
+          "path": "bench/results/e1/2026-08-23_172650-mojolearn-e2-amd/e2u/e2u_cells.json",
+          "sha256": "5c51b159685b98c9d6f375b64bdd6c042f7d293f3a372292d671a1d543f6b076",
+          "commit": "144aa5b2040422f5a3360ed1f245c55e84262761"
+        }
+      ],
+      "refusals": {
+        "et_clf_maxleaf": {
+          "kind": "et_clf",
+          "spec": {
+            "max_depth": 8,
+            "max_leaf_nodes": 64,
+            "n_estimators": 10,
+            "random_state": 7
+          },
+          "refused": "Exception: max_leaf_nodes is not ported under sklearn's semantics. sklearn's is a BEST-FIRST growth limit that changes the ORDER nodes are expanded in; cuML's max_leaves is a soft cap on a breadth-first frontier (builder.cuh:86-88) and stops pushing work once the counter is reached. They are different algorithms, so accepting the name would be accepting a different model. Use cuML's max_leaves through DecisionTreeParams if that is what you want."
+        },
+        "gbdt_multiclass_lossguide": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "grow_policy": "Lossguide",
+            "learning_rate": 0.3,
+            "loss": "MultiClass",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7
+          },
+          "refused": "NotImplementedError: mojolearn: Error: optimization scheme is not supported for GPU learning Loss=MultiClass;OptimizationScheme=Lossguide -- CatBoost's GPU registers a non-symmetric trainer for exactly eleven losses (pointwise_non_symmetric.cpp:7-29; train.cpp:279 is the refusal): ['CrossEntropy', 'Expectile', 'Huber', 'LogLinQuantile', 'Logloss', 'MAE', 'MAPE', 'Poisson', 'Quantile', 'RMSE', 'Tweedie']"
+        },
+        "gbdt_quantile_newton": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "leaf_estimation_method": "Newton",
+            "learning_rate": 0.3,
+            "loss": "Quantile",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7
+          },
+          "refused": "Exception: Newton leaves estimation method is not supported for Quantile loss function"
+        },
+        "gbdt_rmse_depthwise_pointwise": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "grow_policy": "Depthwise",
+            "learning_rate": 0.3,
+            "loss": "RMSE",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7,
+            "use_pointwise_searcher": true
+          },
+          "refused": "ValueError: mojolearn: use_pointwise_searcher=True is TDocParallelObliviousTreeSearcher, an OBLIVIOUS searcher; grow_policy='Depthwise' is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only (pointwise_non_symmetric.cpp:5-29)"
+        },
+        "gbdt_rmse_nan_forbidden_refused": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "learning_rate": 0.3,
+            "loss": "RMSE",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "nan_mode": "Forbidden",
+            "random_state": 7
+          },
+          "refused": "ValueError: mojolearn: nan_mode='Forbidden' but X contains NaN. CatBoost refuses this pair; this port would otherwise bin the NaNs silently with no NaN bin. Use nan_mode='Min' or 'Max', or clean the column."
+        },
+        "dbscan_algorithm_bad": {
+          "kind": "dbscan",
+          "spec": {
+            "algorithm": "kd_tree",
+            "eps": 0.3,
+            "min_samples": 5
+          },
+          "refused": "ValueError: mojolearn DBSCAN: algorithm='kd_tree' is refused; it must be one of ['brute', 'rbc'] ('rbc' is the ball-cover eps search, DEVIATION 35's default; 'brute' is cuML's default arm)"
+        },
+        "dbscan_chain_iter200": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.1875,
+            "max_iterations": 200,
+            "min_samples": 2
+          },
+          "refused": "Exception: weak_cc_batched: label propagation did not converge in 200 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations."
+        },
+        "dbscan_maxiter1": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "max_iterations": 1,
+            "min_samples": 5
+          },
+          "refused": "Exception: weak_cc_batched: label propagation did not converge in 1 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations."
+        },
+        "dbscan_metric_manhattan": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "metric": "manhattan",
+            "min_samples": 5
+          },
+          "refused": "ValueError: mojolearn DBSCAN: metric='manhattan' is refused; only 'euclidean' is ported (the eps kernels in dbscan/ported/neighbors/epsilon_neighborhood.mojo carry L2 only, and cuML's runner.cuh:152-156 downgrades every other metric to L2Sqrt as well)"
+        },
+        "dbscan_sw": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "min_samples": 5
+          },
+          "refused": "NotImplementedError: mojolearn DBSCAN: sample_weight is not ported (dbscan/estimator.mojo, WHAT IS NOT HERE YET)"
+        },
+        "kde_bw_scott_refused": {
+          "kind": "kde",
+          "spec": {
+            "bandwidth": "scott",
+            "kernel": "gaussian"
+          },
+          "refused": "NotImplementedError: mojolearn KernelDensity: bandwidth='scott' is refused; compute the rule on the host and pass the float (sklearn's scott is n ** (-1/(d+4)), silverman is (n (d+2) / 4) ** (-1/(d+4)))"
+        },
+        "kde_metric_cosine_refused": {
+          "kind": "kde",
+          "spec": {
+            "bandwidth": 8.0,
+            "kernel": "gaussian",
+            "metric": "cosine"
+          },
+          "refused": "Exception: kde: metric='cosine' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev"
+        },
+        "kmeans_init_bad": {
+          "kind": "kmeans",
+          "spec": {
+            "init": "pca-ish",
+            "n_clusters": 8,
+            "random_state": 7
+          },
+          "refused": "ValueError: mojolearn: init must be one of ['array', 'k-means++', 'random'], got 'pca-ish'"
+        },
+        "knn_algorithm_kd_tree": {
+          "kind": "knn",
+          "spec": {
+            "algorithm": "kd_tree",
+            "n_neighbors": 10
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: algorithm='kd_tree' is refused; this class is exact brute force ('brute', which 'auto' also means here) and ships no tree or graph index"
+        },
+        "knn_clf_weights_distance_refused": {
+          "kind": "knn_clf",
+          "spec": {
+            "n_neighbors": 5,
+            "weights": "distance"
+          },
+          "refused": "ValueError: mojolearn KNeighborsClassifier: weights='distance' is refused; only 'uniform' is ported. cuML refuses it too (kneighbors_classifier.pyx:191, 'Only uniform weighting strategy is supported currently') and the ported vote (neighbors/ported/selection/knn.mojo) carries no weight: a distance-weighted vote is a port, not a flag"
+        },
+        "knn_k300": {
+          "kind": "knn",
+          "spec": {
+            "n_neighbors": 300
+          },
+          "refused": "Exception: select_radix (IDENTICAL): k > 256 is refused. The rank pass gives one thread to each output slot; a larger k needs a loop, which is not written until something asks for it."
+        },
+        "knn_metric_cosine": {
+          "kind": "knn",
+          "spec": {
+            "metric": "cosine",
+            "n_neighbors": 10
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: metric='cosine' is refused; only Euclidean ('euclidean', 'l2', 'minkowski' with p=2) is ported. The brute-force kernels carry the expanded-L2 arm only (neighbors/ported/neighbors/detail/knn_brute_force.mojo): another metric is a port, not a flag"
+        },
+        "knn_metric_minkowski_p1": {
+          "kind": "knn",
+          "spec": {
+            "metric": "minkowski",
+            "n_neighbors": 10,
+            "p": 1
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: metric='minkowski' with p=1 is refused; only p=2 (Euclidean) is ported"
+        },
+        "logreg_l1_refused": {
+          "kind": "logreg",
+          "spec": {
+            "penalty": "l1"
+          },
+          "refused": "NotImplementedError: mojolearn LogisticRegression: penalty='l1' selects OWL-QN (min_owlqn, qn_solvers.cuh:246), which is NOT PORTED; penalty='l2' or None (L-BFGS) are the ported arms. See glm/UNPORTED.tsv"
+        },
+        "ols_onecol_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "Exception: olsFit: n_cols == 1 selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. cuML forces the same switch and says the eig solver does not support a single column (linear_regression.pyx:390). See glm/UNPORTED.tsv"
+        },
+        "ols_sw_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "NotImplementedError: mojolearn LinearRegression: sample_weight is not ported (ols.cuh:99-110; glm/UNPORTED.tsv)"
+        },
+        "ols_wide_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "Exception: olsFit: n_cols > n_rows selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. The normal-equations solver cannot be used here: A^T A is singular by construction. See glm/UNPORTED.tsv"
+        },
+        "pca_c8_wide": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 8
+          },
+          "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim."
+        },
+        "pca_solver_full": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 2,
+            "svd_solver": "full"
+          },
+          "refused": "ValueError: mojolearn PCA: svd_solver='full' is refused; only 'auto' / 'covariance_eigh' (cuML's covariance + device Jacobi arm) is ported; 'full', 'randomized' and 'arpack' are different algorithms (decomposition/UNPORTED.tsv)"
+        },
+        "pca_whiten": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 2,
+            "whiten": true
+          },
+          "refused": "NotImplementedError: mojolearn PCA: whiten=True is refused; the whitening rescale of the components (and its inverse on inverse_transform) is not ported, and an unwhitened transform returned for whiten=True would be a wrong answer"
+        },
+        "tsvd_c8_wide": {
+          "kind": "tsvd",
+          "spec": {
+            "n_components": 8
+          },
+          "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim."
+        },
+        "tsvd_randomized": {
+          "kind": "tsvd",
+          "spec": {
+            "algorithm": "randomized",
+            "n_components": 2
+          },
+          "refused": "ValueError: mojolearn TruncatedSVD: algorithm='randomized' is refused; only 'covariance_eigh' (the Gram + device Jacobi arm cuML's tsvdFit takes) is ported; 'arpack' and 'randomized' are different algorithms"
+        }
+      },
+      "count": 27
+    },
+    "r13_nv": {
+      "files": [
+        {
+          "path": "bench/results/e1/2026-08-28_131651-runpod-nvidia/e2_cells.json",
+          "sha256": "1f3db460e18a286ecccd3310c6db39b736d22f328210f6683bf3218a756757c8",
+          "commit": "a0a0eeee9a5b774ef62d91fc003a245e0c90af6f"
+        },
+        {
+          "path": "bench/results/e1/2026-08-28_131651-runpod-nvidia/e2u/e2u_cells.json",
+          "sha256": "0212c221910d6112067dad05e2d788c8d29fabaa869b8d557de84b3e422918d7",
+          "commit": "a0a0eeee9a5b774ef62d91fc003a245e0c90af6f"
+        }
+      ],
+      "refusals": {
+        "et_clf_maxleaf": {
+          "kind": "et_clf",
+          "spec": {
+            "max_depth": 8,
+            "max_leaf_nodes": 64,
+            "n_estimators": 10,
+            "random_state": 7
+          },
+          "refused": "Exception: max_leaf_nodes is not ported under sklearn's semantics. sklearn's is a BEST-FIRST growth limit that changes the ORDER nodes are expanded in; cuML's max_leaves is a soft cap on a breadth-first frontier (builder.cuh:86-88) and stops pushing work once the counter is reached. They are different algorithms, so accepting the name would be accepting a different model. Use cuML's max_leaves through DecisionTreeParams if that is what you want."
+        },
+        "gbdt_multiclass_lossguide": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "grow_policy": "Lossguide",
+            "learning_rate": 0.3,
+            "loss": "MultiClass",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7
+          },
+          "refused": "NotImplementedError: mojolearn: Error: optimization scheme is not supported for GPU learning Loss=MultiClass;OptimizationScheme=Lossguide -- CatBoost's GPU registers a non-symmetric trainer for exactly eleven losses (pointwise_non_symmetric.cpp:7-29; train.cpp:279 is the refusal): ['CrossEntropy', 'Expectile', 'Huber', 'LogLinQuantile', 'Logloss', 'MAE', 'MAPE', 'Poisson', 'Quantile', 'RMSE', 'Tweedie']"
+        },
+        "gbdt_quantile_newton": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "leaf_estimation_method": "Newton",
+            "learning_rate": 0.3,
+            "loss": "Quantile",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7
+          },
+          "refused": "Exception: Newton leaves estimation method is not supported for Quantile loss function"
+        },
+        "gbdt_rmse_depthwise_pointwise": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "grow_policy": "Depthwise",
+            "learning_rate": 0.3,
+            "loss": "RMSE",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7,
+            "use_pointwise_searcher": true
+          },
+          "refused": "ValueError: mojolearn: use_pointwise_searcher=True is TDocParallelObliviousTreeSearcher, an OBLIVIOUS searcher; grow_policy='Depthwise' is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only (pointwise_non_symmetric.cpp:5-29)"
+        },
+        "gbdt_rmse_nan_forbidden_refused": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "learning_rate": 0.3,
+            "loss": "RMSE",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "nan_mode": "Forbidden",
+            "random_state": 7
+          },
+          "refused": "ValueError: mojolearn: nan_mode='Forbidden' but X contains NaN. CatBoost refuses this pair; this port would otherwise bin the NaNs silently with no NaN bin. Use nan_mode='Min' or 'Max', or clean the column."
+        },
+        "dbscan_algorithm_bad": {
+          "kind": "dbscan",
+          "spec": {
+            "algorithm": "kd_tree",
+            "eps": 0.3,
+            "min_samples": 5
+          },
+          "refused": "ValueError: mojolearn DBSCAN: algorithm='kd_tree' is refused; it must be one of ['brute', 'rbc'] ('rbc' is the ball-cover eps search, DEVIATION 35's default; 'brute' is cuML's default arm)"
+        },
+        "dbscan_chain_iter200": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.1875,
+            "max_iterations": 200,
+            "min_samples": 2
+          },
+          "refused": "Exception: weak_cc_batched: label propagation did not converge in 200 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations."
+        },
+        "dbscan_maxiter1": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "max_iterations": 1,
+            "min_samples": 5
+          },
+          "refused": "Exception: weak_cc_batched: label propagation did not converge in 1 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations."
+        },
+        "dbscan_metric_manhattan": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "metric": "manhattan",
+            "min_samples": 5
+          },
+          "refused": "ValueError: mojolearn DBSCAN: metric='manhattan' is refused; only 'euclidean' is ported (the eps kernels in dbscan/ported/neighbors/epsilon_neighborhood.mojo carry L2 only, and cuML's runner.cuh:152-156 downgrades every other metric to L2Sqrt as well)"
+        },
+        "dbscan_sw": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "min_samples": 5
+          },
+          "refused": "NotImplementedError: mojolearn DBSCAN: sample_weight is not ported (dbscan/estimator.mojo, WHAT IS NOT HERE YET)"
+        },
+        "kde_bw_scott_refused": {
+          "kind": "kde",
+          "spec": {
+            "bandwidth": "scott",
+            "kernel": "gaussian"
+          },
+          "refused": "NotImplementedError: mojolearn KernelDensity: bandwidth='scott' is refused; compute the rule on the host and pass the float (sklearn's scott is n ** (-1/(d+4)), silverman is (n (d+2) / 4) ** (-1/(d+4)))"
+        },
+        "kde_metric_cosine_refused": {
+          "kind": "kde",
+          "spec": {
+            "bandwidth": 8.0,
+            "kernel": "gaussian",
+            "metric": "cosine"
+          },
+          "refused": "Exception: kde: metric='cosine' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev"
+        },
+        "kmeans_init_bad": {
+          "kind": "kmeans",
+          "spec": {
+            "init": "pca-ish",
+            "n_clusters": 8,
+            "random_state": 7
+          },
+          "refused": "ValueError: mojolearn: init must be one of ['array', 'k-means++', 'random'], got 'pca-ish'"
+        },
+        "knn_algorithm_kd_tree": {
+          "kind": "knn",
+          "spec": {
+            "algorithm": "kd_tree",
+            "n_neighbors": 10
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: algorithm='kd_tree' is refused; this class is exact brute force ('brute', which 'auto' also means here) and ships no tree or graph index"
+        },
+        "knn_clf_weights_distance_refused": {
+          "kind": "knn_clf",
+          "spec": {
+            "n_neighbors": 5,
+            "weights": "distance"
+          },
+          "refused": "ValueError: mojolearn KNeighborsClassifier: weights='distance' is refused; only 'uniform' is ported. cuML refuses it too (kneighbors_classifier.pyx:191, 'Only uniform weighting strategy is supported currently') and the ported vote (neighbors/ported/selection/knn.mojo) carries no weight: a distance-weighted vote is a port, not a flag"
+        },
+        "knn_k300": {
+          "kind": "knn",
+          "spec": {
+            "n_neighbors": 300
+          },
+          "refused": "Exception: select_radix (IDENTICAL): k > 256 is refused. The rank pass gives one thread to each output slot; a larger k needs a loop, which is not written until something asks for it."
+        },
+        "knn_metric_cosine": {
+          "kind": "knn",
+          "spec": {
+            "metric": "cosine",
+            "n_neighbors": 10
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: metric='cosine' is refused; only Euclidean ('euclidean', 'l2', 'minkowski' with p=2) is ported. The brute-force kernels carry the expanded-L2 arm only (neighbors/ported/neighbors/detail/knn_brute_force.mojo): another metric is a port, not a flag"
+        },
+        "knn_metric_minkowski_p1": {
+          "kind": "knn",
+          "spec": {
+            "metric": "minkowski",
+            "n_neighbors": 10,
+            "p": 1
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: metric='minkowski' with p=1 is refused; only p=2 (Euclidean) is ported"
+        },
+        "logreg_l1_refused": {
+          "kind": "logreg",
+          "spec": {
+            "penalty": "l1"
+          },
+          "refused": "NotImplementedError: mojolearn LogisticRegression: penalty='l1' selects OWL-QN (min_owlqn, qn_solvers.cuh:246), which is NOT PORTED; penalty='l2' or None (L-BFGS) are the ported arms. See glm/UNPORTED.tsv"
+        },
+        "ols_onecol_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "Exception: olsFit: n_cols == 1 selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. cuML forces the same switch and says the eig solver does not support a single column (linear_regression.pyx:390). See glm/UNPORTED.tsv"
+        },
+        "ols_sw_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "NotImplementedError: mojolearn LinearRegression: sample_weight is not ported (ols.cuh:99-110; glm/UNPORTED.tsv)"
+        },
+        "ols_wide_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "Exception: olsFit: n_cols > n_rows selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. The normal-equations solver cannot be used here: A^T A is singular by construction. See glm/UNPORTED.tsv"
+        },
+        "pca_c8_wide": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 8
+          },
+          "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim."
+        },
+        "pca_solver_full": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 2,
+            "svd_solver": "full"
+          },
+          "refused": "ValueError: mojolearn PCA: svd_solver='full' is refused; only 'auto' / 'covariance_eigh' (cuML's covariance + device Jacobi arm) is ported; 'full', 'randomized' and 'arpack' are different algorithms (decomposition/UNPORTED.tsv)"
+        },
+        "pca_whiten": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 2,
+            "whiten": true
+          },
+          "refused": "NotImplementedError: mojolearn PCA: whiten=True is refused; the whitening rescale of the components (and its inverse on inverse_transform) is not ported, and an unwhitened transform returned for whiten=True would be a wrong answer"
+        },
+        "tsvd_c8_wide": {
+          "kind": "tsvd",
+          "spec": {
+            "n_components": 8
+          },
+          "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim."
+        },
+        "tsvd_randomized": {
+          "kind": "tsvd",
+          "spec": {
+            "algorithm": "randomized",
+            "n_components": 2
+          },
+          "refused": "ValueError: mojolearn TruncatedSVD: algorithm='randomized' is refused; only 'covariance_eigh' (the Gram + device Jacobi arm cuML's tsvdFit takes) is ported; 'arpack' and 'randomized' are different algorithms"
+        }
+      },
+      "count": 27
+    },
+    "r13_amd": {
+      "files": [
+        {
+          "path": "bench/results/e1/2026-08-28_173933-mojolearn-e2-amd/e2_cells.json",
+          "sha256": "ce05cbc5825939e8e2954abde6b6b4769e7e3e2927f7bec9ce069186b6503c3e",
+          "commit": "a0a0eeee9a5b774ef62d91fc003a245e0c90af6f"
+        },
+        {
+          "path": "bench/results/e1/2026-08-28_173933-mojolearn-e2-amd/e2u/e2u_cells.json",
+          "sha256": "2d4942e15d6d5071a6d2a9d5ff51c96a06103d375c4773f0f3090d3d3a4270ee",
+          "commit": "a0a0eeee9a5b774ef62d91fc003a245e0c90af6f"
+        }
+      ],
+      "refusals": {
+        "et_clf_maxleaf": {
+          "kind": "et_clf",
+          "spec": {
+            "max_depth": 8,
+            "max_leaf_nodes": 64,
+            "n_estimators": 10,
+            "random_state": 7
+          },
+          "refused": "Exception: max_leaf_nodes is not ported under sklearn's semantics. sklearn's is a BEST-FIRST growth limit that changes the ORDER nodes are expanded in; cuML's max_leaves is a soft cap on a breadth-first frontier (builder.cuh:86-88) and stops pushing work once the counter is reached. They are different algorithms, so accepting the name would be accepting a different model. Use cuML's max_leaves through DecisionTreeParams if that is what you want."
+        },
+        "gbdt_multiclass_lossguide": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "grow_policy": "Lossguide",
+            "learning_rate": 0.3,
+            "loss": "MultiClass",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7
+          },
+          "refused": "NotImplementedError: mojolearn: Error: optimization scheme is not supported for GPU learning Loss=MultiClass;OptimizationScheme=Lossguide -- CatBoost's GPU registers a non-symmetric trainer for exactly eleven losses (pointwise_non_symmetric.cpp:7-29; train.cpp:279 is the refusal): ['CrossEntropy', 'Expectile', 'Huber', 'LogLinQuantile', 'Logloss', 'MAE', 'MAPE', 'Poisson', 'Quantile', 'RMSE', 'Tweedie']"
+        },
+        "gbdt_quantile_newton": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "leaf_estimation_method": "Newton",
+            "learning_rate": 0.3,
+            "loss": "Quantile",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7
+          },
+          "refused": "Exception: Newton leaves estimation method is not supported for Quantile loss function"
+        },
+        "gbdt_rmse_depthwise_pointwise": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "grow_policy": "Depthwise",
+            "learning_rate": 0.3,
+            "loss": "RMSE",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7,
+            "use_pointwise_searcher": true
+          },
+          "refused": "ValueError: mojolearn: use_pointwise_searcher=True is TDocParallelObliviousTreeSearcher, an OBLIVIOUS searcher; grow_policy='Depthwise' is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only (pointwise_non_symmetric.cpp:5-29)"
+        },
+        "gbdt_rmse_nan_forbidden_refused": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "learning_rate": 0.3,
+            "loss": "RMSE",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "nan_mode": "Forbidden",
+            "random_state": 7
+          },
+          "refused": "ValueError: mojolearn: nan_mode='Forbidden' but X contains NaN. CatBoost refuses this pair; this port would otherwise bin the NaNs silently with no NaN bin. Use nan_mode='Min' or 'Max', or clean the column."
+        },
+        "dbscan_algorithm_bad": {
+          "kind": "dbscan",
+          "spec": {
+            "algorithm": "kd_tree",
+            "eps": 0.3,
+            "min_samples": 5
+          },
+          "refused": "ValueError: mojolearn DBSCAN: algorithm='kd_tree' is refused; it must be one of ['brute', 'rbc'] ('rbc' is the ball-cover eps search, DEVIATION 35's default; 'brute' is cuML's default arm)"
+        },
+        "dbscan_chain_iter200": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.1875,
+            "max_iterations": 200,
+            "min_samples": 2
+          },
+          "refused": "Exception: weak_cc_batched: label propagation did not converge in 200 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations."
+        },
+        "dbscan_maxiter1": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "max_iterations": 1,
+            "min_samples": 5
+          },
+          "refused": "Exception: weak_cc_batched: label propagation did not converge in 1 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations."
+        },
+        "dbscan_metric_manhattan": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "metric": "manhattan",
+            "min_samples": 5
+          },
+          "refused": "ValueError: mojolearn DBSCAN: metric='manhattan' is refused; only 'euclidean' is ported (the eps kernels in dbscan/ported/neighbors/epsilon_neighborhood.mojo carry L2 only, and cuML's runner.cuh:152-156 downgrades every other metric to L2Sqrt as well)"
+        },
+        "dbscan_sw": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "min_samples": 5
+          },
+          "refused": "NotImplementedError: mojolearn DBSCAN: sample_weight is not ported (dbscan/estimator.mojo, WHAT IS NOT HERE YET)"
+        },
+        "kde_bw_scott_refused": {
+          "kind": "kde",
+          "spec": {
+            "bandwidth": "scott",
+            "kernel": "gaussian"
+          },
+          "refused": "NotImplementedError: mojolearn KernelDensity: bandwidth='scott' is refused; compute the rule on the host and pass the float (sklearn's scott is n ** (-1/(d+4)), silverman is (n (d+2) / 4) ** (-1/(d+4)))"
+        },
+        "kde_metric_cosine_refused": {
+          "kind": "kde",
+          "spec": {
+            "bandwidth": 8.0,
+            "kernel": "gaussian",
+            "metric": "cosine"
+          },
+          "refused": "Exception: kde: metric='cosine' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev"
+        },
+        "kmeans_init_bad": {
+          "kind": "kmeans",
+          "spec": {
+            "init": "pca-ish",
+            "n_clusters": 8,
+            "random_state": 7
+          },
+          "refused": "ValueError: mojolearn: init must be one of ['array', 'k-means++', 'random'], got 'pca-ish'"
+        },
+        "knn_algorithm_kd_tree": {
+          "kind": "knn",
+          "spec": {
+            "algorithm": "kd_tree",
+            "n_neighbors": 10
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: algorithm='kd_tree' is refused; this class is exact brute force ('brute', which 'auto' also means here) and ships no tree or graph index"
+        },
+        "knn_clf_weights_distance_refused": {
+          "kind": "knn_clf",
+          "spec": {
+            "n_neighbors": 5,
+            "weights": "distance"
+          },
+          "refused": "ValueError: mojolearn KNeighborsClassifier: weights='distance' is refused; only 'uniform' is ported. cuML refuses it too (kneighbors_classifier.pyx:191, 'Only uniform weighting strategy is supported currently') and the ported vote (neighbors/ported/selection/knn.mojo) carries no weight: a distance-weighted vote is a port, not a flag"
+        },
+        "knn_k300": {
+          "kind": "knn",
+          "spec": {
+            "n_neighbors": 300
+          },
+          "refused": "Exception: select_radix (IDENTICAL): k > 256 is refused. The rank pass gives one thread to each output slot; a larger k needs a loop, which is not written until something asks for it."
+        },
+        "knn_metric_cosine": {
+          "kind": "knn",
+          "spec": {
+            "metric": "cosine",
+            "n_neighbors": 10
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: metric='cosine' is refused; only Euclidean ('euclidean', 'l2', 'minkowski' with p=2) is ported. The brute-force kernels carry the expanded-L2 arm only (neighbors/ported/neighbors/detail/knn_brute_force.mojo): another metric is a port, not a flag"
+        },
+        "knn_metric_minkowski_p1": {
+          "kind": "knn",
+          "spec": {
+            "metric": "minkowski",
+            "n_neighbors": 10,
+            "p": 1
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: metric='minkowski' with p=1 is refused; only p=2 (Euclidean) is ported"
+        },
+        "logreg_l1_refused": {
+          "kind": "logreg",
+          "spec": {
+            "penalty": "l1"
+          },
+          "refused": "NotImplementedError: mojolearn LogisticRegression: penalty='l1' selects OWL-QN (min_owlqn, qn_solvers.cuh:246), which is NOT PORTED; penalty='l2' or None (L-BFGS) are the ported arms. See glm/UNPORTED.tsv"
+        },
+        "ols_onecol_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "Exception: olsFit: n_cols == 1 selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. cuML forces the same switch and says the eig solver does not support a single column (linear_regression.pyx:390). See glm/UNPORTED.tsv"
+        },
+        "ols_sw_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "NotImplementedError: mojolearn LinearRegression: sample_weight is not ported (ols.cuh:99-110; glm/UNPORTED.tsv)"
+        },
+        "ols_wide_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "Exception: olsFit: n_cols > n_rows selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. The normal-equations solver cannot be used here: A^T A is singular by construction. See glm/UNPORTED.tsv"
+        },
+        "pca_c8_wide": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 8
+          },
+          "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim."
+        },
+        "pca_solver_full": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 2,
+            "svd_solver": "full"
+          },
+          "refused": "ValueError: mojolearn PCA: svd_solver='full' is refused; only 'auto' / 'covariance_eigh' (cuML's covariance + device Jacobi arm) is ported; 'full', 'randomized' and 'arpack' are different algorithms (decomposition/UNPORTED.tsv)"
+        },
+        "pca_whiten": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 2,
+            "whiten": true
+          },
+          "refused": "NotImplementedError: mojolearn PCA: whiten=True is refused; the whitening rescale of the components (and its inverse on inverse_transform) is not ported, and an unwhitened transform returned for whiten=True would be a wrong answer"
+        },
+        "tsvd_c8_wide": {
+          "kind": "tsvd",
+          "spec": {
+            "n_components": 8
+          },
+          "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim."
+        },
+        "tsvd_randomized": {
+          "kind": "tsvd",
+          "spec": {
+            "algorithm": "randomized",
+            "n_components": 2
+          },
+          "refused": "ValueError: mojolearn TruncatedSVD: algorithm='randomized' is refused; only 'covariance_eigh' (the Gram + device Jacobi arm cuML's tsvdFit takes) is ported; 'arpack' and 'randomized' are different algorithms"
+        }
+      },
+      "count": 27
+    },
+    "r13_apple": {
+      "files": [
+        {
+          "path": "bench/results/e1/2026-08-28_130918-MacBook-Air-1-terrabyte/e2_cells.json",
+          "sha256": "2c5fac72e273b67bf2d0eb90ca4bfeeb2a7730690b59b9a63bee638d8d152616",
+          "commit": "a0a0eeee9a5b774ef62d91fc003a245e0c90af6f"
+        },
+        {
+          "path": "bench/results/e1/2026-08-28_130918-MacBook-Air-1-terrabyte/e2u/e2u_cells.json",
+          "sha256": "1852f3554cab34bb5b46b2517ce3634eac6a089b478fbe8cf82edfacaa274d21",
+          "commit": "a0a0eeee9a5b774ef62d91fc003a245e0c90af6f"
+        }
+      ],
+      "refusals": {
+        "et_clf_maxleaf": {
+          "kind": "et_clf",
+          "spec": {
+            "max_depth": 8,
+            "max_leaf_nodes": 64,
+            "n_estimators": 10,
+            "random_state": 7
+          },
+          "refused": "Exception: max_leaf_nodes is not ported under sklearn's semantics. sklearn's is a BEST-FIRST growth limit that changes the ORDER nodes are expanded in; cuML's max_leaves is a soft cap on a breadth-first frontier (builder.cuh:86-88) and stops pushing work once the counter is reached. They are different algorithms, so accepting the name would be accepting a different model. Use cuML's max_leaves through DecisionTreeParams if that is what you want."
+        },
+        "gbdt_multiclass_lossguide": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "grow_policy": "Lossguide",
+            "learning_rate": 0.3,
+            "loss": "MultiClass",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7
+          },
+          "refused": "NotImplementedError: mojolearn: Error: optimization scheme is not supported for GPU learning Loss=MultiClass;OptimizationScheme=Lossguide -- CatBoost's GPU registers a non-symmetric trainer for exactly eleven losses (pointwise_non_symmetric.cpp:7-29; train.cpp:279 is the refusal): ['CrossEntropy', 'Expectile', 'Huber', 'LogLinQuantile', 'Logloss', 'MAE', 'MAPE', 'Poisson', 'Quantile', 'RMSE', 'Tweedie']"
+        },
+        "gbdt_quantile_newton": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "leaf_estimation_method": "Newton",
+            "learning_rate": 0.3,
+            "loss": "Quantile",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7
+          },
+          "refused": "Exception: Newton leaves estimation method is not supported for Quantile loss function"
+        },
+        "gbdt_rmse_depthwise_pointwise": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "grow_policy": "Depthwise",
+            "learning_rate": 0.3,
+            "loss": "RMSE",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "random_state": 7,
+            "use_pointwise_searcher": true
+          },
+          "refused": "ValueError: mojolearn: use_pointwise_searcher=True is TDocParallelObliviousTreeSearcher, an OBLIVIOUS searcher; grow_policy='Depthwise' is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only (pointwise_non_symmetric.cpp:5-29)"
+        },
+        "gbdt_rmse_nan_forbidden_refused": {
+          "kind": "gbdt",
+          "spec": {
+            "border_count": 128,
+            "learning_rate": 0.3,
+            "loss": "RMSE",
+            "max_depth": 6,
+            "n_estimators": 20,
+            "nan_mode": "Forbidden",
+            "random_state": 7
+          },
+          "refused": "ValueError: mojolearn: nan_mode='Forbidden' but X contains NaN. CatBoost refuses this pair; this port would otherwise bin the NaNs silently with no NaN bin. Use nan_mode='Min' or 'Max', or clean the column."
+        },
+        "dbscan_algorithm_bad": {
+          "kind": "dbscan",
+          "spec": {
+            "algorithm": "kd_tree",
+            "eps": 0.3,
+            "min_samples": 5
+          },
+          "refused": "ValueError: mojolearn DBSCAN: algorithm='kd_tree' is refused; it must be one of ['brute', 'rbc'] ('rbc' is the ball-cover eps search, DEVIATION 35's default; 'brute' is cuML's default arm)"
+        },
+        "dbscan_chain_iter200": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.1875,
+            "max_iterations": 200,
+            "min_samples": 2
+          },
+          "refused": "Exception: weak_cc_batched: label propagation did not converge in 200 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations."
+        },
+        "dbscan_maxiter1": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "max_iterations": 1,
+            "min_samples": 5
+          },
+          "refused": "Exception: weak_cc_batched: label propagation did not converge in 1 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations."
+        },
+        "dbscan_metric_manhattan": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "metric": "manhattan",
+            "min_samples": 5
+          },
+          "refused": "ValueError: mojolearn DBSCAN: metric='manhattan' is refused; only 'euclidean' is ported (the eps kernels in dbscan/ported/neighbors/epsilon_neighborhood.mojo carry L2 only, and cuML's runner.cuh:152-156 downgrades every other metric to L2Sqrt as well)"
+        },
+        "dbscan_sw": {
+          "kind": "dbscan",
+          "spec": {
+            "eps": 0.3,
+            "min_samples": 5
+          },
+          "refused": "NotImplementedError: mojolearn DBSCAN: sample_weight is not ported (dbscan/estimator.mojo, WHAT IS NOT HERE YET)"
+        },
+        "kde_bw_scott_refused": {
+          "kind": "kde",
+          "spec": {
+            "bandwidth": "scott",
+            "kernel": "gaussian"
+          },
+          "refused": "NotImplementedError: mojolearn KernelDensity: bandwidth='scott' is refused; compute the rule on the host and pass the float (sklearn's scott is n ** (-1/(d+4)), silverman is (n (d+2) / 4) ** (-1/(d+4)))"
+        },
+        "kde_metric_cosine_refused": {
+          "kind": "kde",
+          "spec": {
+            "bandwidth": 8.0,
+            "kernel": "gaussian",
+            "metric": "cosine"
+          },
+          "refused": "Exception: kde: metric='cosine' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev"
+        },
+        "kmeans_init_bad": {
+          "kind": "kmeans",
+          "spec": {
+            "init": "pca-ish",
+            "n_clusters": 8,
+            "random_state": 7
+          },
+          "refused": "ValueError: mojolearn: init must be one of ['array', 'k-means++', 'random'], got 'pca-ish'"
+        },
+        "knn_algorithm_kd_tree": {
+          "kind": "knn",
+          "spec": {
+            "algorithm": "kd_tree",
+            "n_neighbors": 10
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: algorithm='kd_tree' is refused; this class is exact brute force ('brute', which 'auto' also means here) and ships no tree or graph index"
+        },
+        "knn_clf_weights_distance_refused": {
+          "kind": "knn_clf",
+          "spec": {
+            "n_neighbors": 5,
+            "weights": "distance"
+          },
+          "refused": "ValueError: mojolearn KNeighborsClassifier: weights='distance' is refused; only 'uniform' is ported. cuML refuses it too (kneighbors_classifier.pyx:191, 'Only uniform weighting strategy is supported currently') and the ported vote (neighbors/ported/selection/knn.mojo) carries no weight: a distance-weighted vote is a port, not a flag"
+        },
+        "knn_k300": {
+          "kind": "knn",
+          "spec": {
+            "n_neighbors": 300
+          },
+          "refused": "Exception: select_radix (IDENTICAL): k > 256 is refused. The rank pass gives one thread to each output slot; a larger k needs a loop, which is not written until something asks for it."
+        },
+        "knn_metric_cosine": {
+          "kind": "knn",
+          "spec": {
+            "metric": "cosine",
+            "n_neighbors": 10
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: metric='cosine' is refused; only Euclidean ('euclidean', 'l2', 'minkowski' with p=2) is ported. The brute-force kernels carry the expanded-L2 arm only (neighbors/ported/neighbors/detail/knn_brute_force.mojo): another metric is a port, not a flag"
+        },
+        "knn_metric_minkowski_p1": {
+          "kind": "knn",
+          "spec": {
+            "metric": "minkowski",
+            "n_neighbors": 10,
+            "p": 1
+          },
+          "refused": "ValueError: mojolearn NearestNeighbors: metric='minkowski' with p=1 is refused; only p=2 (Euclidean) is ported"
+        },
+        "logreg_l1_refused": {
+          "kind": "logreg",
+          "spec": {
+            "penalty": "l1"
+          },
+          "refused": "NotImplementedError: mojolearn LogisticRegression: penalty='l1' selects OWL-QN (min_owlqn, qn_solvers.cuh:246), which is NOT PORTED; penalty='l2' or None (L-BFGS) are the ported arms. See glm/UNPORTED.tsv"
+        },
+        "ols_onecol_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "Exception: olsFit: n_cols == 1 selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. cuML forces the same switch and says the eig solver does not support a single column (linear_regression.pyx:390). See glm/UNPORTED.tsv"
+        },
+        "ols_sw_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "NotImplementedError: mojolearn LinearRegression: sample_weight is not ported (ols.cuh:99-110; glm/UNPORTED.tsv)"
+        },
+        "ols_wide_refused": {
+          "kind": "ols",
+          "spec": {},
+          "refused": "Exception: olsFit: n_cols > n_rows selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. The normal-equations solver cannot be used here: A^T A is singular by construction. See glm/UNPORTED.tsv"
+        },
+        "pca_c8_wide": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 8
+          },
+          "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim."
+        },
+        "pca_solver_full": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 2,
+            "svd_solver": "full"
+          },
+          "refused": "ValueError: mojolearn PCA: svd_solver='full' is refused; only 'auto' / 'covariance_eigh' (cuML's covariance + device Jacobi arm) is ported; 'full', 'randomized' and 'arpack' are different algorithms (decomposition/UNPORTED.tsv)"
+        },
+        "pca_whiten": {
+          "kind": "pca",
+          "spec": {
+            "n_components": 2,
+            "whiten": true
+          },
+          "refused": "NotImplementedError: mojolearn PCA: whiten=True is refused; the whitening rescale of the components (and its inverse on inverse_transform) is not ported, and an unwhitened transform returned for whiten=True would be a wrong answer"
+        },
+        "tsvd_c8_wide": {
+          "kind": "tsvd",
+          "spec": {
+            "n_components": 8
+          },
+          "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim."
+        },
+        "tsvd_randomized": {
+          "kind": "tsvd",
+          "spec": {
+            "algorithm": "randomized",
+            "n_components": 2
+          },
+          "refused": "ValueError: mojolearn TruncatedSVD: algorithm='randomized' is refused; only 'covariance_eigh' (the Gram + device Jacobi arm cuML's tsvdFit takes) is ported; 'arpack' and 'randomized' are different algorithms"
+        }
+      },
+      "count": 27
+    }
+  },
+  "comparisons": {
+    "r11_nv": {
+      "ids_equal": true,
+      "differences": []
+    },
+    "r11_amd": {
+      "ids_equal": true,
+      "differences": []
+    },
+    "r13_nv": {
+      "ids_equal": true,
+      "differences": []
+    },
+    "r13_amd": {
+      "ids_equal": true,
+      "differences": []
+    },
+    "r13_apple": {
+      "ids_equal": true,
+      "differences": []
+    }
+  }
+}

@@ -1,0 +1,285 @@
+{
+  "actual_loss": 4.781259536743164,
+  "capture_manifest_sha256": "e5b505826554715a3051957a846a335e9203c4729f7613c9b436e87032df7c32",
+  "controls": {
+    "nonlinear": {
+      "embed": {
+        "cells": 2048,
+        "failed_cells": 447,
+        "max_absolute_error": 0.011281718364419274,
+        "max_excess": 0.01127856943636248,
+        "passed": false
+      },
+      "lm_head": {
+        "cells": 2048,
+        "failed_cells": 0,
+        "max_absolute_error": 2.7755575615628914e-17,
+        "max_excess": -2.0000875035461624e-06,
+        "passed": true
+      },
+      "norm1_w": {
+        "cells": 32,
+        "failed_cells": 32,
+        "max_absolute_error": 0.009618527308910677,
+        "max_excess": 0.009598066752487385,
+        "passed": false
+      },
+      "norm2_w": {
+        "cells": 32,
+        "failed_cells": 32,
+        "max_absolute_error": 0.011477133578362754,
+        "max_excess": 0.011471206616148656,
+        "passed": false
+      },
+      "w_down": {
+        "cells": 2048,
+        "failed_cells": 0,
+        "max_absolute_error": 2.7755575615628914e-17,
+        "max_excess": -2.000968503108043e-06,
+        "passed": true
+      },
+      "w_gate": {
+        "cells": 2048,
+        "failed_cells": 2044,
+        "max_absolute_error": 0.01488737450260566,
+        "max_excess": 0.01487491168494022,
+        "passed": false
+      },
+      "w_k": {
+        "cells": 512,
+        "failed_cells": 512,
+        "max_absolute_error": 0.009938846497329614,
+        "max_excess": 0.009934123915475027,
+        "passed": false
+      },
+      "w_o": {
+        "cells": 1024,
+        "failed_cells": 1020,
+        "max_absolute_error": 0.015828297043608303,
+        "max_excess": 0.015793598467526416,
+        "passed": false
+      },
+      "w_q": {
+        "cells": 1024,
+        "failed_cells": 1020,
+        "max_absolute_error": 0.009536328591632618,
+        "max_excess": 0.009527550124520794,
+        "passed": false
+      },
+      "w_up": {
+        "cells": 2048,
+        "failed_cells": 0,
+        "max_absolute_error": 2.0816681711721685e-17,
+        "max_excess": -2.001716300797358e-06,
+        "passed": true
+      },
+      "w_v": {
+        "cells": 512,
+        "failed_cells": 512,
+        "max_absolute_error": 0.0100963195802821,
+        "max_excess": 0.01008060768052477,
+        "passed": false
+      }
+    },
+    "nonlinear_effective": true,
+    "nonlinear_forward": {
+      "cells": 1,
+      "failed_cells": 0,
+      "max_absolute_error": 0.0,
+      "max_excess": -1.1562519559893107e-05,
+      "passed": true
+    },
+    "sign": {
+      "embed": {
+        "cells": 2048,
+        "failed_cells": 448,
+        "max_absolute_error": 0.3779036448733102,
+        "max_excess": 0.3778638545083626,
+        "passed": false
+      },
+      "lm_head": {
+        "cells": 2048,
+        "failed_cells": 2047,
+        "max_absolute_error": 0.670798182089507,
+        "max_excess": 0.6707291022713379,
+        "passed": false
+      },
+      "norm1_w": {
+        "cells": 32,
+        "failed_cells": 32,
+        "max_absolute_error": 0.41084374072503527,
+        "max_excess": 0.4108006563528678,
+        "passed": false
+      },
+      "norm2_w": {
+        "cells": 32,
+        "failed_cells": 32,
+        "max_absolute_error": 0.12103150829775651,
+        "max_excess": 0.12101740514539182,
+        "passed": false
+      },
+      "w_down": {
+        "cells": 2048,
+        "failed_cells": 2048,
+        "max_absolute_error": 0.310907876304786,
+        "max_excess": 0.31087478551359793,
+        "passed": false
+      },
+      "w_gate": {
+        "cells": 2048,
+        "failed_cells": 2048,
+        "max_absolute_error": 0.1670325647001149,
+        "max_excess": 0.16701386144264946,
+        "passed": false
+      },
+      "w_k": {
+        "cells": 512,
+        "failed_cells": 512,
+        "max_absolute_error": 0.21464996656250962,
+        "max_excess": 0.21462650156374688,
+        "passed": false
+      },
+      "w_o": {
+        "cells": 1024,
+        "failed_cells": 1024,
+        "max_absolute_error": 0.4137069357304876,
+        "max_excess": 0.41366356503321045,
+        "passed": false
+      },
+      "w_q": {
+        "cells": 1024,
+        "failed_cells": 1023,
+        "max_absolute_error": 0.1817165366242205,
+        "max_excess": 0.18169636497004715,
+        "passed": false
+      },
+      "w_up": {
+        "cells": 2048,
+        "failed_cells": 2048,
+        "max_absolute_error": 0.2259127111231359,
+        "max_excess": 0.22588811984843743,
+        "passed": false
+      },
+      "w_v": {
+        "cells": 512,
+        "failed_cells": 512,
+        "max_absolute_error": 0.3294223545940621,
+        "max_excess": 0.32938741235861313,
+        "passed": false
+      }
+    },
+    "sign_effective": true
+  },
+  "cuda_version": null,
+  "device": "AMD Instinct MI300X",
+  "gradients": {
+    "embed": {
+      "cells": 2048,
+      "failed_cells": 0,
+      "max_absolute_error": 5.724212427497821e-08,
+      "max_excess": -1.9953992867043136e-06,
+      "passed": true
+    },
+    "lm_head": {
+      "cells": 2048,
+      "failed_cells": 0,
+      "max_absolute_error": 6.796219399404779e-08,
+      "max_excess": -1.9810791770925673e-06,
+      "passed": true
+    },
+    "norm1_w": {
+      "cells": 32,
+      "failed_cells": 0,
+      "max_absolute_error": 1.06515366929405e-07,
+      "max_excess": -2.4921281475197106e-06,
+      "passed": true
+    },
+    "norm2_w": {
+      "cells": 32,
+      "failed_cells": 0,
+      "max_absolute_error": 1.5349224405381e-08,
+      "max_excess": -2.1618343764362245e-06,
+      "passed": true
+    },
+    "w_down": {
+      "cells": 2048,
+      "failed_cells": 0,
+      "max_absolute_error": 6.657755241556984e-08,
+      "max_excess": -1.9778422473884984e-06,
+      "passed": true
+    },
+    "w_gate": {
+      "cells": 2048,
+      "failed_cells": 0,
+      "max_absolute_error": 2.5567319122954402e-08,
+      "max_excess": -1.999820996597749e-06,
+      "passed": true
+    },
+    "w_k": {
+      "cells": 512,
+      "failed_cells": 0,
+      "max_absolute_error": 9.41004433506476e-08,
+      "max_excess": -1.998968085653575e-06,
+      "passed": true
+    },
+    "w_o": {
+      "cells": 1024,
+      "failed_cells": 0,
+      "max_absolute_error": 6.410293908187814e-08,
+      "max_excess": -1.994714621061362e-06,
+      "passed": true
+    },
+    "w_q": {
+      "cells": 1024,
+      "failed_cells": 0,
+      "max_absolute_error": 6.716242446219711e-08,
+      "max_excess": -1.993490204354977e-06,
+      "passed": true
+    },
+    "w_up": {
+      "cells": 2048,
+      "failed_cells": 0,
+      "max_absolute_error": 3.5861638408851704e-08,
+      "max_excess": -2.000308022051458e-06,
+      "passed": true
+    },
+    "w_v": {
+      "cells": 512,
+      "failed_cells": 0,
+      "max_absolute_error": 4.0872774886846486e-08,
+      "max_excess": -1.992028030949008e-06,
+      "passed": true
+    }
+  },
+  "hip_version": "6.4.43483-a187df25c",
+  "loss": {
+    "cells": 1,
+    "failed_cells": 0,
+    "max_absolute_error": 2.4320338987138257e-07,
+    "max_excess": -1.1319316170021724e-05,
+    "passed": true
+  },
+  "parameters_moved": true,
+  "passed": true,
+  "reference_files": {
+    "nonlinear-control": {
+      "file": "gradient-oracle.json.nonlinear-control.npz",
+      "sha256": "8593ed9d2ef0196b910d63318dafe48497044bc08bd631dadf93202501d9cf73"
+    },
+    "reference": {
+      "file": "gradient-oracle.json.reference.npz",
+      "sha256": "6532176c122c4d7a54c6813f1e789aeecd655e0932461e0ac8b4875683873150"
+    }
+  },
+  "reference_loss": 4.781259779946554,
+  "schema": "mojolearn.training.gradient-oracle.v1",
+  "scope": "single fixed-profile step; FP64 tolerance correctness, not bitwise certification",
+  "tolerances": {
+    "grad_atol": 2e-06,
+    "grad_rtol": 0.0002,
+    "loss_atol": 2e-06,
+    "loss_rtol": 2e-06
+  },
+  "torch_version": "2.6.0+git684f6f2",
+  "vendor": "hip"
+}

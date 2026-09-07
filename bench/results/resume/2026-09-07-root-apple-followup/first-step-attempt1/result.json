@@ -1,0 +1,16 @@
+{
+  "status": "BLOCKED_MEMORY_BEFORE_LAUNCH",
+  "observed_helper_exit_code": 1,
+  "initial_memory": {
+    "compressed_bytes": 5689491456,
+    "conservative_reserve_bytes": 175308800,
+    "pressure_level": 1,
+    "swap_used_bytes": 0,
+    "total_bytes": 17179869184
+  },
+  "required_reserve_bytes": 4294967296,
+  "compiler_launched": false,
+  "model_launched": false,
+  "native_output_present": false,
+  "note": "Original helper raised ValueError at initial admission; retained helper.py is the exact invoked source. Subsequent source revision emits a structured refusal instead. No automatic retry."
+}

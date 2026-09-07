@@ -1,0 +1,10 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=5
+commit=d921eade0da5454e39e0cd103b9a1799286b41b9
+started=2026-09-06T22:47:28Z
+pixi_install_exit=0
+byte_lm_validation_exit=0
+gpu_archs=sm_89
+scope=bounded nvidia byte LM validation; no cross-vendor or performance certificate

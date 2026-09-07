@@ -1,0 +1,88 @@
+{
+  "arm": "identical",
+  "device": "GPU-d3342c3c-6197-7d42-e2a5-31a729e823ce, NVIDIA GeForce RTX 4090, 580.159.04",
+  "parameters": {
+    "n_neighbors": 15,
+    "n_components": 2,
+    "n_epochs": 100,
+    "metric": "euclidean",
+    "init": "spectral",
+    "random_state": 19,
+    "min_dist": 0.1,
+    "spread": 1.0,
+    "set_op_mix_ratio": 1.0,
+    "local_connectivity": 1.0,
+    "learning_rate": 1.0,
+    "repulsion_strength": 1.0,
+    "negative_sample_rate": 5
+  },
+  "numpy": "2.4.6",
+  "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+  "status": "PASS",
+  "train": {
+    "shape": [
+      1024,
+      64
+    ],
+    "dtype": "<f4",
+    "raw_c_order_sha256": "dfcf0ef9afb36886632c652c747eb632331ef7fdf913f41daa90eff4d607cf09"
+  },
+  "query": {
+    "shape": [
+      256,
+      64
+    ],
+    "dtype": "<f4",
+    "raw_c_order_sha256": "5e94ba19b2769c6a23e577ee2c796a4805a42981c15d905d047429e87bfd7087"
+  },
+  "implementation": "mojolearn NVIDIA",
+  "version": "0.6.0",
+  "module_file": "/root/mojolearn/python/mojolearn/__init__.py",
+  "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_metrics.so",
+  "binding_sha256": "a69b82ad6312d7cf26bb4509e27df8e4be0a880025163cfcfa836d469a13a7b6",
+  "numeric_mode_witness": 1,
+  "native_vendor": "cuda",
+  "estimator_source_file": "/root/mojolearn/python/mojolearn/_umap_impl.py",
+  "estimator_source_sha256": "8178e6ab41a1165777b00e8cc84ce289fb1b014e92795fa3429e7caaa464585d",
+  "fit": {
+    "shape": [
+      1024,
+      2
+    ],
+    "dtype": "<f4",
+    "raw_c_order_sha256": "119efde5862eb171f1e0adcb9f043047d2c739b58bdcfb316aaf5a02c7a9a0df"
+  },
+  "transform": {
+    "shape": [
+      256,
+      2
+    ],
+    "dtype": "<f4",
+    "raw_c_order_sha256": "80a8bb3cba68da6268dc026effc1d1db44820c951612456c7758e85350c8a3aa"
+  },
+  "artifact_sha256": "73f943f46b227fe45459845a172a007539f75d3815d9b1dd4ccbbd6cfe8dd64e",
+  "repeatability": {
+    "scope": "same NVIDIA host, independent fresh estimators; no cross-vendor claim",
+    "fit": {
+      "shape": [
+        1024,
+        2
+      ],
+      "dtype": "<f4",
+      "raw_c_order_sha256": "119efde5862eb171f1e0adcb9f043047d2c739b58bdcfb316aaf5a02c7a9a0df"
+    },
+    "transform": {
+      "shape": [
+        256,
+        2
+      ],
+      "dtype": "<f4",
+      "raw_c_order_sha256": "80a8bb3cba68da6268dc026effc1d1db44820c951612456c7758e85350c8a3aa"
+    },
+    "artifact_sha256": "73f943f46b227fe45459845a172a007539f75d3815d9b1dd4ccbbd6cfe8dd64e",
+    "fit_raw_bytes_equal": true,
+    "transform_raw_bytes_equal": true,
+    "frozen_model_unchanged": true,
+    "inputs_unchanged": true
+  }
+}

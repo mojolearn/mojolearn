@@ -1,0 +1,1 @@
+python3 tools/amd_serial_guard.py --seconds 240 -- /root/mojolearn/.byte-lm-validation-venv/bin/python tools/byte_lm_gradient_oracle.py /root/byte-lm-do-output/byte-lm-validation/step1/step000001 --expected-vendor hip --output /root/byte-lm-do-output/byte-lm-validation/gradient-oracle.json 

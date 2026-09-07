@@ -1,0 +1,33 @@
+{
+  "apple": {
+    "float32": {
+      "bad_count": 1,
+      "max_abs_error": 3.0994415283203125e-06,
+      "bad_cells": [
+        {
+          "index": 87,
+          "native": 0.0794239342212677,
+          "reference": 0.07942590862512589,
+          "threshold": 1.7942590862512587e-06
+        }
+      ]
+    },
+    "float64": {
+      "bad_count": 0,
+      "max_abs_error": 3.0503597416853268e-06,
+      "bad_cells": []
+    }
+  },
+  "amd": {
+    "float32": {
+      "bad_count": 0,
+      "max_abs_error": 3.0994415283203125e-06,
+      "bad_cells": []
+    },
+    "float64": {
+      "bad_count": 0,
+      "max_abs_error": 3.050359740353059e-06,
+      "bad_cells": []
+    }
+  }
+}

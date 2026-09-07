@@ -1,0 +1,12 @@
+{
+  "card": "rf_clf_deep.card",
+  "kind": "rf_clf",
+  "model": "53be92218845a2e0bcbe50137e846fc48293d6000219eba8568f206b390069dd",
+  "predictions": "701328ab007180510d2752e29b38158e51c4d1691fe60b229fcb30891c165dfb",
+  "seconds": 28.18,
+  "spec": {
+    "max_depth": null,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

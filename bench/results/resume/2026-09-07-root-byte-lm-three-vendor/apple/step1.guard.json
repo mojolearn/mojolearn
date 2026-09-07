@@ -1,0 +1,49 @@
+{
+  "cleanup": {
+    "errors": [],
+    "quarantined": false,
+    "verified": true
+  },
+  "cpu_affinity": null,
+  "cpu_enforcement": "sampled, not hard affinity",
+  "descendant_accounting": "observed ancestry and PGID, ps start-time identities; sampling gaps remain",
+  "error": null,
+  "gpu_memory_accounting": "system unified-memory reserve/pressure; no per-process Metal VRAM counter",
+  "guard": "macos-root-user-tiny-v1",
+  "initial_memory": {
+    "compressed_bytes": 3780165632,
+    "conservative_reserve_bytes": 1784528896,
+    "pressure_level": 1,
+    "swap_used_bytes": 0,
+    "total_bytes": 17179869184
+  },
+  "policy_limits": {
+    "compressed_growth_bytes": 268435456,
+    "cpu_grace_seconds": 4,
+    "deadline_seconds": 180,
+    "entry_reserve_bytes": 0,
+    "normal_pressure_level": 1,
+    "rss_bytes": 2147483648,
+    "runtime_reserve_bytes": 0,
+    "sample_interval_seconds": 2.0,
+    "sampled_cpu_limit": 3,
+    "swap_growth_bytes": 134217728
+  },
+  "reason": null,
+  "returncode": 0,
+  "samples": [
+    {
+      "compressed_bytes": 3780083712,
+      "conservative_reserve_bytes": 1782906880,
+      "elapsed_seconds": 0.015833624995138962,
+      "pressure_level": 1,
+      "rss_bytes": 9732096,
+      "sampled_cpu_cores": 0.6315673134275994,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    }
+  ],
+  "thread_limit": 2,
+  "watchdog_errors": [],
+  "watchdog_expired": false
+}

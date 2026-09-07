@@ -1,0 +1,63 @@
+{"action": "check", "handoff_sha256": "b314148723d821155e3e92980ad09536072842760608878fb245535d0ef7cd11", "vendor": "cuda", "kind": "baseline128", "identity_admitted": false}
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     rent
+   gpu:      NVIDIA GeForce RTX 4090
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-resume-nvidia/head3
+
+   commit:   3d255241 parent c9d1165d
+   source:   archive of 3d255241d84c5ba856a3e5eabab942887d88b9ae; working-tree edits are not shipped
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and NVIDIA dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /private/tmp/mojolearn-byte-lm-resume-20260906/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[19:59:26 nvidia] dead-man ARMED before the create: pid 6671, fires in 4500s, keyed by name mojolearn-gemm-nvidia-2026-09-06_195924
+[19:59:26 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 6671; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-6597
+[19:59:26 nvidia] creating mojolearn-gemm-nvidia-2026-09-06_195924 (NVIDIA GeForce RTX 4090, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[19:59:26 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[19:59:27 nvidia] pod c9ocwqjoq3l0hp created
+[20:00:14 nvidia] ssh target: -p 50728 root@213.181.111.2
+[20:00:15 nvidia] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[20:00:15 nvidia] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod c9ocwqjoq3l0hp ...
+    ARMED. Pod c9ocwqjoq3l0hp is TERMINATED through the API in 60 minutes.
+      lease: /private/tmp/mojolearn-byte-lm-resume-20260906/tools/../bench/results/runpod_leases/c9ocwqjoq3l0hp.lease
+      extend with: tools/runpod_guard.sh extend c9ocwqjoq3l0hp '-p 50728 root@213.181.111.2' <minutes>
+    c9ocwqjoq3l0hp: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep  7 00:00 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[20:00:24 nvidia] shipping the COMMIT (3d255241d84c5ba856a3e5eabab942887d88b9ae), not the working tree
+[20:00:25 nvidia]   bounded Mamba source archive: 4659213 bytes compressed
+[20:00:25 nvidia]   archive source sha256: 857aab6ae20ada194f6970ebd27ed0f3
+
+Pinned public GitHub source fetch/inventory failed; no SSH fallback
+
+== teardown (exit 1) ==
+  lease at exit:
+    c9ocwqjoq3l0hp: 54 minutes left of a 60-minute lease
+  terminating c9ocwqjoq3l0hp (layer two, from this machine)
+    DELETE /v1/pods/c9ocwqjoq3l0hp -> HTTP 204
+  VERIFIED: c9ocwqjoq3l0hp is gone (HTTP 404).
+  dead-man cancelled (pid 6671)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-6597/gemm_remote_leg.sh: line 2275:  6671 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

@@ -1,0 +1,1 @@
+python3 tools/nvidia_serial_guard.py --seconds 120 -- /root/mojolearn/.byte-lm-validation-venv/bin/python -m pip install --disable-pip-version-check --no-input --only-binary=:all: numpy==1.26.4 pytest==8.3.5 

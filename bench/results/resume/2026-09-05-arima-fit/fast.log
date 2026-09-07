@@ -1,0 +1,183 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:73:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:73:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:73:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:73:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:73:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:75:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/glm/impl/glm/qn/qn_linesearch.mojo:45:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/glm/impl/glm/qn/simple_mat/dense.mojo:52:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:99:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:75:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/glm/impl/glm/qn/qn_linesearch.mojo:45:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/glm/impl/glm/qn/simple_mat/dense.mojo:52:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:104:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:75:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/glm/impl/glm/qn/qn_linesearch.mojo:45:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/glm/impl/glm/qn/simple_mat/dense.mojo:52:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:104:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:75:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/glm/impl/glm/qn/qn_linesearch.mojo:45:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/glm/impl/glm/qn/simple_mat/dense.mojo:52:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:104:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:75:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/glm/impl/glm/qn/qn_linesearch.mojo:45:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/glm/impl/glm/qn/simple_mat/dense.mojo:52:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:107:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/arima/checks/fit_check.mojo:1066:33: warning: assignment to 'N' was never used; assign to '_' instead?
+        var N = order.complexity()
+                                ^
+== arima/checks/fit_check.mojo [FAST] FIT_N_OBS=512 SALT=7 ==
+check_qr_device_equals_oracle [FAST]
+      n = 1, m = 9: 54 cells, 0 differ
+      n = 2, m = 13: 78 cells, 0 differ
+      n = 3, m = 17: 102 cells, 0 differ
+      n = 4, m = 21: 126 cells, 0 differ
+      n = 5, m = 25: 150 cells, 0 differ
+check_qr_beats_normal_equations_on_ill_conditioning [FAST]
+      series 0: QR max |dx| = 2.8237980642664695e-07, normal equations 8.118165630302543e-06
+      series 1: QR max |dx| = 7.420391221479861e-07, normal equations 0.0001517903014851274
+      series 2: QR max |dx| = 1.7312337985408988e-07, normal equations 7.788731754007627e-05
+      series 3: QR max |dx| = 4.5374944159307096e-07, normal equations 1.5320451700179955e-05
+      series 4: QR max |dx| = 2.520977053499518e-07, normal equations 2.2904306789889306e-05
+      series 5: QR max |dx| = 4.011656857816348e-07, normal equations 6.927874288686908e-06
+    worst QR 7.420391221479861e-07, worst normal equations 0.0001517903014851274, Cholesky refusals 0, QR strictly better on 6 of 6
+check_invparams_contraction_is_visible [FAST]
+    of 1152 numerators the two associations differ on 0; the VERDICT flips on 0
+    built to separate: one-rounding 0.0 vs two-rounding 0.0
+    REPORT [FAST]: the seam is inert in this tier because identical_mul_add is a bare a*b + c here and this backend does not contract it. Nothing is asserted; run IDENTICAL to gate the seam and to check sabotage (j)
+check_x0_refusal_is_reached [FAST]
+      the arm fired; 0 of 36 cells are not the documented fill (must be 0)
+check_invparams_verdict_is_reached [FAST]
+    96 verdicts: 92 valid, 4 invalid
+check_x0_solves_the_normal_equations [FAST]
+      f_ar2 (exact reference: True)
+      f_ar1_k (exact reference: True)
+      f_arma11_k (exact reference: False)
+      f_arima111 (exact reference: False)
+      f_sarma (exact reference: False)
+    checked 27 series, skipped 3 (refused or zeroed by test_invparams); worst residual, exact arm 3.0388865364565196e-07, loose arm 7.186815651396586e-07
+check_jones_inverse_is_below_the_fd_step [FAST]
+    over 399 points: inverse half worst |dx| = 9.298669922941372e-08 (at v = -0.4875); forward half, expressed in x, worst |dx| = 1.5374213944478635e-07
+    the finite-difference step is 0.0009765625, so the inverse half is 9.521838001091965e-05 of it and the forward half 0.00015743195079146122
+check_grad_matches_float64 [FAST]
+      f_ar2 h = 2^-6 (0.015625): worst |grad - grad_f64| = 2.0190695259881863
+      f_ar2 h = 2^-8 (0.00390625): worst |grad - grad_f64| = 0.5082968209100613
+      f_ar2 h = 2^-10 (0.0009765625): worst |grad - grad_f64| = 0.16975006798037384
+      f_ar2 h = 2^-12 (0.00024414063): worst |grad - grad_f64| = 0.15916885270775083
+      f_ar2 h = 2^-14 (6.1035156e-05): worst |grad - grad_f64| = 1.1403921578241238
+      f_ar2 h = 2^-16 (1.5258789e-05): worst |grad - grad_f64| = 3.0190695259881863
+      f_ar2 h = 2^-18 (3.8146973e-06): worst |grad - grad_f64| = 15.90868057145775
+      f_ar2 h = 2^-20 (9.536743e-07): worst |grad - grad_f64| = 39.955647124192126
+      f_ar2 h = 2^-22 (2.3841858e-07): worst |grad - grad_f64| = 135.77836212852725
+      f_ar2 h = 2^-24 (5.9604645e-08): worst |grad - grad_f64| = 320.5035902394265
+      f_ar2 h = 2^-26 (1.4901161e-08): worst |grad - grad_f64| = 167.84098419883975
+      f_ar2 at cuML's h = 1e-8: 18 of 18 cells whose true gradient exceeds 1e-3 came back EXACTLY ZERO
+    f_ar2: shipped h = 0.0009765625 -> 0.16975006798037384; best in sweep h = 0.00024414063 -> 0.15916885270775083; cuML's h = 1e-8 -> 167.84098419883975
+      f_ar1_k h = 2^-6 (0.015625): worst |grad - grad_f64| = 1.138034266776799
+      f_ar1_k h = 2^-8 (0.00390625): worst |grad - grad_f64| = 0.2603487199017991
+      f_ar1_k h = 2^-10 (0.0009765625): worst |grad - grad_f64| = 0.011444208800639899
+      f_ar1_k h = 2^-12 (0.00024414063): worst |grad - grad_f64| = 0.3010722376702688
+      f_ar1_k h = 2^-14 (6.1035156e-05): worst |grad - grad_f64| = 0.7866178328325759
+      f_ar1_k h = 2^-16 (1.5258789e-05): worst |grad - grad_f64| = 2.665287571602107
+      f_ar1_k h = 2^-18 (3.8146973e-06): worst |grad - grad_f64| = 7.401677831472341
+      f_ar1_k h = 2^-20 (9.536743e-07): worst |grad - grad_f64| = 30.219105320625545
+      f_ar1_k h = 2^-22 (2.3841858e-07): worst |grad - grad_f64| = 70.29738290851617
+      f_ar1_k h = 2^-24 (5.9604645e-08): worst |grad - grad_f64| = 262.67311533039117
+      f_ar1_k h = 2^-26 (1.4901161e-08): worst |grad - grad_f64| = 122.07834951335883
+      f_ar1_k at cuML's h = 1e-8: 18 of 18 cells whose true gradient exceeds 1e-3 came back EXACTLY ZERO
+    f_ar1_k: shipped h = 0.0009765625 -> 0.011444208800639899; best in sweep h = 0.0009765625 -> 0.011444208800639899; cuML's h = 1e-8 -> 122.07834951335883
+      f_arma11_k h = 2^-6 (0.015625): worst |grad - grad_f64| = 0.9380930256203897
+      f_arma11_k h = 2^-8 (0.00390625): worst |grad - grad_f64| = 0.23457129710476465
+      f_arma11_k h = 2^-10 (0.0009765625): worst |grad - grad_f64| = 0.0682276081399209
+      f_arma11_k h = 2^-12 (0.00024414063): worst |grad - grad_f64| = 0.1500675727108387
+      f_arma11_k h = 2^-14 (6.1035156e-05): worst |grad - grad_f64| = 0.5571110297420887
+      f_arma11_k h = 2^-16 (1.5258789e-05): worst |grad - grad_f64| = 1.0710704277774425
+      f_arma11_k h = 2^-18 (3.8146973e-06): worst |grad - grad_f64| = 12.455350165484276
+      f_arma11_k h = 2^-20 (9.536743e-07): worst |grad - grad_f64| = 12.897977669175077
+      f_arma11_k h = 2^-22 (2.3841858e-07): worst |grad - grad_f64| = 101.07018836253445
+      f_arma11_k h = 2^-24 (5.9604645e-08): worst |grad - grad_f64| = 101.07018836253445
+      f_arma11_k h = 2^-26 (1.4901161e-08): worst |grad - grad_f64| = 101.07018836253445
+      f_arma11_k at cuML's h = 1e-8: 23 of 24 cells whose true gradient exceeds 1e-3 came back EXACTLY ZERO
+    f_arma11_k: shipped h = 0.0009765625 -> 0.0682276081399209; best in sweep h = 0.0009765625 -> 0.0682276081399209; cuML's h = 1e-8 -> 101.07018836253445
+check_lbfgs_rules_match_glm [FAST]
+      armijo_ok vs glm ls_success (ARMIJO arm): 800 cases, 0 disagree
+      check_convergence_at vs glm check_convergence: 1500 cases, 0 disagree (history included)
+check_fit_refuses_by_name [FAST]
+      ARIMA: rd = d + s*D + max(p + s*P, q + s*Q + 1) = 12 > 8 selects cuML's block-per-series Kalman kernel, which is not ported; refused by name (arima/NOT_IMPLEMENTED.tsv)
+      batched_loglike: y contains a non-finite value at index 3; missing observations are not ported and are refused by name (arima/NOT_IMPLEMENTED.tsv)
+      estimate_x0: n_obs (4) must be greater than d + s*D (5) for differencing
+      ARIMA: invalid order, at least one of p, q, P, Q, fit_intercept must be non-zero
+    4 refusals, each by name
+check_fit_recovers_planted_parameters [FAST]
+      planted_ar1: planted phi = 0.7, theta = 0.0; worst |dphi| = 0.06916754245758061, worst |dtheta| = 0.0, tol 0.15; 0 of 6 series did not report OPT_SUCCESS, evaluations 1
+        series 0: n_iter 0, retcode 0, -ll/(n-1) 1.3998494
+        series 1: n_iter 0, retcode 0, -ll/(n-1) 1.4168429
+        series 2: n_iter 0, retcode 0, -ll/(n-1) 1.4078317
+        series 3: n_iter 0, retcode 0, -ll/(n-1) 1.3915391
+        series 4: n_iter 0, retcode 0, -ll/(n-1) 1.4816824
+        series 5: n_iter 0, retcode 0, -ll/(n-1) 1.4648824
+      planted_ma1: planted phi = 0.0, theta = 0.5; worst |dphi| = 0.0, worst |dtheta| = 0.066764235496521, tol 0.2; 0 of 6 series did not report OPT_SUCCESS, evaluations 10
+        series 0: n_iter 4, retcode 0, -ll/(n-1) 1.4480078
+        series 1: n_iter 2, retcode 0, -ll/(n-1) 1.4562796
+        series 2: n_iter 3, retcode 0, -ll/(n-1) 1.4400042
+        series 3: n_iter 3, retcode 0, -ll/(n-1) 1.3860956
+        series 4: n_iter 4, retcode 0, -ll/(n-1) 1.334351
+        series 5: n_iter 2, retcode 0, -ll/(n-1) 1.4234843
+      planted_arma11: planted phi = 0.6, theta = 0.3; worst |dphi| = 0.0883381128311157, worst |dtheta| = 0.11531248986721038, tol 0.25; 0 of 6 series did not report OPT_SUCCESS, evaluations 14
+        series 0: n_iter 3, retcode 0, -ll/(n-1) 1.4434688
+        series 1: n_iter 3, retcode 0, -ll/(n-1) 1.462231
+        series 2: n_iter 5, retcode 0, -ll/(n-1) 1.3944488
+        series 3: n_iter 1, retcode 0, -ll/(n-1) 1.3580135
+        series 4: n_iter 5, retcode 0, -ll/(n-1) 1.4179963
+        series 5: n_iter 1, retcode 0, -ll/(n-1) 1.3951081
+check_fit_is_a_minimizer [FAST]
+      series 0: float64 |grad|_inf = 0.0002504073775000393 vs bound 0.00419954825605943 (objective 1.3998493521972002, the device's own 1.3998494)
+      series 1: float64 |grad|_inf = 0.00034680861193958634 vs bound 0.0042505278735360955 (objective 1.4168425572156216, the device's own 1.4168429)
+      series 2: float64 |grad|_inf = 0.0006628659405816251 vs bound 0.004223495046554916 (objective 1.4078316153165584, the device's own 1.4078317)
+      series 3: float64 |grad|_inf = 0.00017206345015452484 vs bound 0.004174617134049698 (objective 1.3915389785886778, the device's own 1.3915391)
+      series 4: float64 |grad|_inf = 0.0004360843602890796 vs bound 0.004445047414967924 (objective 1.481682401279837, the device's own 1.4816824)
+      series 5: float64 |grad|_inf = 0.0006261681595454149 vs bound 0.004394647643290804 (objective 1.464882478185417, the device's own 1.4648824)
+    the returned objective is below 48 of 48 perturbed objectives; worst gradient/bound ratio 0.15694725180803076
+check_fit_is_batch_composition_invariant [FAST]
+    9 fitted parameters, 0 differ; 0 iteration counts or retcodes differ
+ALL ARIMA FIT CHECKS PASSED [FAST] (no card: set MOJOLEARN_IDENTITY_TRACE)

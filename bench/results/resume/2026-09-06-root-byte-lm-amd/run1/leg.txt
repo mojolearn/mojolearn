@@ -1,0 +1,10 @@
+commit=d921eade parent 2ab73063
+source_ref=d921eade0da5454e39e0cd103b9a1799286b41b9
+vendor=amd
+gpu_requested=AMD Instinct MI300X OAM
+image=rocm/pytorch@sha256:69bb7a567948dfcfdb4d7d4d666062c39f53d9d5feb5ddf4ebe4d955ed3ae721
+minutes=60
+mode=rent
+card_full=<unset>
+trace_dump=<unset>
+started=2026-09-06T22:58:45Z

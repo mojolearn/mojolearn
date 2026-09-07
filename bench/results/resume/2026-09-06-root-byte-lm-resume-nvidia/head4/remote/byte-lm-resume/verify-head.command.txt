@@ -1,0 +1,1 @@
+/root/byte-lm-resume-venv/bin/python tools/nvidia_serial_guard.py --seconds 180 --rss-gib 12 -- /root/byte-lm-resume-venv/bin/python /root/gemm_leg_out/byte-lm-resume/compact_checks.py verify-head /root/mojolearn /root/byte-lm-handoffs/baseline b314148723d821155e3e92980ad09536072842760608878fb245535d0ef7cd11 /root/gemm_leg_out/byte-lm-resume cuda head64 '' '' '' 

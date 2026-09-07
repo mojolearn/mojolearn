@@ -1,0 +1,28 @@
+== DEVIATION 2043 accuracy A/B: lane gbdt-symmetric, higgs rows 1000000, 3 rounds -> bench/results/e1/2026-09-03_164711-mojolearn-e2-nv//gbdt_accuracy_ab ==
+date 2026-09-03T16:47:16Z
+head cab4c5f149b590d33b57eadbd49deabbd89ad289
+host mojolearn-e2-nv
+lane gbdt-symmetric
+rows 1000000
+rounds 3
+ab_define MOJOLEARN_2043_FAST_FUSED_ONE_BYTE
+dataset higgs (UCI 00280/HIGGS.csv.gz) store /root/datasets/gbm-bench
+python pixi run -e gbmbench python ( WARN Skipped running the post-link scripts because `run-post-link-scripts` = `false`
+	- bin/.librsvg-pre-unlink.sh
+
+To enable them, run:
+	pixi config set --local run-post-link-scripts insecure
+
+More info:
+	https://pixi.sh/latest/reference/pixi_configuration/#run-post-link-scripts
+
+Python 3.14.7)
+mem used 702M avail 238977M; swap used 0M
+device NVIDIA H100 80GB HBM3, 81559 MiB, 580.173.02
+== fetch higgs IN BACKGROUND (2.6 GB + gzip csv decode), joined after the builds ==
+fetch_pid=3902 (backgrounded)
+== build estimators (FAST) ==
+== build BASE  (FAST as shipped) ==
+== build PIN   (FAST, -D MOJOLEARN_2043_FAST_FUSED_ONE_BYTE=1) ==
+== build IDENT (IDENTICAL -> python/mojolearn/identical/) ==
+== joining the higgs fetch ==

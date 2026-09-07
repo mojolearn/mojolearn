@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/amd_serial_guard.py", line 220, in <module>
+    sys.exit(run(arguments))
+             ^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/amd_serial_guard.py", line 127, in run
+    device = amd_device()
+             ^^^^^^^^^^^^
+  File "/root/mojolearn/tools/amd_serial_guard.py", line 98, in amd_device
+    device, vendor = pci_identity(render / 'device')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/amd_serial_guard.py", line 87, in pci_identity
+    raise RuntimeError('Visible render node lacks bounded PCI vendor identity')
+RuntimeError: Visible render node lacks bounded PCI vendor identity

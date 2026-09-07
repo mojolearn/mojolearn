@@ -1,0 +1,1214 @@
+{
+  "case": "m3_base_b1_l65_d64",
+  "case_seed": "0x4D6D6233436FC270",
+  "dtype": "float64",
+  "environment": {
+    "cuda": null,
+    "device": "cpu",
+    "hip": null,
+    "python": "3.14.7",
+    "torch": "2.13.0"
+  },
+  "family": "mamba3",
+  "finite_difference": [
+    {
+      "abs_error": 1.5427777388943298e-09,
+      "autograd": -0.2561327269949724,
+      "finite_difference": -0.25613272853775015,
+      "flat_index": 0,
+      "relative_scale_error": 1.5427777388943298e-09,
+      "tensor": "x"
+    },
+    {
+      "abs_error": 7.055405149003491e-10,
+      "autograd": 0.885596978856256,
+      "finite_difference": 0.8855969781507155,
+      "flat_index": 2080,
+      "relative_scale_error": 7.055405149003491e-10,
+      "tensor": "x"
+    },
+    {
+      "abs_error": 6.0444502745019e-10,
+      "autograd": 0.0024940453973561817,
+      "finite_difference": 0.0024940447929111542,
+      "flat_index": 0,
+      "relative_scale_error": 6.0444502745019e-10,
+      "tensor": "B_bias"
+    },
+    {
+      "abs_error": 3.537590428925874e-10,
+      "autograd": -0.009689124523412994,
+      "finite_difference": -0.009689124169653951,
+      "flat_index": 128,
+      "relative_scale_error": 3.537590428925874e-10,
+      "tensor": "B_bias"
+    },
+    {
+      "abs_error": 6.4965155911062e-10,
+      "autograd": 0.0045133887129390525,
+      "finite_difference": 0.004513388063287493,
+      "flat_index": 0,
+      "relative_scale_error": 6.4965155911062e-10,
+      "tensor": "B_norm.weight"
+    },
+    {
+      "abs_error": 1.0342198677117825e-09,
+      "autograd": -5.807375520201255e-05,
+      "finite_difference": -5.807478942188026e-05,
+      "flat_index": 64,
+      "relative_scale_error": 1.0342198677117825e-09,
+      "tensor": "B_norm.weight"
+    },
+    {
+      "abs_error": 8.162130214327962e-10,
+      "autograd": 6.787043724735468e-05,
+      "finite_difference": 6.786962103433325e-05,
+      "flat_index": 0,
+      "relative_scale_error": 8.162130214327962e-10,
+      "tensor": "C_bias"
+    },
+    {
+      "abs_error": 7.444552103681029e-10,
+      "autograd": 0.0005262186791358907,
+      "finite_difference": 0.0005262194235911011,
+      "flat_index": 128,
+      "relative_scale_error": 7.444552103681029e-10,
+      "tensor": "C_bias"
+    },
+    {
+      "abs_error": 3.419498518977132e-10,
+      "autograd": -0.00025989200569514494,
+      "finite_difference": -0.00025989166374529304,
+      "flat_index": 0,
+      "relative_scale_error": 3.419498518977132e-10,
+      "tensor": "C_norm.weight"
+    },
+    {
+      "abs_error": 7.745000430922633e-10,
+      "autograd": 0.0042094227907711656,
+      "finite_difference": 0.004209423565271209,
+      "flat_index": 64,
+      "relative_scale_error": 7.745000430922633e-10,
+      "tensor": "C_norm.weight"
+    },
+    {
+      "abs_error": 2.4273499321658676e-09,
+      "autograd": 0.34527535136148746,
+      "finite_difference": 0.3452753489341375,
+      "flat_index": 0,
+      "relative_scale_error": 2.4273499321658676e-09,
+      "tensor": "D"
+    },
+    {
+      "abs_error": 1.6555573578713734e-10,
+      "autograd": -0.40961018344844924,
+      "finite_difference": -0.4096101832828935,
+      "flat_index": 1,
+      "relative_scale_error": 1.6555573578713734e-10,
+      "tensor": "D"
+    },
+    {
+      "abs_error": 7.083854058897998e-10,
+      "autograd": -0.11950555816258383,
+      "finite_difference": -0.11950555887096924,
+      "flat_index": 0,
+      "relative_scale_error": 7.083854058897998e-10,
+      "tensor": "block_norm.weight"
+    },
+    {
+      "abs_error": 8.710728527372424e-10,
+      "autograd": -0.1724035642964779,
+      "finite_difference": -0.17240356342540505,
+      "flat_index": 32,
+      "relative_scale_error": 8.710728527372424e-10,
+      "tensor": "block_norm.weight"
+    },
+    {
+      "abs_error": 7.618390501784589e-10,
+      "autograd": 0.036130455123521546,
+      "finite_difference": 0.036130454361682496,
+      "flat_index": 0,
+      "relative_scale_error": 7.618390501784589e-10,
+      "tensor": "dt_bias"
+    },
+    {
+      "abs_error": 1.969165830395525e-09,
+      "autograd": -0.7712850161363991,
+      "finite_difference": -0.7712850141672333,
+      "flat_index": 1,
+      "relative_scale_error": 1.969165830395525e-09,
+      "tensor": "dt_bias"
+    },
+    {
+      "abs_error": 1.0415170809130458e-09,
+      "autograd": 0.0657996740004272,
+      "finite_difference": 0.06579967504194428,
+      "flat_index": 0,
+      "relative_scale_error": 1.0415170809130458e-09,
+      "tensor": "in_proj.weight"
+    },
+    {
+      "abs_error": 8.679958765633877e-10,
+      "autograd": 0.04561644375769133,
+      "finite_difference": 0.045616442889695456,
+      "flat_index": 17600,
+      "relative_scale_error": 8.679958765633877e-10,
+      "tensor": "in_proj.weight"
+    },
+    {
+      "abs_error": 5.250134641268667e-10,
+      "autograd": 0.006483883127195068,
+      "finite_difference": 0.006483883652208532,
+      "flat_index": 0,
+      "relative_scale_error": 5.250134641268667e-10,
+      "tensor": "out_proj.weight"
+    },
+    {
+      "abs_error": 3.1316263471303785e-10,
+      "autograd": 0.18712753626407358,
+      "finite_difference": 0.18712753657723621,
+      "flat_index": 4096,
+      "relative_scale_error": 3.1316263471303785e-10,
+      "tensor": "out_proj.weight"
+    }
+  ],
+  "finite_difference_step": 1e-05,
+  "finite_difference_worst_relative_scale_error": 2.4273499321658676e-09,
+  "forward_operands": {
+    "B_bias": {
+      "file": "operand.B_bias.f64",
+      "sha256": "88ff3631067e28f810f499fe5673bed280b355d7e932b6c8c0334b3a089efd96",
+      "shape": [
+        2,
+        128
+      ]
+    },
+    "C_bias": {
+      "file": "operand.C_bias.f64",
+      "sha256": "f8824e7fd1afe226a7ff06c672ec41c3ec9d1eb1a555ad8a1f414c34e72e5624",
+      "shape": [
+        2,
+        128
+      ]
+    },
+    "angle.rate": {
+      "file": "operand.angle.rate.f64",
+      "sha256": "f1ad7cc089d9229e68a4be8fd813bf252fd841cab5e74d8dd8b7fab8a3b0f436",
+      "shape": [
+        65,
+        32
+      ]
+    },
+    "angle.theta": {
+      "file": "operand.angle.theta.f64",
+      "sha256": "2c6cb067b1c737c03bc957b6f1c2018a96ce7a03b3ffa3ab85af1453afe61c0b",
+      "shape": [
+        65,
+        2,
+        32
+      ]
+    },
+    "bcnorm.B": {
+      "file": "operand.bcnorm.B.f64",
+      "sha256": "9dd658efc1ab5a4a19920fda9a793f7563c2ebda2917bb3bc2d64d1f1bfef89b",
+      "shape": [
+        65,
+        1,
+        128
+      ]
+    },
+    "bcnorm.C": {
+      "file": "operand.bcnorm.C.f64",
+      "sha256": "ff07757bd106695cec03251503750765ab9fe1661b3632cfd9303dc1e2f47874",
+      "shape": [
+        65,
+        1,
+        128
+      ]
+    },
+    "dt.out": {
+      "file": "operand.dt.out.f64",
+      "sha256": "5b679a185b7ffb59efd27efb637df51ebe63524ddd7a85c0731dc22c78205584",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "rot.k": {
+      "file": "operand.rot.k.f64",
+      "sha256": "92639ec08dd1297314e21d1b42d752c81a5898eea5df18cf39d0eb926ea9ea14",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "trap.sigma": {
+      "file": "operand.trap.sigma.f64",
+      "sha256": "03a929e62e8dd0233abb166d8fbc00e51146c0d8d35c1ba83c085e46d40bdd2a",
+      "shape": [
+        65,
+        2
+      ]
+    }
+  },
+  "gradients": {
+    "B_bias": {
+      "file": "grad.B_bias.f64",
+      "ref32_file": "grad.B_bias.ref32.f32",
+      "ref32_sha256": "13a14560dcb73c812a1a6b9c016b364e5e55ca8f822d937b64e1ca6b4f6dc108",
+      "sha256": "7fc7c2c61384003ece3db5c57266bda3f3d0fb83b1015c731e06610cc22fb705",
+      "shape": [
+        2,
+        128
+      ]
+    },
+    "B_norm.weight": {
+      "file": "grad.B_norm.weight.f64",
+      "ref32_file": "grad.B_norm.weight.ref32.f32",
+      "ref32_sha256": "851920e79f75bc35b5a6b4442885d5b777f80cd302a002f8f9c665197a43beb3",
+      "sha256": "30ebafe63d68fb0f12f74af10f319cb642c3bab728ee9655f025fa730dced267",
+      "shape": [
+        128
+      ]
+    },
+    "C_bias": {
+      "file": "grad.C_bias.f64",
+      "ref32_file": "grad.C_bias.ref32.f32",
+      "ref32_sha256": "faa55e06cfdf263037cf433c268ef43a67866f38064f23475d439fe21b52c193",
+      "sha256": "141824fc63d158e338e164ba9fa36dcb96d96dc1437e5426ae304578e1a1481e",
+      "shape": [
+        2,
+        128
+      ]
+    },
+    "C_norm.weight": {
+      "file": "grad.C_norm.weight.f64",
+      "ref32_file": "grad.C_norm.weight.ref32.f32",
+      "ref32_sha256": "f6e05108bd5aa2028c65817ca74e1841bbcc7f3caf10e1197afbbf0a1f0d1f5d",
+      "sha256": "cff13784a48760aa3d55ec49f43f6e1cabcecac154d9fec9f7c46f362fe5ffde",
+      "shape": [
+        128
+      ]
+    },
+    "D": {
+      "file": "grad.D.f64",
+      "ref32_file": "grad.D.ref32.f32",
+      "ref32_sha256": "76b97b5d2c0a006b381b07d40e8cc8614332d7b152a0d56c60cd72b966bbdf64",
+      "sha256": "92549e2ed9c3cdbe3448379bdb6477fb753171f6123f66df04b9bb05f1ba0d7a",
+      "shape": [
+        2
+      ]
+    },
+    "block_norm.weight": {
+      "file": "grad.block_norm.weight.f64",
+      "ref32_file": "grad.block_norm.weight.ref32.f32",
+      "ref32_sha256": "beb39c67124811b099495d921c8a4fd86b057ea8b41ef98179250fe031e3cdc2",
+      "sha256": "712fe8a63380511c28cddf72e8121abd9e8b858dce10826672f41a6b939c58b0",
+      "shape": [
+        64
+      ]
+    },
+    "dt_bias": {
+      "file": "grad.dt_bias.f64",
+      "ref32_file": "grad.dt_bias.ref32.f32",
+      "ref32_sha256": "225b90b57fe39f09ccb9e22bca5448defed20f998782f634f033bf926586240d",
+      "sha256": "21ba914cd6f357f64b15e40ab741e006ab54a400aa6797b5644161200d3bc35c",
+      "shape": [
+        2
+      ]
+    },
+    "in_proj.weight": {
+      "file": "grad.in_proj.weight.f64",
+      "ref32_file": "grad.in_proj.weight.ref32.f32",
+      "ref32_policy": "gemm_fp32_v1_leaf128_balanced",
+      "ref32_sha256": "b6bf97133bc2ed59bee32afa1734c342138598a38226b6099079432fc6530766",
+      "sha256": "d2ab67a6a7e570620c23c2c6061d8bd8da86123f9d715aeebd72c3bffbf912fd",
+      "shape": [
+        550,
+        64
+      ]
+    },
+    "out_proj.weight": {
+      "file": "grad.out_proj.weight.f64",
+      "ref32_file": "grad.out_proj.weight.ref32.f32",
+      "ref32_sha256": "b24e92097ccf998d30753a513e039f42aabba981954605352b7657d5d6b18e20",
+      "sha256": "fb1e6ff9534aeaf31e0bc2b9b7ecf3970f1966b26271c4b4d887db6171c9941c",
+      "shape": [
+        64,
+        128
+      ]
+    },
+    "partial.A.from_seg": {
+      "file": "grad.partial.A.from_seg.f64",
+      "ref32_file": "grad.partial.A.from_seg.ref32.f32",
+      "ref32_sha256": "3c81aa0122be4cee024fe45ab6818f9cfcd94693c65fb139f4236fc50a89edf5",
+      "sha256": "4ca4f477a082d4098572e3b97de3540dc333a11717aff226d6b0141bbcec5e76",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.B_biased.total": {
+      "file": "grad.partial.B_biased.total.f64",
+      "ref32_file": "grad.partial.B_biased.total.ref32.f32",
+      "ref32_sha256": "67cf274d9ba493f601efe9402f52a956b504d4357d8b5f47c0371351d834525c",
+      "sha256": "2f2ffa99ccb46026c29ff6dc066d78a2bb0c7018ba5ad968d6be6686073747ac",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.C_biased.total": {
+      "file": "grad.partial.C_biased.total.f64",
+      "ref32_file": "grad.partial.C_biased.total.ref32.f32",
+      "ref32_sha256": "94b186ddcb9a449fc10da6db6dd76a66021b69a5c29f9eb93930420253e26ea9",
+      "sha256": "72235c89b14105d7edb4a968b916f9e5e4953f41707ed6b344b4335bb94c13c1",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.angle.dt": {
+      "file": "grad.partial.angle.dt.f64",
+      "ref32_file": "grad.partial.angle.dt.ref32.f32",
+      "ref32_sha256": "b7920d13eb73d87a39c01740c3adf6c5099732b8c43737764afe3ecd6ac6cabd",
+      "sha256": "ef51e5c28c0d89b224875ae81fd4b5e471af5175b6f560d448fc1851fa908cdc",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.angle.raw": {
+      "file": "grad.partial.angle.raw.f64",
+      "ref32_file": "grad.partial.angle.raw.ref32.f32",
+      "ref32_sha256": "101f0e8df144bf60b469cd48702e48f1965f7099cec1ad5a3349b5bd2189d78d",
+      "sha256": "06c55a5ba08df2a48703e157a1dafb811b5f41b097943451901ea05a54824e08",
+      "shape": [
+        1,
+        65,
+        32
+      ]
+    },
+    "partial.beta.dt": {
+      "file": "grad.partial.beta.dt.f64",
+      "ref32_file": "grad.partial.beta.dt.ref32.f32",
+      "ref32_sha256": "270da4485f93731f683b70cd7d8cea44ee9f16ed8e15a180d55b8071e2293087",
+      "sha256": "6ff2114e01bf486510ca9a03cffb707227f61e22d3d82feb0efa3aea9a6fb9e9",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.beta.trap_raw": {
+      "file": "grad.partial.beta.trap_raw.f64",
+      "ref32_file": "grad.partial.beta.trap_raw.ref32.f32",
+      "ref32_sha256": "958cc49965c5fa54f51c955ed6e119f3ff7e78af87e80bdbc9f73a52c59b526f",
+      "sha256": "859dc70e9ad63fbf7753247404a7c5ff0429f0a748dc6b98098f0d6d094db82f",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.dt.available_total": {
+      "file": "grad.partial.dt.available_total.f64",
+      "ref32_file": "grad.partial.dt.available_total.ref32.f32",
+      "ref32_sha256": "86b89c34c39bc3c92b2195863d986cf750ebeed003d186266aa60cf30cb0f821",
+      "sha256": "00707f35a66d6470b1eed54273f72e7d7b3bf730b95fd714e6e283c95c868073",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.dt.current_total": {
+      "file": "grad.partial.dt.current_total.f64",
+      "ref32_file": "grad.partial.dt.current_total.ref32.f32",
+      "ref32_sha256": "c402ade821abb89d4b0366f9973dde3f417dafae1fb0faa5d7d93a8fe3ee590a",
+      "sha256": "beb438578debb9ce4df51e519f6ef8923ee963b78e768b1eff7d07a29e13b83f",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.dt.from_seg": {
+      "file": "grad.partial.dt.from_seg.f64",
+      "ref32_file": "grad.partial.dt.from_seg.ref32.f32",
+      "ref32_sha256": "e2d3fe44f9f80252b0672210eb87343f85740b67cf301e9da7eef468ada162de",
+      "sha256": "cd5b27f0a96303b21693c59336689a8761069baad9357a59838b09cd16934568",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.dt.raw": {
+      "file": "grad.partial.dt.raw.f64",
+      "ref32_file": "grad.partial.dt.raw.ref32.f32",
+      "ref32_sha256": "148b9315a28a2d4ffc438dcdbcedf5fd7eb871ba5bfb621f710608757de61037",
+      "sha256": "dcbc1f20c5b72ec0a1977180d1a75732e597081647b20fa05f795e920f78d699",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.dt.with_seg": {
+      "file": "grad.partial.dt.with_seg.f64",
+      "ref32_file": "grad.partial.dt.with_seg.ref32.f32",
+      "ref32_sha256": "230be397c7c49cac3280aa42e0f518da443e82c15cd31fd534ced3332b8f6aba",
+      "sha256": "1bcb28944db163f605fb45447de49403ab663b34c5dc41a2753adcede818c7ba",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.dt_bias": {
+      "file": "grad.partial.dt_bias.f64",
+      "ref32_file": "grad.partial.dt_bias.ref32.f32",
+      "ref32_sha256": "dcaa1016b2846a3cfbf24ffa7fd2af1dc9671b2052e9e9589d6e295768868c76",
+      "sha256": "830646024f8cbbd4581aaa8a5fdb6c901edcf3ddc6140ef88c0194006eb47d77",
+      "shape": [
+        2
+      ]
+    },
+    "partial.gamma.total": {
+      "file": "grad.partial.gamma.total.f64",
+      "ref32_file": "grad.partial.gamma.total.ref32.f32",
+      "ref32_sha256": "aafe4b04ecf2ebc84b603c0eab7eb187cbb5455d659d2ca30af7417cdc7e3d26",
+      "sha256": "b1f6aad01539ece2714fd6b2753a8aa79f6d7a0b6430699d3eeb9b2ebafe0430",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.in_proj.x.from_skip": {
+      "file": "grad.partial.in_proj.x.from_skip.f64",
+      "ref32_file": "grad.partial.in_proj.x.from_skip.ref32.f32",
+      "ref32_sha256": "7ff71b39a06e5b2be0088698779cf4a27601b0fc9e42a3113a069930da8460ab",
+      "sha256": "40d8d2e76b5702d5a0e5f724061f8881087e32ed19785a5da9cc5bbe7bd77484",
+      "shape": [
+        65,
+        2,
+        64
+      ]
+    },
+    "partial.join.A.from_adt": {
+      "file": "grad.partial.join.A.from_adt.f64",
+      "ref32_file": "grad.partial.join.A.from_adt.ref32.f32",
+      "ref32_sha256": "72f80c51e25bb45d13e71cec4f12a51b8e239e9d65803bf7466c57b6bee201ad",
+      "sha256": "a2869fd40b9baaedd846e17150db43f870ebcb9f4952498096c1577647071c4a",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.join.A.raw": {
+      "file": "grad.partial.join.A.raw.f64",
+      "ref32_file": "grad.partial.join.A.raw.ref32.f32",
+      "ref32_sha256": "29009dcdd4141883545483c54445224268e5a809dfd27c0462f0d833d6db56a9",
+      "sha256": "f46a1882528a4037060b5449586ccb680eb612b222b811d2309f5c9ef2f860ff",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.join.B.raw": {
+      "file": "grad.partial.join.B.raw.f64",
+      "ref32_file": "grad.partial.join.B.raw.ref32.f32",
+      "ref32_sha256": "c03af1c7dc2c0fd91a02be409ea292f5727cc1893060e056b93a59ce66fd0327",
+      "sha256": "e75e7e2c9da90cbd0131715cf7e2d4232548c68c1e07f952eb35c3fda8a77756",
+      "shape": [
+        65,
+        128
+      ]
+    },
+    "partial.join.B_bias": {
+      "file": "grad.partial.join.B_bias.f64",
+      "ref32_file": "grad.partial.join.B_bias.ref32.f32",
+      "ref32_sha256": "13a14560dcb73c812a1a6b9c016b364e5e55ca8f822d937b64e1ca6b4f6dc108",
+      "sha256": "76f40c31ca026e3265a2a92c72680012a42d0720eb83ff083c7cf36c83531f38",
+      "shape": [
+        2,
+        128
+      ]
+    },
+    "partial.join.B_biased.total": {
+      "file": "grad.partial.join.B_biased.total.f64",
+      "ref32_file": "grad.partial.join.B_biased.total.ref32.f32",
+      "ref32_sha256": "e61fb9739659898eb94d6ade15355cf57e1f3e5bcee2ab6cc46ea43fcf5577d0",
+      "sha256": "9a291780de356921d52c717074d1b5a9ae533182d8f15c89c3182c7b620c269e",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.join.B_norm.weight": {
+      "file": "grad.partial.join.B_norm.weight.f64",
+      "ref32_file": "grad.partial.join.B_norm.weight.ref32.f32",
+      "ref32_sha256": "851920e79f75bc35b5a6b4442885d5b777f80cd302a002f8f9c665197a43beb3",
+      "sha256": "ebdfd2612a8dfa16b39179eccb98274547474783c0fe822a8d2b0d07ab96f1b5",
+      "shape": [
+        128
+      ]
+    },
+    "partial.join.C.raw": {
+      "file": "grad.partial.join.C.raw.f64",
+      "ref32_file": "grad.partial.join.C.raw.ref32.f32",
+      "ref32_sha256": "6d26fb7ae34785f5d972ff43b0e1ff47aa6cd1eb0e86f3dbb1f200b64930d6d3",
+      "sha256": "0da749dd3970c9d6948341f547f3869ed9dc4c65205b7b9b4c8351deabc3ea03",
+      "shape": [
+        65,
+        128
+      ]
+    },
+    "partial.join.C_bias": {
+      "file": "grad.partial.join.C_bias.f64",
+      "ref32_file": "grad.partial.join.C_bias.ref32.f32",
+      "ref32_sha256": "faa55e06cfdf263037cf433c268ef43a67866f38064f23475d439fe21b52c193",
+      "sha256": "141824fc63d158e338e164ba9fa36dcb96d96dc1437e5426ae304578e1a1481e",
+      "shape": [
+        2,
+        128
+      ]
+    },
+    "partial.join.C_biased.total": {
+      "file": "grad.partial.join.C_biased.total.f64",
+      "ref32_file": "grad.partial.join.C_biased.total.ref32.f32",
+      "ref32_sha256": "b310987b0abef526b271f697ed7283f8b75cba72c6422082b736812ca0169cd1",
+      "sha256": "a0977c486b233616f00c03c1a93ecfaa0faab4c4986fb1059d1c8a4c733c6795",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.join.C_norm.weight": {
+      "file": "grad.partial.join.C_norm.weight.f64",
+      "ref32_file": "grad.partial.join.C_norm.weight.ref32.f32",
+      "ref32_sha256": "f6e05108bd5aa2028c65817ca74e1841bbcc7f3caf10e1197afbbf0a1f0d1f5d",
+      "sha256": "cff13784a48760aa3d55ec49f43f6e1cabcecac154d9fec9f7c46f362fe5ffde",
+      "shape": [
+        128
+      ]
+    },
+    "partial.join.adt.from_dacs": {
+      "file": "grad.partial.join.adt.from_dacs.f64",
+      "ref32_file": "grad.partial.join.adt.from_dacs.ref32.f32",
+      "ref32_sha256": "42157cceb9a08d83b3bb73f7f0501b8a19f8bae95d7302ed478c5363e535df8b",
+      "sha256": "17a6f5648d9881fd5949c3249182ebb01d7f9a9bce77f6f91b6ae2713232a8d6",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.join.adt.total": {
+      "file": "grad.partial.join.adt.total.f64",
+      "ref32_file": "grad.partial.join.adt.total.ref32.f32",
+      "ref32_sha256": "ea1eee64087c2013681abbab0feebd202fe589aec3c4f3c2e870b72ff5092e35",
+      "sha256": "b6d617091a4d7c0d702a23dd579dd97056d6acd2f1dc233f17d5c1d42b9dbf11",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.join.angle.dt": {
+      "file": "grad.partial.join.angle.dt.f64",
+      "ref32_file": "grad.partial.join.angle.dt.ref32.f32",
+      "ref32_sha256": "9336611211250b529f7638cb5aadfcb5ff38e102050fb9e8a6c771a64106ae32",
+      "sha256": "059a44ba0b9fa3a51dcd94928596e359f33aa90a2d4d626697c03df659c28f4f",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.join.angle.raw": {
+      "file": "grad.partial.join.angle.raw.f64",
+      "ref32_file": "grad.partial.join.angle.raw.ref32.f32",
+      "ref32_sha256": "d296e85906d138bfd705d900017bea3a0abe2238e6da473f66a6259d0a31797f",
+      "sha256": "145d77fc9e35c2ed907992532cd489a10f0578ea87205956da0db9ffcf3ef1bd",
+      "shape": [
+        1,
+        65,
+        32
+      ]
+    },
+    "partial.join.dacs": {
+      "file": "grad.partial.join.dacs.f64",
+      "ref32_file": "grad.partial.join.dacs.ref32.f32",
+      "ref32_sha256": "2cbcd711a443667c15bc027371a77289139624cb97930e1187759fabad00fe50",
+      "sha256": "22de0e4cc4e757f7f20c17f43a53a08b6271d04a389436b6e4a1ff819b7a4de4",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.join.dt.available_total": {
+      "file": "grad.partial.join.dt.available_total.f64",
+      "ref32_file": "grad.partial.join.dt.available_total.ref32.f32",
+      "ref32_sha256": "59e8b717762133aac04c952e971bd4076fba889657df86076c9818bfbb1c04aa",
+      "sha256": "427f9232ede06c6cf4692f28029deefbdecfeffed93e2b110cce17200f8a798d",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.join.dt.current_total": {
+      "file": "grad.partial.join.dt.current_total.f64",
+      "ref32_file": "grad.partial.join.dt.current_total.ref32.f32",
+      "ref32_sha256": "fb30ee9cbc7421d679d53c63149fd5fc235a6f1f1e3eb051512483b2bfcb01dc",
+      "sha256": "d242ed496f846146e310972c696e68a95a22ceb1f4b5f0b29852133b1b6be46c",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.join.dt.from_adt": {
+      "file": "grad.partial.join.dt.from_adt.f64",
+      "ref32_file": "grad.partial.join.dt.from_adt.ref32.f32",
+      "ref32_sha256": "faf81d0aed65297f8093b68face57948dbeaf8c60ce1d10707fcc39ceac1d64a",
+      "sha256": "ca12b9164840a33781d6162ea735721e259eee24b94a4e49e0258d624573d1d5",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.join.dt.raw": {
+      "file": "grad.partial.join.dt.raw.f64",
+      "ref32_file": "grad.partial.join.dt.raw.ref32.f32",
+      "ref32_sha256": "74d348c9a06d51a125f1494a6b1aad2f990df913dfee92b8662bf4afccf8350e",
+      "sha256": "331b6e2e6776f65597d85ff0f929caf254aa6e1fe5f3019b96eec7ab7b99151a",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.join.dt_bias": {
+      "file": "grad.partial.join.dt_bias.f64",
+      "ref32_file": "grad.partial.join.dt_bias.ref32.f32",
+      "ref32_sha256": "225b90b57fe39f09ccb9e22bca5448defed20f998782f634f033bf926586240d",
+      "sha256": "5ccdb4d53e51b59008afccaaec542059634d547673ba888796e055606fbc491f",
+      "shape": [
+        2
+      ]
+    },
+    "partial.join.gamma.total": {
+      "file": "grad.partial.join.gamma.total.f64",
+      "ref32_file": "grad.partial.join.gamma.total.ref32.f32",
+      "ref32_sha256": "370e2fb19f21011eb83b1b9a5ce33f1994bff9f2b6244a70b485100b8238f886",
+      "sha256": "34287fe5ccdaeef1357860ae3416fc95d887ea94759ed5baf63fc88dcfe5a1da",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.join.in_proj.packed": {
+      "file": "grad.partial.join.in_proj.packed.f64",
+      "ref32_file": "grad.partial.join.in_proj.packed.ref32.f32",
+      "ref32_sha256": "0823705307cc278194cbb45aefaf7175b83fb5ac965880efa802228aed9bd61d",
+      "sha256": "71daffa1f36f7d16c60f28d8df9328747ef93c1e41778685b80d7a1aa693fcb0",
+      "shape": [
+        65,
+        550
+      ]
+    },
+    "partial.join.kscale": {
+      "file": "grad.partial.join.kscale.f64",
+      "ref32_file": "grad.partial.join.kscale.ref32.f32",
+      "ref32_sha256": "c090bfe50a96af37e3c0430b791ceb52c010a5b727b2754461dbe18765196f18",
+      "sha256": "f628e3cfda2309bb58f8f9dbfd6aa4b586c72b4821a5355654090aed761182fe",
+      "shape": [
+        1,
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.join.rot.q": {
+      "file": "grad.partial.join.rot.q.f64",
+      "ref32_file": "grad.partial.join.rot.q.ref32.f32",
+      "ref32_sha256": "573bd22f59cf62dc24115d8b0c5ce46d7f68e53106ffe36a47d57d5bb3f9d233",
+      "sha256": "ec70f834f66767378389a37e1ba38289183309fd1b056c437e28e111e49b2f92",
+      "shape": [
+        1,
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.join.rotary.B_biased": {
+      "file": "grad.partial.join.rotary.B_biased.f64",
+      "ref32_file": "grad.partial.join.rotary.B_biased.ref32.f32",
+      "ref32_sha256": "39cc379001b3c2c5483cf8fc0ea4f2ad0e1e44e2b74514c8c9564e1fc648c493",
+      "sha256": "49cfe5f77ffc923721492ed2bade94edf7283b70383e644c4effe8d2a2f78652",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.join.rotary.C_biased": {
+      "file": "grad.partial.join.rotary.C_biased.f64",
+      "ref32_file": "grad.partial.join.rotary.C_biased.ref32.f32",
+      "ref32_sha256": "b4cf05dbfaf9c80e03f30800ea161094b836ae9dd954c9201b25881cba2eb10b",
+      "sha256": "af3cbf9d7d58041f18ba247c9382c14d769301e10a980cc4a4159e0bdd66f20a",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.join.rotary.theta": {
+      "file": "grad.partial.join.rotary.theta.f64",
+      "ref32_file": "grad.partial.join.rotary.theta.ref32.f32",
+      "ref32_sha256": "4a478855ae47cc9e012a32ec2fd93ae20aeaf381195db80a6b88430b8aa98588",
+      "sha256": "fa9559a83266ed5ac44f878d6cd502b77d53beac017fa4ea4e350bf4c13a2a42",
+      "shape": [
+        65,
+        2,
+        32
+      ]
+    },
+    "partial.join.s15.rot.k": {
+      "file": "grad.partial.join.s15.rot.k.f64",
+      "ref32_file": "grad.partial.join.s15.rot.k.ref32.f32",
+      "ref32_sha256": "a6feefe88a2ecb5ece4c3f56609a8d2f375b5475f265679aeed53413bf18cadb",
+      "sha256": "8e7a652e6309ce77ebae63bc8cad86d3c68a6d6ba84b3633ff8957e77e5c0453",
+      "shape": [
+        1,
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.join.s15.scale": {
+      "file": "grad.partial.join.s15.scale.f64",
+      "ref32_file": "grad.partial.join.s15.scale.ref32.f32",
+      "ref32_sha256": "abb623fee35a5001a9852cffafd9c0facbe19f5a9313fe8abea0503b8c8c1781",
+      "sha256": "7fe6c9cd94e8c34390612aff0e0eeaf01a737f39ae75ac61c4ebe5593fdd6d90",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.join.trap.current_total": {
+      "file": "grad.partial.join.trap.current_total.f64",
+      "ref32_file": "grad.partial.join.trap.current_total.ref32.f32",
+      "ref32_sha256": "024bd8ea1751eee8099447210e37d27293ac821fb608a3fa06f5e0501dae79d1",
+      "sha256": "7ce7ea2fa88c50f9fc68ae3966e1bad33905b48c94c9d872b63685caff29a546",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.join.value": {
+      "file": "grad.partial.join.value.f64",
+      "ref32_file": "grad.partial.join.value.ref32.f32",
+      "ref32_sha256": "03ffeab17bcfbb0f8a891c6450d6980a852b2f665e7729363f7f8ba3e8dcf4ae",
+      "sha256": "d0341c1cfb8cd27d8137980086ddbd99e3273c6d85b9d6d1ea480cd584aab021",
+      "shape": [
+        65,
+        2,
+        64
+      ]
+    },
+    "partial.qkdot.B_biased": {
+      "file": "grad.partial.qkdot.B_biased.f64",
+      "ref32_file": "grad.partial.qkdot.B_biased.ref32.f32",
+      "ref32_sha256": "3e9e8e24d7cb2632614e5fca8cada7ae29c1370933550891cc9b312fa16e7972",
+      "sha256": "074ce32143cd1be4f2231fe6d2fb8ccf5572908e32a8f2f9e38debba9d1a8079",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.qkdot.C_biased": {
+      "file": "grad.partial.qkdot.C_biased.f64",
+      "ref32_file": "grad.partial.qkdot.C_biased.ref32.f32",
+      "ref32_sha256": "f3a88ce83ed8995966e1e9b7d95fc04fd8928396bbd4a7023b181a90c83a6bad",
+      "sha256": "20541f3b98529cb62a4c1b6d00e04aafca64f0e4ab7d09651a6a9874da8dd395",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.qkdot.dt": {
+      "file": "grad.partial.qkdot.dt.f64",
+      "ref32_file": "grad.partial.qkdot.dt.ref32.f32",
+      "ref32_sha256": "01fcf9a1fef6fdc063df4ca1c5cdfd04c80c50ad45bbfc78ea17429dbb6cc88c",
+      "sha256": "0a65ed621666f74767f2c265105ceb953bd7d9f3d4d5a5d19b21c2b0a014a5cb",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.qkdot.gamma": {
+      "file": "grad.partial.qkdot.gamma.f64",
+      "ref32_file": "grad.partial.qkdot.gamma.ref32.f32",
+      "ref32_sha256": "44e6d353e878e5fcf2da35331ab18b991b3b75c73fab188016b1a2392ad403c6",
+      "sha256": "0c448ccf1a1ac5d76754a2156439488d7b1e5588261b4ff6229b2f9d62ffc27a",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.qkdot.trap_raw": {
+      "file": "grad.partial.qkdot.trap_raw.f64",
+      "ref32_file": "grad.partial.qkdot.trap_raw.ref32.f32",
+      "ref32_sha256": "f14e146319a5e05439d5252d2bb2d5b38962c46d1725c631cc25079ddece6073",
+      "sha256": "ffa786303749bdf0a99fe5ed18dee2e75cf7ac352abcbca4c051a333fcbcbfb9",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.rotary.B_biased": {
+      "file": "grad.partial.rotary.B_biased.f64",
+      "ref32_file": "grad.partial.rotary.B_biased.ref32.f32",
+      "ref32_sha256": "208017155a7d7d964c52f3b8919a1aad70c8cb41ca8de479c2f99767c8744c90",
+      "sha256": "c2051835820e480b951c1b86322f9a1d1160cd4fd2fe66a00102b4531fe679f8",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.rotary.C_biased": {
+      "file": "grad.partial.rotary.C_biased.f64",
+      "ref32_file": "grad.partial.rotary.C_biased.ref32.f32",
+      "ref32_sha256": "78e146e803afd088844180742aa3bbae77bf2afcd0c88c111e97d5df3cea2af1",
+      "sha256": "b5ca1fc3f94689f3e720972466cd1ba25e7a40f65c19aad15ca532f85bf4baae",
+      "shape": [
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.rotary.theta": {
+      "file": "grad.partial.rotary.theta.f64",
+      "ref32_file": "grad.partial.rotary.theta.ref32.f32",
+      "ref32_sha256": "c5cf6033a388a80ddae5ccd022f296fcd4aacfc0a43cc1e2f2719baa67280103",
+      "sha256": "cc10e5b07163417a72b40085cbb13981459c9e1c29dc5c4f5487007935d827b3",
+      "shape": [
+        65,
+        2,
+        32
+      ]
+    },
+    "partial.s15.rot.k": {
+      "file": "grad.partial.s15.rot.k.f64",
+      "ref32_file": "grad.partial.s15.rot.k.ref32.f32",
+      "ref32_sha256": "dfba48f84c625ead6d0c69cc76ff2d2d2b2b68d4e1e892b58f52c21b08877112",
+      "sha256": "664c049bc7c3139c6e222131b7b31c4aa6105ea09a742d3d2c17707f0cdc6215",
+      "shape": [
+        1,
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.s15.scale": {
+      "file": "grad.partial.s15.scale.f64",
+      "ref32_file": "grad.partial.s15.scale.ref32.f32",
+      "ref32_sha256": "3f00a130c120a4f0695cfe008a7e2436aa58564c48bc2dee1a77e40c322b8fc7",
+      "sha256": "937267d3a2a78a064e091dbbc188b791b8cf1d3e9b020e7c0619e21acfb1e66b",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.s16.kscale": {
+      "file": "grad.partial.s16.kscale.f64",
+      "ref32_file": "grad.partial.s16.kscale.ref32.f32",
+      "ref32_sha256": "e46aad09cc4bda102aeaf5fdcacd9f46315cd4b2804a7ad9e5d2bf6ed4a0354c",
+      "sha256": "2009586d872b40d984caba7f5763cc07ce446bf222c71f906a50e5e65800a2ae",
+      "shape": [
+        1,
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.s16.rot.q": {
+      "file": "grad.partial.s16.rot.q.f64",
+      "ref32_file": "grad.partial.s16.rot.q.ref32.f32",
+      "ref32_sha256": "7e32be74219613cc3a7ff2db6a054f87b64226cd36995ec3ea6155f641ceba9d",
+      "sha256": "4884947d46515f25630c68f97b08842d009b1657a693008d53b2249fa07bc319",
+      "shape": [
+        1,
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.s16.seg.L": {
+      "file": "grad.partial.s16.seg.L.f64",
+      "ref32_file": "grad.partial.s16.seg.L.ref32.f32",
+      "ref32_sha256": "71867e93bbbfcef0e8e53a8bbf70888f5ebe56a71e09e32b61e2b4fabd2e2c66",
+      "sha256": "5b75a77fc25e06f72cf251554a53ef37d13dd2d764a10ba5a1d40b489f686db4",
+      "shape": [
+        1,
+        2,
+        2,
+        64,
+        64
+      ]
+    },
+    "partial.s16.value": {
+      "file": "grad.partial.s16.value.f64",
+      "ref32_file": "grad.partial.s16.value.ref32.f32",
+      "ref32_sha256": "53b466ea3690eaf71f0c51ff94ae276e368cab67d0c3e4cae15b89edd37bf510",
+      "sha256": "9ead90c8dd606103d4b74db21138b9c14f22862948277c6e568ccd0714e2b152",
+      "shape": [
+        1,
+        65,
+        2,
+        64
+      ]
+    },
+    "partial.s17.initial_state": {
+      "file": "grad.partial.s17.initial_state.f64",
+      "ref32_file": "grad.partial.s17.initial_state.ref32.f32",
+      "ref32_sha256": "d414cb4309d6015c38c6c232a148bc3e1dc5f2fe9dee43c2cf4ef94453af0d6c",
+      "sha256": "ad33b2f24818f9b48fd1e8b8c29d217ca08bcf9359dde11641c2977d8a5d9a6d",
+      "shape": [
+        1,
+        2,
+        64,
+        128
+      ]
+    },
+    "partial.s17.readout.dacs": {
+      "file": "grad.partial.s17.readout.dacs.f64",
+      "ref32_file": "grad.partial.s17.readout.dacs.ref32.f32",
+      "ref32_sha256": "b03315f182f2f794be9a17a5be4c2ea195178c4226c09ca7117365d09334db2f",
+      "sha256": "3e3c031ba27ddc3d21ed3933f15476f89d7e988ad62bafc936553313a2846dbb",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.s17.readout.rot.q": {
+      "file": "grad.partial.s17.readout.rot.q.f64",
+      "ref32_file": "grad.partial.s17.readout.rot.q.ref32.f32",
+      "ref32_sha256": "a5376e4a8f536c2d8469c537e6969ed445161c0f348d7187be47203c131e30d1",
+      "sha256": "4c8dd750c285beb042ce118926c7f2e6a0bc129f344bbb6c58a4104b36cd68ea",
+      "shape": [
+        1,
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.s17.recur.dacs": {
+      "file": "grad.partial.s17.recur.dacs.f64",
+      "ref32_file": "grad.partial.s17.recur.dacs.ref32.f32",
+      "ref32_sha256": "42619107295545ac68413226e04881ba3b56177665f151491c073cbe16b1dafb",
+      "sha256": "229e1b2581f040ecf101acb54b5a7f584b00115f57f83b9477b310e058f22c83",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.s17.recur.kscale": {
+      "file": "grad.partial.s17.recur.kscale.f64",
+      "ref32_file": "grad.partial.s17.recur.kscale.ref32.f32",
+      "ref32_sha256": "da236d296638c902e9361252ae871a2d60f7f243e9e8e00e4d0140b1631c165f",
+      "sha256": "ae8f13936c3e40c73407d98c8af26c3c3252bb2bd5a6f679e8a70a9a128c5b7b",
+      "shape": [
+        1,
+        65,
+        2,
+        128
+      ]
+    },
+    "partial.s17.recur.value": {
+      "file": "grad.partial.s17.recur.value.f64",
+      "ref32_file": "grad.partial.s17.recur.value.ref32.f32",
+      "ref32_sha256": "fd1ec7e1645cfc1af104c857b624a931a947e3ef2f5f5c635dd37e24d0c8a708",
+      "sha256": "46cad2e3e1d4e1b6bf4db89d5d9c5b7bb8ceee42f9d2ab9723fea84eb9efe332",
+      "shape": [
+        1,
+        65,
+        2,
+        64
+      ]
+    },
+    "partial.s17.state.direct": {
+      "file": "grad.partial.s17.state.direct.f64",
+      "ref32_file": "grad.partial.s17.state.direct.ref32.f32",
+      "ref32_sha256": "7bc0b5268cd8caaf61c276c4a8f64278073ac66578774ffb20bed4cd88a86df2",
+      "sha256": "80809887c7d09da73f43288eecc2cbb2583ea1b8b765ea76c9f220840895c204",
+      "shape": [
+        1,
+        2,
+        2,
+        64,
+        128
+      ]
+    },
+    "partial.s17.state.total": {
+      "file": "grad.partial.s17.state.total.f64",
+      "ref32_file": "grad.partial.s17.state.total.ref32.f32",
+      "ref32_sha256": "1d3006f55d928982d99b549d020b8d4b2927dbc81808b0fab8f91f3bd38e3ff9",
+      "sha256": "dc2b981ed9a1c2263f4532e4917998dd4f8c5b0505296b787b7ccd0122539fb2",
+      "shape": [
+        1,
+        2,
+        2,
+        64,
+        128
+      ]
+    },
+    "partial.scale.beta": {
+      "file": "grad.partial.scale.beta.f64",
+      "ref32_file": "grad.partial.scale.beta.ref32.f32",
+      "ref32_sha256": "3f00a130c120a4f0695cfe008a7e2436aa58564c48bc2dee1a77e40c322b8fc7",
+      "sha256": "937267d3a2a78a064e091dbbc188b791b8cf1d3e9b020e7c0619e21acfb1e66b",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.scale.gamma": {
+      "file": "grad.partial.scale.gamma.f64",
+      "ref32_file": "grad.partial.scale.gamma.ref32.f32",
+      "ref32_sha256": "3f00a130c120a4f0695cfe008a7e2436aa58564c48bc2dee1a77e40c322b8fc7",
+      "sha256": "937267d3a2a78a064e091dbbc188b791b8cf1d3e9b020e7c0619e21acfb1e66b",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.seg.adt": {
+      "file": "grad.partial.seg.adt.f64",
+      "ref32_file": "grad.partial.seg.adt.ref32.f32",
+      "ref32_sha256": "8523ac8ba230d4f2674f72cebc54f11a1c01568e8afdc3efa47238cf308895a7",
+      "sha256": "60f4b6eb0ad0db6bff0ccd0463a29c9286d9ca2e1ba5537900edefff0dd3686c",
+      "shape": [
+        1,
+        65,
+        2
+      ]
+    },
+    "partial.trap.current_total": {
+      "file": "grad.partial.trap.current_total.f64",
+      "ref32_file": "grad.partial.trap.current_total.ref32.f32",
+      "ref32_sha256": "db022ca05d16314f5ccf3e8f0196ef501d2785b0fe5cd92774735cee8e2e83b4",
+      "sha256": "e2b81d491a24912ec4923cd9597bd934eb7405a09df7be991afcc041bae20fb1",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "partial.value.total": {
+      "file": "grad.partial.value.total.f64",
+      "ref32_file": "grad.partial.value.total.ref32.f32",
+      "ref32_sha256": "bc60b29009481e847ca29f271690945f91b1f8e107c561d5bf5c2d6e75573ac2",
+      "sha256": "bd081e5b74e24cbe5a94da74f021bcdc61837e79f6aca1d945185fd526eeed08",
+      "shape": [
+        65,
+        2,
+        64
+      ]
+    },
+    "stage.gate.out": {
+      "file": "grad.stage.gate.out.f64",
+      "ref32_file": "grad.stage.gate.out.ref32.f32",
+      "ref32_sha256": "52d3aad8fd734cb27db23ed78785f80513022b7c83d3748d66dec8be320d8048",
+      "sha256": "43814e34a38b1dd6dc7e320f44ffb3ca1b853a9aedd788626ced94510b096bed",
+      "shape": [
+        65,
+        128
+      ]
+    },
+    "stage.in_proj.z": {
+      "file": "grad.stage.in_proj.z.f64",
+      "ref32_file": "grad.stage.in_proj.z.ref32.f32",
+      "ref32_sha256": "4db4450a9ccfa259042e5d7a3ed3741fdc04279ce2519672f1328a5452e13943",
+      "sha256": "408e8c2659720c8c8ead8440d0d8e6469e36d07f2c0257e7cad7f9655e33d39b",
+      "shape": [
+        65,
+        2,
+        64
+      ]
+    },
+    "stage.norm.out": {
+      "file": "grad.stage.norm.out.f64",
+      "ref32_file": "grad.stage.norm.out.ref32.f32",
+      "ref32_sha256": "5385816eebe6b43979b22aadbe6116cdff5790475e4da9b8b9d608a81fb5dfa8",
+      "sha256": "7336cada33346e2a9d226c72350a5d92965918dd2d0f3d5751b3650763733d48",
+      "shape": [
+        65,
+        64
+      ]
+    },
+    "stage.qkdot.out": {
+      "file": "grad.stage.qkdot.out.f64",
+      "ref32_file": "grad.stage.qkdot.out.ref32.f32",
+      "ref32_sha256": "250175257725b1d93cf311848ce475e9fdc1b6daf10fe53e3293c661740761e4",
+      "sha256": "730f19b1d147ec420e086d0c3a95339ae44f0a1bcb1054f70af63b10be966cf7",
+      "shape": [
+        65,
+        2
+      ]
+    },
+    "stage.skip.out": {
+      "file": "grad.stage.skip.out.f64",
+      "ref32_file": "grad.stage.skip.out.ref32.f32",
+      "ref32_sha256": "4e0ed04f1c9fb8761ed52b885ce53058da7c451ef5c145eea35da8e873e882ba",
+      "sha256": "61733fa267b31f192f164721305d624deb58aafbf0c0b0415d1b2bf454214028",
+      "shape": [
+        65,
+        2,
+        64
+      ]
+    },
+    "x": {
+      "file": "grad.x.f64",
+      "ref32_file": "grad.x.ref32.f32",
+      "ref32_sha256": "bf0152add3dd892f13fa5b9e78e8a63cff846f77e76f8611506489e2ab222ae5",
+      "sha256": "0474bdb9930c1cb3371e2dfa611ad037653098f31aa05cad1904762c827f6cda",
+      "shape": [
+        1,
+        65,
+        64
+      ]
+    }
+  },
+  "independent_audit": "central finite difference",
+  "loss": 77.10571634002113,
+  "objective": "sum(flat(block_output) * signed_dyadic_weight_v1)",
+  "oracle": "PyTorch autograd over cited upstream forward transcription",
+  "public_prefill_leaves": [
+    "x",
+    "block_norm.weight",
+    "in_proj.weight",
+    "dt_bias",
+    "B_norm.weight",
+    "C_norm.weight",
+    "B_bias",
+    "C_bias",
+    "D",
+    "out_proj.weight"
+  ],
+  "schema": "mojolearn.mamba.gradient-oracle.v1"
+}

@@ -1,0 +1,12 @@
+vendor=amd
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=4
+commit=8f6ed4112a3c140326011f908e8caf14c0dee4af
+started=2026-09-07T06:23:28Z
+device_memory_pool_bytes=1073741824
+device_memory_pool_only=true
+device_memory_pool_chunk_percent=100
+pixi_install_exit=0
+training_validation_exit=0
+scope=bounded amd training integration and independent gradient checks; no cross-vendor or performance certificate

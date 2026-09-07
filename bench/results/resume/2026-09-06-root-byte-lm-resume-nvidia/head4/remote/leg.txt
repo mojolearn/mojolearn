@@ -1,0 +1,10 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=6
+commit=3d255241d84c5ba856a3e5eabab942887d88b9ae
+started=2026-09-07T00:12:07Z
+device_memory_pool=qualified NVIDIA runtime defaults; external guard retained
+pixi_install_exit=0
+byte_lm_resume_exit=0
+scope=compact diagnostic only; final root raw-file comparison mandatory

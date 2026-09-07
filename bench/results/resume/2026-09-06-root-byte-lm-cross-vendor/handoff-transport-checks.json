@@ -1,0 +1,14 @@
+[
+  {
+    "vendor": "nvidia",
+    "roundtrip": true,
+    "incorrect_pin_refused": true,
+    "transport_bytes": 1954752
+  },
+  {
+    "vendor": "amd",
+    "roundtrip": true,
+    "incorrect_pin_refused": true,
+    "transport_bytes": 1980923
+  }
+]

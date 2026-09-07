@@ -1,0 +1,103 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     dry  (nothing is rented; --rent opts in)
+   gpu:      NVIDIA GeForce RTX 4090
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      bench/results/e1g/2026-09-05_174903-nvidia-mamba-dryrun
+
+   commit:   5658d28e parent 64e70035
+   source:   archive of 5658d28e; working-tree edits are not shipped
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and NVIDIA dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== dry run: every path except the paid ones ==
+   A PATH THAT HAS NEVER RUN IS A PATH NOBODY HAS TESTED. This
+   repository has four separate scars from guard bugs that were
+   found only by running the guard, so these are executed on every
+   dry run rather than described in a comment.
+
+  ok    LAYOUT1 a fetched empty console with successful status is valid
+  ok    LAYOUT2 a missing console is refused
+  ok    LAYOUT3 a failed payload is refused even with a console
+  ok    LAYOUT4 a missing payload status is refused
+  ok    A1 an unknown vendor is refused by name (exit 2)
+  ok    A2 two vendors in one leg are refused
+  ok    A3 --minutes 90 is refused before anything else is checked
+  ok    A4 --rent without a key refuses and rents nothing
+  ok    A4-layout-vendor layout-only refuses AMD
+  ok    A4-layout-payload layout-only refuses a non-mamba transport
+  ok    A4-layout-conflict layout-only refuses NVIDIA campaign
+  ok    A5 an unknown payload is refused by name (exit 2)
+  ok    A6 --column-sweep is refused under phase8 rather than ignored
+  ok    A7 --local-card is refused under phase8 rather than ignored
+  ok    B1 the paid call is fenced: a rehearsal child cannot create a pod
+  ok    C1 runpod_guard.sh arm REFUSES without a key
+  ok    C2 runpod_guard.sh check calls an unknown pod UNGUARDED
+  ok    C3 runpod_guard.sh reap refuses without a key
+  ok    C4 leg_arm turns the guard's refusal into a refusal, not a pass
+  ok    C5 'reap --force' with no pod id is REFUSED (it used to reap every lease)
+  ok    C5b 'reap --force --all' is ACCEPTED by the form check (it stops at the key)
+  ok    C6 reap refuses an unknown option and two pod ids, both by name
+  ok    C7 'reap --force <pod-id>' terminates THAT POD AND NOTHING ELSE
+  ok    C7b '--force --all' still selects every lease (the scoping is not just always-one)
+  ok    C8 a plain reap takes the EXPIRED lease and leaves the live one alone
+  ok    C9 a truncated lease file is SKIPPED and does not inherit the previous pod
+  ok    C10 arm: the key travels on ssh STDIN and appears in NO argv, on either machine
+  ok    C11 reap: the key is in a 0600 curl config and in NO argv
+  ok    D/E skipped: the mamba payload has no gemm card
+  ok    F1 the remote body substitutes cleanly and passes a POSIX sh check
+  ok    F2 the leftover-placeholder detector sees a planted @LEFTOVER@
+  ok    F3 a body that stopped writing the poll sentinel is refused, by name
+  ok    M1 the dead-man composes, substitutes cleanly and passes sh -n
+  ok    M2 the dead-man's key is in a 0600 curl config, and in no script and no argv
+  ok    M3 the dead-man's leftover-placeholder detector sees a planted @LEFTOVER@
+  ok    M4 the dead-man fires: DELETEs its pod by id on both endpoints, keeps the key out of every argv, and removes the credential afterwards
+  ok    M5 the dead-man's by-name lookup finds ITS pod and no other lane's
+  ok    K1 a 0600 key file outside the repo passes the hygiene check
+  ok    K2 a world-readable key file is refused by mode
+  ok    K3 a key file inside the checkout is refused
+  ok    K4 the key is in the 0600 config file and not in curl's argv
+  ok    K5 the ps detector finds a planted key and finds none in the real dump
+  ok    L1 no Apple reference is required for the mamba payload
+  ok    G0a an unknown --source-ref refuses before rental
+  ok    G0b --source-ref refuses other payloads
+  ok    G1 git archive extracts and hashes to a 64-hex source sha (0b0a809df478b9a3...)
+  ok    G2 the archive contains everything the mamba payload runs (tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/corpus/gen_corpus.py checks/kernel_matrix.mojo mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo)
+  ok    G2a the Mamba transitive dependencies are present
+  ok    G2b the Mamba source archive is 2518923 compressed bytes (9902080 tar) and ships no corpus data
+  ok    G3 the working tree is clean for every path that reaches the bits
+
+  50 passed, 0 failed, 0 blocking this box from being rented
+
+== what --rent WOULD do, in order ==
+   1. list leases here and pods there; refuse if either is occupied
+   1b. ARM A DETACHED DEAD-MAN HERE, before the create: it ends a
+      pod named mojolearn-gemm-nvidia-<stamp> after
+      4500s even if this process is killed
+   2. POST https://rest.runpod.io/v1/pods  ->  a NVIDIA GeForce RTX 4090 pod named
+      mojolearn-gemm-nvidia-<stamp>   [THE BILL STARTS HERE]
+   3. wait up to 600s for ssh; time out -> TERMINATE
+   4. tools/runpod_guard.sh arm <pod> '<ssh>' 60
+      refusal -> TERMINATE, no work, no card
+   5. key to the pod on stdin (0600), then read the pod's ps back
+   6. git archive 5658d28e357b293540263a0de062caf2cfcc5d50 -> the box; compare source sha both ways
+   7. mamba-backward-cert-nvidia, bounded at 2400s
+   8. fetch manifests, native gradient bytes, logs and SHA256SUMS
+   9. require five GREEN rows, valid native bytes and IDENTICAL mode
+  10. reap, verify by asking the API, print the lease remaining
+
+   the command:
+     export RUNPOD_API_KEY=...   # or MOJOLEARN_RUNPOD_KEY_FILE
+     tools/gemm_remote_leg.sh nvidia --payload mamba --source-ref 5658d28e357b293540263a0de062caf2cfcc5d50 --rent --minutes 60
+
+DRY RUN: GREEN, and nothing was rented. That is a statement about
+THIS SCRIPT'S plumbing, not about cross-vendor identity, which no
+dry run can say anything about at all.

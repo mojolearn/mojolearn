@@ -1,0 +1,63 @@
+✨ Pixi task (mamba-backward-cert-nvidia in skgpu): bash tools/mamba_backward_certify.sh
+✨ Pixi task (mamba-grad-m1-public in skgpu): oracle=/tmp/mojolearn-mamba1-grad && actual=/tmp/mojolearn-mamba1-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba1 --out $oracle && MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba_backward_device_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba1/base_b2_l4_d8 gradients to /tmp/mojolearn-mamba1-grad
+finite-difference worst relative-scale error: 1.742e-10
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:15:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:15:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba_backward_device_tail_dump.mojo:15:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.158.01 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+mojo: error: execution exited with a non-zero result: 1
+✨ Pixi task (mamba-grad-m2-public in skgpu): oracle=/tmp/mojolearn-mamba2-grad && actual=/tmp/mojolearn-mamba2-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba2 --out $oracle && MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba2_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba2/m2_base_b2_l4_d32 gradients to /tmp/mojolearn-mamba2-grad
+finite-difference worst relative-scale error: 1.511e-10
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here

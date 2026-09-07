@@ -1,0 +1,15 @@
+{
+  "kind": "gbdt",
+  "refused": "ValueError: mojolearn: use_pointwise_searcher=True is TDocParallelObliviousTreeSearcher, an OBLIVIOUS searcher; grow_policy='Depthwise' is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only (pointwise_non_symmetric.cpp:5-29)",
+  "seconds": 0.0,
+  "spec": {
+    "border_count": 128,
+    "grow_policy": "Depthwise",
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7,
+    "use_pointwise_searcher": true
+  }
+}

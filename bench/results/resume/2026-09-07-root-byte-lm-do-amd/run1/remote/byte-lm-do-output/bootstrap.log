@@ -1,0 +1,5 @@
+bootstrap_started=2026-09-07T07:16:39Z
+pid 3128's current affinity list: 0-19
+pid 3128's new affinity list: 0,1
+dependency_setup_started
+bootstrap_exit=1

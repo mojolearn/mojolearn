@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/byte_lm_validation_admit.py", line 108, in <module>
+    print(json.dumps(admit(args.artifacts), sort_keys=True, indent=2, allow_nan=False))
+                     ~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/byte_lm_validation_admit.py", line 23, in admit
+    require(read(root / 'exit_code').strip() == b'0', 'campaign did not finish successfully')
+            ~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/byte_lm_state_compare.py", line 115, in read
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-07-root-byte-lm-do-amd/run6/remote/byte-lm-do-output/byte-lm-validation/exit_code'

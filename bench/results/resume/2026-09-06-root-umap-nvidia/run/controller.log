@@ -1,0 +1,106 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     rent
+   gpu:      NVIDIA GeForce RTX 4090
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-umap-nvidia/run
+
+   commit:   6146b12 parent ce34d2e
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and NVIDIA dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /private/tmp/mojolearn-nvidia-umap-20260906/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[13:50:33 nvidia] dead-man ARMED before the create: pid 93781, fires in 4500s, keyed by name mojolearn-gemm-nvidia-2026-09-06_135031
+[13:50:33 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 93781; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-93686
+[13:50:33 nvidia] creating mojolearn-gemm-nvidia-2026-09-06_135031 (NVIDIA GeForce RTX 4090, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[13:50:33 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[13:50:34 nvidia] pod ludm26ufgrjikf created
+[13:50:57 nvidia] ssh target: -p 15872 root@47.47.180.200
+[13:51:00 nvidia] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[13:51:00 nvidia] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod ludm26ufgrjikf ...
+    ARMED. Pod ludm26ufgrjikf is TERMINATED through the API in 60 minutes.
+      lease: /private/tmp/mojolearn-nvidia-umap-20260906/tools/../bench/results/runpod_leases/ludm26ufgrjikf.lease
+      extend with: tools/runpod_guard.sh extend ludm26ufgrjikf '-p 15872 root@47.47.180.200' <minutes>
+    ludm26ufgrjikf: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep  6 17:51 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[13:51:12 nvidia] shipping the COMMIT (6146b121608d4cf73706d6540bb884e134df409c), not the working tree
+[13:51:12 nvidia]   bounded Mamba source archive: 3724639 bytes compressed
+[13:51:12 nvidia]   archive source sha256: 0b75c34588e2e605275258a713e295ab
+[14:00:09 nvidia] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=243
+[14:00:12 nvidia]   remote pid 243; polling every 30s, giving up after 2755s
+[14:08:32 nvidia]   the payload finished (its sentinel is on the box)
+    REMOTE_BODY_DONE
+
+== step 7: fetch ==
+    source_sha256.txt
+    uname.txt
+    umap-finish
+    pixi_env.log
+    gpu.txt
+    cpu-affinity.log
+    pixi_install.log
+    leg.txt
+    umap-finish-console.log
+
+== step 8: what came home ==
+{
+  "status": "PASSED",
+  "scope": "NVIDIA UMAP API fixtures, one CUDA timing comparator and pinned digits quality; no cross-vendor or universal certificate"
+}
+  source sha256 MATCHES on both ends (0b75c34588e2e605...)
+  gpu on the box:
+    NVIDIA GeForce RTX 4090, 580.159.04
+    vendor=nvidia
+    payload=mamba
+    knn_layout_only=0
+    nvidia_campaign=3
+    commit=6146b121608d4cf73706d6540bb884e134df409c
+    started=2026-09-06T18:00:12Z
+    pixi_install_exit=0
+    umap_finish_exit=0
+    scope=UMAP targeted NVIDIA comparison and real-data quality; CPU umap-learn is quality-only; no full feature or cross-vendor certification
+
+== step 9: targeted NVIDIA UMAP comparison and real-data quality ==
+  Read /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-umap-nvidia/run/remote/umap-finish/results.tsv and its retained admission results.
+  CPU umap-learn is a quality-only baseline; no CPU/GPU speed ratio.
+  This is bounded UMAP coverage, not full feature or cross-vendor certification.
+
+== step 10: terminate at the end of the WORK ==
+  lease at exit:
+    ludm26ufgrjikf: 42 minutes left of a 60-minute lease
+  terminating ludm26ufgrjikf (layer two, from this machine)
+    DELETE /v1/pods/ludm26ufgrjikf -> HTTP 204
+  VERIFIED: ludm26ufgrjikf is gone (HTTP 404).
+
+artifacts: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-umap-nvidia/run
+the targeted UMAP results: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-umap-nvidia/run/remote/umap-finish
+read umap-finish-console.log and umap_finish_exit in remote/leg.txt together.
+
+== teardown (exit 0) ==
+  lease at exit:
+    NO LEASE for ludm26ufgrjikf -- it is unguarded.
+  dead-man cancelled (pid 93781)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-93686/gemm_remote_leg.sh: line 2085: 93781 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

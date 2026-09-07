@@ -1,0 +1,11 @@
+{
+  "observed_utc": "2026-09-07T06:59:11.130860+00:00",
+  "state": {
+    "total_bytes": 17179869184,
+    "conservative_reserve_bytes": 273481728,
+    "pressure_level": 1,
+    "swap_used_bytes": 0,
+    "compressed_bytes": 5398003712
+  },
+  "launch_admitted": false
+}

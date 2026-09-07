@@ -1,0 +1,6 @@
+Collecting numpy==1.26.4
+  Downloading numpy-1.26.4-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (18.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 18.2/18.2 MB 113.8 MB/s eta 0:00:00
+Installing collected packages: numpy
+Successfully installed numpy-1.26.4
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:40/0000:40:01.1/0000:41:00.0/0000:42:01.0/0000:44:00.0/0000:45:00.0/0000:46:00.0", "vram_total_bytes": 206141652992, "telemetry": {"initial_vram_bytes": 298164224, "peak_vram_bytes": 298164224, "last_vram_bytes": 298164224, "initial_rss_bytes": 1572864, "peak_rss_bytes": 94109696, "last_rss_bytes": 94109696, "initial_host_available_bytes": 2345420836864, "last_host_available_bytes": 2345162469376, "samples": 3, "last_elapsed_seconds": 2.0046057533472776, "crossing_sample": null}, "returncode": 0}

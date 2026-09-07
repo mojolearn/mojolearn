@@ -1,0 +1,2 @@
+{'status': 'QUALIFIED_BOUNDED_CONTINUOUS', 'source_files': 258, 'compared_steps': 128, 'initial_heldout_loss': 5.5412986278533936, 'final_heldout_loss': 2.8436418771743774, 'checkpoint_sha256': 'a9858cd59b424b77b897d0171d5f225d63f3f161fcdee02049bd6c04cfd8a6dc'}
+comparison_sha256 7178c201023f29639e01dd8e786040e7511edb080b28e0b9299305b2e505cf6d

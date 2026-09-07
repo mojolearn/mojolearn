@@ -1,0 +1,126 @@
+/root/mojolearn/bindings/_mojolearn_training.mojo:382:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'p'
+    """params=[rows,cols]; all three borrowed buffers hold rows*cols f32.
+       ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:405:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'p'
+    """params=[rows,cols]; borrow rows*cols input and cols output f32.
+       ^
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:503:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:508:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:512:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:513:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:515:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:515:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:518:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_training.mojo:211:19: warning: assignment to 'n_total' was never used; assign to '_' instead?
+    var n_total = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:265:19: warning: assignment to 'n_total' was never used; assign to '_' instead?
+    var n_total = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:341:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:371:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:395:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:416:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:560:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:570:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:590:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:591:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:72:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:424:5: error: function instantiation failed
+def PyInit__mojolearn_training() abi("C") -> PythonObject:
+    ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:351:5: note: function instantiation failed
+def mlp_bias_activation_binding(
+    ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:374:41: note: call expansion failed
+        count = mlp_bias_activation_host(ctx, xp, bp, op, rows, cols, relu_flag)
+                                        ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:77:
+./training/mlp_ops.mojo:110:5: note: function instantiation failed
+def mlp_bias_activation_host(
+    ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:77:
+./training/mlp_ops.mojo:120:21: note: call expansion failed
+    return _mlp_host(ctx, input_ptr, bias_ptr, out_ptr, rows, cols, relu_flag)
+                    ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:77:
+./training/mlp_ops.mojo:68:5: note: function instantiation failed
+def _mlp_host(
+    ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:77:
+./training/mlp_ops.mojo:93:38: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., ..., "_ptxas_info_verbose": False)
+    ctx.enqueue_function[_mlp_kernel](
+                                     ^
+max/mojo/max/gpu/host/_device_context_extras.mojo:282:9: note: function instantiation failed
+max/mojo/max/gpu/host/_device_context_extras.mojo:396:43: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ...)
+max/mojo/max/gpu/host/device_context.mojo:3194:9: note: function instantiation failed
+max/mojo/max/gpu/host/device_context.mojo:3344:44: note: call expansion failed with parameter value(s): (..., "_1": 1, ..., ...)
+<unknown>:0:0: note: function instantiation failed
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:419:8: note: call expansion failed with parameter value(s): (..., "length": 1, ...)
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:606:9: note: function instantiation failed
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:612:9: note: constraint failed: Int and UInt do not conform to DevicePassable; use a fixed-width type such as Int32 or Int64 instead
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 1}

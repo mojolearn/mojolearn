@@ -1,0 +1,522 @@
+{
+  "schema": "mojolearn.retained-evidence-files.v1",
+  "files": {
+    "README.md": {
+      "bytes": 3388,
+      "sha256": "a7b86441cf173a4bf9264db58244eb7ee24fa60e93529cd52c80dc7922100384"
+    },
+    "cross-vendor-compare.guard.json": {
+      "bytes": 764,
+      "sha256": "4874f19704cd9045eb0f29485374192aa4e0e66f7997cdcb221fb284b4865d7e"
+    },
+    "cross-vendor-compare.log": {
+      "bytes": 859,
+      "sha256": "c343ceba72883003b46566e137d6309ab1109989543dc93f7ce801064cd19ab8"
+    },
+    "cuda-hip-comparison.json": {
+      "bytes": 692,
+      "sha256": "f340971883e402bfcc1c170c8a60cffee03c09c74a147aa99b8ce9118b0132ea"
+    },
+    "dry-run-body.sh": {
+      "bytes": 12385,
+      "sha256": "425ea03fddd40f3a61e8844d2845d3745c83a49cba08aecf68bf18e84acfd2d3"
+    },
+    "dry-run.log": {
+      "bytes": 7549,
+      "sha256": "28c167e95dc7fd8af1bd8b1d8ee9397d2f51095d8e753cd94f5b8e0472c6dde8"
+    },
+    "launch.json": {
+      "bytes": 586,
+      "sha256": "d2fd4802adf777a5e0c701c68c37754013c0423afcf88c6825ae321bc993b816"
+    },
+    "paper-anonymous-r2.guard.json": {
+      "bytes": 351,
+      "sha256": "02463036ae8bb2035a6ab5743b313fa6fc9f43b73a49c7a74135a3561e7a7f75"
+    },
+    "paper-anonymous-r2.log": {
+      "bytes": 4662,
+      "sha256": "69b49d8e93dc7670527c0bf163650c92f0b7b9b2f28e10b178a3f2d4a70925c2"
+    },
+    "paper-anonymous.guard.json": {
+      "bytes": 328,
+      "sha256": "6ab6c65454f400ab9b2f2e30b436ef6c2cddbbc30220e8f1efef1b8c3f2cd16b"
+    },
+    "paper-anonymous.log": {
+      "bytes": 4528,
+      "sha256": "d6d908b58d4c7ad580830a9ba62c3810ece06ef18f99f5f0b58aa096083ff085"
+    },
+    "paper-named.guard.json": {
+      "bytes": 352,
+      "sha256": "9399a9cc837e21068acb01d5e526dfe596adfe6eb7f4470edb1a7b8c330d3d8e"
+    },
+    "paper-named.log": {
+      "bytes": 412,
+      "sha256": "3cc59da1df5fbda538a24b3c02bdf4ff4ced5888da655174496ea955443715bc"
+    },
+    "run1/arm.log": {
+      "bytes": 332,
+      "sha256": "541fe5f243183dd63914c58a13ff38b072338cd39b8eabece1e46dc4a73594ce"
+    },
+    "run1/commit.txt": {
+      "bytes": 41,
+      "sha256": "68981a88476cde7ee36d403df2a527c3909ac10604ab73dbb77d1b8b94a9a8a6"
+    },
+    "run1/create_request.json": {
+      "bytes": 2094,
+      "sha256": "6c9b924dae9fa76e9c732224f4d4ea2daf9b3d0e65a962d46ef933f36e06935a"
+    },
+    "run1/create_response.json": {
+      "bytes": 2691,
+      "sha256": "91b7e21110cc98514566ca0e7a512c3b8f371af3e71f34c2fa9bff5a513b88d0"
+    },
+    "run1/deadman_build.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "run1/deadman_dir.txt": {
+      "bytes": 79,
+      "sha256": "3df3a7cec66d880d31a930e359822e3aeed2f8e2061fda15ee13ef098094a128"
+    },
+    "run1/key_in_ps.txt": {
+      "bytes": 14,
+      "sha256": "89097cbb23ee0899d6a41ccb6b49ea85c24a2272a60f294ba57e8c1e991162df"
+    },
+    "run1/lease.txt": {
+      "bytes": 53,
+      "sha256": "16296c9c3deb86a773e25b9ab78ae962045884fd9eff29d6fa29dfeab1041635"
+    },
+    "run1/leg.txt": {
+      "bytes": 454,
+      "sha256": "54a960f50dc30753d94f6c2379ec3d180b61ce314d0bdbf23764c4ff3afc1842"
+    },
+    "run1/pod_id.txt": {
+      "bytes": 15,
+      "sha256": "700ab67e0624d4b35df5bb96feee881e66c79752512234a3bb8b09e4123d996e"
+    },
+    "run1/remote/cpu-affinity.log": {
+      "bytes": 72,
+      "sha256": "1eb180e975ae49b406a0202073ac004361c99d519885b5b09e8aa0889fb6edd9"
+    },
+    "run1/remote/gpu.txt": {
+      "bytes": 677,
+      "sha256": "f234565bed8bf3daff24bf042a6d48059a21e6000c860f73028abba50fa474c9"
+    },
+    "run1/remote/leg.txt": {
+      "bytes": 402,
+      "sha256": "6da81382002b1df9edb5c50492f9da56fbfff0fd961cdbe5eab0efe6ef096fbf"
+    },
+    "run1/remote/pixi_env.log": {
+      "bytes": 44,
+      "sha256": "02b2f089d469b80b2713e85800e80f71a3954e7c75bf33c609359a8d297f9bd9"
+    },
+    "run1/remote/pixi_install.log": {
+      "bytes": 315,
+      "sha256": "e72f85b893101b985710e9572331b495a7a5a1240bb77ec468fea636ee4c9fcb"
+    },
+    "run1/remote/source_inventory.json": {
+      "bytes": 84577,
+      "sha256": "b2d5621ec4e42be0e94700be1567b8fba3fa5fab4ae7fa619e4f3ede9910c6b1"
+    },
+    "run1/remote/source_sha256.txt": {
+      "bytes": 65,
+      "sha256": "f74bfd1cc464da3c4ab5a4f684720bc4fccf061afe4453d2ce319c25f893c408"
+    },
+    "run1/remote/training-validation/bindings/_mojolearn_linalg.so": {
+      "bytes": 349904,
+      "sha256": "e0d28eddd303fe97674210c0e67f658e74a49befacd954e8471d9179a174a534"
+    },
+    "run1/remote/training-validation/bindings/_mojolearn_training.so": {
+      "bytes": 663304,
+      "sha256": "3fb1c805bcf360e01692b71c9d6d9a8157ad3032b07477fb30cee4cf43e1f674"
+    },
+    "run1/remote/training-validation/dependencies.log": {
+      "bytes": 292,
+      "sha256": "3dfbfb7f2671755e267563ca92cd386985a9fa61a1903cb41a2c25e06582d212"
+    },
+    "run1/remote/training-validation/dependency-freeze.log": {
+      "bytes": 3016,
+      "sha256": "3c0d845441906cd66b01f3e65aea61e4fbe6d85391a34a0f1c9cda6cea9c15bd"
+    },
+    "run1/remote/training-validation/exit_code": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "run1/remote/training-validation/gradient-build.log": {
+      "bytes": 4913,
+      "sha256": "fa65c752f6a6c5367e5dfaff42e19012654d1fba0b30fd9161304c368375a241"
+    },
+    "run1/remote/training-validation/gradient-capture/capture.json": {
+      "bytes": 25754,
+      "sha256": "e5b505826554715a3051957a846a335e9203c4729f7613c9b436e87032df7c32"
+    },
+    "run1/remote/training-validation/gradient-capture/gradients.f32": {
+      "bytes": 53504,
+      "sha256": "60198b63f6f50ad8ba0ef08c7a0d4e9c70405744cf574ac76c2f632a2afbab1d"
+    },
+    "run1/remote/training-validation/gradient-capture/initial_m.f32": {
+      "bytes": 53504,
+      "sha256": "0db7a924b86c3e0a89e651ac7e05200800c446435be9825f2830102dc9b42d06"
+    },
+    "run1/remote/training-validation/gradient-capture/initial_params.f32": {
+      "bytes": 53504,
+      "sha256": "721b7cae97d4ce49baa66408b3a6be6c83c1df4f7746686c4d4b10d8f60c89ff"
+    },
+    "run1/remote/training-validation/gradient-capture/initial_v.f32": {
+      "bytes": 53504,
+      "sha256": "0db7a924b86c3e0a89e651ac7e05200800c446435be9825f2830102dc9b42d06"
+    },
+    "run1/remote/training-validation/gradient-capture/loss.f32": {
+      "bytes": 4,
+      "sha256": "478bd57420c60f5f307f876897655fad8eeef8625a162621f6159ba673d7fbca"
+    },
+    "run1/remote/training-validation/gradient-capture/token_ids.i32": {
+      "bytes": 72,
+      "sha256": "2d0cfbaef6814dd5c421553e2d0dd4a9f5a5846527f7e117556ae95493d0d1b8"
+    },
+    "run1/remote/training-validation/gradient-capture/updated_m.f32": {
+      "bytes": 53504,
+      "sha256": "1b025736142721ce36a3acf9d14ae9844f11c83df854e8dc63364ab322f30a0e"
+    },
+    "run1/remote/training-validation/gradient-capture/updated_params.f32": {
+      "bytes": 53504,
+      "sha256": "74dff5fc93451dd03e24dd7b87ee00db9539b8c64b7c5cef6cd2e0ff1a8078f1"
+    },
+    "run1/remote/training-validation/gradient-capture/updated_v.f32": {
+      "bytes": 53504,
+      "sha256": "76713e29401a9fc9e860977c449480fd84cc35130bf0481de02336d158436ef7"
+    },
+    "run1/remote/training-validation/gradient-capture.log": {
+      "bytes": 471,
+      "sha256": "64e1173326674c27fc60f34e3b0a04d0179e229e9aaa7a076799c8152733d910"
+    },
+    "run1/remote/training-validation/gradient-oracle.json": {
+      "bytes": 7832,
+      "sha256": "f9147ac4aecb06079dbef08176d6fa382a9c678148f41c1698a17ea1cb4aa3f0"
+    },
+    "run1/remote/training-validation/gradient-oracle.json.nonlinear-control.npz": {
+      "bytes": 109938,
+      "sha256": "8593ed9d2ef0196b910d63318dafe48497044bc08bd631dadf93202501d9cf73"
+    },
+    "run1/remote/training-validation/gradient-oracle.json.reference.npz": {
+      "bytes": 109938,
+      "sha256": "6532176c122c4d7a54c6813f1e789aeecd655e0932461e0ac8b4875683873150"
+    },
+    "run1/remote/training-validation/gradient-oracle.log": {
+      "bytes": 262,
+      "sha256": "821b58fcd601124690a6edfa6b4c6ddeede5d41b38cbc06acd0b67e3fa10074f"
+    },
+    "run1/remote/training-validation/guard-checks.log": {
+      "bytes": 1450,
+      "sha256": "a121be78c4fad95914d2e73fa45dcfb01ca4b23d3901122100c10f805804a01e"
+    },
+    "run1/remote/training-validation/linalg-build.log": {
+      "bytes": 615,
+      "sha256": "9ef18257b5d75020d9ea8063ffa897c73d73a96012004b411cfc673220d5396b"
+    },
+    "run1/remote/training-validation/mlp-compare.log": {
+      "bytes": 1268,
+      "sha256": "45fed8d571aff159f248d6bc854f1ef54135a122514b2a47baf6519c31eb1fa2"
+    },
+    "run1/remote/training-validation/mlp-comparison.json": {
+      "bytes": 778,
+      "sha256": "06aa6efd15947b65adaf83ad1bb874849ddf5367658096dc8fcdd39e0b1e5e6c"
+    },
+    "run1/remote/training-validation/mlp-continuous/checkpoint-0000.json": {
+      "bytes": 5829,
+      "sha256": "4c993e5aa69dfa338801ac98fa5fc30e98e147e3df70815b5528e8f34d451466"
+    },
+    "run1/remote/training-validation/mlp-continuous/checkpoint-0008.json": {
+      "bytes": 5829,
+      "sha256": "dd31cab32c990cb9b43ca832219cc645c341bc0d509c3d4a8dc1229480565dfa"
+    },
+    "run1/remote/training-validation/mlp-continuous/checkpoint-0016.json": {
+      "bytes": 5830,
+      "sha256": "0f842bb41e6e2bbfc64c0b4057b6f95322dd23e914b039e0550ecac02782b78e"
+    },
+    "run1/remote/training-validation/mlp-continuous/control-step-0009.npz": {
+      "bytes": 8960,
+      "sha256": "106ddb4743c6cb58f023cb7b3daf2bf3ec12ace890943ad9c6b70d298f98eb71"
+    },
+    "run1/remote/training-validation/mlp-continuous/initial-state.npz": {
+      "bytes": 4312,
+      "sha256": "3453d3e82492828e5bda8eb831fce79178ad36811393340fc4ce44f44d82edea"
+    },
+    "run1/remote/training-validation/mlp-continuous/inputs.npz": {
+      "bytes": 4050,
+      "sha256": "12fa2e0ea7b1976d333afb81a9074f6dcf422e1b4dd235445bcbe90a9b98712d"
+    },
+    "run1/remote/training-validation/mlp-continuous/metadata.json": {
+      "bytes": 48809,
+      "sha256": "7ffdddfa5a2a62aaac012da03f9f4ccd79fedbbbebf0d6e7776566f66483f1eb"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0001.npz": {
+      "bytes": 8960,
+      "sha256": "8bf3c3e26d6e95ad87901414618328ea58c8aa6b3bedeae110b77ffdbb1d72b6"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0002.npz": {
+      "bytes": 8960,
+      "sha256": "dadc8b4ab51d8d6ba8398526f9fcd827f25f9171a7a3fd0db73cc9afa663cc4c"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0003.npz": {
+      "bytes": 8960,
+      "sha256": "11f827afca5a51fbdea97d30f31893141320069f597fe64eea5e0e807f9ffdfe"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0004.npz": {
+      "bytes": 8960,
+      "sha256": "c1a87e7cff01878ab21f96152259ec38e1677ab8486f23664351df8bf47416b4"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0005.npz": {
+      "bytes": 8960,
+      "sha256": "c6bce40c2a71e963c1b06b8c1311430af9f80fb49571da830415636b4f968c2c"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0006.npz": {
+      "bytes": 8960,
+      "sha256": "bf4e923f57dbd486d4b1100e838c9ec2f9c62a2f19e1879163ef13e8742a3053"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0007.npz": {
+      "bytes": 8960,
+      "sha256": "9928cbb0e7237fd9fefda5b36444b82b1a5c24a7f7618efb3d44e9b26618c061"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0008.npz": {
+      "bytes": 8960,
+      "sha256": "bc12268e78bf25471c799a17b4fcbb1eeb262d15e8d8b6f34d5ec2d0e701bd24"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0009.npz": {
+      "bytes": 8960,
+      "sha256": "885200c0b3ab121a26a5b3725833ba3ad874c8e8dbcfe0ae70ac85db59c51148"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0010.npz": {
+      "bytes": 8960,
+      "sha256": "ad921678c3f934a5947db70140462731e3a25f053f73aefb1308c6445d5e3857"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0011.npz": {
+      "bytes": 8960,
+      "sha256": "81197283e4af5b3978039d0c0806071cf04794476ce7a684e8079896fce3261a"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0012.npz": {
+      "bytes": 8960,
+      "sha256": "54393312f24f44d714037681fa3293848d56917a08e41e387a4771950bebbbea"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0013.npz": {
+      "bytes": 8960,
+      "sha256": "601301a7ee6ca459906cdf7c03a0fcb78332505873d170b397ec425bba96f102"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0014.npz": {
+      "bytes": 8960,
+      "sha256": "c706f74b66c1785feeb44799a83f7ffa74172249a722b78aed073492c19004f3"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0015.npz": {
+      "bytes": 8960,
+      "sha256": "ecbd4902dfc5bc930254af43e34e5ac90615adee2916470f0dade0e1c76f8c4e"
+    },
+    "run1/remote/training-validation/mlp-continuous/step-0016.npz": {
+      "bytes": 8960,
+      "sha256": "ea54d72d582ea81ce34d843f8f48cd00d09ead908c997f779992440cf4f51048"
+    },
+    "run1/remote/training-validation/mlp-continuous.log": {
+      "bytes": 603,
+      "sha256": "4262af7f14bdc1f0966a0f6b46c4e2260393e92c895d4ccbd5b5265433fa2600"
+    },
+    "run1/remote/training-validation/mlp-head/checkpoint-0000.json": {
+      "bytes": 5829,
+      "sha256": "4c993e5aa69dfa338801ac98fa5fc30e98e147e3df70815b5528e8f34d451466"
+    },
+    "run1/remote/training-validation/mlp-head/checkpoint-0008.json": {
+      "bytes": 5829,
+      "sha256": "dd31cab32c990cb9b43ca832219cc645c341bc0d509c3d4a8dc1229480565dfa"
+    },
+    "run1/remote/training-validation/mlp-head/initial-state.npz": {
+      "bytes": 4312,
+      "sha256": "3453d3e82492828e5bda8eb831fce79178ad36811393340fc4ce44f44d82edea"
+    },
+    "run1/remote/training-validation/mlp-head/inputs.npz": {
+      "bytes": 4050,
+      "sha256": "12fa2e0ea7b1976d333afb81a9074f6dcf422e1b4dd235445bcbe90a9b98712d"
+    },
+    "run1/remote/training-validation/mlp-head/metadata.json": {
+      "bytes": 31157,
+      "sha256": "c2cb3a8e5afce9b47b5990eca11509f93203630152644e018af5a00fc04dd018"
+    },
+    "run1/remote/training-validation/mlp-head/step-0001.npz": {
+      "bytes": 8960,
+      "sha256": "8bf3c3e26d6e95ad87901414618328ea58c8aa6b3bedeae110b77ffdbb1d72b6"
+    },
+    "run1/remote/training-validation/mlp-head/step-0002.npz": {
+      "bytes": 8960,
+      "sha256": "dadc8b4ab51d8d6ba8398526f9fcd827f25f9171a7a3fd0db73cc9afa663cc4c"
+    },
+    "run1/remote/training-validation/mlp-head/step-0003.npz": {
+      "bytes": 8960,
+      "sha256": "11f827afca5a51fbdea97d30f31893141320069f597fe64eea5e0e807f9ffdfe"
+    },
+    "run1/remote/training-validation/mlp-head/step-0004.npz": {
+      "bytes": 8960,
+      "sha256": "c1a87e7cff01878ab21f96152259ec38e1677ab8486f23664351df8bf47416b4"
+    },
+    "run1/remote/training-validation/mlp-head/step-0005.npz": {
+      "bytes": 8960,
+      "sha256": "c6bce40c2a71e963c1b06b8c1311430af9f80fb49571da830415636b4f968c2c"
+    },
+    "run1/remote/training-validation/mlp-head/step-0006.npz": {
+      "bytes": 8960,
+      "sha256": "bf4e923f57dbd486d4b1100e838c9ec2f9c62a2f19e1879163ef13e8742a3053"
+    },
+    "run1/remote/training-validation/mlp-head/step-0007.npz": {
+      "bytes": 8960,
+      "sha256": "9928cbb0e7237fd9fefda5b36444b82b1a5c24a7f7618efb3d44e9b26618c061"
+    },
+    "run1/remote/training-validation/mlp-head/step-0008.npz": {
+      "bytes": 8960,
+      "sha256": "bc12268e78bf25471c799a17b4fcbb1eeb262d15e8d8b6f34d5ec2d0e701bd24"
+    },
+    "run1/remote/training-validation/mlp-head.log": {
+      "bytes": 536,
+      "sha256": "e465a42762be3b85ffd1c8daef6e119840a5823838768134d5b399265e64f219"
+    },
+    "run1/remote/training-validation/mlp-numerical-edges.log": {
+      "bytes": 360,
+      "sha256": "de2a87499fa1462964fad3a4257bfa465f8cd1dc9de9ad06dac74791e7d4e515"
+    },
+    "run1/remote/training-validation/mlp-resume/checkpoint-0008.json": {
+      "bytes": 5829,
+      "sha256": "dd31cab32c990cb9b43ca832219cc645c341bc0d509c3d4a8dc1229480565dfa"
+    },
+    "run1/remote/training-validation/mlp-resume/checkpoint-0016.json": {
+      "bytes": 5830,
+      "sha256": "0f842bb41e6e2bbfc64c0b4057b6f95322dd23e914b039e0550ecac02782b78e"
+    },
+    "run1/remote/training-validation/mlp-resume/control-step-0009.npz": {
+      "bytes": 8960,
+      "sha256": "106ddb4743c6cb58f023cb7b3daf2bf3ec12ace890943ad9c6b70d298f98eb71"
+    },
+    "run1/remote/training-validation/mlp-resume/initial-state.npz": {
+      "bytes": 4312,
+      "sha256": "fd241c7af4d0b3e11d992dd2d11f622aac898a37fd3624532969edb63b7083ce"
+    },
+    "run1/remote/training-validation/mlp-resume/inputs.npz": {
+      "bytes": 4050,
+      "sha256": "12fa2e0ea7b1976d333afb81a9074f6dcf422e1b4dd235445bcbe90a9b98712d"
+    },
+    "run1/remote/training-validation/mlp-resume/metadata.json": {
+      "bytes": 33330,
+      "sha256": "820170e467ac3e996a0ff619d47c5f97009a49201caf1ed890816dab7ae23d64"
+    },
+    "run1/remote/training-validation/mlp-resume/resume-input.json": {
+      "bytes": 5829,
+      "sha256": "dd31cab32c990cb9b43ca832219cc645c341bc0d509c3d4a8dc1229480565dfa"
+    },
+    "run1/remote/training-validation/mlp-resume/step-0009.npz": {
+      "bytes": 8960,
+      "sha256": "885200c0b3ab121a26a5b3725833ba3ad874c8e8dbcfe0ae70ac85db59c51148"
+    },
+    "run1/remote/training-validation/mlp-resume/step-0010.npz": {
+      "bytes": 8960,
+      "sha256": "ad921678c3f934a5947db70140462731e3a25f053f73aefb1308c6445d5e3857"
+    },
+    "run1/remote/training-validation/mlp-resume/step-0011.npz": {
+      "bytes": 8960,
+      "sha256": "81197283e4af5b3978039d0c0806071cf04794476ce7a684e8079896fce3261a"
+    },
+    "run1/remote/training-validation/mlp-resume/step-0012.npz": {
+      "bytes": 8960,
+      "sha256": "54393312f24f44d714037681fa3293848d56917a08e41e387a4771950bebbbea"
+    },
+    "run1/remote/training-validation/mlp-resume/step-0013.npz": {
+      "bytes": 8960,
+      "sha256": "601301a7ee6ca459906cdf7c03a0fcb78332505873d170b397ec425bba96f102"
+    },
+    "run1/remote/training-validation/mlp-resume/step-0014.npz": {
+      "bytes": 8960,
+      "sha256": "c706f74b66c1785feeb44799a83f7ffa74172249a722b78aed073492c19004f3"
+    },
+    "run1/remote/training-validation/mlp-resume/step-0015.npz": {
+      "bytes": 8960,
+      "sha256": "ecbd4902dfc5bc930254af43e34e5ac90615adee2916470f0dade0e1c76f8c4e"
+    },
+    "run1/remote/training-validation/mlp-resume/step-0016.npz": {
+      "bytes": 8960,
+      "sha256": "ea54d72d582ea81ce34d843f8f48cd00d09ead908c997f779992440cf4f51048"
+    },
+    "run1/remote/training-validation/mlp-resume.log": {
+      "bytes": 536,
+      "sha256": "dbefd64f5e983ed547690bd7b900bca085f47516d312aa5e90009dfa0f747cd3"
+    },
+    "run1/remote/training-validation/mlp-surface-and-reference.log": {
+      "bytes": 361,
+      "sha256": "6e79d0a66657d5a9f1e03643feb7c378bb66febf72fc4774a5a43738032ab48d"
+    },
+    "run1/remote/training-validation/provenance.txt": {
+      "bytes": 151,
+      "sha256": "594184184ff0783321e8413da6022d99982754774dec36a4827c787b4e4b1c9d"
+    },
+    "run1/remote/training-validation/results.tsv": {
+      "bytes": 315,
+      "sha256": "e4dc7436990fef7b61af935bf4fad8d6eefa67a40d65c8f0dd40e5252c386556"
+    },
+    "run1/remote/training-validation/retain-linalg.log": {
+      "bytes": 262,
+      "sha256": "821b58fcd601124690a6edfa6b4c6ddeede5d41b38cbc06acd0b67e3fa10074f"
+    },
+    "run1/remote/training-validation/retain-training.log": {
+      "bytes": 262,
+      "sha256": "821b58fcd601124690a6edfa6b4c6ddeede5d41b38cbc06acd0b67e3fa10074f"
+    },
+    "run1/remote/training-validation/train-gradient-capture": {
+      "bytes": 1278992,
+      "sha256": "42dbf6dc366a0a7ba35903797ba0e03194e05a0fb0f246533a9973a9f82e9f83"
+    },
+    "run1/remote/training-validation/training-build.log": {
+      "bytes": 5862,
+      "sha256": "7de5c240865777493ca90f3a1900f6469477fb4b482d2ff6bf509bfca9ba8662"
+    },
+    "run1/remote/training-validation/training-dependencies.log": {
+      "bytes": 2523,
+      "sha256": "43b33949dbe0434f498127bfa09fc751e2d3a8e625a97963014addd7e5399dfe"
+    },
+    "run1/remote/training-validation/training-venv.log": {
+      "bytes": 262,
+      "sha256": "821b58fcd601124690a6edfa6b4c6ddeede5d41b38cbc06acd0b67e3fa10074f"
+    },
+    "run1/remote/training-validation-console.log": {
+      "bytes": 398,
+      "sha256": "cfc2f40a70e4b4501e9189cb14a9e279db7a59f76757f9a924f0135eb5b81b4d"
+    },
+    "run1/remote/uname.txt": {
+      "bytes": 132,
+      "sha256": "e97382b851ce3cf2eeda979f859089376f5767848b6d39377a2ec9767c830c1d"
+    },
+    "run1/remote_body.sh": {
+      "bytes": 12384,
+      "sha256": "2a9b619b18d99a8572f03ebf2545463f7a0c2cb9487bf9d9c8fbd03ad28a0fad"
+    },
+    "run1/remote_console.log": {
+      "bytes": 17,
+      "sha256": "681b7da74328203e641e892b01e0399d98cedb27221b1ea6243c497eebc32392"
+    },
+    "run1/remote_start.log": {
+      "bytes": 15,
+      "sha256": "2c8326a5b082f5e5b39fbf09273243e0f90c81d06cc383999f2274187749907c"
+    },
+    "run1/source_inventory_local.json": {
+      "bytes": 84577,
+      "sha256": "b2d5621ec4e42be0e94700be1567b8fba3fa5fab4ae7fa619e4f3ede9910c6b1"
+    },
+    "run1/source_sha256_local.txt": {
+      "bytes": 65,
+      "sha256": "f74bfd1cc464da3c4ab5a4f684720bc4fccf061afe4453d2ce319c25f893c408"
+    },
+    "run1/teardown.txt": {
+      "bytes": 89,
+      "sha256": "ec141d60b81f29eacdffc4e43a6a15a214786e5ab7bc647bf4c0740315e98dee"
+    },
+    "run1-controller.log": {
+      "bytes": 6410,
+      "sha256": "2367d04e409859f55bfacc350fd525f793f3eb64dc735c10adc2f75e6ef3fca5"
+    },
+    "transport.sh": {
+      "bytes": 301157,
+      "sha256": "d5e42edc9356a768b0f1551d20abdc41f1ccf10c9cf1b4c4d6fd734f55e8ba70"
+    }
+  },
+  "scope": "Saved run, comparison and paper-build files; not a new numerical execution"
+}

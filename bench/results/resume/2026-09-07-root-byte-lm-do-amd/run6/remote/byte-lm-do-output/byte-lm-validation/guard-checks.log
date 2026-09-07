@@ -1,0 +1,8 @@
+.................................{"guard": "nvidia-root-serial-v1", "reason": "available host memory below 2 GiB", "cpu_affinity": "0,1", "thread_limit": 2, "returncode": -15}
+..{"guard": "nvidia-root-serial-v1", "reason": "process-group RSS cap exceeded", "cpu_affinity": "0,1", "thread_limit": 2, "returncode": -15}
+..
+----------------------------------------------------------------------
+Ran 37 tests in 0.036s
+
+OK
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0", "vram_total_bytes": 274542362624, "telemetry": {"initial_vram_bytes": 299687936, "peak_vram_bytes": 299687936, "last_vram_bytes": 299687936, "initial_rss_bytes": 8683520, "peak_rss_bytes": 8683520, "last_rss_bytes": 8683520, "initial_host_available_bytes": 161661980672, "last_host_available_bytes": 161661980672, "samples": 1, "last_elapsed_seconds": 0.0035465089999888733, "crossing_sample": null}, "returncode": 0}

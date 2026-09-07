@@ -1,0 +1,14 @@
+{
+  "bindings/_mojolearn_byte_lm.mojo": "3a7ad29b4852aaa45dfe9e983f0d40d5b4ed718ac4b65849a66f2e519531ec71",
+  "bindings/build_byte_lm.sh": "1a63591d8a97e2793a1bdaa0d06c0ef99333b14734e51cc1cbd77fef27ee8dc3",
+  "python/mojolearn/_byte_lm_impl.py": "34aac192bd1a9960471f0fb624a4e425e5ba58845b962dfe757ad65deb489c50",
+  "tools/byte_lm_real_text_capture.py": "70ed731485734921ec4a78aa61e3e7c24b439d8edbbeb23bba1172c42c4176ca",
+  "tools/root_job_receipt.py": "f821e041cbc828a262046fca62503cdd7da286dad80c95b258465250cf87e0ef",
+  "tools/byte_lm_state_compare.py": "537e135d65ac771f8902074377565e4087d4decefe3ac1f821df22778fa90e09",
+  "tools/macos_serial_guard.py": "a81b34cbe675457991c9e3214c5a0aef74a23ed07881c983b550753c55ec38e5",
+  "python/mojolearn/tests/test_byte_lm_surface.py": "311aa5517aea72dbedbcd24af6a8d0c8844676ac08049fbe81bfef00cc908d1f",
+  "tools/tests/test_byte_lm_capture_portability.py": "5c6a5797153dbedac3259a4d29ac3905ec6d9aebb0e0112ea1f370f61af8b051",
+  "tools/tests/test_byte_lm_state_compare.py": "edce19f8b12eba20c15ee5f21db355158c3356561629edcc4ac73a7703f0f87a",
+  "tools/tests/test_byte_lm_metal_receipt_policy.py": "d3a179e83c20603baaf0872224d84a2853c02df74d2c16170c65f612b9b02df5",
+  "tools/test_macos_serial_guard.py": "79243e95d65c4fad47858eee9f898e0e400afc110823183d8ed27bf01e60dc05"
+}

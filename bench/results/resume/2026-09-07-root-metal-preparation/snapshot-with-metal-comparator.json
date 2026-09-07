@@ -1,0 +1,18 @@
+{
+  "commit": "d17c1aa1e977fb3831da2a8d2ca39de60c37b2c5",
+  "archive_sha256": "d28148a448cf4dc033122895a14c2cd105758fa069b6acb0c1c46f5a580a8395",
+  "previous_snapshot": "59e35532433f3386cecb8c56e0ca0e6a5253d23d",
+  "numerical_inventory_unchanged": true,
+  "comparator_tests_passed": 38,
+  "subtests_passed": 7,
+  "retained_two_vendor_resume_regressions": [
+    "nv-to-amd",
+    "amd-to-nv"
+  ],
+  "metal_model_executed": false,
+  "files": {
+    "tools/byte_lm_state_compare.py": "e524a2903130439eb80ddfe3b5c2fa969ed44173cacaad661ca2bff0448b7d77",
+    "tools/tests/test_byte_lm_optional_metal.py": "09191822352ad4f2f66b31abd6b7826553241cbfc3e91ae7503bb5f93e5daa59",
+    "tools/root_job_receipt.py": "f821e041cbc828a262046fca62503cdd7da286dad80c95b258465250cf87e0ef"
+  }
+}

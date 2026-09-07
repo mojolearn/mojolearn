@@ -1,0 +1,9 @@
+{
+  "commit": "59e35532433f3386cecb8c56e0ca0e6a5253d23d",
+  "branch": "byte-lm-metal-20260907",
+  "archive_sha256": "001cf7a7de082876702aa737025775bdb05a90335def20c9bb215f572d5267ac",
+  "status": "HOST_CHECKED_NOT_GPU_QUALIFIED",
+  "host_tests_passed": 88,
+  "subtests_passed": 7,
+  "metal_model_executed": false
+}

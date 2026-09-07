@@ -1,0 +1,3 @@
+✨ Pixi task (check-umap-finite-params in default): mojo run -I . umap/checks/finite_params_check.mojo
+UMAP non-finite parameter refusal PASS: 24 cases
+{"guard": "nvidia-root-serial-v1", "reason": null, "returncode": 0}

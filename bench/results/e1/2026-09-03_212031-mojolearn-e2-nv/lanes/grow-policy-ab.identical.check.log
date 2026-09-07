@@ -1,0 +1,25 @@
+date 2026-09-03T21:20:36Z
+host mojolearn-e2-nv
+lanes gbdt-lossguide gbdt-depthwise
+rows 1000000
+defines MOJOLEARN_2044_FAST_NO_RIDX_ONLY MOJOLEARN_2045_FAST_NO_QUANT_HIST
+store /mnt/mojolearn-data/gbm-bench
+device NVIDIA H100 80GB HBM3
+== build BASE (FAST as shipped) ==
+== build MOJOLEARN_2044_FAST_NO_RIDX_ONLY ==
+== build MOJOLEARN_2045_FAST_NO_QUANT_HIST ==
+
+== lane gbdt-lossguide ==
+GPAB lane=gbdt-lossguide arm=base shape=none med_ms=- hash=-
+GPAB lane=gbdt-lossguide arm=MOJOLEARN_2044_FAST_NO_RIDX_ONLY med_ms=- ratio=- bits equal
+GPAB lane=gbdt-lossguide arm=MOJOLEARN_2045_FAST_NO_QUANT_HIST med_ms=- ratio=- bits equal
+== lane gbdt-depthwise ==
+GPAB lane=gbdt-depthwise arm=base shape=higgs-1000000x28 med_ms=11839.7 hash=30c39e55baf5aeae
+GPAB lane=gbdt-depthwise arm=MOJOLEARN_2044_FAST_NO_RIDX_ONLY med_ms=11702.5 ratio=0.988 bits equal
+GPAB lane=gbdt-depthwise arm=MOJOLEARN_2045_FAST_NO_QUANT_HIST med_ms=11740.3 ratio=0.992 bits equal
+
+ratio = define / base. Below 1.0 means the define made FAST faster.
+A ratio is a speed result only on a row whose hashes are EQUAL.
+results in bench/results/e1/2026-09-03_212031-mojolearn-e2-nv//grow_policy_ab
+!! NOT HIGGS: a synthetic fixture answers nothing here
+!! grow_policy_ab FAILED (rc=4)

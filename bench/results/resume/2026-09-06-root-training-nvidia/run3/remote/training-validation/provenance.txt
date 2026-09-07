@@ -1,0 +1,3 @@
+source=9898d3e8fbb458d50af5aa28b9fc36bf34258ae6
+vendor=cuda
+scope=training integration and independent numerical checks; not a cross-vendor certificate

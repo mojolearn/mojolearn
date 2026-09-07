@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python3",
+    "tools/macos_serial_guard.py",
+    "--seconds",
+    "5",
+    "--rss-gib",
+    "1",
+    "--",
+    "python3",
+    "-c",
+    "print(\"ROOT_TINY_CHILD_STARTED\")"
+  ],
+  "returncode": 1,
+  "child_started": false,
+  "scope": "Actual supervisor admission check with harmless bounded Python child; no compiler or model"
+}

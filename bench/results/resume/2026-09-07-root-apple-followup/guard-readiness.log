@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/macos_serial_guard.py", line 341, in <module>
+    raise SystemExit(run(args))
+                     ~~~^^^^^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/macos_serial_guard.py", line 220, in run
+    raise RuntimeError('Require normal memory pressure and at least four GiB free/speculative reserve')
+RuntimeError: Require normal memory pressure and at least four GiB free/speculative reserve

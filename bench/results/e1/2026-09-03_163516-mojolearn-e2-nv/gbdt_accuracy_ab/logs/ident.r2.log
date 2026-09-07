@@ -1,0 +1,7 @@
+speed_gbdt_arm: dataset 'higgs' unavailable (No module named 'pandas'); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=synthclf-720000x100 ms=3617.806
+FSPEED lane=gbdt-symmetric arm=ours shape=synthclf-720000x100 round=1 ms=2769.694 hash=5f78304b8d8a674b
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.051836
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.999468

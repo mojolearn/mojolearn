@@ -1,0 +1,8 @@
+{
+  "cache_isolation": "Fresh configured paths; runtime honoring configuration requires root review",
+  "full128_enabled": false,
+  "run_requested": true,
+  "source_commit": "45cc2d9dcd2279646f9a9716fdfab9d598320535",
+  "source_count": 258,
+  "status": "PREPARED_NOT_EXECUTED"
+}

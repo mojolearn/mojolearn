@@ -1,0 +1,4 @@
+✨ Pixi task (check-umap-finite-params in default): mojo run -I . umap/checks/finite_params_check.mojo
+3476 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52c900000000, nodemask=1)
+UMAP non-finite parameter refusal PASS: 24 cases
+{"guard": "nvidia-root-serial-v1", "reason": null, "returncode": 0}

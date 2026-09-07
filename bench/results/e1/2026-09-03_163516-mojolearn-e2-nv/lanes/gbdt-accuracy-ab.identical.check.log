@@ -1,0 +1,57 @@
+== DEVIATION 2043 accuracy A/B: lane gbdt-symmetric, higgs rows 1000000, 3 rounds -> bench/results/e1/2026-09-03_163516-mojolearn-e2-nv//gbdt_accuracy_ab ==
+date 2026-09-03T16:35:20Z
+head adc9967d6bc7f2a1deb36452389aff0de17ad1a1
+host mojolearn-e2-nv
+lane gbdt-symmetric
+rows 1000000
+rounds 3
+ab_define MOJOLEARN_2043_FAST_FUSED_ONE_BYTE
+dataset higgs (UCI 00280/HIGGS.csv.gz) store /root/datasets/gbm-bench
+python pixi run python (Python 3.14.7)
+mem used 695M avail 239027M; swap used 0M
+device NVIDIA H100 80GB HBM3, 81559 MiB, 580.173.02
+== fetch higgs IN BACKGROUND (2.6 GB + gzip csv decode), joined after the builds ==
+fetch_pid=3702 (backgrounded)
+== build estimators (FAST) ==
+== build BASE  (FAST as shipped) ==
+== build PIN   (FAST, -D MOJOLEARN_2043_FAST_FUSED_ONE_BYTE=1) ==
+== build IDENT (IDENTICAL -> python/mojolearn/identical/) ==
+== joining the higgs fetch ==
+higgs fetch exit=1
+WARNING: the higgs fetch FAILED (exit 1). Every arm below will
+         fall back to the SYNTHETIC fixture and every line will say NOT-HIGGS.
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 564, in load_higgs
+    import pandas as pd
+ModuleNotFoundError: No module named 'pandas'
+== rotation: 3 rounds x (base, pin, ident), one process each ==
+  base r1 exit=0 1 timed lines
+  pin r1 exit=0 1 timed lines
+  ident r1 exit=0 1 timed lines
+  base r2 exit=0 1 timed lines
+  pin r2 exit=0 1 timed lines
+  ident r2 exit=0 1 timed lines
+  base r3 exit=0 1 timed lines
+  pin r3 exit=0 1 timed lines
+  ident r3 exit=0 1 timed lines
+
+== per-arm lines (machine readable; one per arm) ==
+GACC arm=base mode=FAST lane=gbdt-symmetric rows=1000000 rounds=3 shape=NOT-HIGGS:synthclf-720000x100 med_s=2.9506 auc=0.999468 auc_n=3 auc_range=0.999468-0.999468 logloss=0.051836 hash=6b190ed49203fd40
+GACC arm=pin mode=FAST+2043 lane=gbdt-symmetric rows=1000000 rounds=3 shape=NOT-HIGGS:synthclf-720000x100 med_s=2.8114 auc=0.999468 auc_n=3 auc_range=0.999468-0.999468 logloss=0.051836 hash=6b190ed49203fd40
+GACC arm=ident mode=IDENTICAL lane=gbdt-symmetric rows=1000000 rounds=3 shape=NOT-HIGGS:synthclf-720000x100 med_s=2.7864 auc=0.999468 auc_n=3 auc_range=0.999468-0.999468 logloss=0.051836 hash=5f78304b8d8a674b
+
+== verdict (the gate is FASTER *and* ACCURACY NOT DEGRADED, never bits) ==
+base AUC over 3 round(s): median 0.999468, range 0.999468..0.999468  (tolerance 0.0005)
+GACC-VERDICT arm=pin vs=base time_ratio=0.9528 d_auc=+0.000000 d_logloss=+0.000000 gate=FLIP
+GACC-VERDICT arm=ident vs=base time_ratio=0.9444 d_auc=+0.000000 d_logloss=+0.000000 gate=REFERENCE (not a candidate default)
+
+arm	mode	shape	med_s	auc	logloss	hash
+base	FAST	NOT-HIGGS:synthclf-720000x100	2.9506	0.999468	0.051836	6b190ed49203fd40
+pin	FAST+2043	NOT-HIGGS:synthclf-720000x100	2.8114	0.999468	0.051836	6b190ed49203fd40
+ident	IDENTICAL	NOT-HIGGS:synthclf-720000x100	2.7864	0.999468	0.051836	5f78304b8d8a674b
+
+THE HASHES ARE EXPECTED TO DIFFER between base and pin and that is NOT a
+defect: the fused arm accumulates dithered fixed-point Int32 where the
+PASS(8) ladder accumulates warp-private float32. They are recorded, never
+gated. A ratio here is a result only on a row whose shape= says higgs.
+
+results in bench/results/e1/2026-09-03_163516-mojolearn-e2-nv//gbdt_accuracy_ab

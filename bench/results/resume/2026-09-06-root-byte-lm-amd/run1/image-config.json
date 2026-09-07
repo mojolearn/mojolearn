@@ -1,0 +1,659 @@
+{
+  "architecture": "amd64",
+  "config": {
+    "Hostname": "d8ac8e4fecfe",
+    "Domainname": "",
+    "User": "root",
+    "AttachStdin": true,
+    "AttachStdout": true,
+    "AttachStderr": true,
+    "Tty": true,
+    "OpenStdin": true,
+    "StdinOnce": true,
+    "Env": [
+      "PATH=/opt/ompi/bin:/opt/ucx/bin:/opt/cache/bin:/opt/rocm/llvm/bin:/opt/rocm/opencl/bin:/opt/rocm/hip/bin:/opt/rocm/hcc/bin:/opt/rocm/bin:/opt/conda/envs/py_3.10/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "DEBIAN_FRONTEND=noninteractive",
+      "PYTORCH_ROCM_ARCH=gfx908;gfx90a;gfx1030;gfx1100;gfx1101;gfx942;gfx1200;gfx1201",
+      "ANACONDA_PYTHON_VERSION=3.10",
+      "INSTALLED_PROTOBUF=yes",
+      "INSTALLED_DB=yes",
+      "INSTALLED_VISION=yes",
+      "ROCM_PATH=/opt/rocm",
+      "MAGMA_HOME=/opt/rocm/magma",
+      "LANG=C.UTF-8",
+      "LC_ALL=C.UTF-8",
+      "BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10",
+      "MAX_JOBS=32",
+      "MPI_HOME=/opt/ompi",
+      "UCX_HOME=/opt/ucx",
+      "LD_LIBRARY_PATH=/opt/ompi/lib:/opt/rocm/lib:/usr/local/lib:",
+      "CI=1",
+      "PYTORCH_TEST_WITH_ROCM=1",
+      "PYTORCH_TESTING_DEVICE_ONLY_FOR=cuda",
+      "HSA_FORCE_FINE_GRAIN_PCIE=1"
+    ],
+    "Cmd": [
+      "bash"
+    ],
+    "Image": "rocm/pytorch:rocm6.4.1_ubuntu22.04_py3.10_pytorch_release_2.6.0",
+    "Volumes": null,
+    "WorkingDir": "/var/lib/jenkins",
+    "Entrypoint": null,
+    "OnBuild": null,
+    "Labels": {
+      "org.opencontainers.image.ref.name": "ubuntu",
+      "org.opencontainers.image.version": "22.04"
+    }
+  },
+  "container": "d8ac8e4fecfe8e87156714910a11b31dc1faa3741091369a19a86aceacf47a0c",
+  "container_config": {
+    "Hostname": "d8ac8e4fecfe",
+    "Domainname": "",
+    "User": "root",
+    "AttachStdin": true,
+    "AttachStdout": true,
+    "AttachStderr": true,
+    "Tty": true,
+    "OpenStdin": true,
+    "StdinOnce": true,
+    "Env": [
+      "PATH=/opt/ompi/bin:/opt/ucx/bin:/opt/cache/bin:/opt/rocm/llvm/bin:/opt/rocm/opencl/bin:/opt/rocm/hip/bin:/opt/rocm/hcc/bin:/opt/rocm/bin:/opt/conda/envs/py_3.10/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "DEBIAN_FRONTEND=noninteractive",
+      "PYTORCH_ROCM_ARCH=gfx908;gfx90a;gfx1030;gfx1100;gfx1101;gfx942;gfx1200;gfx1201",
+      "ANACONDA_PYTHON_VERSION=3.10",
+      "INSTALLED_PROTOBUF=yes",
+      "INSTALLED_DB=yes",
+      "INSTALLED_VISION=yes",
+      "ROCM_PATH=/opt/rocm",
+      "MAGMA_HOME=/opt/rocm/magma",
+      "LANG=C.UTF-8",
+      "LC_ALL=C.UTF-8",
+      "BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10",
+      "MAX_JOBS=32",
+      "MPI_HOME=/opt/ompi",
+      "UCX_HOME=/opt/ucx",
+      "LD_LIBRARY_PATH=/opt/ompi/lib:/opt/rocm/lib:/usr/local/lib:",
+      "CI=1",
+      "PYTORCH_TEST_WITH_ROCM=1",
+      "PYTORCH_TESTING_DEVICE_ONLY_FOR=cuda",
+      "HSA_FORCE_FINE_GRAIN_PCIE=1"
+    ],
+    "Cmd": [
+      "bash"
+    ],
+    "Image": "rocm/pytorch:rocm6.4.1_ubuntu22.04_py3.10_pytorch_release_2.6.0",
+    "Volumes": null,
+    "WorkingDir": "/var/lib/jenkins",
+    "Entrypoint": null,
+    "OnBuild": null,
+    "Labels": {
+      "org.opencontainers.image.ref.name": "ubuntu",
+      "org.opencontainers.image.version": "22.04"
+    }
+  },
+  "created": "2025-07-24T20:55:45.732731525Z",
+  "docker_version": "28.3.2",
+  "history": [
+    {
+      "created": "2025-04-28T09:44:40.148538709Z",
+      "created_by": "/bin/sh -c #(nop)  ARG RELEASE",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-04-28T09:44:40.176482348Z",
+      "created_by": "/bin/sh -c #(nop)  ARG LAUNCHPAD_BUILD_ARCH",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-04-28T09:44:40.208170588Z",
+      "created_by": "/bin/sh -c #(nop)  LABEL org.opencontainers.image.ref.name=ubuntu",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-04-28T09:44:40.232710822Z",
+      "created_by": "/bin/sh -c #(nop)  LABEL org.opencontainers.image.version=22.04",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-04-28T09:44:42.414112095Z",
+      "created_by": "/bin/sh -c #(nop) ADD file:59e67123ba6a5d9eea9813e7b2a767696f767c15c5b23c61c4d5bd6ba6fa9ac6 in / "
+    },
+    {
+      "created": "2025-04-28T09:44:42.727616626Z",
+      "created_by": "/bin/sh -c #(nop)  CMD [\"/bin/bash\"]",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:03:44.319193338Z",
+      "created_by": "/bin/sh -c #(nop)  ARG UBUNTU_VERSION",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:03:44.419972893Z",
+      "created_by": "/bin/sh -c #(nop)  ENV DEBIAN_FRONTEND=noninteractive",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:03:44.465308757Z",
+      "created_by": "/bin/sh -c #(nop)  ARG PYTORCH_ROCM_ARCH",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:03:44.5276798Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PYTORCH_ROCM_ARCH=gfx908;gfx90a;gfx1030;gfx1100;gfx1101;gfx942;gfx1200;gfx1201",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:03:44.550328637Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:b2a090cb02b5615fc2d1036ea77428cbb70253c6a8b8614f78fab85c2ba2dfb5 in install_base.sh "
+    },
+    {
+      "created": "2025-05-20T19:06:52.620313017Z",
+      "created_by": "|1 UBUNTU_VERSION=22.04 /bin/sh -c bash ./install_base.sh && rm install_base.sh"
+    },
+    {
+      "created": "2025-05-20T19:06:54.033600643Z",
+      "created_by": "/bin/sh -c #(nop)  ARG LLVMDEV",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:06:54.081007997Z",
+      "created_by": "/bin/sh -c #(nop)  ARG CLANG_VERSION",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:06:54.109310382Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:579317ceda1019f6cd72be303e1ec7c4c2486dbb81a333e2747d779070ed6794 in install_clang.sh "
+    },
+    {
+      "created": "2025-05-20T19:06:54.622288922Z",
+      "created_by": "|3 CLANG_VERSION= LLVMDEV= UBUNTU_VERSION=22.04 /bin/sh -c bash ./install_clang.sh && rm install_clang.sh"
+    },
+    {
+      "created": "2025-05-20T19:06:54.68922738Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:9f0cc865cc521cff044d880f1cb248b7f8e1ed60e8871fd662be075c2c6381b0 in install_user.sh "
+    },
+    {
+      "created": "2025-05-20T19:06:55.188682449Z",
+      "created_by": "|3 CLANG_VERSION= LLVMDEV= UBUNTU_VERSION=22.04 /bin/sh -c bash ./install_user.sh && rm install_user.sh"
+    },
+    {
+      "created": "2025-05-20T19:06:55.262616373Z",
+      "created_by": "/bin/sh -c #(nop)  ARG ANACONDA_PYTHON_VERSION",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:06:55.337966804Z",
+      "created_by": "/bin/sh -c #(nop)  ARG CONDA_CMAKE",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:06:55.389362234Z",
+      "created_by": "/bin/sh -c #(nop)  ARG BUILD_ENVIRONMENT",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:06:55.433169637Z",
+      "created_by": "/bin/sh -c #(nop)  ENV ANACONDA_PYTHON_VERSION=3.10",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:06:55.480143433Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PATH=/opt/conda/envs/py_3.10/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:06:55.532244516Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:5bb2bf9f600c791c8add13c6b7fa012e87171d16f0ff9cc6e36b5fa85ef534e8 in /opt/conda/requirements-ci.txt "
+    },
+    {
+      "created": "2025-05-20T19:06:55.575919016Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:4f2030250f761e6ac8f87880f43562c7195f8c965a62221ef19c1546241d8439 in install_conda.sh "
+    },
+    {
+      "created": "2025-05-20T19:06:55.591735732Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:9e6db7f5d2e2c5e4a161d58370737ca06f20ca3a566e47689fc3c7bfeb0193a2 in common_utils.sh "
+    },
+    {
+      "created": "2025-05-20T19:10:51.578425962Z",
+      "created_by": "|5 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes LLVMDEV= UBUNTU_VERSION=22.04 /bin/sh -c bash ./install_conda.sh && rm install_conda.sh common_utils.sh /opt/conda/requirements-ci.txt"
+    },
+    {
+      "created": "2025-05-20T19:10:55.21953354Z",
+      "created_by": "/bin/sh -c #(nop)  ARG GCC_VERSION",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:10:55.290952783Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:f0e99070d8114620f665268ab11f181c0153236fb98685afc2502a7f1e978b2c in install_gcc.sh "
+    },
+    {
+      "created": "2025-05-20T19:10:55.843521673Z",
+      "created_by": "|6 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes GCC_VERSION= LLVMDEV= UBUNTU_VERSION=22.04 /bin/sh -c bash ./install_gcc.sh && rm install_gcc.sh"
+    },
+    {
+      "created": "2025-05-20T19:10:55.958534216Z",
+      "created_by": "/bin/sh -c #(nop)  ARG PROTOBUF",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:10:56.032999099Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:638eb6acc2fc2ff495707449113f05ffc78b46b8a4bb23639e30d89724372a1f in install_protobuf.sh "
+    },
+    {
+      "created": "2025-05-20T19:12:50.071509123Z",
+      "created_by": "|7 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes UBUNTU_VERSION=22.04 /bin/sh -c if [ -n \"${PROTOBUF}\" ]; then bash ./install_protobuf.sh; fi"
+    },
+    {
+      "created": "2025-05-20T19:12:50.94395763Z",
+      "created_by": "|7 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes UBUNTU_VERSION=22.04 /bin/sh -c rm install_protobuf.sh"
+    },
+    {
+      "created": "2025-05-20T19:12:50.970401279Z",
+      "created_by": "/bin/sh -c #(nop)  ENV INSTALLED_PROTOBUF=yes",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:12:51.046879639Z",
+      "created_by": "/bin/sh -c #(nop)  ARG DB",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:12:51.07086792Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:e2f252dfb0c5021405f1818c90ddc6a8fd573505ed7427bfbdd51167d3e5dda7 in install_db.sh "
+    },
+    {
+      "created": "2025-05-20T19:13:05.482013082Z",
+      "created_by": "|8 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes UBUNTU_VERSION=22.04 /bin/sh -c if [ -n \"${DB}\" ]; then bash ./install_db.sh; fi"
+    },
+    {
+      "created": "2025-05-20T19:13:05.936821997Z",
+      "created_by": "|8 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes UBUNTU_VERSION=22.04 /bin/sh -c rm install_db.sh"
+    },
+    {
+      "created": "2025-05-20T19:13:06.038870649Z",
+      "created_by": "/bin/sh -c #(nop)  ENV INSTALLED_DB=yes",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:13:06.090753087Z",
+      "created_by": "/bin/sh -c #(nop)  ARG VISION",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:13:06.125265351Z",
+      "created_by": "/bin/sh -c #(nop) COPY multi:ecc701bddaf12d424d5629cf1acf0828dd4080da63bc673d1ddf7460edfab7e2 in ./ "
+    },
+    {
+      "created": "2025-05-20T19:14:48.985903012Z",
+      "created_by": "|9 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c if [ -n \"${VISION}\" ]; then bash ./install_vision.sh; fi"
+    },
+    {
+      "created": "2025-05-20T19:14:50.405817333Z",
+      "created_by": "|9 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c rm install_vision.sh cache_vision_models.sh common_utils.sh"
+    },
+    {
+      "created": "2025-05-20T19:14:50.443904316Z",
+      "created_by": "/bin/sh -c #(nop)  ENV INSTALLED_VISION=yes",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:14:50.496317803Z",
+      "created_by": "/bin/sh -c #(nop)  ARG ROCM_VERSION",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:14:50.537904742Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:97b22d5b61371bd4f097b3f607f7d0b6ded9cb3f757b0dc23b7c2375782f4ef6 in install_rocm.sh "
+    },
+    {
+      "created": "2025-05-20T19:30:46.515708255Z",
+      "created_by": "|10 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c bash ./install_rocm.sh"
+    },
+    {
+      "created": "2025-05-20T19:30:56.769278674Z",
+      "created_by": "|10 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c rm install_rocm.sh"
+    },
+    {
+      "created": "2025-05-20T19:30:56.871729321Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:dc007ec718680ca3fa2f00ec07dcee0d2f25ef694073fdb79ac48f76140b21d5 in install_rocm_magma.sh "
+    },
+    {
+      "created": "2025-05-20T19:51:19.715057459Z",
+      "created_by": "|10 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c bash ./install_rocm_magma.sh"
+    },
+    {
+      "created": "2025-05-20T19:51:22.277774754Z",
+      "created_by": "|10 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c rm install_rocm_magma.sh"
+    },
+    {
+      "created": "2025-05-20T19:51:22.303659623Z",
+      "created_by": "/bin/sh -c #(nop) ADD file:e5178dfdfdb457aa8d70e5da9fff4af3b4d543bf18032f18a89b047f0316bf8d in install_miopen.sh "
+    },
+    {
+      "created": "2025-05-20T19:51:22.879913242Z",
+      "created_by": "|10 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c bash ./install_miopen.sh ${ROCM_VERSION} && rm install_miopen.sh"
+    },
+    {
+      "created": "2025-05-20T19:51:22.990443224Z",
+      "created_by": "/bin/sh -c #(nop)  ENV ROCM_PATH=/opt/rocm",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:23.066300685Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PATH=/opt/rocm/bin:/opt/conda/envs/py_3.10/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:23.138593395Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PATH=/opt/rocm/hcc/bin:/opt/rocm/bin:/opt/conda/envs/py_3.10/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:23.247641855Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PATH=/opt/rocm/hip/bin:/opt/rocm/hcc/bin:/opt/rocm/bin:/opt/conda/envs/py_3.10/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:23.34613029Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PATH=/opt/rocm/opencl/bin:/opt/rocm/hip/bin:/opt/rocm/hcc/bin:/opt/rocm/bin:/opt/conda/envs/py_3.10/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:23.418988521Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PATH=/opt/rocm/llvm/bin:/opt/rocm/opencl/bin:/opt/rocm/hip/bin:/opt/rocm/hcc/bin:/opt/rocm/bin:/opt/conda/envs/py_3.10/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:23.494296661Z",
+      "created_by": "/bin/sh -c #(nop)  ENV MAGMA_HOME=/opt/rocm/magma",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:23.602728649Z",
+      "created_by": "/bin/sh -c #(nop)  ENV LANG=C.UTF-8",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:23.773256337Z",
+      "created_by": "/bin/sh -c #(nop)  ENV LC_ALL=C.UTF-8",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:23.809036199Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:78e4a3281ca763191f3b77613d800ded4b7b00b181cdeec0200f96c67a3613ba in install_amdsmi.sh "
+    },
+    {
+      "created": "2025-05-20T19:51:27.443902422Z",
+      "created_by": "|10 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c bash ./install_amdsmi.sh"
+    },
+    {
+      "created": "2025-05-20T19:51:28.300016129Z",
+      "created_by": "|10 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c rm install_amdsmi.sh"
+    },
+    {
+      "created": "2025-05-20T19:51:28.368773865Z",
+      "created_by": "/bin/sh -c #(nop)  ARG CMAKE_VERSION",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:28.41644278Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:5201a03ab45964625e825e856290df6dfb1826d702a824e47020a4d65c575468 in install_cmake.sh "
+    },
+    {
+      "created": "2025-05-20T19:51:35.603516575Z",
+      "created_by": "|11 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CMAKE_VERSION=3.18.5 CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c if [ -n \"${CMAKE_VERSION}\" ]; then bash ./install_cmake.sh; fi"
+    },
+    {
+      "created": "2025-05-20T19:51:36.285290077Z",
+      "created_by": "|11 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CMAKE_VERSION=3.18.5 CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c rm install_cmake.sh"
+    },
+    {
+      "created": "2025-05-20T19:51:36.316071267Z",
+      "created_by": "/bin/sh -c #(nop)  ARG NINJA_VERSION",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:36.338319081Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:f562ac7c4f4bdd63c08a52ddfc7e1180d5ee49530c1a18f726242695cfae1868 in install_ninja.sh "
+    },
+    {
+      "created": "2025-05-20T19:51:37.332040056Z",
+      "created_by": "|12 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CMAKE_VERSION=3.18.5 CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= NINJA_VERSION=1.9.0 PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c if [ -n \"${NINJA_VERSION}\" ]; then bash ./install_ninja.sh; fi"
+    },
+    {
+      "created": "2025-05-20T19:51:37.868695902Z",
+      "created_by": "|12 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CMAKE_VERSION=3.18.5 CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= NINJA_VERSION=1.9.0 PROTOBUF=yes ROCM_VERSION=6.4.1 UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c rm install_ninja.sh"
+    },
+    {
+      "created": "2025-05-20T19:51:38.060501301Z",
+      "created_by": "/bin/sh -c #(nop)  ARG TRITON",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:51:38.309495038Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:4278720cb36f67567d70b5828bbe9eb47e3b03c9ae7a67fa254f9478559cd993 in install_triton.sh "
+    },
+    {
+      "created": "2025-05-20T19:51:38.33212959Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:9e6db7f5d2e2c5e4a161d58370737ca06f20ca3a566e47689fc3c7bfeb0193a2 in common_utils.sh "
+    },
+    {
+      "created": "2025-05-20T19:51:38.396193849Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:77ff88eac004d39867271f88970329615a9fc3b28797c7bf4cc1caf5ede2c2f0 in triton.txt "
+    },
+    {
+      "created": "2025-05-20T19:51:38.486258249Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:317afa136ef0c0a5d80d6702afbfd60a0d37bb2987570d2514318ccc8051e223 in triton_version.txt "
+    },
+    {
+      "created": "2025-05-20T19:59:03.302222062Z",
+      "created_by": "|13 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CMAKE_VERSION=3.18.5 CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= NINJA_VERSION=1.9.0 PROTOBUF=yes ROCM_VERSION=6.4.1 TRITON=yes UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c if [ -n \"${TRITON}\" ]; then bash ./install_triton.sh; fi"
+    },
+    {
+      "created": "2025-05-20T19:59:10.060317055Z",
+      "created_by": "|13 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CMAKE_VERSION=3.18.5 CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= NINJA_VERSION=1.9.0 PROTOBUF=yes ROCM_VERSION=6.4.1 TRITON=yes UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c rm install_triton.sh common_utils.sh triton.txt triton_version.txt"
+    },
+    {
+      "created": "2025-05-20T19:59:10.169732254Z",
+      "created_by": "/bin/sh -c #(nop) COPY file:62caab7ea7f18fb87560e07354fbefedb8b0eab2c4e3ed0bfa080fb1a2394d69 in install_cache.sh "
+    },
+    {
+      "created": "2025-05-20T19:59:10.224374582Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PATH=/opt/cache/bin:/opt/rocm/llvm/bin:/opt/rocm/opencl/bin:/opt/rocm/hip/bin:/opt/rocm/hcc/bin:/opt/rocm/bin:/opt/conda/envs/py_3.10/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:59:23.946980922Z",
+      "created_by": "|13 BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10 CLANG_VERSION= CMAKE_VERSION=3.18.5 CONDA_CMAKE=yes DB=yes GCC_VERSION= LLVMDEV= NINJA_VERSION=1.9.0 PROTOBUF=yes ROCM_VERSION=6.4.1 TRITON=yes UBUNTU_VERSION=22.04 VISION=yes /bin/sh -c bash ./install_cache.sh && rm install_cache.sh"
+    },
+    {
+      "created": "2025-05-20T19:59:24.063060203Z",
+      "created_by": "/bin/sh -c #(nop)  ARG BUILD_ENVIRONMENT",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:59:24.141937723Z",
+      "created_by": "/bin/sh -c #(nop)  ENV BUILD_ENVIRONMENT=pytorch-linux-jammy-rocm6.4.1-py3.10",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:59:34.616644357Z",
+      "created_by": "/bin/sh -c #(nop) COPY dir:4ccc9e9d18635493a3825294a70103eaa912bdc81d80351d4dcd16f0a2e3d2b1 in /opt/llvm "
+    },
+    {
+      "created": "2025-05-20T19:59:35.300594647Z",
+      "created_by": "/bin/sh -c #(nop)  USER jenkins",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T19:59:35.332281508Z",
+      "created_by": "/bin/sh -c #(nop)  CMD [\"bash\"]",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T20:19:57.175680687Z",
+      "created_by": "/bin/sh -c #(nop)  ARG FRAME_NAME",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T20:19:57.26568881Z",
+      "created_by": "/bin/sh -c #(nop)  ARG OS_CHOICE",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T20:19:57.307727836Z",
+      "created_by": "/bin/sh -c #(nop)  ARG PY_VER",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T20:19:57.375854516Z",
+      "created_by": "/bin/sh -c #(nop)  ARG PY_EXTRA_PK",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T20:19:57.424521086Z",
+      "created_by": "/bin/sh -c #(nop)  ARG MAX_JOBS=4",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T20:19:57.474113231Z",
+      "created_by": "/bin/sh -c #(nop)  ENV MAX_JOBS=32",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T20:19:57.518243622Z",
+      "created_by": "/bin/sh -c #(nop)  USER root",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T20:19:57.543474162Z",
+      "created_by": "/bin/sh -c #(nop) COPY dir:9a0662d9c5c20fa43f422b1d9f178295e34181aa791d59605dda11504da06686 in /var/lib/jenkins "
+    },
+    {
+      "created": "2025-05-20T20:21:48.625964439Z",
+      "created_by": "/bin/sh -c #(nop) COPY dir:0b716cfd444b0db3550477da67ba84ff528a5a2944bfd0d26625ea3b89934b12 in /var/lib/jenkins/pytorch "
+    },
+    {
+      "created": "2025-05-20T20:21:53.007242434Z",
+      "created_by": "/bin/sh -c #(nop) WORKDIR /var/lib/jenkins",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T20:21:53.518298307Z",
+      "created_by": "|4 FRAME_NAME=pytorch OS_CHOICE=ubuntu22.04 PY_EXTRA_PK= PY_VER=py3.10 /bin/sh -c if [ \"x$PY_EXTRA_PK\" != \"x\" ]; then         bash script.sh ${PY_EXTRA_PK};     fi",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T22:08:41.548593761Z",
+      "created_by": "|4 FRAME_NAME=pytorch OS_CHOICE=ubuntu22.04 PY_EXTRA_PK= PY_VER=py3.10 /bin/sh -c ./build.sh"
+    },
+    {
+      "created": "2025-05-20T22:08:44.456775003Z",
+      "created_by": "/bin/sh -c #(nop)  ENV ROCM_PATH=/opt/rocm",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T22:08:44.500903913Z",
+      "created_by": "/bin/sh -c #(nop)  ENV MPI_HOME=/opt/ompi",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T22:08:44.552212475Z",
+      "created_by": "/bin/sh -c #(nop)  ENV UCX_HOME=/opt/ucx",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T22:08:44.613985696Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PATH=/opt/ompi/bin:/opt/ucx/bin:/opt/cache/bin:/opt/rocm/llvm/bin:/opt/rocm/opencl/bin:/opt/rocm/hip/bin:/opt/rocm/hcc/bin:/opt/rocm/bin:/opt/conda/envs/py_3.10/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T22:08:44.764777323Z",
+      "created_by": "/bin/sh -c #(nop)  ENV LD_LIBRARY_PATH=/opt/ompi/lib:/opt/rocm/lib:/usr/local/lib:",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T22:08:44.822177225Z",
+      "created_by": "/bin/sh -c #(nop)  ENV CI=1",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T22:08:44.874580707Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PYTORCH_TEST_WITH_ROCM=1",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T22:08:44.937330726Z",
+      "created_by": "/bin/sh -c #(nop)  ENV PYTORCH_TESTING_DEVICE_ONLY_FOR=cuda",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-05-20T22:08:44.998979384Z",
+      "created_by": "/bin/sh -c #(nop)  ENV HSA_FORCE_FINE_GRAIN_PCIE=1",
+      "empty_layer": true
+    },
+    {
+      "created": "2025-07-24T20:55:45.732731525Z",
+      "created_by": "bash"
+    }
+  ],
+  "os": "linux",
+  "rootfs": {
+    "type": "layers",
+    "diff_ids": [
+      "sha256:346f14bf17b9846c3e67362b00c16c9085772033cb7c58742c4e1efa22466d38",
+      "sha256:43fb436f833f21a0941ce14ab0b230806d9e0af75f6e1e0f6cb26bbe41996dc7",
+      "sha256:4e571a2e93144155f31dae85d026233c9b149aa0e10b0449f606af9dfb9bfbd9",
+      "sha256:fa1d3ebb74616b15cb15d1416b5c2832f9f010c74b799f4484642dad5ed83500",
+      "sha256:a069a762b4a7e4ff6b4ddb0bce71aae991304633d050fc227ac08546901f71fb",
+      "sha256:9b9156ce6a5d6afff9ce0f2f0aa40ada2112f40c658aed750a04dd58cd9442df",
+      "sha256:b47d840e4ed98864f182e098c5643719cdeaa47a68c7e35c314c5567d3b9ba9e",
+      "sha256:43f3c6c8e7b7304594e8372dec37470fef279cbf2dea1a39da4c5779c9d8622f",
+      "sha256:3467d013087e3dcb737e04cd7455ac7c61e4860bdba0a7d9fa0daab35920dca6",
+      "sha256:b667427f48f2da424ef757d266639b244ee83cfdc9185deafe3bb0fb0ef214f0",
+      "sha256:3b137c0ccd08c4747670a9997197cf0ac5faaed4096e81b658096cbdf78cd7e3",
+      "sha256:c918a93ab2d7b17851ebf609fc5983be3bd7fee7e36ea2ff5795263b2fa48e90",
+      "sha256:41d64ec02fe4b2363b676cef224522e5b96d5e6eba27148b909cfb3a6637804f",
+      "sha256:e8584ac30452eca5c7261653547137d55863a650ee36586dce9b09fc2df37658",
+      "sha256:e34ef948f948035c208d2af47d94ee04a57361171fa51bf2a97d17db59c07c47",
+      "sha256:209c056ce50f43c66740890147d17136654cdce17babdad45a36a1c6237a8b26",
+      "sha256:6a3823725ada94a834e9644ba75327af722a5fc26b3b49ed899f84eeb9b7deb9",
+      "sha256:69f702d810e00f4cab5784a3bc45fe96b4e340a84e88386bdd662ec1007f6450",
+      "sha256:299988bc7dfb19c394bf94d8579b2c724e70907b6db09bc01b1ec97c6328b83b",
+      "sha256:184080e43403a47483790c95d63d89cba44b5b1855667474724a38c1e1ad3cb7",
+      "sha256:2f33e0d993efc9b9f84ab43448c2b4049a3001e020a99428e10189e2127f1f2d",
+      "sha256:045b67ca32d0d2f812f11b81c5204149eb4e4fc6ce48f23da7efd48dbe239c12",
+      "sha256:24b009ced6ca79e62e5d692a2f58cdea3efa9707f4da4888c5bb91a32c5cd6f3",
+      "sha256:8b565dee38ae7569f8f7975058a4c59cf82468ba1e650cae2ecf245f983bdc86",
+      "sha256:c5415cf77f962ce1ea55d47b6ecd5547759fbb64ed13c6c99badd5cdbd5d6ed4",
+      "sha256:0c80f9d158c915d2d4d1f62a0adb9c48b6b29c5d44577746b9b315f3b2f733aa",
+      "sha256:1f99d50b5be91a5df2a77842f1ad0b648431002e26e58119fb9fc492e88e267d",
+      "sha256:f2162342457222dd10e5a4415cd25258f07ca1cbbed28bfa54f261fdbc1dded0",
+      "sha256:da553cd63e0a314d8ebc651273660e53ca0f1aebf67772a7f3290ae62240a4c0",
+      "sha256:3bc1f088ac0c20e84e36a94ac9fc9c1655b7f9b96ae069ba90c35d989b47a254",
+      "sha256:31d556128ab4f01dd94e2c7509ce45cf7a9ff311a20869ca0db2ddbe1cce5b66",
+      "sha256:2e403da0c00c51777d8ab8408dcedec8707ee84bc3047040f9f80c8452e3ed6e",
+      "sha256:50b6fdce4d2796d85a29c027a02a4dc094485014127a4e8624a08d645610c4be",
+      "sha256:83366c415b1490b13f035a798fe7a014b9dd3bf03b0ca3f00a91fc0fff5c2d7a",
+      "sha256:0f575d303170fd2de532e336d801cae184e6cbcdc96295bb4018c18b97f35bb2",
+      "sha256:a92a1ea853461bac26b88f86a000f863fd0edd1c75f932508128a6286614f33d",
+      "sha256:12818518767bae3f1831af412dc69649627e71f8f348f8b3a02d43a721a111ff",
+      "sha256:57a55a5eb8592b6ba795735b1dc768bcf1db90925b64e9b2a4a6fe7520f1eefa",
+      "sha256:91a5bad65060706c68180adfd893fb4b6a3847533a1651a69e73314d8f3b1827",
+      "sha256:d7581ff39df99692df8e0959d2ea5ba9295fed5f47dd3bb0b7f2c1224a588570",
+      "sha256:b667427f48f2da424ef757d266639b244ee83cfdc9185deafe3bb0fb0ef214f0",
+      "sha256:b2cb2d4879dad9bbb64ed0c9e60da85127fe4dfe7ff88523fbe07f35d921172e",
+      "sha256:4deaf9fbcaee25e95ba72c550829c83432f36645f92af38b1b970d3f13011d6b",
+      "sha256:898b8c072624eb2788f48fd8361812de3e15cd92204e20c3ebe210d57468133e",
+      "sha256:b57eccbb9cc8d807c09c117d04998d62b64dc69995b9cc4bd2a00dfdee96d04f",
+      "sha256:06356779181337515a9a8e963075a603a48ca54b1e4468f516fa81686129663e",
+      "sha256:0e140ad27575c1d52df167c70ee2725ee3ed5a9fa7515ce274e45c49a77bfb6e",
+      "sha256:932fd4a5ca81a8111a51b756f1f9f03e12d3e1416782b5f738f393680693f927",
+      "sha256:228ecd519bc21286d0e40d959b9cb31b61a1fb71003012e925e798ecffe45213",
+      "sha256:c0c623390af9df3911c8d09eca8e8ddc3d0edd74979dc853d0b33faa8ccfc520",
+      "sha256:3861434c1f05ce2a13242eede38f65532478b4948bb944c889d0db722ff87915",
+      "sha256:05c3de3787c4aaedc457a0e124d356e508064966f74219c93fdddf7b44dd5cfb"
+    ]
+  }
+}

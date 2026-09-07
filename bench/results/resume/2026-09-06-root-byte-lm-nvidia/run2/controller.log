@@ -1,0 +1,190 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     rent
+   gpu:      NVIDIA GeForce RTX 4090
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-nvidia/run2
+
+   commit:   d921eade parent 2ab73063
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and NVIDIA dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /private/tmp/mojolearn-alpha-release-20260906/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[18:46:01 nvidia] dead-man ARMED before the create: pid 69276, fires in 4500s, keyed by name mojolearn-gemm-nvidia-2026-09-06_184559
+[18:46:01 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 69276; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-69185
+[18:46:01 nvidia] creating mojolearn-gemm-nvidia-2026-09-06_184559 (NVIDIA GeForce RTX 4090, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[18:46:01 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[18:46:02 nvidia] pod g0by6c4ijuuwdb created
+[18:46:36 nvidia] ssh target: -p 16328 root@47.47.180.99
+[18:46:39 nvidia] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[18:46:39 nvidia] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod g0by6c4ijuuwdb ...
+    ARMED. Pod g0by6c4ijuuwdb is TERMINATED through the API in 60 minutes.
+      lease: /private/tmp/mojolearn-alpha-release-20260906/tools/../bench/results/runpod_leases/g0by6c4ijuuwdb.lease
+      extend with: tools/runpod_guard.sh extend g0by6c4ijuuwdb '-p 16328 root@47.47.180.99' <minutes>
+    g0by6c4ijuuwdb: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep  6 22:46 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[18:46:54 nvidia] shipping the COMMIT (d921eade0da5454e39e0cd103b9a1799286b41b9), not the working tree
+[18:46:54 nvidia]   bounded Mamba source archive: 4642609 bytes compressed
+[18:46:54 nvidia]   archive source sha256: 857aab6ae20ada194f6970ebd27ed0f3
+[18:47:25 nvidia] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=305
+[18:47:28 nvidia]   remote pid 305; polling every 30s, giving up after 3240s
+[18:49:10 nvidia]   the payload finished (its sentinel is on the box)
+    REMOTE_BODY_DONE
+
+== step 7: fetch ==
+    source_sha256.txt
+    uname.txt
+    pixi_env.log
+    byte-lm-validation-console.log
+    gpu.txt
+    cpu-affinity.log
+    source_inventory.json
+    pixi_install.log
+    leg.txt
+    byte-lm-validation
+
+== step 8: what came home ==
+{
+  "binding_sha256": "ebe19b94815f89930b5c84ed30ac7e48ee3c21fddf909b184fdd3400411b925a",
+  "completed_steps": 128,
+  "heldout_loss_ratio": 0.5131724651836634,
+  "independent_oracle": {
+    "guard": {
+      "command": {
+        "bytes": 286,
+        "file": "byte-gradient-oracle.command.txt",
+        "sha256": "6dad7dc06eab6f699b4511ebe26621662b8cbf6bedd7bccd8b44aedb275e6ac1"
+      },
+      "final": {
+        "cpu_affinity": "0,1",
+        "guard": "nvidia-root-serial-v1",
+        "reason": null,
+        "returncode": 0,
+        "thread_limit": 2
+      },
+      "guard_log_sha256": "dd5b6a620b2f026b600b6af9016fd5b80872122c3359c673cbeb7ab26358295d",
+      "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+      "receipt_sha256": "2de52a65f0c5b0148c774def8c775eb010ede2807d3f8b98f73e044cb1d98a16",
+      "result": {
+        "bytes": 38238,
+        "file": "gradient-oracle.json",
+        "sha256": "123d7ea6e19a856dc10adef7a62a1d277bc6669836ff3c560da19d04b575afc2"
+      }
+    },
+    "oracle_sha256": "123d7ea6e19a856dc10adef7a62a1d277bc6669836ff3c560da19d04b575afc2",
+    "reference": {
+      "file": "gradient-oracle.json.reference.npz",
+      "sha256": "091cea38fbdaafbceb36abdd683b70e3a5bfc277c778db3382106d359b5b391f"
+    },
+    "step": 1
+  },
+  "passed": true,
+  "receipts": {
+    "first": {
+      "command": {
+        "bytes": 228,
+        "file": "byte-step1.command.txt",
+        "sha256": "9cc8b8d6efdd1e60b3081b6533c59f3e5768e352a6aafa2904bd94ec3822f15e"
+      },
+      "final": {
+        "cpu_affinity": "0,1",
+        "guard": "nvidia-root-serial-v1",
+        "reason": null,
+        "returncode": 0,
+        "thread_limit": 2
+      },
+      "guard_log_sha256": "dd5b6a620b2f026b600b6af9016fd5b80872122c3359c673cbeb7ab26358295d",
+      "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+      "receipt_sha256": "e9ae0fd3a7d41dd3033961911ee8e4100f0979dd9f8eb13f66d8c485112aa352",
+      "result": {
+        "bytes": 4589,
+        "file": "step1/summary.json",
+        "sha256": "77ebaacf8c500f1bba6fa7cfecaa61842dd500e92f1c6bdb8b5d8413d09851c3"
+      }
+    },
+    "full": {
+      "command": {
+        "bytes": 233,
+        "file": "byte-full128.command.txt",
+        "sha256": "f2c665aa6f9b44d67061d69dc2fa6ecfcdf4b5f810a3ceb8a489f73f9a01d225"
+      },
+      "final": {
+        "cpu_affinity": "0,1",
+        "guard": "nvidia-root-serial-v1",
+        "reason": null,
+        "returncode": 0,
+        "thread_limit": 2
+      },
+      "guard_log_sha256": "2e9ae8fb6f7cf373e25ce270282b23d2c3df1a4549caa4355bb998314e9d4c38",
+      "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+      "receipt_sha256": "14b112ff5bcb777a96b314b811874844300dd1fbb0a809d9f9f21e4822ca5be8",
+      "result": {
+        "bytes": 28192,
+        "file": "full128/summary.json",
+        "sha256": "d546e42f4dc83c5a4435fcd5f587056898bf05c9391e35fb34e649cf895e72fb"
+      }
+    }
+  },
+  "schema": "mojolearn.byte-lm.single-vendor-admission.v1",
+  "scope": "fixed small real-text model: independent first-step FP64 correctness and 128-step heldout learning on this vendor; cross-vendor identity remains separate",
+  "source_commit": "d921eade0da5454e39e0cd103b9a1799286b41b9",
+  "vendor": "cuda"
+}
+  source sha256 MATCHES on both ends (857aab6ae20ada19...)
+  gpu on the box:
+    NVIDIA GeForce RTX 4090, 580.159.04
+    vendor=nvidia
+    payload=mamba
+    knn_layout_only=0
+    nvidia_campaign=5
+    commit=d921eade0da5454e39e0cd103b9a1799286b41b9
+    started=2026-09-06T22:47:28Z
+    pixi_install_exit=0
+    byte_lm_validation_exit=0
+    gpu_archs=sm_89
+    scope=bounded nvidia byte LM validation; no cross-vendor or performance certificate
+
+== step 9: bounded nvidia byte LM validation ==
+  Results: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-nvidia/run2/remote/byte-lm-validation
+  Admission requires retained root receipts and the independent oracle.
+  This is not a cross-vendor identity or performance certificate.
+
+== step 10: terminate at the end of the WORK ==
+  lease at exit:
+    g0by6c4ijuuwdb: 57 minutes left of a 60-minute lease
+  terminating g0by6c4ijuuwdb (layer two, from this machine)
+    DELETE /v1/pods/g0by6c4ijuuwdb -> HTTP 204
+  VERIFIED: g0by6c4ijuuwdb is gone (HTTP 404).
+
+artifacts: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-nvidia/run2
+the byte LM validation results: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-nvidia/run2/remote/byte-lm-validation
+read byte-lm-validation-console.log and byte_lm_validation_exit together.
+
+== teardown (exit 0) ==
+  lease at exit:
+    NO LEASE for g0by6c4ijuuwdb -- it is unguarded.
+  dead-man cancelled (pid 69276)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-69185/gemm_remote_leg.sh: line 2229: 69276 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

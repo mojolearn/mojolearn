@@ -1,0 +1,1 @@
+python3 tools/nvidia_serial_guard.py --seconds 240 -- /root/mojolearn/.byte-lm-validation-venv/bin/python tools/byte_lm_gradient_oracle.py /root/gemm_leg_out/byte-lm-validation/step1/step000001 --expected-vendor cuda --output /root/gemm_leg_out/byte-lm-validation/gradient-oracle.json 

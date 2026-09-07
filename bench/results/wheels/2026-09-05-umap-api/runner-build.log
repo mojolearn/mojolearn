@@ -1,0 +1,58 @@
+runner already installed under /Users/andrewhendel/.mojolearn-runner (rm -rf it to reinstall)
+
+runner name:   m4-real-gpu-1788598304
+labels:        self-hosted (automatic), macos,arm64,metal,real-gpu
+repository:    https://github.com/mojolearn/mojolearn
+
+From ANOTHER terminal, dispatch exactly one run:
+  gh workflow run release-provenance.yml -f publish=none       # build only
+  gh workflow run release-provenance.yml -f publish=testpypi
+  gh workflow run release-provenance.yml -f publish=pypi
+then: gh run watch
+
+
+--------------------------------------------------------------------------------
+|        ____ _ _   _   _       _          _        _   _                      |
+|       / ___(_) |_| | | |_   _| |__      / \   ___| |_(_) ___  _ __  ___      |
+|      | |  _| | __| |_| | | | | '_ \    / _ \ / __| __| |/ _ \| '_ \/ __|     |
+|      | |_| | | |_|  _  | |_| | |_) |  / ___ \ (__| |_| | (_) | | | \__ \     |
+|       \____|_|\__|_| |_|\__,_|_.__/  /_/   \_\___|\__|_|\___/|_| |_|___/     |
+|                                                                              |
+|                       Self-hosted runner registration                        |
+|                                                                              |
+--------------------------------------------------------------------------------
+
+# Authentication
+
+
+√ Connected to GitHub
+
+# Runner Registration
+
+
+
+
+√ Runner successfully added
+
+# Runner settings
+
+
+√ Settings Saved.
+
+
+runner m4-real-gpu-1788598304 is registered and waiting for ONE job; dispatch it now.
+Ctrl-C here removes the registration.
+
+
+√ Connected to GitHub
+
+Current runner version: '2.337.0'
+2026-09-05 08:51:51Z: Listening for Jobs
+2026-09-05 08:51:53Z: Running job: Build and verify the wheel
+2026-09-05 09:30:18Z: Job Build and verify the wheel completed with result: Succeeded
+√ Removed .credentials
+√ Removed .runner
+Runner listener exit with 0 return code, stop the service, no retry needed.
+Exiting runner...
+run.sh exited with 0
+runner m4-real-gpu-1788598304 is not registered on GitHub (already gone)

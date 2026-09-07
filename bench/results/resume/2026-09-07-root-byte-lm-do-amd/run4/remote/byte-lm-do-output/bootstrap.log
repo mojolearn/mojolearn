@@ -1,0 +1,9 @@
+bootstrap_started=2026-09-07T07:40:55Z
+pid 3169's current affinity list: 0-19
+pid 3169's new affinity list: 0,1
+dependency_setup_started
+dependency_setup_passed
+bash: line 1: html: No such file or directory
+bash: line 2: syntax error near unexpected token `<'
+bash: line 2: `<head><title>301 Moved Permanently</title></head>'
+bootstrap_exit=2

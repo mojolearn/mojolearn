@@ -1,0 +1,20 @@
+{
+  "status": "QUALIFIED_SINGLE_VENDOR",
+  "provider": "DigitalOcean",
+  "device": "AMD Instinct MI325X VF",
+  "architecture": "gfx942",
+  "commit": "eac39c367beeddb8ba4792551d154673e654ce21",
+  "source_files": 258,
+  "jobs_passed": 12,
+  "steps": 128,
+  "initial_heldout_loss": 5.5412986278533936,
+  "final_heldout_loss": 2.8436418771743774,
+  "binding_sha256": "02f007a221a624172b4aa9f278a7e987f12d2d4bc1856ce94db74df8253b2784",
+  "checkpoint_sha256": "a9858cd59b424b77b897d0171d5f225d63f3f161fcdee02049bd6c04cfd8a6dc",
+  "head64_checkpoint_sha256": "264f189179b5a3b8a3cbbceb0f54209fb657ff7dacf701b4f8a760c693da8ff0",
+  "head64_matches_continuous_steps": 64,
+  "droplet_id": 598413448,
+  "deletion_verified_http_404": true,
+  "cpu_affinity": "0,1",
+  "scope": "New single-vendor learning/oracle/head evidence; expanded-source cross-vendor comparison and Metal remain separate."
+}

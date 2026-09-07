@@ -1,0 +1,163 @@
+{
+  "arch": "arm64",
+  "build": "release",
+  "build_number": 0,
+  "depends": [
+    "mojo-python ==1.0.0"
+  ],
+  "license": "LicenseRef-Modular-Proprietary",
+  "md5": "b5103c9d9978173a1e97c5e5eed1aeba",
+  "name": "mojo-compiler",
+  "platform": "osx",
+  "run_exports": {},
+  "sha256": "c52054bc444d851e5c38cc33e790fb011a1080470244aaa59351ac5056d08c59",
+  "size": 61221085,
+  "subdir": "osx-arm64",
+  "timestamp": 1786294690001,
+  "version": "1.0.0",
+  "fn": "mojo-compiler-1.0.0-release.conda",
+  "url": "https://conda.modular.com/max/osx-arm64/mojo-compiler-1.0.0-release.conda",
+  "channel": "https://conda.modular.com/max/",
+  "extracted_package_dir": "/Users/andrewhendel/Library/Caches/rattler/cache/pkgs/mojo-compiler-1.0.0-release",
+  "requested_specs": [],
+  "files": [
+    "bin/lld",
+    "bin/modular-crashpad-handler",
+    "bin/mojo",
+    "etc/conda/activate.d/10-activate-max.sh",
+    "lib/libAsyncRTRuntimeGlobals.dylib",
+    "lib/libKGENCompilerRTShared.dylib",
+    "lib/libMSupportGlobals.dylib",
+    "lib/mojo/std.mojoc",
+    "share/man/man1/mojo-build.1",
+    "share/man/man1/mojo-debug.1",
+    "share/man/man1/mojo-demangle.1",
+    "share/man/man1/mojo-doc.1",
+    "share/man/man1/mojo-format.1",
+    "share/man/man1/mojo-precompile.1",
+    "share/man/man1/mojo-repl.1",
+    "share/man/man1/mojo-run.1",
+    "share/man/man1/mojo.1",
+    "share/max/modular.cfg"
+  ],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": [
+      {
+        "_path": "bin/lld",
+        "path_type": "hardlink",
+        "sha256": "911ae2b007b5005c8662ac13b5cd3283497d884f5ffb79ccda32f60638b6fc11",
+        "size_in_bytes": 102201856
+      },
+      {
+        "_path": "bin/modular-crashpad-handler",
+        "path_type": "hardlink",
+        "sha256": "2f3a39e63ab89bcb39e443c3776881a8b3f3afec6ef98ba758c9e608b2d46ff8",
+        "size_in_bytes": 503280
+      },
+      {
+        "_path": "bin/mojo",
+        "path_type": "hardlink",
+        "sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+        "size_in_bytes": 123889264
+      },
+      {
+        "_path": "etc/conda/activate.d/10-activate-max.sh",
+        "path_type": "hardlink",
+        "sha256": "abfa8f8c3c2d7c01cf2cfe03fc5b60fe4b6d646c7eceda81c5b8881dced3b5f8",
+        "size_in_bytes": 2256
+      },
+      {
+        "_path": "lib/libAsyncRTRuntimeGlobals.dylib",
+        "path_type": "hardlink",
+        "sha256": "6f8b1b88974d5f9b937434639c74b598ab861b177debf8e20ce60b10e4ca59eb",
+        "size_in_bytes": 339488
+      },
+      {
+        "_path": "lib/libKGENCompilerRTShared.dylib",
+        "path_type": "hardlink",
+        "sha256": "688f466aa14e830f4b4f0a5448bb7b24024aa58d64c53fb35b256118fc3ef588",
+        "size_in_bytes": 1122336
+      },
+      {
+        "_path": "lib/libMSupportGlobals.dylib",
+        "path_type": "hardlink",
+        "sha256": "ebc40cfcb2859c3c66f3f27d5a068c7c153fba65996670b4989c0f51cad2c332",
+        "size_in_bytes": 123472
+      },
+      {
+        "_path": "lib/mojo/std.mojoc",
+        "path_type": "hardlink",
+        "sha256": "0ca4b40d6907d4fd631ffbf092aee2d4b7cc99baa63f277eea52d56a0b3f8d68",
+        "size_in_bytes": 3197996
+      },
+      {
+        "_path": "share/man/man1/mojo-build.1",
+        "path_type": "hardlink",
+        "sha256": "9ba9c50a7d7d4cb85d1030181e5daffc138770b249a0925a02588f3033888951",
+        "size_in_bytes": 7653
+      },
+      {
+        "_path": "share/man/man1/mojo-debug.1",
+        "path_type": "hardlink",
+        "sha256": "2ef26e8509e280399eb28c516b03f98a910a88daca3b1ff7163f168ce6a38137",
+        "size_in_bytes": 10833
+      },
+      {
+        "_path": "share/man/man1/mojo-demangle.1",
+        "path_type": "hardlink",
+        "sha256": "13640c348969ef92a9f32be8f9b4b34be237442485230840ee35cfebb96ef43d",
+        "size_in_bytes": 516
+      },
+      {
+        "_path": "share/man/man1/mojo-doc.1",
+        "path_type": "hardlink",
+        "sha256": "7eb9554b2e5f3ce44fdbb74cfdba3fed5fa6194d15a0d2a19de51ace985f85e7",
+        "size_in_bytes": 2832
+      },
+      {
+        "_path": "share/man/man1/mojo-format.1",
+        "path_type": "hardlink",
+        "sha256": "a2285754a8b3f3ddf2ff22724bbe4d1fd8f7de403e1b911c25f1ad9691318c3c",
+        "size_in_bytes": 708
+      },
+      {
+        "_path": "share/man/man1/mojo-precompile.1",
+        "path_type": "hardlink",
+        "sha256": "c0c83503f1788135944865224d2226b35c5da91f8572c661949954d72ac2b35b",
+        "size_in_bytes": 3913
+      },
+      {
+        "_path": "share/man/man1/mojo-repl.1",
+        "path_type": "hardlink",
+        "sha256": "d3381cb2df7b55afefcfde66548dfbc1d69e50bfc7fb32b586f8af5bd1988907",
+        "size_in_bytes": 687
+      },
+      {
+        "_path": "share/man/man1/mojo-run.1",
+        "path_type": "hardlink",
+        "sha256": "a2c2ce9f8a86152da84c9f2c3fc31409cbc5c86401320aacf3df4dd359622499",
+        "size_in_bytes": 6998
+      },
+      {
+        "_path": "share/man/man1/mojo.1",
+        "path_type": "hardlink",
+        "sha256": "b289b3556ff2c93009c8fede47d8c3b251aaff532e65b5330c39d381bff16ae8",
+        "size_in_bytes": 1988
+      },
+      {
+        "_path": "share/max/modular.cfg",
+        "path_type": "hardlink",
+        "sha256": "9ffbfb03b0dfbbc1a4e516500357eec9e668b4557a95ef689bdba5c9baa4c7e8",
+        "sha256_in_prefix": "e6192d6250613970c5cfd4b026ca49d1bc887084c7cd8ab9b316e53a2d1c2d22",
+        "size_in_bytes": 1814,
+        "file_mode": "text",
+        "prefix_placeholder": "/buildbuddy-execroot/bazel-out/aarch64-opt-production/bin/utils/packaging/conda/output/bld/rattler-build_mojo-compiler_1786294690/host_env_placehold_placehold_placehold_placehold_placehold_placehold_placehold_placehold_placehold_placehold_placehold_placeh"
+      }
+    ]
+  },
+  "link": {
+    "source": "/Users/andrewhendel/Library/Caches/rattler/cache/pkgs/mojo-compiler-1.0.0-release",
+    "type": 1
+  }
+}
