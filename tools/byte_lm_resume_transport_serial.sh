@@ -44,7 +44,22 @@ run() {
 }
 VENV=/root/byte-lm-resume-venv
 [[ ! -e "$VENV" && ! -L "$VENV" ]] || exit 2
-run venv 60 "$PY" -m venv "$VENV"
+# The frozen resume driver requires Linux memfd support. Some Conda builds
+# omit os.memfd_create despite running on Linux. Fail before capture, and use
+# Ubuntu's system interpreter explicitly on the HIP image when requested.
+run venv 300 bash -c '
+set -euo pipefail
+py=$1 destination=$2 action=$3
+if [ "$action" = resume128 ]; then
+    "$py" -c "import os, fcntl; assert hasattr(os, \"memfd_create\") and hasattr(os, \"MFD_ALLOW_SEALING\") and hasattr(fcntl, \"F_ADD_SEALS\"), \"frozen resume requires a Python with Linux memfd/seal APIs\""
+fi
+if [ "$py" = /usr/bin/python3 ] && ! "$py" -c "import ensurepip" >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 update
+    apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 install -y --no-install-recommends python3-venv
+fi
+exec "$py" -m venv "$destination"
+' byte-lm-venv "$PY" "$VENV" "$MOJOLEARN_BYTE_LM_RESUME_ACTION"
 PY="$VENV/bin/python"
 export MOJOLEARN_PYTHON="$PY"
 run numpy 180 "$PY" -m pip install --disable-pip-version-check --no-input --only-binary=:all: numpy==1.26.4

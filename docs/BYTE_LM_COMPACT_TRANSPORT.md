@@ -52,3 +52,10 @@ file-only transport checks/dry run before any rental. Image Python ABI/runtime
 compatibility is still checked by the actual guarded capture. Slow SSH data
 uploads can exhaust the existing lease; public GitHub transport accelerates
 source only and sends no private handoff data to GitHub.
+
+For the retained ROCm PyTorch image, use `MOJOLEARN_BYTE_LM_PYTHON=/usr/bin/python3`
+for resume: its Conda Python lacks `os.memfd_create`. The guarded venv setup
+checks the frozen driver's memfd/seal API prerequisites before model capture.
+If the explicitly selected Ubuntu system Python lacks ensurepip, that same
+bounded setup job installs `python3-venv` from the image's configured apt
+repositories. The capture source and exact retained native binding stay fixed.
