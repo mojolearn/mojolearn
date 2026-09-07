@@ -11,13 +11,25 @@ process that interleaves it with the NVIDIA-native opponents.
 
 THE QUESTION THIS FILE ANSWERS
 -------------------------------
-How fast is mojolearn's FAST path -- the DEFAULT build, NOT
-`-D MOJOLEARN_NUMERIC_IDENTICAL=1` -- against what an NVIDIA user would
-actually run, on an NVIDIA GPU. That is a pure speed question about the
-explicitly non-deterministic, non-bitwise-identical arm. It is not the
-identity question, no line here gates a hash, and `MOJOLEARN_NUMERIC_MODE`
-is reported on every header only so that a run of the wrong arm is
-impossible to mislabel.
+How fast is mojolearn, in the numeric mode it was imported under, against
+what an NVIDIA user would actually run, on an NVIDIA GPU, at large
+workloads, with the accuracy beside the time.
+
+THE MODE OF OUR ARM IS NOT CHOSEN HERE. It is whatever
+`MOJOLEARN_NUMERIC_MODE` selected at import -- `fast` (the library's
+default), `deterministic`, or `identical` -- and it is printed on EVERY
+header as `mode=FAST|DETERMINISTIC|IDENTICAL` (`spec.numeric_mode_label`,
+DEVIATION 1896), so that a run of any arm is impossible to mislabel. The
+FAST-speed legs run the default. The NVIDIA identity-cost campaign
+(2026-09-07) runs the same lanes under `identical`, against each
+incumbent's fast configuration AND its documented deterministic
+configuration (the `-deterministic` sibling arms, DEVIATION 1890 in
+`tools/speed_gbdt_arm.py`), because the two ratios together are the
+result: what a vendor charges for a repeatable answer on its own GPU, and
+what we charge for one that is bitwise the same on every vendor's. It is
+still not the identity question: no line here gates a hash, the identity
+gates live in `checks/`, and the `hash=` column is recorded so a reader can
+see whether a deterministic promise held, never enforced.
 
 **We expect to lose the GPU columns, possibly by a lot. Recording how much
 is the entire point.**
@@ -219,10 +231,16 @@ def our_rf_arm(lane, cfg, data):
     under a GPU label. There is no CPU arm here because the library has no
     CPU path at all -- `kernel_matrix.mojo` says "There is no CPU column."
 
-    `n_streams` is left at the class default, which is cuML's, for the same
-    reason the cuML arm leaves it: a value above 1 makes the fit
-    non-reproducible, and this whole slice measures the non-deterministic
-    FAST path. Pinning it would benchmark a configuration nobody runs."""
+    `n_streams` is left at the class default, which is cuML's (4), for the
+    same reason the `cuml-rf-gpu` arm leaves it: that is the configuration
+    a user gets with the knob unset, and pinning it would benchmark one
+    nobody runs. What makes our fit repeatable, or cross-vendor identical,
+    is the NUMERIC MODE the library was imported under, not the stream
+    count -- the mode is printed on every header (DEVIATION 1896) -- and
+    the vendor's own deterministic configuration, `n_streams=1`, is the
+    separate `cuml-rf-gpu-deterministic` arm beside this one (DEVIATION
+    1894). This arm has no `-deterministic` sibling of its own: one
+    process, one import, one mode."""
     import mojolearn
 
     common = dict(
@@ -295,9 +313,10 @@ def our_iforest_arm(lane, cfg, data):
         plus a one-row scoring pass, and is comparable to sklearn's `fit`;
       * the ACCURACY column comes from a DIFFERENT forest than the one that
         was timed, because `score_samples` built its own;
-      * a `hash=` that changes between rounds is expected here twice over --
-        once for the FAST path's non-determinism and once because the forest
-        was rebuilt.
+      * a `hash=` that changes between rounds is expected here twice over
+        under the FAST mode -- once for that mode's non-determinism and once
+        because the forest was rebuilt -- and once over under `deterministic`
+        or `identical`, where the rebuild alone can move it.
 
     None of that is corrected here. It is a property of the surface under
     test and correcting it in the harness would measure a library that does
@@ -393,15 +412,19 @@ def build_ours(lane, cfg, data):
 def build_parser():
     p = argparse.ArgumentParser(
         prog="forest_speed_arm",
-        description="mojolearn's FAST path against the NVIDIA-native "
-                    "opponents, one lane per process",
+        description="mojolearn, in the numeric mode MOJOLEARN_NUMERIC_MODE "
+                    "selected at import (printed on every header), against "
+                    "the NVIDIA-native opponents' fast and deterministic "
+                    "arms, one lane per process",
     )
     p.add_argument("--lane", required=True, choices=spec.LANE_NAMES)
     p.add_argument("--dataset", default=None,
                    help="higgs, year, covtype, covtype2, synth, synthclf, "
-                        "anomaly; the lane's own default if unset. `higgs` "
-                        "is the LARGE-LOAD dataset (11M x 28) and is what "
-                        "--rows climbs.")
+                        "synthwide, anomaly; the lane's own default if "
+                        "unset. `higgs` is the LARGE-LOAD dataset (11M x "
+                        "28) and is what --rows climbs. `synthwide` is the "
+                        "WIDE one (1M x 500, binary, generated in-process, "
+                        "nothing to download; DEVIATION 1895).")
     p.add_argument("--devices", default="auto",
                    help="which device arms of each opponent to run. `auto` "
                         "(the default) is GPU-ONLY wherever an accelerator "

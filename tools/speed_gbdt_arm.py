@@ -52,24 +52,49 @@ either. So:
 
     lane gbdt-symmetric   ours grow_policy='SymmetricTree'
                           opponents: catboost-cpu, catboost-gpu ONLY
+                          (+ catboost-gpu-deterministic, NOT-OFFERED)
     lane gbdt-depthwise   ours grow_policy='Depthwise' (the level-wise
                           binary tree)
                           opponents: xgboost-cpu, xgboost-gpu
                           (grow_policy='depthwise'), catboost-cpu/gpu
                           under the SAME policy
+                          (+ xgboost-gpu-deterministic and
+                          catboost-gpu-deterministic, both NOT-OFFERED)
     lane gbdt-lossguide   ours grow_policy='Lossguide' (leaf-wise, one leaf
                           per step)
                           opponents: lightgbm-cpu, lightgbm-cuda -- this IS
                           LightGBM's own algorithm, which is why LightGBM
                           belongs here and not beside the symmetric lane --
                           plus xgboost-*/catboost-* under lossguide
-    lane rf               opponents: cuml-rf-gpu, sklearn-rf-cpu,
+                          (+ the three *-deterministic siblings, all
+                          NOT-OFFERED)
+    lane rf               opponents: cuml-rf-gpu, cuml-rf-gpu-deterministic
+                          (n_streams=1, LIVE), sklearn-rf-cpu,
                           lightgbm-cpu/cuda in boosting_type='rf'
+                          (+ lightgbm-cuda-deterministic, NOT-OFFERED)
     lane et               opponents: sklearn-et-cpu, lightgbm-cpu/cuda in
                           rf + extra_trees; cuML has no ExtraTrees and
                           REFUSES by name
+                          (+ lightgbm-cuda-deterministic, NOT-OFFERED)
     lane iforest          opponents: sklearn-iforest-cpu, and cuml-iforest-gpu
                           IF cuML ships one (DEVIATION 1837)
+
+THE DETERMINISTIC ARMS (DEVIATION 1890)
+----------------------------------------
+The NVIDIA identity-cost campaign (2026-09-07) asks a second question
+beside the speed one: what does each vendor CHARGE for a repeatable answer,
+and what do we charge for a cross-vendor bitwise-identical one? So every GPU
+opponent arm a lane builds now has a SIBLING whose name carries the suffix
+`-deterministic` and which runs the vendor's DOCUMENTED deterministic
+configuration. Where the vendor documents none, the sibling is REFUSED BY
+NAME with the reason prefix `NOT-OFFERED:` quoting the vendor's own words,
+so that a reader of the results file can tell "the vendor does not sell
+this" from "the wheel did not install" and from "it crashed". The facts,
+each verified against the vendor's documentation on 2026-09-07, live in
+`NOT_OFFERED` (the three refusals, DEVIATIONS 1891-1893) and in
+`cuml_rf_arm` (the one vendor that offers a switch, DEVIATION 1894). The
+`ours` arm has no sibling: its mode is whatever `MOJOLEARN_NUMERIC_MODE`
+selected at import and the header says which (DEVIATION 1896).
 
 THE TIMED REGION (DEVIATION 1830)
 ----------------------------------
@@ -95,7 +120,8 @@ THE OUTPUT CONTRACT
 --------------------
 Header, once per process:
 
-    FSPEED-HEADER family=forest lane=<lane> arm=<arm> mode=<FAST|IDENTICAL> \
+    FSPEED-HEADER family=forest lane=<lane> arm=<arm> \
+        mode=<FAST|DETERMINISTIC|IDENTICAL> \
         device=<string> rounds=<n> size=<shipped|smoke>
 
 One line per timed round, one warm-up line per arm never in the table, one
@@ -106,6 +132,12 @@ not be installed or could not run:
     FSPEED-WARMUP lane=<l> arm=<a> shape=<tag> ms=<float>
     FSPEED-ACC lane=<l> arm=<a> metric=<rmse|logloss|accuracy|auc> value=<f>
     FSPEED-REFUSED lane=<l> arm=<a> reason=<one line>
+
+A refusal's reason may begin with one of two fixed prefixes, and a parser
+that wants to sort refusals should key on them rather than on the prose:
+`GPU-PATH-ONLY:` (the arm is a CPU arm and this box has an accelerator) and
+`NOT-OFFERED:` (the vendor documents no such configuration, DEVIATION 1890).
+Every other refusal is an install, budget or runtime failure.
 
 One line type is NOT in the contract the orchestrator handed down, and it is
 additive rather than a change to the four above (DEVIATION 1839):
@@ -198,13 +230,27 @@ def process_deadline_s():
 
 
 def numeric_mode_label():
-    """FAST or IDENTICAL. This slice's whole question is the FAST path -- the
-    default build, NOT `-D MOJOLEARN_NUMERIC_IDENTICAL=1` -- so FAST is the
-    expected value here and a run that reports IDENTICAL is answering a
-    different question. The label is read from the environment rather than
-    assumed, because a mislabelled arm is worse than a missing one."""
+    """FAST, DETERMINISTIC or IDENTICAL: the three tiers `mojolearn` ships
+    (`python/mojolearn/_backend.py:requested_mode`), spelled the way the
+    header prints them.
+
+    The mode of our arm is whatever `MOJOLEARN_NUMERIC_MODE` selected at
+    import, and it is printed on every header; this file does not choose it.
+    The FAST-speed legs run the default, and the NVIDIA identity-cost
+    campaign (2026-09-07) runs the SAME lanes under `identical` against the
+    vendors' fast AND deterministic arms (DEVIATION 1890), so no value is
+    "the expected one" here any more (DEVIATION 1896). The label is read
+    from the environment rather than assumed, because a mislabelled arm is
+    worse than a missing one. FAST stays the default, exactly as the library
+    itself defaults; an unknown spelling is reported as FAST because that is
+    what the library would have loaded, and `mojolearn`'s own import is the
+    place that rejects it."""
     mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower()
-    return "IDENTICAL" if mode == "identical" else "FAST"
+    if mode == "identical":
+        return "IDENTICAL"
+    if mode == "deterministic":
+        return "DETERMINISTIC"
+    return "FAST"
 
 
 def device_string():
@@ -269,12 +315,17 @@ def hash_predictions(vec):
     digits, the same recipe `bench/external/patch_gbm_bench.py` puts in the
     gbm-bench results.
 
-    IT IS NOT A DETERMINISM CLAIM HERE. This slice measures the FAST path,
-    which is the explicitly non-deterministic arm: cuML's `n_streams`, our
-    own atomics and CatBoost's GPU reductions all reorder run to run. Two
-    equal hashes across rounds are informative, two unequal ones are
-    expected, and neither is a defect. Across arms the hashes are not even
-    comparable, because the dtypes differ."""
+    IT IS NOT A DETERMINISM CLAIM HERE, AND NO LINE GATES ON IT. On a FAST
+    arm -- cuML at its default `n_streams`, our own default tier, CatBoost's
+    GPU reductions -- the summation order moves run to run, so two equal
+    hashes across rounds are informative, two unequal ones are expected,
+    and neither is a defect. On a `-deterministic` sibling, or on our arm
+    under `MOJOLEARN_NUMERIC_MODE=deterministic|identical` (DEVIATION 1890),
+    equal hashes across rounds are what the configuration PROMISES, so the
+    column is where a reader checks whether the promise held; it is still
+    recorded, never enforced, because this harness times and the identity
+    gates live elsewhere. Across arms the hashes are not even comparable,
+    because the dtypes differ."""
     if vec is None:
         return None
     arr = np.ascontiguousarray(vec)
@@ -393,11 +444,58 @@ def _synth_binary(rows, feats, seed=7):
     return x, y
 
 
-def _split_tail(x, y, task, name, n_classes=0, frac=0.1):
+def _synth_wide(rows, feats, seed=7, block=65536):
+    """The WIDE synthetic, DEVIATION 1895: binary classification over
+    `feats` columns (500 at size shipped), for the one question the other
+    fixtures cannot ask. `year` is 90 wide, `higgs` 28, `covtype` 54 and
+    `synth` 100, so every ratio this slice has ever printed was taken on a
+    narrow matrix, and the per-feature histogram work that dominates a GPU
+    tree learner -- ours and every opponent's -- has never been the term
+    that decided a row. At 500 features it is.
+
+    THE LABEL DEPENDS ON TEN FEATURES AND CARRIES TWO INTERACTIONS, so that
+    the accuracy column means something: a learner that only found the
+    linear terms scores measurably worse than one that found `x2*x3` and
+    `x6*x7`, and an arm whose configuration silently dropped features would
+    show it. The threshold is the median of the raw score, so the classes
+    are balanced by construction and `accuracy`, `logloss` and `auc` are all
+    informative. Indices stop at 9 so the smoke shape (64 features) runs the
+    same formula as the shipped one (500).
+
+    GENERATED IN ROW BLOCKS, float32 from the generator, because 1.1M x 500
+    is 2.2 GB of float32 and drawing it as float64 first would peak at
+    another 4.4 GB on a box whose whole job is the GPU. The block size does
+    not change the values: `Generator.standard_normal` with a fixed seed is
+    a single stream, consumed in order, and the label is computed once over
+    the finished matrix. Seeded 7 like every other fixture here."""
+    rng = np.random.default_rng(seed)
+    x = np.empty((rows, feats), dtype=np.float32)
+    start = 0
+    while start < rows:
+        stop = min(rows, start + block)
+        x[start:stop] = rng.standard_normal(size=(stop - start, feats),
+                                            dtype=np.float32)
+        start = stop
+    raw = (2.0 * x[:, 0] - 1.5 * x[:, 1] + 1.2 * x[:, 2] * x[:, 3]
+           + 0.8 * x[:, 4] - 0.6 * x[:, 5] + 1.0 * x[:, 6] * x[:, 7]
+           + 0.5 * x[:, 8] - 0.4 * x[:, 9]
+           + 0.1 * rng.standard_normal(size=rows, dtype=np.float32))
+    y = (raw > np.median(raw)).astype(np.float32)
+    return x, y
+
+
+def _split_tail(x, y, task, name, n_classes=0, frac=0.1, n_test=None):
     """A deterministic TAIL split, no shuffle, no sklearn. The test rows are
     only ever used for the accuracy column, so what matters is that every arm
-    of every lane scores the same rows -- not that the split is clever."""
-    n_test = max(1, int(x.shape[0] * frac))
+    of every lane scores the same rows -- not that the split is clever.
+
+    `n_test`, when given, is the EXACT tail length and `frac` is ignored. It
+    exists for `load_synthwide` (DEVIATION 1897), whose training-row count
+    has to land on the number the caller asked for rather than on 90% of
+    it; passing a fraction of `n_test / rows` back through `int()` is a
+    floating-point coin toss on the last row."""
+    if n_test is None:
+        n_test = max(1, int(x.shape[0] * frac))
     n_train = x.shape[0] - n_test
     return Data(name, x[:n_train], x[n_train:], y[:n_train], y[n_train:],
                 task, n_classes)
@@ -509,6 +607,38 @@ def load_synth(size, task, rows_cap=None):
         return _split_tail(x, y, "binary", "synthclf", 2)
     x, y = _synth_regression(rows, feats)
     return _split_tail(x, y, "regression", "synth")
+
+
+def load_synthwide(size, rows_cap=None):
+    """The WIDE fixture, DEVIATION 1895: `synthwide`, binary, 500 features
+    at 1,000,000 TRAINING rows shipped and 64 features at 50,000 training
+    rows smoke, generated in-process by `_synth_wide` (seed 7) and never
+    downloaded. `rows_cap` caps the training rows exactly as `load_synth`
+    caps its rows: `min(rows, rows_cap)`, so `--rows 200000` is a prefix
+    of the same stream and every line says so in `shape=`.
+
+    THE ROW COUNT IS THE TRAINING COUNT (DEVIATION 1897). `load_synth`
+    generates its rows and hands 10% of them to the tail, so its shipped
+    tag reads `synth-720000x100`; this fixture generates `rows + rows // 10`
+    and hands exactly `rows // 10` to the tail, so the shipped tag reads
+    `synthwide-1000000x500`. The reason is Andrew's standing order of
+    2026-09-01 that no tree timing is measured or decided below 1,000,000
+    rows: a fixture whose default lands at 900,000 training rows would sit
+    under the floor by construction, and the number that matters is the
+    one the learner sees. The tail is the same deterministic, unshuffled
+    `_split_tail` every other fixture uses; only its length is spelled out.
+
+    Host memory at shipped size: 1.1M x 500 float32 is 2.2 GB, plus each
+    opponent's own copy inside its `fit` (XGBoost's QuantileDMatrix,
+    LightGBM's Dataset, CatBoost's pool). Named here so a box that runs out
+    is not mistaken for a broken arm."""
+    rows = 1000000 if size == "shipped" else 50000
+    feats = 500 if size == "shipped" else 64
+    if rows_cap:
+        rows = min(rows, rows_cap)
+    n_test = max(1, rows // 10)
+    x, y = _synth_wide(rows + n_test, feats)
+    return _split_tail(x, y, "binary", "synthwide", 2, n_test=n_test)
 
 
 def load_anomaly(size, rows_cap=None):
@@ -665,6 +795,8 @@ def load_dataset(name, size, rows_cap=None):
         return load_synth(size, "regression", rows_cap)
     if name == "synthclf":
         return load_synth(size, "binary", rows_cap)
+    if name == "synthwide":
+        return load_synthwide(size, rows_cap)         # DEVIATION 1895
     if name == "anomaly":
         return load_anomaly(size, rows_cap)
     raise SystemExit("unknown dataset " + repr(name))
@@ -687,6 +819,13 @@ def load_with_fallback(name, size, rows_cap=None):
             return load_dataset("synthclf", size, rows_cap)
         if name == "anomaly":
             return load_dataset("anomaly", size, rows_cap)
+        if name == "synthwide":
+            # DEVIATION 1895. It never downloads, so the only way it fails
+            # is host memory or a bug, and neither is something to paper
+            # over with a 100-feature fixture under a different tag: the
+            # wide question is the whole reason it was asked for. Fall
+            # back to ITSELF, which re-raises and ends the leg loudly.
+            return load_dataset("synthwide", size, rows_cap)
         return load_dataset("synth", size, rows_cap)
 
 
@@ -739,7 +878,7 @@ def download(name):
         print("covtype fetched into ~/scikit_learn_data (about 11 MB "
               "compressed, 581012 x 54)")
         return
-    if name in ("synth", "synthclf", "anomaly"):
+    if name in ("synth", "synthclf", "synthwide", "anomaly"):
         print("%s is generated in-process; nothing to download" % name)
         return
     raise SystemExit("nothing known to download for " + repr(name))
@@ -918,6 +1057,69 @@ def _blocking(name):
     tells you which arms were checked and which were assumed."""
     del name
     return None
+
+
+# ---- the deterministic siblings that no vendor sells --------------------
+
+class NotOffered(object):
+    """DEVIATION 1890. A `-deterministic` sibling that the vendor documents
+    NO configuration for. It is not an `Arm`: it has no `make`, no `fit`,
+    and the runner never sees it. It exists so that the refusal is emitted
+    from ONE place (`build_opponents`), ONCE per lane, with the fixed prefix
+    `NOT-OFFERED:` and the vendor's own words, and so that the roster
+    (`--list-arms`) still names the arm a reader would look for.
+
+    It is keyed by NAME in `NOT_OFFERED` rather than returned by the builder
+    that would have made it, for a reason that matters on a rented box: the
+    builders `import` their library first, and on a box where the wheel did
+    not install the builder raises before it can return anything. A sibling
+    returned from inside the builder would then be refused as an
+    `ImportError`, which is a fact about the box; "the vendor sells no such
+    switch" is a fact about the vendor and it is true on every box. Keeping
+    the two apart is the whole point of the prefix."""
+
+    def __init__(self, name, reason):
+        self.name = name
+        self.reason = reason
+
+
+#: DEVIATION 1890. Every entry is a GPU arm's `-deterministic` sibling whose
+#: vendor, per its own documentation as read on 2026-09-07, offers NO
+#: deterministic configuration for that device. The quoted words are the
+#: vendor's, and the reason string carries them so the results file does
+#: too. The one vendor that DOES offer a switch, cuML (`n_streams=1`), is a
+#: live arm built by `cuml_rf_arm` and is deliberately absent here.
+NOT_OFFERED = {
+    # DEVIATION 1891. CatBoost, "Training on GPU" page
+    # (features/training-on-gpu). There is no parameter to set: the page
+    # states the property of the implementation outright.
+    "catboost-gpu-deterministic": NotOffered(
+        "catboost-gpu-deterministic",
+        "NOT-OFFERED: CatBoost documents no deterministic GPU configuration; "
+        "official doc (features/training-on-gpu): \"Training on GPU is "
+        "non-deterministic, because the order of floating point summations "
+        "is non-deterministic in this implementation.\""),
+    # DEVIATION 1892. LightGBM's Parameters page: the `deterministic`
+    # parameter exists, and its own description restricts it to the CPU
+    # learner, so on `device_type='cuda'` it is not a switch at all.
+    "lightgbm-cuda-deterministic": NotOffered(
+        "lightgbm-cuda-deterministic",
+        "NOT-OFFERED: LightGBM's `deterministic` parameter is documented "
+        "\"used only with cpu device type\" (Parameters page); there is no "
+        "deterministic configuration for device_type='cuda'"),
+    # DEVIATION 1893. XGBoost's current Parameters page lists no
+    # deterministic switch for tree_method='hist' on device='cuda'; the
+    # `deterministic_histogram` parameter that older releases carried is not
+    # in the documented parameter list. The fast arm's hash column is the
+    # only evidence about repeatability that XGBoost's CUDA learner can
+    # give, and the reason says so.
+    "xgboost-gpu-deterministic": NotOffered(
+        "xgboost-gpu-deterministic",
+        "NOT-OFFERED: no documented deterministic parameter for "
+        "tree_method='hist' on device='cuda' (no deterministic_histogram in "
+        "the current Parameters page); the fast arm's per-round hash column "
+        "records whether it repeats."),
+}
 
 
 # ---- CatBoost -------------------------------------------------------------
@@ -1125,15 +1327,41 @@ def lightgbm_arms(lane, cfg, data, devices):
 
 # ---- cuML and scikit-learn forests ---------------------------------------
 
-def cuml_rf_arm(lane, cfg, data):
+def cuml_rf_arm(lane, cfg, data, deterministic=False):
     """cuML's RandomForest on the GPU: NVIDIA's own forest, and the library
-    `ensemble/` is a port of. The honest opponent for the `rf` lane.
+    `ensemble/` is a port of. The honest opponent for the `rf` lane, and it
+    comes in TWO arms (DEVIATION 1894):
 
-    `n_streams` is left at cuML's default. Their own documentation says a
-    value above 1 makes the fit NON-REPRODUCIBLE, which is fine here and only
-    here: this slice measures the FAST path, which is the explicitly
-    non-deterministic arm. Pinning it to 1 would be benchmarking a
-    configuration no cuML user runs."""
+      cuml-rf-gpu                `n_streams` at cuML's default, 4 in the
+                                 pinned v26.08.00 (`randomforest_common.pyx:
+                                 326`). The FAST arm: what a cuML user runs
+                                 with the knob unset, and NON-REPRODUCIBLE
+                                 by their own account.
+      cuml-rf-gpu-deterministic  the SAME parameters plus `n_streams=1`,
+                                 the vendor's documented deterministic
+                                 configuration. cuML's own source states
+                                 that results are reproducible only when
+                                 the forest is built on one stream (the
+                                 identity paper cites this as
+                                 `cuml_source`); the current online API doc
+                                 says only that `n_streams` is the "Number
+                                 of parallel streams used for forest
+                                 building", default 4, so the SOURCE is the
+                                 authority and the doc is silent, which is
+                                 recorded rather than smoothed over.
+
+    Both arms carry `library="cuml"`, so DEVIATION 1839's same-library check
+    compares their accuracy: a stream count must not change the answer
+    beyond summation-order noise, and if it does the note says so.
+
+    THIS SLICE NO LONGER MEASURES ONLY OUR FAST PATH. It used to say here
+    that the default `n_streams` was "fine here and only here" because the
+    slice was a FAST-versus-FAST question. The mode of our arm is now
+    whatever `MOJOLEARN_NUMERIC_MODE` selected at import and the header
+    prints it (DEVIATION 1896); the identity-cost campaign runs it under
+    `identical` against BOTH of these arms, and the two ratios are the
+    result: what cuML charges for its own repeatability, and what we charge
+    for cross-vendor identity."""
     from cuml.ensemble import RandomForestClassifier, RandomForestRegressor
 
     if lane != "rf":
@@ -1154,6 +1382,12 @@ def cuml_rf_arm(lane, cfg, data):
         bootstrap=cfg["bootstrap"],
         random_state=cfg["seed"],
     )
+    if deterministic:
+        # DEVIATION 1894: the ONLY difference between the two cuML arms.
+        # The fast arm leaves the knob unset on purpose, so that it is the
+        # vendor's default and not our reading of it that is timed.
+        common["n_streams"] = 1
+    name = "cuml-rf-gpu-deterministic" if deterministic else "cuml-rf-gpu"
 
     def make():
         if data.task == "regression":
@@ -1167,7 +1401,7 @@ def cuml_rf_arm(lane, cfg, data):
         # the timer and only indexed here.
         return model.fit(d.X_train, d._cuml_y)
 
-    return Arm("cuml-rf-gpu", make, fit, _score_sklearn_like,
+    return Arm(name, make, fit, _score_sklearn_like,
                sync=_cuda_sync, library="cuml")
 
 
@@ -1330,41 +1564,61 @@ score_sklearn_like = _score_sklearn_like
 # --------------------------------------------------------------------------
 
 def opponent_builders(lane, cfg, data, devices):
-    """`[(arm_name, thunk)]`. Each thunk returns a LIST of arms or raises;
+    """`[(arm_names, thunk)]`. Each thunk returns a LIST of arms or raises;
     the raise becomes an FSPEED-REFUSED line for every arm it would have
     produced, which is why the names are known before the thunk runs. An
     opponent that cannot be installed must be visible as a refusal, never as
-    an absent row."""
+    an absent row.
+
+    A name list may also carry a `-deterministic` sibling that the thunk
+    NEVER builds, because it is a key of `NOT_OFFERED` (DEVIATION 1890).
+    `build_opponents` refuses those by name before the thunk runs; listing
+    them here is what puts them in `--list-arms` and what lets the
+    GPU-path-only chokepoint see every name a lane has."""
     builders = []
     if lane == "gbdt-symmetric":
         # CatBoost ONLY. Standing order, 2026-08-22.
-        builders.append((["catboost-cpu", "catboost-gpu"],
+        builders.append((["catboost-cpu", "catboost-gpu",
+                          "catboost-gpu-deterministic"],
                          lambda: catboost_arms(lane, cfg, data, devices)))
     elif lane in ("gbdt-depthwise", "gbdt-lossguide"):
-        builders.append((["catboost-cpu", "catboost-gpu"],
+        builders.append((["catboost-cpu", "catboost-gpu",
+                          "catboost-gpu-deterministic"],
                          lambda: catboost_arms(lane, cfg, data, devices)))
-        builders.append((["xgboost-cpu", "xgboost-gpu"],
+        builders.append((["xgboost-cpu", "xgboost-gpu",
+                          "xgboost-gpu-deterministic"],
                          lambda: xgboost_arms(lane, cfg, data, devices)))
         if lane == "gbdt-lossguide":
             # Leaf-wise growth IS LightGBM's algorithm; this is the only
             # boosting lane it belongs in.
-            builders.append((["lightgbm-cpu", "lightgbm-cuda"],
+            builders.append((["lightgbm-cpu", "lightgbm-cuda",
+                              "lightgbm-cuda-deterministic"],
                              lambda: lightgbm_arms(lane, cfg, data, devices)))
     elif lane == "rf":
         builders.append((["cuml-rf-gpu"],
                          lambda: [cuml_rf_arm(lane, cfg, data)]))
+        # DEVIATION 1894: the one vendor with a documented switch. Its own
+        # builder entry, so an import failure refuses both cuML arms by
+        # name and a runtime failure in one does not take the other.
+        builders.append((["cuml-rf-gpu-deterministic"],
+                         lambda: [cuml_rf_arm(lane, cfg, data,
+                                              deterministic=True)]))
         builders.append((["sklearn-rf-cpu"],
                          lambda: [sklearn_forest_arm(lane, cfg, data)]))
-        builders.append((["lightgbm-cpu", "lightgbm-cuda"],
+        builders.append((["lightgbm-cpu", "lightgbm-cuda",
+                          "lightgbm-cuda-deterministic"],
                          lambda: lightgbm_arms(lane, cfg, data, devices)))
     elif lane == "et":
         # Named `cuml-et-gpu` so the refusal reads as "cuML has no ExtraTrees"
-        # rather than as a missing RandomForest row.
+        # rather than as a missing RandomForest row. It has no
+        # `-deterministic` sibling: a sibling of an arm that is never built
+        # would be a second line saying the same thing.
         builders.append((["cuml-et-gpu"],
                          lambda: [cuml_rf_arm(lane, cfg, data)]))
         builders.append((["sklearn-et-cpu"],
                          lambda: [sklearn_forest_arm(lane, cfg, data)]))
-        builders.append((["lightgbm-cpu", "lightgbm-cuda"],
+        builders.append((["lightgbm-cpu", "lightgbm-cuda",
+                          "lightgbm-cuda-deterministic"],
                          lambda: lightgbm_arms(lane, cfg, data, devices)))
     elif lane == "iforest":
         builders.append((["cuml-iforest-gpu"],
@@ -1461,15 +1715,40 @@ def build_opponents(lane, cfg, data, devices):
                          "accelerator. On NVIDIA and AMD we compare against "
                          "the vendor's GPU path only; their CPU path is the "
                          "MacBook's." % name)
+        # THE CHOKEPOINT FOR THE NOT-OFFERED RULE (DEVIATION 1890). A
+        # `-deterministic` sibling the vendor sells no configuration for is
+        # refused HERE, by name, once, with the vendor's own words, and it
+        # is removed from `names` BEFORE the thunk runs so that a thunk
+        # that raises cannot refuse it a second time under an ImportError.
+        # It is a GPU arm's sibling, so it is only spoken of when the GPU
+        # device is in play: on the MacBook the GPU arm itself is silently
+        # absent and its sibling is too.
+        not_offered = [n for n in names if n in NOT_OFFERED]
+        if "gpu" in devices:
+            for name in not_offered:
+                emit_refused(lane, name, NOT_OFFERED[name].reason)
+        names = [n for n in names if n not in NOT_OFFERED]
         if blocked and len(blocked) == len(names):
             continue
+        if not names:
+            continue
         try:
-            arms.extend(thunk())
+            built = thunk()
         except Exception as exc:                   # noqa: BLE001
             reason = " ".join(str(exc).split()) or exc.__class__.__name__
             for name in names:
                 emit_refused(lane, name, "%s: %s" % (exc.__class__.__name__,
                                                      reason))
+            continue
+        for arm in built:
+            # Belt and braces: a builder that hands back a sentinel rather
+            # than an `Arm` gets it refused here instead of handed to the
+            # runner, which would call `make()` on it. Nothing does this
+            # today; the registry route above is the one in use.
+            if isinstance(arm, NotOffered):
+                emit_refused(lane, arm.name, arm.reason)
+                continue
+            arms.append(arm)
     return arms
 
 
@@ -1631,9 +1910,11 @@ def build_parser(prog=None):
                         "lane that segfaults must not take the others down")
     p.add_argument("--dataset", default=None,
                    help="higgs, year, covtype, covtype2, synth, synthclf, "
-                        "anomaly; the lane's own default if unset. `higgs` "
-                        "is the LARGE-LOAD dataset (11M x 28) and is what "
-                        "--rows climbs.")
+                        "synthwide, anomaly; the lane's own default if "
+                        "unset. `higgs` is the LARGE-LOAD dataset (11M x "
+                        "28) and is what --rows climbs. `synthwide` is the "
+                        "WIDE one (1M x 500, binary, in-process; DEVIATION "
+                        "1895).")
     p.add_argument("--devices", default="cpu,gpu",
                    help="which device arms of each opponent to run; the "
                         "default runs BOTH, which is the whole point on "
@@ -1705,8 +1986,16 @@ def main(argv=None):
         # name asked for and not found is refused BY NAME here.
         wanted = [n for n in (x.strip() for x in args.arms.split(",")) if n]
         have = {a.name for a in arms}
+        # A name that IS on the roster but is not among the constructed arms
+        # was already refused by `build_opponents` -- NOT-OFFERED
+        # (DEVIATION 1890), GPU-PATH-ONLY, or an install failure -- and one
+        # refusal per arm is the contract; refusing it again here as "not in
+        # the roster" would be both a second line and a false one.
+        roster = {n for names, _ in
+                  opponent_builders(args.lane, cfg, data, devices)
+                  for n in names}
         for name in wanted:
-            if name not in have:
+            if name not in have and name not in roster:
                 emit_refused(args.lane, name,
                              "not in this lane's roster on this interpreter; "
                              "the roster here is: %s" % ",".join(sorted(have)))

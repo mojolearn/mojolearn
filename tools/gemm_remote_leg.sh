@@ -478,6 +478,20 @@ SPEED_FAMILY="${MOJOLEARN_SPEED_FAMILY:-gemmseq}"
 # whose lanes are symmetric boosting and forests, where LightGBM is a
 # secondary opponent and the build would cost half the rungs.
 SPEED_LGBM_CUDA="${MOJOLEARN_SPEED_LGBM_CUDA:-1}"
+# OUR ARM'S NUMERIC MODE ON THE BOX (DEVIATION 1898). The speed payload was
+# written to time the FAST path, and its mode witness refused any `ours`
+# header that said IDENTICAL. The identity-cost campaign asks the inverse
+# question: our IDENTICAL arm against each incumbent's FAST and DETERMINISTIC
+# configurations. The mode travels to the box as one explicit environment
+# variable, MOJOLEARN_NUMERIC_MODE, which bindings/build*.sh turn into the
+# -D define and python/mojolearn/_backend.py reads at import, and the fetch
+# side's witness then expects THAT mode on every `ours` header and refuses
+# the other. Default stays fast so every existing invocation is unchanged.
+SPEED_OURS_MODE="${MOJOLEARN_SPEED_OURS_MODE:-fast}"
+case "$SPEED_OURS_MODE" in
+    fast|identical|deterministic) ;;
+    *) echo "gemm_remote_leg: MOJOLEARN_SPEED_OURS_MODE must be fast, identical or deterministic, got '$SPEED_OURS_MODE'" >&2; exit 2 ;;
+esac
 # Concurrent legs on one account. The pre-flight normally REFUSES to rent
 # while any mojolearn-gemm-* pod is up, and that refusal is the orphan guard:
 # a leg that finds someone else's pod cannot know whether it is a live run or
@@ -1488,13 +1502,20 @@ leg_speed_artifacts() {
         echo "  drivers failed, which is a finding and is in $_ld."
         _bad=1
     fi
-    if [ "${_ident:-0}" -gt 0 ]; then
-        echo "  MODE WITNESS FAILED: ${_ident} 'ours' header(s) report"
-        echo "  IDENTICAL. This payload is the FAST path and builds with no"
-        echo "  -D define, so a binary that compiled IDENTICAL means the"
-        echo "  environment on that box carried the mode in. Every ratio in"
-        echo "  this run is void: it would be the cost of the pin wearing the"
-        echo "  label of the fast arm."
+    # DEVIATION 1898: the witness expects the mode this leg ASKED for.
+    _det=$(grep -h '^FSPEED-HEADER' "$_ld"/*.log 2>/dev/null | grep -c 'arm=ours mode=DETERMINISTIC' || true)
+    case "$SPEED_OURS_MODE" in
+        identical)     _wrong=$(( ${_fast:-0} + ${_det:-0} )); _want=IDENTICAL ;;
+        deterministic) _wrong=$(( ${_fast:-0} + ${_ident:-0} )); _want=DETERMINISTIC ;;
+        *)             _wrong=$(( ${_ident:-0} + ${_det:-0} )); _want=FAST ;;
+    esac
+    if [ "$_wrong" -gt 0 ]; then
+        echo "  MODE WITNESS FAILED: $_wrong 'ours' header(s) report a mode"
+        echo "  other than $_want, the mode this leg asked for through"
+        echo "  MOJOLEARN_SPEED_OURS_MODE=$SPEED_OURS_MODE. A binary compiled"
+        echo "  in another mode means the environment on that box did not"
+        echo "  carry the mode in. Every ratio in this run is void: it would"
+        echo "  be one arm's cost wearing another arm's label."
         _bad=1
     fi
     if [ -f "$_lt" ]; then sed 's/^/    /' "$_lt"; fi
@@ -2849,6 +2870,10 @@ python3 -c 'import sys; print(sys.version)' >> "$OUT/python_which.txt" 2>&1 || t
 
 export MOJOLEARN_SPEED_ROUNDS="@SPEEDROUNDS@"
 export MOJOLEARN_SPEED_SIZE="@SPEEDSIZE@"
+# DEVIATION 1898: the mode of OUR arm, explicit, before any binding is built
+# and before any arm imports the package. Read back on every header.
+export MOJOLEARN_NUMERIC_MODE="@OURSMODE@"
+echo "ours_mode=@OURSMODE@" >> "$OUT/leg.txt"
 
 # THE DEVICE NAME ON THE HEADER LINE. `bench/speed/seq_speed_main.mojo` takes
 # it from the environment rather than from `DeviceContext`, so if this is left
@@ -3318,7 +3343,8 @@ forest)
         # The budget is 2400s because it is a 2.6 GB pull PLUS a gzip csv
         # parse of 11M x 29 that runs several minutes, and both happen here,
         # once, rather than inside a 600s per-arm budget six times over.
-        if [ "@SPEEDDATASET@" = "higgs" ]; then
+        case " @SPEEDDATASET@ " in *higgs*) _want_higgs=1 ;; *) _want_higgs=0 ;; esac
+        if [ "$_want_higgs" = 1 ]; then
             timeout -k 30 2400 python3 tools/speed_gbdt_arm.py --download higgs \
                 > "$LOGS/download.higgs.log" 2>&1
             echo "download_exit higgs=$?" >> "$OUT/leg.txt"
@@ -3438,20 +3464,36 @@ LGBMPROBE
         # thing this whole slice refuses to print. So the ladder's dataset
         # is NOT forced onto it; it runs its `anomaly` fixture, whose row
         # count --rows still climbs.
-        _dsflag=""
-        if [ -n "@SPEEDDATASET@" ] && [ "$L" != "iforest" ]; then
-            _dsflag="--dataset @SPEEDDATASET@"
-        fi
-        if [ -z "@SPEEDROWS@" ]; then
-            runarm "forest.$L.log" \
-                "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" $_dsflag
-        else
-            for R in @SPEEDROWS@; do
-                runarm "forest.$L.r$R.log" \
-                    "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" \
-                        $_dsflag --rows "$R"
-            done
-        fi
+        # THE LADDER (DEVIATION 1899). @SPEEDDATASET@ may name several
+        # datasets, space separated, each optionally carrying its own row
+        # rungs as name:r1,r2,r3. A dataset without rungs uses @SPEEDROWS@;
+        # an empty ladder runs the dataset's shipped size once. The dataset
+        # name goes into the log file name so two datasets' rungs of one
+        # lane can never overwrite each other.
+        _dslist="@SPEEDDATASET@"
+        [ -n "$_dslist" ] || _dslist="-"
+        for _dstok in $_dslist; do
+            _dsname="${_dstok%%:*}"
+            _dsrows=""
+            case "$_dstok" in *:*) _dsrows=$(printf '%s' "${_dstok#*:}" | tr ',' ' ') ;; esac
+            [ -n "$_dsrows" ] || _dsrows="@SPEEDROWS@"
+            _dsflag=""
+            if [ "$_dsname" != "-" ] && [ "$L" != "iforest" ]; then
+                _dsflag="--dataset $_dsname"
+            fi
+            _dstag="$_dsname"
+            [ "$_dstag" = "-" ] && _dstag="default"
+            if [ -z "$_dsrows" ]; then
+                runarm "forest.$L.$_dstag.log" \
+                    "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" $_dsflag
+            else
+                for R in $_dsrows; do
+                    runarm "forest.$L.$_dstag.r$R.log" \
+                        "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" \
+                            $_dsflag --rows "$R"
+                done
+            fi
+        done
     done
     ;;
 esac
@@ -3489,6 +3531,7 @@ leg_check_remote_body() {
         -e "s|@SPEEDDATASET@|$SPEED_DATASET|g" \
         -e "s|@SPEEDROWS@|$SPEED_ROWS|g" \
         -e "s|@LGBMCUDA@|$SPEED_LGBM_CUDA|g" \
+        -e "s|@OURSMODE@|$SPEED_OURS_MODE|g" \
         -e "s|@SPEEDSIZE@|$SPEED_SIZE|g" \
         -e "s|@ARMBUDGET@|$ARM_BUDGET|g" \
         -e "s|@BUILDBUDGET@|$BUILD_BUDGET|g" \
@@ -4941,12 +4984,12 @@ if [ "$MODE" = "dry" ]; then
     echo "   8. fetch manifests, native gradient bytes, logs and SHA256SUMS"
     echo "   9. require five GREEN rows, valid native bytes and IDENTICAL mode"
     elif [ "$PAYLOAD" = "speed" ]; then
-    echo "   7. the bench/speed/ drivers, FAST (NO -D define), and the"
-    echo "      vendor arms, on the box, one arm per process, each bounded"
-    echo "      at ${ARM_BUDGET}s: family=$SPEED_FAMILY"
-    echo "      lanes: $SPEED_LANES"
-    echo "   8. fetch the FSPEED logs; REFUSE any 'ours' header that says"
-    echo "      IDENTICAL, because this payload is the FAST arm"
+    echo "   7. the bench/speed/ drivers, our arm in mode $SPEED_OURS_MODE"
+    echo "      (MOJOLEARN_NUMERIC_MODE on the box), and the vendor arms,"
+    echo "      one arm per process, each bounded at ${ARM_BUDGET}s:"
+    echo "      family=$SPEED_FAMILY  lanes: $SPEED_LANES"
+    echo "   8. fetch the FSPEED logs; REFUSE any 'ours' header whose mode"
+    echo "      is not $SPEED_OURS_MODE"
     echo "   9. no diff. tools/fast_speed_table.py builds the ratio table"
     echo "      HERE, from the logs, after the box is gone"
     elif [ "$PAYLOAD" = "phase8" ]; then
