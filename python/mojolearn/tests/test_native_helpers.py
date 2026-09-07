@@ -231,3 +231,183 @@ def test_column_mean_f64_refuses_bad_shapes_and_null():
         _ext.column_mean_f64(0, 2, 1, _addr(out))
     with pytest.raises(Exception, match="null buffer address"):
         _ext.column_mean_f64(_addr(buf), 2, 1, 0)
+
+
+# ---------------------------------------------------------------------------
+# center_columns_f32 / scale_rows_f32 (DEVIATIONS 2444-2449): bit identity
+# against the Python loops they replace, `linear_model.py::_center` and
+# `::_scale_rows` (DEVIATION 2362), on a seeded 2000 x 9 float32 block.
+#
+# The Python loops are imported and RUN here as the oracle. They are the
+# definition (float64 operation, one narrowing through `array.array('f')`);
+# the helpers are written in that same order, so equality is by
+# construction and the comparison is on the raw bytes of the whole block.
+# ---------------------------------------------------------------------------
+
+try:
+    from mojolearn import linear_model as _lm
+    from mojolearn._array import Array as _Array
+    from mojolearn._buffer import addr as _w_addr, addr_ro as _ro_addr, empty as _empty
+except ImportError:  # the NumPy-free Python layer is not on this checkout
+    _lm = None
+
+ROWS2, COLS2 = 2000, 9
+SEED2 = 2440
+
+
+def _need(name):
+    if _lm is None:
+        pytest.skip("mojolearn.linear_model / _array / _buffer not importable")
+    fn = getattr(_ext, name, None)
+    if not callable(fn):
+        pytest.skip(f"python/mojolearn/_mojolearn.so predates DEVIATION 2440 "
+                    f"(no {name}); rebuild with bash bindings/build.sh")
+    return fn
+
+
+def _block2():
+    """Seeded 2000 x 9 float32 block spanning nine decades, both signs,
+    with four planted elements: a float32 max, a subnormal, a zero and a
+    negative zero, so the narrowing sees an overflow-to-inf candidate and
+    the signed-zero cases along with the ordinary ones."""
+    rng = random.Random(SEED2)
+    rows = []
+    for r in range(ROWS2):
+        row = [rng.choice((-1.0, 1.0)) * 10.0 ** rng.uniform(-4, 5)
+               for _ in range(COLS2)]
+        rows.append(row)
+    rows[0][0] = 3.4028234663852886e38      # float32 max, exact
+    rows[1][1] = 1e-40                      # float32 subnormal
+    rows[2][2] = 0.0
+    rows[3][3] = -0.0
+    return _Array.from_list(rows, "<f4")
+
+
+def _mu32():
+    """Float32-valued means, as `_column_means` hands `_center` (it ends in
+    `_round_f32`). Seeded independently of the block so they are not the
+    block's means: the helper subtracts whatever it is given."""
+    rng = random.Random(SEED2 + 1)
+    return [_lm._round_f32(rng.uniform(-1e3, 1e3)) for _ in range(COLS2)]
+
+
+def _root32():
+    """`fl32(sqrt(w))` per row, the value `LinearRegression.fit` builds
+    (`root = [_round_f32(math.sqrt(v)) for v in weights.tolist()]`), with
+    row 0's weight planted at 4.0 so `root[0] == 2.0` multiplies the
+    float32 max into an overflow, which the Python's C `(float)` cast
+    makes +inf and the helper's `Float32(...)` must make +inf too."""
+    rng = random.Random(SEED2 + 2)
+    w = [rng.uniform(0.01, 50.0) for _ in range(ROWS2)]
+    w[0] = 4.0
+    return [_lm._round_f32(math.sqrt(v)) for v in w]
+
+
+def _assert_same_bytes(got, want, label):
+    gb, wb = got.tobytes(), want.tobytes()
+    if gb != wb:
+        g, w = got.tolist(), want.tolist()
+        bad = [(r, c, g[r][c], w[r][c]) for r in range(ROWS2)
+               for c in range(COLS2) if _bits(g[r][c]) != _bits(w[r][c])]
+        pytest.fail(f"{label}: {len(bad)} element(s) differ; first: {bad[:3]}")
+
+
+def test_center_columns_f32_is_bit_identical_to_the_python_center():
+    """DEVIATION 2444."""
+    fn = _need("center_columns_f32")
+    x, mu32 = _block2(), _mu32()
+    want = _lm._center(x, mu32)
+    assert want.dtype == "<f4" and want.shape == (ROWS2, COLS2)
+    mean = array.array("d", mu32)
+    out = _empty((ROWS2, COLS2), "<f4")
+    ret = fn(_ro_addr(x, name="X"), ROWS2, COLS2, _addr(mean),
+             _w_addr(out, name="centered"))
+    assert ret == 0
+    _assert_same_bytes(out, want, "center_columns_f32 vs _center")
+    # The subtraction really happened (not a copy): column 0 moved by mu[0].
+    assert out.tolist()[5][0] != x.tolist()[5][0]
+
+
+def test_center_columns_f32_may_alias_its_input():
+    """DEVIATION 2445: in-place is the same bits, since no element depends
+    on another. `fit` can overwrite its float32 copy instead of allocating
+    a second block."""
+    fn = _need("center_columns_f32")
+    x, mu32 = _block2(), _mu32()
+    want = _lm._center(x, mu32)
+    work = x.copy()
+    mean = array.array("d", mu32)
+    fn(_ro_addr(work, name="X"), ROWS2, COLS2, _addr(mean),
+       _w_addr(work, name="X"))
+    _assert_same_bytes(work, want, "center_columns_f32 in place vs _center")
+
+
+def test_scale_rows_f32_is_bit_identical_to_the_python_scale_rows():
+    """DEVIATION 2446."""
+    fn = _need("scale_rows_f32")
+    x, root = _block2(), _root32()
+    want = _lm._scale_rows(x, root)
+    assert want.dtype == "<f4" and want.shape == (ROWS2, COLS2)
+    w = array.array("f", root)              # exact: already float32 values
+    assert w.tolist() == root
+    out = _empty((ROWS2, COLS2), "<f4")
+    ret = fn(_ro_addr(x, name="X"), ROWS2, COLS2, _addr(w),
+             _w_addr(out, name="scaled"))
+    assert ret == 0
+    _assert_same_bytes(out, want, "scale_rows_f32 vs _scale_rows")
+    # The planted overflow: float32 max times 2.0 is +inf on BOTH sides.
+    assert math.isinf(want.tolist()[0][0]) and math.isinf(out.tolist()[0][0])
+    # Row 0 is scaled by root[0] == 2.0 exactly; every other element of it
+    # is the input doubled (exact in float32 short of overflow).
+    for c in range(1, COLS2):
+        assert out.tolist()[0][c] == 2.0 * x.tolist()[0][c]
+
+
+def test_scale_rows_f32_may_alias_its_input():
+    """DEVIATION 2447."""
+    fn = _need("scale_rows_f32")
+    x, root = _block2(), _root32()
+    want = _lm._scale_rows(x, root)
+    work = x.copy()
+    w = array.array("f", root)
+    fn(_ro_addr(work, name="X"), ROWS2, COLS2, _addr(w),
+       _w_addr(work, name="X"))
+    _assert_same_bytes(work, want, "scale_rows_f32 in place vs _scale_rows")
+
+
+def test_center_then_scale_matches_the_fit_path_composition():
+    """DEVIATION 2448: `fit` centers THEN scales (linear_model.py, the
+    weighted branch after `_center`). The two helpers composed in that
+    order equal the two Python loops composed in that order, byte for
+    byte, on the same block."""
+    cen, sca = _need("center_columns_f32"), _need("scale_rows_f32")
+    x, mu32, root = _block2(), _mu32(), _root32()
+    want = _lm._scale_rows(_lm._center(x, mu32), root)
+    mean, w = array.array("d", mu32), array.array("f", root)
+    work = x.copy()
+    cen(_ro_addr(work, name="X"), ROWS2, COLS2, _addr(mean), _w_addr(work, name="X"))
+    sca(_ro_addr(work, name="X"), ROWS2, COLS2, _addr(w), _w_addr(work, name="X"))
+    _assert_same_bytes(work, want, "center then scale vs the Python pair")
+
+
+def test_elementwise_helpers_refuse_null_and_negative_and_accept_empty():
+    """DEVIATION 2449."""
+    cen, sca = _need("center_columns_f32"), _need("scale_rows_f32")
+    x = array.array("f", [1.0, 2.0])
+    mean = array.array("d", [0.5])
+    w = array.array("f", [2.0])
+    out = array.array("f", [0.0, 0.0])
+    with pytest.raises(Exception, match="null buffer address"):
+        cen(0, 2, 1, _addr(mean), _addr(out))
+    with pytest.raises(Exception, match="null buffer address"):
+        cen(_addr(x), 2, 1, 0, _addr(out))
+    with pytest.raises(Exception, match="null buffer address"):
+        sca(_addr(x), 2, 1, _addr(w), 0)
+    with pytest.raises(Exception, match="non-negative"):
+        cen(_addr(x), -1, 1, _addr(mean), _addr(out))
+    with pytest.raises(Exception, match="non-negative"):
+        sca(_addr(x), 2, -1, _addr(w), _addr(out))
+    # Zero rows or zero cols writes nothing and returns 0.
+    assert cen(_addr(x), 0, 1, _addr(mean), _addr(out)) == 0
+    assert sca(_addr(x), 2, 0, _addr(w), _addr(out)) == 0
+    assert out.tolist() == [0.0, 0.0]

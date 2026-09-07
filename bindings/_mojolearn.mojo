@@ -67,15 +67,17 @@ nothing inside touches a Python object, and the caller's arrays are kept alive
 by the wrapper on the Python side. The pattern matches mojotrees'
 `buffer_has_infinite`.
 
-THREE HOST HELPERS WITH NO DEVICE CONTEXT (DEVIATION 2303, 2026-09-07)
------------------------------------------------------------------------
-`all_finite_f32`, `all_finite_f64` and `column_mean_f64` at the bottom of
+FIVE HOST HELPERS WITH NO DEVICE CONTEXT (DEVIATION 2303 + 2440, 2026-09-07)
+-----------------------------------------------------------------------------
+`all_finite_f32`, `all_finite_f64`, `column_mean_f64` (DEVIATION 2303) and
+`center_columns_f32`, `scale_rows_f32` (DEVIATION 2440) at the bottom of
 this file run on the CPU over the caller's buffer and never construct a
 `DeviceContext`. They exist so the NumPy-free Python layer
 (`python/mojolearn/NUMPY_FREE_CONTRACT.md`) has somewhere other than a
-Python loop to put a per-element scan. `column_mean_f64` is the DEFINITION
+Python loop to put a per-element pass. `column_mean_f64` is the DEFINITION
 of the centering order OLS/ridge now use, and its docstring states that
-order because callers rely on it.
+order because callers rely on it; the two elementwise helpers reproduce
+`linear_model.py`'s `_center` / `_scale_rows` operation for operation.
 """
 
 from std.os import abort
@@ -735,6 +737,100 @@ def column_mean_f64_binding(
     return PythonObject(0)
 
 
+# ---------------------------------------------------------------------------
+# The two elementwise helpers of DEVIATION 2440, replacing the Python loops
+# `python/mojolearn/linear_model.py` flagged as DEFECTS under DEVIATION
+# 2362 (`_center`, `_scale_rows`). Each reproduces its Python loop
+# OPERATION FOR OPERATION: widen both float32 operands to float64, one
+# binary64 operation, ONE narrowing to float32 through `Float32(...)`, which
+# is the same round-to-nearest-even the Python's `array.array('f')` item
+# setter (a C `(float)` cast) performs. That is the definition; it is not
+# "the float32 op" and it is not an approximation of it (for `-` and `*` on
+# two float32 values the two coincide, but the helper is written as the
+# Python is written so the equality is by construction, not by theorem).
+# ---------------------------------------------------------------------------
+
+
+def center_columns_f32_binding(
+    x_addr: PythonObject,
+    rows: PythonObject,
+    cols: PythonObject,
+    mean_addr: PythonObject,
+    out_addr: PythonObject,
+) raises -> PythonObject:
+    """`out[r, c] = fl32(float64(x[r, c]) - mean[c])` over a C-contiguous
+    float32 `[rows, cols]` matrix, `mean` a float64 `[cols]` buffer, `out`
+    float32 `[rows, cols]` (DEVIATION 2441). Returns 0.
+
+    THIS IS `linear_model.py::_center` (DEVIATION 2362) IN THE SAME ORDER:
+    row by row, column by column, the element widened to binary64 (exact),
+    the float64 `mean[c]` subtracted in binary64 (one round-to-nearest-even),
+    the difference narrowed to binary32 (one more). The caller passes the
+    means it already narrowed to float32 values (`_column_means` ends in
+    `_round_f32`), stored in a float64 buffer; this helper does NOT narrow
+    the mean itself, because the Python does not. Nothing here depends on
+    any other element, so `out` may alias `x`.
+
+    `rows == 0` or `cols == 0` writes nothing; negatives are refused.
+    """
+    var xp = _f32_ptr(Int(py=x_addr))
+    var mp = _f64_ptr(Int(py=mean_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    if nr < 0 or nc < 0:
+        raise Error(
+            "center_columns_f32: rows and cols must be non-negative, got "
+            + String(nr) + " x " + String(nc)
+        )
+    with GILReleased(Python()):
+        for r in range(nr):
+            for c in range(nc):
+                var d = Float64(xp.unsafe_load(r * nc + c)) - mp.unsafe_load(c)
+                op.unsafe_store(r * nc + c, Float32(d))
+    return PythonObject(0)
+
+
+def scale_rows_f32_binding(
+    x_addr: PythonObject,
+    rows: PythonObject,
+    cols: PythonObject,
+    w_addr: PythonObject,
+    out_addr: PythonObject,
+) raises -> PythonObject:
+    """`out[r, c] = fl32(float64(x[r, c]) * float64(w[r]))` over a
+    C-contiguous float32 `[rows, cols]` matrix, `w` a float32 `[rows]`
+    buffer, `out` float32 `[rows, cols]` (DEVIATION 2442). Returns 0.
+
+    THIS IS `linear_model.py::_scale_rows` (DEVIATION 2362) IN THE SAME
+    ORDER: both float32 operands widened to binary64 (exact), one binary64
+    multiply (exact too, since two 24-bit significands fit in 53), and ONE
+    narrowing to binary32. The caller's `w` is `fl32(sqrt(sample_weight))`,
+    already a float32 value; this helper takes no root and applies no
+    weight semantics, it multiplies. No FMA is possible: there is no add.
+    Nothing here depends on any other element, so `out` may alias `x`.
+
+    `rows == 0` or `cols == 0` writes nothing; negatives are refused.
+    """
+    var xp = _f32_ptr(Int(py=x_addr))
+    var wp = _f32_ptr(Int(py=w_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    if nr < 0 or nc < 0:
+        raise Error(
+            "scale_rows_f32: rows and cols must be non-negative, got "
+            + String(nr) + " x " + String(nc)
+        )
+    with GILReleased(Python()):
+        for r in range(nr):
+            var w = Float64(wp.unsafe_load(r))
+            for c in range(nc):
+                var p = Float64(xp.unsafe_load(r * nc + c)) * w
+                op.unsafe_store(r * nc + c, Float32(p))
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
@@ -754,6 +850,9 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[all_finite_f32_binding]("all_finite_f32")
         m.def_function[all_finite_f64_binding]("all_finite_f64")
         m.def_function[column_mean_f64_binding]("column_mean_f64")
+        # DEVIATION 2443: the two elementwise helpers of DEVIATION 2440.
+        m.def_function[center_columns_f32_binding]("center_columns_f32")
+        m.def_function[scale_rows_f32_binding]("scale_rows_f32")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

@@ -10,9 +10,10 @@ target mean that center an intercept fit -- run through the native
 `column_mean_f64` helper (bindings/_mojolearn.mojo, DEVIATION 2303/2324),
 whose accumulation order is written down. What is still Python here is
 named at each site: label encoding (permitted, O(rows)), and the
-elementwise centering and sqrt-weight rescale, which are O(rows * features)
-Python loops and are FLAGGED AS DEFECTS (DEVIATION 2362) until they get a
-native helper.
+elementwise centering and sqrt-weight rescale, which run through the native
+`center_columns_f32` / `scale_rows_f32` helpers when the loaded binary
+carries them and through a Python reference spelling of the same
+arithmetic otherwise (DEVIATION 2450).
 """
 
 import array
@@ -194,22 +195,25 @@ def _r2_host(pred, y):
 _NATIVE = {}
 
 
-def _native_column_mean():
-    """The base binding's `column_mean_f64`, resolved the way
-    `_buffer.all_finite` resolves its helpers: through `_backend.binding`
-    for the process's tier, once, and None when the binary is not built,
-    is the wrong tier, or predates the helper (`_backend` hands out a stub
-    whose attribute access raises ImportError, so a bare `getattr` default
-    would not do). The helper is host code with no device context and no
-    tier-dependent arithmetic, so any tier's binary gives the same bits."""
-    if "column_mean_f64" in _NATIVE:
-        return _NATIVE["column_mean_f64"]
+def _native_helper(name):
+    """A host helper of the base binding (`column_mean_f64`,
+    `center_columns_f32`, `scale_rows_f32`), resolved the way
+    `_buffer.all_finite` resolves its own: through `_backend.binding` for
+    the process's tier, once per name, and None when the binary is not
+    built, is the wrong tier, or predates the helper (`_backend` hands out
+    a stub whose attribute access raises ImportError, so a bare `getattr`
+    default would not do). The helpers are host code with no device
+    context and no tier-dependent arithmetic, so any tier's binary gives
+    the same bits, and each has a Python fallback below that is the SAME
+    arithmetic written a second way (DEVIATION 2450)."""
+    if name in _NATIVE:
+        return _NATIVE[name]
     try:
         from . import _backend
-        fn = getattr(_backend.binding("_mojolearn"), "column_mean_f64")
+        fn = getattr(_backend.binding("_mojolearn"), name)
     except Exception:  # not built, wrong tier, no device: the Python path
         fn = None
-    _NATIVE["column_mean_f64"] = fn
+    _NATIVE[name] = fn
     return fn
 
 
@@ -226,7 +230,7 @@ def _column_means_f64(x, rows, cols):
     is only slow. A 1-D vector is a `[rows, 1]` matrix here, which is how
     `_vector_mean` uses it.
     """
-    fn = _native_column_mean()
+    fn = _native_helper("column_mean_f64")
     if fn is not None:
         out = empty((cols,), "<f8")
         fn(addr_ro(x, name="X"), int(rows), int(cols),
@@ -309,20 +313,40 @@ def _vector_mean(v, weights):
     return _column_means_f64(wy, n, 1)[0] * n / total
 
 
+def _dims(x):
+    """`(rows, cols)` of a 2-D Array, or `(rows, 1)` of a 1-D one: a vector
+    is a `[rows, 1]` matrix to every host helper in this file."""
+    return (x.shape[0], x.shape[1]) if x.ndim == 2 else (x.shape[0], 1)
+
+
 def _center(x, mu32):
     """`x - mu` in float32, one rounding per element: `fl32(x_ij - mu_j)`
-    with both operands float32 values. Computing the difference in float64
-    and rounding once is the correctly rounded float32 subtraction (double
-    rounding is innocuous for +, -, *, / and sqrt when the wide format has
-    at least 2p + 2 bits; 53 >= 50), so these are the bits NumPy's float32
-    subtract produced.
+    with both operands float32 values; `x` is `[rows, cols]` or a vector
+    with `cols == 1`, `mu32` a list of `cols` float32-valued floats.
 
-    DEVIATION 2362 -- DEFECT, FLAGGED: this is an O(rows * features) PYTHON
-    LOOP in a fit path, which NUMPY_FREE_CONTRACT.md forbids. It stays
-    because no native elementwise helper exists yet; the fix is a
-    `center_f32(x, mu, out)` binding beside `column_mean_f64`. Same for
-    `_scale_rows` and `_shift`.
+    DEVIATION 2450 -- NATIVE WHEN AVAILABLE; THE PYTHON FALLBACK IS THE
+    REFERENCE SPELLING. The binding's `center_columns_f32(x, rows, cols,
+    mean, out)` reproduces this loop exactly; it takes the means as
+    FLOAT64, and they are handed over already rounded to float32 (exactly
+    representable in float64), so whether the helper widens `x` to the
+    mean or narrows the mean to `x`, the difference it rounds is the same
+    difference. The fallback computes each difference in float64 and
+    rounds once, which is the correctly rounded float32 subtraction (double
+    rounding is innocuous for +, -, *, / and sqrt when the wide format has
+    at least 2p + 2 bits; 53 >= 50): the bits NumPy's float32 subtract
+    produced, and the bits the helper produces.
     """
+    rows, cols = _dims(x)
+    fn = _native_helper("center_columns_f32")
+    if fn is not None:
+        mean = Array.from_list([float(m) for m in mu32], "<f8")
+        out = empty(x.shape, "<f4")
+        fn(addr_ro(x, name="X"), int(rows), int(cols),
+           addr_ro(mean, name="column means"), addr(out, name="centered X"))
+        return out
+    if x.ndim == 1:
+        m = mu32[0]
+        return Array.from_list([v - m for v in x.tolist()], "<f4")
     return Array.from_list(
         [[v - m for v, m in zip(row, mu32)] for row in x.tolist()], "<f4"
     )
@@ -330,15 +354,31 @@ def _center(x, mu32):
 
 def _shift(v, mu32):
     """The 1-D `_center`: `fl32(v_i - mu)`, `mu` already a float32 value."""
-    return Array.from_list([a - mu32 for a in v.tolist()], "<f4")
+    return _center(v, [mu32])
 
 
 def _scale_rows(x, root):
     """Row `i` of `x` times `root[i]`, float32: `fl32(x_ij * r_i)`, one
-    rounding (the float64 product of two float32 values is exact). The
-    device's `ols_fit_weighted` performs the same multiply, which is the
-    bit-for-bit claim `check_ols_sample_weight_host_rescale_matches_device`
-    gates. DEVIATION 2362 applies (a Python O(rows * features) loop)."""
+    rounding (the float64 product of two float32 values is exact); `x` is
+    `[rows, cols]` or a vector, `root` a list of `rows` float32-valued
+    floats. The device's `ols_fit_weighted` performs the same multiply,
+    which is the bit-for-bit claim
+    `check_ols_sample_weight_host_rescale_matches_device` gates.
+
+    DEVIATION 2450 -- NATIVE WHEN AVAILABLE (`scale_rows_f32(x, rows, cols,
+    w, out)`, float32 weights); THE PYTHON FALLBACK IS THE REFERENCE
+    SPELLING of the same arithmetic.
+    """
+    rows, cols = _dims(x)
+    fn = _native_helper("scale_rows_f32")
+    if fn is not None:
+        w = Array.from_list([float(r) for r in root], "<f4")
+        out = empty(x.shape, "<f4")
+        fn(addr_ro(x, name="X"), int(rows), int(cols),
+           addr_ro(w, name="sqrt weights"), addr(out, name="scaled X"))
+        return out
+    if x.ndim == 1:
+        return Array.from_list([v * r for v, r in zip(x.tolist(), root)], "<f4")
     return Array.from_list(
         [[v * r for v in row] for r, row in zip(root, x.tolist())], "<f4"
     )
@@ -520,9 +560,7 @@ class LinearRegression(NumericModeMixin):
             # layer, and for the bit-for-bit claim the gate checks.
             root = [_round_f32(math.sqrt(v)) for v in weights.tolist()]
             work_x = _scale_rows(work_x, root)
-            work_y = Array.from_list(
-                [v * r for v, r in zip(work_y.tolist(), root)], "<f4"
-            )
+            work_y = _scale_rows(work_y, root)
         self.coef_ = empty((cols,), "<f4")
         self._bind("_mojolearn_estimators").ols_fit(
             addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
