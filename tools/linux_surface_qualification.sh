@@ -5,22 +5,40 @@
 # build: tools/linux_surface_qualification.sh build /absolute/artifacts
 # build-tier: tools/linux_surface_qualification.sh build-tier OUT fast|deterministic|identical
 # qualify: tools/linux_surface_qualification.sh qualify WHEEL SHA256 cuda|hip OUT BUILD_PROVENANCE_JSON
+# qualify-release-0.6.1: same first four args, then PROOF_DIRECTORY ARCH
+# Proof filenames: cuda-sm_89.json, cuda-sm_90.json, hip-gfx942.json.
 # Parent must impose the lease/work timeout and retain its fetch reserve.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ACTION=${1:?build or qualify}
 shift
 PY=${MOJOLEARN_QUALIFY_PYTHON:-python3}
+[[ $(uname -s) = Linux ]] || { echo 'Qualification requires remote Linux' >&2; exit 2; }
+command -v taskset >/dev/null || { echo 'taskset required for CPU cap' >&2; exit 2; }
+# Fixed limits override inherited broad job settings. Child builds inherit this
+# affinity; build_sets.sh selects a subset of it and cannot expand it itself.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+export OMP_THREAD_LIMIT=1 OMP_MAX_ACTIVE_LEVELS=1 BLIS_NUM_THREADS=1 NUMEXPR_MAX_THREADS=1
 export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2 MOJOLEARN_CPU_THREADS=2
-cores=$("$PY" -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:4])))')
+export MOJOLEARN_BUILD_JOBS=1 CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2
+export MAKEFLAGS=-j2 MFLAGS=-j2 GNUMAKEFLAGS=
+cores=$("$PY" -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+[[ -n "$cores" ]] || { echo 'Empty CPU affinity' >&2; exit 2; }
 taskset -pc "$cores" $$
+"$PY" - "$cores" <<'PYCAP'
+import os, sys
+expected = {int(cpu) for cpu in sys.argv[1].split(',')}
+actual = os.sched_getaffinity(0)
+if not 1 <= len(actual) <= 2 or actual != expected:
+    raise SystemExit('CPU affinity cap failed')
+PYCAP
+# RESOURCE_CAPS_END: source-only test extracts only the admission prefix.
 if [[ "$ACTION" = build || "$ACTION" = build-tier ]]; then
     DEST=${1:?artifact directory}
     mkdir -p "$DEST"
     DEST=$(cd "$DEST" && pwd)
     cd "$ROOT"
-    # One compiler at a time; all 45 outputs are required for a full build.
+    # One compiler at a time; legacy 45 or explicitly requested byte-LM 46 outputs.
     [[ -z $(ls -A "$DEST") ]] || { echo 'Refusing reused build directory'; exit 2; }
     export MOJOLEARN_BUILD_JOBS=1
     unset MOJOLEARN_BUILD_SCRIPTS MOJOLEARN_BUILD_TIERS
@@ -36,9 +54,14 @@ if [[ "$ACTION" = build || "$ACTION" = build-tier ]]; then
     [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'Full source commit SHA required'; exit 2; }
     {
         echo "source_commit=$commit"
-        echo 'expected_bindings_per_tier=15'
+        if [[ ${MOJOLEARN_PACKAGE_BYTE_LM:-0} = 1 ]]; then
+            echo 'expected_bindings_fast=15 expected_bindings_deterministic=15 expected_bindings_identical=16'
+        else
+            echo 'expected_bindings_per_tier=15'
+        fi
         echo "expected_tiers=${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
-        echo 'build_jobs=1 cpu_affinity_max=4 compiler_jobs=2 blas_threads=1'
+        echo 'build_jobs=1 cpu_affinity_max=2 compiler_jobs=2 blas_threads=1'
+        echo "cpu_affinity=$cores"
         echo "artifact=$ACTION vendor set; not a wheel or publication"
     } > "$DEST/source-provenance.txt"
     command -v objdump >/dev/null || { echo 'objdump required for CPU ISA qualification'; exit 2; }
@@ -60,7 +83,7 @@ PYPROVENANCE
     status=0
     bash packaging/linux/build_sets.sh "$DEST" || status=$?
     "$PY" - "$ROOT" "$DEST" "$status" "$ACTION" <<'PYBUILT'
-import hashlib, json, pathlib, sys
+import hashlib, json, os, pathlib, sys
 root, out = map(pathlib.Path, sys.argv[1:3])
 status, action = int(sys.argv[3]), sys.argv[4]
 files = json.loads((out / 'source-inventory.json').read_text())
@@ -69,16 +92,23 @@ outputs = {}
 for path in sorted((out / 'sets').rglob('_mojolearn*.so')):
     outputs['mojolearn/' + path.relative_to(out / 'sets').as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
 commit = next(line.split('=', 1)[1] for line in (out / 'source-provenance.txt').read_text().splitlines() if line.startswith('source_commit='))
+byte_lm = os.environ.get('MOJOLEARN_PACKAGE_BYTE_LM', '0')
+assert byte_lm in ('0', '1'), 'Invalid byte-LM build flag'
+full_count = 46 if byte_lm == '1' else 45
+expected_count = full_count if action == 'build' else (16 if byte_lm == '1' and os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical' else 15)
+byte_members = [n for n in outputs if n.endswith('/_mojolearn_byte_lm.so')]
+assert len(byte_members) == (1 if byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical') else 0), 'Incorrect byte-LM inventory'
+assert all('/identical/' in n for n in byte_members), 'Byte-LM is IDENTICAL only'
 record = dict(schema='mojolearn.linux.build-provenance.v1', source_commit=commit, action=action, build_exit=status,
               source_inventory=files, source_sha256=hashlib.sha256(json.dumps(files, separators=(',', ':')).encode()).hexdigest(),
-              extensions=outputs, complete=(status == 0 and action == 'build' and len(outputs) == 45))
+              extensions=outputs, complete=(status == 0 and action == 'build' and len(outputs) == full_count))
 (out / 'build-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
 assert status == 0, 'Build/staging failed; retained provenance is not admissible'
-assert len(outputs) == (45 if action == 'build' else 15), 'Incomplete build outputs'
+assert len(outputs) == expected_count, 'Incomplete build outputs'
 PYBUILT
     exit "$status"
 fi
-[[ "$ACTION" = qualify ]] || { echo 'action must be build or qualify'; exit 2; }
+[[ "$ACTION" = qualify || "$ACTION" = qualify-release-0.6.1 ]] || { echo 'Unknown qualification action'; exit 2; }
 WHEEL=${1:?wheel} EXPECTED=${2:?sha256} VENDOR=${3:?cuda or hip} DEST=${4:?artifact directory}
 PROVENANCE=${5:?build-provenance.json from the complete vendor build}
 [[ "$VENDOR" = cuda || "$VENDOR" = hip ]] || exit 2
@@ -94,6 +124,21 @@ printf '1\n' > "$DEST/exit_code"
 # Audit every RECORD hash and require each embedded architecture to have all
 # 15 extension names in all three modes. A CUDA-only/HIP-only wheel is
 # admitted for that vendor and labelled explicitly; no universal claim.
+if [[ "$ACTION" = qualify-release-0.6.1 ]]; then
+    ARCH=${6:?actual runtime architecture sm_89, sm_90 or gfx942}
+    "$PY" - "$ROOT" "$WHEEL" "$EXPECTED" "$PROVENANCE" "$VENDOR/$ARCH" "$DEST" <<'PYMULTI'
+import json, pathlib, shutil, sys
+root, wheel, expected, proof_root, key, out = sys.argv[1:]
+sys.path.insert(0, str(pathlib.Path(root) / 'tools'))
+from check_linux_release_qualification import release_audit
+audit = release_audit(wheel, root, proof_root, key)
+if audit['sha256'] != expected:
+    raise SystemExit('Wheel SHA mismatch')
+dest = pathlib.Path(out)
+(dest / 'wheel-audit.json').write_text(json.dumps(audit, indent=2) + '\n')
+shutil.copyfile(pathlib.Path(proof_root) / (key.replace('/', '-') + '.json'), dest / 'build-provenance.json')
+PYMULTI
+else
 "$PY" - "$WHEEL" "$EXPECTED" "$ROOT" "$VENDOR" "$PROVENANCE" > "$DEST/wheel-audit.json" <<'PYAUDIT'
 import base64, csv, hashlib, io, json, pathlib, re, sys, zipfile
 wheel, expected, root, required_vendor, provenance = sys.argv[1:]
@@ -163,6 +208,7 @@ print(json.dumps({'sha256': expected, 'wheel': str(wheel),
                   'extension_hashes': extension_hashes,
                   'sets': {'/'.join(k): len(v) for k, v in sorted(sets.items())}}, indent=2))
 PYAUDIT
+fi
 
 timeout -k 10 60 "$PY" -m venv "$DEST/venv"
 VPY="$DEST/venv/bin/python"
@@ -183,12 +229,22 @@ assert mojolearn.numeric_mode() == os.environ['MOJOLEARN_NUMERIC_MODE']
 print(json.dumps({'package': str(installed), 'version': mojolearn.__version__,
                   'vendor': mojolearn.vendor(), 'mode': mojolearn.numeric_mode()}), flush=True)
 from mojolearn import _backend
+architecture = {}
+if audit.get('assembly_profile') == 'release-0.6.1':
+    assert not os.environ.get('MOJOLEARN_GPU_ARCH'), 'Architecture override forbidden'
+    device_arch, probe = _backend._device_arch(os.environ['MOJOLEARN_EXPECT_VENDOR'])
+    selected = _backend.gpu_arch()
+    assert device_arch == selected == audit['runtime_architecture'], ('Wrong actual GPU architecture', device_arch, selected)
+    architecture = dict(device_architecture=device_arch, selected_architecture=selected,
+                        architecture_probe=probe, architecture_override_absent=True)
 # Older bindings expose vendor but no tier getter; report that gap explicitly.
 getters = {'_mojolearn': 'mojolearn_numeric_mode', '_mojolearn_gbdt': 'gbdt_numeric_mode',
            '_mojolearn_svm': 'svm_numeric_mode', '_mojolearn_metrics': 'umap_numeric_mode',
            '_mojolearn_linalg': 'linalg_numeric_mode', '_mojolearn_arima': 'arima_numeric_mode',
            '_mojolearn_training': 'training_numeric_mode', '_mojolearn_gp': 'gp_numeric_mode',
            '_mojolearn_mamba': 'mamba_numeric_mode', '_mojolearn_transformer': 'transformer_numeric_mode'}
+if audit.get('assembly_profile') == 'release-0.6.1' and mojolearn.numeric_mode() == 'identical':
+    getters['_mojolearn_byte_lm'] = 'byte_lm_numeric_mode'
 all_bindings = set(getters) | {'_mojolearn_estimators', '_mojolearn_rf', '_mojolearn_trees', '_mojolearn_solver', '_mojolearn_tsa'}
 readback = {}
 for name in sorted(all_bindings):
@@ -198,6 +254,8 @@ for name in sorted(all_bindings):
     assert _backend.read_vendor(binding) == os.environ['MOJOLEARN_EXPECT_VENDOR']
     row = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
     member = path.relative_to(installed.parent).as_posix()
+    if architecture:
+        assert member.startswith(os.environ['MOJOLEARN_EXPECT_VENDOR'] + '/' + architecture['selected_architecture'] + '/')
     assert audit['extension_hashes'].get(member) == row['sha256'], ('Installed binary differs from wheel', member)
     if name in getters:
         row['mode_code'] = int(getattr(binding, getters[name])())
@@ -208,6 +266,7 @@ for name in sorted(all_bindings):
 record = {'package': str(installed), 'version': mojolearn.__version__,
           'vendor': mojolearn.vendor(), 'mode': mojolearn.numeric_mode(),
           'wheel_sha256': audit['sha256'], 'installed_bindings': readback}
+record.update(architecture)
 pathlib.Path(os.environ['MOJOLEARN_INSTALLED_RECORD']).write_text(json.dumps(record, indent=2) + '\n')
 print(json.dumps(record), flush=True)
 target = sys.argv[1]
@@ -222,12 +281,16 @@ export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 MOJOLEARN_EXPECT_VENDOR="$VENDOR" M
 cd "$DEST"
 for mode in fast deterministic identical; do
     export MOJOLEARN_NUMERIC_MODE="$mode"
-    for surface in smoke umap umap-transform umap-quality ordered-rmse mamba transformer arima; do
+    surfaces=(smoke umap umap-transform umap-quality ordered-rmse mamba transformer arima)
+    if [[ "$ACTION" = qualify-release-0.6.1 && "$mode" = identical ]]; then surfaces+=(byte-lm); fi
+    for surface in "${surfaces[@]}"; do
         export MOJOLEARN_INSTALLED_RECORD="$DEST/$surface-$mode.installed.json"
         args=()
         if [[ "$surface" = smoke ]]; then
             test="$ROOT/packaging/linux/smoke.py"
             args=(--vendor "$VENDOR" --json "$DEST/smoke-$mode.json")
+        elif [[ "$surface" = byte-lm ]]; then
+            test="$ROOT/tools/byte_lm_installed_step.py"
         elif [[ "$surface" = ordered-rmse ]]; then
             test="$ROOT/tools/ordered_rmse_surface_check.py"
         elif [[ "$surface" = umap-transform ]]; then

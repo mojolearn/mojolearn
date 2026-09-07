@@ -104,6 +104,77 @@ TIERS = ("fast", "deterministic", "identical")
 ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
 PYPI_LIMIT = 100 * 1024 * 1024
 LINUX_VENDORS = ("cuda", "hip")
+RELEASE_061_SETS = {("cuda", "sm_89"), ("cuda", "sm_90"), ("hip", "gfx942")}
+
+
+def release_inventory(sets, proof_paths, version, source_root=REPO):
+    """Bind the explicit 0.6.1 payload to complete per-architecture builds.
+
+    File inspection only. Build provenance is not installed/runtime admission.
+    Byte-LM is required only in IDENTICAL; legacy generic sets remain unchanged.
+    """
+    keys = [(v, a) for v, a, _, _, _ in sets]
+    if version != '0.6.1' or len(keys) != 3 or set(keys) != RELEASE_061_SETS:
+        raise SystemExit('release-0.6.1 requires exactly CUDA sm_89/sm_90 and HIP gfx942')
+    if len(proof_paths) != 3:
+        raise SystemExit('release-0.6.1 requires three complete architecture build proofs')
+    payload = {f'mojolearn/{rel}': sha(path).hex()
+               for _, _, files, _, _ in sets for rel, path in files.items()}
+    proofs, inventories, commits = {}, [], set()
+    for path in proof_paths:
+        raw = pathlib.Path(path).read_bytes()
+        proof = json.loads(raw)
+        if (proof.get('schema') != 'mojolearn.linux.build-provenance.v1'
+                or proof.get('complete') is not True or proof.get('build_exit') != 0
+                or proof.get('action') != 'build'):
+            raise SystemExit('Incomplete architecture build proof')
+        covered = {key for key in keys if any(
+            name.startswith(f'mojolearn/{key[0]}/{key[1]}/')
+            for name in proof.get('extensions', {}))}
+        if len(covered) != 1:
+            raise SystemExit('Each proof must cover exactly one advertised architecture')
+        key = next(iter(covered))
+        expected = {n: h for n, h in payload.items()
+                    if n.startswith(f'mojolearn/{key[0]}/{key[1]}/')}
+        required = {f'mojolearn/{key[0]}/{key[1]}/' +
+                    ('' if mode == 'fast' else mode + '/') + name + '.so'
+                    for mode in TIERS for name in (*EXT_NAMES, *(
+                        ('_mojolearn_byte_lm',) if mode == 'identical' else ()))}
+        if key in proofs or proof['extensions'] != expected or set(expected) != required:
+            raise SystemExit('Duplicate, stale or incomplete architecture proof')
+        inventory = proof['source_inventory']
+        if (not inventory or len(inventory) != len({p for p, _ in inventory})
+                or proof['source_sha256'] != hashlib.sha256(
+                    json.dumps(inventory, separators=(',', ':')).encode()).hexdigest()):
+            raise SystemExit('Invalid build source inventory')
+        for rel, digest in inventory:
+            name = pathlib.PurePosixPath(rel)
+            if name.is_absolute() or '..' in name.parts:
+                raise SystemExit('Unsafe build source path')
+            source = pathlib.Path(source_root) / rel
+            if not source.resolve().is_relative_to(pathlib.Path(source_root).resolve()):
+                raise SystemExit('Build source escapes source root')
+            if sha(source).hex() != digest:
+                raise SystemExit('Current source differs from build: ' + rel)
+        commit = proof.get('source_commit', '')
+        if not re.fullmatch('[0-9a-f]{40}', commit):
+            raise SystemExit('Missing full build commit')
+        commits.add(commit)
+        inventories.append(inventory)
+        proofs[key] = dict(sha256=hashlib.sha256(raw).hexdigest(),
+                           source_sha256=proof['source_sha256'])
+    if len(commits) != 1 or any(i != inventories[0] for i in inventories[1:]):
+        raise SystemExit('Architecture sets were built from different sources')
+    return dict(schema='mojolearn.linux-payload.v1', version=version,
+                release_profile='alpha-api', assembly_profile='release-0.6.1',
+                source_commit=next(iter(commits)), source_inventory=inventories[0],
+                sets={'/'.join(k): proofs[k] for k in sorted(proofs)},
+                extensions=payload,
+                optional_native={'_mojolearn_byte_lm': {
+                    'included': True, 'supported_modes': ['identical'],
+                    'unsupported_modes': ['fast', 'deterministic']}},
+                qualification='Build and file provenance only; installed runtime and numerical checks required',
+                runtime_coverage={ '/'.join(k): 'PENDING_INSTALLED_ARTIFACT' for k in sorted(proofs)})
 
 
 def urlsafe_b64(digest):
@@ -145,7 +216,7 @@ def metadata_text(proj, readme):
     return "\n".join(lines) + "\n\n" + readme
 
 
-def load_set(path):
+def load_set(path, include_byte_lm=False):
     """Every (vendor, arch, files, libs, manifest) under one sets/<vendor>
     directory. One tuple per architecture subdirectory."""
     path = pathlib.Path(path).resolve()
@@ -181,10 +252,24 @@ def load_set(path):
             raise SystemExit(
                 f"pack_wheel: {adir}/arch_readback.txt says {sorted(said_arch)}, "
                 f"directory says {arch}; refusing to pack a mislabeled set")
+        if include_byte_lm:
+            expected_rows = {(tier, name) for tier in TIERS for name in
+                             EXT_NAMES + (('_mojolearn_byte_lm',) if tier == 'identical' else ())}
+            for witness, expected_value in (('readback.txt', vendor), ('arch_readback.txt', arch)):
+                rows = [line.split() for line in (adir / witness).read_text().splitlines()]
+                if (len(rows) != 46 or any(len(row) != 3 for row in rows)
+                        or {(row[0], row[1]) for row in rows} != expected_rows
+                        or any(row[2] != expected_value for row in rows)):
+                    raise SystemExit(f'pack_wheel: incomplete release native readback in {adir / witness}')
         files = {}
         for tier in TIERS:
             d = adir if tier == "fast" else adir / tier
-            for n in EXT_NAMES:
+            names = EXT_NAMES + (('_mojolearn_byte_lm',)
+                                 if include_byte_lm and tier == 'identical' else ())
+            actual = {p.name for p in d.glob('_mojolearn*.so')}
+            if actual != {n + '.so' for n in names}:
+                raise SystemExit(f'pack_wheel: undeclared or missing native payload in {d}: {sorted(actual)}')
+            for n in names:
                 so = d / (n + ".so")
                 if not so.exists():
                     raise SystemExit(
@@ -213,6 +298,9 @@ def main():
                     help="a sets/<vendor> directory from build_sets.sh; give both")
     ap.add_argument("--out", default=str(PY_DIR / "dist"))
     ap.add_argument("--plat", default="linux_x86_64")
+    ap.add_argument('--profile', choices=('generic', 'release-0.6.1'), default='generic')
+    ap.add_argument('--build-proof', action='append', default=[],
+                    help='complete per-architecture build-provenance.json; three required for release-0.6.1')
     ap.add_argument("--check-against", default="",
                     help="a macOS wheel whose METADATA must match this one's")
     a = ap.parse_args()
@@ -224,10 +312,14 @@ def main():
                          f"_version.py says {version}")
     readme = (REPO / "README.md").read_text()
 
-    sets = [t for s in a.set for t in load_set(s)]
+    sets = [t for s in a.set for t in load_set(s, include_byte_lm=a.profile == 'release-0.6.1')]
     keys = [(v, arch) for v, arch, _, _, _ in sets]
     if len(set(keys)) != len(keys):
         raise SystemExit(f"pack_wheel: the same (vendor, arch) given twice: {keys}")
+    if a.profile == 'generic' and a.build_proof:
+        raise SystemExit('--build-proof requires an explicit release profile')
+    inventory = (release_inventory(sets, a.build_proof, version)
+                 if a.profile == 'release-0.6.1' else None)
 
     # .libs layout: ONE shared mojolearn/.libs when every closure across
     # every (vendor, arch) set matches by name AND sha256 (2026-08-30
@@ -252,6 +344,7 @@ def main():
     entries["mojolearn_diagnostics.py"] = PY_DIR / "mojolearn_diagnostics.py"
     for py in sorted(PKG.glob("*.py")):
         entries[f"mojolearn/{py.name}"] = py
+    entries["mojolearn/ALPHA_API.md"] = PKG / "ALPHA_API.md"
     seen_vendor_libs = set()
     for vendor, arch, files, libs, _ in sets:
         for rel, p in files.items():
@@ -276,6 +369,16 @@ def main():
                 f"{k} = {v}\n" for k, v in proj.get("scripts", {}).items())).encode(),
         f"{dist}/top_level.txt": b"mojolearn\nmojolearn_diagnostics\n",
     }
+    if inventory is not None:
+        inventory['runtime_layout'] = 'shared' if shared else 'per-vendor'
+        inventory['runtime_sha256'] = {
+            name: sha(path).hex() for name, path in entries.items()
+            if '/.libs/' in name}
+        inventory['python_sha256'] = {
+            name: sha(path).hex() for name, path in entries.items()
+            if name.endswith('.py')}
+        generated[f'{dist}/LINUX_PAYLOAD.json'] = (
+            json.dumps(inventory, sort_keys=True, indent=2) + '\n').encode()
     for lf in proj.get("license-files", []):
         generated[f"{dist}/licenses/{lf}"] = (REPO / lf).read_bytes()
 
@@ -307,6 +410,8 @@ def main():
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     whl = out / f"mojolearn-{version}-{tag}.whl"
+    if whl.exists():
+        raise SystemExit('pack_wheel: refusing to overwrite existing artifact: ' + str(whl))
     record = []
     with zipfile.ZipFile(whl, "w", zipfile.ZIP_DEFLATED) as z:
         for arc, src in entries.items():

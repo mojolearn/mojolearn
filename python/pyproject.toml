@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 name = "mojolearn"
 # Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
 # version bump is a visible edit in both places rather than one.
-version = "0.6.0"
+version = "0.6.1"
 description = "GPU machine learning in Mojo for Metal, CUDA, and HIP, with fast, deterministic, and cross-vendor identical modes for certified configurations"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -81,7 +81,7 @@ keywords = [
 # rather than softened. A floor is a promise and it is only as good as the run.
 
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     # Two platforms have a wheel as of 0.3.0: macOS on Apple silicon, and
@@ -217,6 +217,7 @@ mojolearn = [
     # machine-readable citation, not just the license. Attribution that only
     # exists in the git repository does not travel with the artifact.
     "CITATION.cff",
+    "ALPHA_API.md",
     "*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib",
     "cuda/*.so", "cuda/identical/*.so", "cuda/deterministic/*.so", "cuda/.libs/*",
     "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/deterministic/*.so", "cuda/sm_*/.libs/*",

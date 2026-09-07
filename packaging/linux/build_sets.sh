@@ -23,7 +23,7 @@
 #
 # Build tiers serially. Concurrent compilers previously multiplied worker counts
 # and memory pressure; MOJOLEARN_BUILD_JOBS must now be 1. The inherited Linux
-# affinity is capped at four CPUs, compiler workers at two, BLAS/OpenMP at one.
+# affinity is capped at two CPUs, compiler workers at two, BLAS/OpenMP at one.
 # A partial timed-out build is retained as partial, never release-qualified.
 #
 # THE BUILD SCRIPTS ARE THE EXISTING ONES. bindings/build_*.sh already know
@@ -49,9 +49,10 @@ if [[ "$(uname -s)" != Linux ]]; then
     exit 2
 fi
 command -v taskset >/dev/null || { echo 'taskset required for CPU cap' >&2; exit 2; }
-BUILD_CPUS=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:4])))') || exit 2
+BUILD_CPUS=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))') || exit 2
 [[ -n "$BUILD_CPUS" ]] || { echo 'Empty CPU affinity' >&2; exit 2; }
 taskset -pc "$BUILD_CPUS" $$ || exit 2
+python3 -c 'import os; assert 1 <= len(os.sched_getaffinity(0)) <= 2, "two-core build affinity required"' || exit 2
 TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
 # THE TWO LISTS BELOW ARE THE LINUX WHEEL'S CONTENTS AND THEY GO STALE
 # SILENTLY. A binding missing from them is not a build error -- it is a wheel
@@ -64,6 +65,19 @@ TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
 # `packaging/macos/build_release_wheel.sh`'s pair.
 SCRIPTS="${MOJOLEARN_BUILD_SCRIPTS:-build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh build_gp.sh build_mamba.sh build_transformer.sh}"
 EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training _mojolearn_gp _mojolearn_mamba _mojolearn_transformer"
+PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
+case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
+unset MOJOLEARN_BYTE_LM_OUTDIR
+tier_names() {
+  printf '%s' "$EXT_NAMES"
+  if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf ' _mojolearn_byte_lm'; fi
+  printf '\n'
+}
+tier_scripts() {
+  printf '%s' "$SCRIPTS"
+  if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf ' build_byte_lm.sh'; fi
+  printf '\n'
+}
 say() { echo "[$(date +%T) build_sets] $*"; }
 
 say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS"
@@ -82,7 +96,7 @@ done
 # ---------------------------------------------------------------- builds
 build_tier() {
   local tier="$1" rc=0
-  for s in $SCRIPTS; do
+  for s in $(tier_scripts "$tier"); do
     local log="$DEST/build_logs/${tier}_${s%.sh}.log"
     { echo "start $(date -u +%FT%TZ)"; } > "$log"
     if MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
@@ -111,7 +125,7 @@ READBACK="$DEST/readback.txt"
 : > "$READBACK"
 for t in $TIERS; do
   case "$t" in fast) d=python/mojolearn ;; *) d=python/mojolearn/$t ;; esac
-  for n in $EXT_NAMES; do
+  for n in $(tier_names "$t"); do
     so="$d/$n.so"
     [ -f "$so" ] || { echo "$t $n MISSING" >> "$READBACK"; continue; }
     v=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" <<'PY' 2>&1 | tail -1
@@ -123,6 +137,9 @@ spec = importlib.util.spec_from_loader(name, loader, origin=so)
 m = importlib.util.module_from_spec(spec)
 loader.exec_module(m)
 f = getattr(m, fn, None)
+if name == '_mojolearn_byte_lm':
+    assert m.byte_lm_numeric_mode() == 1, 'Byte LM must be IDENTICAL'
+    assert m.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1', 'Wrong byte LM profile'
 print("NO-READBACK" if f is None else str(f()))
 PY
 )
@@ -155,7 +172,7 @@ arch_of() {
 }
 for t in $TIERS; do
   case "$t" in fast) d=python/mojolearn ;; *) d=python/mojolearn/$t ;; esac
-  for n in $EXT_NAMES; do
+  for n in $(tier_names "$t"); do
     so="$d/$n.so"
     [ -f "$so" ] || { echo "$t $n MISSING" >> "$ARCHBACK"; continue; }
     a=$(arch_of "$so")
@@ -229,7 +246,7 @@ SET="$DEST/sets/$VENDOR/$ARCH"
 rm -rf "$DEST/sets/$VENDOR"; mkdir -p "$SET/deterministic" "$SET/identical"
 for t in $TIERS; do
   case "$t" in fast) src=python/mojolearn; dst="$SET" ;; *) src=python/mojolearn/$t; dst="$SET/$t" ;; esac
-  for n in $EXT_NAMES; do
+  for n in $(tier_names "$t"); do
     [ -f "$src/$n.so" ] && mv "$src/$n.so" "$dst/$n.so"
   done
 done
@@ -342,6 +359,18 @@ python3 packaging/linux/stage_libs.py --set "$SET" --env-lib "$ENV_LIB" \
   --manifest "$SET/manifest.json" --patchelf "$PATCHELF" \
   2>&1 | tee "$DEST/build_logs/stage.log"
 STAGE_RC=${PIPESTATUS[0]}
+if [[ "$STAGE_RC" = 0 && "$PACKAGE_BYTE_LM" = 1 && -f "$SET/identical/_mojolearn_byte_lm.so" ]]; then
+  python3 - "$SET/manifest.json" <<'PYBYTE'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+record = json.loads(path.read_text())
+record.setdefault('optional_native', {})['_mojolearn_byte_lm'] = dict(
+    included=True, supported_modes=['identical'], unsupported_modes=['fast', 'deterministic'],
+    profile='mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1')
+path.write_text(json.dumps(record, indent=2) + '\n')
+PYBYTE
+  [[ $? = 0 ]] || STAGE_RC=1
+fi
 
 # ---------------------------------------------------------------- sizes
 ( cd "$DEST/sets" && tar czf "$VENDOR.tar.gz" "$VENDOR" )

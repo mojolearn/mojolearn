@@ -85,6 +85,9 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # all. Add a binding there only when a phase actually imports it.
 BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh build_gp.sh build_mamba.sh build_transformer.sh"
 EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training _mojolearn_gp _mojolearn_mamba _mojolearn_transformer"
+PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
+case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
+unset MOJOLEARN_BYTE_LM_OUTDIR
 
 # THE PER-SCRIPT GATES ARE OFF HERE, AND THE REASON IS A CLEAN CHECKOUT.
 # Each bindings/build_*.sh ends by copying python/mojolearn/ aside and
@@ -143,12 +146,27 @@ EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojol
 # build. pyproject.toml's package-data glob carries all three directories.
 MODES="${MOJOLEARN_RELEASE_MODES:-fast deterministic identical}"
 echo "== numeric tiers in this wheel: $MODES"
+if [ "$PACKAGE_BYTE_LM" = 1 ]; then
+    case " $MODES " in *' identical '*) ;; *) echo 'Byte LM requires the identical tier' >&2; exit 2 ;; esac
+fi
+# Refuse stale unsupported-mode artifacts rather than silently packaging them.
+for byte_path in "$PKG/_mojolearn_byte_lm.so" "$PKG/deterministic/_mojolearn_byte_lm.so"; do
+    [ ! -e "$byte_path" ] && [ ! -L "$byte_path" ] || { echo 'Byte LM is IDENTICAL only' >&2; exit 2; }
+done
+if [ "$PACKAGE_BYTE_LM" = 0 ]; then
+    [ ! -e "$PKG/identical/_mojolearn_byte_lm.so" ] && [ ! -L "$PKG/identical/_mojolearn_byte_lm.so" ] || {
+        echo 'Legacy build refuses an unrequested byte LM binary' >&2; exit 2;
+    }
+fi
 
 for mode in $MODES; do
     for script in $BUILD_SCRIPTS; do
         echo "== $script ($mode)"
         MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=1 ./bindings/$script
     done
+    if [ "$PACKAGE_BYTE_LM" = 1 ] && [ "$mode" = identical ]; then
+        MOJOLEARN_NUMERIC_MODE=identical bash ./bindings/build_byte_lm.sh
+    fi
 done
 
 # THE FILES THE REST OF THIS SCRIPT GATES, thirteen per tier (thirty-nine
@@ -170,6 +188,20 @@ for n in $EXT_NAMES; do
         fi
     done
 done
+if [ "$PACKAGE_BYTE_LM" = 1 ]; then
+    ALL_SOS="$ALL_SOS $PKG/identical/_mojolearn_byte_lm.so"
+    pixi run -e pkg python - "$PKG/identical/_mojolearn_byte_lm.so" <<'PYBYTE'
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location('_mojolearn_byte_lm', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+assert module.byte_lm_numeric_mode() == 1
+assert module.byte_lm_vendor() == 'metal'
+assert module.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+print(json.dumps(dict(extension='_mojolearn_byte_lm', native_vendor='metal', numeric_mode=1,
+    profile=module.byte_lm_profile(), supported_modes=['identical'], unsupported_modes=['fast', 'deterministic'])))
+PYBYTE
+fi
 for so in $ALL_SOS; do
     [ -f "$so" ] || { echo "ERROR: $so was not produced" >&2; exit 1; }
     [ "$so" -nt "$STAMP" ] || { echo "ERROR: $so predates this build (stale)" >&2; exit 1; }

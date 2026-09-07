@@ -23,6 +23,92 @@ FIXTURES = {
 }
 
 
+BYTE_LM_PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+BYTE_FILES = {'byte-lm-identical.json', 'byte-lm-before.json', 'byte-lm-after.json', 'byte-lm-restored.json'}
+
+
+def expected_jobs(audit):
+    jobs = {(s, m) for s in SURFACES for m in MODES}
+    if audit.get('assembly_profile') == 'release-0.6.1':
+        jobs.add(('byte-lm', 'identical'))
+    return jobs
+
+
+def expected_bindings(mode, byte_lm=False):
+    return BINDINGS | ({'_mojolearn_byte_lm'} if byte_lm and mode == 'identical' else set())
+
+
+def check_byte_lm(out, installed):
+    import math
+    for name in BYTE_FILES:
+        require((out / name).stat().st_size <= 2 * 1024 * 1024, 'Byte-LM evidence too large')
+    report = json.loads((out / 'byte-lm-identical.json').read_text())
+    meta = report['metadata']
+    require(report.get('schema') == 'mojolearn.installed-byte-lm-step.v1'
+            and report.get('status') == 'PASS' and report.get('completed_steps') == 1,
+            'Missing byte-LM one-step success')
+    require(meta.get('native_profile') == BYTE_LM_PROFILE and meta.get('profile') == BYTE_LM_PROFILE
+            and meta.get('native_numeric_mode') == 1 and meta.get('native_vendor') == installed['vendor']
+            and meta.get('binding_sha256') == installed['installed_bindings']['_mojolearn_byte_lm']['sha256'],
+            'Byte-LM installed profile/mode/vendor/binary differs')
+    require(all(type(report[k]) in (int, float) and math.isfinite(report[k])
+                for k in ('loss', 'evaluation_loss')), 'Nonfinite byte-LM loss')
+    def floats(encoded):
+        require(type(encoded) is str and len(encoded) == 34944 * 8, 'Wrong byte-LM array length')
+        raw = bytes.fromhex(encoded)
+        require(all(math.isfinite(x[0]) for x in struct.iter_unpack('<f', raw)), 'Nonfinite byte-LM array')
+        return raw
+    gradient = floats(report['gradients_hex'])
+    require(any(x[0] != 0 for x in struct.iter_unpack('<f', gradient)), 'Zero byte-LM gradients')
+    payloads = []
+    expected = BYTE_FILES - {'byte-lm-identical.json'}
+    require(set(report['checkpoint_sha256']) == expected, 'Missing checkpoint files')
+    for name in ('byte-lm-before.json', 'byte-lm-after.json', 'byte-lm-restored.json'):
+        require(sha(out / name) == report['checkpoint_sha256'][name], 'Checkpoint bytes changed')
+        envelope = json.loads((out / name).read_text())
+        payload = envelope['payload']
+        require(envelope.get('schema') == 'mojolearn.small-byte-lm-json-checkpoint.v1'
+                and envelope.get('payload_sha256') == hashlib.sha256(json.dumps(payload, sort_keys=True,
+                    separators=(',', ':'), allow_nan=False).encode()).hexdigest(), 'Checkpoint payload hash differs')
+        require(set(payload) == {'schema', 'profile', 'numeric_mode', 'parameter_names', 'parameter_shapes',
+                'parameter_offsets', 'parameters', 'm', 'v', 'flags', 'completed_steps', 'next_batch_index',
+                'config', 'data_schedule'} and payload.get('schema') == 'mojolearn.small-byte-lm-state.v1',
+                'Incomplete checkpoint state schema')
+        require(len(payload['parameter_names']) == len(set(payload['parameter_names'])) == 20
+                and len(payload['parameter_shapes']) == 20 and len(payload['parameter_offsets']) == 21
+                and payload['parameter_offsets'][0] == 0 and payload['parameter_offsets'][-1] == 34944,
+                'Incomplete checkpoint parameter registry')
+        for index, shape in enumerate(payload['parameter_shapes']):
+            require(type(shape) is list and shape and all(type(d) is int and d > 0 for d in shape)
+                    and math.prod(shape) == payload['parameter_offsets'][index + 1] - payload['parameter_offsets'][index],
+                    'Invalid checkpoint parameter offsets')
+        require(isinstance(payload['data_schedule'], dict) and payload['data_schedule']
+                and payload['config'].get('kind') == 2, 'Missing schedule or AdamW configuration')
+        require(payload.get('profile') == BYTE_LM_PROFILE and payload.get('numeric_mode') == 'identical',
+                'Wrong checkpoint profile/mode')
+        for key in ('parameters', 'm', 'v'):
+            require(payload[key]['dtype'] == '<f4' and payload[key]['shape'] == [34944], 'Wrong state array')
+            raw = floats(payload[key]['hex'])
+            if key == 'v':
+                require(all(x[0] >= 0 for x in struct.iter_unpack('<f', raw)), 'Negative second moments')
+        require(payload['flags']['dtype'] == '<i4' and payload['flags']['shape'] == [20]
+                and len(bytes.fromhex(payload['flags']['hex'])) == 80, 'Wrong optimizer flags')
+        payloads.append(payload)
+    before, after, restored = payloads
+    require(after == restored, 'Restore/evaluation changed training state')
+    require(before['completed_steps'] == before['next_batch_index'] == 0
+            and after['completed_steps'] == after['next_batch_index'] == 1, 'Wrong step continuation')
+    for key in ('parameters', 'm', 'v'):
+        require(before[key]['hex'] != after[key]['hex'], 'Missing AdamW state update: ' + key)
+    for key in ('m', 'v'):
+        require(bytes.fromhex(before[key]['hex']) == bytes(34944 * 4), 'Initial moments not zero')
+    require(bytes.fromhex(before['flags']['hex']) == bytes(80)
+            and bytes.fromhex(after['flags']['hex']) == struct.pack('<20i', *([1] * 20)), 'Wrong optimizer initialization')
+    mutable = {'parameters', 'm', 'v', 'flags', 'completed_steps', 'next_batch_index'}
+    require({k:v for k,v in before.items() if k not in mutable} ==
+            {k:v for k,v in after.items() if k not in mutable}, 'Step altered fixed checkpoint metadata')
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)
@@ -89,7 +175,7 @@ def verify(root, out):
     require(frozen == sources(root), 'Qualification source changed')
     audit = json.loads((out / 'wheel-audit.json').read_text())
     require(sha(audit['wheel']) == audit['sha256'], 'Wheel changed during qualification')
-    expected = {(s, m) for s in SURFACES for m in MODES}
+    expected = expected_jobs(audit)
     rows = [line.split('\t') for line in (out / 'results.tsv').read_text().splitlines()]
     require(len(rows) == len(expected) and all(len(r) == 3 for r in rows), 'Incomplete status inventory')
     require({(s, m) for s, m, _ in rows} == expected and all(status == '0' for _, _, status in rows),
@@ -105,7 +191,7 @@ def verify(root, out):
         require(package.is_relative_to(out / 'venv') and 'site-packages' in package.parts,
                 'Package outside isolated installation')
         bindings = record['installed_bindings']
-        require(set(bindings) == BINDINGS, 'Incomplete binding inventory')
+        require(set(bindings) == expected_bindings(mode, audit.get('assembly_profile') == 'release-0.6.1'), 'Incomplete binding inventory')
         for row in bindings.values():
             member = str(Path(row['path']).relative_to(package))
             require(row['sha256'] == audit['extension_hashes'].get(member), 'Binding differs from wheel')
@@ -114,13 +200,15 @@ def verify(root, out):
         if surface == 'umap-quality':
             check_quality(json.loads((out / (name + '.json')).read_text()), mode,
                           bindings['_mojolearn_metrics']['sha256'])
+        if surface == 'byte-lm':
+            check_byte_lm(out, record)
         records[name] = sha(out / (name + '.installed.json'))
     return {'schema': 'mojolearn.linux.installed-surfaces.v1', 'status': 'PASSED',
             'vendor': audit['qualification_vendor'], 'wheel_sha256': audit['sha256'],
             'source_sha256': audit['source_sha256'], 'installed_records': records,
             'evidence_sha256': {p.name: sha(p) for p in sorted(out.iterdir())
                                if p.is_file() and p.name not in ('qualification.json', 'exit_code')},
-            'scope': '24 installed jobs; UMAP six held-out quality fixtures per mode; not universal identity'}
+            'scope': str(len(expected)) + ' installed jobs; byte-LM when present is one step only; UMAP six held-out quality fixtures per mode; not universal identity'}
 
 
 def retained(out):
@@ -130,12 +218,15 @@ def retained(out):
             and record.get('status') == 'PASSED', 'Installed qualification did not pass')
     require((out / 'exit_code').read_text().strip() == '0', 'Qualification exit marker failed')
     evidence = record.get('evidence_sha256', {})
-    expected = {(s, m) for s in SURFACES for m in MODES}
+    audit = json.loads((out / 'wheel-audit.json').read_text())
+    expected = expected_jobs(audit)
     required = {'results.tsv', 'wheel-audit.json', 'qualification-sources.json',
                 'installed-dependencies.txt', 'dependency-check.log'}
     required.update(s + '-' + m + suffix for s, m in expected
                     for suffix in ('.log', '.installed.json'))
     required.update('umap-quality-' + m + '.json' for m in MODES)
+    if ('byte-lm', 'identical') in expected:
+        required.update(BYTE_FILES)
     require(required <= set(evidence), 'Incomplete retained evidence inventory')
     for name, digest in evidence.items():
         require(Path(name).name == name and name not in ('.', '..'), 'Invalid evidence path')
@@ -149,6 +240,8 @@ def retained(out):
             and installed.get('wheel_sha256') == record['wheel_sha256'], 'Retained provenance mismatch')
     quality = json.loads((out / 'umap-quality-identical.json').read_text())
     check_quality(quality, 'identical', installed['installed_bindings']['_mojolearn_metrics']['sha256'])
+    if ('byte-lm', 'identical') in expected:
+        check_byte_lm(out, json.loads((out / 'byte-lm-identical.installed.json').read_text()))
     return record, quality
 
 
