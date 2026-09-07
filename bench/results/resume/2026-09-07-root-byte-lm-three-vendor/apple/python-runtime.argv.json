@@ -1,0 +1,16 @@
+[
+  "/opt/homebrew/opt/python@3.14/bin/python3.14",
+  "/private/tmp/mojolearn-apple-byte-lm-attempt3-20260907/macos_serial_guard.py",
+  "--seconds",
+  "60",
+  "--rss-gib",
+  "2",
+  "--memory-policy",
+  "user-tiny",
+  "--report",
+  "/private/tmp/mojolearn-apple-byte-lm-attempt3-20260907/python-runtime.guard.json",
+  "--",
+  "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/python",
+  "-c",
+  "import json,sys,platform,numpy; print(json.dumps(dict(executable=sys.executable,python=sys.version,platform=platform.platform(),numpy=numpy.__version__,numpy_file=numpy.__file__)))"
+]

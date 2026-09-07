@@ -1,7 +1,56 @@
 # Roadmap
 
-This is the only live project plan. Historical plans and handoffs are not
-current instructions; git history and `archive/` retain their evidence.
+This is the main project roadmap. The actionable follow-up checklist is
+[Feature completion and release follow-up](FEATURE_COMPLETION_PLAN.md),
+covering the six requested workstreams and execution limits. Historical
+plans and handoffs are not current instructions; git history and `archive/`
+retain their evidence.
+
+Follow [the remaining-work execution plan](REMAINING_WORK_PLAN.md) for the
+current publication and validation order, beginning with PyPI 0.6.0.
+
+Current execution direction (2026-09-06): prefer new GPU validation and
+measurements remotely on NVIDIA and AMD. The user permits necessary bounded
+MacBook checks; use two CPU cores/threads by default, never above three,
+with explicit memory and time limits. Only the root/main
+thread runs tests, builds or measurements; implementation agents never do.
+
+Near-term training goal: validate the new small MLP, then a two-block,
+34,944-parameter byte language model on pinned real text, with independently
+checked gradients/AdamW, held-out learning, full per-step NVIDIA/AMD state
+equality and cross-vendor checkpoint continuation. New training source is
+authored, not yet qualified. See the [active milestones](FEATURE_COMPLETION_PLAN.md#near-term-training-milestone-active).
+
+The [bounded NVIDIA UMAP follow-up](bench/results/resume/2026-09-06-root-umap-nvidia/README.md)
+passed all 15 jobs, including the pinned digits quality experiment and one
+matched cuML comparison. Its rental is confirmed deleted. This scoped result
+does not qualify newer training changes or establish arbitrary dataset coverage.
+
+## Apple completion follow-up (2026-09-06)
+
+At `2e53699e`, freshly rebuilt Apple Mamba bindings pass all 102 Python
+surface checks in each of FAST, DETERMINISTIC and IDENTICAL. Corrected native
+Apple backward now passes all five baseline cases (54 public tensors) and
+Mamba1 L64. Mamba3 L65 remains RED on one `partial.qkdot.dt` float32-reference
+cell. All 93 shared native arrays match the older AMD operand capture by
+bytes, while the platform-generated float32 references differ; float64
+semantics for this operand pass. This is a diagnostic, not permission to
+ignore the failed independent reference or a new cross-vendor certificate.
+No tolerance or numerical contract changed. See the [retained checks and
+diagnostic](bench/results/resume/2026-09-06-feature-finish/README.md).
+
+The macOS verifier now fails incomplete interpreter coverage and ambiguous
+wheel selection, and preserves JSON backslashes in retained output. Nine new
+shell regression tests and five existing ordered
+smoke tests pass. Installed Apple smoke now runs the complete Mamba and
+Transformer surface gates in every interpreter/mode job. The fresh full45
+Apple 0.6.0 wheel passes all fifteen Python 3.10–3.14/mode jobs, including
+UMAP transform, OrderedRMSE, numeric-mode save/load, 102 Mamba checks and
+44 Transformer checks per job. Its SHA256 is
+`061d9f47acdce1f6f4d3fa451fc03a7b55ea8909f8e84a318e02723a41739027`.
+The clean final verification exits zero and retains parseable ordered JSON,
+all binding hashes and the exact wheel digest. Publication and Linux gates
+remain open; native long Mamba3 backward is separate and still RED.
 
 ## Installed API gap closure (2026-09-06, release pending)
 
@@ -68,8 +117,9 @@ that process has a different default. Six lightweight archive/routing tests
 and the 30 OrderedRMSE boundary checks pass. The native save/load gate now
 changes the process default and requires restoration without manually resetting
 the loaded estimator. A separate NVIDIA native wrapper-overlay check passes
-all three modes and retains unchanged model/prediction bits; AMD/Apple
-follow-up is pending. This Python-wrapper follow-up is newer than the frozen
+all three modes and retains unchanged model/prediction bits. Apple now passes
+this through the current wheel in all fifteen jobs; AMD follow-up is pending.
+This Python-wrapper follow-up is newer than the frozen
 `eb835021` candidate wheels; those wheel passes do not qualify these new bytes.
 
 Release admission `b7129905` requires the exact same combined Linux wheel SHA
@@ -77,8 +127,8 @@ in both vendors' retained full installed qualifications, matching current
 native sources and recomputed UMAP/ordered comparisons. Eighteen lightweight
 admission/comparator tests pass; the real single-vendor AMD candidate is
 correctly refused as a combined release. Apple smoke now includes OrderedRMSE
-in every interpreter/mode job; its five orchestration checks pass, with the
-actual current Apple wheel run still pending.
+in every interpreter/mode job; its five orchestration checks and the current
+Apple wheel's fifteen installed jobs now pass.
 
 The next Mamba3 state probe is `tools/mamba3_mode_state_probe.py`: run each
 mode serially in an isolated installed environment and retain theta/key bits,
@@ -100,9 +150,10 @@ manifests are preserved unchanged, and UMAP/ordered lane evidence is separate.
   separate candidate wheel certificates do not certify a subsequently assembled
   archive. Bind publication admission to that exact wheel digest and retained
   installed evidence, including UMAP and ordered RMSE IDENTICAL comparisons.
-- Rebuild the Apple candidate with the new OrderedRMSE ABI and exercise that
-  estimator in every installed numeric mode. Older Apple candidate evidence
-  predates this addition. Re-run corrected native Mamba3 backward separately.
+- The rebuilt Apple candidate now passes the new OrderedRMSE ABI and saved
+  arithmetic policy in every installed interpreter/mode job (see above).
+  Resolve the separately retained long Mamba3 backward reference discrepancy;
+  the corrected Apple baseline passes, but the long certificate remains RED.
 - Exercise the final Linux artifacts across the supported Python interpreter
   matrix; a single-interpreter Linux qualification does not establish 3.10–3.14.
 - Expose Python Mamba backward through shared native launch helpers used by the

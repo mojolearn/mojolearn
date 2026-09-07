@@ -1,0 +1,8 @@
+{
+  "ref": "release-0.6.0-alpha-api",
+  "inputs": {
+    "publish": "pypi",
+    "alpha_candidate_tag": "alpha-api-0.6.0-20260906",
+    "alpha_manifest_sha256": "29abe57ff766170259ddf7eb3852c4891f005f72903ef6c5a38e5ce2b544b027"
+  }
+}

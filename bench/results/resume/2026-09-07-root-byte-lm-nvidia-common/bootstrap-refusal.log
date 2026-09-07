@@ -1,0 +1,1 @@
+{'status': 'PASS', 'scope': 'mocked guard failure; no API, compiler or GPU', 'returncode': 7, 'guard_argv': ['tools/nvidia_serial_guard.py', '--seconds', '600', '--rss-gib', '12', '--', 'pixi', 'install', '--locked'], 'body_sha256': '1dbb685ecb4527bd4b98eae85b3da4726c70ed1ca4bd42037c3d730c73ecc67c'}

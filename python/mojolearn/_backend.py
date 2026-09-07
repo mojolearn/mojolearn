@@ -21,7 +21,7 @@ of a LADDER in which each rung keeps the rung below it:
 `MOJOLEARN_NUMERIC_MODE=<tier>` in the environment AT IMPORT TIME makes
 `mojolearn` load that set under the canonical module names, so every caller's
 `from . import _mojolearn_gbdt` sees the right arithmetic (IDENTITY_PATHS.md;
-E1/archive/evidence/E2_RESULTS.md are the measurements). Unset or `fast` loads the default
+E1/archive/evidence/E2_RESULTS.md are the measurements). Unset selects `identical`. Explicit `fast` loads the baseline
 set. Anything else raises: a mode that is accepted and ignored is worse than
 one refused -- which is exactly what this selector did to `deterministic`
 until 2026-08-29, when the tier existed in the compiler and was unreachable
@@ -165,6 +165,8 @@ _MODULES = (
     "_mojolearn_linalg",
     "_mojolearn_arima",
     "_mojolearn_training",
+    # Fixed two-block byte-LM trainer; source integration is not qualification.
+    "_mojolearn_byte_lm",
     # Added 2026-09-01 with the GaussianProcessRegressor exposure. The
     # binding itself (bindings/_mojolearn_gp.mojo + build_gp.sh) is OWED at
     # the time of this edit; listing the name FIRST is deliberate, because
@@ -709,11 +711,11 @@ def _check_vendor(module, name, path):
 
 
 def requested_mode():
-    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower()
+    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower()
     if mode not in _MODE_CODE:
         raise ImportError(
-            f"mojolearn: MOJOLEARN_NUMERIC_MODE={mode!r}; it must be 'fast' "
-            "(the default), 'deterministic' or 'identical'"
+            f"mojolearn: MOJOLEARN_NUMERIC_MODE={mode!r}; it must be 'fast', "
+            "'deterministic' or 'identical' (the default)"
         )
     return mode
 
@@ -881,11 +883,11 @@ class _ModeSet:
 def load_set(mode):
     """Load (and cache) every binding for one tier, side by side with the
     others. The mechanism behind a per-call `numeric_mode=`."""
-    mode = (mode or "fast").strip().lower()
+    mode = (default_mode() if mode is None else mode).strip().lower()
     if mode not in _MODE_CODE:
         raise ValueError(
-            f"mojolearn: numeric_mode={mode!r}; it must be 'fast' (the "
-            "default), 'deterministic' or 'identical'"
+            f"mojolearn: numeric_mode={mode!r}; it must be 'fast', "
+            "'deterministic' or 'identical' (the default)"
         )
     if mode in _SETS:
         return _SETS[mode]
@@ -954,7 +956,7 @@ def set_default_mode(mode):
     otherwise silently run on the tier it was already holding.
     """
     global _DEFAULT_MODE
-    mode = (mode or "fast").strip().lower()
+    mode = (default_mode() if mode is None else mode).strip().lower()
     load_set(mode)
     prev = default_mode()
     _DEFAULT_MODE = mode
@@ -1011,6 +1013,7 @@ def _build_script(name):
         "_mojolearn_linalg": "build_linalg.sh",
         "_mojolearn_arima": "build_arima.sh",
         "_mojolearn_training": "build_training.sh",
+        "_mojolearn_byte_lm": "build_byte_lm.sh",
         "_mojolearn_gp": "build_gp.sh",
         "_mojolearn_mamba": "build_mamba.sh",
         "_mojolearn_transformer": "build_transformer.sh",

@@ -1,0 +1,96 @@
+{
+  "cells": {
+    "kmeans_k3": {
+      "card": "kmeans_k3.card",
+      "centroids": "3b5bda4188feebd407c8a86c20d83df957b1a834ebe799c5150d7ceddd06f0ee",
+      "inertia": "4d7d2bab481ddceba10fba9a25e13559874bfdfcb428e439e6a4d6903c01a08e",
+      "inertia_value": 37991.53125,
+      "kind": "kmeans",
+      "labels": "3bec35ededf9ccc73350f4c8e43018388b4643a7b58812ae0ef45a6b69344140",
+      "n_iter": 60,
+      "seconds": 3.84,
+      "spec": {
+        "n_clusters": 3,
+        "random_state": 7
+      },
+      "stages": 490,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k32": {
+      "card": "kmeans_k32.card",
+      "centroids": "5acf6821d4e46144fa666ff7cefa42fcf52111fe5f3267c97c926689013ec96f",
+      "inertia": "f2cfe186e2ec6b037e43dc090d38599db33535985c3fb178a5dc7200cbb01062",
+      "inertia_value": 32023.044921875,
+      "kind": "kmeans",
+      "labels": "8d40568a3458892070e0f4963f6f7eec5ae3226383324595a879106a69dd9bf6",
+      "n_iter": 117,
+      "seconds": 7.53,
+      "spec": {
+        "n_clusters": 32,
+        "random_state": 7
+      },
+      "stages": 889,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8": {
+      "card": "kmeans_k8.card",
+      "centroids": "a75be13ae713757839f2ce42b1df3df8f6d596d54d66291b7f6dd3b99154f27b",
+      "inertia": "8235f0d3282022ac2dd0e410845cd7ad3fe95dedf168364a8090626fe3980158",
+      "inertia_value": 35844.8203125,
+      "kind": "kmeans",
+      "labels": "0f1feb6120205a47ba412a9a55b8e4af58b2cce2c7875b36697e81bac29da8c0",
+      "n_iter": 81,
+      "seconds": 4.91,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 602,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_random": {
+      "card": "kmeans_k8_random.card",
+      "centroids": "7f3964aded98bfefaed96f3e1a9a1f601f48f48837f782d5742c1bde011eedb0",
+      "inertia": "637c0eb835d5104676d61048c3c95e46ac9191292d2992c6186967cb7ba27ece",
+      "inertia_value": 35822.3671875,
+      "kind": "kmeans",
+      "labels": "11463766dc034b3396e406a46a6ceba5bf794a201fd19a83c9740a54958cf7ad",
+      "n_iter": 70,
+      "seconds": 3.65,
+      "spec": {
+        "init": "random",
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 497,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    }
+  },
+  "commit": "0fbbdecdba29389387131e7bec4cf6e4ddfd2097",
+  "driver": "e2u",
+  "inputs": {
+    "C0": "09d72baac77347c606b0ec4a90977b55c246e10fadc174888d3fee05bfee4a4e",
+    "X": "5a095c2b4b84d5e01de5fb6be5486723093c6abd431b82b612bc28ee89484e95",
+    "X_blobs": "6b619f79e2b0dd5b258193598de84fe3521645f71d7fe6372b94ee4ff9eb8dcf",
+    "X_chain": "8a11433bb672dc09d76fd980ddd604a7b11bb35cb4817fa4aa74fb15685edb03",
+    "X_ols_wide": "d9126dc7bc873d6f03466d1b935abc0642699ca62e41f698a4fd6180d9e30187",
+    "X_ties": "a83aadd777521005a6e17a32ee30d83b6341be4f10ed06ecf3519e831620feee",
+    "X_wide": "c3a39be30811e8bf7a9532e280e29c53b4db0630b1246ad1ddd4cab2a750ebe0",
+    "Xb": "f677a70a0cd8a870f263a8f66d63a5e6c56ff98b11bf8a650122485178b1ce80",
+    "Xq": "f7af5e4967e5455e8bd0d4bb775dad8d6326401043168539fa2e117d959b007a",
+    "Xq_ties": "7e66684f8f9585f876aa45622a0749476bc3dd91a7543320ac56e1ac0d36d663",
+    "sw": "dc70834feb7e9806b2e8e9c17df83290fd7a09bf37d7d119a06e3409503b84f3",
+    "y_clf2": "66f61758631c071484d67c1341b6f848c84d853d7db20403a738f799f1938237",
+    "y_clf3": "d011af44e44d9bc82487bbd70705aa0642d0131b905eee521706e8123c67dd3e",
+    "y_ols_wide": "1df84470fdac59abad6ce08f405289230a5ae4bd5387097ef2436e8d72a50824",
+    "y_reg": "c9360efad18ce7e0414753c377d663e3a6035ea6d098457b9264a5768f1fe573",
+    "yb_reg": "a424cbbb79a28102880781cc2db1c80cacf22596ed4af77e657a74452771b8e3"
+  },
+  "machine": "MacBook-Air-1-terrabyte.local",
+  "numeric_mode": "identical",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O"
+}

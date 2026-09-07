@@ -1,0 +1,8 @@
+{
+  "scope": "Root read-only SSH capability inspection before capture",
+  "interpreter": "python3",
+  "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+  "memfd_create": true,
+  "sealing": true,
+  "model_executed": false
+}

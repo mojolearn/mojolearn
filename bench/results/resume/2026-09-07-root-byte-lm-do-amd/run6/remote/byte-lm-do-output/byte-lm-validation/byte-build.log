@@ -1,0 +1,108 @@
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:11:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:11:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:11:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:503:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:508:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:512:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:513:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:515:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:515:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Imported from ./training/byte_lm.mojo:33:
+./training/checks/loss.mojo:518:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:150:30: warning: assignment to 'out_p' was never used; assign to '_' instead?
+    var out_p = List[Float32]()
+                             ^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:151:30: warning: assignment to 'out_m' was never used; assign to '_' instead?
+    var out_m = List[Float32]()
+                             ^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:152:30: warning: assignment to 'out_v' was never used; assign to '_' instead?
+    var out_v = List[Float32]()
+                             ^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:154:31: warning: assignment to 'out_flags' was never used; assign to '_' instead?
+    var out_flags = List[Bool]()
+                              ^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:155:23: warning: assignment to 'loss' was never used; assign to '_' instead?
+    var loss = Float32(0)
+                      ^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:156:23: warning: assignment to 'result_step' was never used; assign to '_' instead?
+    var result_step = completed
+                      ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Included from ./training/byte_lm.mojo:38:
+./training/checks/optimizer.mojo:560:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Included from ./training/byte_lm.mojo:38:
+./training/checks/optimizer.mojo:570:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Included from ./training/byte_lm.mojo:38:
+./training/checks/optimizer.mojo:590:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Included from ./training/byte_lm.mojo:38:
+./training/checks/optimizer.mojo:591:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:21:
+Included from ./training/byte_lm.mojo:38:
+./training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built /root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so; root must read byte_lm_numeric_mode/vendor/profile and retain guard exit evidence
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0", "vram_total_bytes": 274542362624, "telemetry": {"initial_vram_bytes": 299687936, "peak_vram_bytes": 299687936, "last_vram_bytes": 299687936, "initial_rss_bytes": 3440640, "peak_rss_bytes": 1056980992, "last_rss_bytes": 1056980992, "initial_host_available_bytes": 161686765568, "last_host_available_bytes": 161482629120, "samples": 26, "last_elapsed_seconds": 25.164688033000004, "crossing_sample": null}, "returncode": 0}

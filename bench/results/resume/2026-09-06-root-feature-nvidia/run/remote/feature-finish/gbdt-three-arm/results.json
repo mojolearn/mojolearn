@@ -1,0 +1,25 @@
+{
+  "status": "REFUSED",
+  "scope": "host-array public APIs, including transfers and outputs; not historical kernel-only fixtures",
+  "args": {
+    "worker": null,
+    "lane": "gbdt",
+    "out": "/root/gemm_leg_out/feature-finish/gbdt-three-arm",
+    "rounds": 7,
+    "index": 10000,
+    "queries": 128,
+    "k": 10,
+    "knn_external": "cuml",
+    "dim": 2048,
+    "rows": 16384,
+    "gram_rows": 65536,
+    "rtol": 0.0005,
+    "umap_rows": 256,
+    "umap_epochs": 50,
+    "quality_min": 0.85,
+    "quality_gap": 0.05
+  },
+  "metadata": {},
+  "records": [],
+  "reason": "RuntimeError('Worker exited: 1')"
+}

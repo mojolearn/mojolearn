@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/amd_serial_guard.py", line 188, in <module>
+    sys.exit(run(arguments))
+             ^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/amd_serial_guard.py", line 95, in run
+    device = amd_device()
+             ^^^^^^^^^^^^
+  File "/root/mojolearn/tools/amd_serial_guard.py", line 65, in amd_device
+    raise RuntimeError('Visible render node lacks vendor identity')
+RuntimeError: Visible render node lacks vendor identity

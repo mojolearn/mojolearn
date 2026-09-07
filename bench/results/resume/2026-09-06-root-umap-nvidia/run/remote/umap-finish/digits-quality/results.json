@@ -1,0 +1,331 @@
+{
+  "schema": "umap.digits.real-data-quality.v1",
+  "status": "PASS",
+  "scope": "fit and held-out quality only; no speed or cross-library bit parity claim",
+  "harness_sha256": "8d45f866f80f4b92da96fe67d2e6f5b5d0a6e321a3a9ce1858d6fa6fbe9e4dda",
+  "policy": {
+    "k": 10,
+    "minimum_trustworthiness": 0.85,
+    "maximum_trustworthiness_loss_vs_reference": 0.08,
+    "minimum_retention": 0.15,
+    "minimum_control_trustworthiness_margin": 0.15
+  },
+  "arms": {
+    "reference": {
+      "arm": "reference",
+      "device": "GPU-d3342c3c-6197-7d42-e2a5-31a729e823ce, NVIDIA GeForce RTX 4090, 580.159.04",
+      "parameters": {
+        "n_neighbors": 15,
+        "n_components": 2,
+        "n_epochs": 100,
+        "metric": "euclidean",
+        "init": "spectral",
+        "random_state": 19,
+        "min_dist": 0.1,
+        "spread": 1.0,
+        "set_op_mix_ratio": 1.0,
+        "local_connectivity": 1.0,
+        "learning_rate": 1.0,
+        "repulsion_strength": 1.0,
+        "negative_sample_rate": 5
+      },
+      "numpy": "2.4.6",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "status": "PASS",
+      "train": {
+        "shape": [
+          1024,
+          64
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "dfcf0ef9afb36886632c652c747eb632331ef7fdf913f41daa90eff4d607cf09"
+      },
+      "query": {
+        "shape": [
+          256,
+          64
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "5e94ba19b2769c6a23e577ee2c796a4805a42981c15d905d047429e87bfd7087"
+      },
+      "implementation": "umap-learn CPU quality reference",
+      "version": "0.5.12",
+      "module_file": "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/umap/__init__.py",
+      "transform_seed": 19,
+      "n_jobs": 1,
+      "force_approximation_algorithm": false,
+      "estimator_source_file": "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/umap/umap_.py",
+      "estimator_source_sha256": "505592e483d19586f5dae35a27f04c3cf115b0223ad2813f40e00f01a1da8ff0",
+      "fit": {
+        "shape": [
+          1024,
+          2
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "e19d243416f48822ff13c57fec3dcfe150c89946318d880bcc98158189d87cea"
+      },
+      "transform": {
+        "shape": [
+          256,
+          2
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "39aae186e6e606c5cd72866246d9a17d99247c28babed070657e9cebeb7b7f12"
+      },
+      "artifact_sha256": "283fc187b387dbe2c306312c2cab2e4d12e9bbbf18077182ba499eb99fba7a80"
+    },
+    "fast": {
+      "arm": "fast",
+      "device": "GPU-d3342c3c-6197-7d42-e2a5-31a729e823ce, NVIDIA GeForce RTX 4090, 580.159.04",
+      "parameters": {
+        "n_neighbors": 15,
+        "n_components": 2,
+        "n_epochs": 100,
+        "metric": "euclidean",
+        "init": "spectral",
+        "random_state": 19,
+        "min_dist": 0.1,
+        "spread": 1.0,
+        "set_op_mix_ratio": 1.0,
+        "local_connectivity": 1.0,
+        "learning_rate": 1.0,
+        "repulsion_strength": 1.0,
+        "negative_sample_rate": 5
+      },
+      "numpy": "2.4.6",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "status": "PASS",
+      "train": {
+        "shape": [
+          1024,
+          64
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "dfcf0ef9afb36886632c652c747eb632331ef7fdf913f41daa90eff4d607cf09"
+      },
+      "query": {
+        "shape": [
+          256,
+          64
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "5e94ba19b2769c6a23e577ee2c796a4805a42981c15d905d047429e87bfd7087"
+      },
+      "implementation": "mojolearn NVIDIA",
+      "version": "0.6.0",
+      "module_file": "/root/mojolearn/python/mojolearn/__init__.py",
+      "binding_file": "/root/mojolearn/python/mojolearn/_mojolearn_metrics.so",
+      "binding_sha256": "f8bf00d3d4ed3a5fe8f80d9c1ceaa096aa82a498d547ec119b8e0c4b9af17dad",
+      "numeric_mode_witness": 0,
+      "native_vendor": "cuda",
+      "estimator_source_file": "/root/mojolearn/python/mojolearn/_umap_impl.py",
+      "estimator_source_sha256": "8178e6ab41a1165777b00e8cc84ce289fb1b014e92795fa3429e7caaa464585d",
+      "fit": {
+        "shape": [
+          1024,
+          2
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "4638bcdafd923370e5c9e7f3a3e9f989b81c45f9a15ca1bb3ae56021cf505cb3"
+      },
+      "transform": {
+        "shape": [
+          256,
+          2
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "4a13795b5ccfac9e136b154dd05df9f23dcde8cd519b39e88620cddd9dbde753"
+      },
+      "artifact_sha256": "bcf39d7d72a8e045a166a6788682654cf35448c4eef5324dad9c5d2c8f55a072"
+    },
+    "identical": {
+      "arm": "identical",
+      "device": "GPU-d3342c3c-6197-7d42-e2a5-31a729e823ce, NVIDIA GeForce RTX 4090, 580.159.04",
+      "parameters": {
+        "n_neighbors": 15,
+        "n_components": 2,
+        "n_epochs": 100,
+        "metric": "euclidean",
+        "init": "spectral",
+        "random_state": 19,
+        "min_dist": 0.1,
+        "spread": 1.0,
+        "set_op_mix_ratio": 1.0,
+        "local_connectivity": 1.0,
+        "learning_rate": 1.0,
+        "repulsion_strength": 1.0,
+        "negative_sample_rate": 5
+      },
+      "numpy": "2.4.6",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "status": "PASS",
+      "train": {
+        "shape": [
+          1024,
+          64
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "dfcf0ef9afb36886632c652c747eb632331ef7fdf913f41daa90eff4d607cf09"
+      },
+      "query": {
+        "shape": [
+          256,
+          64
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "5e94ba19b2769c6a23e577ee2c796a4805a42981c15d905d047429e87bfd7087"
+      },
+      "implementation": "mojolearn NVIDIA",
+      "version": "0.6.0",
+      "module_file": "/root/mojolearn/python/mojolearn/__init__.py",
+      "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_metrics.so",
+      "binding_sha256": "a69b82ad6312d7cf26bb4509e27df8e4be0a880025163cfcfa836d469a13a7b6",
+      "numeric_mode_witness": 1,
+      "native_vendor": "cuda",
+      "estimator_source_file": "/root/mojolearn/python/mojolearn/_umap_impl.py",
+      "estimator_source_sha256": "8178e6ab41a1165777b00e8cc84ce289fb1b014e92795fa3429e7caaa464585d",
+      "fit": {
+        "shape": [
+          1024,
+          2
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "119efde5862eb171f1e0adcb9f043047d2c739b58bdcfb316aaf5a02c7a9a0df"
+      },
+      "transform": {
+        "shape": [
+          256,
+          2
+        ],
+        "dtype": "<f4",
+        "raw_c_order_sha256": "80a8bb3cba68da6268dc026effc1d1db44820c951612456c7758e85350c8a3aa"
+      },
+      "artifact_sha256": "73f943f46b227fe45459845a172a007539f75d3815d9b1dd4ccbbd6cfe8dd64e",
+      "repeatability": {
+        "scope": "same NVIDIA host, independent fresh estimators; no cross-vendor claim",
+        "fit": {
+          "shape": [
+            1024,
+            2
+          ],
+          "dtype": "<f4",
+          "raw_c_order_sha256": "119efde5862eb171f1e0adcb9f043047d2c739b58bdcfb316aaf5a02c7a9a0df"
+        },
+        "transform": {
+          "shape": [
+            256,
+            2
+          ],
+          "dtype": "<f4",
+          "raw_c_order_sha256": "80a8bb3cba68da6268dc026effc1d1db44820c951612456c7758e85350c8a3aa"
+        },
+        "artifact_sha256": "73f943f46b227fe45459845a172a007539f75d3815d9b1dd4ccbbd6cfe8dd64e",
+        "fit_raw_bytes_equal": true,
+        "transform_raw_bytes_equal": true,
+        "frozen_model_unchanged": true,
+        "inputs_unchanged": true
+      }
+    }
+  },
+  "quality": {
+    "reference": {
+      "fit": {
+        "trustworthiness": 0.9842192922657412,
+        "retention": 0.51708984375,
+        "control_trustworthiness": 0.5072498024603371,
+        "passed": true
+      },
+      "transform": {
+        "trustworthiness": 0.9809183847201585,
+        "retention": 0.461328125,
+        "control_trustworthiness": 0.5182167842991581,
+        "passed": true
+      }
+    },
+    "fast": {
+      "fit": {
+        "trustworthiness": 0.9842240370909767,
+        "retention": 0.52509765625,
+        "control_trustworthiness": 0.5058708981470005,
+        "passed": true
+      },
+      "transform": {
+        "trustworthiness": 0.9828407472758791,
+        "retention": 0.4625,
+        "control_trustworthiness": 0.5148015725606736,
+        "passed": true
+      }
+    },
+    "identical": {
+      "fit": {
+        "trustworthiness": 0.9843393653941497,
+        "retention": 0.5279296875,
+        "control_trustworthiness": 0.5079021675136342,
+        "passed": true
+      },
+      "transform": {
+        "trustworthiness": 0.9803530522535909,
+        "retention": 0.46015625,
+        "control_trustworthiness": 0.5162212883853392,
+        "passed": true
+      }
+    }
+  },
+  "metrics": {
+    "fit": "self-excluding Euclidean rank trustworthiness and top-k retention",
+    "transform": "held-out query-to-frozen-training rank trustworthiness and top-k retention",
+    "ties": "stable ascending training-row index",
+    "control": "rotate training embedding rows by 512, preserving geometry"
+  },
+  "threads": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMBA_NUM_THREADS": "1",
+    "MOJOLEARN_CPU_THREADS": "1"
+  },
+  "device": "GPU-d3342c3c-6197-7d42-e2a5-31a729e823ce, NVIDIA GeForce RTX 4090, 580.159.04",
+  "dataset": {
+    "name": "sklearn.datasets.load_digits",
+    "sklearn": "1.9.0",
+    "data_sha256": "faf2d98f61250c1cdc0b114323133d3c58da04f5c5d28bb78e4bde3c936a75b1",
+    "expected_data_sha256": "faf2d98f61250c1cdc0b114323133d3c58da04f5c5d28bb78e4bde3c936a75b1",
+    "pin_format": "C-order little-endian float32 pixels followed by int64 labels",
+    "pin_verified": true,
+    "scaling": "divide pixels by 16; no fitted preprocessing",
+    "split": "sklearn stratified train_test_split seed 19; 1024/256 disjoint rows",
+    "labels_used_for_embedding": false,
+    "train": {
+      "shape": [
+        1024,
+        64
+      ],
+      "dtype": "<f4",
+      "raw_c_order_sha256": "dfcf0ef9afb36886632c652c747eb632331ef7fdf913f41daa90eff4d607cf09"
+    },
+    "query": {
+      "shape": [
+        256,
+        64
+      ],
+      "dtype": "<f4",
+      "raw_c_order_sha256": "5e94ba19b2769c6a23e577ee2c796a4805a42981c15d905d047429e87bfd7087"
+    },
+    "train_indices": {
+      "shape": [
+        1024
+      ],
+      "dtype": "<i8",
+      "raw_c_order_sha256": "54842c3070a242cba8eca8e33a0daf472727e77f582e6314b3f7154df6eb4f77"
+    },
+    "query_indices": {
+      "shape": [
+        256
+      ],
+      "dtype": "<i8",
+      "raw_c_order_sha256": "60c1eb1135e1dc659356d41df38dcd7e4fa5b9fa37805b072bf39ede92575a9a"
+    },
+    "inputs_file_sha256": "ccc676f98a1017a8e8b5325e576dc2b91f5a16d8d656e69ef99bcedb9e4309a1"
+  },
+  "quality_passed": true
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "build": "anonymous",
+    "exit": 0,
+    "reason": null,
+    "peak_group_rss_kib": 68048,
+    "thread_limit": 2,
+    "deadline_seconds": 60,
+    "rss_limit_kib": 2097152
+  },
+  {
+    "build": "named",
+    "exit": 0,
+    "reason": null,
+    "peak_group_rss_kib": 78336,
+    "thread_limit": 2,
+    "deadline_seconds": 60,
+    "rss_limit_kib": 2097152
+  }
+]

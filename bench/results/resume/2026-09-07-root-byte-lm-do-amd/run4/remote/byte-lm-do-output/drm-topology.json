@@ -1,0 +1,269 @@
+[
+  {
+    "render": "renderD128",
+    "sysfs_dev": "226:128",
+    "node_dev": "226:128",
+    "ancestry": [
+      {
+        "path": "/sys/devices/pci0000:00/0000:00:01.0",
+        "subsystem": "/sys/bus/pci",
+        "vendor": "0x1af4",
+        "device": "0x1050"
+      },
+      {
+        "path": "/sys/devices/pci0000:00",
+        "subsystem": null
+      },
+      {
+        "path": "/sys/devices",
+        "subsystem": null
+      },
+      {
+        "path": "/sys",
+        "subsystem": null
+      },
+      {
+        "path": "/",
+        "subsystem": null
+      }
+    ]
+  },
+  {
+    "render": "renderD129",
+    "sysfs_dev": "226:129",
+    "node_dev": "226:129",
+    "ancestry": [
+      {
+        "path": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0",
+        "subsystem": "/sys/bus/pci",
+        "vendor": "0x1002",
+        "device": "0x74b9",
+        "mem_info_vram_total": "274542362624",
+        "mem_info_vram_used": "299687936"
+      },
+      {
+        "path": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0",
+        "subsystem": "/sys/bus/pci",
+        "vendor": "0x104c",
+        "device": "0x8233"
+      },
+      {
+        "path": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0",
+        "subsystem": "/sys/bus/pci",
+        "vendor": "0x104c",
+        "device": "0x8232"
+      },
+      {
+        "path": "/sys/devices/pci0000:80/0000:80:00.0",
+        "subsystem": "/sys/bus/pci",
+        "vendor": "0x1b36",
+        "device": "0x000c"
+      },
+      {
+        "path": "/sys/devices/pci0000:80",
+        "subsystem": null
+      },
+      {
+        "path": "/sys/devices",
+        "subsystem": null
+      },
+      {
+        "path": "/sys",
+        "subsystem": null
+      },
+      {
+        "path": "/",
+        "subsystem": null
+      }
+    ]
+  },
+  {
+    "render": "renderD130",
+    "sysfs_dev": "226:130",
+    "node_dev": "226:130",
+    "ancestry": [
+      {
+        "path": "/sys/devices/platform/amdgpu_xcp_0",
+        "subsystem": "/sys/bus/platform"
+      },
+      {
+        "path": "/sys/devices/platform",
+        "subsystem": null
+      },
+      {
+        "path": "/sys/devices",
+        "subsystem": null
+      },
+      {
+        "path": "/sys",
+        "subsystem": null
+      },
+      {
+        "path": "/",
+        "subsystem": null
+      }
+    ]
+  },
+  {
+    "render": "renderD131",
+    "sysfs_dev": "226:131",
+    "node_dev": "226:131",
+    "ancestry": [
+      {
+        "path": "/sys/devices/platform/amdgpu_xcp_1",
+        "subsystem": "/sys/bus/platform"
+      },
+      {
+        "path": "/sys/devices/platform",
+        "subsystem": null
+      },
+      {
+        "path": "/sys/devices",
+        "subsystem": null
+      },
+      {
+        "path": "/sys",
+        "subsystem": null
+      },
+      {
+        "path": "/",
+        "subsystem": null
+      }
+    ]
+  },
+  {
+    "render": "renderD132",
+    "sysfs_dev": "226:132",
+    "node_dev": "226:132",
+    "ancestry": [
+      {
+        "path": "/sys/devices/platform/amdgpu_xcp_2",
+        "subsystem": "/sys/bus/platform"
+      },
+      {
+        "path": "/sys/devices/platform",
+        "subsystem": null
+      },
+      {
+        "path": "/sys/devices",
+        "subsystem": null
+      },
+      {
+        "path": "/sys",
+        "subsystem": null
+      },
+      {
+        "path": "/",
+        "subsystem": null
+      }
+    ]
+  },
+  {
+    "render": "renderD133",
+    "sysfs_dev": "226:133",
+    "node_dev": "226:133",
+    "ancestry": [
+      {
+        "path": "/sys/devices/platform/amdgpu_xcp_3",
+        "subsystem": "/sys/bus/platform"
+      },
+      {
+        "path": "/sys/devices/platform",
+        "subsystem": null
+      },
+      {
+        "path": "/sys/devices",
+        "subsystem": null
+      },
+      {
+        "path": "/sys",
+        "subsystem": null
+      },
+      {
+        "path": "/",
+        "subsystem": null
+      }
+    ]
+  },
+  {
+    "render": "renderD134",
+    "sysfs_dev": "226:134",
+    "node_dev": "226:134",
+    "ancestry": [
+      {
+        "path": "/sys/devices/platform/amdgpu_xcp_4",
+        "subsystem": "/sys/bus/platform"
+      },
+      {
+        "path": "/sys/devices/platform",
+        "subsystem": null
+      },
+      {
+        "path": "/sys/devices",
+        "subsystem": null
+      },
+      {
+        "path": "/sys",
+        "subsystem": null
+      },
+      {
+        "path": "/",
+        "subsystem": null
+      }
+    ]
+  },
+  {
+    "render": "renderD135",
+    "sysfs_dev": "226:135",
+    "node_dev": "226:135",
+    "ancestry": [
+      {
+        "path": "/sys/devices/platform/amdgpu_xcp_5",
+        "subsystem": "/sys/bus/platform"
+      },
+      {
+        "path": "/sys/devices/platform",
+        "subsystem": null
+      },
+      {
+        "path": "/sys/devices",
+        "subsystem": null
+      },
+      {
+        "path": "/sys",
+        "subsystem": null
+      },
+      {
+        "path": "/",
+        "subsystem": null
+      }
+    ]
+  },
+  {
+    "render": "renderD136",
+    "sysfs_dev": "226:136",
+    "node_dev": "226:136",
+    "ancestry": [
+      {
+        "path": "/sys/devices/platform/amdgpu_xcp_6",
+        "subsystem": "/sys/bus/platform"
+      },
+      {
+        "path": "/sys/devices/platform",
+        "subsystem": null
+      },
+      {
+        "path": "/sys/devices",
+        "subsystem": null
+      },
+      {
+        "path": "/sys",
+        "subsystem": null
+      },
+      {
+        "path": "/",
+        "subsystem": null
+      }
+    ]
+  }
+]

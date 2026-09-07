@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod ocshz624wm2axa ...
+ARMED. Pod ocshz624wm2axa is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/mojolearn-byte-lm-resume-20260906/tools/../bench/results/runpod_leases/ocshz624wm2axa.lease
+  extend with: tools/runpod_guard.sh extend ocshz624wm2axa '-p 14679 root@213.173.96.55' <minutes>

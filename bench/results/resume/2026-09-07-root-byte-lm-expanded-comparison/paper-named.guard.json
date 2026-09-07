@@ -1,0 +1,13 @@
+{
+  "command": [
+    "bash",
+    "paper/build_named.sh"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 78320,
+  "elapsed_seconds": 0.9539717500010738,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

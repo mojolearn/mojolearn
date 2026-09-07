@@ -1,0 +1,139 @@
+{
+  "cleanup": {
+    "errors": [],
+    "quarantined": false,
+    "verified": true
+  },
+  "cpu_affinity": null,
+  "cpu_enforcement": "sampled, not hard affinity",
+  "descendant_accounting": "observed ancestry and PGID, ps start-time identities; sampling gaps remain",
+  "error": null,
+  "gpu_memory_accounting": "system unified-memory reserve/pressure; no per-process Metal VRAM counter",
+  "guard": "macos-root-user-tiny-v1",
+  "initial_memory": {
+    "compressed_bytes": 4324868096,
+    "conservative_reserve_bytes": 1858011136,
+    "pressure_level": 1,
+    "swap_used_bytes": 0,
+    "total_bytes": 17179869184
+  },
+  "policy_limits": {
+    "compressed_growth_bytes": 268435456,
+    "cpu_grace_seconds": 4,
+    "deadline_seconds": 180,
+    "entry_reserve_bytes": 0,
+    "normal_pressure_level": 1,
+    "rss_bytes": 2147483648,
+    "runtime_reserve_bytes": 0,
+    "sample_interval_seconds": 2.0,
+    "sampled_cpu_limit": 3,
+    "swap_growth_bytes": 134217728
+  },
+  "reason": null,
+  "returncode": 0,
+  "samples": [
+    {
+      "compressed_bytes": 4324868096,
+      "conservative_reserve_bytes": 1856241664,
+      "elapsed_seconds": 0.015934917006234173,
+      "pressure_level": 1,
+      "rss_bytes": 25411584,
+      "sampled_cpu_cores": 0.6275526879799705,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 4284956672,
+      "conservative_reserve_bytes": 1300824064,
+      "elapsed_seconds": 2.0354981670025154,
+      "pressure_level": 1,
+      "rss_bytes": 398966784,
+      "sampled_cpu_cores": 0.9457490375721171,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 4277288960,
+      "conservative_reserve_bytes": 978567168,
+      "elapsed_seconds": 4.053569042000163,
+      "pressure_level": 1,
+      "rss_bytes": 612630528,
+      "sampled_cpu_cores": 1.1942097920633286,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 4275765248,
+      "conservative_reserve_bytes": 524075008,
+      "elapsed_seconds": 6.083857000005082,
+      "pressure_level": 1,
+      "rss_bytes": 958234624,
+      "sampled_cpu_cores": 1.3889655351012862,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 4268457984,
+      "conservative_reserve_bytes": 686030848,
+      "elapsed_seconds": 8.114915042002394,
+      "pressure_level": 1,
+      "rss_bytes": 817381376,
+      "sampled_cpu_cores": 1.0388674062337762,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 4268015616,
+      "conservative_reserve_bytes": 679428096,
+      "elapsed_seconds": 10.135135500000615,
+      "pressure_level": 1,
+      "rss_bytes": 885702656,
+      "sampled_cpu_cores": 1.2226388413309375,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 4171415552,
+      "conservative_reserve_bytes": 115425280,
+      "elapsed_seconds": 12.16214200000104,
+      "pressure_level": 1,
+      "rss_bytes": 1086603264,
+      "sampled_cpu_cores": 0.9176092923232411,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 4154671104,
+      "conservative_reserve_bytes": 106823680,
+      "elapsed_seconds": 14.192665583002963,
+      "pressure_level": 1,
+      "rss_bytes": 1173716992,
+      "sampled_cpu_cores": 1.3001572708143723,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 3797008384,
+      "conservative_reserve_bytes": 110051328,
+      "elapsed_seconds": 16.221294125003624,
+      "pressure_level": 1,
+      "rss_bytes": 1189953536,
+      "sampled_cpu_cores": 1.3358778819740762,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 3804364800,
+      "conservative_reserve_bytes": 514605056,
+      "elapsed_seconds": 18.254158458003076,
+      "pressure_level": 1,
+      "rss_bytes": 1224392704,
+      "sampled_cpu_cores": 1.416720217502471,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    }
+  ],
+  "thread_limit": 2,
+  "watchdog_errors": [],
+  "watchdog_expired": false
+}

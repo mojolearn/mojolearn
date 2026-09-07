@@ -364,7 +364,7 @@ def _summary(report: dict[str, Any]) -> str:
         "platform: {system} {release} {machine}".format(**report["platform"]),
         f"python: {report['platform']['python_version']}",
         f"mojolearn: {versions.get('mojolearn') or 'not installed'}",
-        f"numeric mode requested: {report['environment'].get('MOJOLEARN_NUMERIC_MODE', 'fast (default)')}",
+        f"numeric mode requested: {report['environment'].get('MOJOLEARN_NUMERIC_MODE', 'identical (default)')}",
         f"numeric mode loaded: {report['import_probe'].get('result', {}).get('numeric_mode') or 'unknown (import probe did not report one)'}",
         f"vendor loaded: {report['import_probe'].get('result', {}).get('vendor') or 'unknown (import probe did not report one)'}",
         f"gpu architecture loaded: {report['import_probe'].get('result', {}).get('gpu_arch') or 'none (flat or arch-less layout, or probe did not report one)'}",

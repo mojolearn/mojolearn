@@ -1,0 +1,14 @@
+{
+  "kind": "gbdt",
+  "refused": "ValueError: mojolearn: nan_mode='Forbidden' but X contains NaN. CatBoost refuses this pair; this port would otherwise bin the NaNs silently with no NaN bin. Use nan_mode='Min' or 'Max', or clean the column.",
+  "seconds": 0.0,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "nan_mode": "Forbidden",
+    "random_state": 7
+  }
+}

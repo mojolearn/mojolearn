@@ -1,0 +1,1 @@
+/root/byte-lm-resume-venv/bin/python tools/amd_serial_guard.py --seconds 1200 --rss-gib 12 -- /root/byte-lm-resume-venv/bin/python tools/byte_lm_real_text_capture.py --output /root/gemm_leg_out/byte-lm-resume/resume128 --expected-vendor hip --steps 128 --action resume128 --resume-checkpoint /root/gemm_leg_out/byte-lm-resume/transferred-head64.checkpoint.json 

@@ -1,0 +1,32 @@
+{
+  "creator": 7814639,
+  "id": 903069938,
+  "images": [
+    {
+      "architecture": "amd64",
+      "features": "",
+      "variant": null,
+      "digest": "sha256:69bb7a567948dfcfdb4d7d4d666062c39f53d9d5feb5ddf4ebe4d955ed3ae721",
+      "os": "linux",
+      "os_features": "",
+      "os_version": null,
+      "size": 22524643448,
+      "status": "active",
+      "last_pulled": "2026-09-05T18:25:09.803218154Z",
+      "last_pushed": "2025-07-24T20:55:58.367676595Z"
+    }
+  ],
+  "last_updated": "2025-07-24T20:55:59.067453Z",
+  "last_updater": 7814639,
+  "last_updater_username": "rocmdev",
+  "name": "rocm6.4.1_ubuntu22.04_py3.10_pytorch_release_2.6.0",
+  "repository": 6353840,
+  "full_size": 22524643448,
+  "v2": true,
+  "tag_status": "active",
+  "tag_last_pulled": "2026-09-05T18:25:09.803218154Z",
+  "tag_last_pushed": "2025-07-24T20:55:59.067453Z",
+  "media_type": "application/vnd.docker.container.image.v1+json",
+  "content_type": "image",
+  "digest": "sha256:69bb7a567948dfcfdb4d7d4d666062c39f53d9d5feb5ddf4ebe4d955ed3ae721"
+}

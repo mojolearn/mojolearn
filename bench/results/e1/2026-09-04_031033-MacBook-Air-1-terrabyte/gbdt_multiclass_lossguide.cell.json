@@ -1,0 +1,14 @@
+{
+  "kind": "gbdt",
+  "refused": "NotImplementedError: mojolearn: Error: optimization scheme is not supported for GPU learning Loss=MultiClass;OptimizationScheme=Lossguide -- CatBoost's GPU registers a non-symmetric trainer for exactly eleven losses (pointwise_non_symmetric.cpp:7-29; train.cpp:279 is the refusal): ['CrossEntropy', 'Expectile', 'Huber', 'LogLinQuantile', 'Logloss', 'MAE', 'MAPE', 'Poisson', 'Quantile', 'RMSE', 'Tweedie']",
+  "seconds": 0.0,
+  "spec": {
+    "border_count": 128,
+    "grow_policy": "Lossguide",
+    "learning_rate": 0.3,
+    "loss": "MultiClass",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  }
+}

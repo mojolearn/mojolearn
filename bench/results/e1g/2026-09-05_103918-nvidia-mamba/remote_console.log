@@ -1,0 +1,41 @@
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+MAMBA2 BACKWARD: all ten public parameter/input leaves emitted for prefill plus the explicit incoming initial_state cotangent; internal stage tensors remain diagnostic partials and decode/window backward remains explicitly unsupported
+Mamba gradient state-boundary comparison passed: 2 tensors
+  selected manifest policy=mamba2.state_boundary_leaves.exact1.v1
+schema=mojolearn.mamba.backward-certificate.nvidia.v2
+created_utc=2026-09-05T14:47:23Z
+host=12fca54d82d4
+kernel=Linux 6.8.0-124-generic x86_64
+mode=IDENTICAL
+vendor=nvidia
+mode_injector=tools/with_identical_mode.sh
+commit=64fa92f4005172b067973cf45705519c98eac0d8
+source_sha256=785e324b9604dd6849d8291694934a47ce941ed1e93ac0ea610b5cdda4890ae0
+0, NVIDIA GeForce RTX 4090, GPU-0fc01f6a-bc70-3bb7-85b4-1ade55967802, 580.159.04
+family	verdict	rc	oracle_manifest_sha256	dump_manifest_sha256
+mamba1	GREEN	0	55a946fecb51e2106730ea822d7f6f604cd2ea278eb62f77d062ffc9ac94f90a	85a254b74bde291da380838c0d67980a34cec5de2fd5275972d013032ab03c60
+mamba2	GREEN	0	eed821c7b87e5434d7b537c511818723818ec0e74ca77d0f9bee71b93a591174	ff1d04923df796262b955a9a1fd121d28cebca72b1a5f419a75336b6c12d1de5
+mamba3	GREEN	0	d9ad3b1a669507a7c05bc81ee78e134df95e98ec78f52c7b1e550dccfc206c96	d3650751e51cd42d1eeb556e8783a0fc3374f720e96017e95256c149c07cd915
+mamba2-l257	GREEN	0	89adf8d761548f0d0ccf2d5dd4fae763c6994cc7b689ffb35228ef492d2f69fb	30e55cd47fa608873a1c26a03f2dfacdf9f4dfce2c0bc7a91b7d53d80ccfd3bd
+mamba2-state	GREEN	0	89adf8d761548f0d0ccf2d5dd4fae763c6994cc7b689ffb35228ef492d2f69fb	30e55cd47fa608873a1c26a03f2dfacdf9f4dfce2c0bc7a91b7d53d80ccfd3bd
+MAMBA-BACKWARD-CERT artifacts=/root/gemm_leg_out/mamba-cert
+REMOTE_BODY_DONE

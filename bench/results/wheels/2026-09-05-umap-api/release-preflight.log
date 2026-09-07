@@ -1,0 +1,20 @@
+== admit ==
+  PASS  a good staged wheel is admitted
+  PASS  no stage dir is a macOS-only release, not a failure
+  PASS  a wheel whose digest does not match its sidecar is REFUSED
+  PASS  a wheel with no sidecar is REFUSED
+  PASS  a wheel of the WRONG VERSION is REFUSED
+  PASS  an UNAUDITED linux_x86_64 tag is REFUSED
+  PASS  TWO staged wheels is REFUSED rather than guessed
+== digest ==
+  PASS  macOS-only release still produces a manifest (the pipefail bug)
+  PASS  two wheels, macOS FIRST in the manifest
+== publish ==
+  PASS  two matching wheels are published
+  PASS  an EXTRA wheel nobody built is REFUSED
+  PASS  a TAMPERED Linux wheel is REFUSED
+  PASS  a MISSING wheel is REFUSED
+  PASS  a macOS-only release still publishes
+  PASS  a macOS digest that disagrees with the build job is REFUSED
+
+PASS=15 FAIL=0

@@ -1,0 +1,41 @@
+{
+  "status": "QUALIFIED_BOUNDED_CAPTURE",
+  "parameters": 34944,
+  "blocks": 2,
+  "steps": 128,
+  "numeric_mode": "identical",
+  "directions": {
+    "NVIDIA to AMD": {
+      "file": "nv-to-amd-resume128-comparison.json",
+      "sha256": "da61bddd4c9e49f5be10678939ec2db8c78506e47b4fb5f43e620d56842df125",
+      "compared_continuous_steps": 128,
+      "control": {
+        "changed_post_arrays": [
+          "post_p",
+          "post_m",
+          "post_v"
+        ],
+        "compared_legitimate_step": 65,
+        "effective": true,
+        "transferred_checkpoint_sha256": "264f189179b5a3b8a3cbbceb0f54209fb657ff7dacf701b4f8a760c693da8ff0"
+      }
+    },
+    "AMD to NVIDIA": {
+      "file": "amd-to-nv-resume128-comparison.json",
+      "sha256": "b1cad765638b7e6a3477d600c1ce389e93377758d72056369e8aa58ddae83d39",
+      "compared_continuous_steps": 128,
+      "control": {
+        "changed_post_arrays": [
+          "post_p",
+          "post_m",
+          "post_v"
+        ],
+        "compared_legitimate_step": 65,
+        "effective": true,
+        "transferred_checkpoint_sha256": "264f189179b5a3b8a3cbbceb0f54209fb657ff7dacf701b4f8a760c693da8ff0"
+      }
+    }
+  },
+  "metal_admitted": false,
+  "scope": "Only these retained real-text FP32 trajectories and foreign checkpoint continuations; no general architecture or speed claim"
+}

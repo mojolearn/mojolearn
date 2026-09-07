@@ -1,0 +1,6 @@
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0", "vram_total_bytes": 274542362624, "telemetry": {"initial_vram_bytes": 299687936, "peak_vram_bytes": 299687936, "last_vram_bytes": 299687936, "initial_rss_bytes": 3768320, "peak_rss_bytes": 3768320, "last_rss_bytes": 3768320, "initial_host_available_bytes": 161830264832, "last_host_available_bytes": 161829244928, "samples": 1, "last_elapsed_seconds": 0.0036602600000037455, "crossing_sample": null}, "returncode": 0}

@@ -1,0 +1,12 @@
+......{"guard": "amd-root-serial-v1", "reason": "deadline exceeded", "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/fake/amd", "vram_total_bytes": 17179869184, "returncode": -15}
+..{"guard": "amd-root-serial-v1", "reason": "available host memory below 2 GiB", "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/fake/amd", "vram_total_bytes": 17179869184, "returncode": -15}
+....{"guard": "amd-root-serial-v1", "reason": "process-group RSS cap exceeded", "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/fake/amd", "vram_total_bytes": 17179869184, "returncode": -15}
+..{"guard": "amd-root-serial-v1", "reason": "GPU memory exceeds 85 percent", "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/fake/amd", "vram_total_bytes": 17179869184, "returncode": -15}
+...{"guard": "nvidia-root-serial-v1", "reason": "available host memory below 2 GiB", "cpu_affinity": "0,1", "thread_limit": 2, "returncode": -15}
+..{"guard": "nvidia-root-serial-v1", "reason": "process-group RSS cap exceeded", "cpu_affinity": "0,1", "thread_limit": 2, "returncode": -15}
+..
+----------------------------------------------------------------------
+Ran 21 tests in 0.053s
+
+OK
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

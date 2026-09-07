@@ -137,12 +137,12 @@ COLUMN_DEFINE=""
 # resolved, so an identical run cannot silently get the FAST binary.
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
-if [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "identical" ]; then
+if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "identical" ]; then
     MODE_DEFINE="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
     OUTDIR="python/mojolearn/identical"
     mkdir -p "$OUTDIR"
     export MOJOLEARN_SKIP_BUILD_GATE=1
-elif [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "deterministic" ]; then
+elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "deterministic" ]; then
     # The MIDDLE tier: reproducible run to run on ONE device, with no
     # promise about a second one. It gets its own directory because it
     # is its own binary, PIN_DETERMINISM is comptime, so a
@@ -152,7 +152,7 @@ elif [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "deterministic" ]; then
     OUTDIR="python/mojolearn/deterministic"
     mkdir -p "$OUTDIR"
     export MOJOLEARN_SKIP_BUILD_GATE=1
-elif [ "${MOJOLEARN_NUMERIC_MODE:-fast}" != "fast" ]; then
+elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" != "fast" ]; then
     echo "MOJOLEARN_NUMERIC_MODE must be fast, deterministic or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
     exit 2
 fi

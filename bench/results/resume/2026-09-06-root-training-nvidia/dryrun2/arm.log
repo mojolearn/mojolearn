@@ -1,0 +1,10 @@
+arming a 60-minute self-kill on pod gemm-dryrun-pod ...
+REFUSING to arm gemm-dryrun-pod: RUNPOD_API_KEY is not set.
+  The credential-free watchdog was TESTED and does not stop
+  billing on RunPod -- kill 1 exits the container and RunPod
+  RESTARTS it, wiping the watchdog and leaving the box less
+  protected than before. See this file's header.
+  Self-termination through the API is the only mechanism that
+  survives this machine going away, and it needs a key ON THE
+  POD. Set RUNPOD_API_KEY and re-arm, or terminate the box:
+    tools/runpod_guard.sh reap --force gemm-dryrun-pod

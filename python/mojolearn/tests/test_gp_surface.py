@@ -149,7 +149,7 @@ BOUND = 2.0 ** -14
 
 def main(out=sys.stdout):
     rep = Report()
-    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower()
+    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower()
     assert_bits = mode == "identical"
 
     x = hashed_unit(N * D, 0x67700001).reshape(N, D)

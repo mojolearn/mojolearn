@@ -1,0 +1,45 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   amd    label in the diff: AMD
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     rent
+   gpu:      AMD Instinct MI300X OAM
+   image:    rocm/pytorch@sha256:69bb7a567948dfcfdb4d7d4d666062c39f53d9d5feb5ddf4ebe4d955ed3ae721
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-amd/run1
+
+   commit:   d921eade parent 2ab73063
+   source:   archive of d921eade0da5454e39e0cd103b9a1799286b41b9; working-tree edits are not shipped
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and AMD dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /tmp/mojolearn-alpha-release-20260906/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[18:58:47 amd] dead-man ARMED before the create: pid 77380, fires in 4500s, keyed by name mojolearn-gemm-amd-2026-09-06_185845
+[18:58:47 amd]   cancel by hand only after the pod is confirmed gone:  kill 77380; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-77290
+[18:58:47 amd] creating mojolearn-gemm-amd-2026-09-06_185845 (AMD Instinct MI300X OAM, rocm/pytorch@sha256:69bb7a567948dfcfdb4d7d4d666062c39f53d9d5feb5ddf4ebe4d955ed3ae721)
+[18:58:47 amd]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[18:58:48 amd] pod tdeo5vig111t3j created
+
+READY TIMEOUT: 600 seconds without an ssh endpoint.
+  The box has been billing and unarmed for all of it, which is exactly the
+  window this timeout exists to close. Terminating.
+
+== teardown (exit 1) ==
+  lease at exit:
+    NO LEASE for tdeo5vig111t3j -- it is unguarded.
+  terminating tdeo5vig111t3j (layer two, from this machine)
+    DELETE /v1/pods/tdeo5vig111t3j -> HTTP 204
+  VERIFIED: tdeo5vig111t3j is gone (HTTP 404).
+  dead-man cancelled (pid 77380)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-77290/gemm_remote_leg.sh: line 2240: 77380 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

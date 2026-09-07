@@ -1,0 +1,103 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     rent
+   gpu:      NVIDIA GeForce RTX 4090
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-training-nvidia/run
+
+   commit:   f30670d parent 6146b12
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and NVIDIA dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /private/tmp/mojolearn-nvidia-training-20260906/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[14:21:16 nvidia] dead-man ARMED before the create: pid 10281, fires in 4500s, keyed by name mojolearn-gemm-nvidia-2026-09-06_142114
+[14:21:16 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 10281; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-10182
+[14:21:16 nvidia] creating mojolearn-gemm-nvidia-2026-09-06_142114 (NVIDIA GeForce RTX 4090, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[14:21:16 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[14:21:20 nvidia] pod 86n0hx8cipt01h created
+[14:21:33 nvidia] ssh target: -p 17362 root@47.47.180.47
+[14:21:36 nvidia] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[14:21:36 nvidia] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod 86n0hx8cipt01h ...
+    ARMED. Pod 86n0hx8cipt01h is TERMINATED through the API in 60 minutes.
+      lease: /private/tmp/mojolearn-nvidia-training-20260906/tools/../bench/results/runpod_leases/86n0hx8cipt01h.lease
+      extend with: tools/runpod_guard.sh extend 86n0hx8cipt01h '-p 17362 root@47.47.180.47' <minutes>
+    86n0hx8cipt01h: 59 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep  6 18:21 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[14:21:52 nvidia] shipping the COMMIT (f30670da6f91c58347ec445c6ef358fb37e45fd1), not the working tree
+[14:21:52 nvidia]   bounded Mamba source archive: 4162895 bytes compressed
+[14:21:53 nvidia]   archive source sha256: 934cd1c87dcc54559c55a756e0c4582d
+[14:32:26 nvidia] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=285
+[14:32:30 nvidia]   remote pid 285; polling every 30s, giving up after 2653s
+[14:33:11 nvidia]   the payload finished (its sentinel is on the box)
+    REMOTE_BODY_DONE
+
+== step 7: fetch ==
+    source_sha256.txt
+    uname.txt
+    pixi_env.log
+    gpu.txt
+    cpu-affinity.log
+    source_inventory.json
+    training-validation
+    pixi_install.log
+    training-validation-console.log
+    leg.txt
+
+== step 8: what came home ==
+  source sha256 MATCHES on both ends (934cd1c87dcc5455...)
+  gpu on the box:
+    NVIDIA GeForce RTX 4090, 580.159.04
+    vendor=nvidia
+    payload=mamba
+    knn_layout_only=0
+    nvidia_campaign=4
+    commit=f30670da6f91c58347ec445c6ef358fb37e45fd1
+    started=2026-09-06T18:32:30Z
+    pixi_install_exit=0
+    training_validation_exit=1
+    scope=bounded NVIDIA training integration and independent gradient checks; no cross-vendor or performance certificate
+
+== step 9: bounded NVIDIA training integration and independent gradients ==
+  Results: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-training-nvidia/run/remote/training-validation
+  Admission requires every job and the retained independent gradient oracle.
+  This is not a cross-vendor identity or performance certificate.
+
+== step 10: terminate at the end of the WORK ==
+  lease at exit:
+    86n0hx8cipt01h: 48 minutes left of a 60-minute lease
+  terminating 86n0hx8cipt01h (layer two, from this machine)
+    DELETE /v1/pods/86n0hx8cipt01h -> HTTP 204
+  VERIFIED: 86n0hx8cipt01h is gone (HTTP 404).
+
+artifacts: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-training-nvidia/run
+the training validation results: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-training-nvidia/run/remote/training-validation
+read training-validation-console.log and training_validation_exit together.
+
+== teardown (exit 1) ==
+  lease at exit:
+    NO LEASE for 86n0hx8cipt01h -- it is unguarded.
+  dead-man cancelled (pid 10281)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-10182/gemm_remote_leg.sh: line 2102: 10281 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

@@ -589,6 +589,13 @@ WHEEL_INDEX="${MOJOLEARN_WHEEL_INDEX:-testpypi}"
 # wheel that only runs on an H100. Recorded in leg.txt so a set's coverage is
 # a property of the leg record and not of somebody's shell history.
 GPU_ARCHS="${MOJOLEARN_GPU_ARCHS:-}"
+BYTE_LM_PYTHON=${MOJOLEARN_BYTE_LM_PYTHON:-python3}
+case "$BYTE_LM_PYTHON" in ''|*[!A-Za-z0-9_./-]*) echo 'Byte LM interpreter must be a literal executable path' >&2; exit 2 ;; esac
+PUBLIC_GITHUB_SOURCE=${MOJOLEARN_PUBLIC_GITHUB_SOURCE:-}
+case "$PUBLIC_GITHUB_SOURCE" in
+    ''|mojolearn/mojolearn) ;;
+    *) echo 'Public GitHub source permits only mojolearn/mojolearn' >&2; exit 2 ;;
+esac
 # DEVIATION 973: which phase-8 lanes the box runs. Empty means all of them.
 # Leg 12 proved the need: the lane order puts mamba LAST behind gemm's device
 # check, the largest compile in the set, so on a cold box mamba was never
@@ -872,14 +879,60 @@ if [ "$PAYLOAD" = "phase8" ]; then
     fi
 fi
 
+# The historical variable name is retained for compatibility. Profiles 4/5/6
+# are vendor-generic training (profiles 1..3 remain NVIDIA-only):
+#   MOJOLEARN_NVIDIA_CAMPAIGN=4 tools/gemm_remote_leg.sh amd --payload mamba ...
+#   MOJOLEARN_NVIDIA_CAMPAIGN=4 tools/gemm_remote_leg.sh nvidia --payload mamba ...
+#   MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_NVIDIA_CAMPAIGN=5 tools/gemm_remote_leg.sh amd --payload mamba ...
+# Replace gfx942 with the actual rented GPU target; it is not autodetected.
+# Root runs either command through the existing leased transport/guards.
 NVIDIA_CAMPAIGN=${MOJOLEARN_NVIDIA_CAMPAIGN:-0}
 MAMBA_CERT_ONLY=${MOJOLEARN_MAMBA_CERT_ONLY:-0}
 case "$MAMBA_CERT_ONLY" in 0|1) ;; *) echo 'MOJOLEARN_MAMBA_CERT_ONLY must be 0 or 1' >&2; exit 2 ;; esac
 CONTINUED_CERT_CHECKS=${MOJOLEARN_CONTINUED_CERT_CHECKS:-0}
 case "$CONTINUED_CERT_CHECKS" in 0|1) ;; *) echo 'MOJOLEARN_CONTINUED_CERT_CHECKS must be 0 or 1' >&2; exit 2 ;; esac
-case "$NVIDIA_CAMPAIGN" in 0|1) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0 or 1" ;; esac
-if [ "$NVIDIA_CAMPAIGN" = 1 ]; then
-    [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaign requires nvidia --payload mamba"
+case "$NVIDIA_CAMPAIGN" in 0|1|2|3|4|5|6|7) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0..7 (7 is one-architecture release build)" ;; esac
+if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+    [ "$VENDOR" = nvidia ] && [ "$PAYLOAD" = mamba ] || leg_die 'Release profile 7 requires nvidia --payload mamba'
+    case "$GPU_ARCHS" in sm_89|sm_90) ;; *) leg_die 'Release profile 7 requires explicit actual sm_89 or sm_90' ;; esac
+fi
+if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
+    if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+        # Historical variable name: profiles 4/5/6 are generic remote training.
+        [ "$PAYLOAD" = mamba ] || leg_die "Training profiles 4/5/6 require --payload mamba"
+        case "$VENDOR" in nvidia|amd) ;; *) leg_die "Training profiles 4/5/6 require nvidia or amd" ;; esac
+    else
+        [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaigns 1..3/7 require nvidia --payload mamba"
+    fi
+fi
+if [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+    # Validate before any rental; never infer an AMD accelerator target.
+    case "$GPU_ARCHS" in ''|*[!A-Za-z0-9_]*) leg_die "Byte LM profiles 5/6 require one explicit MOJOLEARN_GPU_ARCHS target" ;; esac
+    case "$VENDOR:$GPU_ARCHS" in
+        nvidia:sm_[0-9]*|amd:gfx[0-9]*) ;;
+        *) leg_die "Byte LM profiles 5/6 require vendor-compatible sm_NN or gfxNNN architecture" ;;
+    esac
+    printf '%s\n' "$GPU_ARCHS" | grep -Eq '^(sm_[0-9]{2,3}[a-z]?|gfx[0-9][0-9a-f]{2,3})$' \
+        || leg_die "Byte LM profiles 5/6 require a single accelerator architecture name"
+fi
+BYTE_RESUME_ACTION=${MOJOLEARN_BYTE_LM_RESUME_ACTION:-head64}
+BYTE_BASE_DIR=${MOJOLEARN_BYTE_LM_BASELINE_HANDOFF_DIR:-}
+BYTE_BASE_SHA=${MOJOLEARN_BYTE_LM_BASELINE_HANDOFF_SHA256:-}
+BYTE_FOREIGN_DIR=${MOJOLEARN_BYTE_LM_FOREIGN_HANDOFF_DIR:-}
+BYTE_FOREIGN_SHA=${MOJOLEARN_BYTE_LM_FOREIGN_HANDOFF_SHA256:-}
+BYTE_CHECKPOINT_SHA=${MOJOLEARN_BYTE_LM_FOREIGN_SHA256:-}
+if [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+    case "$BYTE_RESUME_ACTION" in head64|resume128) ;; *) leg_die "Invalid compact resume action" ;; esac
+    printf '%s\n' "$BYTE_BASE_SHA" | grep -Eq '^[0-9a-f]{64}$' || leg_die "Root-pinned baseline handoff SHA required"
+    case "$VENDOR" in nvidia) _byte_vendor=cuda; _foreign_vendor=hip ;; amd) _byte_vendor=hip; _foreign_vendor=cuda ;; esac
+    python3 -B tools/byte_lm_handoff_transport.py check "$BYTE_BASE_DIR" --sha256 "$BYTE_BASE_SHA" --vendor "$_byte_vendor" --kind baseline128 || leg_die "Baseline handoff refused before rental"
+    if [ "$BYTE_RESUME_ACTION" = resume128 ]; then
+        printf '%s\n' "$BYTE_FOREIGN_SHA" | grep -Eq '^[0-9a-f]{64}$' || leg_die "Root-pinned foreign handoff SHA required"
+        printf '%s\n' "$BYTE_CHECKPOINT_SHA" | grep -Eq '^[0-9a-f]{64}$' || leg_die "Root-pinned foreign checkpoint SHA required"
+        python3 -B tools/byte_lm_handoff_transport.py check "$BYTE_FOREIGN_DIR" --sha256 "$BYTE_FOREIGN_SHA" --vendor "$_foreign_vendor" --kind head64 || leg_die "Foreign handoff refused before rental"
+    else
+        [ -z "$BYTE_FOREIGN_DIR$BYTE_FOREIGN_SHA$BYTE_CHECKPOINT_SHA" ] || leg_die "head64 refuses foreign inputs"
+    fi
 fi
 KNN_LAYOUT_ONLY=${MOJOLEARN_KNN_LAYOUT_ONLY:-0}
 case "$KNN_LAYOUT_ONLY" in 0|1) ;; *) leg_die "MOJOLEARN_KNN_LAYOUT_ONLY must be 0 or 1" ;; esac
@@ -908,6 +961,15 @@ if [ "$MODE" != "reap" ]; then
                 CUDA_VERSIONS="${MOJOLEARN_GEMM_LEG_CUDA:-}" ;;
     esac
     VLABEL=$(echo "$VENDOR" | tr '[:lower:]' '[:upper:]')
+    if [ "$VENDOR" = amd ] && [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+        # This campaign creates a venv with system-site-packages and inherits
+        # Torch from its interpreter. A plain ROCm SDK image is insufficient.
+        case "$IMAGE" in
+            rocm/pytorch:latest|rocm/pytorch:|rocm/pytorch) leg_die 'AMD byte LM requires an explicit pinned ROCm PyTorch image tag/digest, not latest' ;;
+            rocm/pytorch:*|rocm/pytorch@sha256:*) ;;
+            *) leg_die 'AMD byte LM profile 5 requires --image rocm/pytorch:<pinned-tag> (or digest) with HIP Torch; the plain ROCm development image is not sufficient' ;;
+        esac
+    fi
 fi
 
 STAMP=$(date +%Y-%m-%d_%H%M%S)
@@ -919,6 +981,9 @@ if [ "$MODE" = "dry" ]; then
     OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}${PSUF}-dryrun}"
 else
     OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}${PSUF}}"
+fi
+if [ "$NVIDIA_CAMPAIGN" = 6 ] && [ "$MODE" != reap ]; then
+    [ ! -e "$OUT" ] && [ ! -L "$OUT" ] || leg_die "Compact resume requires a new local output directory"
 fi
 if [ "$MODE" != "reap" ] && [ "$PAYLOAD" = "phase8" ]; then
     # WHERE THE JUDGE WILL LOOK. tools/e3_round_judge.sh takes one bootstrap
@@ -1181,12 +1246,56 @@ if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
     LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_layout_paths"
     LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_layout_paths"
 fi
-if [ "$NVIDIA_CAMPAIGN" = 1 ]; then
-    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA gemm transformer/__init__.mojo transformer/checks transformer/impl transformer/corpus/gen_corpus.py bench/__init__.mojo bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo bench/speed bench/gemm_shapes.mojo tools/nvidia_campaign.sh tools/nvidia_public_compare.py tools/speed_torch_seq.py tools/transformer_corpus_check.py"
+if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA gemm transformer/__init__.mojo transformer/checks transformer/impl transformer/corpus/gen_corpus.py bench/__init__.mojo bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo bench/speed bench/gemm_shapes.mojo tools/nvidia_campaign.sh tools/nvidia_feature_finish.sh tools/nvidia_feature_finish_validate.py tools/nvidia_serial_guard.py tools/nvidia_public_compare.py tools/speed_torch_seq.py tools/transformer_corpus_check.py"
+fi
+if [ "$NVIDIA_CAMPAIGN" = 3 ]; then
+    _umap_finish_paths="tools/nvidia_umap_finish.sh tools/nvidia_umap_finish_validate.py tools/umap_real_dataset_quality.py tools/amd_serial_guard.py tools/test_amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/nvidia_serial_guard.py tools/nvidia_public_compare.py tools/nvidia_feature_finish_validate.py tools/test_nvidia_feature_finish_validate.py tools/test_nvidia_umap_finish_validate.py"
+    LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_umap_finish_paths"
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_umap_finish_paths"
+fi
+if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+    _training_validation_paths="training embedding gemm transformer/__init__.mojo transformer/checks transformer/impl tools/training_validation_serial.sh tools/training_validation_admit.py tools/transformer_training_gradient_oracle.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py python/mojolearn/_mlp_impl.py python/mojolearn/neural_network.py python/mojolearn/tests/test_small_mlp_surface.py python/mojolearn/tests/test_small_mlp_numerical_edges.py"
+    LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_training_validation_paths"
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_training_validation_paths"
+    LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA tools/small_mlp_training_capture.py"
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA tools/small_mlp_training_capture.py"
+fi
+if [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+    _byte_lm_paths="training embedding gemm transformer/__init__.mojo transformer/checks transformer/impl tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
+    LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_byte_lm_paths"
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_byte_lm_paths"
+fi
+
+if [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+    _compact_paths="tools/byte_lm_resume_compact_serial.sh tools/byte_lm_resume_handoff.py tools/byte_lm_handoff_transport.py tools/byte_lm_resume_transport_serial.sh tools/byte_lm_resume_transport_check.py"
+    LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_compact_paths"
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_compact_paths"
 fi
 
 leg_git_archive() {
     _archive_ref=$1
+    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+        # Match canonical native_inventory's directory exclusions and include
+        # ALL eligible tracked native source, not merely transitive kernels.
+        # Add small tooling/metadata, never binary corpus data or result trees.
+        _release_paths=$(git ls-tree -r --name-only "$_archive_ref" | python3 -c '
+import pathlib, sys
+excluded={".git", ".pixi", ".venv", "__pycache__", "results", "dist", "archive", "upstream"}
+for line in sys.stdin:
+    name=line.rstrip("\n"); p=pathlib.PurePosixPath(name)
+    if any(d in excluded or d.startswith(".") for d in p.parts[:-1]): continue
+    native=name.endswith(".mojo") or (name.startswith(("bindings/", "packaging/linux/", "python/mojolearn/")) and name.endswith((".py", ".sh")))
+    tooling=name.startswith("tools/") and name.endswith((".py", ".sh"))
+    metadata=name in {".gitattributes", "pixi.toml", "pixi.lock", "python/pyproject.toml", "python/mojolearn_diagnostics.py", "python/mojolearn/ALPHA_API.md", "README.md", "CITATION.cff", "LICENSE", "NOTICE"}
+    if native or tooling or metadata:
+        if any(c.isspace() for c in name): raise SystemExit("Whitespace source paths unsupported")
+        print(name)
+') || return 1
+        [ -n "$_release_paths" ] || return 1
+        git archive --format=tar "$_archive_ref" -- $_release_paths
+        return $?
+    fi
     if [ "$PAYLOAD" = "mamba" ]; then
         # Deliberate word-list pathspec; none of these names contain spaces.
         # shellcheck disable=SC2086
@@ -1205,6 +1314,98 @@ leg_git_archive() {
     fi
 }
 
+leg_public_source_fetch() {
+    # Source transport only: no package imports or device execution. Keep this
+    # manifest separate from the existing numerical-source qualification hashes.
+    cat > "$OUT/public_source_inventory.py" <<'PUBLIC_INVENTORY'
+import hashlib, json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+result = {}
+for path in sorted(root.rglob('*')):
+    if path.is_symlink():
+        raise ValueError('Public archive transport refuses source symlinks')
+    if path.is_file():
+        h = hashlib.sha256()
+        with path.open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1048576), b''):
+                h.update(chunk)
+        result[path.relative_to(root).as_posix()] = h.hexdigest()
+print(json.dumps(result, sort_keys=True, separators=(',', ':')))
+PUBLIC_INVENTORY
+    python3 "$OUT/public_source_inventory.py" "$TMPD/archive" > "$OUT/public_source_inventory_local.json" \
+        || leg_die 'Public source inventory failed'
+    _public_cap=$(wc -c < "$TMPD/src.tgz" | tr -d ' ')
+    if [ "$PAYLOAD" = mamba ]; then
+        _public_cap=$LEG_MAMBA_ARCHIVE_MAX_BYTES
+    else
+        _public_cap=$((_public_cap + 1048576))
+    fi
+    # Remote gzip/tar implementations may change archive encoding; admission
+    # compares every extracted byte instead of compressed archive bytes.
+    _public_tar_cap=$(gzip -dc "$TMPD/src.tgz" | wc -c | tr -d ' ')
+    _public_tar_cap=$((_public_tar_cap + 1048576))
+    if [ "$PAYLOAD" = mamba ]; then
+        _public_paths=$LEG_ARCHIVE_PATHS_MAMBA
+        if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+            # Reuse the exact already-extracted filtered archive inventory.
+            # leg_git_archive runs in a pipeline, so its shell variables do
+            # not survive here. Never fall back to the broad legacy paths.
+            _public_paths=$(python3 -c 'import json,sys; print(" ".join(sorted(json.load(open(sys.argv[1])))))' \
+                "$OUT/public_source_inventory_local.json") || leg_die 'Missing release public-source inventory'
+        fi
+    else
+        _public_paths=". :!bench/results"
+    fi
+    # The fixed path list is data, never executable shell input.
+    case "$_public_paths" in *[!A-Za-z0-9_./:!\ -]*) leg_die 'Unsafe public archive pathspec' ;; esac
+    {
+        printf "source_commit='%s'\narchive_cap='%s'\ntar_cap='%s'\narchive_paths='%s'\n" \
+            "$COMMIT" "$_public_cap" "$_public_tar_cap" "$_public_paths"
+        cat <<'PUBLIC_FETCH'
+set -eu
+test ! -e /root/mojolearn || { echo 'Public source destination must be fresh' >&2; exit 2; }
+cores=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+taskset -pc "$cores" $$
+export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MAX_JOBS=2
+# Bound virtual address space for git/archive children, including lazy blob
+# fetches. This transport runs before the numerical workload's serial guard.
+ulimit -v 4194304
+scratch=$(mktemp -d /root/mojolearn-public-source.XXXXXX)
+trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+git_public() {
+    env -i PATH="$PATH" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+        GIT_TERMINAL_PROMPT=0 git -c credential.helper= -c core.askPass= \
+        -c http.extraHeader= -c core.hooksPath=/dev/null \
+        -c pack.threads=2 -c index.threads=2 -c fetch.parallel=1 \
+        -c pack.windowMemory=64m -c pack.deltaCacheSize=64m \
+        -c core.packedGitLimit=256m "$@"
+}
+git_public init --bare "$scratch/repo.git"
+git_public -C "$scratch/repo.git" remote add origin https://github.com/mojolearn/mojolearn.git
+git_public -C "$scratch/repo.git" -c pack.threads=2 fetch --depth=1 --no-tags origin "$source_commit"
+actual=$(git_public -C "$scratch/repo.git" rev-parse 'FETCH_HEAD^{commit}')
+test "$actual" = "$source_commit" || { echo 'Fetched commit differs from pinned commit' >&2; exit 2; }
+# Same git archive format/pathspec/export-ignore rules as leg_git_archive.
+# Deliberate word-list expansion, restricted locally to literal path characters.
+git_public -C "$scratch/repo.git" archive --format=tar "$source_commit" -- $archive_paths > "$scratch/source.tar"
+test "$(wc -c < "$scratch/source.tar")" -le "$tar_cap" || { echo 'Public source tar exceeds cap' >&2; exit 2; }
+gzip -c "$scratch/source.tar" > "$scratch/source.tgz"
+test "$(wc -c < "$scratch/source.tgz")" -le "$archive_cap" || { echo 'Public source compressed archive exceeds cap' >&2; exit 2; }
+mkdir /root/mojolearn
+tar xf "$scratch/source.tar" -C /root/mojolearn
+python3 /root/public_source_inventory.py /root/mojolearn > /root/public_source_inventory_remote.json
+cmp /root/public_source_inventory_expected.json /root/public_source_inventory_remote.json
+echo "PUBLIC_SOURCE_COMMIT=$actual"
+echo 'PUBLIC_SOURCE_INVENTORY=PASS'
+PUBLIC_FETCH
+    } > "$OUT/public_source_fetch.sh"
+    leg_ssh 'cat > /root/public_source_inventory.py' < "$OUT/public_source_inventory.py"
+    leg_ssh 'cat > /root/public_source_inventory_expected.json' < "$OUT/public_source_inventory_local.json"
+    leg_ssh 'cat > /root/public_source_fetch.sh' < "$OUT/public_source_fetch.sh"
+    leg_ssh 'timeout -k 10 300 sh /root/public_source_fetch.sh' > "$OUT/public_source_fetch.log" 2>&1 \
+        || leg_die 'Pinned public GitHub source fetch/inventory failed; no SSH fallback'
+}
+
 leg_check_tree_clean() {
     # THE LOCAL CARD COMES FROM THE WORKING TREE AND THE REMOTE CARD COMES
     # FROM THE COMMIT. If those differ for any file that can reach the bits,
@@ -1217,6 +1418,7 @@ leg_check_tree_clean() {
     if [ "$PAYLOAD" = "phase8" ]; then _paths="$LEG_SOURCE_PATHS_PHASE8"; fi
     if [ "$PAYLOAD" = "speed" ]; then _paths="$LEG_SOURCE_PATHS_SPEED"; fi
     if [ "$PAYLOAD" = "mamba" ]; then _paths="$LEG_SOURCE_PATHS_MAMBA"; fi
+    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then _paths=.; fi
     # The list is a deliberate word list, so it is unquoted.
     # shellcheck disable=SC2086
     _dirty=$(git status --porcelain -- $_paths 2>/dev/null || true)
@@ -1532,6 +1734,62 @@ leg_speed_artifacts() {
 }
 
 leg_mamba_artifacts() {
+    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+        grep -q '^release_build_exit=0$' "$OUT/remote/leg.txt" || return 1
+        grep -q '^release_tools_setup_exit=0$' "$OUT/remote/leg.txt" || return 1
+        python3 - "$OUT/remote/release-build" "$GPU_ARCHS" "$COMMIT" "$OUT/source_inventory_local.json" <<'RELEASE_ADMIT'
+import hashlib, json, pathlib, sys
+out=pathlib.Path(sys.argv[1]); arch, commit, inventory_path=sys.argv[2:]
+if (out / 'exit_code').read_text().strip() != '0': raise SystemExit('Build campaign failed')
+rows=[r.split('\t') for r in (out / 'results.tsv').read_text().splitlines()]
+if rows != [[n, '0'] for n in ('resource-prefix-tests','physical-source-preflight','full46-build','build-proof-check')]: raise SystemExit('Incomplete build campaign')
+proof=json.loads((out / 'build/build-provenance.json').read_text())
+before=json.loads((out / 'preflight.json').read_text())
+if proof.get('complete') is not True or proof.get('build_exit') != 0 or proof.get('source_commit') != commit: raise SystemExit('Invalid build proof')
+if before.get('device_architecture') != arch or before.get('vendor') != 'cuda' or before.get('source_inventory') != proof.get('source_inventory'): raise SystemExit('Physical/source witness mismatch')
+if proof.get('source_inventory') != json.loads(pathlib.Path(inventory_path).read_text()): raise SystemExit('Local/archive/build source inventories differ')
+extensions=proof['extensions']
+if len(extensions)!=46: raise SystemExit('Incomplete native payload')
+for name, digest in extensions.items():
+    p=pathlib.PurePosixPath(name)
+    if not name.startswith('mojolearn/cuda/'+arch+'/') or '..' in p.parts: raise SystemExit('Wrong architecture/path')
+    path=out / 'build/sets' / p.relative_to('mojolearn')
+    with path.open('rb') as stream:
+        h=hashlib.sha256()
+        for block in iter(lambda:stream.read(1048576), b''): h.update(block)
+    if h.hexdigest()!=digest: raise SystemExit('Fetched native byte mismatch')
+print('BUILT_NOT_INSTALLED: one actual CUDA architecture, 45 retained extensions')
+RELEASE_ADMIT
+        return $?
+    fi
+    if [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+        grep -q '^byte_lm_resume_exit=0$' "$OUT/remote/leg.txt" || return 1
+        cmp "$OUT/source_inventory_local.json" "$OUT/remote/source_inventory.json" || return 1
+        python3 tools/byte_lm_resume_transport_check.py "$OUT/remote" --action "$BYTE_RESUME_ACTION" --vendor "$VENDOR" --baseline-sha "$BYTE_BASE_SHA" --foreign-sha "$BYTE_FOREIGN_SHA" --checkpoint-sha "$BYTE_CHECKPOINT_SHA"
+        return $?
+    fi
+    if [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+        grep -q '^byte_lm_validation_exit=0$' "$OUT/remote/leg.txt" || return 1
+        cmp "$OUT/source_inventory_local.json" "$OUT/remote/source_inventory.json" || return 1
+        python3 tools/byte_lm_validation_admit.py "$OUT/remote/byte-lm-validation"
+        return $?
+    fi
+    if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+        grep -q '^training_validation_exit=0$' "$OUT/remote/leg.txt" || return 1
+        cmp "$OUT/source_inventory_local.json" "$OUT/remote/source_inventory.json" || return 1
+        python3 tools/training_validation_admit.py "$OUT/remote/training-validation"
+        return $?
+    fi
+    if [ "$NVIDIA_CAMPAIGN" = 3 ]; then
+        grep -q '^umap_finish_exit=0$' "$OUT/remote/leg.txt" || return 1
+        python3 tools/nvidia_umap_finish_validate.py "$OUT/remote/umap-finish"
+        return $?
+    fi
+    if [ "$NVIDIA_CAMPAIGN" = 2 ]; then
+        grep -q '^feature_finish_exit=0$' "$OUT/remote/leg.txt" || return 1
+        python3 tools/nvidia_feature_finish_validate.py "$OUT/remote/feature-finish"
+        return $?
+    fi
     _md="$OUT/remote/mamba-cert"
     _bad=0
     leg_require_file "$_md/results.tsv" \
@@ -1755,6 +2013,11 @@ leg_phase9_artifacts() {
 }
 
 leg_archive_required() {
+    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+        echo 'pixi.toml pixi.lock tools/release061_remote_build.sh tools/byte_lm_installed_step.py tools/linux_surface_qualification.sh tools/test_linux_surface_resource_caps.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/check_linux_release_qualification.py tools/verify_linux_surface_qualification.py tools/compare_ordered_python.py packaging/linux/build_sets.sh packaging/linux/stage_libs.py python/mojolearn/_backend.py'
+        return
+    fi
+    if [ "$NVIDIA_CAMPAIGN" = 6 ]; then echo "$_compact_paths"; fi
     # What must be inside the archive for THIS payload to be worth shipping.
     # A word list on purpose, so the caller can iterate it.
     if [ "$PAYLOAD" = "speed" ]; then
@@ -1790,8 +2053,18 @@ leg_archive_required() {
             return
         fi
         echo "tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/corpus/gen_corpus.py checks/kernel_matrix.mojo mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
-        if [ "$NVIDIA_CAMPAIGN" = 1 ]; then
-            echo "tools/nvidia_campaign.sh tools/nvidia_public_compare.py tools/speed_torch_seq.py transformer/checks/transformer_backward_check.mojo transformer/corpus/gen_corpus.py bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo"
+        if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
+            echo "tools/nvidia_campaign.sh tools/nvidia_feature_finish.sh tools/nvidia_feature_finish_validate.py tools/nvidia_serial_guard.py tools/nvidia_public_compare.py tools/speed_torch_seq.py transformer/checks/transformer_backward_check.mojo transformer/corpus/gen_corpus.py bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo"
+        fi
+        if [ "$NVIDIA_CAMPAIGN" = 3 ]; then
+            echo "tools/nvidia_umap_finish.sh tools/nvidia_umap_finish_validate.py tools/umap_real_dataset_quality.py tools/amd_serial_guard.py tools/test_amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_nvidia_feature_finish_validate.py tools/test_nvidia_umap_finish_validate.py"
+        fi
+        if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+            echo "tools/small_mlp_training_capture.py"
+            echo "training/__init__.mojo training/mlp_ops.mojo training/estimator.mojo training/checks/train_loop.mojo training/checks/train_gradient_capture.mojo training/checks/optimizer.mojo training/checks/loss.mojo embedding/checks/embedding_identical.mojo gemm/host_entry.mojo tools/training_validation_serial.sh tools/training_validation_admit.py tools/transformer_training_gradient_oracle.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py python/mojolearn/_mlp_impl.py python/mojolearn/neural_network.py python/mojolearn/tests/test_small_mlp_surface.py python/mojolearn/tests/test_small_mlp_numerical_edges.py"
+        fi
+        if [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+            echo "training/byte_lm.mojo training/corpus/tinyshakespeare/input.txt training/corpus/tinyshakespeare/manifest.json embedding/checks/embedding_identical.mojo gemm/host_entry.mojo bindings/_mojolearn_byte_lm.mojo bindings/build_byte_lm.sh python/mojolearn/language_model.py python/mojolearn/_byte_lm_impl.py python/mojolearn/tests/test_byte_lm_surface.py tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
         fi
     else
         echo "gemm/checks/gemm_identical.mojo"
@@ -2173,7 +2446,7 @@ if cuda:
     if not versions or not all(isinstance(version, str) for version in versions):
         raise ValueError("allowed CUDA versions must be nonempty strings")
     request["allowedCudaVersions"] = versions
-if vendor == "amd" and image.startswith("rocm/dev-"):
+if vendor == "amd" and (image.startswith("rocm/dev-") or image.startswith("rocm/pytorch:") or image.startswith("rocm/pytorch@")):
     request["dockerEntrypoint"] = ["/bin/bash", "-lc"]
     request["dockerStartCmd"] = [Path(bootstrap).read_text()]
 Path(output).write_text(json.dumps(request, indent=2) + "\n")
@@ -2388,16 +2661,34 @@ OUT=/root/gemm_leg_out
 mkdir -p "$OUT"
 cd "$ROOT" || exit 9
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
-export MAX_JOBS=4 CMAKE_BUILD_PARALLEL_LEVEL=4
-cores=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:4])))')
+export MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
+cores=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
 taskset -pc "$cores" $$ > "$OUT/cpu-affinity.log" 2>&1 || exit 9
 {
   echo "vendor=@VENDOR@"
   echo "payload=mamba"
   echo "knn_layout_only=@KNNLAYOUTONLY@"
+  echo "nvidia_campaign=@NVIDIACAMPAIGN@"
   echo "commit=@COMMIT@"
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
+if [ "@NVIDIACAMPAIGN@" = 4 ] || [ "@NVIDIACAMPAIGN@" = 5 ] || [ "@NVIDIACAMPAIGN@" = 6 ]; then
+    # Keep the qualified vendor settings. CUDA pool-only overrides refused
+    # small allocations in two retained attempts; its baseline used defaults.
+    # HIP's default pool exceeded the external guard; its 1 GiB override passed.
+    if [ "@VENDOR@" = amd ]; then
+        export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE=1073741824
+        export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_ONLY=true
+        export MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_CHUNK_PERCENT=100
+        printf '%s\n' 'device_memory_pool_bytes=1073741824' 'device_memory_pool_only=true' \
+            'device_memory_pool_chunk_percent=100' >> "$OUT/leg.txt"
+    else
+        unset MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_ONLY MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_CHUNK_PERCENT
+        printf '%s\n' 'device_memory_pool=qualified NVIDIA runtime defaults; external guard retained' >> "$OUT/leg.txt"
+    fi
+    python3 tools/training_validation_admit.py --inventory-root "$ROOT" \
+        > "$OUT/source_inventory.json" || exit 9
+fi
 uname -a > "$OUT/uname.txt" 2>&1
 @SMI@ > "$OUT/gpu.txt" 2>&1 || echo "no vendor smi tool answered" >> "$OUT/gpu.txt"
 { find . -name '*.mojo' -not -path './.pixi/*' -not -path './bench/results/*' \
@@ -2407,7 +2698,7 @@ uname -a > "$OUT/uname.txt" 2>&1
   | { shasum -a 256 2>/dev/null || sha256sum ; } \
   | awk '{print $1}' > "$OUT/source_sha256.txt"
 if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi >/dev/null 2>&1; then
-  if [ "@NVIDIACAMPAIGN@" = 1 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
+  if [ "@NVIDIACAMPAIGN@" != 0 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
     timeout -k 10 120 sh -c 'curl -fsSL --max-time 30 https://pixi.sh/install.sh | sh' > "$OUT/pixi_install.log" 2>&1
   else
     curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
@@ -2415,12 +2706,221 @@ if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi >/dev/null 2>&1; then
 fi
 PATH="$HOME/.pixi/bin:$PATH"
 export PATH
-if [ "@NVIDIACAMPAIGN@" = 1 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
-    timeout -k 10 600 pixi install > "$OUT/pixi_env.log" 2>&1
+if [ "@NVIDIACAMPAIGN@" != 0 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
+    if [ "@NVIDIACAMPAIGN@" = 5 ] || [ "@NVIDIACAMPAIGN@" = 7 ]; then
+        # Profile 5 must install the frozen lock under the same vendor/RSS
+        # supervision as the campaign. Never proceed after bootstrap failure.
+        case "@VENDOR@" in
+            nvidia) pixi_guard=tools/nvidia_serial_guard.py ;;
+            amd) pixi_guard=tools/amd_serial_guard.py ;;
+            *) exit 9 ;;
+        esac
+        pixi_rc=124
+        pixi_environment=
+        if [ "@NVIDIACAMPAIGN@" = 7 ]; then pixi_environment='--environment default'; fi
+        pixi_seconds=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+        if [ "$pixi_seconds" -gt 600 ]; then pixi_seconds=600; fi
+        if [ "$pixi_seconds" -ge 15 ]; then
+            python3 "$pixi_guard" --seconds "$pixi_seconds" --rss-gib 12 -- \
+                pixi install --locked $pixi_environment > "$OUT/pixi_env.log" 2>&1
+            pixi_rc=$?
+        fi
+        if [ "$pixi_rc" -ne 0 ]; then
+            echo "pixi_install_exit=$pixi_rc" >> "$OUT/leg.txt"
+            if [ "@NVIDIACAMPAIGN@" = 7 ]; then
+                echo 'release_build_status=NOT_STARTED_BOOTSTRAP_FAILED' >> "$OUT/leg.txt"
+            else
+                echo 'byte_lm_validation_status=NOT_STARTED_BOOTSTRAP_FAILED' >> "$OUT/leg.txt"
+            fi
+            : > /root/gemm_leg.done
+            echo REMOTE_BODY_DONE
+            exit "$pixi_rc"
+        fi
+    elif [ "@NVIDIACAMPAIGN@" = 6 ]; then
+        timeout -k 10 600 pixi install --locked > "$OUT/pixi_env.log" 2>&1 || exit 9
+    else
+        timeout -k 10 600 pixi install > "$OUT/pixi_env.log" 2>&1
+    fi
 else
 pixi install > "$OUT/pixi_env.log" 2>&1
 fi
 echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
+if [ "@NVIDIACAMPAIGN@" = 7 ]; then
+    release_rc=124
+    if ! command -v objdump >/dev/null 2>&1; then
+        echo 'release_build_status=NOT_STARTED_MISSING_OBJDUMP' >> "$OUT/leg.txt"
+        echo 'release_build_exit=9' >> "$OUT/leg.txt"
+        : > /root/gemm_leg.done
+        echo REMOTE_BODY_DONE
+        exit 9
+    fi
+    release_system_python=$(command -v python3)
+    cat > "$OUT/release-tools-setup.sh" <<'RELEASE_TOOLS_SETUP'
+#!/bin/sh
+set -eu
+system_python=$1
+destination=$2
+if command -v patchelf >/dev/null 2>&1; then
+    tool_source=preexisting
+else
+    tool_source=pinned-private-venv
+    test ! -e "$destination/tools-venv" && test ! -L "$destination/tools-venv"
+    "$system_python" -m venv "$destination/tools-venv"
+    "$destination/tools-venv/bin/python" -m pip install --disable-pip-version-check \
+        --only-binary=:all: --retries 1 --timeout 20 'patchelf==0.17.2.4'
+    PATH="$destination/tools-venv/bin:$PATH"
+    export PATH
+fi
+tool_path=$(command -v patchelf)
+{
+    printf 'source=%s\npath=%s\n' "$tool_source" "$tool_path"
+    "$tool_path" --version
+} > "$destination/release-tools-provenance.txt"
+printf '%s\n' "$tool_path" > "$destination/release-patchelf-path.txt"
+RELEASE_TOOLS_SETUP
+    tools_seconds=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started - 20))
+    if [ "$tools_seconds" -gt 120 ]; then tools_seconds=120; fi
+    tools_rc=124
+    printf 'guard=tools/nvidia_serial_guard.py\nseconds=%s\nrss_gib=12\npython=%s\nscript=%s\n' \
+        "$tools_seconds" "$release_system_python" "$OUT/release-tools-setup.sh" > "$OUT/release-tools-setup-command.txt"
+    if [ "$tools_seconds" -ge 15 ]; then
+        "$release_system_python" tools/nvidia_serial_guard.py --seconds "$tools_seconds" --rss-gib 12 -- \
+            sh "$OUT/release-tools-setup.sh" "$release_system_python" "$OUT" \
+            > "$OUT/release-tools-setup.log" 2>&1
+        tools_rc=$?
+    fi
+    echo "release_tools_setup_exit=$tools_rc" >> "$OUT/leg.txt"
+    printf '%s\n' "$tools_rc" > "$OUT/release-tools-setup.exit_code"
+    if [ "$tools_rc" -ne 0 ]; then
+        echo 'release_build_status=NOT_STARTED_TOOLS_SETUP_FAILED' >> "$OUT/leg.txt"
+        echo "release_build_exit=$tools_rc" >> "$OUT/leg.txt"
+        : > /root/gemm_leg.done
+        echo REMOTE_BODY_DONE
+        exit "$tools_rc"
+    fi
+    if [ -x "$OUT/tools-venv/bin/patchelf" ]; then
+        PATH="$OUT/tools-venv/bin:$PATH"
+        export PATH
+    fi
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+    if [ "$work_remaining" -ge 150 ]; then
+        release_seconds=$((work_remaining - 20))
+        if [ "$release_seconds" -gt 2400 ]; then release_seconds=2400; fi
+        printf '%s\n' '@COMMIT@' > "$ROOT/commit.txt"
+        MOJOLEARN_COMMIT='@COMMIT@' MOJOLEARN_PYTHON="$release_system_python" \
+          MOJOLEARN_RELEASE_BUILD_SECONDS="$release_seconds" MOJOLEARN_BUILD_PIXI_ENV=default \
+          timeout -k 20 "$work_remaining" bash tools/release061_remote_build.sh \
+            cuda '@GPUARCHS@' "$OUT/release-build" > "$OUT/release-build-console.log" 2>&1
+        release_rc=$?
+    fi
+    echo "release_build_exit=$release_rc" >> "$OUT/leg.txt"
+    echo 'scope=one actual CUDA architecture full46 build; no installed wheel qualification' >> "$OUT/leg.txt"
+    : > /root/gemm_leg.done
+    echo REMOTE_BODY_DONE
+    exit "$release_rc"
+fi
+# Reuse a root-pinned retained binding; no model or compiler build in profile 6.
+if [ "@NVIDIACAMPAIGN@" = 6 ]; then
+    compact_rc=124
+    case "@VENDOR@" in nvidia) compact_vendor=cuda ;; amd) compact_vendor=hip ;; *) exit 9 ;; esac
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+    if [ "$work_remaining" -ge 180 ]; then
+        if [ "$work_remaining" -gt 2700 ]; then work_remaining=2700; fi
+        MOJOLEARN_BYTE_LM_EXPECT_VENDOR="$compact_vendor" MOJOLEARN_GPU_ARCHS="@GPUARCHS@" \
+        MOJOLEARN_BYTE_LM_RESUME_ACTION="@COMPACTACTION@" \
+        MOJOLEARN_BYTE_LM_BASELINE_HANDOFF_SHA256="@BASEHANDOFFSHA@" \
+        MOJOLEARN_BYTE_LM_FOREIGN_HANDOFF_SHA256="@FOREIGNHANDOFFSHA@" \
+        MOJOLEARN_BYTE_LM_FOREIGN_SHA256="@FOREIGNCHECKPOINTSHA@" \
+        MOJOLEARN_PYTHON="@BYTELMPYTHON@" MOJOLEARN_COMMIT="@COMMIT@" \
+        timeout -k 20 "$work_remaining" bash tools/byte_lm_resume_transport_serial.sh \
+            "$OUT/byte-lm-resume-setup" "$work_remaining" > "$OUT/byte-lm-resume-console.log" 2>&1
+        compact_rc=$?
+    fi
+    echo "byte_lm_resume_exit=$compact_rc" >> "$OUT/leg.txt"
+    echo "scope=compact diagnostic only; final root raw-file comparison mandatory" >> "$OUT/leg.txt"
+    : > /root/gemm_leg.done
+    echo REMOTE_BODY_DONE
+    exit "$compact_rc"
+fi
+# The byte LM has a separate oracle-gated workload and explicit GPU target.
+if [ "@NVIDIACAMPAIGN@" = 5 ]; then
+    byte_rc=124
+    case "@VENDOR@" in nvidia) byte_vendor=cuda ;; amd) byte_vendor=hip ;; *) exit 9 ;; esac
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+    if [ "$work_remaining" -ge 60 ]; then
+        if [ "$work_remaining" -gt 3000 ]; then work_remaining=3000; fi
+        MOJOLEARN_BYTE_LM_VALIDATION_OUT="$OUT/byte-lm-validation" \
+          MOJOLEARN_BYTE_LM_EXPECT_VENDOR="$byte_vendor" MOJOLEARN_COMMIT="@COMMIT@" \
+          MOJOLEARN_GPU_ARCHS="@GPUARCHS@" MOJOLEARN_BYTE_LM_VALIDATION_SECONDS="$work_remaining" \
+          MOJOLEARN_PYTHON="@BYTELMPYTHON@" \
+          timeout -k 10 "$work_remaining" bash tools/byte_lm_validation_serial.sh \
+          > "$OUT/byte-lm-validation-console.log" 2>&1
+        byte_rc=$?
+    fi
+    echo "byte_lm_validation_exit=$byte_rc" >> "$OUT/leg.txt"
+    echo "gpu_archs=@GPUARCHS@" >> "$OUT/leg.txt"
+    echo "scope=bounded @VENDOR@ byte LM validation; no cross-vendor or performance certificate" >> "$OUT/leg.txt"
+    : > /root/gemm_leg.done
+    echo REMOTE_BODY_DONE
+    exit "$byte_rc"
+fi
+# Training integration is a distinct bounded qualification, with no Apple
+# execution and no inherited Mamba/UMAP performance workload.
+if [ "@NVIDIACAMPAIGN@" = 4 ]; then
+    training_rc=124
+    case "@VENDOR@" in nvidia) training_vendor=cuda ;; amd) training_vendor=hip ;; *) exit 9 ;; esac
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+    if [ "$work_remaining" -ge 60 ]; then
+        if [ "$work_remaining" -gt 3000 ]; then work_remaining=3000; fi
+        MOJOLEARN_TRAIN_VALIDATION_OUT="$OUT/training-validation" \
+          MOJOLEARN_TRAIN_EXPECT_VENDOR="$training_vendor" MOJOLEARN_COMMIT="@COMMIT@" \
+          MOJOLEARN_TRAIN_VALIDATION_SECONDS="$work_remaining" \
+          timeout -k 10 "$work_remaining" bash tools/training_validation_serial.sh \
+          > "$OUT/training-validation-console.log" 2>&1
+        training_rc=$?
+    fi
+    echo "training_validation_exit=$training_rc" >> "$OUT/leg.txt"
+    echo "scope=bounded @VENDOR@ training integration and independent gradient checks; no cross-vendor or performance certificate" >> "$OUT/leg.txt"
+    : > /root/gemm_leg.done
+    echo REMOTE_BODY_DONE
+    exit "$training_rc"
+fi
+# Targeted UMAP finish shares bootstrap and the remaining lease budget only.
+# It exits before either the broader feature or sequence campaign starts.
+if [ "@NVIDIACAMPAIGN@" = 3 ]; then
+    umap_rc=124
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+    if [ "$work_remaining" -gt 30 ]; then
+        MOJOLEARN_CAMPAIGN_OUT="$OUT/umap-finish" MOJOLEARN_COMMIT="@COMMIT@" \
+          MOJOLEARN_CAMPAIGN_SECONDS="$work_remaining" \
+          timeout -k 10 "$work_remaining" bash tools/nvidia_umap_finish.sh \
+          > "$OUT/umap-finish-console.log" 2>&1
+        umap_rc=$?
+    fi
+    echo "umap_finish_exit=$umap_rc" >> "$OUT/leg.txt"
+    echo "scope=UMAP targeted NVIDIA comparison and real-data quality; CPU umap-learn is quality-only; no full feature or cross-vendor certification" >> "$OUT/leg.txt"
+    : > /root/gemm_leg.done
+    echo REMOTE_BODY_DONE
+    exit "$umap_rc"
+fi
+# Feature finish starts directly; do not spend its bounded lease on the
+# older unrelated sequence campaign before the requested feature tests.
+if [ "@NVIDIACAMPAIGN@" = 2 ]; then
+    feature_rc=124
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+    if [ "$work_remaining" -gt 30 ]; then
+        MOJOLEARN_CAMPAIGN_OUT="$OUT/feature-finish" MOJOLEARN_COMMIT="@COMMIT@" \
+          MOJOLEARN_CAMPAIGN_SECONDS="$work_remaining" \
+          timeout -k 10 "$work_remaining" bash tools/nvidia_feature_finish.sh \
+          > "$OUT/feature-finish-console.log" 2>&1
+        feature_rc=$?
+    fi
+    echo "feature_finish_exit=$feature_rc" >> "$OUT/leg.txt"
+    echo "scope=feature-finish; see per-job results, not full backward certification" >> "$OUT/leg.txt"
+    : > /root/gemm_leg.done
+    echo REMOTE_BODY_DONE
+    exit "$feature_rc"
+fi
 # Layout-only reuses transport/bootstrap, not the Mamba/UMAP workload.
 if [ "@KNNLAYOUTONLY@" = 1 ]; then
     layout_rc=124
@@ -2446,7 +2946,7 @@ fi
 # Both witnesses share one work deadline, preserving the fetch reserve.
 # Refuse without timeout instead of silently running an unbounded payload.
 work_started=$(date +%s)
-if [ "@NVIDIACAMPAIGN@" = 1 ]; then work_started=$campaign_started; fi
+if [ "@NVIDIACAMPAIGN@" != 0 ]; then work_started=$campaign_started; fi
 if ! command -v timeout >/dev/null 2>&1; then
     echo "umap_identity_exit=127" >> "$OUT/leg.txt"
     echo "timeout is required for the guarded payload" > "$OUT/mamba_cert_console.log"
@@ -2471,7 +2971,7 @@ echo "mamba_cert_exit=$cert_rc" >> "$OUT/leg.txt"
 work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + work_started))
 followup_rc=124
 if [ "$work_remaining" -gt 60 ]; then
-  if [ "@NVIDIACAMPAIGN@" = 1 ]; then
+  if [ "@NVIDIACAMPAIGN@" != 0 ]; then
     MOJOLEARN_CAMPAIGN_OUT="$OUT/campaign" MOJOLEARN_COMMIT="@COMMIT@" \
       MOJOLEARN_CAMPAIGN_SECONDS="$work_remaining" \
       timeout -k 30 "$work_remaining" bash tools/nvidia_campaign.sh \
@@ -3618,6 +4118,11 @@ leg_check_remote_body() {
         -e "s|@WHEELVERSION@|$WHEEL_VERSION|g" \
         -e "s|@WHEELINDEX@|$WHEEL_INDEX|g" \
         -e "s|@GPUARCHS@|$GPU_ARCHS|g" \
+        -e "s|@BYTELMPYTHON@|$BYTE_LM_PYTHON|g" \
+        -e "s|@COMPACTACTION@|$BYTE_RESUME_ACTION|g" \
+        -e "s|@BASEHANDOFFSHA@|$BYTE_BASE_SHA|g" \
+        -e "s|@FOREIGNHANDOFFSHA@|$BYTE_FOREIGN_SHA|g" \
+        -e "s|@FOREIGNCHECKPOINTSHA@|$BYTE_CHECKPOINT_SHA|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"
@@ -3746,11 +4251,47 @@ leg_ship_and_run() {
   this commit. Shipping it would rent a box to build nothing."
     done
     leg_source_sha_recipe "$TMPD/archive" > "$OUT/source_sha256_local.txt"
+    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+        python3 - "$TMPD/archive" "$REPO" > "$OUT/source_inventory_local.json" <<'RELEASE_SOURCE'
+import json, pathlib, sys
+archive, local=map(pathlib.Path, sys.argv[1:])
+sys.path.insert(0,str(archive/'tools'))
+from check_linux_release_qualification import native_inventory
+received=native_inventory(archive)
+if received!=native_inventory(local): raise SystemExit('Release archive lacks or changes canonical current native source')
+print(json.dumps(received, separators=(',', ':')))
+RELEASE_SOURCE
+        [ "$?" = 0 ] || leg_die 'Could not bind full release source inventory'
+    fi
+    if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+        python3 "$TMPD/archive/tools/training_validation_admit.py" \
+            --inventory-root "$TMPD/archive" > "$OUT/source_inventory_local.json" \
+            || leg_die "Could not freeze the training source inventory"
+    fi
     leg_say "  archive source sha256: $(cut -c1-32 < "$OUT/source_sha256_local.txt")"
 
-    leg_ssh 'rm -rf /root/mojolearn /root/gemm_leg_out && mkdir -p /root/mojolearn' \
-        > /dev/null
-    leg_ssh 'cd /root/mojolearn && tar xzf -' < "$TMPD/src.tgz"
+    if [ -n "$PUBLIC_GITHUB_SOURCE" ]; then
+        leg_ssh 'rm -rf /root/mojolearn /root/gemm_leg_out' > /dev/null
+        leg_public_source_fetch
+    else
+        leg_ssh 'rm -rf /root/mojolearn /root/gemm_leg_out && mkdir -p /root/mojolearn' \
+            > /dev/null
+        leg_ssh 'cd /root/mojolearn && tar xzf -' < "$TMPD/src.tgz"
+    fi
+    if [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+        leg_ssh 'python3 /root/mojolearn/tools/training_validation_admit.py --inventory-root /root/mojolearn' > "$OUT/source_inventory_preship_remote.json" || leg_die "Remote compact source inventory unavailable"
+        cmp "$OUT/source_inventory_local.json" "$OUT/source_inventory_preship_remote.json" || leg_die "Compact source differs before data/model launch"
+        case "$VENDOR" in nvidia) _byte_vendor=cuda; _foreign_vendor=hip ;; amd) _byte_vendor=hip; _foreign_vendor=cuda ;; esac
+        python3 -B "$TMPD/archive/tools/byte_lm_handoff_transport.py" pack "$BYTE_BASE_DIR" --output "$TMPD/baseline.zip" --sha256 "$BYTE_BASE_SHA" --vendor "$_byte_vendor" --kind baseline128 || leg_die "Pinned baseline packing failed"
+        leg_ssh 'umask 077; mkdir /root/byte-lm-handoffs' || leg_die "Handoff destination already exists"
+        leg_ssh 'cat > /root/byte-lm-handoffs/baseline.zip' < "$TMPD/baseline.zip"
+        leg_ssh "python3 -B /root/mojolearn/tools/byte_lm_handoff_transport.py unpack /root/byte-lm-handoffs/baseline.zip --output /root/byte-lm-handoffs/baseline --sha256 $BYTE_BASE_SHA --vendor $_byte_vendor --kind baseline128" > "$OUT/baseline-transport.log" 2>&1 || leg_die "Remote baseline handoff refused"
+        if [ "$BYTE_RESUME_ACTION" = resume128 ]; then
+            python3 -B "$TMPD/archive/tools/byte_lm_handoff_transport.py" pack "$BYTE_FOREIGN_DIR" --output "$TMPD/foreign.zip" --sha256 "$BYTE_FOREIGN_SHA" --vendor "$_foreign_vendor" --kind head64 || leg_die "Pinned foreign packing failed"
+            leg_ssh 'cat > /root/byte-lm-handoffs/foreign.zip' < "$TMPD/foreign.zip"
+            leg_ssh "python3 -B /root/mojolearn/tools/byte_lm_handoff_transport.py unpack /root/byte-lm-handoffs/foreign.zip --output /root/byte-lm-handoffs/foreign --sha256 $BYTE_FOREIGN_SHA --vendor $_foreign_vendor --kind head64" > "$OUT/foreign-transport.log" 2>&1 || leg_die "Remote foreign handoff refused"
+        fi
+    fi
     leg_ssh 'umask 022; cat > /root/gemm_leg.sh' < "$OUT/remote_body.sh"
     leg_run_payload
 }
@@ -3804,9 +4345,19 @@ leg_run_payload() {
     # and the terminate still waiting behind it. The cap leaves the lease its
     # last five minutes so the fetch below still has somewhere to run.
     _polllimit=$(( WORK_TIMEOUT + 240 ))
-    _leasecap=$(( MINUTES * 60 - 300 ))
+    # The lease starts before source transfer, which can consume minutes.
+    # Using MINUTES again here silently restarted the lease clock.
+    _lease_deadline=$(sed -n 's/^deadline_epoch=//p' "$LEASE_DIR/$POD_ID.lease")
+    case "$_lease_deadline" in
+        ''|*[!0-9]*) leg_die "Cannot read the armed lease deadline; refusing unbounded polling." ;;
+    esac
+    _leasecap=$(( _lease_deadline - $(date -u +%s) - 300 ))
+    if [ "$_leasecap" -le 0 ]; then
+        echo "Lease fetch reserve already reached; fetching partial artifacts."
+        FETCH_RED=1
+        return 0
+    fi
     if [ "$_polllimit" -gt "$_leasecap" ]; then _polllimit=$_leasecap; fi
-    if [ "$_polllimit" -lt 120 ]; then _polllimit=120; fi
     leg_say "  remote pid $_rpid; polling every 30s, giving up after ${_polllimit}s"
     _pdeadline=$(( $(date -u +%s) + _polllimit ))
     _unreach=0
@@ -4741,7 +5292,20 @@ leg_rehearse() {
             rbad "G2 the archive contains what the $PAYLOAD payload runs" "MISSING:$_miss -- the leg would rent a box to build nothing"
         fi
         if [ "$PAYLOAD" = "mamba" ]; then
-            if [ -f "$TMPD/dryarch/mamba/corpus/gen_corpus.py" ] &&
+            if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+                if python3 - "$TMPD/dryarch" "$REPO" > "$TMPD/g2a.out" 2>&1 <<'RELEASE_DRY_INVENTORY'
+import pathlib, sys
+archive, local = map(pathlib.Path, sys.argv[1:])
+sys.path.insert(0, str(archive / 'tools'))
+from check_linux_release_qualification import native_inventory
+assert native_inventory(archive) == native_inventory(local), 'Canonical release source inventory differs'
+RELEASE_DRY_INVENTORY
+                then
+                    rok "G2a the release archive matches the complete canonical native inventory"
+                else
+                    rbad "G2a the release archive covers current native source" "$(cat "$TMPD/g2a.out")"
+                fi
+            elif [ -f "$TMPD/dryarch/mamba/corpus/gen_corpus.py" ] &&
                [ -f "$TMPD/dryarch/tools/with_build_lock.sh" ] &&
                [ -f "$TMPD/dryarch/checks/kernel_matrix.mojo" ]; then
                 rok "G2a the Mamba transitive dependencies are present"
@@ -4754,7 +5318,7 @@ leg_rehearse() {
             if [ "$_archive_gzip_bytes" -gt "$LEG_MAMBA_ARCHIVE_MAX_BYTES" ]; then
                 rbad "G2b the Mamba source archive is bounded" \
                     "$_archive_gzip_bytes compressed bytes exceeds $LEG_MAMBA_ARCHIVE_MAX_BYTES; a broad path was likely added"
-            elif find "$TMPD/dryarch/mamba/corpus" -type f \
+            elif [ -d "$TMPD/dryarch/mamba/corpus" ] && find "$TMPD/dryarch/mamba/corpus" -type f \
                     ! -path "$TMPD/dryarch/mamba/corpus/gen_corpus.py" -print \
                     | grep -q .; then
                 rbad "G2b the Mamba source archive excludes corpus data" \
@@ -5249,6 +5813,32 @@ echo "== step 9: k-NN layout dispatch gates and prices =="
 echo "  Results: $OUT/remote/layout-price"
 echo "  Admission requires layout_exit=0 and source parity."
 echo "  Mamba and UMAP checks were not requested by this payload."
+elif [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+echo '== step 9: one-architecture release build =='
+echo "  Retained sets/proofs: $OUT/remote/release-build/build"
+echo '  BUILT_NOT_INSTALLED; no wheel or numerical admission.'
+elif [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+echo "== step 9: compact $VENDOR resume diagnostic =="
+echo "  Raw results: $OUT/remote/byte-lm-resume; final local all-raw comparison mandatory."
+elif [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+echo "== step 9: bounded $VENDOR byte LM validation =="
+echo "  Results: $OUT/remote/byte-lm-validation"
+echo "  Admission requires retained root receipts and the independent oracle."
+echo "  This is not a cross-vendor identity or performance certificate."
+elif [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+echo "== step 9: bounded $VENDOR training integration and independent gradients =="
+echo "  Results: $OUT/remote/training-validation"
+echo "  Admission requires every job and the retained independent gradient oracle."
+echo "  This is not a cross-vendor identity or performance certificate."
+elif [ "$NVIDIA_CAMPAIGN" = 3 ]; then
+echo "== step 9: targeted NVIDIA UMAP comparison and real-data quality =="
+echo "  Read $OUT/remote/umap-finish/results.tsv and its retained admission results."
+echo "  CPU umap-learn is a quality-only baseline; no CPU/GPU speed ratio."
+echo "  This is bounded UMAP coverage, not full feature or cross-vendor certification."
+elif [ "$NVIDIA_CAMPAIGN" = 2 ]; then
+echo "== step 9: NVIDIA feature qualification and two three-arm comparisons =="
+echo "  Read $OUT/remote/feature-finish/results.tsv and each comparison results.json."
+echo "  This is source/API fixture coverage, not full feature or cross-vendor certification."
 elif [ "$PAYLOAD" = "mamba" ]; then
 echo "== step 9: Mamba backward certificate =="
 echo "  Strict backward results, manifests, and native gradient bytes:"
@@ -5317,6 +5907,23 @@ if [ "$PAYLOAD" = "speed" ]; then
 elif [ "$KNN_LAYOUT_ONLY" = 1 ]; then
     echo "the layout results: $OUT/remote/layout-price"
     echo "read layout-console.log and layout_exit in remote/leg.txt together."
+elif [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+    echo "release build evidence: $OUT/remote/release-build"
+    echo 'Next: pack and qualify exact final wheel; build success is not publication admission.'
+elif [ "$NVIDIA_CAMPAIGN" = 6 ]; then
+    echo "compact diagnostic only: $OUT/remote/byte-lm-resume"
+    echo "Final local all-raw comparison remains mandatory; no identity admission here."
+elif [ "$NVIDIA_CAMPAIGN" = 5 ]; then
+    echo "the byte LM validation results: $OUT/remote/byte-lm-validation"
+    echo "read byte-lm-validation-console.log and byte_lm_validation_exit together."
+elif [ "$NVIDIA_CAMPAIGN" = 4 ]; then
+    echo "the training validation results: $OUT/remote/training-validation"
+    echo "read training-validation-console.log and training_validation_exit together."
+elif [ "$NVIDIA_CAMPAIGN" = 3 ]; then
+    echo "the targeted UMAP results: $OUT/remote/umap-finish"
+    echo "read umap-finish-console.log and umap_finish_exit in remote/leg.txt together."
+elif [ "$NVIDIA_CAMPAIGN" = 2 ]; then
+    echo "the feature results: $OUT/remote/feature-finish"
 elif [ "$PAYLOAD" = "mamba" ]; then
     echo "the certificate: $OUT/remote/mamba-cert"
     echo "read results.tsv, device.csv, commit.txt, and SHA256SUMS together."

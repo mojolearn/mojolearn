@@ -1,0 +1,27 @@
+bootstrap_started=2026-09-07T08:05:53Z
+pid 3166's current affinity list: 0-19
+pid 3166's new affinity list: 0,1
+dependency_setup_started
+dependency_setup_passed
+✔ The default environment has been installed.
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0", "vram_total_bytes": 274542362624, "telemetry": {"initial_vram_bytes": 299687936, "peak_vram_bytes": 299687936, "last_vram_bytes": 299687936, "initial_rss_bytes": 19496960, "peak_rss_bytes": 140914688, "last_rss_bytes": 137211904, "initial_host_available_bytes": 161765392384, "last_host_available_bytes": 162284191744, "samples": 3, "last_elapsed_seconds": 2.0161944120000044, "crossing_sample": null}, "returncode": 0}
+twelve_job_validation_started
+byte-venv	0
+byte-dependencies	0
+dependencies	0
+dependency-freeze	0
+guard-checks	0
+comparator-fixtures	0
+byte-build	0
+retain-binding	0
+byte-host-mocks	0
+byte-step1	0
+byte-gradient-oracle	0
+byte-full128	0
+Raw captures and root receipts retained. Learning requires summary review; head/resume/control and cross-vendor comparison are separate future runs.
+twelve_job_validation_passed
+preflight exit=0
+head64 exit=0
+verify-head exit=0
+Continuation artifacts retained; use the separate full comparator with both continuous campaigns and all root receipts.
+bootstrap_exit=0

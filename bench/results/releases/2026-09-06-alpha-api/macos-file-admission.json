@@ -1,0 +1,15 @@
+{
+  "files": {
+    "mojolearn-0.6.0a1-py3-none-macosx_11_0_arm64.whl": "be071669666efb93be0d98bce711f3d11bc0e3aaf5951ea65b6691cbce10503f"
+  },
+  "manifest_sha256": "3272b025cd6f580bcc855152b1f31c08054cb9617e0271f7bedbf1524441ea84",
+  "passed": true,
+  "schema": "mojolearn.alpha-artifact-verification.v1",
+  "scope": "File integrity, alpha metadata and recorded overlay provenance only; no package execution, native compatibility or current numerical qualification",
+  "tags": {
+    "mojolearn-0.6.0a1-py3-none-macosx_11_0_arm64.whl": [
+      "py3-none-macosx_11_0_arm64"
+    ]
+  },
+  "version": "0.6.0a1"
+}

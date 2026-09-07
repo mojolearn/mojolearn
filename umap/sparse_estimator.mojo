@@ -121,6 +121,9 @@ def sparse_fit_transform(
     var curve = fit_umap_curve(params.min_dist, params.spread)
     return optimize_sparse_layout(
         ctx, initial^, graph, n_samples, params.n_components, epochs,
+        initial_learning_rate=params.learning_rate,
+        negative_sample_rate=params.negative_sample_rate,
+        repulsion_strength=params.repulsion_strength,
         a=curve.a, b=curve.b,
         seed=params.random_seed,
     )

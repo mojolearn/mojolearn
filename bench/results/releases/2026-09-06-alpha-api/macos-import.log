@@ -1,0 +1,1 @@
+{"version": "0.6.0a1", "modules": ["linalg", "umap", "training", "mamba", "transformer", "language_model", "neural_network"], "all_exports_resolve": true, "scope": "imports only; no model or numerical execution"}

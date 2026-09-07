@@ -1,0 +1,7 @@
+.CLEANUP_UNVERIFIED: holding all locks until observed children exit and telemetry recovers
+.CLEANUP_UNVERIFIED: holding all locks until observed children exit and telemetry recovers
+.......
+----------------------------------------------------------------------
+Ran 9 tests in 0.001s
+
+OK

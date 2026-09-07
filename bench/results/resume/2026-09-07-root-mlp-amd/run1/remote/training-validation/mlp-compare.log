@@ -1,0 +1,44 @@
+{
+  "schema": "small-mlp.comparison.v1",
+  "profile": "small-mlp.identical.48x8.relu16.ce3.adamw.steps16.v1",
+  "identity": "PASS",
+  "compared_cells": 21024,
+  "learning": {
+    "status": "PASS",
+    "policy": {
+      "first_step": 1,
+      "final_step": 16,
+      "maximum_loss_ratio": 0.9
+    },
+    "initial_loss": 1.1047444343566895,
+    "final_loss": 0.04506960138678551
+  },
+  "left": [
+    "/root/gemm_leg_out/training-validation/mlp-continuous"
+  ],
+  "right": [
+    "/root/gemm_leg_out/training-validation/mlp-head",
+    "/root/gemm_leg_out/training-validation/mlp-resume"
+  ],
+  "vendors": {
+    "left": [
+      "hip"
+    ],
+    "right": [
+      "hip",
+      "hip"
+    ]
+  },
+  "transferred_checkpoints": {
+    "left": [],
+    "right": [
+      {
+        "sha256": "dd31cab32c990cb9b43ca832219cc645c341bc0d509c3d4a8dc1229480565dfa",
+        "head_vendor": "hip",
+        "resume_vendor": "hip"
+      }
+    ]
+  },
+  "scope": "named fixed training/resume fixtures only; no universal certificate"
+}
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:40/0000:40:01.1/0000:41:00.0/0000:42:01.0/0000:44:00.0/0000:45:00.0/0000:46:00.0", "vram_total_bytes": 206141652992, "returncode": 0}

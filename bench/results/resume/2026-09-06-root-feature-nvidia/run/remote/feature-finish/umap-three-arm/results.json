@@ -1,0 +1,108 @@
+{
+  "status": "REFUSED",
+  "scope": "host-array public APIs, including transfers and outputs; not historical kernel-only fixtures",
+  "args": {
+    "worker": null,
+    "lane": "umap",
+    "out": "/root/gemm_leg_out/feature-finish/umap-three-arm",
+    "rounds": 7,
+    "index": 10000,
+    "queries": 128,
+    "k": 10,
+    "knn_external": "cuml",
+    "dim": 2048,
+    "rows": 16384,
+    "gram_rows": 65536,
+    "rtol": 0.0005,
+    "umap_rows": 1024,
+    "umap_epochs": 50,
+    "quality_min": 0.85,
+    "quality_gap": 0.05
+  },
+  "metadata": {
+    "fast": {
+      "arm": "fast",
+      "lane": "umap",
+      "inputs": [
+        "bbea92187a936d171511ba06084d3ae70cd37f43c5661e5a0a546170a3cdd1b9",
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "shapes": [
+        [
+          1024,
+          16
+        ],
+        [
+          0
+        ]
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "mojolearn FAST; backend precision policy not inferred",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "2.4.6",
+      "source_commit": "202c44caacd2ee56164da148662393d77a1840d3",
+      "nvidia_smi": "580.126.20, NVIDIA GeForce RTX 4090",
+      "mojolearn": "0.6.0",
+      "package": "/root/mojolearn/python/mojolearn/__init__.py",
+      "binding_file": "/root/mojolearn/python/mojolearn/_mojolearn_metrics.so",
+      "mode": "fast",
+      "parameters": {
+        "n_neighbors": 15,
+        "n_components": 2,
+        "metric": "euclidean",
+        "init": "spectral",
+        "random_state": 19,
+        "n_epochs": 50,
+        "min_dist": 0.1,
+        "spread": 1.0
+      },
+      "arm_label": "mojolearn-umap-fit-transform-host-request",
+      "binding_sha256": "f8bf00d3d4ed3a5fe8f80d9c1ceaa096aa82a498d547ec119b8e0c4b9af17dad"
+    },
+    "identical": {
+      "arm": "identical",
+      "lane": "umap",
+      "inputs": [
+        "bbea92187a936d171511ba06084d3ae70cd37f43c5661e5a0a546170a3cdd1b9",
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "shapes": [
+        [
+          1024,
+          16
+        ],
+        [
+          0
+        ]
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "mojolearn IDENTICAL FP32",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "2.4.6",
+      "source_commit": "202c44caacd2ee56164da148662393d77a1840d3",
+      "nvidia_smi": "580.126.20, NVIDIA GeForce RTX 4090",
+      "mojolearn": "0.6.0",
+      "package": "/root/mojolearn/python/mojolearn/__init__.py",
+      "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_metrics.so",
+      "mode": "identical",
+      "parameters": {
+        "n_neighbors": 15,
+        "n_components": 2,
+        "metric": "euclidean",
+        "init": "spectral",
+        "random_state": 19,
+        "n_epochs": 50,
+        "min_dist": 0.1,
+        "spread": 1.0
+      },
+      "arm_label": "mojolearn-umap-fit-transform-host-request",
+      "binding_sha256": "a69b82ad6312d7cf26bb4509e27df8e4be0a880025163cfcfa836d469a13a7b6"
+    }
+  },
+  "records": [],
+  "reason": "RuntimeError('Worker exited: 1')"
+}

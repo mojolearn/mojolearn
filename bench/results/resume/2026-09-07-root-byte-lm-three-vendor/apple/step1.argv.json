@@ -1,0 +1,23 @@
+[
+  "/opt/homebrew/opt/python@3.14/bin/python3.14",
+  "/private/tmp/mojolearn-apple-byte-lm-attempt3-20260907/macos_serial_guard.py",
+  "--seconds",
+  "180",
+  "--rss-gib",
+  "2",
+  "--memory-policy",
+  "user-tiny",
+  "--report",
+  "/private/tmp/mojolearn-apple-byte-lm-attempt3-20260907/step1.guard.json",
+  "--",
+  "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/python",
+  "/private/tmp/mojolearn-byte-lm-metal-20260907/tools/byte_lm_real_text_capture.py",
+  "--expected-vendor",
+  "metal",
+  "--steps",
+  "1",
+  "--action",
+  "continuous",
+  "--output",
+  "/private/tmp/mojolearn-apple-byte-lm-attempt3-20260907/step1"
+]

@@ -1,0 +1,4 @@
+arm	mode	shape	med_s	auc	logloss	hash
+base	FAST	-	-	-	-	-
+pin	FAST+2043	-	-	-	-	-
+ident	IDENTICAL	-	-	-	-	-

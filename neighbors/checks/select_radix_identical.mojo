@@ -48,16 +48,18 @@ output is therefore ASCENDING by (distance, index), which is also what the
 fused arm's `WarpSelect::reduce()` produces, so the two arms become
 comparable slot for slot instead of as multisets.
 
-Rank-by-counting rather than a sort: k is at most `SELECT_BLOCK`, the
+Rank-by-counting rather than a sort: k is at most `IDENTICAL_MAX_K`, the
 comparison is a total order so no two ranks collide, and it needs no
 network, no shared scratch beyond the staged pairs, and no second barrier
 pattern to get wrong. `ball_cover.mojo` already uses the same argument.
 
 WHAT IS STILL REFUSED HERE
 ---------------------------
-`k > SELECT_BLOCK`. The rank pass gives one thread to each output slot; a
-larger k needs a loop, which is easy and is not written until something
-asks for it. The refusal is at the launcher, not silent.
+`k > IDENTICAL_MAX_K` (1024). Threads stage and rank slots in strides of
+SELECT_BLOCK (256), with one barrier after all inputs are staged. The
+bounded extension uses 8 KiB of pair staging and O(k*k) integer comparisons
+per query. It is authored, not yet remotely qualified. The launcher refuses
+larger k explicitly; this is not an unbounded workload promise.
 
 THIS SELECTOR IS NOT THE WHOLE TILED ARM. Its distances arrive from
 `core/gemm.mojo::gemm_nt`, which is MAX's `linalg.matmul` -- a closed vendor
@@ -84,6 +86,7 @@ from neighbors.impl.matrix.detail.select_radix import (
 comptime BITS_PER_PASS_64 = 8
 comptime NUM_BUCKETS_64 = 1 << BITS_PER_PASS_64
 comptime NUM_PASSES_64 = 64 // BITS_PER_PASS_64
+comptime IDENTICAL_MAX_K = 1024
 
 # `Counter<T, IdxT>`'s fields, the same slots the ported kernel uses. The
 # back-fill counter is gone with the tie class it served.
@@ -130,7 +133,7 @@ def calc_mask_64(pass_id: Int) -> UInt64:
     return (UInt64(1) << UInt64(num_bits)) - 1
 
 
-def radix_topk_identical_kernel(
+def radix_topk_identical_kernel[RANK_CAPACITY: Int](
     in_val: MutPointer[Float32, MutAnyOrigin],
     out_val: MutPointer[Float32, MutAnyOrigin],
     out_idx: MutPointer[UInt32, MutAnyOrigin],
@@ -182,15 +185,15 @@ def radix_topk_identical_kernel(
         Scalar[DType.uint64],
         address_space = AddressSpace.SHARED,
     ]()
-    # The rank pass's staging. `SELECT_BLOCK` pairs, which is also the
-    # largest k this kernel accepts; the launcher refuses anything larger.
+    # Stage every winner before publishing any reordered output: reading
+    # the output directly during ranking would race other threads' writes.
     var s_val = stack_allocation[
-        SELECT_BLOCK,
+        RANK_CAPACITY,
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
     ]()
     var s_idx = stack_allocation[
-        SELECT_BLOCK,
+        RANK_CAPACITY,
         Scalar[DType.uint32],
         address_space = AddressSpace.SHARED,
     ]()
@@ -352,16 +355,20 @@ def radix_topk_identical_kernel(
     # them, rank each against the others under the same total order, and
     # write each to its rank. Distinct keys means distinct ranks, so the
     # permutation is exact and every slot is written exactly once.
-    if tid < k:
-        s_val[tid] = o_val.unsafe_load(tid)
-        s_idx[tid] = o_idx.unsafe_load(tid)
+    var slot = tid
+    while slot < k:
+        s_val[slot] = o_val.unsafe_load(slot)
+        s_idx[slot] = o_idx.unsafe_load(slot)
+        slot += SELECT_BLOCK
     barrier()
-    if tid < k:
-        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+    slot = tid
+    while slot < k:
+        var key_t = composite_key(s_val[slot], s_idx[slot], select_min)
         var rank = 0
         for j in range(k):
             if composite_key(s_val[j], s_idx[j], select_min) < key_t:
                 rank += 1
-        o_val.unsafe_store(rank, s_val[tid])
-        o_idx.unsafe_store(rank, s_idx[tid])
+        o_val.unsafe_store(rank, s_val[slot])
+        o_idx.unsafe_store(rank, s_idx[slot])
+        slot += SELECT_BLOCK
     barrier()

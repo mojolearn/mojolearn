@@ -1,0 +1,44 @@
+{
+  "boundary": "Root-observed guard return status, including cleanup; file-only receipt writer",
+  "command": {
+    "bytes": 234,
+    "file": "byte-full128.command.txt",
+    "sha256": "90bf53d88060a554aed444ad1a229b169b4a5fddaa29eb373ce74476fefedd7a"
+  },
+  "exit_code": 0,
+  "guard_log": {
+    "bytes": 1022,
+    "file": "byte-full128.log",
+    "sha256": "1404be7cb4b2a33016a9bbafcdff0c347558d2ff9a744acbf082fe3e36afdce3"
+  },
+  "guard_terminal": {
+    "cpu_affinity": "0,1",
+    "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0",
+    "guard": "amd-root-serial-v1",
+    "reason": null,
+    "returncode": 0,
+    "telemetry": {
+      "crossing_sample": null,
+      "initial_host_available_bytes": 161856708608,
+      "initial_rss_bytes": 8683520,
+      "initial_vram_bytes": 299687936,
+      "last_elapsed_seconds": 2.012925499000005,
+      "last_host_available_bytes": 160056872960,
+      "last_rss_bytes": 3072077824,
+      "last_vram_bytes": 2740178944,
+      "peak_rss_bytes": 3072077824,
+      "peak_vram_bytes": 2740178944,
+      "samples": 3
+    },
+    "thread_limit": 2,
+    "vram_total_bytes": 274542362624
+  },
+  "job_kind": "capture",
+  "result": {
+    "bytes": 28355,
+    "file": "full128/summary.json",
+    "sha256": "0ddbec01a2a066d0cbb832119fd6a6df8ebbe809e7a586a8c2f3686028880ad3"
+  },
+  "schema": "mojolearn.root-job-receipt.v1",
+  "vendor": "hip"
+}

@@ -26,22 +26,39 @@ MODE="full (device fits)"
 if [ "${1:-}" = "--no-gpu" ]; then
     SMOKE_ARGS="--no-gpu"
     MODE="--no-gpu (import and API only, DEVICE NOT TESTED)"
+    shift
 fi
+[ "$#" -eq 0 ] || { echo "usage: $0 [--no-gpu]" >&2; exit 2; }
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-WHEEL=$(ls "$here"/python/dist/mojolearn-*.whl 2>/dev/null | head -1)
-[ -n "$WHEEL" ] || { echo "no wheel in python/dist; run build_release_wheel.sh" >&2; exit 1; }
+set -- "$here"/python/dist/mojolearn-*.whl
+[ -f "$1" ] || { echo "no wheel in python/dist; run build_release_wheel.sh" >&2; exit 1; }
+[ "$#" -eq 1 ] || { echo "multiple wheels in python/dist; qualification requires exactly one candidate" >&2; exit 1; }
+WHEEL=$1
 echo "wheel: $(basename "$WHEEL")"
 echo "mode:  $MODE"
 
+MODES="${MOJOLEARN_RELEASE_MODES:-fast deterministic identical}"
+set -f
+set -- $MODES
+[ "$#" -gt 0 ] || { echo "no numeric modes requested" >&2; exit 2; }
+for mode do
+    case "$mode" in
+        fast|deterministic|identical) ;;
+        *) echo "unsupported numeric mode: $mode" >&2; exit 2 ;;
+    esac
+done
+
 fails=0
+skips=0
+passed=0
 # Every interpreter at or above the declared floor. Ones that are not
-# installed are SKIPPED and reported as skipped, never silently passed.
+# installed are reported as SKIP, and incomplete coverage fails this gate.
 for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
-    command -v "$py" >/dev/null 2>&1 || { echo "SKIP $py (not installed)"; continue; }
+    command -v "$py" >/dev/null 2>&1 || { echo "SKIP $py (not installed)"; skips=$((skips+1)); continue; }
     tmp=$(mktemp -d)
     if ! "$py" -m venv "$tmp/venv" >/dev/null 2>&1; then
-        echo "SKIP $py (venv creation failed)"; rm -rf "$tmp"; continue
+        echo "SKIP $py (venv creation failed)"; skips=$((skips+1)); rm -rf "$tmp"; continue
     fi
     # --no-cache-dir so a previously built wheel cannot be silently reused.
     if ! "$tmp/venv/bin/pip" install --quiet --no-cache-dir "$WHEEL" >/dev/null 2>&1; then
@@ -58,19 +75,46 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     # the one that was asked for, so a wheel that silently shipped only the
     # fast set fails here rather than on a user's machine.
     okmode=1
+    if [ "${MOJOLEARN_PACKAGE_BYTE_LM:-0}" = 1 ]; then
+        # Native availability witness only; no byte-LM model/learning claim.
+        if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=identical \
+                "$tmp/venv/bin/python" - <<'PYBYTE'
+import pathlib, sys
+import mojolearn
+from mojolearn import _mojolearn_byte_lm as native
+package = pathlib.Path(mojolearn.__file__).resolve().parent
+assert package.is_relative_to(pathlib.Path(sys.prefix).resolve())
+assert pathlib.Path(native.__file__).resolve() == package / 'identical/_mojolearn_byte_lm.so'
+assert not (package / '_mojolearn_byte_lm.so').exists()
+assert not (package / 'deterministic/_mojolearn_byte_lm.so').exists()
+assert native.byte_lm_numeric_mode() == 1 and native.byte_lm_vendor() == 'metal'
+assert native.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+print('Byte LM IDENTICAL-only native available; numerical training qualification separate')
+PYBYTE
+        ); then :; else
+            echo "FAIL $py: installed byte LM native availability"; okmode=0
+        fi
+    fi
     # The same tier list the wheel was built with, so a deliberately two-tier
     # wheel is not failed for lacking a third. MOJOLEARN_RELEASE_MODES is what
     # build_release_wheel.sh reads; keep them set the same for one release.
-    for mode in ${MOJOLEARN_RELEASE_MODES:-fast deterministic identical}; do
+    for mode in $MODES; do
         if out=$(cd "$tmp" && MOJOLEARN_NUMERIC_MODE=$mode "$tmp/venv/bin/python" "$here/packaging/macos/smoke.py" $SMOKE_ARGS 2>&1); then
-            echo "PASS $py [$mode]  $out"
+            printf 'PASS %s [%s]  %s\n' "$py" "$mode" "$out"
         else
-            echo "FAIL $py [$mode]"; echo "$out"; okmode=0
+            printf 'FAIL %s [%s]\n%s\n' "$py" "$mode" "$out"; okmode=0
         fi
     done
-    [ "$okmode" -eq 1 ] || fails=$((fails+1))
+    if [ "$okmode" -eq 1 ]; then
+        passed=$((passed+1))
+    else
+        fails=$((fails+1))
+    fi
     rm -rf "$tmp"
 done
 
-[ "$fails" -eq 0 ] || { echo "$fails interpreter(s) failed"; exit 1; }
-echo "all interpreters passed"
+[ "$fails" -eq 0 ] && [ "$skips" -eq 0 ] && [ "$passed" -eq 5 ] || {
+    echo "incomplete qualification: $passed interpreter(s) passed, $fails failed, $skips skipped"
+    exit 1
+}
+echo "all 5 interpreters passed ($MODE)"

@@ -1,0 +1,643 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Two-block FP32 byte LM orchestration. AUTHORED, UNCOMPILED, UNQUALIFIED.
+
+Fixed B2/L32/DM32/H4/KV2/FF64/V256, 20 tensors, 34,944 parameters.
+Every numerical operation is an existing embedding/GEMM/Llama/loss/AdamW op.
+Caller supplies actual parameters, moments, flags, completed step and token IDs.
+No generated data, hidden initialization, tokenizer, performance or learning claim.
+"""
+from std.memory import bitcast
+from max.gpu.host import DeviceBuffer, DeviceContext
+from core.identity_trace import IdentityTrace
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.vendor import COMPILED_VENDOR
+from training.checkpoint import Checkpoint
+from training.checks.train_loop import (
+    _zeros, _zeros_i32, _upload, _ones, _copy_into, download_f32,
+)
+from gemm.checks.gemm_identical import (
+    ANY_SABOTAGE as GEMM_SABOTAGE, identical_gemm_into,
+    identical_gemm_workspace_max_floats,
+)
+from gemm.checks.gemm_backward import (
+    ANY_BWD_SABOTAGE as GEMM_BWD_SABOTAGE, identical_gemm_backward_a_into,
+    identical_gemm_backward_b_into, identical_gemm_backward_workspace_max_floats,
+)
+from gemm.checks.gemm_oracle import OP_NT
+from embedding.checks.embedding_identical import (
+    ANY_EMB_SABOTAGE, emb_run_scratch_ints, identical_embedding_forward_into,
+    identical_embedding_backward_into,
+)
+from embedding.checks.embedding_oracle import EmbConfig
+from training.checks.loss import (
+    ANY_LOSS_SABOTAGE, identical_ce_forward_into, identical_ce_backward_into,
+    identical_ce_ones_floats, identical_ce_workspace_max_floats,
+)
+from training.checks.loss_oracle import REDUCTION_MEAN, CeConfig
+from training.checks.optimizer import (
+    ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
+    identical_optimizer_workspace_floats,
+)
+from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
+from transformer.checks.transformer_backward import (
+    BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward,
+)
+from transformer.impl.transformers.models.llama.modeling_llama import (
+    BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
+    LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward,
+)
+
+comptime BYTE_B = 2
+comptime BYTE_L = 32
+comptime BYTE_DM = 32
+comptime BYTE_V = 256
+comptime BYTE_J = 20
+comptime BYTE_N_TOTAL = 34944
+comptime BYTE_PROFILE = "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1"
+
+
+def byte_dims() -> LlamaDims:
+    return LlamaDims(32, 4, 2, 8, 64)
+
+
+def byte_param_count(j: Int) raises -> Int:
+    if j < 0 or j >= BYTE_J:
+        raise Error("byte LM: parameter index out of range")
+    if j == 0 or j == 19:
+        return 8192
+    var local = (j - 1) % 9
+    if local == 0 or local == 5:
+        return 32
+    if local == 1 or local == 4:
+        return 1024
+    if local == 2 or local == 3:
+        return 512
+    return 2048
+
+
+def byte_param_name(j: Int) raises -> String:
+    if j < 0 or j >= BYTE_J:
+        raise Error("byte LM: parameter index out of range")
+    if j == 0:
+        return "embed"
+    if j == 19:
+        return "lm_head"
+    var names = List[String]()
+    names.append("norm1_w")
+    names.append("w_q")
+    names.append("w_k")
+    names.append("w_v")
+    names.append("w_o")
+    names.append("norm2_w")
+    names.append("w_gate")
+    names.append("w_up")
+    names.append("w_down")
+    return String("block") + String((j - 1) // 9) + "." + names[(j - 1) % 9]
+
+
+def byte_offsets() raises -> List[Int]:
+    var result = List[Int]()
+    result.append(0)
+    var offset = 0
+    for j in range(BYTE_J):
+        offset += byte_param_count(j)
+        result.append(offset)
+    if offset != BYTE_N_TOTAL:
+        raise Error("byte LM: registry count changed")
+    return result^
+
+
+def byte_names() raises -> List[String]:
+    var result = List[String]()
+    for j in range(BYTE_J):
+        result.append(byte_param_name(j))
+    return result^
+
+
+def _require_finite(values: List[Float32], name: String) raises:
+    for i in range(len(values)):
+        if (bitcast[DType.uint32](values[i]) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            raise Error("byte LM: nonfinite " + name + " at " + String(i))
+
+
+def byte_validate_state(param: List[Float32], m: List[Float32], v: List[Float32],
+                        flags: List[Bool], completed: Int) raises:
+    if len(param) != BYTE_N_TOTAL or len(m) != BYTE_N_TOTAL or len(v) != BYTE_N_TOTAL or len(flags) != BYTE_J:
+        raise Error("byte LM: state length differs from canonical registry")
+    if completed < 0 or completed >= 1000000:
+        raise Error("byte LM: completed step must be in [0,1000000)")
+    _require_finite(param, "parameters")
+    _require_finite(m, "first moments")
+    _require_finite(v, "second moments")
+    for i in range(BYTE_N_TOTAL):
+        if v[i] < Float32(0):
+            raise Error("byte LM: negative second moment")
+
+
+def byte_validate_optimizer(cfg: OptimizerConfig) raises:
+    var scalars = List[Float32]()
+    scalars.append(cfg.lr)
+    scalars.append(cfg.beta1)
+    scalars.append(cfg.beta2)
+    scalars.append(cfg.eps)
+    scalars.append(cfg.weight_decay)
+    scalars.append(cfg.momentum)
+    scalars.append(cfg.dampening)
+    scalars.append(cfg.max_norm)
+    _require_finite(scalars, "optimizer configuration")
+    if (cfg.kind != OPT_ADAMW or cfg.lr <= 0 or cfg.eps <= 0
+        or cfg.beta1 < 0 or cfg.beta1 >= 1 or cfg.beta2 < 0 or cfg.beta2 >= 1
+        or cfg.weight_decay < 0 or cfg.max_norm != 0 or cfg.momentum != 0
+        or cfg.dampening != 0 or cfg.nesterov):
+        raise Error("byte LM: requires positive-lr AdamW, finite legal betas/eps, no clipping/SGD options")
+
+
+def byte_validate_tokens(ids: List[Int32]) raises:
+    if len(ids) != BYTE_B * (BYTE_L + 1):
+        raise Error("byte LM: expected exactly 66 token IDs, row-major [2,33]")
+    for i in range(len(ids)):
+        if ids[i] < 0 or ids[i] >= BYTE_V:
+            raise Error("byte LM: token ID outside [0,256)")
+
+
+def _require_profile() raises:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("byte LM: initial profile requires IDENTICAL")
+    comptime if (GEMM_SABOTAGE or GEMM_BWD_SABOTAGE or ANY_EMB_SABOTAGE
+                 or ANY_LOSS_SABOTAGE or OPT_SABOTAGE or BWD_ANY_SABOTAGE
+                 or BLOCK_ANY_SABOTAGE):
+        raise Error("byte LM: numerical sabotage build refused")
+
+
+struct ByteBuffers(Movable):
+    """Fixed-shape buffers; flat arrays are authoritative, weights are views."""
+    var n_total: Int
+    var offsets: List[Int]
+
+    var param: DeviceBuffer[DType.float32]
+    var grad: DeviceBuffer[DType.float32]
+    var m_state: DeviceBuffer[DType.float32]
+    var v_state: DeviceBuffer[DType.float32]
+    var denom_out: DeviceBuffer[DType.float32]
+    var q_out: DeviceBuffer[DType.float32]
+    var sumsq: DeviceBuffer[DType.float32]
+    var norms: DeviceBuffer[DType.float32]
+    var total_cell: DeviceBuffer[DType.float32]
+    var out2: DeviceBuffer[DType.float32]
+    var opt_ws: DeviceBuffer[DType.float32]
+    var sab_partials: DeviceBuffer[DType.float32]
+
+    var emb_w: DeviceBuffer[DType.float32]  # [V, d_model]
+    var lm_w: DeviceBuffer[DType.float32]  # [V, d_model]
+    var dw_emb: DeviceBuffer[DType.float32]  # [V, d_model]
+    var dw_lm: DeviceBuffer[DType.float32]  # [V, d_model]
+
+    var ids: DeviceBuffer[DType.int32]  # [M]
+    var targets: DeviceBuffer[DType.int32]  # [M]
+
+    var x: DeviceBuffer[DType.float32]  # [M, d_model]  block input
+    var logits: DeviceBuffer[DType.float32]  # [M, V]
+    var d_h: DeviceBuffer[DType.float32]  # [M, d_model]
+
+    var ce_max: DeviceBuffer[DType.float32]
+    var ce_shift: DeviceBuffer[DType.float32]
+    var ce_expo: DeviceBuffer[DType.float32]
+    var ce_denom: DeviceBuffer[DType.float32]
+    var ce_logdenom: DeviceBuffer[DType.float32]
+    var ce_logp_target: DeviceBuffer[DType.float32]
+    var ce_nll: DeviceBuffer[DType.float32]
+    var ce_logp: DeviceBuffer[DType.float32]
+    var ce_logp_sum: DeviceBuffer[DType.float32]
+    var ce_smooth: DeviceBuffer[DType.float32]
+    var ce_row: DeviceBuffer[DType.float32]
+    var ce_total: DeviceBuffer[DType.float32]
+    var ce_loss: DeviceBuffer[DType.float32]
+    var ce_weights: DeviceBuffer[DType.float32]
+    var ce_dlogits: DeviceBuffer[DType.float32]
+    var ce_ones: DeviceBuffer[DType.float32]
+    var ce_ws: DeviceBuffer[DType.float32]
+
+    var head_ws: DeviceBuffer[DType.float32]
+    var head_bwd_ws: DeviceBuffer[DType.float32]
+
+    var emb_counts: DeviceBuffer[DType.int32]
+    var emb_run_begin: DeviceBuffer[DType.int32]
+    var emb_perm: DeviceBuffer[DType.int32]
+
+    var buf_initialized: List[Bool]
+
+    def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
+                 initial_m: List[Float32], initial_v: List[Float32], flags: List[Bool]) raises:
+        comptime M = BYTE_B * BYTE_L
+        comptime DM = BYTE_DM
+        comptime V = BYTE_V
+
+        self.offsets = byte_offsets()
+        self.n_total = BYTE_N_TOTAL
+        var n = self.n_total
+
+        self.param = _upload(ctx, initial_params)
+        self.grad = _zeros(ctx, n)
+        self.m_state = _upload(ctx, initial_m)
+        self.v_state = _upload(ctx, initial_v)
+        # Recording kernels write one intermediate per parameter.
+        var record_n = 1
+        comptime if OPT_RECORD_INTERMEDIATES:
+            record_n = BYTE_N_TOTAL
+        self.denom_out = _zeros(ctx, record_n)
+        self.q_out = _zeros(ctx, record_n)
+        self.sumsq = _zeros(ctx, BYTE_J)
+        self.norms = _zeros(ctx, BYTE_J)
+        self.total_cell = _zeros(ctx, 1)
+        self.out2 = _zeros(ctx, 2)
+        self.opt_ws = _zeros(
+            ctx, identical_optimizer_workspace_floats(self.offsets)
+        )
+        self.sab_partials = _zeros(ctx, SAB_CHUNKS)
+
+        self.emb_w = _zeros(ctx, V * DM)
+        self.lm_w = _zeros(ctx, V * DM)
+        self.dw_emb = _zeros(ctx, V * DM)
+        self.dw_lm = _zeros(ctx, V * DM)
+
+        self.ids = _zeros_i32(ctx, M)
+        self.targets = _zeros_i32(ctx, M)
+
+        self.x = _zeros(ctx, M * DM)
+        self.logits = _zeros(ctx, M * V)
+        self.d_h = _zeros(ctx, M * DM)
+
+        self.ce_max = _zeros(ctx, M)
+        self.ce_shift = _zeros(ctx, M * V)
+        self.ce_expo = _zeros(ctx, M * V)
+        self.ce_denom = _zeros(ctx, M)
+        self.ce_logdenom = _zeros(ctx, M)
+        self.ce_logp_target = _zeros(ctx, M)
+        self.ce_nll = _zeros(ctx, M)
+        self.ce_logp = _zeros(ctx, 1)
+        self.ce_logp_sum = _zeros(ctx, 1)
+        self.ce_smooth = _zeros(ctx, 1)
+        self.ce_row = _zeros(ctx, M)
+        self.ce_total = _zeros(ctx, 1)
+        self.ce_loss = _zeros(ctx, 1)
+        self.ce_weights = _zeros(ctx, M * V)
+        self.ce_dlogits = _zeros(ctx, M * V)
+        self.ce_ones = _ones(ctx, identical_ce_ones_floats(M, V))
+        self.ce_ws = _zeros(
+            ctx, identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN)
+        )
+
+        self.head_ws = _zeros(
+            ctx, identical_gemm_workspace_max_floats(M, V, DM)
+        )
+        self.head_bwd_ws = _zeros(
+            ctx,
+            identical_gemm_backward_workspace_max_floats(
+                OP_NT, M, V, DM, False
+            ),
+        )
+
+        var scratch = emb_run_scratch_ints(V, M)
+        if scratch != V + (V + 1) + M:
+            raise Error(
+                String("byte LM: emb_run_scratch_ints says ")
+                + String(scratch)
+                + " ints and counts+run_begin+perm is "
+                + String(V + (V + 1) + M)
+                + ". The embedding lane changed its run structure and this"
+                + " harness would hand it three buffers of the wrong size."
+            )
+        self.emb_counts = _zeros_i32(ctx, V)
+        self.emb_run_begin = _zeros_i32(ctx, V + 1)
+        self.emb_perm = _zeros_i32(ctx, M)
+
+        self.buf_initialized = flags.copy()
+
+
+
+
+def _param_slice(values: List[Float32], j: Int) raises -> List[Float32]:
+    var offsets = byte_offsets()
+    var result = List[Float32]()
+    for i in range(offsets[j], offsets[j + 1]):
+        result.append(values[i])
+    return result^
+
+
+def _block_weights(ctx: DeviceContext, params: List[Float32], block: Int) raises -> LlamaDeviceWeights:
+    var base = 1 + 9 * block
+    return LlamaDeviceWeights(ctx, byte_dims(), Float32(1e-6),
+        _param_slice(params, base), _param_slice(params, base + 5),
+        _param_slice(params, base + 1), _param_slice(params, base + 2),
+        _param_slice(params, base + 3), _param_slice(params, base + 4),
+        _param_slice(params, base + 6), _param_slice(params, base + 7),
+        _param_slice(params, base + 8))
+
+
+def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWeights, block: Int) raises:
+    var base = 1 + 9 * block
+    var o = tb.offsets.copy()
+    _copy_into(ctx, w.norm1_w, tb.param, 0, o[base], 32)
+    _copy_into(ctx, w.w_q, tb.param, 0, o[base + 1], 1024)
+    _copy_into(ctx, w.w_k, tb.param, 0, o[base + 2], 512)
+    _copy_into(ctx, w.w_v, tb.param, 0, o[base + 3], 512)
+    _copy_into(ctx, w.w_o, tb.param, 0, o[base + 4], 1024)
+    _copy_into(ctx, w.norm2_w, tb.param, 0, o[base + 5], 32)
+    _copy_into(ctx, w.w_gate, tb.param, 0, o[base + 6], 2048)
+    _copy_into(ctx, w.w_up, tb.param, 0, o[base + 7], 2048)
+    _copy_into(ctx, w.w_down, tb.param, 0, o[base + 8], 2048)
+    ctx.synchronize()
+
+
+def _pack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut bst: LlamaBackwardStages, block: Int) raises:
+    var base = 1 + 9 * block
+    var o = tb.offsets.copy()
+    _copy_into(ctx, tb.grad, bst.dw_norm1, o[base], 0, 32)
+    _copy_into(ctx, tb.grad, bst.dw_q, o[base + 1], 0, 1024)
+    _copy_into(ctx, tb.grad, bst.dw_k, o[base + 2], 0, 512)
+    _copy_into(ctx, tb.grad, bst.dw_v, o[base + 3], 0, 512)
+    _copy_into(ctx, tb.grad, bst.dw_o, o[base + 4], 0, 1024)
+    _copy_into(ctx, tb.grad, bst.dw_norm2, o[base + 5], 0, 32)
+    _copy_into(ctx, tb.grad, bst.dw_gate, o[base + 6], 0, 2048)
+    _copy_into(ctx, tb.grad, bst.dw_up, o[base + 7], 0, 2048)
+    _copy_into(ctx, tb.grad, bst.dw_down, o[base + 8], 0, 2048)
+    ctx.synchronize()
+
+
+struct ByteTrainer(Movable):
+    """Owned device state. Use only with the same DeviceContext that created it.
+
+    Do not mutate fields externally. A failed numerical step poisons this object;
+    reconstruct from the last successful retained state before continuing.
+    """
+    var buffers: ByteBuffers
+    var weights0: LlamaDeviceWeights
+    var weights1: LlamaDeviceWeights
+    var rope: LlamaRopeTable
+    var forward0: LlamaDeviceStages
+    var forward1: LlamaDeviceStages
+    var backward0: LlamaBackwardStages
+    var backward1: LlamaBackwardStages
+    var optimizer: OptimizerConfig
+    var completed_steps: Int
+    var healthy: Bool
+
+    def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
+                 initial_m: List[Float32], initial_v: List[Float32],
+                 flags: List[Bool], completed_steps: Int, optimizer: OptimizerConfig) raises:
+        # All supplied host state/configuration admitted before first allocation.
+        _require_profile()
+        byte_validate_state(initial_params, initial_m, initial_v, flags, completed_steps)
+        byte_validate_optimizer(optimizer)
+        self.optimizer = optimizer.copy()
+        self.completed_steps = completed_steps
+        self.healthy = True
+        self.buffers = ByteBuffers(ctx, initial_params, initial_m, initial_v, flags)
+        self.weights0 = _block_weights(ctx, initial_params, 0)
+        self.weights1 = _block_weights(ctx, initial_params, 1)
+        self.rope = LlamaRopeTable(ctx, byte_dims(), Float32(10000), BYTE_L)
+        self.forward0 = LlamaDeviceStages(ctx, BYTE_B, BYTE_L, BYTE_L, byte_dims())
+        self.forward1 = LlamaDeviceStages(ctx, BYTE_B, BYTE_L, BYTE_L, byte_dims())
+        self.backward0 = LlamaBackwardStages(ctx, BYTE_B, BYTE_L, BYTE_L, byte_dims())
+        self.backward1 = LlamaBackwardStages(ctx, BYTE_B, BYTE_L, BYTE_L, byte_dims())
+        ctx.synchronize()
+
+
+@fieldwise_init
+struct ByteStepCapture(Movable):
+    """Host-owned full step. Gradients/loss are BEFORE the update.
+
+    Loss is the mean of 64 next-byte cross-entropies: inputs [:,:32], targets
+    [:,1:33]. No ignored positions, padding, label smoothing or batch splitting.
+    All arrays use canonical byte_offsets()/byte_names() order; FP32 raw bits
+    must be retained, never converted through decimal text by an adapter.
+    """
+    var token_ids: List[Int32]
+    var before_params: List[Float32]
+    var before_m: List[Float32]
+    var before_v: List[Float32]
+    var before_flags: List[Bool]
+    var gradients: List[Float32]
+    var after_params: List[Float32]
+    var after_m: List[Float32]
+    var after_v: List[Float32]
+    var after_flags: List[Bool]
+    var loss: Float32
+    var completed_steps: Int
+    var optimizer: OptimizerConfig
+    var profile: String
+    var numeric_mode: String
+    var vendor: String
+
+
+def byte_train_step(ctx: DeviceContext, mut trainer: ByteTrainer,
+                    token_ids: List[Int32]) raises -> ByteStepCapture:
+    """One supplied-batch step; reuses every existing numerical primitive."""
+    _require_profile()
+    byte_validate_tokens(token_ids)
+    byte_validate_optimizer(trainer.optimizer)
+    if not trainer.healthy:
+        raise Error("byte LM: previous step failed; restore a retained checkpoint")
+    if trainer.completed_steps < 0 or trainer.completed_steps >= 999999:
+        raise Error("byte LM: step bound reached")
+    # Device-state validation requires readback. It precedes all numerical work
+    # and all writes; downloads themselves are the only device operations here.
+    var before_p = download_f32(ctx, trainer.buffers.param, BYTE_N_TOTAL)
+    var before_m = download_f32(ctx, trainer.buffers.m_state, BYTE_N_TOTAL)
+    var before_v = download_f32(ctx, trainer.buffers.v_state, BYTE_N_TOTAL)
+    var before_flags = trainer.buffers.buf_initialized.copy()
+    byte_validate_state(before_p, before_m, before_v, before_flags, trainer.completed_steps)
+    trainer.healthy = False
+    var capture = _byte_step_admitted(ctx, trainer, token_ids, before_p, before_m, before_v, before_flags)
+    trainer.healthy = True
+    return capture^
+
+
+def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
+                       ids: List[Int32], mut kv0: LlamaKVCache,
+                       mut kv1: LlamaKVCache, mut trace: IdentityTrace) raises -> Float32:
+    """Shared forward only. Authoritative params/m/v/flags/t are read-only."""
+    comptime M = BYTE_B * BYTE_L
+    var inputs = List[Int32]()
+    var targets = List[Int32]()
+    for b in range(BYTE_B):
+        for l in range(BYTE_L):
+            inputs.append(ids[b * (BYTE_L + 1) + l])
+            targets.append(ids[b * (BYTE_L + 1) + l + 1])
+    var hi = ctx.enqueue_create_host_buffer[DType.int32](M)
+    var ht = ctx.enqueue_create_host_buffer[DType.int32](M)
+    ctx.synchronize()
+    for i in range(M):
+        hi.unsafe_ptr().unsafe_store(i, inputs[i])
+        ht.unsafe_ptr().unsafe_store(i, targets[i])
+    ctx.enqueue_copy(dst_buf=tr.buffers.ids, src_ptr=hi.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=tr.buffers.targets, src_ptr=ht.unsafe_ptr())
+    ctx.synchronize()
+    _ = hi
+    _ = ht
+    _unpack_block(ctx, tr.buffers, tr.weights0, 0)
+    _unpack_block(ctx, tr.buffers, tr.weights1, 1)
+    _copy_into(ctx, tr.buffers.emb_w, tr.buffers.param, 0, 0, 8192)
+    _copy_into(ctx, tr.buffers.lm_w, tr.buffers.param, 0, tr.buffers.offsets[19], 8192)
+    ctx.synchronize()
+    var emb = EmbConfig.llama(BYTE_V, BYTE_DM)
+    var ce = CeConfig.causal_lm(BYTE_V)
+    identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
+    ctx.synchronize()
+    llama_decoder_layer_forward(ctx, tr.forward0, kv0, tr.rope, tr.weights0,
+        tr.buffers.x, BYTE_B, BYTE_L, 0, trace, "byte.block0.forward")
+    ctx.synchronize()
+    llama_decoder_layer_forward(ctx, tr.forward1, kv1, tr.rope, tr.weights1,
+        tr.forward0.residual2, BYTE_B, BYTE_L, 0, trace, "byte.block1.forward")
+    ctx.synchronize()
+    identical_gemm_into(ctx, tr.buffers.logits, tr.forward1.residual2,
+        tr.buffers.lm_w, tr.buffers.head_ws, M, BYTE_V, BYTE_DM, OP_NT)
+    ctx.synchronize()
+    identical_ce_forward_into(ctx, tr.buffers.ce_max, tr.buffers.ce_shift,
+        tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logdenom,
+        tr.buffers.ce_logp_target, tr.buffers.ce_nll, tr.buffers.ce_logp,
+        tr.buffers.ce_logp_sum, tr.buffers.ce_smooth, tr.buffers.ce_row,
+        tr.buffers.ce_total, tr.buffers.ce_loss, tr.buffers.logits,
+        tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce)
+    ctx.synchronize()
+    var losses = download_f32(ctx, tr.buffers.ce_loss, 1)
+    _require_finite(losses, "loss")
+    return losses[0]
+
+
+def _byte_step_admitted(ctx: DeviceContext, mut tr: ByteTrainer,
+                        ids: List[Int32], before_p: List[Float32],
+                        before_m: List[Float32], before_v: List[Float32],
+                        before_flags: List[Bool]) raises -> ByteStepCapture:
+    comptime M = BYTE_B * BYTE_L
+    var emb = EmbConfig.llama(BYTE_V, BYTE_DM)
+    var ce = CeConfig.causal_lm(BYTE_V)
+    var trace = IdentityTrace.disabled()
+    var kv0 = LlamaKVCache(ctx, BYTE_B, byte_dims(), BYTE_L)
+    var kv1 = LlamaKVCache(ctx, BYTE_B, byte_dims(), BYTE_L)
+    var loss = _byte_forward_loss(ctx, tr, ids, kv0, kv1, trace)
+    identical_ce_backward_into(ctx, tr.buffers.ce_weights, tr.buffers.ce_dlogits,
+        tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logp,
+        tr.buffers.targets, M, M, ce)
+    ctx.synchronize()
+    identical_gemm_backward_a_into(ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
+        tr.buffers.lm_w, tr.buffers.head_bwd_ws, M, BYTE_V, BYTE_DM, OP_NT)
+    identical_gemm_backward_b_into(ctx, tr.buffers.dw_lm, tr.buffers.ce_dlogits,
+        tr.forward1.residual2, tr.buffers.head_bwd_ws, M, BYTE_V, BYTE_DM, OP_NT)
+    ctx.synchronize()
+    var head_gradient = download_f32(ctx, tr.buffers.d_h, M * BYTE_DM)
+    llama_decoder_layer_backward(ctx, tr.backward1, tr.forward1, tr.weights1,
+        tr.rope.cos, tr.rope.sin, tr.forward0.residual2, head_gradient,
+        BYTE_B, BYTE_L, 0, trace, "byte.block1.backward")
+    ctx.synchronize()
+    var middle_gradient = download_f32(ctx, tr.backward1.d_x, M * BYTE_DM)
+    llama_decoder_layer_backward(ctx, tr.backward0, tr.forward0, tr.weights0,
+        tr.rope.cos, tr.rope.sin, tr.buffers.x, middle_gradient,
+        BYTE_B, BYTE_L, 0, trace, "byte.block0.backward")
+    ctx.synchronize()
+    identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward0.d_x,
+        tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
+        tr.buffers.emb_perm, M, emb)
+    ctx.synchronize()
+    _pack_block(ctx, tr.buffers, tr.backward0, 0)
+    _pack_block(ctx, tr.buffers, tr.backward1, 1)
+    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, 8192)
+    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[19], 0, 8192)
+    ctx.synchronize()
+    # Capture actual raw pre-update gradients before ANY optimizer writes.
+    var grads = download_f32(ctx, tr.buffers.grad, BYTE_N_TOTAL)
+    _require_finite(grads, "gradients")
+    var next_step = tr.completed_steps + 1
+    identical_optimizer_step(ctx, tr.buffers.param, tr.buffers.grad,
+        tr.buffers.m_state, tr.buffers.v_state, tr.buffers.denom_out,
+        tr.buffers.q_out, tr.buffers.sumsq, tr.buffers.norms,
+        tr.buffers.total_cell, tr.buffers.out2, tr.buffers.opt_ws,
+        tr.buffers.sab_partials, tr.buffers.buf_initialized, tr.buffers.offsets,
+        tr.optimizer, next_step)
+    var after_p = download_f32(ctx, tr.buffers.param, BYTE_N_TOTAL)
+    var after_m = download_f32(ctx, tr.buffers.m_state, BYTE_N_TOTAL)
+    var after_v = download_f32(ctx, tr.buffers.v_state, BYTE_N_TOTAL)
+    var after_flags = tr.buffers.buf_initialized.copy()
+    byte_validate_state(after_p, after_m, after_v, after_flags, next_step)
+    ctx.synchronize()
+    tr.completed_steps = next_step
+    # Explicit last uses retain all async operands through completion.
+    _ = kv0^
+    _ = kv1^
+    _ = head_gradient
+    _ = middle_gradient
+    _ = trace
+    return ByteStepCapture(ids.copy(), before_p.copy(), before_m.copy(),
+        before_v.copy(), before_flags.copy(), grads^, after_p^, after_m^,
+        after_v^, after_flags^, loss, next_step, tr.optimizer.copy(),
+        String(BYTE_PROFILE), "identical", String(COMPILED_VENDOR))
+
+
+def byte_checkpoint(capture: ByteStepCapture, seed: UInt64,
+                    steps_planned: Int) raises -> Checkpoint:
+    """Encode the successful post-step state using the unchanged v1 codec.
+
+    Seed is descriptive data-schedule metadata supplied by caller, not hidden
+    initialization. A required sidecar binds profile, raw corpus bytes, token
+    schedule/cursor, numeric mode, optimizer bits, source and checkpoint hash.
+    The codec alone cannot admit a resume of this two-block architecture.
+    """
+    if (capture.profile != String(BYTE_PROFILE) or capture.numeric_mode != "identical"
+        or steps_planned < capture.completed_steps or steps_planned >= 1000000):
+        raise Error("byte LM: checkpoint profile/planned steps mismatch")
+    byte_validate_state(capture.after_params, capture.after_m, capture.after_v,
+        capture.after_flags, capture.completed_steps)
+    byte_validate_optimizer(capture.optimizer)
+    var ck = Checkpoint()
+    ck.param = capture.after_params.copy()
+    ck.m_state = capture.after_m.copy()
+    ck.v_state = capture.after_v.copy()
+    ck.buf_initialized = capture.after_flags.copy()
+    ck.offsets = byte_offsets()
+    ck.names = byte_names()
+    ck.t = capture.completed_steps
+    ck.seed = seed
+    ck.opt_kind = capture.optimizer.kind
+    ck.lr = capture.optimizer.lr
+    ck.beta1 = capture.optimizer.beta1
+    ck.beta2 = capture.optimizer.beta2
+    ck.eps = capture.optimizer.eps
+    ck.weight_decay = capture.optimizer.weight_decay
+    ck.momentum = capture.optimizer.momentum
+    ck.dampening = capture.optimizer.dampening
+    ck.nesterov = capture.optimizer.nesterov
+    ck.max_norm = capture.optimizer.max_norm
+    ck.steps_planned = steps_planned
+    ck.arm = 0
+    ck.validate()
+    return ck^
+
+
+def byte_eval_loss(ctx: DeviceContext, mut trainer: ByteTrainer,
+                   token_ids: List[Int32]) raises -> Float32:
+    """Forward-only mean64target loss. No backward or optimizer invocation.
+
+    Authoritative parameters/moments/flags/completed_steps are unchanged.
+    Scratch, weight views and the temporary health guard may change. Root must
+    retain independent before/after state evidence when qualifying this promise.
+    """
+    _require_profile()
+    byte_validate_tokens(token_ids)
+    byte_validate_optimizer(trainer.optimizer)
+    if not trainer.healthy:
+        raise Error("byte LM: previous operation failed; restore retained state")
+    var p = download_f32(ctx, trainer.buffers.param, BYTE_N_TOTAL)
+    var m = download_f32(ctx, trainer.buffers.m_state, BYTE_N_TOTAL)
+    var v = download_f32(ctx, trainer.buffers.v_state, BYTE_N_TOTAL)
+    byte_validate_state(p, m, v, trainer.buffers.buf_initialized, trainer.completed_steps)
+    trainer.healthy = False
+    var trace = IdentityTrace.disabled()
+    var kv0 = LlamaKVCache(ctx, BYTE_B, byte_dims(), BYTE_L)
+    var kv1 = LlamaKVCache(ctx, BYTE_B, byte_dims(), BYTE_L)
+    var loss = _byte_forward_loss(ctx, trainer, token_ids, kv0, kv1, trace)
+    ctx.synchronize()
+    _ = kv0^
+    _ = kv1^
+    _ = trace
+    trainer.healthy = True
+    return loss

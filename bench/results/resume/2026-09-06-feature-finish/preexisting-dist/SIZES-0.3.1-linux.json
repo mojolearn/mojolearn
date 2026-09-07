@@ -1,0 +1,36 @@
+{
+  "wheel": "python/dist/mojolearn-0.3.1-py3-none-linux_x86_64.whl",
+  "compressed_bytes": 60810923,
+  "compressed_mb": 60.81,
+  "pypi_limit_bytes": 104857600,
+  "over_limit": false,
+  "libs_layout": "shared mojolearn/.libs",
+  "sets": {
+    "cuda/sm_80": {
+      "extensions_bytes": 65470750,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "cuda/sm_90a": {
+      "extensions_bytes": 65483038,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "hip/gfx942": {
+      "extensions_bytes": 42233310,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "hip/gfx1100": {
+      "extensions_bytes": 41524142,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "hip/gfx90a": {
+      "extensions_bytes": 42347998,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    }
+  },
+  "tag": "py3-none-linux_x86_64"
+}

@@ -1,0 +1,9 @@
+{"completed_steps": 16, "loss": 3.591373920440674}
+{"completed_steps": 32, "loss": 3.463036060333252}
+{"completed_steps": 48, "loss": 3.0923633575439453}
+{"completed_steps": 64, "loss": 3.2663369178771973}
+{"completed_steps": 80, "loss": 2.903602123260498}
+{"completed_steps": 96, "loss": 2.8806047439575195}
+{"completed_steps": 112, "loss": 2.8825793266296387}
+{"completed_steps": 128, "loss": 2.9659969806671143}
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0", "vram_total_bytes": 274542362624, "telemetry": {"initial_vram_bytes": 299687936, "peak_vram_bytes": 2740178944, "last_vram_bytes": 2740178944, "initial_rss_bytes": 8683520, "peak_rss_bytes": 3072077824, "last_rss_bytes": 3072077824, "initial_host_available_bytes": 161856708608, "last_host_available_bytes": 160056872960, "samples": 3, "last_elapsed_seconds": 2.012925499000005, "crossing_sample": null}, "returncode": 0}

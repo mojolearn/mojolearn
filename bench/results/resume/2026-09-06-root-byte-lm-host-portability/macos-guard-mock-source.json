@@ -1,0 +1,11 @@
+{
+  "scope": "Root stdlib mocks only; no OS telemetry or child model launched",
+  "thread_limit": 2,
+  "deadline_seconds": 30,
+  "tests_passed": 9,
+  "source_sha256": {
+    "tools/macos_serial_guard.py": "80700a9bac30dfee9e8dd7743ae8d1e0d159e948f4da17a49b289e350ce09a72",
+    "tools/test_macos_serial_guard.py": "79243e95d65c4fad47858eee9f898e0e400afc110823183d8ed27bf01e60dc05",
+    "docs/MACOS_TINY_JOB_GUARD.md": "aa149ead8192d20f9f3fd179016bee1f908f900640f0e7b99ae603bb2df3b2e9"
+  }
+}

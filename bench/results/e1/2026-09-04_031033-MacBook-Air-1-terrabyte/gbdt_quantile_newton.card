@@ -1,0 +1,4 @@
+# mojolearn train(): borders + SymmetricTree fit
+# format: mojolearn-identity-trace v1
+0	borders.counts	i32	24	fb3d9c03377a6ca5
+1	borders.values	f32	3072	c73ad8e13fb91c30

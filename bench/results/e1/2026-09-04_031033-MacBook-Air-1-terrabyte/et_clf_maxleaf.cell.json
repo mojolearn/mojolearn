@@ -1,0 +1,13 @@
+{
+  "card": "et_clf_maxleaf.card",
+  "kind": "et_clf",
+  "model": "f70c64a69cee098f731580560ce6d5a59f67df9962a8d7e8925af7d7ec8f09cc",
+  "predictions": "ec0026a238297f29db3a7a09be1e9a63d64dc49b0b3892500d0716b09d0a68df",
+  "seconds": 3.64,
+  "spec": {
+    "max_depth": 8,
+    "max_leaf_nodes": 64,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

@@ -1,0 +1,9 @@
+mamba-api-identical	0
+mamba-api-fast	1
+mamba2-native-dump	0
+mamba3-native-dump	0
+mamba23-backward	0
+build-gbdt-fast	0
+gbdt-boundary-fast	0
+compare-gbdt	124
+nan-forbidden	1

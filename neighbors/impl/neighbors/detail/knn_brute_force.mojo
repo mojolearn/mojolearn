@@ -93,6 +93,7 @@ from neighbors.checks.pinned_distance_tile import (
 )
 from neighbors.checks.select_radix_identical import (
     radix_topk_identical_kernel,
+    IDENTICAL_MAX_K,
 )
 from neighbors.checks.select_smallk_identical_candidate import (
     SMALLK_BLOCK,
@@ -672,20 +673,16 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                 # k-NN build took RAFT's selector and was not deterministic.
                 # IDENTICAL is unmoved; `PIN_DETERMINISM` is true there too.
                 #
-                # THE REFUSAL BELOW NOW BINDS THE MIDDLE TIER TOO, and that
-                # is a real narrowing of what `deterministic` accepts rather
-                # than a formality: `k > SELECT_BLOCK` raises where a FAST
-                # build would have answered. Refusing beats returning an
-                # answer that moves between two runs of the same call.
-                if k > SELECT_BLOCK:
+                # Both pinned tiers share the bounded rank staging. The
+                # strided pass extends it beyond the 256-thread block; the
+                # cap still bounds shared storage and quadratic rank work.
+                if k > IDENTICAL_MAX_K:
                     raise Error(
                         "select_radix ("
                         + numeric_mode_name()
                         + "): k > "
-                        + String(SELECT_BLOCK)
-                        + " is refused. The rank pass gives one thread to"
-                        " each output slot; a larger k needs a loop, which"
-                        " is not written until something asks for it."
+                        + String(IDENTICAL_MAX_K)
+                        + " is refused by the bounded pinned rank profile."
                     )
                 var selected_smallk = False
                 comptime if EXPERIMENTAL_SMALLK_IDENTICAL:
@@ -723,19 +720,36 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                             )
                             selected_smallk = True
                 if not selected_smallk:
-                    ctx.enqueue_function[radix_topk_identical_kernel](
-                        dist_tile.unsafe_ptr(),
-                        out_dist.unsafe_ptr().unsafe_offset(q * k),
-                        out_idx.unsafe_ptr().unsafe_offset(q * k),
-                        buf_val.unsafe_ptr(),
-                        buf_idx.unsafe_ptr(),
-                        Int32(n_index),
-                        Int32(k),
-                        Int32(buf_len),
-                        Int32(1),
-                        grid_dim=(rows, 1, 1),
-                        block_dim=(SELECT_BLOCK, 1, 1),
-                    )
+                    # Preserve the historical shared-memory footprint for
+                    # existing k. Only the extended range stages 1024 pairs.
+                    if k <= SELECT_BLOCK:
+                        ctx.enqueue_function[radix_topk_identical_kernel[SELECT_BLOCK]](
+                            dist_tile.unsafe_ptr(),
+                            out_dist.unsafe_ptr().unsafe_offset(q * k),
+                            out_idx.unsafe_ptr().unsafe_offset(q * k),
+                            buf_val.unsafe_ptr(),
+                            buf_idx.unsafe_ptr(),
+                            Int32(n_index),
+                            Int32(k),
+                            Int32(buf_len),
+                            Int32(1),
+                            grid_dim=(rows, 1, 1),
+                            block_dim=(SELECT_BLOCK, 1, 1),
+                        )
+                    else:
+                        ctx.enqueue_function[radix_topk_identical_kernel[IDENTICAL_MAX_K]](
+                            dist_tile.unsafe_ptr(),
+                            out_dist.unsafe_ptr().unsafe_offset(q * k),
+                            out_idx.unsafe_ptr().unsafe_offset(q * k),
+                            buf_val.unsafe_ptr(),
+                            buf_idx.unsafe_ptr(),
+                            Int32(n_index),
+                            Int32(k),
+                            Int32(buf_len),
+                            Int32(1),
+                            grid_dim=(rows, 1, 1),
+                            block_dim=(SELECT_BLOCK, 1, 1),
+                        )
             else:
                 # DEVIATION 1922 (kernel-matrix row `knn_warpsort_select_for`):
                 # RAFT's OWN `select_k` dispatch sends `2 < k <= 256` to the

@@ -1,0 +1,41 @@
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Mamba gradient public-prefill comparison passed: 86 tensors
+  selected manifest policy=mamba3.public_prefill_leaves.exact10.v1
+schema=mojolearn.mamba.backward-certificate.nvidia.v1
+created_utc=2026-09-05T06:47:48Z
+host=07335e22d43e
+kernel=Linux 6.8.0-124-generic x86_64 GNU/Linux
+mode=IDENTICAL
+mode_injector=tools/with_identical_mode.sh
+commit=f7ac4f1f86c6035225302d725964271a1115ed34
+0, NVIDIA GeForce RTX 4090, GPU-e31ff1bc-c17b-e78a-62ae-ca195f497fe0, 580.159.04
+family	verdict	rc	oracle_manifest_sha256	dump_manifest_sha256
+mamba1	GREEN	0	55a946fecb51e2106730ea822d7f6f604cd2ea278eb62f77d062ffc9ac94f90a	85a254b74bde291da380838c0d67980a34cec5de2fd5275972d013032ab03c60
+mamba2	GREEN	0	3af73a33583d47f2e438a66041d39017467185a8b4f4ced46460dcaaaf504921	febe6af812d1225a3e139371ccf66da2015f4a69a5d392227e36f2e367ab1753
+mamba3	GREEN	0	d9ad3b1a669507a7c05bc81ee78e134df95e98ec78f52c7b1e550dccfc206c96	d3650751e51cd42d1eeb556e8783a0fc3374f720e96017e95256c149c07cd915
+MAMBA-BACKWARD-CERT artifacts=/root/gemm_leg_out/mamba-cert
+REMOTE_BODY_DONE

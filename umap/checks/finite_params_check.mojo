@@ -14,7 +14,7 @@ def main() raises:
     var dist: List[Float32] = [0, 1, 0, 1]
     for pattern in patterns:
         var value = bitcast[DType.float32](pattern)
-        for field in range(6):
+        for field in range(8):
             var refused = False
             try:
                 if field == 0:
@@ -27,10 +27,14 @@ def main() raises:
                     _ = fit_umap_curve(value, Float32(1.0))
                 elif field == 4:
                     _ = fit_umap_curve(Float32(0.1), value)
-                else:
+                elif field == 5:
                     _ = fuzzy_simplicial_graph(idx, dist, 2, 2, value)
+                elif field == 6:
+                    UMAPParams(n_neighbors=2, learning_rate=value).validate(2)
+                else:
+                    UMAPParams(n_neighbors=2, repulsion_strength=value).validate(2)
             except:
                 refused = True
             if not refused:
                 raise Error("UMAP admitted a non-finite hyperparameter")
-    print("UMAP non-finite parameter refusal PASS: 18 cases")
+    print("UMAP non-finite parameter refusal PASS: 24 cases")

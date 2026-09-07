@@ -163,3 +163,20 @@ fit/transform API groups, and both held-out quality cases in each of the three
 modes. The retained embeddings match the prior dense-fit records within each
 mode. See [public CSR integration evidence](../bench/results/umap/2026-09-05-public-sparse/).
 Remote public integration and installed-wheel qualification remain open.
+
+## Optimizer controls (source, qualification pending)
+
+`learning_rate` (positive, default 1), `repulsion_strength` (nonnegative,
+default 1), and `negative_sample_rate` (nonnegative integer, default 5)
+now propagate through the Python binding and native parameters to both
+serial and GPU fit optimizers. Transform uses one quarter of the learning
+rate and the same repulsion and negative-sampling settings. Changing these
+settings after fitting requires a refit. The default parameter lists retain
+the legacy binding ABI; extended lists require the updated metrics extension.
+
+Existing identity fixtures continue to gate the default trajectory. New
+custom-control API checks cover finite output, repeatability and parameter
+mutation; these are authored source checks, pending main-thread execution.
+They do not establish cuML coordinate identity or qualify untested profiles.
+The public slice still excludes supervised targets, alternative metrics and
+initialization, arbitrary output dimensions, and local_connectivity != 1.

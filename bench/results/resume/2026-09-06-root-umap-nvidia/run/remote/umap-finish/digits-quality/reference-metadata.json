@@ -1,0 +1,63 @@
+{
+  "arm": "reference",
+  "device": "GPU-d3342c3c-6197-7d42-e2a5-31a729e823ce, NVIDIA GeForce RTX 4090, 580.159.04",
+  "parameters": {
+    "n_neighbors": 15,
+    "n_components": 2,
+    "n_epochs": 100,
+    "metric": "euclidean",
+    "init": "spectral",
+    "random_state": 19,
+    "min_dist": 0.1,
+    "spread": 1.0,
+    "set_op_mix_ratio": 1.0,
+    "local_connectivity": 1.0,
+    "learning_rate": 1.0,
+    "repulsion_strength": 1.0,
+    "negative_sample_rate": 5
+  },
+  "numpy": "2.4.6",
+  "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+  "status": "PASS",
+  "train": {
+    "shape": [
+      1024,
+      64
+    ],
+    "dtype": "<f4",
+    "raw_c_order_sha256": "dfcf0ef9afb36886632c652c747eb632331ef7fdf913f41daa90eff4d607cf09"
+  },
+  "query": {
+    "shape": [
+      256,
+      64
+    ],
+    "dtype": "<f4",
+    "raw_c_order_sha256": "5e94ba19b2769c6a23e577ee2c796a4805a42981c15d905d047429e87bfd7087"
+  },
+  "implementation": "umap-learn CPU quality reference",
+  "version": "0.5.12",
+  "module_file": "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/umap/__init__.py",
+  "transform_seed": 19,
+  "n_jobs": 1,
+  "force_approximation_algorithm": false,
+  "estimator_source_file": "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/umap/umap_.py",
+  "estimator_source_sha256": "505592e483d19586f5dae35a27f04c3cf115b0223ad2813f40e00f01a1da8ff0",
+  "fit": {
+    "shape": [
+      1024,
+      2
+    ],
+    "dtype": "<f4",
+    "raw_c_order_sha256": "e19d243416f48822ff13c57fec3dcfe150c89946318d880bcc98158189d87cea"
+  },
+  "transform": {
+    "shape": [
+      256,
+      2
+    ],
+    "dtype": "<f4",
+    "raw_c_order_sha256": "39aae186e6e606c5cd72866246d9a17d99247c28babed070657e9cebeb7b7f12"
+  },
+  "artifact_sha256": "283fc187b387dbe2c306312c2cab2e4d12e9bbbf18077182ba499eb99fba7a80"
+}

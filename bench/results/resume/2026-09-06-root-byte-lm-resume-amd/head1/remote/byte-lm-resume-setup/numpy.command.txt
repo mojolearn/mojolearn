@@ -1,0 +1,1 @@
+/root/byte-lm-resume-venv/bin/python tools/amd_serial_guard.py --seconds 180 --rss-gib 12 -- /root/byte-lm-resume-venv/bin/python -m pip install --disable-pip-version-check --no-input --only-binary=:all: numpy==1.26.4 

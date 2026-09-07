@@ -1,0 +1,1 @@
+python3 tools/amd_serial_guard.py --seconds 30 -- cp /root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so /root/byte-lm-do-output/byte-lm-validation/bindings/ 

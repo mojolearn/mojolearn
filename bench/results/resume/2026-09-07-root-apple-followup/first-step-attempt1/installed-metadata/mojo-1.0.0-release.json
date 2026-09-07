@@ -1,0 +1,187 @@
+{
+  "arch": "arm64",
+  "build": "release",
+  "build_number": 0,
+  "depends": [
+    "python >=3.10",
+    "mojo-compiler ==1.0.0",
+    "mblack ==26.5.0",
+    "jupyter_client >=8.6.2,<8.7"
+  ],
+  "license": "LicenseRef-Modular-Proprietary",
+  "md5": "954433eb905b424cc3d4325c9c2242de",
+  "name": "mojo",
+  "platform": "osx",
+  "run_exports": {},
+  "sha256": "200bd9ace6e06ad2a9b4f4cce9afa3e5f3c00b3d87a6d57206249df2a5568e38",
+  "size": 101155040,
+  "subdir": "osx-arm64",
+  "timestamp": 1786294689438,
+  "version": "1.0.0",
+  "fn": "mojo-1.0.0-release.conda",
+  "url": "https://conda.modular.com/max/osx-arm64/mojo-1.0.0-release.conda",
+  "channel": "https://conda.modular.com/max/",
+  "extracted_package_dir": "/Users/andrewhendel/Library/Caches/rattler/cache/pkgs/mojo-1.0.0-release",
+  "requested_specs": [],
+  "files": [
+    "bin/_mojo-lldb-dap",
+    "bin/debugserver",
+    "bin/gpu-query",
+    "bin/lldb-argdumper",
+    "bin/llvm-symbolizer",
+    "bin/mojo-lldb",
+    "bin/mojo-lldb-dap",
+    "bin/mojo-lsp-server",
+    "lib/libMojoJupyter.dylib",
+    "lib/libMojoLLDB.dylib",
+    "lib/liblldb24.0.0git.dylib",
+    "lib/lldb-visualizers/lldbDataFormatters.py",
+    "lib/lldb-visualizers/mlirDataFormatters.py",
+    "lib/mojo-repl-entry-point",
+    "share/jupyter/kernels/mojo/kernel.json",
+    "share/jupyter/kernels/mojo/logo-64x64.png",
+    "share/jupyter/kernels/mojo/logo.svg",
+    "share/jupyter/kernels/mojo/manage_kernel.py",
+    "share/jupyter/kernels/mojo/mojokernel.py",
+    "share/jupyter/kernels/mojo/nightly-logo-64x64.png",
+    "share/jupyter/kernels/mojo/nightly-logo.svg"
+  ],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": [
+      {
+        "_path": "bin/_mojo-lldb-dap",
+        "path_type": "hardlink",
+        "sha256": "bbfb8ecccefb5e181fad55eb74ab0aa42d3195eb73bd5ccdc2bbf7de6d1cfb45",
+        "size_in_bytes": 1204288
+      },
+      {
+        "_path": "bin/debugserver",
+        "path_type": "hardlink",
+        "sha256": "c1a8aa01dd2c8ad788fdb112d11bad584b1c3a27b4afb52fa1096f68ec6fdf92",
+        "size_in_bytes": 525888
+      },
+      {
+        "_path": "bin/gpu-query",
+        "path_type": "hardlink",
+        "sha256": "75795b08ba0bf5887b9097cb24bdf20a950497e535d63e77aae51f3b2b92bca8",
+        "size_in_bytes": 1218208
+      },
+      {
+        "_path": "bin/lldb-argdumper",
+        "path_type": "hardlink",
+        "sha256": "b1603a30a316a5fb2f921919677495a6ab30a7a9670b852e595c5e79e23bcf30",
+        "size_in_bytes": 157968
+      },
+      {
+        "_path": "bin/llvm-symbolizer",
+        "path_type": "hardlink",
+        "sha256": "e8f3f06501a8fefca2dc235311d79be920b460c8a8ede336af04b2266fe84ffa",
+        "size_in_bytes": 5372880
+      },
+      {
+        "_path": "bin/mojo-lldb",
+        "path_type": "hardlink",
+        "sha256": "e697eb9686c6d877194e2a65406fe5905fc8f63493dc62e8ee972be5083ba453",
+        "size_in_bytes": 343536
+      },
+      {
+        "_path": "bin/mojo-lldb-dap",
+        "path_type": "hardlink",
+        "sha256": "21ca46f6dc161e44e2f14e0d39cc76f7758f4bfd8a725409f85cfb2bf35a9bbf",
+        "size_in_bytes": 278
+      },
+      {
+        "_path": "bin/mojo-lsp-server",
+        "path_type": "hardlink",
+        "sha256": "e8927fd6533c78fba2870b398770abc727f7956ce8a62b45ac9893262b2860e9",
+        "size_in_bytes": 52598720
+      },
+      {
+        "_path": "lib/libMojoJupyter.dylib",
+        "path_type": "hardlink",
+        "sha256": "f74e0523eec683458bc72b4346f4587ee304353dabbdada9a266c45e6dce3785",
+        "size_in_bytes": 1096480
+      },
+      {
+        "_path": "lib/libMojoLLDB.dylib",
+        "path_type": "hardlink",
+        "sha256": "f24a201108e6c5b43480c30c7e29abe79395161734de3f72c0965ec3c577bb09",
+        "size_in_bytes": 122959712
+      },
+      {
+        "_path": "lib/liblldb24.0.0git.dylib",
+        "path_type": "hardlink",
+        "sha256": "79ac196762744ebdfa8338cb09efda9865daad1c9c203acc27ce822fc432867c",
+        "size_in_bytes": 153816288
+      },
+      {
+        "_path": "lib/lldb-visualizers/lldbDataFormatters.py",
+        "path_type": "hardlink",
+        "sha256": "bc180f5d14c6f798d74c9dd57f5e90d46a5fbcf1368518e806884194b6cb6b80",
+        "size_in_bytes": 20059
+      },
+      {
+        "_path": "lib/lldb-visualizers/mlirDataFormatters.py",
+        "path_type": "hardlink",
+        "sha256": "e33e1af8b58520386c346daaaecb8b4be1e511bc95f62588160ccdb78a668c83",
+        "size_in_bytes": 29792
+      },
+      {
+        "_path": "lib/mojo-repl-entry-point",
+        "path_type": "hardlink",
+        "sha256": "cafc148a2fd10625c79ae84f307d8a07d6f8af615d1b2319f281126d80e7e89e",
+        "size_in_bytes": 38134960
+      },
+      {
+        "_path": "share/jupyter/kernels/mojo/kernel.json",
+        "path_type": "hardlink",
+        "sha256": "7f56ed4f6e540a589f5f28803242d7b2a30493e0831f154ef49b1e118a604dd8",
+        "sha256_in_prefix": "8a518344007fa38ffcafe4c4d7fd8102dcc22914ae433a4eeadf128a48e0c922",
+        "size_in_bytes": 863,
+        "file_mode": "text",
+        "prefix_placeholder": "/buildbuddy-execroot/bazel-out/aarch64-opt-production/bin/utils/packaging/conda/output/bld/rattler-build_mojo_1786294689/host_env_placehold_placehold_placehold_placehold_placehold_placehold_placehold_placehold_placehold_placehold_placehold_placehold_place"
+      },
+      {
+        "_path": "share/jupyter/kernels/mojo/logo-64x64.png",
+        "path_type": "hardlink",
+        "sha256": "49a9c54da22948331c02141d029c01c70d85c693636f8d3b37de33f6ef1bc97f",
+        "size_in_bytes": 1637
+      },
+      {
+        "_path": "share/jupyter/kernels/mojo/logo.svg",
+        "path_type": "hardlink",
+        "sha256": "83d32cc2d2fa93902bc0ca28bfdcea8eace04649498b62b789744e4cf211a90a",
+        "size_in_bytes": 2364
+      },
+      {
+        "_path": "share/jupyter/kernels/mojo/manage_kernel.py",
+        "path_type": "hardlink",
+        "sha256": "7422ea72e454b2af59cbd4f8cf549125caa9f3b034db75488e42c1de589e6995",
+        "size_in_bytes": 4260
+      },
+      {
+        "_path": "share/jupyter/kernels/mojo/mojokernel.py",
+        "path_type": "hardlink",
+        "sha256": "d65cdc5c555de7adeb9534e5e35ff17f0c9246aef0813bdd0948480600824c53",
+        "size_in_bytes": 14219
+      },
+      {
+        "_path": "share/jupyter/kernels/mojo/nightly-logo-64x64.png",
+        "path_type": "hardlink",
+        "sha256": "308b360f2b3bcc33c282efd964a4b2337a9b9e09ae8753a7481a99f46a8b28ad",
+        "size_in_bytes": 2340
+      },
+      {
+        "_path": "share/jupyter/kernels/mojo/nightly-logo.svg",
+        "path_type": "hardlink",
+        "sha256": "fd73817ecd28aa8f26637de2b1965ecaa752eac7d58e87a5085c00df3bda32ee",
+        "size_in_bytes": 2787
+      }
+    ]
+  },
+  "link": {
+    "source": "/Users/andrewhendel/Library/Caches/rattler/cache/pkgs/mojo-1.0.0-release",
+    "type": 1
+  }
+}

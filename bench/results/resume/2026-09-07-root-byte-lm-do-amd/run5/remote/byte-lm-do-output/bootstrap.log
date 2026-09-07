@@ -1,0 +1,16 @@
+bootstrap_started=2026-09-07T07:51:30Z
+pid 3139's current affinity list: 0-19
+pid 3139's new affinity list: 0,1
+dependency_setup_started
+dependency_setup_passed
+✔ The default environment has been installed.
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0", "vram_total_bytes": 274542362624, "telemetry": {"initial_vram_bytes": 299687936, "peak_vram_bytes": 299687936, "last_vram_bytes": 299687936, "initial_rss_bytes": 19496960, "peak_rss_bytes": 140288000, "last_rss_bytes": 122556416, "initial_host_available_bytes": 161856614400, "last_host_available_bytes": 162313023488, "samples": 3, "last_elapsed_seconds": 2.0164932079999858, "crossing_sample": null}, "returncode": 0}
+twelve_job_validation_started
+byte-venv	0
+byte-dependencies	0
+dependencies	0
+dependency-freeze	0
+guard-checks	0
+comparator-fixtures	0
+byte-build	1
+bootstrap_exit=1

@@ -288,6 +288,19 @@ _umap_result = unittest.TextTestRunner(verbosity=1).run(
     unittest.defaultTestLoader.loadTestsFromModule(test_umap_surface))
 assert _umap_result.wasSuccessful(), "installed UMAP surface failed"
 
+# The sequence fixes must pass their full API gates in the installed wheel,
+# including corpus tolerances and state continuation, in every matrix job.
+# Load the drivers from source so they can find their independent corpora;
+# their mojolearn imports continue to resolve to this isolated installation.
+for _sequence_family in ("mamba", "transformer"):
+    _sequence_spec = importlib.util.spec_from_file_location(
+        "test_" + _sequence_family + "_surface",
+        Path(__file__).resolve().parents[2]
+        / ("python/mojolearn/tests/test_" + _sequence_family + "_surface.py"))
+    _sequence_gate = importlib.util.module_from_spec(_sequence_spec)
+    _sequence_spec.loader.exec_module(_sequence_gate)
+    assert _sequence_gate.main() == 0, "installed " + _sequence_family + " surface failed"
+
 # THE VENDOR THAT ACTUALLY LOADED, read back from the binary (2026-08-29,
 # docs/LINUX_WHEEL.md). On the macOS wheel it is 'metal'; the Linux smoke
 # (packaging/linux/smoke.py) asserts 'cuda' or 'hip' the same way.

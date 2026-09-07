@@ -51,7 +51,8 @@ class UMAP(NumericModeMixin):
     neighbors, memberships, weighted initialization and seeded refinement
     against the frozen training embedding. Default refinement is 100 epochs
     (30 above 10,000 queries), or max(1, n_epochs//3) when explicitly set;
-    learning rate is 0.25 and the negative sample rate is 5. Query batching
+    learning rate is learning_rate/4; repulsion_strength and
+    negative_sample_rate apply to both fit and transform. Query batching
     can change results. This path has its own qualification requirements;
     existing fit certificates do not certify transform or upstream RNG bits.
     Supervised UMAP and alternate metrics/init are unsupported.
@@ -62,7 +63,8 @@ class UMAP(NumericModeMixin):
     def __init__(self, n_neighbors=15, n_components=2, *, min_dist=0.1,
                  spread=1.0, n_epochs=None, random_state=0,
                  set_op_mix_ratio=1.0, local_connectivity=1.0,
-                 metric="euclidean", init="spectral"):
+                 metric="euclidean", init="spectral", learning_rate=1.0,
+                 repulsion_strength=1.0, negative_sample_rate=5):
         self.n_neighbors = n_neighbors
         self.n_components = n_components
         self.min_dist = min_dist
@@ -73,6 +75,9 @@ class UMAP(NumericModeMixin):
         self.local_connectivity = local_connectivity
         self.metric = metric
         self.init = init
+        self.learning_rate = learning_rate
+        self.repulsion_strength = repulsion_strength
+        self.negative_sample_rate = negative_sample_rate
         self._parameters()
 
     def _parameters(self):
@@ -85,6 +90,14 @@ class UMAP(NumericModeMixin):
         spread = _scalar(self.spread, "spread")
         mix = _scalar(self.set_op_mix_ratio, "set_op_mix_ratio")
         connectivity = _scalar(self.local_connectivity, "local_connectivity")
+        rate = _scalar(self.learning_rate, "learning_rate")
+        repulsion = _scalar(self.repulsion_strength, "repulsion_strength")
+        negatives = _integer(self.negative_sample_rate, "negative_sample_rate",
+                             0, (1 << 31) - 1)
+        if rate <= 0:
+            raise ValueError("UMAP learning_rate must be positive")
+        if repulsion < 0:
+            raise ValueError("UMAP repulsion_strength must be nonnegative")
         if not 0 <= min_dist <= spread or spread <= 0:
             raise ValueError("UMAP requires 0 <= min_dist <= spread and spread > 0")
         if not 0 <= mix <= 1:
@@ -94,7 +107,7 @@ class UMAP(NumericModeMixin):
         if self.metric != "euclidean" or self.init != "spectral":
             raise ValueError("UMAP supports only metric='euclidean', init='spectral'")
         return [neighbors, components, epochs, min_dist, spread, mix,
-                connectivity, seed]
+                connectivity, seed, rate, repulsion, negatives]
 
     def fit(self, X, y=None):
         if y is not None:
@@ -110,14 +123,17 @@ class UMAP(NumericModeMixin):
             raise ValueError("UMAP has too few samples for spectral initialization")
         embedding = np.empty((n, config[1]), dtype=np.float32)
         # n_samples, n_features, n_neighbors, n_components, n_epochs,
-        # min_dist, spread, set_op_mix_ratio, local_connectivity, random_state.
+        # min_dist, spread, set_op_mix_ratio, local_connectivity, random_state,
+        # learning_rate, repulsion_strength, negative_sample_rate.
         binding = self._bind()
         mode = (self.numeric_mode or _backend.default_mode()).strip().lower()
         if binding.umap_numeric_mode() != {"fast": 0, "identical": 1,
                                            "deterministic": 2}[mode]:
             raise RuntimeError("UMAP binary numeric mode disagrees with requested mode")
+        # Preserve the legacy ABI for default controls and existing wheels.
+        native_config = config[:8] if config[8:] == [1.0, 1.0, 5] else config
         columns = binding.umap_fit_transform(
-            _addr_ro(x), _addr(embedding), [n, d, *config])
+            _addr_ro(x), _addr(embedding), [n, d, *native_config])
         if columns != config[1] or not np.isfinite(embedding).all():
             raise RuntimeError("UMAP returned an invalid embedding")
         # Prepare all retained state before publishing a successful fit. Copies
@@ -165,10 +181,11 @@ class UMAP(NumericModeMixin):
                                            "deterministic": 2}[mode]:
             raise RuntimeError("UMAP binary numeric mode disagrees with fitted mode")
         output = np.empty((x.shape[0], config[1]), dtype=np.float32)
+        native_config = config[:8] if config[8:] == [1.0, 1.0, 5] else config
         columns = binding.umap_transform(
             [_addr_ro(training), _addr_ro(fitted_embedding), _addr_ro(x),
              _addr(output)],
-            [training.shape[0], x.shape[0], training.shape[1], *config])
+            [training.shape[0], x.shape[0], training.shape[1], *native_config])
         if columns != config[1] or not np.isfinite(output).all():
             raise RuntimeError("UMAP transform returned an invalid embedding")
         return output

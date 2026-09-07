@@ -1,0 +1,12 @@
+5136 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10fa40000000, nodemask=1)
+test_folded_abi_names_layout_and_ownership (mojolearn.tests.test_mamba23_backward_surface.Mamba23BackwardHostSurface.test_folded_abi_names_layout_and_ownership) ... ok
+test_refusals_precede_loading_native_extension (mojolearn.tests.test_mamba23_backward_surface.Mamba23BackwardHostSurface.test_refusals_precede_loading_native_extension) ... ok
+test_stale_binary_has_actionable_error (mojolearn.tests.test_mamba23_backward_surface.Mamba23BackwardHostSurface.test_stale_binary_has_actionable_error) ... ok
+test_arbitrary_cotangent_all_public_leaves_and_repeat_bits (mojolearn.tests.test_mamba23_backward_surface.Mamba23BackwardNVIDIA.test_arbitrary_cotangent_all_public_leaves_and_repeat_bits) ... ok
+test_native_fixture_bits_when_requested (mojolearn.tests.test_mamba23_backward_surface.Mamba23BackwardNVIDIA.test_native_fixture_bits_when_requested) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 3.474s
+
+OK
+{"guard": "nvidia-root-serial-v1", "reason": null, "returncode": 0}

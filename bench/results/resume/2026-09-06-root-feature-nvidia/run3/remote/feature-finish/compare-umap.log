@@ -1,0 +1,30 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 452, in <module>
+    worker(arguments) if arguments.worker else main(arguments)
+    ^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 157, in worker
+    import cuml
+  File "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/cuml/__init__.py", line 16, in <module>
+    import cuml.accel
+  File "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/cuml/accel/__init__.py", line 6, in <module>
+    from cuml.accel.core import enabled, install
+  File "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/cuml/accel/core.py", line 17, in <module>
+    from cuml.internals.outputs import set_global_output_type
+  File "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/cuml/internals/__init__.py", line 4, in <module>
+    from cuml.internals.base import Base, get_handle
+  File "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/cuml/internals/base.py", line 14, in <module>
+    import cuml.common
+  File "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/cuml/common/__init__.py", line 6, in <module>
+    from cuml.internals import logger
+ImportError: /root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64/../../nvidia/cusolver/lib/libcusolver.so.11: undefined symbol: cublasSetEnvironmentMode, version libcublas.so.12
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 452, in <module>
+    worker(arguments) if arguments.worker else main(arguments)
+                                               ^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 323, in main
+    metadata[arm] = receive(processes[arm])['ready']
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 238, in receive
+    raise RuntimeError('Worker exited: ' + str(proc.wait()))
+RuntimeError: Worker exited: 1
+{"guard": "nvidia-root-serial-v1", "reason": null, "returncode": 1}

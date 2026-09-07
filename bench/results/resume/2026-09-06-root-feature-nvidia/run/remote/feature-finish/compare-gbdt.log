@@ -1,0 +1,29 @@
+4348 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x305c00000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 428, in <module>
+    worker(arguments) if arguments.worker else main(arguments)
+    ^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 94, in worker
+    binding = probe._bind('_mojolearn_gbdt')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 92, in _bind
+    return _backend.binding(
+           ^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 966, in binding
+    return getattr(load_set(mode or default_mode()), name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 868, in __getattr__
+    raise ImportError(
+ImportError: mojolearn: numeric_mode='fast' needs python/mojolearn/_mojolearn_gbdt.so, which is not built. Build it with
+    bash bindings/build_gbdt.sh
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 428, in <module>
+    worker(arguments) if arguments.worker else main(arguments)
+                                               ^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 302, in main
+    metadata[arm] = receive(processes[arm])['ready']
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 235, in receive
+    raise RuntimeError('Worker exited: ' + str(proc.wait()))
+RuntimeError: Worker exited: 1
+{"guard": "nvidia-root-serial-v1", "reason": null, "returncode": 1}

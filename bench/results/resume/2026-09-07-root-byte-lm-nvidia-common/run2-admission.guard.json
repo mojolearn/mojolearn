@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/tmp/mojolearn-root-validation-20260906/bin/python",
+    "tools/byte_lm_validation_admit.py",
+    "bench/results/resume/2026-09-07-root-byte-lm-nvidia-common/run2/remote/byte-lm-validation"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 31328,
+  "elapsed_seconds": 2.5063822919983068,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

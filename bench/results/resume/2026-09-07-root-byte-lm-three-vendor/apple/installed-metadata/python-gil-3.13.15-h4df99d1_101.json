@@ -1,0 +1,32 @@
+{
+  "build": "h4df99d1_101",
+  "build_number": 101,
+  "depends": [
+    "cpython 3.13.15.*",
+    "python_abi * *_cp313"
+  ],
+  "license": "Python-2.0",
+  "md5": "c5e565a020c31fd7aba0a87dc2fc29d0",
+  "name": "python-gil",
+  "noarch": "generic",
+  "run_exports": {},
+  "sha256": "bc9fcc5c7bf80a382fc2b38a22db3549b39dc5ae114537c32fe610be005d16ba",
+  "size": 48362,
+  "subdir": "noarch",
+  "timestamp": 1786366765154,
+  "version": "3.13.15",
+  "fn": "python-gil-3.13.15-h4df99d1_101.conda",
+  "url": "https://conda.anaconda.org/conda-forge/noarch/python-gil-3.13.15-h4df99d1_101.conda",
+  "channel": "https://conda.anaconda.org/conda-forge/",
+  "extracted_package_dir": "/Users/andrewhendel/Library/Caches/rattler/cache/pkgs/python-gil-3.13.15-h4df99d1_101",
+  "requested_specs": [],
+  "files": [],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": []
+  },
+  "link": {
+    "source": "/Users/andrewhendel/Library/Caches/rattler/cache/pkgs/python-gil-3.13.15-h4df99d1_101",
+    "type": 1
+  }
+}

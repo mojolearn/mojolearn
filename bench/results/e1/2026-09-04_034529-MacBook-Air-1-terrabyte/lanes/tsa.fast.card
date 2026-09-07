@@ -1,0 +1,13 @@
+# tsa_main mode=FAST n_obs=520 batch=8 salt=1
+# format: mojolearn-identity-trace v1
+0	tsa.input	f32	4160	8fd2b11268b5fa09
+1	tsa.diff	f32	4152	2da78b099d44f4a7
+2	tsa.mean	f32	8	996c6ea8b083be57
+3	tsa.resid	f32	4152	945d9cb664d9e877
+4	tsa.s2A	f32	8	1430a3e792bf7fe3
+5	tsa.s2B	f32	8	4ba6445040351ef2
+6	tsa.cumsum	f32	4152	0d80154e53b0924f
+7	tsa.eta	f32	8	7fc45400b353f973
+8	tsa.stat	f32	8	c5237dfab4ee6cac
+9	tsa.flags	u8	8	e7e395a2ad0bc74d
+10	tsa.d	i32	8	a2aa4417edc238d4

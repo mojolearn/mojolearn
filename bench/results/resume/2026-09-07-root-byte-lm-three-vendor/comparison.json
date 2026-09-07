@@ -1,0 +1,521 @@
+{
+  "checkpoint_sha256": "a9858cd59b424b77b897d0171d5f225d63f3f161fcdee02049bd6c04cfd8a6dc",
+  "compared_steps": 128,
+  "continuous_vendors": [
+    "cuda",
+    "hip",
+    "metal"
+  ],
+  "final_heldout_loss": 2.8436418771743774,
+  "identity_admitted": true,
+  "independent_gradient_oracle_vendors": [
+    "cuda",
+    "hip"
+  ],
+  "initial_heldout_loss": 5.5412986278533936,
+  "learning_admitted": true,
+  "linux_admissions": {
+    "cuda": {
+      "binding_sha256": "9dec548908dd38cc186ae90ddcd3f341a3b1d430a56bd1a54543eba962b00923",
+      "completed_steps": 128,
+      "heldout_loss_ratio": 0.5131724651836634,
+      "independent_oracle": {
+        "guard": {
+          "command": {
+            "bytes": 286,
+            "file": "byte-gradient-oracle.command.txt",
+            "sha256": "6dad7dc06eab6f699b4511ebe26621662b8cbf6bedd7bccd8b44aedb275e6ac1"
+          },
+          "final": {
+            "cpu_affinity": "0,1",
+            "guard": "nvidia-root-serial-v1",
+            "reason": null,
+            "returncode": 0,
+            "thread_limit": 2
+          },
+          "guard_log_sha256": "dd5b6a620b2f026b600b6af9016fd5b80872122c3359c673cbeb7ab26358295d",
+          "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+          "receipt_sha256": "2de52a65f0c5b0148c774def8c775eb010ede2807d3f8b98f73e044cb1d98a16",
+          "result": {
+            "bytes": 38238,
+            "file": "gradient-oracle.json",
+            "sha256": "123d7ea6e19a856dc10adef7a62a1d277bc6669836ff3c560da19d04b575afc2"
+          }
+        },
+        "oracle_sha256": "123d7ea6e19a856dc10adef7a62a1d277bc6669836ff3c560da19d04b575afc2",
+        "reference": {
+          "file": "gradient-oracle.json.reference.npz",
+          "sha256": "091cea38fbdaafbceb36abdd683b70e3a5bfc277c778db3382106d359b5b391f"
+        },
+        "step": 1
+      },
+      "passed": true,
+      "receipts": {
+        "first": {
+          "command": {
+            "bytes": 228,
+            "file": "byte-step1.command.txt",
+            "sha256": "9cc8b8d6efdd1e60b3081b6533c59f3e5768e352a6aafa2904bd94ec3822f15e"
+          },
+          "final": {
+            "cpu_affinity": "0,1",
+            "guard": "nvidia-root-serial-v1",
+            "reason": null,
+            "returncode": 0,
+            "thread_limit": 2
+          },
+          "guard_log_sha256": "dd5b6a620b2f026b600b6af9016fd5b80872122c3359c673cbeb7ab26358295d",
+          "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+          "receipt_sha256": "b76d912e027bfd6dab4366a48f544f367d5878952c27a75663731e619c392783",
+          "result": {
+            "bytes": 4755,
+            "file": "step1/summary.json",
+            "sha256": "682e4d7e1fac4e9034a8074178d4a0d5e7bf5c8f625ed2949d8d13843e93eb07"
+          }
+        },
+        "full": {
+          "command": {
+            "bytes": 233,
+            "file": "byte-full128.command.txt",
+            "sha256": "f2c665aa6f9b44d67061d69dc2fa6ecfcdf4b5f810a3ceb8a489f73f9a01d225"
+          },
+          "final": {
+            "cpu_affinity": "0,1",
+            "guard": "nvidia-root-serial-v1",
+            "reason": null,
+            "returncode": 0,
+            "thread_limit": 2
+          },
+          "guard_log_sha256": "2e9ae8fb6f7cf373e25ce270282b23d2c3df1a4549caa4355bb998314e9d4c38",
+          "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+          "receipt_sha256": "4422493f858a3bd3ccb9807993406682eee6d4f20b0086731cc93f233c999a2a",
+          "result": {
+            "bytes": 28358,
+            "file": "full128/summary.json",
+            "sha256": "ae4d89362cee5262b64e441c6b32756ace76679e14528905793c5a765e514446"
+          }
+        }
+      },
+      "schema": "mojolearn.byte-lm.single-vendor-admission.v1",
+      "scope": "fixed small real-text model: independent first-step FP64 correctness and 128-step heldout learning on this vendor; cross-vendor identity remains separate",
+      "source_commit": "eac39c367beeddb8ba4792551d154673e654ce21",
+      "vendor": "cuda"
+    },
+    "hip": {
+      "binding_sha256": "02f007a221a624172b4aa9f278a7e987f12d2d4bc1856ce94db74df8253b2784",
+      "completed_steps": 128,
+      "heldout_loss_ratio": 0.5131724651836634,
+      "independent_oracle": {
+        "guard": {
+          "command": {
+            "bytes": 292,
+            "file": "byte-gradient-oracle.command.txt",
+            "sha256": "4c7200ea331cb668e01b8c166b310e0b08d7bfb770a3224ae2481b92b94fdcd5"
+          },
+          "final": {
+            "cpu_affinity": "0,1",
+            "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0",
+            "guard": "amd-root-serial-v1",
+            "reason": null,
+            "returncode": 0,
+            "telemetry": {
+              "crossing_sample": null,
+              "initial_host_available_bytes": 162445844480,
+              "initial_rss_bytes": 8683520,
+              "initial_vram_bytes": 299687936,
+              "last_elapsed_seconds": 4.020534423000015,
+              "last_host_available_bytes": 161161093120,
+              "last_rss_bytes": 2806730752,
+              "last_vram_bytes": 1085222912,
+              "peak_rss_bytes": 2806730752,
+              "peak_vram_bytes": 1085222912,
+              "samples": 5
+            },
+            "thread_limit": 2,
+            "vram_total_bytes": 274542362624
+          },
+          "guard_log_sha256": "ad5e02dc4ca6cadc3e0e37f5b79b49c53f07aa41b87efbb33377a973a80b3a4b",
+          "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+          "receipt_sha256": "6d066f060146dbdbc37d635bde4db550335b9fc5dce04daf22e719cd5e133127",
+          "result": {
+            "bytes": 38272,
+            "file": "gradient-oracle.json",
+            "sha256": "1d62123f997b42d849fbc1f92071294dbdbbfc600fdade2094545547c9c3ed47"
+          }
+        },
+        "oracle_sha256": "1d62123f997b42d849fbc1f92071294dbdbbfc600fdade2094545547c9c3ed47",
+        "reference": {
+          "file": "gradient-oracle.json.reference.npz",
+          "sha256": "f0e653d3fa85b1017973521e585bae8ad01366b6851b2a4909a3d345e0e062fa"
+        },
+        "step": 1
+      },
+      "passed": true,
+      "receipts": {
+        "first": {
+          "command": {
+            "bytes": 229,
+            "file": "byte-step1.command.txt",
+            "sha256": "8ca42994908c46c580519992d45ea83b5891bdf46c1167943a6cbac2f4203bed"
+          },
+          "final": {
+            "cpu_affinity": "0,1",
+            "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0",
+            "guard": "amd-root-serial-v1",
+            "reason": null,
+            "returncode": 0,
+            "telemetry": {
+              "crossing_sample": null,
+              "initial_host_available_bytes": 162419654656,
+              "initial_rss_bytes": 8519680,
+              "initial_vram_bytes": 299687936,
+              "last_elapsed_seconds": 0.0034165640000196618,
+              "last_host_available_bytes": 162419654656,
+              "last_rss_bytes": 8519680,
+              "last_vram_bytes": 299687936,
+              "peak_rss_bytes": 8519680,
+              "peak_vram_bytes": 299687936,
+              "samples": 1
+            },
+            "thread_limit": 2,
+            "vram_total_bytes": 274542362624
+          },
+          "guard_log_sha256": "f566ba95b3ba42313fc18a1f3c272ff4c3b3c58f703d284aa35c6cbc3cc4736b",
+          "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+          "receipt_sha256": "ac563af52b51b0ea2f606bdbc8ebec7c28a8aedc38717d5ac9f325fe81ffcf68",
+          "result": {
+            "bytes": 4752,
+            "file": "step1/summary.json",
+            "sha256": "c9c8e3a38633e3263da3225daa0df2296383b91daba5708be92e63ee8025ce17"
+          }
+        },
+        "full": {
+          "command": {
+            "bytes": 234,
+            "file": "byte-full128.command.txt",
+            "sha256": "90bf53d88060a554aed444ad1a229b169b4a5fddaa29eb373ce74476fefedd7a"
+          },
+          "final": {
+            "cpu_affinity": "0,1",
+            "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0",
+            "guard": "amd-root-serial-v1",
+            "reason": null,
+            "returncode": 0,
+            "telemetry": {
+              "crossing_sample": null,
+              "initial_host_available_bytes": 161856708608,
+              "initial_rss_bytes": 8683520,
+              "initial_vram_bytes": 299687936,
+              "last_elapsed_seconds": 2.012925499000005,
+              "last_host_available_bytes": 160056872960,
+              "last_rss_bytes": 3072077824,
+              "last_vram_bytes": 2740178944,
+              "peak_rss_bytes": 3072077824,
+              "peak_vram_bytes": 2740178944,
+              "samples": 3
+            },
+            "thread_limit": 2,
+            "vram_total_bytes": 274542362624
+          },
+          "guard_log_sha256": "1404be7cb4b2a33016a9bbafcdff0c347558d2ff9a744acbf082fe3e36afdce3",
+          "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+          "receipt_sha256": "3c9da0f62bd44adc56980d9f79fcdc206099193b8f9a012cc9ce7489c179c1b8",
+          "result": {
+            "bytes": 28355,
+            "file": "full128/summary.json",
+            "sha256": "0ddbec01a2a066d0cbb832119fd6a6df8ebbe809e7a586a8c2f3686028880ad3"
+          }
+        }
+      },
+      "schema": "mojolearn.byte-lm.single-vendor-admission.v1",
+      "scope": "fixed small real-text model: independent first-step FP64 correctness and 128-step heldout learning on this vendor; cross-vendor identity remains separate",
+      "source_commit": "eac39c367beeddb8ba4792551d154673e654ce21",
+      "vendor": "hip"
+    }
+  },
+  "metal_admitted": true,
+  "metal_guard": {
+    "command": {
+      "bytes": 518,
+      "file": "full128.command.txt",
+      "sha256": "0288c1b023804ef52e979b6597952d3f907d95c6dc10e5f0e6144fb5bd38a412"
+    },
+    "final": {
+      "cleanup": {
+        "errors": [],
+        "quarantined": false,
+        "verified": true
+      },
+      "cpu_affinity": null,
+      "cpu_enforcement": "sampled, not hard affinity",
+      "descendant_accounting": "observed ancestry and PGID, ps start-time identities; sampling gaps remain",
+      "error": null,
+      "gpu_memory_accounting": "system unified-memory reserve/pressure; no per-process Metal VRAM counter",
+      "guard": "macos-root-user-tiny-v1",
+      "initial_memory": {
+        "compressed_bytes": 3745579008,
+        "conservative_reserve_bytes": 1752236032,
+        "pressure_level": 1,
+        "swap_used_bytes": 0,
+        "total_bytes": 17179869184
+      },
+      "policy_limits": {
+        "compressed_growth_bytes": 268435456,
+        "cpu_grace_seconds": 4,
+        "deadline_seconds": 180,
+        "entry_reserve_bytes": 0,
+        "normal_pressure_level": 1,
+        "rss_bytes": 2147483648,
+        "runtime_reserve_bytes": 0,
+        "sample_interval_seconds": 2.0,
+        "sampled_cpu_limit": 3,
+        "swap_growth_bytes": 134217728
+      },
+      "reason": null,
+      "returncode": 0,
+      "samples": [
+        {
+          "compressed_bytes": 3745579008,
+          "conservative_reserve_bytes": 1745879040,
+          "elapsed_seconds": 0.015585124994686339,
+          "pressure_level": 1,
+          "rss_bytes": 9584640,
+          "sampled_cpu_cores": 0.6416374590136071,
+          "swap_used_bytes": 0,
+          "total_bytes": 17179869184
+        },
+        {
+          "compressed_bytes": 3745349632,
+          "conservative_reserve_bytes": 1629749248,
+          "elapsed_seconds": 2.031702290994872,
+          "pressure_level": 1,
+          "rss_bytes": 84410368,
+          "sampled_cpu_cores": 0.4910428901134156,
+          "swap_used_bytes": 0,
+          "total_bytes": 17179869184
+        },
+        {
+          "compressed_bytes": 3745284096,
+          "conservative_reserve_bytes": 1624358912,
+          "elapsed_seconds": 4.052449457994953,
+          "pressure_level": 1,
+          "rss_bytes": 87801856,
+          "sampled_cpu_cores": 0.46022580914001227,
+          "swap_used_bytes": 0,
+          "total_bytes": 17179869184
+        },
+        {
+          "compressed_bytes": 3745153024,
+          "conservative_reserve_bytes": 1614872576,
+          "elapsed_seconds": 6.073232457994891,
+          "pressure_level": 1,
+          "rss_bytes": 89309184,
+          "sampled_cpu_cores": 0.4701148020346714,
+          "swap_used_bytes": 0,
+          "total_bytes": 17179869184
+        },
+        {
+          "compressed_bytes": 3742941184,
+          "conservative_reserve_bytes": 1615282176,
+          "elapsed_seconds": 8.094028332998278,
+          "pressure_level": 1,
+          "rss_bytes": 88031232,
+          "sampled_cpu_cores": 0.4602147161441734,
+          "swap_used_bytes": 0,
+          "total_bytes": 17179869184
+        },
+        {
+          "compressed_bytes": 3742285824,
+          "conservative_reserve_bytes": 1612578816,
+          "elapsed_seconds": 10.110968957997102,
+          "pressure_level": 1,
+          "rss_bytes": 90161152,
+          "sampled_cpu_cores": 0.4561363822995715,
+          "swap_used_bytes": 0,
+          "total_bytes": 17179869184
+        },
+        {
+          "compressed_bytes": 3742138368,
+          "conservative_reserve_bytes": 1600323584,
+          "elapsed_seconds": 12.141220332996454,
+          "pressure_level": 1,
+          "rss_bytes": 90193920,
+          "sampled_cpu_cores": 0.4728478511683344,
+          "swap_used_bytes": 0,
+          "total_bytes": 17179869184
+        }
+      ],
+      "thread_limit": 2,
+      "watchdog_errors": [],
+      "watchdog_expired": false
+    },
+    "guard_log_sha256": "bd1ab441afd484b58c3aff227ae805f1e776e3c2a75b1ba50a4627b81acde6cd",
+    "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+    "receipt_sha256": "465b63a143adb9ef6307ea4b59cad12c3b9ed8db3df43cb45318f84ae459cc4f",
+    "result": {
+      "bytes": 28413,
+      "file": "full128/summary.json",
+      "sha256": "2e1412f26d49ea068a11f6129611d06c8cfdab277a3c0e6eeb65e735881ae3e2"
+    }
+  },
+  "raw_32bit_cells_per_step": 244715,
+  "resume_admitted": false,
+  "runtimes": {
+    "cuda": {
+      "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so",
+      "binding_sha256": "9dec548908dd38cc186ae90ddcd3f341a3b1d430a56bd1a54543eba962b00923",
+      "completed_steps": 0,
+      "config": {
+        "beta1": 0.8999999761581421,
+        "beta2": 0.9990000128746033,
+        "dampening": 0.0,
+        "eps": 9.99999993922529e-09,
+        "kind": 2,
+        "lr": 0.003000000026077032,
+        "max_norm": 0.0,
+        "momentum": 0.0,
+        "nesterov": false,
+        "weight_decay": 0.009999999776482582
+      },
+      "data_schedule": {
+        "corpus_manifest_sha256": "62104076baccf809e986aba08c1c4fae644896de7c995d542c0f757001065dc3",
+        "corpus_sha256": "86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed",
+        "heldout_schedule_sha256": "e5512f24fc86b195635277ac775ef3dc6bbbbfb3696bb9621be21bfe0e0165d2",
+        "initial_parameters_sha256": "b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424",
+        "initialization": "u32-avalanche-index-xor-42595445-top8-centered128-div1024-norm1.v1",
+        "planned_steps": 128,
+        "schema": "mojolearn.byte-lm.real-text-schedule.v1",
+        "train_schedule_sha256": "f7c606fa1b250285fa6decdc688ba6db0576753b8101e8844bae5ca8dc580f82"
+      },
+      "host_runtime": {
+        "machine": "x86_64",
+        "macos_version": null,
+        "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+        "release": "6.8.0-124-generic",
+        "system": "Linux"
+      },
+      "native_numeric_mode": 1,
+      "native_profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+      "native_vendor": "cuda",
+      "next_batch_index": 0,
+      "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+      "qualification": "authored/unqualified",
+      "schema": "small-byte-lm.run-metadata.v1",
+      "source_scope": "available direct source files; binding SHA identifies the compiled artifact",
+      "source_sha256": {
+        "bindings/_mojolearn_byte_lm.mojo": "3a7ad29b4852aaa45dfe9e983f0d40d5b4ed718ac4b65849a66f2e519531ec71",
+        "loaded_python_wrapper": "34aac192bd1a9960471f0fb624a4e425e5ba58845b962dfe757ad65deb489c50",
+        "python/mojolearn/_byte_lm_impl.py": "34aac192bd1a9960471f0fb624a4e425e5ba58845b962dfe757ad65deb489c50",
+        "python/mojolearn/language_model.py": "229631586b19e36170905bf79551ab06a54c2e8efb06e2fabdcc43e8d54edc9b",
+        "training/byte_lm.mojo": "b71af4f06c2bbe907abd7d24c739b20e820b93c124eabef787fc7476116cd08f"
+      }
+    },
+    "hip": {
+      "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so",
+      "binding_sha256": "02f007a221a624172b4aa9f278a7e987f12d2d4bc1856ce94db74df8253b2784",
+      "completed_steps": 0,
+      "config": {
+        "beta1": 0.8999999761581421,
+        "beta2": 0.9990000128746033,
+        "dampening": 0.0,
+        "eps": 9.99999993922529e-09,
+        "kind": 2,
+        "lr": 0.003000000026077032,
+        "max_norm": 0.0,
+        "momentum": 0.0,
+        "nesterov": false,
+        "weight_decay": 0.009999999776482582
+      },
+      "data_schedule": {
+        "corpus_manifest_sha256": "62104076baccf809e986aba08c1c4fae644896de7c995d542c0f757001065dc3",
+        "corpus_sha256": "86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed",
+        "heldout_schedule_sha256": "e5512f24fc86b195635277ac775ef3dc6bbbbfb3696bb9621be21bfe0e0165d2",
+        "initial_parameters_sha256": "b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424",
+        "initialization": "u32-avalanche-index-xor-42595445-top8-centered128-div1024-norm1.v1",
+        "planned_steps": 128,
+        "schema": "mojolearn.byte-lm.real-text-schedule.v1",
+        "train_schedule_sha256": "f7c606fa1b250285fa6decdc688ba6db0576753b8101e8844bae5ca8dc580f82"
+      },
+      "host_runtime": {
+        "machine": "x86_64",
+        "macos_version": null,
+        "python": "3.12.3 (main, Jul 15 2026, 23:46:41) [GCC 13.3.0]",
+        "release": "6.8.0-59-generic",
+        "system": "Linux"
+      },
+      "native_numeric_mode": 1,
+      "native_profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+      "native_vendor": "hip",
+      "next_batch_index": 0,
+      "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+      "qualification": "authored/unqualified",
+      "schema": "small-byte-lm.run-metadata.v1",
+      "source_scope": "available direct source files; binding SHA identifies the compiled artifact",
+      "source_sha256": {
+        "bindings/_mojolearn_byte_lm.mojo": "3a7ad29b4852aaa45dfe9e983f0d40d5b4ed718ac4b65849a66f2e519531ec71",
+        "loaded_python_wrapper": "34aac192bd1a9960471f0fb624a4e425e5ba58845b962dfe757ad65deb489c50",
+        "python/mojolearn/_byte_lm_impl.py": "34aac192bd1a9960471f0fb624a4e425e5ba58845b962dfe757ad65deb489c50",
+        "python/mojolearn/language_model.py": "229631586b19e36170905bf79551ab06a54c2e8efb06e2fabdcc43e8d54edc9b",
+        "training/byte_lm.mojo": "b71af4f06c2bbe907abd7d24c739b20e820b93c124eabef787fc7476116cd08f"
+      }
+    },
+    "metal": {
+      "binding_file": "/private/tmp/mojolearn-byte-lm-metal-20260907/python/mojolearn/identical/_mojolearn_byte_lm.so",
+      "binding_sha256": "260dc3e08ba9f01cda927707f29648f5c3769aecab2d072a30f8e722545e6af5",
+      "completed_steps": 0,
+      "config": {
+        "beta1": 0.8999999761581421,
+        "beta2": 0.9990000128746033,
+        "dampening": 0.0,
+        "eps": 9.99999993922529e-09,
+        "kind": 2,
+        "lr": 0.003000000026077032,
+        "max_norm": 0.0,
+        "momentum": 0.0,
+        "nesterov": false,
+        "weight_decay": 0.009999999776482582
+      },
+      "data_schedule": {
+        "corpus_manifest_sha256": "62104076baccf809e986aba08c1c4fae644896de7c995d542c0f757001065dc3",
+        "corpus_sha256": "86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed",
+        "heldout_schedule_sha256": "e5512f24fc86b195635277ac775ef3dc6bbbbfb3696bb9621be21bfe0e0165d2",
+        "initial_parameters_sha256": "b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424",
+        "initialization": "u32-avalanche-index-xor-42595445-top8-centered128-div1024-norm1.v1",
+        "planned_steps": 128,
+        "schema": "mojolearn.byte-lm.real-text-schedule.v1",
+        "train_schedule_sha256": "f7c606fa1b250285fa6decdc688ba6db0576753b8101e8844bae5ca8dc580f82"
+      },
+      "host_runtime": {
+        "machine": "arm64",
+        "macos_version": "26.5.2",
+        "python": "3.13.15 | packaged by conda-forge | (main, Aug 10 2026, 13:01:04) [Clang 19.1.7 ]",
+        "release": "25.5.0",
+        "system": "Darwin"
+      },
+      "native_numeric_mode": 1,
+      "native_profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+      "native_vendor": "metal",
+      "next_batch_index": 0,
+      "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+      "qualification": "authored/unqualified",
+      "schema": "small-byte-lm.run-metadata.v1",
+      "source_scope": "available direct source files; binding SHA identifies the compiled artifact",
+      "source_sha256": {
+        "bindings/_mojolearn_byte_lm.mojo": "3a7ad29b4852aaa45dfe9e983f0d40d5b4ed718ac4b65849a66f2e519531ec71",
+        "loaded_python_wrapper": "34aac192bd1a9960471f0fb624a4e425e5ba58845b962dfe757ad65deb489c50",
+        "python/mojolearn/_byte_lm_impl.py": "34aac192bd1a9960471f0fb624a4e425e5ba58845b962dfe757ad65deb489c50",
+        "python/mojolearn/language_model.py": "229631586b19e36170905bf79551ab06a54c2e8efb06e2fabdcc43e8d54edc9b",
+        "training/byte_lm.mojo": "b71af4f06c2bbe907abd7d24c739b20e820b93c124eabef787fc7476116cd08f"
+      }
+    }
+  },
+  "schema": "mojolearn.byte-lm.continuous-admission.v1",
+  "scope": "All128 continuous FP32 training states, inputs, heldout bytes and final checkpoint match across three vendors for this fixed two-block 34944-parameter model. No Metal resume, independent Metal FP64 oracle, larger-model or benchmark claim. Metal used the explicitly user-authorized no-free-reserve guard policy; other recorded limits remained active.",
+  "source_files": 258,
+  "status": "QUALIFIED_BOUNDED_CONTINUOUS",
+  "summary_sha256": {
+    "cuda": "ae4d89362cee5262b64e441c6b32756ace76679e14528905793c5a765e514446",
+    "hip": "0ddbec01a2a066d0cbb832119fd6a6df8ebbe809e7a586a8c2f3686028880ad3",
+    "metal": "2e1412f26d49ea068a11f6129611d06c8cfdab277a3c0e6eeb65e735881ae3e2"
+  }
+}

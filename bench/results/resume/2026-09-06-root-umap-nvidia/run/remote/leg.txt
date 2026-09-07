@@ -1,0 +1,9 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=3
+commit=6146b121608d4cf73706d6540bb884e134df409c
+started=2026-09-06T18:00:12Z
+pixi_install_exit=0
+umap_finish_exit=0
+scope=UMAP targeted NVIDIA comparison and real-data quality; CPU umap-learn is quality-only; no full feature or cross-vendor certification

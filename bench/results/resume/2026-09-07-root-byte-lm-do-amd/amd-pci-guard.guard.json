@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/tmp/mojolearn-root-validation-20260906/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tools/test_amd_serial_guard.py"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 43328,
+  "elapsed_seconds": 0.3471502500033239,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

@@ -1,0 +1,2691 @@
+{
+  "schema": "mojolearn.nvidia_feature_coverage.v1",
+  "audit_date": "2026-09-06",
+  "audit_kind": "read_only_retained_evidence_then_documentation",
+  "execution_performed": false,
+  "scope": "Public API and native family/operation inventory; family rows do not certify every method/parameter combination.",
+  "status_vocabulary": {
+    "missing": "No accepted measurement found for current source.",
+    "stale": "Historical actual run; current source not certified.",
+    "invalid": "Failed/refused execution or numerical admission; do not quote competitive ratio.",
+    "inapplicable": "No equivalent GPU implementation established; explicit CPU/I/O fallback is not GPU evidence.",
+    "unverified_in_this_audit": "No independent assertion of this identity leg; consult authoritative ledger."
+  },
+  "policy": {
+    "measurement_owner": "root agent only",
+    "max_concurrent_jobs": 1,
+    "threads": 2,
+    "exactly_one_selected_comparator_per_feature": true,
+    "cross_library_bitwise_identity_claim": false,
+    "current_complete_matrix": false,
+    "admission": "same source/device/session/input; excluded warmup; seven rotating rounds; synchronize; median/IQR/paired ranges; hashes plus accuracy; cross-vendor identity separate",
+    "resource_rule": "No provisioning or commands executed by this audit. Root observes artifact gates before GPU performance; no subagent tests or measurements.",
+    "scope_freeze": "Retained evidence inspected before any root-agent measurements in this turn; new root results may supersede current-source missing cells."
+  },
+  "harnesses": {
+    "public_knn": {
+      "status": "existing_three_arm_runner",
+      "command": "python tools/nvidia_public_compare.py --lane knn --knn-external cuml --index 100000 --queries 32 --k 10 --rounds 7 --out /tmp/mojolearn-current-knn-q32",
+      "next": "Repeat sequentially with queries128/1000 and distinct output directories; same installed source."
+    },
+    "public_gemv": {
+      "status": "existing_three_arm_runner",
+      "command": "python tools/nvidia_public_compare.py --lane gemv --dim 2048 --rounds 7 --out /tmp/mojolearn-current-gemv"
+    },
+    "public_nt": {
+      "status": "existing_three_arm_runner",
+      "command": "python tools/nvidia_public_compare.py --lane nt --rows 16384 --rounds 7 --out /tmp/mojolearn-current-nt"
+    },
+    "public_gram": {
+      "status": "existing_three_arm_runner",
+      "command": "python tools/nvidia_public_compare.py --lane gram --gram-rows 65536 --rounds 7 --out /tmp/mojolearn-current-gram"
+    },
+    "public_umap": {
+      "status": "existing_three_arm_runner",
+      "command": "python tools/nvidia_public_compare.py --lane umap --umap-rows 256 --umap-epochs 50 --rounds 7 --out /tmp/mojolearn-current-umap256",
+      "next": "Require installed cuML and quality admission; start256, then1024 only if admitted."
+    },
+    "forest_adapter": {
+      "status": "implementation_required_before_measurement",
+      "command": "MOJOLEARN_SPEED_SIZE=smoke MOJOLEARN_SPEED_ROUNDS=7 python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset synthclf --devices gpu",
+      "next": "This existing command is FAST+opponents only, NOT three-arm admission. Add explicit fast/identical workers, exactly one selected external arm, same fixtures and output checks before use for target measurements. Existing --ours-only permits arm isolation. Do not run nvidia_forest_bench.sh: six-arm historical default violates requested one-comparator policy."
+    },
+    "classical_adapter": {
+      "status": "implementation_required_before_measurement",
+      "command": "MOJOLEARN_SPEED_LANE=kmeans MOJOLEARN_SPEED_ROUNDS=7 python tools/speed_cuml_arm.py",
+      "next": "Existing external leg only; combine prepared FAST/IDENTICAL classical binaries in seven rotating rounds. Use MOJOLEARN_SPEED_DUMP where supported to share exact input bytes. Fix refused PCA solver; no all-lane uncontrolled launch."
+    },
+    "mamba_external": {
+      "status": "correctness_or_external_only_runner",
+      "command": "python tools/mamba_external_compare.py --family mamba1 --native /tmp/current-mamba1/native --out /tmp/current-mamba1-external --samples 0",
+      "next": "Fresh native manifest required. samples7 adds external-only timing, NOT a Mojo ratio; backward includes forward. Fix Mamba2 stride and Mamba3 availability, then add paired native forward/backward timed regions with matching objective."
+    },
+    "sequence_adapter": {
+      "status": "external_admission_leg_only",
+      "command": "MOJOLEARN_CPU_THREADS=2 python tools/speed_torch_seq.py --lane transformer --row 2 --rounds 1 --warmups 1 --no-bf16 --dump-dir /tmp/current-transformer-identical --mojo-log /tmp/current-transformer-fast.log --mojo-log /tmp/current-transformer-identical.log",
+      "next": "Prepared current FAST/IDENTICAL dumps required; run against each mode dump to gate both outputs; explicitly select one strict-FP32 arm in orchestrator and rotate seven rounds. Mamba uses lane mamba row8 and --require-fused. Other emitted diagnostic precision arms are not additional selected comparisons."
+    },
+    "gemm_adapter": {
+      "status": "implementation_required_before_measurement",
+      "command": null,
+      "next": "Pair bench/speed/gemm_speed_main.mojo with tools/speed_gemm_arm.py only after exact common input/precision/output admission and one-comparator selection are enforced."
+    },
+    "new_adapter": {
+      "status": "missing",
+      "command": null,
+      "next": "No admitted operation-specific three-arm runner identified; implement bounded same-fixture adapter before measurement."
+    }
+  },
+  "features": [
+    {
+      "id": "gbdt_plain_fit",
+      "feature": "Symmetric GBDT plain fit",
+      "surface": "public fit",
+      "priority": 0,
+      "selected_comparator": {
+        "name": "CatBoost GPU",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-28_030908-nvidia-speed-forest/remote/logs/forest.gbdt-symmetric.r1000000.log",
+          "fixture": "HIGGS 1m x28; related 2m/5m logs",
+          "source": "3d65d70609bd35f73401f38fcb2064bb1156cc08",
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "CatBoost GPU",
+          "admission_caveat": "H100; five interleaved FAST/external rounds with accuracy; no IDENTICAL arm. Source predates current fixes."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "rf_classifier_fit",
+      "feature": "RandomForestClassifier fit",
+      "surface": "public fit",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML RandomForestClassifier",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-28_030908-nvidia-speed-forest/remote/logs/forest.rf.r1000000.log",
+          "fixture": "HIGGS 1m x28; related 2m/5m logs",
+          "source": "3d65d70609bd35f73401f38fcb2064bb1156cc08",
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML RF CUDA",
+          "admission_caveat": "H100; five interleaved FAST/external rounds with accuracy; no IDENTICAL arm. Source predates current fixes."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "gbdt_depthwise_fit",
+      "feature": "GBDT depthwise fit",
+      "surface": "public fit",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "XGBoost GPU",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-28_030908-nvidia-speed-forest/remote/logs/forest.gbdt-depthwise.r1000000.log",
+          "fixture": "HIGGS 1m x28; related 2m/5m logs",
+          "source": "3d65d70609bd35f73401f38fcb2064bb1156cc08",
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "CatBoost GPU and XGBoost GPU in historical multi-comparator run; only XGBoost selected for new inventory",
+          "admission_caveat": "H100; five interleaved FAST/external rounds with accuracy; no IDENTICAL arm. Source predates current fixes. Historical multiple comparator roster violates current one-comparator policy; lossguide LightGBM CUDA additionally refused."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "gbdt_lossguide_fit",
+      "feature": "GBDT lossguide fit",
+      "surface": "public fit",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "XGBoost GPU",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-28_030908-nvidia-speed-forest/remote/logs/forest.gbdt-lossguide.r1000000.log",
+          "fixture": "HIGGS 1m x28; related 2m/5m logs",
+          "source": "3d65d70609bd35f73401f38fcb2064bb1156cc08",
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "CatBoost GPU and XGBoost GPU in historical multi-comparator run; only XGBoost selected for new inventory",
+          "admission_caveat": "H100; five interleaved FAST/external rounds with accuracy; no IDENTICAL arm. Source predates current fixes. Historical multiple comparator roster violates current one-comparator policy; lossguide LightGBM CUDA additionally refused."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "gbdt_predict",
+      "feature": "Symmetric GBDT prediction",
+      "surface": "public predict",
+      "priority": 0,
+      "selected_comparator": {
+        "name": "CatBoost GPU",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Inventory supported parameters against native checks; no feature-specific current NVIDIA three-arm result. Refused/unimplemented upstream configurations remain outside implemented scope.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "gbdt_ordered",
+      "feature": "OrderedRMSE single-permutation fit/predict",
+      "surface": "public OrderedRMSE",
+      "priority": 0,
+      "selected_comparator": {
+        "name": "CatBoost GPU",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/cross-device-continued.json",
+          "bench/results/resume/2026-09-06-installed-gap-closure/installed-lane-comparison.json"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Inventory supported parameters against native checks; no feature-specific current NVIDIA three-arm result. Refused/unimplemented upstream configurations remain outside implemented scope.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "gbdt_categorical",
+      "feature": "Categorical/CTR FeatureFreq and weighted partitions",
+      "surface": "experimental/native",
+      "priority": 0,
+      "selected_comparator": {
+        "name": "CatBoost GPU",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/cross-device-continued.json",
+          "bench/results/resume/2026-09-06-installed-gap-closure/installed-lane-comparison.json"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Inventory supported parameters against native checks; no feature-specific current NVIDIA three-arm result. Refused/unimplemented upstream configurations remain outside implemented scope.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "gbdt_ranking",
+      "feature": "Symmetric-tree ranking objectives and derivatives",
+      "surface": "native supported slice",
+      "priority": 0,
+      "selected_comparator": {
+        "name": "CatBoost GPU",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Inventory supported parameters against native checks; no feature-specific current NVIDIA three-arm result. Refused/unimplemented upstream configurations remain outside implemented scope.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "gbdt_objectives",
+      "feature": "Other supported symmetric-tree losses, gradients and Hessians",
+      "surface": "native/public supported slice",
+      "priority": 0,
+      "selected_comparator": {
+        "name": "CatBoost GPU",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Inventory supported parameters against native checks; no feature-specific current NVIDIA three-arm result. Refused/unimplemented upstream configurations remain outside implemented scope.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "gbdt_bootstrap",
+      "feature": "Symmetric-tree bootstrap, weights, leaf estimation and score configuration",
+      "surface": "native/public supported slice",
+      "priority": 0,
+      "selected_comparator": {
+        "name": "CatBoost GPU",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Inventory supported parameters against native checks; no feature-specific current NVIDIA three-arm result. Refused/unimplemented upstream configurations remain outside implemented scope.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "gbdt_serialization",
+      "feature": "GBDT/OrderedRMSE model save/load and restored predictions",
+      "surface": "public serialization",
+      "priority": 0,
+      "selected_comparator": {
+        "name": "CatBoost GPU",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/cross-device-continued.json",
+          "bench/results/resume/2026-09-06-installed-gap-closure/installed-lane-comparison.json"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Inventory supported parameters against native checks; no feature-specific current NVIDIA three-arm result. Refused/unimplemented upstream configurations remain outside implemented scope.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "rf_regressor",
+      "feature": "RandomForestRegressor fit/predict",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML RandomForestRegressor",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "HIGGS classifier timing does not cover regression or separate prediction latency.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "rf_predict",
+      "feature": "RandomForestClassifier prediction",
+      "surface": "public predict",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML RandomForestClassifier",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "et_classifier",
+      "feature": "ExtraTreesClassifier fit/predict",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "LightGBM CUDA RF extra_trees=true",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-28_030908-nvidia-speed-forest/remote/logs/forest.et.r1000000.log",
+          "fixture": "HIGGS 1m x28 classifier",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "invalid",
+          "actual_external": "LightGBM CUDA refused; cuML ET refused",
+          "admission_caveat": "LightGBM wheel lacks CUDA; cuML has no ExtraTrees in retained environment. FAST only. Classifier fixture is inapplicable to regressor performance."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Selected LightGBM mode is a related random-threshold forest, not exact ExtraTrees equivalence; disclose this. No admitted GPU external or IDENTICAL timing.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "et_regressor",
+      "feature": "ExtraTreesRegressor fit/predict",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "LightGBM CUDA RF extra_trees=true",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-28_030908-nvidia-speed-forest/remote/logs/forest.et.r1000000.log",
+          "fixture": "HIGGS 1m x28 classifier",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "invalid",
+          "actual_external": "LightGBM CUDA refused; cuML ET refused",
+          "admission_caveat": "LightGBM wheel lacks CUDA; cuML has no ExtraTrees in retained environment. FAST only. Classifier fixture is inapplicable to regressor performance."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Selected LightGBM mode is a related random-threshold forest, not exact ExtraTrees equivalence; disclose this. No admitted GPU external or IDENTICAL timing.",
+      "harness": "forest_adapter"
+    },
+    {
+      "id": "iforest",
+      "feature": "IsolationForest fit/score",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "scikit-learn IsolationForest",
+        "backend": "CPU"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "inapplicable_to_gpu_comparison"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "No matching GPU estimator established among requested libraries. CPU comparator is an explicitly inapplicable GPU-performance cell, not a GPU win; reconsider only with evidenced equivalent GPU support.",
+      "harness": null
+    },
+    {
+      "id": "knn_search",
+      "feature": "NearestNeighbors kNN search",
+      "surface": "public",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "cuML NearestNeighbors",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/final-supplement/torch-knn-32/results.json",
+          "fixture": "100000 index x32, 32 queries, k10",
+          "source": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+          "fast": "stale",
+          "identical": "stale",
+          "external": "stale",
+          "actual_external": "PyTorch CUDA cdist + sorted topk",
+          "admission_caveat": "Seven rotating public-API rounds PASSED at retained source; includes host transfers/output; selected cuML comparator was unavailable."
+        },
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/final-supplement/torch-knn-128/results.json",
+          "fixture": "100000 index x32, 128 queries, k10",
+          "source": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+          "fast": "stale",
+          "identical": "stale",
+          "external": "stale",
+          "actual_external": "PyTorch CUDA cdist + sorted topk",
+          "admission_caveat": "Seven rotating public-API rounds PASSED at retained source; includes host transfers/output; selected cuML comparator was unavailable."
+        },
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/final-supplement/torch-knn-1000/results.json",
+          "fixture": "100000 index x32, 1000 queries, k10",
+          "source": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+          "fast": "stale",
+          "identical": "stale",
+          "external": "stale",
+          "actual_external": "PyTorch CUDA cdist + sorted topk",
+          "admission_caveat": "Seven rotating public-API rounds PASSED at retained source; includes host transfers/output; selected cuML comparator was unavailable."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Retain admitted PyTorch historical comparison as-is. Need selected cuML and current FAST/IDENTICAL in one session; selector/layout flag timings are separate two-arm experiments.",
+      "harness": "public_knn"
+    },
+    {
+      "id": "knn_classifier",
+      "feature": "KNeighborsClassifier fit/query",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML KNeighborsClassifier",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Search primitive coverage does not establish this estimator/output contract. Verify exact selected API support on installed cuML; unsupported API is inapplicable, not a timing pass.",
+      "harness": null
+    },
+    {
+      "id": "knn_regressor",
+      "feature": "KNeighborsRegressor fit/query",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML KNeighborsRegressor",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Search primitive coverage does not establish this estimator/output contract. Verify exact selected API support on installed cuML; unsupported API is inapplicable, not a timing pass.",
+      "harness": null
+    },
+    {
+      "id": "radius_neighbors",
+      "feature": "RadiusNeighbors fit/query",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML NearestNeighbors radius_neighbors",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Search primitive coverage does not establish this estimator/output contract. Verify exact selected API support on installed cuML; unsupported API is inapplicable, not a timing pass.",
+      "harness": null
+    },
+    {
+      "id": "kmeans",
+      "feature": "KMeans",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML KMeans",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.kmeans.ours.log",
+          "fixture": "4000000x32 k64 i20",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML KMeans",
+          "admission_caveat": "External companion is classical.kmeans.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "dbscan",
+      "feature": "DBSCAN",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML DBSCAN",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.dbscan.ours.log",
+          "fixture": "4000x16",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML DBSCAN",
+          "admission_caveat": "External companion is classical.dbscan.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "svc",
+      "feature": "SVC",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML SVC",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.svm.ours.log",
+          "fixture": "xor 240x2",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML SVC",
+          "admission_caveat": "External companion is classical.svm.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "linear_regression",
+      "feature": "LinearRegression",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML LinearRegression",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.ols.ours.log",
+          "fixture": "4000000x32",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML LinearRegression",
+          "admission_caveat": "External companion is classical.ols.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "elasticnet",
+      "feature": "ElasticNet",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML ElasticNet",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.cd.ours.log",
+          "fixture": "2048x16",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML ElasticNet",
+          "admission_caveat": "External companion is classical.cd.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "kde",
+      "feature": "KernelDensity",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML KernelDensity",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.kde.ours.log",
+          "fixture": "1024 training x256 queries x8",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML KernelDensity",
+          "admission_caveat": "External companion is classical.kde.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "agglomerative",
+      "feature": "AgglomerativeClustering",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML AgglomerativeClustering",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.linkage.ours.log",
+          "fixture": "102x5 duplicates",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML AgglomerativeClustering",
+          "admission_caveat": "External companion is classical.linkage.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "holtwinters",
+      "feature": "ExponentialSmoothing",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML ExponentialSmoothing",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.holtwinters.ours.log",
+          "fixture": "7x72 forecast12",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML ExponentialSmoothing",
+          "admission_caveat": "External companion is classical.holtwinters.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "nvidia_pending",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "kpss",
+      "feature": "KPSS and select_d",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML stationarity tests",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.kpss.ours.log",
+          "fixture": "8x520",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML stationarity tests",
+          "admission_caveat": "External companion is classical.kpss.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "nvidia_pending",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "hdbscan",
+      "feature": "HDBSCAN",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML HDBSCAN",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.hdbscan.ours.log",
+          "fixture": "96x4 blobs",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML HDBSCAN",
+          "admission_caveat": "External companion is classical.hdbscan.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "ivf",
+      "feature": "IVF approximate neighbors",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuVS IVF",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.ivf.ours.log",
+          "fixture": "512x8 q64 lists8 probes3 k8",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuVS IVF",
+          "admission_caveat": "External companion is classical.ivf.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "kernel_ridge",
+      "feature": "Kernel ridge",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML KernelRidge",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.krr.ours.log",
+          "fixture": "RBF 16x5",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML KernelRidge",
+          "admission_caveat": "External companion is classical.krr.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "cholesky",
+      "feature": "Cholesky solve",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "PyTorch CUDA linalg",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.cholesky.ours.log",
+          "fixture": "RBF64x64 rhs4",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "PyTorch CUDA linalg",
+          "admission_caveat": "External companion is classical.cholesky.vendor.log; three rounds, separate arm runs, no IDENTICAL or FSPEED-ACC. Kernel fixture does not cover all public operations."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "pca",
+      "feature": "PCA fit/transform",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML PCA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.pca.vendor.log",
+          "fixture": "4000000x32 components8",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "invalid",
+          "actual_external": "cuML CUDA",
+          "admission_caveat": "cuML rejected svd_solver='covariance_eigh'; use supported equivalent solver with recorded semantics."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "lasso",
+      "feature": "Lasso",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML Lasso",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "No separately admitted NVIDIA row found. Related linear/SVC primitive or installed smoke is not this estimator timing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "ridge",
+      "feature": "Ridge",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML Ridge",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "No separately admitted NVIDIA row found. Related linear/SVC primitive or installed smoke is not this estimator timing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "logistic",
+      "feature": "LogisticRegression",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML LogisticRegression",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "No separately admitted NVIDIA row found. Related linear/SVC primitive or installed smoke is not this estimator timing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "svr",
+      "feature": "SVR",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML SVR",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "No separately admitted NVIDIA row found. Related linear/SVC primitive or installed smoke is not this estimator timing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "tsvd",
+      "feature": "TruncatedSVD",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML TruncatedSVD",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "No separately admitted NVIDIA row found. Related linear/SVC primitive or installed smoke is not this estimator timing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "arima",
+      "feature": "ARIMA fit/filter/forecast",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML ARIMA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "No separately admitted NVIDIA row found. Related linear/SVC primitive or installed smoke is not this estimator timing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "gp",
+      "feature": "GaussianProcessRegressor",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "scikit-learn GaussianProcessRegressor",
+        "backend": "CPU"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "inapplicable_to_gpu_comparison"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.gp.vendor.log",
+          "fixture": "See companion native fixture header",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "inapplicable",
+          "actual_external": "scikit-learn GaussianProcessRegressor (refused)",
+          "admission_caveat": "Requested GPU reference not supplied by retained RAPIDS; older runner also refused CPU fallback."
+        }
+      ],
+      "identity": {
+        "status": "nvidia_pending",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Selected CPU fallback is explicit. No matching GPU comparator established among requested libraries; GPU external cell inapplicable, not zero milliseconds.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "spectral",
+      "feature": "SpectralClustering",
+      "surface": "public",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "scikit-learn SpectralClustering",
+        "backend": "CPU"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "inapplicable_to_gpu_comparison"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.spectral.vendor.log",
+          "fixture": "See companion native fixture header",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "inapplicable",
+          "actual_external": "scikit-learn SpectralClustering (refused)",
+          "admission_caveat": "Requested GPU reference not supplied by retained RAPIDS; older runner also refused CPU fallback."
+        }
+      ],
+      "identity": {
+        "status": "nvidia_pending",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Selected CPU fallback is explicit. No matching GPU comparator established among requested libraries; GPU external cell inapplicable, not zero milliseconds.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "gmm",
+      "feature": "Gaussian mixture",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "scikit-learn GaussianMixture",
+        "backend": "CPU"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "inapplicable_to_gpu_comparison"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.gmm.vendor.log",
+          "fixture": "See companion native fixture header",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "inapplicable",
+          "actual_external": "scikit-learn GaussianMixture (refused)",
+          "admission_caveat": "Requested GPU reference not supplied by retained RAPIDS; older runner also refused CPU fallback."
+        }
+      ],
+      "identity": {
+        "status": "unverified_in_this_audit",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Selected CPU fallback is explicit. No matching GPU comparator established among requested libraries; GPU external cell inapplicable, not zero milliseconds.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "nystroem",
+      "feature": "Nystroem",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "scikit-learn Nystroem",
+        "backend": "CPU"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "inapplicable_to_gpu_comparison"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.nystroem.vendor.log",
+          "fixture": "See companion native fixture header",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "inapplicable",
+          "actual_external": "scikit-learn Nystroem (refused)",
+          "admission_caveat": "Requested GPU reference not supplied by retained RAPIDS; older runner also refused CPU fallback."
+        }
+      ],
+      "identity": {
+        "status": "unverified_in_this_audit",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Selected CPU fallback is explicit. No matching GPU comparator established among requested libraries; GPU external cell inapplicable, not zero milliseconds.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "rbfsampler",
+      "feature": "Random Fourier features",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "scikit-learn RBFSampler",
+        "backend": "CPU"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "inapplicable_to_gpu_comparison"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.rbfsampler.vendor.log",
+          "fixture": "See companion native fixture header",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "inapplicable",
+          "actual_external": "scikit-learn RBFSampler (refused)",
+          "admission_caveat": "Requested GPU reference not supplied by retained RAPIDS; older runner also refused CPU fallback."
+        }
+      ],
+      "identity": {
+        "status": "unverified_in_this_audit",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Selected CPU fallback is explicit. No matching GPU comparator established among requested libraries; GPU external cell inapplicable, not zero milliseconds.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "resample",
+      "feature": "Bootstrap resampling",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "SciPy bootstrap",
+        "backend": "CPU"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "inapplicable_to_gpu_comparison"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.resample.vendor.log",
+          "fixture": "See companion native fixture header",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "inapplicable",
+          "actual_external": "SciPy bootstrap (refused)",
+          "admission_caveat": "Requested GPU reference not supplied by retained RAPIDS; older runner also refused CPU fallback."
+        }
+      ],
+      "identity": {
+        "status": "unverified_in_this_audit",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Selected CPU fallback is explicit. No matching GPU comparator established among requested libraries; GPU external cell inapplicable, not zero milliseconds.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "metrics_labels",
+      "feature": "Label metrics",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML metrics",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.metrics.ours.log",
+          "fixture": "labels2053 floats2053 silhouette521x4 trustworthiness301x6",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML CUDA",
+          "admission_caveat": "Combined metrics fixture, three rounds; vendor companion retained; no per-feature IDENTICAL timing/admission."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "metrics_regression",
+      "feature": "Regression/KL metrics",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML metrics",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.metrics.ours.log",
+          "fixture": "labels2053 floats2053 silhouette521x4 trustworthiness301x6",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML CUDA",
+          "admission_caveat": "Combined metrics fixture, three rounds; vendor companion retained; no per-feature IDENTICAL timing/admission."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "metrics_silhouette",
+      "feature": "Silhouette",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML metrics",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.metrics.ours.log",
+          "fixture": "labels2053 floats2053 silhouette521x4 trustworthiness301x6",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML CUDA",
+          "admission_caveat": "Combined metrics fixture, three rounds; vendor companion retained; no per-feature IDENTICAL timing/admission."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "metrics_trustworthiness",
+      "feature": "Trustworthiness",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "cuML metrics",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/logs/classical.metrics.ours.log",
+          "fixture": "labels2053 floats2053 silhouette521x4 trustworthiness301x6",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuML CUDA",
+          "admission_caveat": "Combined metrics fixture, three rounds; vendor companion retained; no per-feature IDENTICAL timing/admission."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "classical_adapter"
+    },
+    {
+      "id": "gemv",
+      "feature": "GEMV",
+      "surface": "public linalg",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "PyTorch CUDA strict FP32",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/campaign/public-gemv/results.json",
+          "fixture": "2048 squared",
+          "source": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+          "fast": "stale",
+          "identical": "stale",
+          "external": "stale",
+          "actual_external": "PyTorch CUDA strict FP32",
+          "admission_caveat": "Seven rotating rounds PASSED; public host-array API includes transfers/output. NT IDENTICAL faster than FAST requires investigation."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "public_gemv"
+    },
+    {
+      "id": "nt",
+      "feature": "NT",
+      "surface": "public linalg",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "PyTorch CUDA strict FP32",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/campaign/public-nt/results.json",
+          "fixture": "16384x64x64",
+          "source": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+          "fast": "stale",
+          "identical": "stale",
+          "external": "stale",
+          "actual_external": "PyTorch CUDA strict FP32",
+          "admission_caveat": "Seven rotating rounds PASSED; public host-array API includes transfers/output. NT IDENTICAL faster than FAST requires investigation."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "public_nt"
+    },
+    {
+      "id": "gram",
+      "feature": "GRAM",
+      "surface": "public linalg",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "PyTorch CUDA strict FP32",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/campaign/public-gram/results.json",
+          "fixture": "65536x32",
+          "source": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+          "fast": "stale",
+          "identical": "stale",
+          "external": "stale",
+          "actual_external": "PyTorch CUDA strict FP32",
+          "admission_caveat": "Seven rotating rounds PASSED; public host-array API includes transfers/output. NT IDENTICAL faster than FAST requires investigation."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "public_gram"
+    },
+    {
+      "id": "gemm",
+      "feature": "General GEMM orientations/shapes",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "PyTorch CUDA matmul",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-28_040316-nvidia-speed-gemmseq/remote/logs/gemm.gemm.ours.log",
+          "fixture": "Gram32x32x1M and other header shapes",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "stale",
+          "actual_external": "cuBLAS via PyTorch, precision-labelled arms",
+          "admission_caveat": "FAST only; historical source says MAX tuned FAST route should compare TF32; do not merge with strict-FP32 three-arm fixtures."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "gemm_adapter"
+    },
+    {
+      "id": "linalg_other",
+      "feature": "Other exposed linalg reductions/solves",
+      "surface": "public/native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "PyTorch CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "local_or_scoped_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "new_adapter"
+    },
+    {
+      "id": "embedding_forward",
+      "feature": "Embedding forward",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "PyTorch CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "local_or_scoped_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "new_adapter"
+    },
+    {
+      "id": "embedding_backward",
+      "feature": "Embedding backward",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "PyTorch CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "local_or_scoped_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "new_adapter"
+    },
+    {
+      "id": "training_loss_forward",
+      "feature": "Training losses forward",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "PyTorch CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "local_or_scoped_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "new_adapter"
+    },
+    {
+      "id": "training_loss_backward",
+      "feature": "Training loss derivatives",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "PyTorch CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "local_or_scoped_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "new_adapter"
+    },
+    {
+      "id": "training_optimizer",
+      "feature": "Optimizer update/state",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "PyTorch CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "local_or_scoped_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "new_adapter"
+    },
+    {
+      "id": "training_step",
+      "feature": "Composed training forward/backward/update",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "PyTorch CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "local_or_scoped_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "new_adapter"
+    },
+    {
+      "id": "checkpoint",
+      "feature": "Training checkpoints save/load",
+      "surface": "native I/O",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "PyTorch serialization",
+        "backend": "CPU/storage"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "inapplicable_to_gpu_comparison"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "local_or_scoped_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "I/O benchmark, not CUDA compute. Pin payload, serialization guarantees, storage and warm-cache policy; separate restored-tensor identity.",
+      "harness": "new_adapter"
+    },
+    {
+      "id": "mamba1_forward",
+      "feature": "MAMBA1 forward",
+      "surface": "public forward/state; native backward",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "mamba-ssm CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/campaign/seq-mamba-fast-1.log",
+          "fixture": "mamba130m.prefill.t8",
+          "source": "1d1f8fdd",
+          "fast": "stale",
+          "identical": "stale",
+          "external": "stale",
+          "actual_external": "mamba-ssm CUDA",
+          "admission_caveat": "Seven rotating rounds in sibling seq-mamba-*.log; accuracy passed; not current source."
+        }
+      ],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "mamba/BACKWARD_CERTIFICATION.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/README.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current native backward certificates differ from historical certificate; Python backward absent at audit baseline. Forward correctness does not certify backward timing; state/decode require separate operands and objective.",
+      "harness": "mamba_external"
+    },
+    {
+      "id": "mamba1_backward",
+      "feature": "MAMBA1 backward",
+      "surface": "public forward/state; native backward",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "mamba-ssm CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/last-checks/mamba1/result.json",
+          "fixture": "base_b2_l4_d8",
+          "source": null,
+          "fast": "missing",
+          "identical": "missing",
+          "external": "missing",
+          "actual_external": "mamba-ssm CUDA",
+          "admission_caveat": "Mamba1 whole-block forward/backward agreement PASSED, correctness only. Mamba2 failed fused-convolution stride constraint. Mamba3 timed out. No admitted backward ratio."
+        }
+      ],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "mamba/BACKWARD_CERTIFICATION.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/README.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current native backward certificates differ from historical certificate; Python backward absent at audit baseline. Forward correctness does not certify backward timing; state/decode require separate operands and objective.",
+      "harness": "mamba_external"
+    },
+    {
+      "id": "mamba1_state_decode",
+      "feature": "MAMBA1 state_decode",
+      "surface": "public forward/state; native backward",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "mamba-ssm CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "mamba/BACKWARD_CERTIFICATION.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/README.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current native backward certificates differ from historical certificate; Python backward absent at audit baseline. Forward correctness does not certify backward timing; state/decode require separate operands and objective.",
+      "harness": "mamba_external"
+    },
+    {
+      "id": "mamba2_forward",
+      "feature": "MAMBA2 forward",
+      "surface": "public forward/state; native backward",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "mamba-ssm CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/last-checks/mamba2/result.json",
+          "fixture": "Retained family manifest",
+          "source": null,
+          "fast": "missing",
+          "identical": "missing",
+          "external": "invalid",
+          "actual_external": "mamba-ssm CUDA",
+          "admission_caveat": "Mamba1 whole-block forward/backward agreement PASSED, correctness only. Mamba2 failed fused-convolution stride constraint. Mamba3 timed out. No admitted backward ratio."
+        }
+      ],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "mamba/BACKWARD_CERTIFICATION.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/README.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current native backward certificates differ from historical certificate; Python backward absent at audit baseline. Forward correctness does not certify backward timing; state/decode require separate operands and objective.",
+      "harness": "mamba_external"
+    },
+    {
+      "id": "mamba2_backward",
+      "feature": "MAMBA2 backward",
+      "surface": "public forward/state; native backward",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "mamba-ssm CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/last-checks/mamba2/result.json",
+          "fixture": "Retained family manifest",
+          "source": null,
+          "fast": "missing",
+          "identical": "missing",
+          "external": "invalid",
+          "actual_external": "mamba-ssm CUDA",
+          "admission_caveat": "Mamba1 whole-block forward/backward agreement PASSED, correctness only. Mamba2 failed fused-convolution stride constraint. Mamba3 timed out. No admitted backward ratio."
+        }
+      ],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "mamba/BACKWARD_CERTIFICATION.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/README.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current native backward certificates differ from historical certificate; Python backward absent at audit baseline. Forward correctness does not certify backward timing; state/decode require separate operands and objective.",
+      "harness": "mamba_external"
+    },
+    {
+      "id": "mamba2_state_decode",
+      "feature": "MAMBA2 state_decode",
+      "surface": "public forward/state; native backward",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "mamba-ssm CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "mamba/BACKWARD_CERTIFICATION.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/README.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current native backward certificates differ from historical certificate; Python backward absent at audit baseline. Forward correctness does not certify backward timing; state/decode require separate operands and objective.",
+      "harness": "mamba_external"
+    },
+    {
+      "id": "mamba3_forward",
+      "feature": "MAMBA3 forward",
+      "surface": "public forward/state; native backward",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "upstream Mamba3 CUDA/Triton",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/last-checks/results.tsv",
+          "fixture": "Retained family manifest",
+          "source": null,
+          "fast": "missing",
+          "identical": "missing",
+          "external": "invalid",
+          "actual_external": "upstream Mamba3 CUDA/Triton",
+          "admission_caveat": "Mamba1 whole-block forward/backward agreement PASSED, correctness only. Mamba2 failed fused-convolution stride constraint. Mamba3 timed out. No admitted backward ratio."
+        }
+      ],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "mamba/BACKWARD_CERTIFICATION.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/README.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current native backward certificates differ from historical certificate; Python backward absent at audit baseline. Forward correctness does not certify backward timing; state/decode require separate operands and objective.",
+      "harness": "mamba_external"
+    },
+    {
+      "id": "mamba3_backward",
+      "feature": "MAMBA3 backward",
+      "surface": "public forward/state; native backward",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "upstream Mamba3 CUDA/Triton",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/last-checks/results.tsv",
+          "fixture": "Retained family manifest",
+          "source": null,
+          "fast": "missing",
+          "identical": "missing",
+          "external": "invalid",
+          "actual_external": "upstream Mamba3 CUDA/Triton",
+          "admission_caveat": "Mamba1 whole-block forward/backward agreement PASSED, correctness only. Mamba2 failed fused-convolution stride constraint. Mamba3 timed out. No admitted backward ratio."
+        }
+      ],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "mamba/BACKWARD_CERTIFICATION.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/README.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current native backward certificates differ from historical certificate; Python backward absent at audit baseline. Forward correctness does not certify backward timing; state/decode require separate operands and objective.",
+      "harness": "mamba_external"
+    },
+    {
+      "id": "mamba3_state_decode",
+      "feature": "MAMBA3 state_decode",
+      "surface": "public forward/state; native backward",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "upstream Mamba3 CUDA/Triton",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "mamba/BACKWARD_CERTIFICATION.md",
+          "bench/results/resume/2026-09-06-ordered-mamba-knn/README.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current native backward certificates differ from historical certificate; Python backward absent at audit baseline. Forward correctness does not certify backward timing; state/decode require separate operands and objective.",
+      "harness": "mamba_external"
+    },
+    {
+      "id": "transformer_forward",
+      "feature": "Transformer forward",
+      "surface": "public forward/state; native backward/primitives",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "PyTorch CUDA strict FP32",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/campaign/results.tsv",
+          "fixture": "Transformer timing row2 prefill t8",
+          "source": null,
+          "fast": "invalid",
+          "identical": "invalid",
+          "external": "invalid",
+          "actual_external": "PyTorch CUDA strict FP32",
+          "admission_caveat": "Seven-round transformer attempt failed numerical admission (external exit2); timings rejected."
+        }
+      ],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "sequence_adapter"
+    },
+    {
+      "id": "transformer_backward",
+      "feature": "Transformer backward",
+      "surface": "public forward/state; native backward/primitives",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "PyTorch CUDA strict FP32",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "sequence_adapter"
+    },
+    {
+      "id": "transformer_state_decode",
+      "feature": "Transformer state_decode",
+      "surface": "public forward/state; native backward/primitives",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "PyTorch CUDA strict FP32",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "sequence_adapter"
+    },
+    {
+      "id": "transformer_attention",
+      "feature": "Transformer attention",
+      "surface": "public forward/state; native backward/primitives",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "PyTorch CUDA strict FP32",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "sequence_adapter"
+    },
+    {
+      "id": "transformer_mlp",
+      "feature": "Transformer mlp",
+      "surface": "public forward/state; native backward/primitives",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "PyTorch CUDA strict FP32",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "sequence_adapter"
+    },
+    {
+      "id": "transformer_rmsnorm",
+      "feature": "Transformer rmsnorm",
+      "surface": "public forward/state; native backward/primitives",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "PyTorch CUDA strict FP32",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "sequence_adapter"
+    },
+    {
+      "id": "selective_scan",
+      "feature": "Mamba1 selective scan primitive",
+      "surface": "native",
+      "priority": 2,
+      "selected_comparator": {
+        "name": "mamba-ssm CUDA",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-08-28_040316-nvidia-speed-gemmseq/remote/logs/seq.selective_scan.torch.log",
+          "fixture": "Recorded sequence shape ladder",
+          "source": null,
+          "fast": "stale",
+          "identical": "missing",
+          "external": "invalid",
+          "actual_external": "PyTorch reference loop; fused mamba-ssm unavailable",
+          "admission_caveat": "Reference loop not production-throughput comparator; operands generated through different prefixes require common stage dumps."
+        }
+      ],
+      "identity": {
+        "status": "historical_fixture_only",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "sequence_adapter"
+    },
+    {
+      "id": "umap_fit",
+      "feature": "UMAP fit/fit_transform",
+      "surface": "public",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "cuML UMAP",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [
+        {
+          "evidence": "bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/campaign/results.tsv",
+          "fixture": "256x16,2D,epochs50",
+          "source": null,
+          "fast": "missing",
+          "identical": "missing",
+          "external": "invalid",
+          "actual_external": "cuML UMAP unavailable",
+          "admission_caveat": "RAPIDS install timed out; no end-to-end accepted comparison."
+        }
+      ],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "bench/results/resume/2026-09-06-installed-gap-closure/installed-lane-comparison.json"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "public_umap"
+    },
+    {
+      "id": "umap_transform",
+      "feature": "UMAP held-out transform",
+      "surface": "public",
+      "priority": 1,
+      "selected_comparator": {
+        "name": "cuML UMAP",
+        "backend": "CUDA"
+      },
+      "current_source_measurement_cells": {
+        "fast": "missing",
+        "identical": "missing",
+        "selected_external": "missing"
+      },
+      "historical_measurements": [],
+      "identity": {
+        "status": "scoped_partial",
+        "evidence": [
+          "SUPPORT_MATRIX.md",
+          "IDENTITY_PATHS.md",
+          "bench/results/resume/2026-09-06-installed-gap-closure/installed-lane-comparison.json"
+        ],
+        "current_all_configuration_certificate": false
+      },
+      "gap": "Current same-source seven-round three-arm run and independent agreement gate missing.",
+      "harness": "new_adapter"
+    }
+  ]
+}

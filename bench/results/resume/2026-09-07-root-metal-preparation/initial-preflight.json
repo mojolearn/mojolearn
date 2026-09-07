@@ -1,0 +1,15 @@
+{
+  "schema": "mojolearn.macos-read-only-preflight.v1",
+  "date": "2026-09-07",
+  "total_bytes": 17179869184,
+  "conservative_reserve_bytes": 143572992,
+  "pressure_level": 1,
+  "swap_used_bytes": 0,
+  "compressed_bytes": 5669093376,
+  "process_count": 637,
+  "launch_reserve_required_bytes": 4294967296,
+  "telemetry_readable": true,
+  "launch_admitted": false,
+  "model_or_compiler_started": false,
+  "scope": "Root read-only memory_state/process_table observation earlier this turn; not a supervised child or Metal execution"
+}

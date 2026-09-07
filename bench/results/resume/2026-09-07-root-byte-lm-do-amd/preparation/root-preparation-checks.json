@@ -1,0 +1,13 @@
+{
+  "source_inventory_files": 213,
+  "source_inventory_matches": true,
+  "watchdog_readiness_child_passed": true,
+  "delete_requires_get404": true,
+  "empty_name_listing_not_admitted": true,
+  "shell_syntax_passed": true,
+  "root_only": true,
+  "thread_limits": 2,
+  "no_api_calls_in_tests": true,
+  "no_gpu_or_build": true,
+  "controller_sha256": "1f5ddbacf175d0bbb11aee2287a93f0a30f29b3c1534c9a8f0d2cd28392701b4"
+}

@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "checks": {
+    "wrong_manifest_hash": true,
+    "extra_file": true,
+    "wrong_wheel_hash": true
+  },
+  "scope": "file-only alpha manifest refusal checks; no model execution"
+}

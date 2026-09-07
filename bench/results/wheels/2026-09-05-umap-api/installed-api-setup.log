@@ -1,0 +1,12 @@
+Processing ./bench/results/wheels/2026-09-05-umap-api/mojolearn-0.5.0-py3-none-macosx_11_0_arm64.whl
+Collecting numpy>=1.24 (from mojolearn==0.5.0)
+  Downloading numpy-2.5.2-cp312-cp312-macosx_14_0_arm64.whl.metadata (6.6 kB)
+Downloading numpy-2.5.2-cp312-cp312-macosx_14_0_arm64.whl (5.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.4/5.4 MB 303.3 kB/s eta 0:00:00
+Installing collected packages: numpy, mojolearn
+
+Successfully installed mojolearn-0.5.0 numpy-2.5.2
+
+[notice] A new release of pip is available: 25.1.1 -> 26.2.1
+[notice] To update, run: /private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-api-qualification-jpef55qt/venv/bin/python -m pip install --upgrade pip
+0.5.0 /private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-api-qualification-jpef55qt/venv/lib/python3.12/site-packages/mojolearn/__init__.py

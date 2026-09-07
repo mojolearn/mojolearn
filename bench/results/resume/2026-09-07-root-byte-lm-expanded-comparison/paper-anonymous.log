@@ -1,0 +1,53 @@
+==> verifying result provenance
+
+SOURCE FILES NOT FOUND. A number here may no longer have a document behind it:
+  release-0.3.1.json: python/dist/audit/repaired/mojolearn-0.3.1-py3-none-manylinux_2_35_x86_64.whl
+board-algorithm-matched-m4-2026-08-20.json 2026-08-20  git+sha bench/results/BOARD_2026-08-20_algorithm-matched.md
+box-m4.json                            no provenance block (audit or box record)
+byte-lm-expanded-continuous-2026-09-07.json no provenance block (audit or box record)
+byte-lm-two-vendor-resume-2026-09-06.json 2026-09-06  found   bench/results/resume/2026-09-06-root-byte-lm-cross-vendor/nv-to-amd-resume128-comparison.json
+card-diff-knn-ad90dfe.json             2026-08-23  git+sha bench/results/e1/2026-08-23_090605-MacBook-Air-1-terrabyte/e3_verdicts_e2u.md
+closure-2026-09-05.json                2026-09-05  found   bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json
+cross-vendor-identity.json             2026-08-23  git+sha E3_RESULTS.md
+e7-apple-gpu-sweep.json                no provenance block (audit or box record)
+epsilon-m4-2026-08-21.json             2026-08-21  git+sha bench/results/EPSILON_2026-08-21_interleaved.md
+fixed-cost-m4-2026-08-19.json          2026-08-19  git+sha RESUME.md, 'Why we are slower, and it is not the kernels'
+gbm-bench-quiet-m4-2026-08-22.json     2026-08-22  git+sha bench/results/THREE_SUITE_QUIET_2026-08-22.md
+identity-cost-2026-09-03.json          2026-09-03  git+sha bench/results/lanes_price/SWEEP_2026-09-03/README.md
+identity-cost-lanes-m4-2026-09-02.json 2026-09-02  found   bench/LANES_PRICE.md, the harness's own record of the price lanes; the run directory is bench/results/lanes_price/2026-09-02_165828_185eb002/ (ratio.tsv, summary.tsv, env.txt)
+identity-cost-m4-2026-08-19.json       2026-08-19  git+sha PORTING.md, deviation 41 (hist_2 Apple accumulation)
+identity-pathways-2026-08-31.json      2026-08-31  found   IDENTITY_PATHS.md
+incumbent-backend-audit.json           no provenance block (audit or box record)
+knn-public-request-2026-09-05.json     no provenance block (audit or box record)
+knn-public-request-amd-2026-09-05.json no provenance block (audit or box record)
+mlp-two-vendor-2026-09-07.json         2026-09-07  found   bench/results/resume/2026-09-07-root-mlp-amd/cuda-hip-comparison.json
+mps-baseline-2026-08-20.json           2026-08-20  git+sha bench/results/SKLEARN_GPU_BASELINE_2026-08-20.md
+neural-blocks-three-vendor-2026-09-02.json 2026-09-02  found   IDENTITY_PATHS.md, rows 92 and 93 (the mamba2 and mamba3 compositions' per-vendor status columns); the per-block run records are in mamba/IDENTICAL_MAMBA2_CONTRACT.md and mamba/IDENTICAL_MAMBA3_CONTRACT.md, and the cards themselves are under bench/results/e1/
+neural-training-three-vendor-2026-09-03.json 2026-09-03  git+sha bench/results/checkpoint_2026-09-03/README.md
+peer-performance-summary-2026-08-28.json 2026-08-28  git+sha bench/results/fast_speed/2026-08-28-NVIDIA-forest-A.md
+prep-bill-2026-08-21.json              2026-08-21  git+sha bench/results/PREP_BILL_2026-08-21.md
+pypi-0.6.0-verification.json           no provenance block (audit or box record)
+refusal-audit-2026-09-06.json          2026-09-06  found   python/mojolearn/neighbors.py, density.py, linear_model.py, decomposition.py, extratrees.py; native exports in bindings/_mojolearn_estimators.mojo; decomposition/estimator.mojo and decomposition/impl/linalg/detail/pca.mojo
+release-0.3.1.json                     2026-08-31  MISSING python/dist/audit/repaired/mojolearn-0.3.1-py3-none-manylinux_2_35_x86_64.whl
+release-0.6.0.json                     2026-09-06  found   ROADMAP.md
+scaling-m4-2026-08-20.json             2026-08-20  git+sha bench/results/SCALING_2026-08-20_catboost.md
+shape-epsilon-2026-08-21.json          2026-08-21  git+sha bench/results/SHAPE_SWEEP_2026-08-21_epsilon.md
+source-surface-2026-08-31.json         2026-09-02  found   python/mojolearn/__init__.py
+tier-stability-2026-08-29.json         2026-08-29  git+sha bench/results/stability/RESULTS.md
+two-vendor-gap-closure-2026-08-31.json no provenance block (audit or box record)
+umap-060-candidate-installed-2026-09-05.json no provenance block (audit or box record)
+
+25 result file(s) with provenance.
+   (provenance warnings above)
+==> regenerating numbers.tex from results/
+wrote paper/numbers.tex with 247 macros
+
+1 macro(s) bound to \UNMEASURED and will render red:
+  \relVersionDOI
+==> checking font-family consistency
+==> compiling
+Latexmk: Using bibtex to make bibliography file(s).
+==> built paper/paper.pdf (anonymous MLSys-format paper with appendix)
+
+NOTE: numbers.tex still binds macros to \UNMEASURED.
+They render as red markers. Do not submit while any remain.

@@ -305,9 +305,9 @@ class NearestNeighbors(NumericModeMixin):
         n_neighbors   honored   k. Refused above n_samples_fit (the
                                 upstream's short-index fill is not ported:
                                 knn_brute_force.mojo) and, UNDER
-                                NUMERIC_IDENTICAL ONLY, above 256 -- the
-                                identical selector's rank pass gives one
-                                thread per output slot (DEVIATION 500,
+                                IDENTICAL/DETERMINISTIC, above 1024 -- the
+                                pinned selector's strided rank pass bounds
+                                its shared staging and quadratic work (
                                 neighbors/checks/select_radix_identical
                                 .mojo). FAST runs k > 256 through the
                                 ported RAFT radix select.

@@ -1,0 +1,109 @@
+{
+  "cleanup": {
+    "errors": [],
+    "quarantined": false,
+    "verified": true
+  },
+  "cpu_affinity": null,
+  "cpu_enforcement": "sampled, not hard affinity",
+  "descendant_accounting": "observed ancestry and PGID, ps start-time identities; sampling gaps remain",
+  "error": null,
+  "gpu_memory_accounting": "system unified-memory reserve/pressure; no per-process Metal VRAM counter",
+  "guard": "macos-root-user-tiny-v1",
+  "initial_memory": {
+    "compressed_bytes": 3745579008,
+    "conservative_reserve_bytes": 1752236032,
+    "pressure_level": 1,
+    "swap_used_bytes": 0,
+    "total_bytes": 17179869184
+  },
+  "policy_limits": {
+    "compressed_growth_bytes": 268435456,
+    "cpu_grace_seconds": 4,
+    "deadline_seconds": 180,
+    "entry_reserve_bytes": 0,
+    "normal_pressure_level": 1,
+    "rss_bytes": 2147483648,
+    "runtime_reserve_bytes": 0,
+    "sample_interval_seconds": 2.0,
+    "sampled_cpu_limit": 3,
+    "swap_growth_bytes": 134217728
+  },
+  "reason": null,
+  "returncode": 0,
+  "samples": [
+    {
+      "compressed_bytes": 3745579008,
+      "conservative_reserve_bytes": 1745879040,
+      "elapsed_seconds": 0.015585124994686339,
+      "pressure_level": 1,
+      "rss_bytes": 9584640,
+      "sampled_cpu_cores": 0.6416374590136071,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 3745349632,
+      "conservative_reserve_bytes": 1629749248,
+      "elapsed_seconds": 2.031702290994872,
+      "pressure_level": 1,
+      "rss_bytes": 84410368,
+      "sampled_cpu_cores": 0.4910428901134156,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 3745284096,
+      "conservative_reserve_bytes": 1624358912,
+      "elapsed_seconds": 4.052449457994953,
+      "pressure_level": 1,
+      "rss_bytes": 87801856,
+      "sampled_cpu_cores": 0.46022580914001227,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 3745153024,
+      "conservative_reserve_bytes": 1614872576,
+      "elapsed_seconds": 6.073232457994891,
+      "pressure_level": 1,
+      "rss_bytes": 89309184,
+      "sampled_cpu_cores": 0.4701148020346714,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 3742941184,
+      "conservative_reserve_bytes": 1615282176,
+      "elapsed_seconds": 8.094028332998278,
+      "pressure_level": 1,
+      "rss_bytes": 88031232,
+      "sampled_cpu_cores": 0.4602147161441734,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 3742285824,
+      "conservative_reserve_bytes": 1612578816,
+      "elapsed_seconds": 10.110968957997102,
+      "pressure_level": 1,
+      "rss_bytes": 90161152,
+      "sampled_cpu_cores": 0.4561363822995715,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 3742138368,
+      "conservative_reserve_bytes": 1600323584,
+      "elapsed_seconds": 12.141220332996454,
+      "pressure_level": 1,
+      "rss_bytes": 90193920,
+      "sampled_cpu_cores": 0.4728478511683344,
+      "swap_used_bytes": 0,
+      "total_bytes": 17179869184
+    }
+  ],
+  "thread_limit": 2,
+  "watchdog_errors": [],
+  "watchdog_expired": false
+}

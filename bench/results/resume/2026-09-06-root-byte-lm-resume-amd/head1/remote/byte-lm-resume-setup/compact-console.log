@@ -1,0 +1,4 @@
+preflight exit=0
+head64 exit=0
+verify-head exit=0
+COMPACT DIAGNOSTIC COMPLETE. Fetch raw outputs; final local all-raw comparator is mandatory.

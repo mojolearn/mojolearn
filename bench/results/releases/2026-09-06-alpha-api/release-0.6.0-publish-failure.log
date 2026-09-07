@@ -1,0 +1,137 @@
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	﻿2026-09-06T23:04:28.8335525Z ##[group]Run pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8336021Z with:
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8336300Z   repository-url: https://upload.pypi.org/legacy/
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8336624Z   print-hash: true
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8336854Z   skip-existing: false
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8337076Z   user: __token__
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8337338Z   repository_url: https://upload.pypi.org/legacy/
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8337674Z   packages_dir: dist
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8337903Z   verify_metadata: true
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8338131Z   skip_existing: false
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8338355Z   verbose: false
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8338567Z   print_hash: false
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8338782Z   attestations: true
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8339006Z ##[endgroup]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8398452Z ##[start-action display=Fail-fast in unsupported environments;id=__pypa_gh-action-pypi-publish.__run]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8407758Z ##[end-action id=__pypa_gh-action-pypi-publish.__run;outcome=skipped;conclusion=skipped;duration_ms=0]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8409905Z ##[start-action display=Reset path if needed;id=__pypa_gh-action-pypi-publish.__run_2]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8433092Z ##[group]Run # Reset path if needed
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8433431Z [36;1m# Reset path if needed[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8433835Z [36;1m# https://github.com/pypa/gh-action-pypi-publish/issues/112[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8434269Z [36;1mif [[ $PATH != *"/usr/bin"* ]]; then[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8434661Z [36;1m  echo "\$PATH=$PATH. Resetting \$PATH for GitHub Actions."[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8435131Z [36;1m  PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8435913Z [36;1m  echo "PATH=$PATH" >>"$GITHUB_ENV"[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8436244Z [36;1m  echo "$PATH" >>"$GITHUB_PATH"[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8436558Z [36;1m  echo "\$PATH reset. \$PATH=$PATH"[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8436863Z [36;1mfi[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8473580Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8473945Z ##[endgroup]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8541339Z ##[end-action id=__pypa_gh-action-pypi-publish.__run_2;outcome=success;conclusion=success;duration_ms=13]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8543839Z ##[start-action display=Discover pre-installed Python;id=__pypa_gh-action-pypi-publish.pre-installed-python]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8559454Z ##[group]Run # 🔎 Discover pre-installed Python
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8559834Z [36;1m# 🔎 Discover pre-installed Python[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8560449Z [36;1mecho "python-path=$(command -v python3 || :)" | tee -a "${GITHUB_OUTPUT}"[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8593529Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8593896Z ##[endgroup]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8656218Z python-path=/usr/bin/python3
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8680454Z ##[end-action id=__pypa_gh-action-pypi-publish.pre-installed-python;outcome=success;conclusion=success;duration_ms=13]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8685069Z ##[start-action display=Install Python 3;id=__pypa_gh-action-pypi-publish.new-python]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8690793Z ##[end-action id=__pypa_gh-action-pypi-publish.new-python;outcome=skipped;conclusion=skipped;duration_ms=0]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8696061Z ##[start-action display=Create Docker container action;id=__pypa_gh-action-pypi-publish.__run_3]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8729407Z ##[group]Run # Create Docker container action
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8729771Z [36;1m# Create Docker container action[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8730480Z [36;1m/usr/bin/python3 '/home/runner/work/_actions/pypa/gh-action-pypi-publish/ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e/create-docker-action.py'[0m
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8763723Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8764099Z env:
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8764395Z   REF: ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8764733Z   REPO: pypa/gh-action-pypi-publish
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8765010Z   REPO_ID: 1340747000
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.8765499Z ##[endgroup]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9100010Z ##[end-action id=__pypa_gh-action-pypi-publish.__run_3;outcome=success;conclusion=success;duration_ms=40]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9102988Z ##[start-action display=Run Docker container;id=__pypa_gh-action-pypi-publish.__self]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9215114Z ##[group]Run ./.github/.tmp/.generated-actions/run-pypi-publish-in-docker-container
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9215801Z with:
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9216011Z   user: __token__
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9216290Z   repository-url: https://upload.pypi.org/legacy/
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9216627Z   packages-dir: dist
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9216869Z   verify-metadata: true
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9217112Z   skip-existing: false
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9217344Z   verbose: false
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9217557Z   print-hash: true
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9217781Z   attestations: true
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9218002Z ##[endgroup]
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:28.9423410Z ##[command]/usr/bin/docker run --name ghcriopypaghactionpypipublished0c53931b1dc9bd32cbe73a98c7f6766f8a527e_f61de5 --label ade01b --workdir /github/workspace --rm -e "INPUT_USER" -e "INPUT_PASSWORD" -e "INPUT_REPOSITORY-URL" -e "INPUT_PACKAGES-DIR" -e "INPUT_VERIFY-METADATA" -e "INPUT_SKIP-EXISTING" -e "INPUT_VERBOSE" -e "INPUT_PRINT-HASH" -e "INPUT_ATTESTATIONS" -e "HOME" -e "GITHUB_JOB" -e "GITHUB_REF" -e "GITHUB_SHA" -e "GITHUB_REPOSITORY" -e "GITHUB_REPOSITORY_OWNER" -e "GITHUB_REPOSITORY_OWNER_ID" -e "GITHUB_RUN_ID" -e "GITHUB_RUN_NUMBER" -e "GITHUB_RETENTION_DAYS" -e "GITHUB_RUN_ATTEMPT" -e "GITHUB_ACTOR_ID" -e "GITHUB_ACTOR" -e "GITHUB_WORKFLOW" -e "GITHUB_HEAD_REF" -e "GITHUB_BASE_REF" -e "GITHUB_EVENT_NAME" -e "GITHUB_SERVER_URL" -e "GITHUB_API_URL" -e "GITHUB_GRAPHQL_URL" -e "GITHUB_REF_NAME" -e "GITHUB_REF_PROTECTED" -e "GITHUB_REF_TYPE" -e "GITHUB_WORKFLOW_REF" -e "GITHUB_WORKFLOW_SHA" -e "GITHUB_REPOSITORY_ID" -e "GITHUB_TRIGGERING_ACTOR" -e "GITHUB_WORKSPACE" -e "GITHUB_ACTION" -e "GITHUB_EVENT_PATH" -e "GITHUB_ACTION_REPOSITORY" -e "GITHUB_ACTION_REF" -e "GITHUB_PATH" -e "GITHUB_ENV" -e "GITHUB_STEP_SUMMARY" -e "GITHUB_STATE" -e "GITHUB_OUTPUT" -e "GITHUB_ARTIFACTS" -e "GITHUB_ARTIFACTS_LIST" -e "GITHUB_ACTION_PATH" -e "RUNNER_OS" -e "RUNNER_ARCH" -e "RUNNER_NAME" -e "RUNNER_ENVIRONMENT" -e "RUNNER_TOOL_CACHE" -e "RUNNER_TEMP" -e "RUNNER_WORKSPACE" -e "ACTIONS_RUNTIME_URL" -e "ACTIONS_RUNTIME_TOKEN" -e "ACTIONS_CACHE_URL" -e "ACTIONS_ID_TOKEN_REQUEST_URL" -e "ACTIONS_ID_TOKEN_REQUEST_TOKEN" -e "ACTIONS_RESULTS_URL" -e "ACTIONS_ORCHESTRATION_ID" -e GITHUB_ACTIONS=true -e CI=true -v "/var/run/docker.sock":"/var/run/docker.sock" -v "/home/runner/work/_temp":"/github/runner_temp" -v "/home/runner/work/_temp/_github_home":"/github/home" -v "/home/runner/work/_temp/_github_workflow":"/github/workflow" -v "/home/runner/work/_temp/_runner_file_commands":"/github/file_commands" -v "/home/runner/work/mojolearn/mojolearn":"/github/workspace" ghcr.io/pypa/gh-action-pypi-publish:ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.0232560Z Unable to find image 'ghcr.io/pypa/gh-action-pypi-publish:ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e' locally
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5758182Z ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e: Pulling from pypa/gh-action-pypi-publish
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5762260Z 6e0d6626b028: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5762985Z 7b1ad37e982c: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5763604Z 31b0d2470ce1: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5764132Z 8c141999d083: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5764686Z 89903b6a5e9e: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5765387Z 154843a3ee13: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5765957Z 99fd61e6d799: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5766471Z f06b2707cccc: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5767041Z 59f56ccad18a: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5767650Z 37327ffc8f8b: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5768161Z 04e0b73a9099: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5768766Z 8a92d08df634: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5769365Z 41038b8d511c: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5769797Z 4f4fb700ef54: Pulling fs layer
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5770163Z 59f56ccad18a: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5770813Z 37327ffc8f8b: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5771256Z 04e0b73a9099: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5772041Z 8a92d08df634: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5772475Z 41038b8d511c: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5772899Z 4f4fb700ef54: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5773315Z 8c141999d083: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5773796Z 89903b6a5e9e: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5774274Z 154843a3ee13: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5774771Z 99fd61e6d799: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:29.5775526Z f06b2707cccc: Waiting
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.0435625Z 31b0d2470ce1: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.0436386Z 31b0d2470ce1: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.0534306Z 7b1ad37e982c: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.0534878Z 7b1ad37e982c: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.2593816Z 8c141999d083: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.2594659Z 89903b6a5e9e: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.2595107Z 89903b6a5e9e: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.4675114Z 99fd61e6d799: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.4676060Z 99fd61e6d799: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.6774251Z f06b2707cccc: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.6774994Z f06b2707cccc: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.7508724Z 6e0d6626b028: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.7509473Z 6e0d6626b028: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.8869590Z 59f56ccad18a: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.8870220Z 59f56ccad18a: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.9589303Z 37327ffc8f8b: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:30.9589889Z 37327ffc8f8b: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.0362620Z 154843a3ee13: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.0365424Z 154843a3ee13: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.0993500Z 04e0b73a9099: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.0994512Z 04e0b73a9099: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.1757531Z 8a92d08df634: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.1764334Z 8a92d08df634: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.2340230Z 4f4fb700ef54: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.2340877Z 4f4fb700ef54: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.2469420Z 41038b8d511c: Verifying Checksum
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.2470074Z 41038b8d511c: Download complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:31.7537796Z 6e0d6626b028: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:33.8802513Z 7b1ad37e982c: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:34.4783768Z 31b0d2470ce1: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:34.4920419Z 8c141999d083: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:34.5027269Z 89903b6a5e9e: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.7451111Z 154843a3ee13: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.7542862Z 99fd61e6d799: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.7631093Z f06b2707cccc: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.7729666Z 59f56ccad18a: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.7822547Z 37327ffc8f8b: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.7909611Z 04e0b73a9099: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.7987766Z 8a92d08df634: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.8086495Z 41038b8d511c: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.8158875Z 4f4fb700ef54: Pull complete
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.8200226Z Digest: sha256:79318a29c7f1c2b55f27fddec11d1d56de84d1ac97e0d0e508e981a006eea5be
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:35.8213227Z Status: Downloaded newer image for ghcr.io/pypa/gh-action-pypi-publish:ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:38.5773399Z Checking dist/mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl: [31mERROR   [0m InvalidDistribution: Invalid distribution metadata: 'summary' must be a
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:38.5774255Z          single line                                                            
+Publish alpha API artifacts to pypi	Publish explicit prerelease without claiming numerical certification	2026-09-06T23:04:38.6965949Z ##[end-action id=__pypa_gh-action-pypi-publish.__self;outcome=failure;conclusion=failure;duration_ms=9786]

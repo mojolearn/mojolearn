@@ -1,0 +1,6 @@
+preflight exit=0
+resume128 exit=0
+verify-resume exit=0
+zero-moments65 exit=0
+verify-control exit=0
+COMPACT DIAGNOSTIC COMPLETE. Fetch raw outputs; final local all-raw comparator is mandatory.

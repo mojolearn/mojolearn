@@ -1,0 +1,3 @@
+{"status": "BLOCKED_MEMORY_BEFORE_LAUNCH", "required_reserve_bytes": 4294967296, "observed": {"pressure_level": 1, "conservative_reserve_bytes": 1073741824}, "compiler_launched": false, "model_launched": false}
+{"status": "BLOCKED_MEMORY_BEFORE_LAUNCH", "required_reserve_bytes": 4294967296, "observed": {"pressure_level": 2, "conservative_reserve_bytes": 5368709120}, "compiler_launched": false, "model_launched": false}
+PASS: low-memory and pressure refusals retain structured evidence and launch no child

@@ -1,0 +1,104 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     rent
+   gpu:      NVIDIA GeForce RTX 4090
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-nvidia/run1
+
+   commit:   659ce86 parent 8f6ed41
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and NVIDIA dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /private/tmp/mojolearn-byte-lm-20260906/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[17:58:33 nvidia] dead-man ARMED before the create: pid 46254, fires in 4500s, keyed by name mojolearn-gemm-nvidia-2026-09-06_175831
+[17:58:33 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 46254; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-46167
+[17:58:34 nvidia] creating mojolearn-gemm-nvidia-2026-09-06_175831 (NVIDIA GeForce RTX 4090, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[17:58:34 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[17:58:35 nvidia] pod fqrhv7jmdkf3ru created
+[17:58:49 nvidia] ssh target: -p 18974 root@47.47.180.20
+[17:58:54 nvidia] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[17:58:54 nvidia] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod fqrhv7jmdkf3ru ...
+    ARMED. Pod fqrhv7jmdkf3ru is TERMINATED through the API in 60 minutes.
+      lease: /private/tmp/mojolearn-byte-lm-20260906/tools/../bench/results/runpod_leases/fqrhv7jmdkf3ru.lease
+      extend with: tools/runpod_guard.sh extend fqrhv7jmdkf3ru '-p 18974 root@47.47.180.20' <minutes>
+    fqrhv7jmdkf3ru: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep  6 21:59 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[17:59:12 nvidia] shipping the COMMIT (659ce86da4932bd2f6442a8faea1ad9cee5e979f), not the working tree
+[17:59:12 nvidia]   bounded Mamba source archive: 4638683 bytes compressed
+[17:59:13 nvidia]   archive source sha256: f103f782c4bc1a4ffd961c98ed36c4a1
+[18:14:29 nvidia] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=242
+[18:14:33 nvidia]   remote pid 242; polling every 30s, giving up after 2370s
+[18:15:08 nvidia]   the payload finished (its sentinel is on the box)
+    REMOTE_BODY_DONE
+
+== step 7: fetch ==
+    source_sha256.txt
+    uname.txt
+    pixi_env.log
+    byte-lm-validation-console.log
+    gpu.txt
+    cpu-affinity.log
+    source_inventory.json
+    pixi_install.log
+    leg.txt
+    byte-lm-validation
+
+== step 8: what came home ==
+  source sha256 MATCHES on both ends (f103f782c4bc1a4f...)
+  gpu on the box:
+    NVIDIA GeForce RTX 4090, 580.159.04
+    vendor=nvidia
+    payload=mamba
+    knn_layout_only=0
+    nvidia_campaign=5
+    commit=659ce86da4932bd2f6442a8faea1ad9cee5e979f
+    started=2026-09-06T22:14:33Z
+    pixi_install_exit=0
+    byte_lm_validation_exit=1
+    gpu_archs=sm_89
+    scope=bounded nvidia byte LM validation; no cross-vendor or performance certificate
+
+== step 9: bounded nvidia byte LM validation ==
+  Results: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-nvidia/run1/remote/byte-lm-validation
+  Admission requires retained root receipts and the independent oracle.
+  This is not a cross-vendor identity or performance certificate.
+
+== step 10: terminate at the end of the WORK ==
+  lease at exit:
+    fqrhv7jmdkf3ru: 43 minutes left of a 60-minute lease
+  terminating fqrhv7jmdkf3ru (layer two, from this machine)
+    DELETE /v1/pods/fqrhv7jmdkf3ru -> HTTP 204
+  VERIFIED: fqrhv7jmdkf3ru is gone (HTTP 404).
+
+artifacts: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-nvidia/run1
+the byte LM validation results: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-06-root-byte-lm-nvidia/run1/remote/byte-lm-validation
+read byte-lm-validation-console.log and byte_lm_validation_exit together.
+
+== teardown (exit 1) ==
+  lease at exit:
+    NO LEASE for fqrhv7jmdkf3ru -- it is unguarded.
+  dead-man cancelled (pid 46254)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-46167/gemm_remote_leg.sh: line 2139: 46254 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

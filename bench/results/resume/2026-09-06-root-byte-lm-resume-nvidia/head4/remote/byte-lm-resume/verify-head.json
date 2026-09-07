@@ -1,0 +1,1 @@
+{"boundary":"Remote diagnostic only; final full raw baseline comparison remains mandatory","checkpoint_sha256":"264f189179b5a3b8a3cbbceb0f54209fb657ff7dacf701b4f8a760c693da8ff0","identity_admitted":false,"learning_admitted":false,"phase":"verify-head","schema":"mojolearn.byte-lm.compact-resume-diagnostic.v1"}

@@ -1,0 +1,5 @@
+bootstrap_started=2026-09-07T07:32:56Z
+pid 3200's current affinity list: 0-19
+pid 3200's new affinity list: 0,1
+dependency_setup_started
+bootstrap_exit=1

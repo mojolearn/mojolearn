@@ -1,0 +1,12 @@
+{
+  "commit": "eac39c367beeddb8ba4792551d154673e654ce21",
+  "source_sha256": "ec67d451615d492ddc5524e97695c87c69f40d5c41a814229a1dae1f2fd845fa",
+  "image": 188571990,
+  "region": "tor1",
+  "size": "gpu-mi325x1-256gb",
+  "python": "/usr/bin/python3",
+  "cpu_cores": 2,
+  "modular_pool_bytes": 1073741824,
+  "deadline_seconds": 3600,
+  "scope": "12-job AMD byte-LM qualification; no inferred cross-vendor result"
+}

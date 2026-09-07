@@ -1,0 +1,6 @@
+pod=bncobasb8l6l6w
+armed=1
+terminated=1
+deadman_pid=21820
+exit=0
+at=2026-09-07T00:43:21Z

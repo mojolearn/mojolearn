@@ -1,0 +1,13 @@
+{
+  "observed_utc": "2026-09-07T06:28:46.582187+00:00",
+  "state": {
+    "total_bytes": 17179869184,
+    "conservative_reserve_bytes": 121552896,
+    "pressure_level": 1,
+    "swap_used_bytes": 0,
+    "compressed_bytes": 5462867968
+  },
+  "required_reserve_bytes": 4294967296,
+  "launch_admitted": false,
+  "scope": "Read-only telemetry; no compiler/model launched"
+}

@@ -27,6 +27,7 @@ EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
                        r'(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so')
 MODE_READBACK = surface.BINDINGS - {'_mojolearn_estimators', '_mojolearn_rf',
                                  '_mojolearn_trees', '_mojolearn_solver', '_mojolearn_tsa'}
+RELEASE_ARCHES = {'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'}
 
 
 def digest_file(path):
@@ -70,7 +71,7 @@ def inventory_digest(inventory):
     return hashlib.sha256(json.dumps(inventory, separators=(',', ':')).encode()).hexdigest()
 
 
-def inspect_wheel(wheel, root):
+def inspect_wheel(wheel, root, flat_python=False, byte_lm=False):
     """Verify RECORD and every advertised architecture/mode on final bytes."""
     extensions, sets = {}, {}
     require(re.fullmatch(r'.+-manylinux_[A-Za-z0-9_.]+_x86_64\.whl', wheel.name),
@@ -108,15 +109,17 @@ def inspect_wheel(wheel, root):
                 'Final release wheel must contain both HIP and CUDA')
         for vendor, arch in {(v, a) for v, a, _ in sets}:
             for mode in surface.MODES:
-                require(sets.get((vendor, arch, mode)) == surface.BINDINGS,
+                require(sets.get((vendor, arch, mode)) == surface.expected_bindings(mode, byte_lm),
                         'Incomplete final wheel set: ' + '/'.join((vendor, arch, mode)))
-        for source in (root / 'python/mojolearn').rglob('*.py'):
+        python_sources = ((root / 'python/mojolearn').glob('*.py') if flat_python
+                          else (root / 'python/mojolearn').rglob('*.py'))
+        for source in python_sources:
             member = 'mojolearn/' + source.relative_to(root / 'python/mojolearn').as_posix()
             require(archive.read(member) == source.read_bytes(), 'Stale packaged Python source: ' + member)
     return extensions, {'/'.join(k): len(v) for k, v in sorted(sets.items())}
 
 
-def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets):
+def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch=None):
     qualification, _ = surface.retained(directory)
     require(qualification.get('vendor') == vendor, 'Wrong staged qualification vendor')
     require(qualification.get('wheel_sha256') == wheel_sha,
@@ -145,20 +148,28 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets):
             and qualification.get('source_sha256') == source_sha,
             'Native source inventory/hash disagreement')
     expected_extensions = {'mojolearn/' + p: h for p, h in extensions.items()
-                           if p.startswith(vendor + '/')}
+                           if p.startswith(vendor + '/' + (arch + '/' if arch else ''))}
     require(proof.get('extensions') == expected_extensions,
             'Final wheel vendor binaries differ from qualified build proof')
-    expected_records = {s + '-' + m
-                        for s in surface.SURFACES for m in surface.MODES}
+    expected_records = {s + '-' + m for s, m in surface.expected_jobs(audit)}
     require(set(qualification.get('installed_records', {})) == expected_records,
-            'Final admission requires exactly 24 installed records')
-    for surface_name in surface.SURFACES:
-        for mode, code in surface.MODES.items():
+            'Final admission requires the exact profile job inventory')
+    for surface_name, mode in sorted(surface.expected_jobs(audit)):
+        for code in (surface.MODES[mode],):
             name = surface_name + '-' + mode
             path = directory / (name + '.installed.json')
             require(qualification['installed_records'][name] == digest_file(path),
                     'Installed record differs from qualification manifest')
             installed = json.loads(path.read_text())
+            if arch is not None:
+                require(audit.get('assembly_profile') == 'release-0.6.1'
+                        and audit.get('runtime_architecture') == arch,
+                        'Missing architecture-specific wheel audit')
+                require(installed.get('device_architecture') == arch
+                        and installed.get('selected_architecture') == arch
+                        and installed.get('architecture_probe')
+                        and installed.get('architecture_override_absent') is True,
+                        'Job did not execute on the claimed native architecture')
             require(installed.get('vendor') == vendor and installed.get('mode') == mode
                     and installed.get('wheel_sha256') == wheel_sha,
                     'Installed job provenance mismatch: ' + name)
@@ -166,15 +177,16 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets):
             require(package.is_absolute() and 'site-packages' in package.parts
                     and 'venv' in package.parts, 'Job package is not an isolated installed package')
             bindings = installed['installed_bindings']
-            require(set(bindings) == surface.BINDINGS, 'Incomplete installed binding inventory')
+            require(set(bindings) == surface.expected_bindings(mode, arch is not None), 'Incomplete installed binding inventory')
             for binding_name, binding in bindings.items():
                 member = PurePosixPath(binding['path']).relative_to(package).as_posix()
                 match = EXTENSION.fullmatch('mojolearn/' + member)
                 require(match is not None and match[1] == vendor
+                        and (arch is None or match[2] == arch)
                         and (match[3] or 'fast') == mode and match[4] == binding_name
                         and binding.get('sha256') == extensions.get(member),
                         'Installed binding does not match final wheel vendor/mode')
-                if binding_name in MODE_READBACK or 'mode_code' in binding:
+                if binding_name in MODE_READBACK | {'_mojolearn_byte_lm'} or 'mode_code' in binding:
                     require('mode_code' in binding, 'Missing required native mode readback')
                     require(type(binding['mode_code']) is int and binding['mode_code'] == code,
                             'Installed native mode readback mismatch')
@@ -182,6 +194,85 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets):
                 surface.check_quality(json.loads((directory / (name + '.json')).read_text()),
                                       mode, bindings['_mojolearn_metrics']['sha256'])
     return qualification
+
+
+def release_audit(wheel, source_root, proof_root, runtime_key):
+    """File-only three-architecture preflight, also recomputed at final admission."""
+    wheel, source_root, proof_root = map(Path, (wheel, source_root, proof_root))
+    require(runtime_key in RELEASE_ARCHES, 'Unknown runtime architecture')
+    extensions, sets = inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True)
+    require({'/'.join(k.split('/')[:2]) for k in sets} == RELEASE_ARCHES,
+            '0.6.1 requires exactly sm_89, sm_90 and gfx942')
+    inventory = native_inventory(source_root)
+    source_sha = inventory_digest(inventory)
+    with zipfile.ZipFile(wheel) as archive:
+        member = 'mojolearn-0.6.1.dist-info/LINUX_PAYLOAD.json'
+        payload = json.loads(archive.read(member))
+        require(payload.get('schema') == 'mojolearn.linux-payload.v1'
+                and payload.get('version') == '0.6.1'
+                and payload.get('assembly_profile') == 'release-0.6.1', 'Wrong payload profile')
+        require(payload.get('extensions') == {'mojolearn/' + n: h for n, h in extensions.items()}
+                and payload.get('source_inventory') == inventory,
+                'Final payload or source differs from assembly inventory')
+        require(set(payload.get('sets', {})) == RELEASE_ARCHES, 'Missing assembly set proofs')
+        require(payload.get('optional_native', {}).get('_mojolearn_byte_lm') == dict(included=True,
+                    supported_modes=['identical'], unsupported_modes=['fast', 'deterministic']),
+                'Release byte-LM must be included in IDENTICAL only')
+        for field, select in [('python_sha256', lambda n: n.endswith('.py')),
+                              ('runtime_sha256', lambda n: '/.libs/' in n)]:
+            actual = {n: hashlib.sha256(archive.read(n)).hexdigest()
+                      for n in archive.namelist() if select(n)}
+            require(payload.get(field) == actual, 'Final wheel differs from ' + field)
+    proof_hashes = {}
+    for key in sorted(RELEASE_ARCHES):
+        proof_path = proof_root / (key.replace('/', '-') + '.json')
+        proof = json.loads(proof_path.read_text())
+        require(proof.get('schema') == 'mojolearn.linux.build-provenance.v1'
+                and proof.get('complete') is True and type(proof.get('build_exit')) is int
+                and proof['build_exit'] == 0 and proof.get('action') == 'build', 'Failed architecture build')
+        require(proof.get('source_inventory') == inventory and proof.get('source_sha256') == source_sha
+                and re.fullmatch('[0-9a-f]{40}', proof.get('source_commit', ''))
+                and proof['source_commit'] == payload.get('source_commit'), 'Different architecture source')
+        expected = {'mojolearn/' + n: h for n, h in extensions.items() if n.startswith(key + '/')}
+        require(len(expected) == 46 and proof.get('extensions') == expected, 'Architecture build bytes differ')
+        proof_hashes[key] = digest_file(proof_path)
+        require(payload['sets'][key] == {'sha256': proof_hashes[key], 'source_sha256': source_sha},
+                'Assembly proof linkage differs')
+    vendor, arch = runtime_key.split('/')
+    return dict(sha256=digest_file(wheel), wheel=str(wheel.resolve()), advertised_vendors=['cuda', 'hip'],
+                assembly_profile='release-0.6.1', qualification_vendor=vendor, runtime_architecture=arch,
+                source_sha256=source_sha, build_provenance_sha256=proof_hashes[runtime_key],
+                architecture_build_proofs=proof_hashes, extension_hashes=extensions, sets=sets)
+
+
+def check_release061(wheel, qualification_root, source_root):
+    wheel, qualification_root, source_root = map(Path, (wheel, qualification_root, source_root))
+    proof_root = qualification_root / 'build-proofs'
+    inventory = native_inventory(source_root)
+    directories = {}
+    for key in sorted(RELEASE_ARCHES):
+        vendor, arch = key.split('/')
+        directory = qualification_root / vendor / arch
+        expected = release_audit(wheel, source_root, proof_root, key)
+        recorded = json.loads((directory / 'wheel-audit.json').read_text())
+        require({k: v for k, v in recorded.items() if k != 'wheel'} ==
+                {k: v for k, v in expected.items() if k != 'wheel'}, 'Architecture audit differs')
+        check_vendor(directory, vendor, expected['sha256'], inventory,
+                     expected['extension_hashes'], expected['sets'], arch)
+        check_corpora(directory, source_root)
+        directories[key] = directory
+    comparisons = {}
+    for cuda in ('cuda/sm_89', 'cuda/sm_90'):
+        umap = surface.compare(directories['hip/gfx942'], directories[cuda])
+        ordered = compare_ordered_python.compare(directories['hip/gfx942'], directories[cuda])
+        require(umap.get('status') == ordered.get('status') == 'PASSED', 'Architecture identity comparison failed')
+        comparisons[cuda] = dict(umap=umap, ordered=ordered)
+    return dict(schema='mojolearn.linux.release-admission.v2', status='PASSED',
+                assembly_profile='release-0.6.1', wheel=wheel.name, wheel_sha256=digest_file(wheel),
+                source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=25,
+                runtime_coverage={key: digest_file(path / 'qualification.json') for key, path in directories.items()},
+                comparisons=comparisons,
+                scope='Exact final wheel; 25 installed jobs on each of sm_89, sm_90, gfx942; byte-LM one-step/checkpoint functionality only; bounded UMAP/Ordered identity only')
 
 
 def check_corpora(directory, source_root):
@@ -226,9 +317,11 @@ def main():
     parser.add_argument('wheel', type=Path)
     parser.add_argument('--qualification-root', required=True, type=Path)
     parser.add_argument('--source-root', required=True, type=Path)
+    parser.add_argument('--profile', choices=('legacy', 'release-0.6.1'), default='legacy')
     args = parser.parse_args()
     try:
-        result = check(args.wheel, args.qualification_root, args.source_root)
+        action = check_release061 if args.profile == 'release-0.6.1' else check
+        result = action(args.wheel, args.qualification_root, args.source_root)
     except (ValueError, OSError, KeyError, TypeError, AttributeError, zipfile.BadZipFile) as exc:
         result = {'status': 'FAILED', 'reason': str(exc)}
     print(json.dumps(result, indent=2))

@@ -1,0 +1,7 @@
+vendor=nvidia
+payload=mamba
+commit=69a8c27cc5741a2465a6e88334f8056ea89ea7ee
+started=2026-09-05T06:40:31Z
+pixi_install_exit=0
+mamba_cert_exit=1
+finished=2026-09-05T06:43:25Z

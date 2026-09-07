@@ -1,0 +1,2 @@
+source=6146b121608d4cf73706d6540bb884e134df409c
+targeted NVIDIA UMAP; not wheel or cross-vendor certification

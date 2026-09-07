@@ -1,0 +1,19 @@
+training-venv	0
+training-dependencies	0
+dependencies	0
+dependency-freeze	0
+guard-checks	0
+gradient-build	0
+gradient-capture	0
+gradient-oracle	0
+training-build	0
+linalg-build	0
+mlp-surface-and-reference	0
+mlp-numerical-edges	0
+mlp-continuous	0
+mlp-head	0
+mlp-resume	0
+mlp-compare	0
+retain-training	0
+retain-linalg	0
+Integration jobs finished. Raw multi-step/vendor-resume qualification is separate.

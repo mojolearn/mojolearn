@@ -1,0 +1,17 @@
+pid 251's current affinity list: 0-127
+pid 251's new affinity list: 0,1
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: is subject to change. To configure the initial branch name to use in all
+hint: of your new repositories, which will suppress this warning, call:
+hint: 
+hint: 	git config --global init.defaultBranch <name>
+hint: 
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint: 
+hint: 	git branch -m <name>
+Initialized empty Git repository in /root/mojolearn-public-source.FWywRU/repo.git/
+From https://github.com/mojolearn/mojolearn
+ * branch            c9d1165dfbcde0a3931764ed3fe2aa3583f860c4 -> FETCH_HEAD
+PUBLIC_SOURCE_COMMIT=c9d1165dfbcde0a3931764ed3fe2aa3583f860c4
+PUBLIC_SOURCE_INVENTORY=PASS

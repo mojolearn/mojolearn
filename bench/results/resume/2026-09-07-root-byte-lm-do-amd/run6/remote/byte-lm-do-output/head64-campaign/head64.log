@@ -1,0 +1,5 @@
+{"completed_steps": 16, "loss": 3.591373920440674}
+{"completed_steps": 32, "loss": 3.463036060333252}
+{"completed_steps": 48, "loss": 3.0923633575439453}
+{"completed_steps": 64, "loss": 3.2663369178771973}
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0", "vram_total_bytes": 274542362624, "telemetry": {"initial_vram_bytes": 299687936, "peak_vram_bytes": 2677252096, "last_vram_bytes": 2677252096, "initial_rss_bytes": 8683520, "peak_rss_bytes": 2824556544, "last_rss_bytes": 2824556544, "initial_host_available_bytes": 162095357952, "last_host_available_bytes": 160531456000, "samples": 2, "last_elapsed_seconds": 1.0082547069999919, "crossing_sample": null}, "returncode": 0}

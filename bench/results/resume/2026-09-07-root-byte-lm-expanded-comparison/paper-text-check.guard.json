@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python3",
+    "-c",
+    "import subprocess,pathlib,json; paths=[pathlib.Path(\"paper/paper.pdf\"),pathlib.Path(\"paper/paper_named.pdf\")]; records=[]\nfor p in paths:\n s=subprocess.check_output([\"pdftotext\",str(p),\"-\"],text=True,timeout=15); assert \"expanded-source repeat\" in s.lower(); assert \"MI325X\" in s; assert \"UNMEASURED\" not in s; records.append({\"path\":str(p),\"expanded_repeat_present\":True,\"unmeasured_rendered\":False})\nassert paths[1].read_bytes()==pathlib.Path(\"endorsement_emails/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf\").read_bytes(); print(json.dumps(records))"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 27056,
+  "elapsed_seconds": 0.24158158299542265,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

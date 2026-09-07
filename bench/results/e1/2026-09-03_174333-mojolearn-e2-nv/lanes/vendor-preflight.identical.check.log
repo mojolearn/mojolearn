@@ -1,0 +1,69 @@
+== vendor preflight -> bench/results/e1/2026-09-03_174333-mojolearn-e2-nv//vendor_preflight ==
+date 2026-09-03T17:43:38Z
+host mojolearn-e2-nv
+device NVIDIA H100 80GB HBM3
+
+-- gbmbench (our arms, catboost, lightgbm) --
+ WARN Skipped running the post-link scripts because `run-post-link-scripts` = `false`
+	- bin/.librsvg-pre-unlink.sh
+
+To enable them, run:
+	pixi config set --local run-post-link-scripts insecure
+
+More info:
+	https://pixi.sh/latest/reference/pixi_configuration/#run-post-link-scripts
+
+PREFLIGHT gbmbench python 3.14.7 at /root/mojolearn/.pixi/envs/gbmbench/bin/python
+PREFLIGHT gbmbench numpy OK [REQUIRED] 2.5.2  (every arm)
+PREFLIGHT gbmbench pandas OK [optional] 3.0.5  (the higgs decode in speed_gbdt_arm)
+PREFLIGHT gbmbench sklearn OK [optional] 1.9.0  (the cpu opponents)
+PREFLIGHT gbmbench catboost OK [optional] 1.2.10  (the gbdt-symmetric opponent (port lineage))
+PREFLIGHT gbmbench lightgbm OK [optional] 4.7.0  (the depthwise/lossguide opponent)
+PREFLIGHT gbmbench xgboost MISSING [optional] No module named 'xgboost'  (a second gbdt opponent)
+PREFLIGHT gbmbench cuml MISSING [optional] No module named 'cuml'  (the classical + rf opponents)
+PREFLIGHT gbmbench cuvs MISSING [optional] No module named 'cuvs'  (the knn/kmeans opponents)
+PREFLIGHT gbmbench torch MISSING [optional] No module named 'torch'  (the transformer opponent)
+PREFLIGHT gbmbench mamba_ssm MISSING [optional] No module named 'mamba_ssm'  (the mamba opponent)
+PREFLIGHT gbmbench mojolearn OK [REQUIRED] mode=fast
+PREFLIGHT gbmbench OK
+
+-- system python3 (cuml, cuvs, torch) --
+PREFLIGHT system python 3.10.12 at /usr/bin/python3
+PREFLIGHT system numpy MISSING [REQUIRED] No module named 'numpy'  (every arm)
+PREFLIGHT system pandas MISSING [optional] No module named 'pandas'  (the higgs decode in speed_gbdt_arm)
+PREFLIGHT system sklearn MISSING [optional] No module named 'sklearn'  (the cpu opponents)
+PREFLIGHT system catboost MISSING [optional] No module named 'catboost'  (the gbdt-symmetric opponent (port lineage))
+PREFLIGHT system lightgbm MISSING [optional] No module named 'lightgbm'  (the depthwise/lossguide opponent)
+PREFLIGHT system xgboost MISSING [optional] No module named 'xgboost'  (a second gbdt opponent)
+PREFLIGHT system cuml MISSING [optional] No module named 'cuml'  (the classical + rf opponents)
+PREFLIGHT system cuvs MISSING [optional] No module named 'cuvs'  (the knn/kmeans opponents)
+PREFLIGHT system torch MISSING [optional] No module named 'torch'  (the transformer opponent)
+PREFLIGHT system mamba_ssm MISSING [optional] No module named 'mamba_ssm'  (the mamba opponent)
+PREFLIGHT system mojolearn ERROR [REQUIRED] ModuleNotFoundError: No module named 'numpy'
+PREFLIGHT system FAILED: missing required numpy,mojolearn
+
+== what this box can run ==
+  gbmbench   catboost     OK       1.2.10
+  gbmbench   cuml         MISSING  No
+  gbmbench   cuvs         MISSING  No
+  gbmbench   lightgbm     OK       4.7.0
+  gbmbench   mamba_ssm    MISSING  No
+  gbmbench   mojolearn    OK       mode=fast
+  gbmbench   numpy        OK       2.5.2
+  gbmbench   pandas       OK       3.0.5
+  gbmbench   sklearn      OK       1.9.0
+  gbmbench   torch        MISSING  No
+  gbmbench   xgboost      MISSING  No
+  system     catboost     MISSING  No
+  system     cuml         MISSING  No
+  system     cuvs         MISSING  No
+  system     lightgbm     MISSING  No
+  system     mamba_ssm    MISSING  No
+  system     mojolearn    ERROR    ModuleNotFoundError:
+  system     numpy        MISSING  No
+  system     pandas       MISSING  No
+  system     sklearn      MISSING  No
+  system     torch        MISSING  No
+  system     xgboost      MISSING  No
+
+results in bench/results/e1/2026-09-03_174333-mojolearn-e2-nv//vendor_preflight

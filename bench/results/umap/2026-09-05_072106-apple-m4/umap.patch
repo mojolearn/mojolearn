@@ -1,0 +1,78 @@
+diff --git a/umap/checks/curve_check.mojo b/umap/checks/curve_check.mojo
+index ebe6c9a5..38579524 100644
+--- a/umap/checks/curve_check.mojo
++++ b/umap/checks/curve_check.mojo
+@@ -23,4 +23,13 @@ def main() raises:
+         raise Error("UMAP custom curve fit is not positive")
+     if custom.a == default_curve.a and custom.b == default_curve.b:
+         raise Error("UMAP curve fit ignored min_dist/spread")
++    # tools/umap_curve_oracle.py independently evaluates this custom fit.
++    var custom_a_error = custom.a - Float32(0.4265052371)
++    var custom_b_error = custom.b - Float32(1.0093838144)
++    if custom_a_error < Float32(0.0):
++        custom_a_error = -custom_a_error
++    if custom_b_error < Float32(0.0):
++        custom_b_error = -custom_b_error
++    if custom_a_error > Float32(2.0e-4) or custom_b_error > Float32(2.0e-4):
++        raise Error("UMAP custom curve disagrees with scalar LM reference")
+     print("UMAP curve parameter fit PASS")
+diff --git a/umap/curve.mojo b/umap/curve.mojo
+index 2ae0cb40..fb9d6f53 100644
+--- a/umap/curve.mojo
++++ b/umap/curve.mojo
+@@ -2,7 +2,7 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Deterministic fit of UMAP's differentiable distance curve."""
+ 
+-from std.math import exp, log, pow
++from std.math import exp, isfinite, log, pow
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+ 
+@@ -45,6 +45,8 @@ def fit_umap_curve(
+     order using Float64. IDENTICAL performs exactly 64 proposals. FAST may
+     return after an accepted update has max magnitude below 1e-10.
+     """
++    if not isfinite(min_dist_in) or not isfinite(spread_in):
++        raise Error("UMAP curve min_dist and spread must be finite")
+     if min_dist_in < Float32(0.0) or not (spread_in > Float32(0.0)) or (
+         min_dist_in > spread_in
+     ):
+diff --git a/umap/graph.mojo b/umap/graph.mojo
+index d4ca47df..9c4ef5eb 100644
+--- a/umap/graph.mojo
++++ b/umap/graph.mojo
+@@ -123,6 +123,8 @@ def fuzzy_simplicial_graph(
+         knn_distances
+     ) != n_samples * n_neighbors:
+         raise Error("UMAP k-NN arrays do not match their shape")
++    if not _finite(set_op_mix_ratio):
++        raise Error("UMAP set operation mix ratio must be finite")
+     if set_op_mix_ratio < Float32(0.0) or set_op_mix_ratio > Float32(1.0):
+         raise Error("UMAP set operation mix ratio must be in [0, 1]")
+     var rhos = List[Float32]()
+diff --git a/umap/params.mojo b/umap/params.mojo
+index a32f5be7..d3dbac2c 100644
+--- a/umap/params.mojo
++++ b/umap/params.mojo
+@@ -2,6 +2,9 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
+ 
++from std.math import isfinite
++
++
+ struct UMAPParams(Copyable, Movable):
+     var n_neighbors: Int
+     var n_components: Int
+@@ -41,6 +44,10 @@ struct UMAPParams(Copyable, Movable):
+             raise Error("UMAP n_components must be positive")
+         if self.local_connectivity != Float32(1.0):
+             raise Error("UMAP local_connectivity != 1 is not implemented")
++        if not isfinite(self.set_op_mix_ratio):
++            raise Error("UMAP set_op_mix_ratio must be finite")
++        if not isfinite(self.min_dist) or not isfinite(self.spread):
++            raise Error("UMAP min_dist and spread must be finite")
+         if self.set_op_mix_ratio < Float32(0.0) or (
+             self.set_op_mix_ratio > Float32(1.0)
+         ):

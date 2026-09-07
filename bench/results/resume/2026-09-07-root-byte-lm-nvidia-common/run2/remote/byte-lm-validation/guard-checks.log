@@ -1,0 +1,8 @@
+.................................{"guard": "nvidia-root-serial-v1", "reason": "available host memory below 2 GiB", "cpu_affinity": "0,1", "thread_limit": 2, "returncode": -15}
+..{"guard": "nvidia-root-serial-v1", "reason": "process-group RSS cap exceeded", "cpu_affinity": "0,1", "thread_limit": 2, "returncode": -15}
+..
+----------------------------------------------------------------------
+Ran 37 tests in 0.141s
+
+OK
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

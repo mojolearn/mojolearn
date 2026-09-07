@@ -1,0 +1,1047 @@
+{
+  "status": "PASSED",
+  "scope": "host-array public APIs, including transfers and outputs; not historical kernel-only fixtures",
+  "args": {
+    "worker": null,
+    "probe_external": false,
+    "lane": "umap",
+    "out": "/root/gemm_leg_out/umap-finish/umap-three-arm",
+    "rounds": 7,
+    "index": 10000,
+    "queries": 128,
+    "k": 10,
+    "knn_external": "cuml",
+    "dim": 2048,
+    "rows": 16384,
+    "gram_rows": 65536,
+    "rtol": 0.0005,
+    "umap_rows": 1024,
+    "umap_epochs": 50,
+    "quality_min": 0.85,
+    "quality_gap": 0.05
+  },
+  "metadata": {
+    "fast": {
+      "arm": "fast",
+      "lane": "umap",
+      "inputs": [
+        "bbea92187a936d171511ba06084d3ae70cd37f43c5661e5a0a546170a3cdd1b9",
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "shapes": [
+        [
+          1024,
+          16
+        ],
+        [
+          0
+        ]
+      ],
+      "dtypes": [
+        "<f4",
+        "<f4"
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "mojolearn FAST; backend precision policy not inferred",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "2.4.6",
+      "ld_library_path": "",
+      "source_commit": "6146b121608d4cf73706d6540bb884e134df409c",
+      "nvidia_smi": "580.159.04, NVIDIA GeForce RTX 4090",
+      "mojolearn": "0.6.0",
+      "package": "/root/mojolearn/python/mojolearn/__init__.py",
+      "binding_file": "/root/mojolearn/python/mojolearn/_mojolearn_metrics.so",
+      "mode": "fast",
+      "parameters": {
+        "n_neighbors": 15,
+        "n_components": 2,
+        "metric": "euclidean",
+        "init": "spectral",
+        "random_state": 19,
+        "n_epochs": 50,
+        "min_dist": 0.1,
+        "spread": 1.0
+      },
+      "arm_label": "mojolearn-umap-fit-transform-host-request",
+      "binding_sha256": "f8bf00d3d4ed3a5fe8f80d9c1ceaa096aa82a498d547ec119b8e0c4b9af17dad",
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ]
+    },
+    "identical": {
+      "arm": "identical",
+      "lane": "umap",
+      "inputs": [
+        "bbea92187a936d171511ba06084d3ae70cd37f43c5661e5a0a546170a3cdd1b9",
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "shapes": [
+        [
+          1024,
+          16
+        ],
+        [
+          0
+        ]
+      ],
+      "dtypes": [
+        "<f4",
+        "<f4"
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "mojolearn IDENTICAL FP32",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "2.4.6",
+      "ld_library_path": "",
+      "source_commit": "6146b121608d4cf73706d6540bb884e134df409c",
+      "nvidia_smi": "580.159.04, NVIDIA GeForce RTX 4090",
+      "mojolearn": "0.6.0",
+      "package": "/root/mojolearn/python/mojolearn/__init__.py",
+      "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_metrics.so",
+      "mode": "identical",
+      "parameters": {
+        "n_neighbors": 15,
+        "n_components": 2,
+        "metric": "euclidean",
+        "init": "spectral",
+        "random_state": 19,
+        "n_epochs": 50,
+        "min_dist": 0.1,
+        "spread": 1.0
+      },
+      "arm_label": "mojolearn-umap-fit-transform-host-request",
+      "binding_sha256": "a69b82ad6312d7cf26bb4509e27df8e4be0a880025163cfcfa836d469a13a7b6",
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ]
+    },
+    "external": {
+      "arm": "external",
+      "lane": "umap",
+      "inputs": [
+        "bbea92187a936d171511ba06084d3ae70cd37f43c5661e5a0a546170a3cdd1b9",
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "shapes": [
+        [
+          1024,
+          16
+        ],
+        [
+          0
+        ]
+      ],
+      "dtypes": [
+        "<f4",
+        "<f4"
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "cupy": "14.2.0",
+      "cuda": 12090,
+      "cuda_driver_version": 13000,
+      "precision": "float32 input; cuML backend precision policy",
+      "synchronization": "cupy.cuda.runtime.deviceSynchronize",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "2.4.6",
+      "ld_library_path": "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_cccl/lib:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufft/lib:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufile/lib:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/curand/lib:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusolver/lib:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusparse/lib:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/libnvcomp/lib64:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcudf/lib64:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libkvikio/lib64:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libnvforest/lib64:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libraft/lib64:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/librmm/lib64:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/rapids_logger/lib64:/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/treelite/lib:/root/mojolearn/.pixi/envs/default/lib",
+      "source_commit": "6146b121608d4cf73706d6540bb884e134df409c",
+      "nvidia_smi": "580.159.04, NVIDIA GeForce RTX 4090",
+      "cuml": "26.08.00",
+      "parameters": {
+        "n_neighbors": 15,
+        "n_components": 2,
+        "metric": "euclidean",
+        "init": "spectral",
+        "random_state": 19,
+        "n_epochs": 50,
+        "min_dist": 0.1,
+        "spread": 1.0,
+        "output_type": "numpy",
+        "build_algo": "brute_force_knn",
+        "force_serial_epochs": false
+      },
+      "arm_label": "cuml-umap-fit-transform-host-request",
+      "repeatability": "cuML parallel epochs; no cross-round bitwise promise",
+      "loaded_cuda_libraries": [
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64/libcuml.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs_c.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libraft/lib64/libraft.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/librmm/lib64/librmm.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/curand/lib/libcurand.so.10",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusolver/lib/libcusolver.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/lib/x86_64-linux-gnu/libnccl.so.2.21.5"
+      ]
+    }
+  },
+  "records": [
+    {
+      "ms": 1285.331644,
+      "hashes": [
+        "74d309be2ebdbd43c28d5cde5237aebf69543dee22489e2be0c94527883455a1"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "fast",
+      "round": 0,
+      "warmup": true
+    },
+    {
+      "ms": 1321.649196,
+      "hashes": [
+        "0eff714ecf30bc0c416d10e52b611b8440369e404ac33c436aaa3babc4555ea7"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "identical",
+      "round": 0,
+      "warmup": true
+    },
+    {
+      "ms": 4313.469565,
+      "hashes": [
+        "2da78ef2e784a49008263b99d876156e73f798fc067afd98fac2e6e2f4aa6aa3"
+      ],
+      "loaded_cuda_libraries": [
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64/libcuml.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs_c.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libraft/lib64/libraft.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/librmm/lib64/librmm.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc-builtins.so.12.9",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/curand/lib/libcurand.so.10",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusolver/lib/libcusolver.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/lib/x86_64-linux-gnu/libnccl.so.2.21.5"
+      ],
+      "arm": "external",
+      "round": 0,
+      "warmup": true
+    },
+    {
+      "ms": 195.216843,
+      "hashes": [
+        "0eff714ecf30bc0c416d10e52b611b8440369e404ac33c436aaa3babc4555ea7"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "identical",
+      "round": 1,
+      "warmup": false
+    },
+    {
+      "ms": 27.047628,
+      "hashes": [
+        "2da78ef2e784a49008263b99d876156e73f798fc067afd98fac2e6e2f4aa6aa3"
+      ],
+      "loaded_cuda_libraries": [
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64/libcuml.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs_c.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libraft/lib64/libraft.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/librmm/lib64/librmm.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc-builtins.so.12.9",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/curand/lib/libcurand.so.10",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusolver/lib/libcusolver.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/lib/x86_64-linux-gnu/libnccl.so.2.21.5"
+      ],
+      "arm": "external",
+      "round": 1,
+      "warmup": false
+    },
+    {
+      "ms": 47.90109,
+      "hashes": [
+        "74d309be2ebdbd43c28d5cde5237aebf69543dee22489e2be0c94527883455a1"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "fast",
+      "round": 1,
+      "warmup": false
+    },
+    {
+      "ms": 26.879023,
+      "hashes": [
+        "2da78ef2e784a49008263b99d876156e73f798fc067afd98fac2e6e2f4aa6aa3"
+      ],
+      "loaded_cuda_libraries": [
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64/libcuml.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs_c.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libraft/lib64/libraft.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/librmm/lib64/librmm.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc-builtins.so.12.9",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/curand/lib/libcurand.so.10",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusolver/lib/libcusolver.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/lib/x86_64-linux-gnu/libnccl.so.2.21.5"
+      ],
+      "arm": "external",
+      "round": 2,
+      "warmup": false
+    },
+    {
+      "ms": 49.308994,
+      "hashes": [
+        "74d309be2ebdbd43c28d5cde5237aebf69543dee22489e2be0c94527883455a1"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "fast",
+      "round": 2,
+      "warmup": false
+    },
+    {
+      "ms": 196.126092,
+      "hashes": [
+        "0eff714ecf30bc0c416d10e52b611b8440369e404ac33c436aaa3babc4555ea7"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "identical",
+      "round": 2,
+      "warmup": false
+    },
+    {
+      "ms": 48.113347,
+      "hashes": [
+        "74d309be2ebdbd43c28d5cde5237aebf69543dee22489e2be0c94527883455a1"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "fast",
+      "round": 3,
+      "warmup": false
+    },
+    {
+      "ms": 195.155971,
+      "hashes": [
+        "0eff714ecf30bc0c416d10e52b611b8440369e404ac33c436aaa3babc4555ea7"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "identical",
+      "round": 3,
+      "warmup": false
+    },
+    {
+      "ms": 27.281255,
+      "hashes": [
+        "2da78ef2e784a49008263b99d876156e73f798fc067afd98fac2e6e2f4aa6aa3"
+      ],
+      "loaded_cuda_libraries": [
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64/libcuml.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs_c.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libraft/lib64/libraft.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/librmm/lib64/librmm.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc-builtins.so.12.9",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/curand/lib/libcurand.so.10",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusolver/lib/libcusolver.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/lib/x86_64-linux-gnu/libnccl.so.2.21.5"
+      ],
+      "arm": "external",
+      "round": 3,
+      "warmup": false
+    },
+    {
+      "ms": 195.773411,
+      "hashes": [
+        "0eff714ecf30bc0c416d10e52b611b8440369e404ac33c436aaa3babc4555ea7"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "identical",
+      "round": 4,
+      "warmup": false
+    },
+    {
+      "ms": 26.954435,
+      "hashes": [
+        "2da78ef2e784a49008263b99d876156e73f798fc067afd98fac2e6e2f4aa6aa3"
+      ],
+      "loaded_cuda_libraries": [
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64/libcuml.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs_c.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libraft/lib64/libraft.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/librmm/lib64/librmm.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc-builtins.so.12.9",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/curand/lib/libcurand.so.10",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusolver/lib/libcusolver.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/lib/x86_64-linux-gnu/libnccl.so.2.21.5"
+      ],
+      "arm": "external",
+      "round": 4,
+      "warmup": false
+    },
+    {
+      "ms": 47.862948,
+      "hashes": [
+        "74d309be2ebdbd43c28d5cde5237aebf69543dee22489e2be0c94527883455a1"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "fast",
+      "round": 4,
+      "warmup": false
+    },
+    {
+      "ms": 26.928524,
+      "hashes": [
+        "2da78ef2e784a49008263b99d876156e73f798fc067afd98fac2e6e2f4aa6aa3"
+      ],
+      "loaded_cuda_libraries": [
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64/libcuml.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs_c.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libraft/lib64/libraft.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/librmm/lib64/librmm.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc-builtins.so.12.9",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/curand/lib/libcurand.so.10",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusolver/lib/libcusolver.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/lib/x86_64-linux-gnu/libnccl.so.2.21.5"
+      ],
+      "arm": "external",
+      "round": 5,
+      "warmup": false
+    },
+    {
+      "ms": 48.011653,
+      "hashes": [
+        "74d309be2ebdbd43c28d5cde5237aebf69543dee22489e2be0c94527883455a1"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "fast",
+      "round": 5,
+      "warmup": false
+    },
+    {
+      "ms": 196.247386,
+      "hashes": [
+        "0eff714ecf30bc0c416d10e52b611b8440369e404ac33c436aaa3babc4555ea7"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "identical",
+      "round": 5,
+      "warmup": false
+    },
+    {
+      "ms": 47.741694,
+      "hashes": [
+        "74d309be2ebdbd43c28d5cde5237aebf69543dee22489e2be0c94527883455a1"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "fast",
+      "round": 6,
+      "warmup": false
+    },
+    {
+      "ms": 196.457992,
+      "hashes": [
+        "0eff714ecf30bc0c416d10e52b611b8440369e404ac33c436aaa3babc4555ea7"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "identical",
+      "round": 6,
+      "warmup": false
+    },
+    {
+      "ms": 27.050868,
+      "hashes": [
+        "2da78ef2e784a49008263b99d876156e73f798fc067afd98fac2e6e2f4aa6aa3"
+      ],
+      "loaded_cuda_libraries": [
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64/libcuml.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs_c.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libraft/lib64/libraft.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/librmm/lib64/librmm.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc-builtins.so.12.9",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/curand/lib/libcurand.so.10",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusolver/lib/libcusolver.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/lib/x86_64-linux-gnu/libnccl.so.2.21.5"
+      ],
+      "arm": "external",
+      "round": 6,
+      "warmup": false
+    },
+    {
+      "ms": 196.535914,
+      "hashes": [
+        "0eff714ecf30bc0c416d10e52b611b8440369e404ac33c436aaa3babc4555ea7"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "identical",
+      "round": 7,
+      "warmup": false
+    },
+    {
+      "ms": 27.13402,
+      "hashes": [
+        "2da78ef2e784a49008263b99d876156e73f798fc067afd98fac2e6e2f4aa6aa3"
+      ],
+      "loaded_cuda_libraries": [
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuml/lib64/libcuml.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libcuvs/lib64/libcuvs_c.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/libraft/lib64/libraft.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/librmm/lib64/librmm.so",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc-builtins.so.12.9",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/curand/lib/libcurand.so.10",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusolver/lib/libcusolver.so.11",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/root/mojolearn/.nvidia-feature-venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/lib/x86_64-linux-gnu/libnccl.so.2.21.5"
+      ],
+      "arm": "external",
+      "round": 7,
+      "warmup": false
+    },
+    {
+      "ms": 48.574031,
+      "hashes": [
+        "74d309be2ebdbd43c28d5cde5237aebf69543dee22489e2be0c94527883455a1"
+      ],
+      "loaded_cuda_libraries": [
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.580.159.04",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublas.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib/libcublasLt.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib/libcudnn.so.9",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cufft/lib/libcufft.so.11",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/curand/lib/libcurand.so.10",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/cusparse/lib/libcusparse.so.12",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nccl/lib/libnccl.so.2",
+        "/usr/local/lib/python3.11/dist-packages/nvidia/nvjitlink/lib/libnvJitLink.so.12",
+        "/usr/local/lib/python3.11/dist-packages/torch/lib/libcusparseLt-f80c68d1.so.0"
+      ],
+      "arm": "fast",
+      "round": 7,
+      "warmup": false
+    }
+  ],
+  "inputs": {
+    "file": "inputs.npz",
+    "file_sha256": "d0918b5629ada266f635d02e22f205434bdd1c03b472e5799af3fdf068248359",
+    "keys": [
+      "a",
+      "b"
+    ],
+    "raw_sha256": [
+      "bbea92187a936d171511ba06084d3ae70cd37f43c5661e5a0a546170a3cdd1b9",
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "shapes": [
+      [
+        1024,
+        16
+      ],
+      [
+        0
+      ]
+    ],
+    "dtypes": [
+      "<f4",
+      "<f4"
+    ],
+    "hash_order": "raw C-order bytes, one digest per array"
+  },
+  "quality_policy": {
+    "minimum_trustworthiness": 0.85,
+    "maximum_trustworthiness_loss_vs_cuml": 0.05,
+    "coordinate_equality": "not required across different implementations",
+    "retention": "reported separately; no equality required"
+  },
+  "accuracy": [
+    {
+      "trustworthiness": 0.997439246870352,
+      "neighbor_retention": 0.7244140625,
+      "k": 10,
+      "arm": "fast",
+      "round": 0,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9978711227999504,
+      "neighbor_retention": 0.7388671875,
+      "k": 10,
+      "arm": "identical",
+      "round": 0,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9973013564390183,
+      "neighbor_retention": 0.7072265625,
+      "k": 10,
+      "arm": "external",
+      "round": 0,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.997439246870352,
+      "neighbor_retention": 0.7244140625,
+      "k": 10,
+      "arm": "fast",
+      "round": 1,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9978711227999504,
+      "neighbor_retention": 0.7388671875,
+      "k": 10,
+      "arm": "identical",
+      "round": 1,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9973013564390183,
+      "neighbor_retention": 0.7072265625,
+      "k": 10,
+      "arm": "external",
+      "round": 1,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.997439246870352,
+      "neighbor_retention": 0.7244140625,
+      "k": 10,
+      "arm": "fast",
+      "round": 2,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9978711227999504,
+      "neighbor_retention": 0.7388671875,
+      "k": 10,
+      "arm": "identical",
+      "round": 2,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9973013564390183,
+      "neighbor_retention": 0.7072265625,
+      "k": 10,
+      "arm": "external",
+      "round": 2,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.997439246870352,
+      "neighbor_retention": 0.7244140625,
+      "k": 10,
+      "arm": "fast",
+      "round": 3,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9978711227999504,
+      "neighbor_retention": 0.7388671875,
+      "k": 10,
+      "arm": "identical",
+      "round": 3,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9973013564390183,
+      "neighbor_retention": 0.7072265625,
+      "k": 10,
+      "arm": "external",
+      "round": 3,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.997439246870352,
+      "neighbor_retention": 0.7244140625,
+      "k": 10,
+      "arm": "fast",
+      "round": 4,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9978711227999504,
+      "neighbor_retention": 0.7388671875,
+      "k": 10,
+      "arm": "identical",
+      "round": 4,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9973013564390183,
+      "neighbor_retention": 0.7072265625,
+      "k": 10,
+      "arm": "external",
+      "round": 4,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.997439246870352,
+      "neighbor_retention": 0.7244140625,
+      "k": 10,
+      "arm": "fast",
+      "round": 5,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9978711227999504,
+      "neighbor_retention": 0.7388671875,
+      "k": 10,
+      "arm": "identical",
+      "round": 5,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9973013564390183,
+      "neighbor_retention": 0.7072265625,
+      "k": 10,
+      "arm": "external",
+      "round": 5,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.997439246870352,
+      "neighbor_retention": 0.7244140625,
+      "k": 10,
+      "arm": "fast",
+      "round": 6,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9978711227999504,
+      "neighbor_retention": 0.7388671875,
+      "k": 10,
+      "arm": "identical",
+      "round": 6,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9973013564390183,
+      "neighbor_retention": 0.7072265625,
+      "k": 10,
+      "arm": "external",
+      "round": 6,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.997439246870352,
+      "neighbor_retention": 0.7244140625,
+      "k": 10,
+      "arm": "fast",
+      "round": 7,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9978711227999504,
+      "neighbor_retention": 0.7388671875,
+      "k": 10,
+      "arm": "identical",
+      "round": 7,
+      "passed": true
+    },
+    {
+      "trustworthiness": 0.9973013564390183,
+      "neighbor_retention": 0.7072265625,
+      "k": 10,
+      "arm": "external",
+      "round": 7,
+      "passed": true
+    }
+  ],
+  "summary": {
+    "fast": {
+      "median_ms": 48.011653,
+      "iqr_ms": 0.461669999999998
+    },
+    "identical": {
+      "median_ms": 196.126092,
+      "iqr_ms": 0.8575619999999731
+    },
+    "external": {
+      "median_ms": 27.047628,
+      "iqr_ms": 0.1509645000000006
+    }
+  },
+  "ratios": {
+    "identical/fast": {
+      "median_paired": 4.075415465493583,
+      "min_paired": 3.9774912463231353,
+      "max_paired": 4.115019295293544,
+      "separated_from_one": true
+    },
+    "identical/external": {
+      "median_paired": 7.262539301881181,
+      "min_paired": 7.153482162019305,
+      "max_paired": 7.2966227976366556,
+      "separated_from_one": true
+    },
+    "fast/external": {
+      "median_paired": 1.7756984333004942,
+      "min_paired": 1.763604606899499,
+      "max_paired": 1.8344786564600952,
+      "separated_from_one": true
+    }
+  }
+}

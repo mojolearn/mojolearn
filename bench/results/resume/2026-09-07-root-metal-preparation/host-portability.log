@@ -1,0 +1,111 @@
+....................................................F.F...F...... [ 73%]
+.......................                                                  [100%]
+=================================== FAILURES ===================================
+_______ ArtifactBoundaries.test_checkpoint_integrity_and_canonical_bytes _______
+
+self = <test_byte_lm_state_compare.ArtifactBoundaries testMethod=test_checkpoint_integrity_and_canonical_bytes>
+
+    def test_checkpoint_integrity_and_canonical_bytes(self):
+        # The checkpoint parser only checks envelope/array integrity. Full
+        # registry/config admission is separately required by load_capture.
+        payload = {'completed_steps': 64}
+        for key in compare.STATE_NAMES:
+            count = 20 if key == 'flags' else compare.N
+            payload[key] = dict(dtype='<i4' if key == 'flags' else '<f4',
+                                shape=[count], hex='00' * (count * 4))
+        envelope = dict(schema='mojolearn.small-byte-lm-json-checkpoint.v1', payload=payload,
+                        payload_sha256=compare.sha(compare.canonical(payload, False)))
+        path = self.root / 'checkpoint.json'
+        path.write_bytes(compare.canonical(envelope))
+>       raw, metadata, arrays = compare.checkpoint(self.root, path.name, self.descriptor(path.name))
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tools/tests/test_byte_lm_state_compare.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tools/byte_lm_state_compare.py:217: in checkpoint
+    raw = read(directory / name, limit=2 * 1024 * 1024)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/byte_lm_state_compare.py:109: in read
+    path = safe_path(path)
+           ^^^^^^^^^^^^^^^
+tools/byte_lm_state_compare.py:104: in safe_path
+    require(not component.is_symlink(), 'symlink component refused: ' + str(component))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+condition = False, message = 'symlink component refused: /var'
+
+    def require(condition, message):
+        if not condition:
+>           raise ValueError(message)
+E           ValueError: symlink component refused: /var
+
+tools/byte_lm_state_compare.py:68: ValueError
+________________ ArtifactBoundaries.test_complete_root_receipt _________________
+
+self = <test_byte_lm_state_compare.ArtifactBoundaries testMethod=test_complete_root_receipt>
+
+    def test_complete_root_receipt(self):
+>       self.assertEqual(self.admit()['final'], self.terminal)
+                         ^^^^^^^^^^^^
+
+tools/tests/test_byte_lm_state_compare.py:65: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tools/tests/test_byte_lm_state_compare.py:61: in admit
+    return compare.receipt(self.root / 'receipt.json',
+tools/byte_lm_state_compare.py:435: in receipt
+    raw = read(path, limit=65536)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+tools/byte_lm_state_compare.py:109: in read
+    path = safe_path(path)
+           ^^^^^^^^^^^^^^^
+tools/byte_lm_state_compare.py:104: in safe_path
+    require(not component.is_symlink(), 'symlink component refused: ' + str(component))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+condition = False, message = 'symlink component refused: /var'
+
+    def require(condition, message):
+        if not condition:
+>           raise ValueError(message)
+E           ValueError: symlink component refused: /var
+
+tools/byte_lm_state_compare.py:68: ValueError
+___________ ArtifactBoundaries.test_nested_relative_artifact_allowed ___________
+
+self = <test_byte_lm_state_compare.ArtifactBoundaries testMethod=test_nested_relative_artifact_allowed>
+
+    def test_nested_relative_artifact_allowed(self):
+        (self.root / 'nested').mkdir()
+        (self.root / 'nested/result.json').write_bytes((self.root / 'result.json').read_bytes())
+        self.receipt['result'] = self.descriptor('nested/result.json')
+        self.flush()
+>       self.assertEqual(self.admit()['result']['file'], 'nested/result.json')
+                         ^^^^^^^^^^^^
+
+tools/tests/test_byte_lm_state_compare.py:108: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tools/tests/test_byte_lm_state_compare.py:61: in admit
+    return compare.receipt(self.root / 'receipt.json',
+tools/byte_lm_state_compare.py:435: in receipt
+    raw = read(path, limit=65536)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+tools/byte_lm_state_compare.py:109: in read
+    path = safe_path(path)
+           ^^^^^^^^^^^^^^^
+tools/byte_lm_state_compare.py:104: in safe_path
+    require(not component.is_symlink(), 'symlink component refused: ' + str(component))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+condition = False, message = 'symlink component refused: /var'
+
+    def require(condition, message):
+        if not condition:
+>           raise ValueError(message)
+E           ValueError: symlink component refused: /var
+
+tools/byte_lm_state_compare.py:68: ValueError
+=========================== short test summary info ============================
+FAILED python::ArtifactBoundaries::test_checkpoint_integrity_and_canonical_bytes
+FAILED python::ArtifactBoundaries::test_complete_root_receipt - ValueError: s...
+FAILED python::ArtifactBoundaries::test_nested_relative_artifact_allowed - Va...
+3 failed, 85 passed, 7 subtests passed in 0.44s

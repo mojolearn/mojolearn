@@ -10,12 +10,17 @@ point. `training/` is the newest lane in the tree and the one most likely to
 gain entry points, so it gets its own `.so` rather than riding a sibling's.
 All of them land in one wheel.
 
-WHAT THIS EXPOSES, AND IT IS ONLY WHAT ALREADY EXISTED. Three functions over
+THE ORIGINAL THREE ENTRY POINTS expose functions over
 `training/estimator.mojo`, which is itself pointer-shaped transport over
 `training/checks/optimizer.mojo` and `training/checks/loss.mojo`. **NO NEW
-ARITHMETIC LANDED ANYWHERE ON THIS PATH.** A paper draft said "neural
+ARITHMETIC LANDED IN THOSE WRAPPERS.** A paper draft said "neural
 training is internal, not a public API"; that sentence was true and this
 module is the only thing that was wrong with it.
+
+The small-MLP additions expose bias/ReLU, ReLU backward and ascending-row
+sum from `training/mlp_ops.mojo`. They require IDENTICAL and bounded shapes;
+their new arithmetic needs separate root-run qualification. Existing loss
+and optimizer arithmetic is unchanged.
 
 WHERE THE MEASUREMENT STOPS, AND IT IS UNEVEN. The loss contract card (md5
 `a87615d9`) and the optimizer contract card (md5 `97d160b0`) are
@@ -67,6 +72,10 @@ from training.estimator import (
     identical_ce_loss_host,
     identical_clip_grad_norm_host,
     identical_optimizer_step_host,
+)
+from training.mlp_ops import (
+    mlp_bias_activation_host, mlp_relu_backward_host, mlp_sum_rows_host,
+    mlp_validate_shape,
 )
 
 
@@ -339,6 +348,78 @@ def ce_loss_binding(
     return PythonObject(count)
 
 
+def mlp_bias_activation_binding(
+    input_addr: PythonObject, bias_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """C-row-major f32 bias + optional ReLU; params=[rows,cols,relu_flag].
+
+    Borrow input rows*cols, bias cols and output rows*cols floats.
+    Returns rows*cols after synchronous copyback; IDENTICAL only.
+    """
+    if len(params) != 3:
+        raise Error("mlp_bias_activation params must be [rows,cols,relu_flag]")
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    var relu_flag = Int(py=params[2])
+    mlp_validate_shape(rows, cols)
+    if relu_flag != 0 and relu_flag != 1:
+        raise Error("mlp_bias_activation relu_flag must be 0 or 1")
+    var xp = _f32_ptr(Int(py=input_addr))
+    var bp = _f32_ptr(Int(py=bias_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = mlp_bias_activation_host(ctx, xp, bp, op, rows, cols, relu_flag)
+    return PythonObject(count)
+
+
+def mlp_relu_backward_binding(
+    activation_addr: PythonObject, incoming_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params=[rows,cols]; all three borrowed buffers hold rows*cols f32.
+
+    Derivative is incoming where activation>0, otherwise +0 (including zero).
+    Returns rows*cols after synchronous copyback; IDENTICAL only.
+    """
+    if len(params) != 2:
+        raise Error("mlp_relu_backward params must be [rows,cols]")
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    mlp_validate_shape(rows, cols)
+    var ap = _f32_ptr(Int(py=activation_addr))
+    var gp = _f32_ptr(Int(py=incoming_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = mlp_relu_backward_host(ctx, ap, gp, op, rows, cols)
+    return PythonObject(count)
+
+
+def mlp_sum_rows_binding(
+    input_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params=[rows,cols]; borrow rows*cols input and cols output f32.
+
+    Returns cols after synchronous ascending-row sum; IDENTICAL only.
+    """
+    if len(params) != 2:
+        raise Error("mlp_sum_rows params must be [rows,cols]")
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    mlp_validate_shape(rows, cols)
+    var xp = _f32_ptr(Int(py=input_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = mlp_sum_rows_host(ctx, xp, op, rows, cols)
+    return PythonObject(count)
+
+
 @export
 def PyInit__mojolearn_training() abi("C") -> PythonObject:
     try:
@@ -348,6 +429,9 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[optimizer_step_binding]("optimizer_step")
         m.def_function[clip_grad_norm_binding]("clip_grad_norm")
         m.def_function[ce_loss_binding]("ce_loss")
+        m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
+        m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
+        m.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_training: ", e))

@@ -1,0 +1,92 @@
+{
+  "binding_sha256": "927597eae95a23999a05c2261cd522cd5a9c816a85d08ebcd8bca41ef65bacfe",
+  "completed_steps": 128,
+  "heldout_loss_ratio": 0.5131724651836634,
+  "independent_oracle": {
+    "guard": {
+      "command": {
+        "bytes": 282,
+        "file": "byte-gradient-oracle.command.txt",
+        "sha256": "4d35c705d5cea9a85e96c28d8cfe04f8f245873898e30b100d83a3b0a1add986"
+      },
+      "final": {
+        "cpu_affinity": "0,1",
+        "device_sysfs": "/sys/devices/pci0000:20/0000:20:01.1/0000:21:00.0/0000:22:01.0/0000:24:00.0/0000:25:00.0/0000:26:00.0",
+        "guard": "amd-root-serial-v1",
+        "reason": null,
+        "returncode": 0,
+        "thread_limit": 2,
+        "vram_total_bytes": 206141652992
+      },
+      "guard_log_sha256": "e8440eb9d40cfec58f1e38f2aa15ae29ac6cd1d24534848f81e8b4ff2508e6df",
+      "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+      "receipt_sha256": "f2da758501c6a1e63535bdb8a9f4c7014e4e4cd1c7b851394b8f58183bb98892",
+      "result": {
+        "bytes": 38258,
+        "file": "gradient-oracle.json",
+        "sha256": "30ebae30563f7002912002ddb762cc49639bd768b77f7ad511076743b334de8d"
+      }
+    },
+    "oracle_sha256": "30ebae30563f7002912002ddb762cc49639bd768b77f7ad511076743b334de8d",
+    "reference": {
+      "file": "gradient-oracle.json.reference.npz",
+      "sha256": "2d58daf7a7f5ceb410cafd39ca18f88e22abffbc748fcb76f08c3cee93fe0118"
+    },
+    "step": 1
+  },
+  "passed": true,
+  "receipts": {
+    "first": {
+      "command": {
+        "bytes": 224,
+        "file": "byte-step1.command.txt",
+        "sha256": "d3e6dca324aca9be8c8de272e14b8bdc8e5e9f65753751738f6030775efb304b"
+      },
+      "final": {
+        "cpu_affinity": "0,1",
+        "device_sysfs": "/sys/devices/pci0000:20/0000:20:01.1/0000:21:00.0/0000:22:01.0/0000:24:00.0/0000:25:00.0/0000:26:00.0",
+        "guard": "amd-root-serial-v1",
+        "reason": null,
+        "returncode": 0,
+        "thread_limit": 2,
+        "vram_total_bytes": 206141652992
+      },
+      "guard_log_sha256": "0f2583311de15a104c6c522247e8e29d7bfeab71ebf1b52ff2afc97412d6c9f7",
+      "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+      "receipt_sha256": "0063038850f3acb59fc1f671961c69fbe9d4bffd4ba31513646afd2dc231251d",
+      "result": {
+        "bytes": 4588,
+        "file": "step1/summary.json",
+        "sha256": "89b886d9a461d512c2b68b9df867b5ead74061939c53f6c4c618a7b395344663"
+      }
+    },
+    "full": {
+      "command": {
+        "bytes": 229,
+        "file": "byte-full128.command.txt",
+        "sha256": "761bffeb2326fa1cd620afb9824f02a2d5ebb4671afcc746ea8d6adf8e6723f3"
+      },
+      "final": {
+        "cpu_affinity": "0,1",
+        "device_sysfs": "/sys/devices/pci0000:20/0000:20:01.1/0000:21:00.0/0000:22:01.0/0000:24:00.0/0000:25:00.0/0000:26:00.0",
+        "guard": "amd-root-serial-v1",
+        "reason": null,
+        "returncode": 0,
+        "thread_limit": 2,
+        "vram_total_bytes": 206141652992
+      },
+      "guard_log_sha256": "1deab4d85d77e7c82caedcbc0f768c9fc5bc0797764dff7f3722ce1595c501d6",
+      "linkage": "root-supplied artifact/command pairing; not a signed attestation",
+      "receipt_sha256": "c4fb40bd55adf81ef4525460f01c39a91ac8e4feff9386a164e174834d582c45",
+      "result": {
+        "bytes": 28191,
+        "file": "full128/summary.json",
+        "sha256": "72c0c89a6ad5d7fe8610697a393560b41d1222f605df210d87b5dd7c1a7d34eb"
+      }
+    }
+  },
+  "schema": "mojolearn.byte-lm.single-vendor-admission.v1",
+  "scope": "fixed small real-text model: independent first-step FP64 correctness and 128-step heldout learning on this vendor; cross-vendor identity remains separate",
+  "source_commit": "d921eade0da5454e39e0cd103b9a1799286b41b9",
+  "vendor": "hip"
+}

@@ -1,0 +1,7 @@
+{
+  "commit": "34fb352f0754ba5ce281728b8bc510f992b62e08",
+  "numerical_files": 213,
+  "match": "Metal d17c1aa1 and DO0ba54976",
+  "dryrun": "50 passed, no rental",
+  "mock_failure": "PASS"
+}

@@ -1,0 +1,12 @@
+{"time": 1788767267.08009, "method": "GET", "path": "/droplets?per_page=200", "status": 200}
+{"time": 1788767269.531496, "method": "POST", "path": "/droplets", "status": 202}
+{"time": 1788767270.077218, "method": "GET", "path": "/droplets/598410424", "status": 200}
+{"time": 1788767280.730616, "method": "GET", "path": "/droplets/598410424", "status": 200}
+{"time": 1788767291.445605, "method": "GET", "path": "/droplets/598410424", "status": 200}
+{"time": 1788767302.26831, "method": "GET", "path": "/droplets/598410424", "status": 200}
+{"time": 1788767312.795786, "method": "GET", "path": "/droplets/598410424", "status": 200}
+{"time": 1788767330.6762938, "method": "GET", "path": "/droplets/598410424", "status": 200}
+{"time": 1788767591.924748, "method": "DELETE", "path": "/droplets/598410424", "status": 204}
+{"time": 1788767592.433727, "method": "GET", "path": "/droplets/598410424", "status": 200}
+{"time": 1788767598.009485, "method": "GET", "path": "/droplets/598410424", "status": 200}
+{"time": 1788767603.4690182, "method": "GET", "path": "/droplets/598410424", "status": 404}

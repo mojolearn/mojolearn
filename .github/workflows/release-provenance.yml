@@ -70,6 +70,16 @@ on:
           - none
           - testpypi
           - pypi
+      alpha_candidate_tag:
+        description: Optional alpha-api-* release asset tag; selects prebuilt alpha exposure instead of Apple build.
+        required: false
+        default: ''
+        type: string
+      alpha_manifest_sha256:
+        description: SHA256 of the root-prepared alpha-manifest.json; required with alpha_candidate_tag.
+        required: false
+        default: ''
+        type: string
 
 # Deny by default. Every job adds back exactly what it needs, so a step that
 # starts wanting a token has to say so in a diff.
@@ -84,6 +94,7 @@ concurrency:
 jobs:
   build:
     name: Build and verify the wheel
+    if: inputs.alpha_candidate_tag == ''
     # Self-hosted and ephemeral. See the header: a hosted runner produces a
     # wheel with no GPU kernels in it.
     runs-on: [self-hosted, macos, arm64, metal, real-gpu]
@@ -429,7 +440,7 @@ jobs:
   publish:
     name: Publish to ${{ inputs.publish }}
     needs: build
-    if: inputs.publish != 'none'
+    if: inputs.publish != 'none' && inputs.alpha_candidate_tag == ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The environment name is what the Trusted Publisher on PyPI and TestPyPI
@@ -502,4 +513,135 @@ jobs:
           # A filename collision means this exact version was already
           # uploaded. Skipping it quietly is how two different artifacts end
           # up believed to be the same one.
+          skip-existing: false
+
+  alpha_stage:
+    name: Admit explicitly alpha API artifacts
+    outputs:
+      linux_qualification: ${{ steps.linux_qualification.outputs.required }}
+    if: inputs.alpha_candidate_tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Download root-prepared candidate assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_TAG: ${{ inputs.alpha_candidate_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_TAG" =~ ^alpha-api-[A-Za-z0-9._-]+$ ]] || exit 2
+          mkdir dist
+          gh release download "$CANDIDATE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.whl' --pattern alpha-manifest.json --dir dist
+      - name: Read SHA-pinned optional combined Linux qualification contract
+        id: linux_qualification
+        env:
+          EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
+        run: |
+          python3 - <<'PYQUAL'
+          import hashlib, json, os
+          from pathlib import Path
+          with Path('dist/alpha-manifest.json').open('rb') as stream:
+              raw = stream.read(2 * 1024**2 + 1)
+          if len(raw) > 2 * 1024**2 or hashlib.sha256(raw).hexdigest() != os.environ['EXPECTED_MANIFEST_SHA']:
+              raise SystemExit('Manifest hash/bound mismatch before qualification download')
+          contract = json.loads(raw).get('linux_qualification')
+          if contract is not None and (not isinstance(contract, dict) or contract.get('file') != 'linux-qualification.tar.gz'):
+              raise SystemExit('Unsupported qualification asset name')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('required=' + ('true' if contract is not None else 'false') + '\n')
+          PYQUAL
+      - name: Download complete installed Linux evidence when declared
+        if: steps.linux_qualification.outputs.required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_TAG: ${{ inputs.alpha_candidate_tag }}
+        run: |
+          set -euo pipefail
+          mkdir qualification
+          gh release download "$CANDIDATE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern linux-qualification.tar.gz --dir qualification
+      - name: Check exact alpha artifact bytes without GPU execution
+        env:
+          EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+          qualification_args=()
+          if [ -f qualification/linux-qualification.tar.gz ]; then
+            qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
+          fi
+          timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
+            dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}" > alpha-admission.json
+          cat alpha-admission.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mojolearn-alpha-wheel
+          path: |
+            dist/*.whl
+            dist/alpha-manifest.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: steps.linux_qualification.outputs.required == 'true'
+        with:
+          name: mojolearn-alpha-linux-qualification
+          path: qualification/linux-qualification.tar.gz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mojolearn-alpha-admission
+          path: alpha-admission.json
+          if-no-files-found: error
+
+  publish_alpha:
+    name: Publish alpha API artifacts to ${{ inputs.publish }}
+    needs: alpha_stage
+    if: inputs.publish != 'none' && inputs.alpha_candidate_tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ inputs.publish }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: mojolearn-alpha-wheel
+          path: dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: needs.alpha_stage.outputs.linux_qualification == 'true'
+        with:
+          name: mojolearn-alpha-linux-qualification
+          path: qualification
+      - name: Recheck exact alpha bytes immediately before publishing
+        env:
+          EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+          qualification_args=()
+          if [ -f qualification/linux-qualification.tar.gz ]; then
+            qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
+          fi
+          timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
+            dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}"
+          rm dist/alpha-manifest.json
+      - name: Publish exact alpha API wheel bytes with their scoped admission
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+        with:
+          repository-url: ${{ inputs.publish == 'pypi' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+          print-hash: true
           skip-existing: false

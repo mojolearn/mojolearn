@@ -1,0 +1,1069 @@
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:28:
+Imported from ./umap/spectral_init.mojo:8:
+/root/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:28:
+Imported from ./umap/spectral_init.mojo:8:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:28:
+Imported from ./umap/spectral_init.mojo:8:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:28:
+Imported from ./umap/spectral_init.mojo:8:
+/root/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:151:
+Imported from /root/mojolearn/./neighbors/impl/distance/detail/distance_ops.mojo:191:
+/root/mojolearn/./core/pinned_reduce.mojo:99:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:151:
+Imported from /root/mojolearn/./neighbors/impl/distance/detail/distance_ops.mojo:191:
+/root/mojolearn/./core/pinned_reduce.mojo:104:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:151:
+Imported from /root/mojolearn/./neighbors/impl/distance/detail/distance_ops.mojo:191:
+/root/mojolearn/./core/pinned_reduce.mojo:104:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:151:
+Imported from /root/mojolearn/./neighbors/impl/distance/detail/distance_ops.mojo:191:
+/root/mojolearn/./core/pinned_reduce.mojo:104:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:151:
+Imported from /root/mojolearn/./neighbors/impl/distance/detail/distance_ops.mojo:191:
+/root/mojolearn/./core/pinned_reduce.mojo:107:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:28:
+Imported from ./umap/spectral_init.mojo:8:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:441:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:450:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:464:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:466:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        regy[j] = sy[
+                                  ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:480:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:491:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[
+                                    ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:513:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:523:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:537:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:638:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:669:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:674:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:138:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:744:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:73:
+/root/mojolearn/./core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:73:
+/root/mojolearn/./core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:222:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:223:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:224:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:225:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:226:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_BACK_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:227:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt32(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:253:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:254:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:255:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:267:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:269:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:274:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:332:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:333:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:339:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:340:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:344:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:345:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:346:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:346:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:349:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:353:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:353:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:355:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:128:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:357:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var needed = Int(ctr[CTR_K])
+                             ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:99:
+/root/mojolearn/./neighbors/checks/select_smallk_identical_candidate.mojo:113:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        heads[tid] = mine
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:99:
+/root/mojolearn/./neighbors/checks/select_smallk_identical_candidate.mojo:118:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var other = heads[tid + stride]
+                            ~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:99:
+/root/mojolearn/./neighbors/checks/select_smallk_identical_candidate.mojo:119:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other < heads[tid]:
+                           ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:99:
+/root/mojolearn/./neighbors/checks/select_smallk_identical_candidate.mojo:120:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    heads[tid] = other
+                    ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:99:
+/root/mojolearn/./neighbors/checks/select_smallk_identical_candidate.mojo:123:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var winner = heads[0]
+                     ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:199:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:200:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:201:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:202:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:203:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt64(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:227:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:228:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:229:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:239:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:241:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:246:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:290:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:291:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:296:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:297:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:299:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:300:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:301:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:301:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:306:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:309:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:309:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:315:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:356:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_val[tid] = o_val.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:357:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_idx[tid] = o_idx.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:360:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                  ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:360:52: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                              ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:363:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                             ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:363:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:365:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_val.unsafe_store(rank, s_val[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:95:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:366:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_idx.unsafe_store(rank, s_idx[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:684:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    val_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:689:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    idx_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:537:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:550:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:301:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:432:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:624:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_val: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:629:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_idx: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:571:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_val: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:576:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_idx: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:518:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:601:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:647:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:666:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:283:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:367:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Imported from ./umap/checks/sparse_estimator_check.mojo:14:
+Imported from ./umap/estimator.mojo:7:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:132:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:375:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Included from /root/mojolearn/umap/checks/optimizer_controls_check.mojo:4:
+Included from ./umap/checks/sparse_estimator_check.mojo:28:
+Included from ./umap/spectral_init.mojo:11:
+Included from /root/mojolearn/./spectral/impl/spectral/spectral_embedding.mojo:25:
+Included from /root/mojolearn/./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:59:
+Included from /root/mojolearn/./spectral/impl/sparse/linalg/detail/laplacian.mojo:58:
+/root/mojolearn/./spectral/impl/sparse/op/coo_ops.mojo:114:9: warning: ref 'i' was never used, remove it?
+    for i in range(n):
+        ^
+UMAP_SPARSE_FIT_BITS controls-neg0.rho 0 1065353216
+UMAP_SPARSE_FIT_BITS controls-neg0.rho 1 1065353216
+UMAP_SPARSE_FIT_BITS controls-neg0.rho 2 1067030938
+UMAP_SPARSE_FIT_BITS controls-neg0.rho 3 1072064102
+UMAP_SPARSE_FIT_BITS controls-neg0.rho 4 1075838976
+UMAP_SPARSE_FIT_BITS controls-neg0.rho 5 1080033280
+UMAP_SPARSE_FIT_BITS controls-neg0.rho 6 1083179008
+UMAP_SPARSE_FIT_BITS controls-neg0.rho 7 1085276160
+UMAP_SPARSE_FIT_BITS controls-neg0.sigma 0 1074739815
+UMAP_SPARSE_FIT_BITS controls-neg0.sigma 1 1052702860
+UMAP_SPARSE_FIT_BITS controls-neg0.sigma 2 1066351205
+UMAP_SPARSE_FIT_BITS controls-neg0.sigma 3 1067915640
+UMAP_SPARSE_FIT_BITS controls-neg0.sigma 4 1072608939
+UMAP_SPARSE_FIT_BITS controls-neg0.sigma 5 1072608939
+UMAP_SPARSE_FIT_BITS controls-neg0.sigma 6 1072608939
+UMAP_SPARSE_FIT_BITS controls-neg0.sigma 7 1090930368
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 0 3240099838
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 1 3234590669
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 2 3239908326
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 3 3232958229
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 4 3237691428
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 5 1056935979
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 6 3224521611
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 7 1092616160
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 8 1077037956
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 9 1092616192
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 10 1090207777
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 11 1056936382
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 12 1092424676
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 13 3232958249
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 14 1092616192
+UMAP_SPARSE_FIT_BITS controls-neg0.initial 15 3234590716
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 0 3239848019
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 1 3232811804
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 2 3239841519
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 3 3232765123
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 4 3237926503
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 5 3183254624
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 6 3221729623
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 7 1092265086
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 8 1074295802
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 9 1092234688
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 10 1090420654
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 11 3181722300
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 12 1092357853
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 13 3232784300
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 14 1092363028
+UMAP_SPARSE_FIT_BITS controls-neg0.layout 15 3232815549
+UMAP_SPARSE_FIT_CASE_PASS controls-neg0 graph_logical_bytes 480
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 0 1049252836
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 1 1050121576
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 2 1052958640
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 3 1050726498
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 4 1051044986
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 5 1051708958
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 6 1055755535
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 7 1054783748
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 8 1054898918
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 9 1053813715
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 10 1058169940
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 11 1050737920
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 12 1057995072
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 13 1048662890
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 14 1056627924
+UMAP_SPARSE_FIT_BITS controls-fast-neg0 15 1049024217
+UMAP_SPARSE_FIT_BITS controls-neg3.rho 0 1065353216
+UMAP_SPARSE_FIT_BITS controls-neg3.rho 1 1065353216
+UMAP_SPARSE_FIT_BITS controls-neg3.rho 2 1067030938
+UMAP_SPARSE_FIT_BITS controls-neg3.rho 3 1072064102
+UMAP_SPARSE_FIT_BITS controls-neg3.rho 4 1075838976
+UMAP_SPARSE_FIT_BITS controls-neg3.rho 5 1080033280
+UMAP_SPARSE_FIT_BITS controls-neg3.rho 6 1083179008
+UMAP_SPARSE_FIT_BITS controls-neg3.rho 7 1085276160
+UMAP_SPARSE_FIT_BITS controls-neg3.sigma 0 1074739815
+UMAP_SPARSE_FIT_BITS controls-neg3.sigma 1 1052702860
+UMAP_SPARSE_FIT_BITS controls-neg3.sigma 2 1066351205
+UMAP_SPARSE_FIT_BITS controls-neg3.sigma 3 1067915640
+UMAP_SPARSE_FIT_BITS controls-neg3.sigma 4 1072608939
+UMAP_SPARSE_FIT_BITS controls-neg3.sigma 5 1072608939
+UMAP_SPARSE_FIT_BITS controls-neg3.sigma 6 1072608939
+UMAP_SPARSE_FIT_BITS controls-neg3.sigma 7 1090930368
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 0 3240099838
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 1 3234590669
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 2 3239908326
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 3 3232958229
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 4 3237691428
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 5 1056935979
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 6 3224521611
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 7 1092616160
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 8 1077037956
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 9 1092616192
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 10 1090207777
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 11 1056936382
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 12 1092424676
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 13 3232958249
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 14 1092616192
+UMAP_SPARSE_FIT_BITS controls-neg3.initial 15 3234590716
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 0 3238699331
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 1 3230464134
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 2 3239750488
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 3 3232391586
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 4 3237882705
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 5 3189306035
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 6 3221869217
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 7 1092268078
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 8 1074512152
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 9 1092238457
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 10 1090439668
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 11 1019765692
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 12 1092922113
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 13 3233330611
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 14 1093749929
+UMAP_SPARSE_FIT_BITS controls-neg3.layout 15 3235164388
+UMAP_SPARSE_FIT_CASE_PASS controls-neg3 graph_logical_bytes 480
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 0 3234393298
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 1 3233728235
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 2 3234633358
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 3 1063557774
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 4 3163885214
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 5 1089903012
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 6 3227614383
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 7 3232641635
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 8 1038123392
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 9 1092041304
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 10 1074848777
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 11 3230539259
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 12 1088798913
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 13 3229831553
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 14 1085510194
+UMAP_SPARSE_FIT_BITS controls-fast-neg3 15 3228455027
+UMAP optimizer controls PASS
+{"guard": "nvidia-root-serial-v1", "reason": null, "returncode": 0}

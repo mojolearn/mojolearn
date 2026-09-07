@@ -1,0 +1,9 @@
+{
+  "exit": 1,
+  "reason": null,
+  "peak_group_rss_kib": 32,
+  "thread_limit": 2,
+  "deadline_seconds": 60,
+  "rss_limit_kib": 1048576,
+  "scope": "Host mocks and checkpoint parsing only; no native model execution"
+}

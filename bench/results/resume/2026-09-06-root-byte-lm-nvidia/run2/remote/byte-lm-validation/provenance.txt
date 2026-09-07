@@ -1,0 +1,4 @@
+source=d921eade0da5454e39e0cd103b9a1799286b41b9
+vendor=cuda
+gpu_arch=sm_89
+scope=single-vendor real-byte training and independent gradient gate; no cross-vendor certificate

@@ -1,0 +1,35 @@
+{
+  "schema": "small-mlp.comparison.v1",
+  "profile": "small-mlp.identical.48x8.relu16.ce3.adamw.steps16.v1",
+  "identity": "PASS",
+  "compared_cells": 21024,
+  "learning": {
+    "status": "PASS",
+    "policy": {
+      "first_step": 1,
+      "final_step": 16,
+      "maximum_loss_ratio": 0.9
+    },
+    "initial_loss": 1.1047444343566895,
+    "final_loss": 0.04506960138678551
+  },
+  "left": [
+    "bench/results/resume/2026-09-06-root-training-nvidia/run4/remote/training-validation/mlp-continuous"
+  ],
+  "right": [
+    "bench/results/resume/2026-09-07-root-mlp-amd/run1/remote/training-validation/mlp-continuous"
+  ],
+  "vendors": {
+    "left": [
+      "cuda"
+    ],
+    "right": [
+      "hip"
+    ]
+  },
+  "transferred_checkpoints": {
+    "left": [],
+    "right": []
+  },
+  "scope": "named fixed training/resume fixtures only; no universal certificate"
+}

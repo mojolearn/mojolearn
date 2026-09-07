@@ -390,9 +390,9 @@ def _mode_report():
     this lane's to edit.
     """
     rep = ModeReport()
-    rep.requested = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower()
+    rep.requested = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower()
     if not rep.requested:
-        rep.requested = "fast"
+        rep.requested = "identical"
 
     try:
         from . import _backend

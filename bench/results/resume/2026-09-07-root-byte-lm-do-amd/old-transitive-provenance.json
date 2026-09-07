@@ -1,0 +1,44 @@
+{
+  "status": "PASS",
+  "scope": "supplemental root physical-file/source audit; original capture source.json remains unchanged",
+  "records": {
+    "nv-continuous": {
+      "inventory": "bench/results/resume/2026-09-06-root-byte-lm-nvidia/run2/remote/source_inventory.json",
+      "inventory_sha256": "2d1e0b0d0db4fbe21ec7e73979248054daca2f62e6a32c76c2f90f33a41e5e08",
+      "mamba_mojo_files": 45,
+      "archive_sha256": "3578255db74c5878320850b9052fd29070f95989ffd0d56ad735235fc630c906",
+      "physical_mamba_bytes_match_inventory": true
+    },
+    "amd-continuous": {
+      "inventory": "bench/results/resume/2026-09-06-root-byte-lm-amd/run3/remote/source_inventory.json",
+      "inventory_sha256": "2d1e0b0d0db4fbe21ec7e73979248054daca2f62e6a32c76c2f90f33a41e5e08",
+      "mamba_mojo_files": 45,
+      "archive_sha256": "3578255db74c5878320850b9052fd29070f95989ffd0d56ad735235fc630c906",
+      "physical_mamba_bytes_match_inventory": true
+    },
+    "nv-head": {
+      "inventory": "bench/results/resume/2026-09-06-root-byte-lm-resume-nvidia/head4/remote/source_inventory.json",
+      "inventory_sha256": "453dfeb085e38a67f9c3013c281272e6b23eea52dce2620981179ff0667896c6",
+      "mamba_mojo_files": 45
+    },
+    "amd-resume": {
+      "inventory": "bench/results/resume/2026-09-06-root-byte-lm-resume-amd/resume2/remote/source_inventory.json",
+      "inventory_sha256": "56b6f7a20cba8172ba631a487275dcce20f5ea690cb48f772902515e9f31ed83",
+      "mamba_mojo_files": 45
+    },
+    "amd-head": {
+      "inventory": "bench/results/resume/2026-09-06-root-byte-lm-resume-amd/head1/remote/source_inventory.json",
+      "inventory_sha256": "56b6f7a20cba8172ba631a487275dcce20f5ea690cb48f772902515e9f31ed83",
+      "mamba_mojo_files": 45
+    },
+    "nv-resume": {
+      "inventory": "bench/results/resume/2026-09-06-root-byte-lm-resume-nvidia/resume1/remote/source_inventory.json",
+      "inventory_sha256": "56b6f7a20cba8172ba631a487275dcce20f5ea690cb48f772902515e9f31ed83",
+      "mamba_mojo_files": 45
+    }
+  },
+  "matching_mamba_mojo_files": 45,
+  "resume_snapshot": "/tmp/mojolearn-byte-lm-resume-20260906",
+  "resume_snapshot_files_match": true,
+  "missing_physical_resume_archives": true
+}

@@ -84,6 +84,8 @@ from gemm.checks.gemm_identical import identical_gemm
 from gemm.checks.gemm_oracle import OP_NT
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     ftz,
     identical_clamp,
     identical_div,
@@ -94,6 +96,7 @@ from checks.numerics import (
     identical_softplus,
     identical_tanh,
     portable_cosf,
+    portable_log1pf,
     portable_sinf,
 )
 from mamba.checks.mamba3_fixture import (
@@ -418,6 +421,24 @@ struct Mamba3DeviceStages(Movable):
 # ===========================================================================
 
 
+def m3_dt_softplus(x: Float32) -> Float32:
+    """S6 softplus with a stable small-dt FAST path.
+
+    Negative dt biases make exp(x) small. Rounding exp(x) + 1 before log
+    discards significant dt bits, which accumulate in S10's rotary angle
+    and can exceed the key-state tolerance after cancellation in rotation.
+    Retain FAST's vendor exp, but evaluate log1p directly in float32.
+    IDENTICAL and DETERMINISTIC keep their existing arithmetic verbatim.
+    """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        from std.math import exp
+
+        if x <= Float32(20.0):
+            return portable_log1pf(exp(x))
+        return x
+    return identical_softplus(x)
+
+
 def m3_a_dt_kernel(
     a_out: MutPointer[Float32, MutAnyOrigin],  # [M, H]
     dt_out: MutPointer[Float32, MutAnyOrigin],  # [M, H]
@@ -462,7 +483,7 @@ def m3_a_dt_kernel(
         ftz(in_proj.unsafe_load(t * dip + c_dt + hh))
         + ftz(dt_bias.unsafe_load(hh))
     )
-    dt_out.unsafe_store(cell, ftz(identical_softplus(biased)))
+    dt_out.unsafe_store(cell, ftz(m3_dt_softplus(biased)))
 
 
 # ===========================================================================

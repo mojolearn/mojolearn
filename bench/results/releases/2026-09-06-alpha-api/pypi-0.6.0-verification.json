@@ -1,0 +1,22 @@
+{
+  "version": "0.6.0",
+  "files": {
+    "mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl": "a44889df2990289658a232cab6f3b734268e4e274785b84039024025920847a7",
+    "mojolearn-0.6.0-py3-none-manylinux_2_35_x86_64.whl": "beeb02d2d41bb64421957bfbcd937860ed00c0aed5618840454e322f11a372b0"
+  },
+  "verified": true,
+  "source": "https://pypi.org/pypi/mojolearn/0.6.0/json",
+  "workflow_run": 34066704839,
+  "uploaded": [
+    {
+      "filename": "mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl",
+      "upload_time_iso_8601": "2026-09-06T23:23:11.855443Z",
+      "url": "https://files.pythonhosted.org/packages/90/92/90fd6f2b8ebba2f5b7564f2a4fccc5dc038c1e5442d27ed40819db848fe9/mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl"
+    },
+    {
+      "filename": "mojolearn-0.6.0-py3-none-manylinux_2_35_x86_64.whl",
+      "upload_time_iso_8601": "2026-09-06T23:23:14.693653Z",
+      "url": "https://files.pythonhosted.org/packages/44/44/571e55d64c9a9fe9157b4e0bf68f1dae483a3c23987dc97be1d0c01abf37/mojolearn-0.6.0-py3-none-manylinux_2_35_x86_64.whl"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     rent
+   gpu:      NVIDIA GeForce RTX 4090
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-07-root-byte-lm-nvidia-common/run1
+
+   commit:   eac39c36 parent 34fb352f
+   source:   archive of eac39c367beeddb8ba4792551d154673e654ce21; working-tree edits are not shipped
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and NVIDIA dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /private/tmp/mojolearn-byte-lm-do-20260907/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[04:17:32 nvidia] dead-man ARMED before the create: pid 79517, fires in 4500s, keyed by name mojolearn-gemm-nvidia-2026-09-07_041731
+[04:17:32 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 79517; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-79427
+[04:17:33 nvidia] creating mojolearn-gemm-nvidia-2026-09-07_041731 (NVIDIA GeForce RTX 4090, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[04:17:33 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+  create returned HTTP 500 and no id this script could parse.
+  A pod may nonetheless exist. Looking for it by name ...
+
+create FAILED (HTTP 200) and no pod named mojolearn-gemm-nvidia-2026-09-07_041731 exists.
+  Body: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-07-root-byte-lm-nvidia-common/run1/create_response.json
+  CHECK THE CONSOLE ANYWAY -- https://console.runpod.io/pods -- because
+  'no pod in the listing' and 'no pod' are the same sentence only if the
+  listing was complete.
+  dead-man cancelled (pid 79517)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-79427/gemm_remote_leg.sh: line 2275: 79517 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

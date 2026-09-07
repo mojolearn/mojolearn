@@ -1,0 +1,14 @@
+downloading https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz -> /root/datasets/gbm-bench/higgs/HIGGS.csv.gz (about 2.6 GB)
+higgs: 2816.4 MB
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 1650, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 1611, in main
+    download(args.download)
+    ~~~~~~~~^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 664, in download
+    d = load_higgs("shipped")
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 564, in load_higgs
+    import pandas as pd
+ModuleNotFoundError: No module named 'pandas'

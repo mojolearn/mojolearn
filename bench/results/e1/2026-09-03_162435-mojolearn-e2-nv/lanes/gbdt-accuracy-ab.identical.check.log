@@ -1,0 +1,102 @@
+== DEVIATION 2043 accuracy A/B: lane gbdt-symmetric, higgs rows 1000000, 3 rounds -> bench/results/e1/2026-09-03_162435-mojolearn-e2-nv//gbdt_accuracy_ab ==
+date 2026-09-03T16:24:40Z
+head 0c5956e6fe4d1144e0ef20878c7939fe083ab54d
+host mojolearn-e2-nv
+lane gbdt-symmetric
+rows 1000000
+rounds 3
+ab_define MOJOLEARN_2043_FAST_FUSED_ONE_BYTE
+dataset higgs (UCI 00280/HIGGS.csv.gz) store /root/datasets/gbm-bench
+python python3 (Python 3.10.12)
+mem used 684M avail 239038M; swap used 0M
+device NVIDIA H100 80GB HBM3, 81559 MiB, 580.173.02
+== fetch higgs IN BACKGROUND (2.6 GB + gzip csv decode), joined after the builds ==
+fetch_pid=3661 (backgrounded)
+== build estimators (FAST) ==
+== build BASE  (FAST as shipped) ==
+!! BASE build failed
+Traceback (most recent call last):
+  File "<stdin>", line 9, in <module>
+ModuleNotFoundError: No module named 'numpy'
+
+FAILED: the GBDT extension did not come out complete.
+
+THE FIRST THING TO SUSPECT IS THE COMPILER CACHE, not this source.
+$MODULAR_HOME/cache/.mojo_cache is content-addressed and its key does
+NOT include the macOS deployment target, so ONE build made with
+MACOSX_DEPLOYMENT_TARGET set poisons those keys with empty 134-byte
+metallibs and every later build reads them back. Find them with
+
+  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\
+    -exec sh -c 'head -c4 "$1" | grep -q MTLB && echo "$1"' _ {} \;
+
+and if there are any, move the whole cache aside and build again.
+The cache is regenerable; a poisoned one is not detectable any other
+way, because the build succeeds and the artifact merely does not work.
+
+See the comment at the top of this script and PORTING.md 70.
+!! BASE .so not produced
+== build PIN   (FAST, -D MOJOLEARN_2043_FAST_FUSED_ONE_BYTE=1) ==
+!! PIN build failed
+Traceback (most recent call last):
+  File "<stdin>", line 9, in <module>
+ModuleNotFoundError: No module named 'numpy'
+
+FAILED: the GBDT extension did not come out complete.
+
+THE FIRST THING TO SUSPECT IS THE COMPILER CACHE, not this source.
+$MODULAR_HOME/cache/.mojo_cache is content-addressed and its key does
+NOT include the macOS deployment target, so ONE build made with
+MACOSX_DEPLOYMENT_TARGET set poisons those keys with empty 134-byte
+metallibs and every later build reads them back. Find them with
+
+  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\
+    -exec sh -c 'head -c4 "$1" | grep -q MTLB && echo "$1"' _ {} \;
+
+and if there are any, move the whole cache aside and build again.
+The cache is regenerable; a poisoned one is not detectable any other
+way, because the build succeeds and the artifact merely does not work.
+
+See the comment at the top of this script and PORTING.md 70.
+!! PIN .so not produced
+== build IDENT (IDENTICAL -> python/mojolearn/identical/) ==
+!! at least one build failed; the table below will say NO DATA where it did
+== joining the higgs fetch ==
+higgs fetch exit=1
+WARNING: the higgs fetch FAILED (exit 1). Every arm below will
+         fall back to the SYNTHETIC fixture and every line will say NOT-HIGGS.
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 139, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
+== rotation: 3 rounds x (base, pin, ident), one process each ==
+  base r1 SKIPPED (no bench/results/e1/2026-09-03_162435-mojolearn-e2-nv//gbdt_accuracy_ab/so/base.so)
+  pin r1 SKIPPED (no bench/results/e1/2026-09-03_162435-mojolearn-e2-nv//gbdt_accuracy_ab/so/pin.so)
+  ident r1 exit=1 0 timed lines
+  base r2 SKIPPED (no bench/results/e1/2026-09-03_162435-mojolearn-e2-nv//gbdt_accuracy_ab/so/base.so)
+  pin r2 SKIPPED (no bench/results/e1/2026-09-03_162435-mojolearn-e2-nv//gbdt_accuracy_ab/so/pin.so)
+  ident r2 exit=1 0 timed lines
+  base r3 SKIPPED (no bench/results/e1/2026-09-03_162435-mojolearn-e2-nv//gbdt_accuracy_ab/so/base.so)
+  pin r3 SKIPPED (no bench/results/e1/2026-09-03_162435-mojolearn-e2-nv//gbdt_accuracy_ab/so/pin.so)
+  ident r3 exit=1 0 timed lines
+
+== per-arm lines (machine readable; one per arm) ==
+GACC arm=base mode=FAST lane=gbdt-symmetric rows=1000000 rounds=3 shape=- med_s=- auc=- auc_n=0 auc_range=--- logloss=- hash=-
+GACC arm=pin mode=FAST+2043 lane=gbdt-symmetric rows=1000000 rounds=3 shape=- med_s=- auc=- auc_n=0 auc_range=--- logloss=- hash=-
+GACC arm=ident mode=IDENTICAL lane=gbdt-symmetric rows=1000000 rounds=3 shape=- med_s=- auc=- auc_n=0 auc_range=--- logloss=- hash=-
+
+== verdict (the gate is FASTER *and* ACCURACY NOT DEGRADED, never bits) ==
+base AUC over 0 round(s): median , range -..-  (tolerance 0.0005)
+GACC-VERDICT arm=pin vs=base time_ratio=- d_auc=- d_logloss=- gate=NO DATA
+GACC-VERDICT arm=ident vs=base time_ratio=- d_auc=- d_logloss=- gate=NO DATA
+
+arm	mode	shape	med_s	auc	logloss	hash
+base	FAST	-	-	-	-	-
+pin	FAST+2043	-	-	-	-	-
+ident	IDENTICAL	-	-	-	-	-
+
+THE HASHES ARE EXPECTED TO DIFFER between base and pin and that is NOT a
+defect: the fused arm accumulates dithered fixed-point Int32 where the
+PASS(8) ladder accumulates warp-private float32. They are recorded, never
+gated. A ratio here is a result only on a row whose shape= says higgs.
+
+results in bench/results/e1/2026-09-03_162435-mojolearn-e2-nv//gbdt_accuracy_ab

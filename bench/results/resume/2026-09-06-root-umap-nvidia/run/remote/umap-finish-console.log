@@ -1,0 +1,15 @@
+vendor-venv	0
+vendor-wheels	0
+vendor-freeze	0
+external-runtime	0
+guard-checks	0
+admission-checks	0
+build-metrics-identical	0
+umap-api-identical	0
+retain-metrics-identical	0
+build-metrics-fast	0
+umap-api-fast	0
+retain-metrics-fast	0
+compare-umap	0
+digits-capture	0
+digits-quality	0

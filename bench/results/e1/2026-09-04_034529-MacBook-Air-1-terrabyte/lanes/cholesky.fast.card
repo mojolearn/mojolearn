@@ -1,0 +1,11 @@
+# cholesky card 1
+# format: mojolearn-identity-trace v1
+0	chol.jittered	f32	4096	c0656bf36a7c4ca9
+1	chol.panel000.factored	f32	4096	f256187eb793eca8
+2	chol.panel000.solved	f32	4096	d46abe5d1ad1e1a3
+3	chol.panel000.trailing	f32	4096	6413f401b928283a
+4	chol.panel001.factored	f32	4096	402abf2d807d12e8
+5	chol.factor	f32	4096	9480e6d3c25c337b
+6	chol.nb	i32	3	e9eccae0d927e2b7
+7	chol.diag	f32	64	4d403d40c1417e6c
+8	chol.logdet	f32	1	1ee574a0f0d54eb3

@@ -1,0 +1,1 @@
+{"claim":"checked retained local continuation bytes; full cross-vendor admission remains separate","compared_steps":64,"head_checkpoint_sha256":"264f189179b5a3b8a3cbbceb0f54209fb657ff7dacf701b4f8a760c693da8ff0","phase":"verify-head","schema":"mojolearn.byte-lm.resume-local-check.v1"}

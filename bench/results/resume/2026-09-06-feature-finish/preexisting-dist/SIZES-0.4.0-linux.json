@@ -1,0 +1,41 @@
+{
+  "wheel": "/Users/andrewhendel/CascadeProjects/mojolearn/python/dist/mojolearn-0.4.0-py3-none-linux_x86_64.whl",
+  "compressed_bytes": 99097721,
+  "compressed_mb": 99.1,
+  "pypi_limit_bytes": 104857600,
+  "over_limit": false,
+  "libs_layout": "shared mojolearn/.libs",
+  "sets": {
+    "cuda/sm_90a": {
+      "extensions_bytes": 90545080,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "cuda/sm_80": {
+      "extensions_bytes": 92806072,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "cuda/sm_120a": {
+      "extensions_bytes": 100379576,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "hip/gfx942": {
+      "extensions_bytes": 59517541,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "hip/gfx1100": {
+      "extensions_bytes": 58596373,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "hip/gfx90a": {
+      "extensions_bytes": 59660901,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    }
+  },
+  "tag": "py3-none-linux_x86_64"
+}

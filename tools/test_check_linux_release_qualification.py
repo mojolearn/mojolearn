@@ -133,6 +133,32 @@ class ReleaseAdmissionTests(unittest.TestCase):
                 gate.check_vendor(out, 'hip', *args)
                 self.assertEqual(quality.call_count, 3)
 
+    def test_runtime_architecture_requires_device_and_selection_in_every_job(self):
+        # Use the full 0.6.1 inert fixture: 25 jobs and 16 IDENTICAL bindings.
+        # Re-seal mutated evidence so this checks actual architecture admission,
+        # not merely stale hashes. Neither this fixture nor gate loads natives.
+        from test_release061_end_to_end import fixture, seal_evidence
+        for target in ('smoke-fast', 'byte-lm-identical'):
+            for defect in (None, 'device_architecture', 'selected_architecture', 'architecture_override_absent'):
+                with self.subTest(target=target, defect=defect), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    wheel, qualification = fixture(root)
+                    out = qualification / 'hip/gfx942'
+                    if defect:
+                        path = out / (target + '.installed.json')
+                        row = json.loads(path.read_text())
+                        row[defect] = False if defect == 'architecture_override_absent' else 'gfx90a'
+                        write_json(path, row)
+                        seal_evidence(out)
+                    extensions, sets = gate.inspect_wheel(wheel, root, flat_python=True, byte_lm=True)
+                    args = (out, 'hip', gate.digest_file(wheel), gate.native_inventory(root), extensions, sets)
+                    if defect:
+                        with self.assertRaisesRegex(ValueError, 'claimed native architecture'):
+                            gate.check_vendor(*args, arch='gfx942')
+                    else:
+                        result = gate.check_vendor(*args, arch='gfx942')
+                        self.assertEqual(len(result['installed_records']), 25)
+
     def test_stale_hash_inventory_and_missing_job_refuse(self):
         for defect in ('wheel', 'native', 'missing_job', 'build_proof'):
             with self.subTest(defect=defect), tempfile.TemporaryDirectory() as directory:

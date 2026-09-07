@@ -1,0 +1,141 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  strict Mamba backward certificate with retained native bytes
+   vendor:   amd    label in the diff: AMD
+   payload:  mamba
+   MODE:     IDENTICAL. Strict public-prefill backward gates for
+             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim.
+   mode:     rent
+   gpu:      AMD Instinct MI300X OAM
+   image:    rocm/pytorch:rocm6.4.1_ubuntu22.04_py3.10_pytorch_release_2.6.0
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-07-root-mlp-amd/run1
+
+   commit:   8f6ed41 parent 9898d3e
+   source:   archive of 8f6ed4112a3c140326011f908e8caf14c0dee4af; working-tree edits are not shipped
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   The semantic oracle and AMD dumps are generated together on
+   the pod; the fetched strict certificate is self-contained.
+
+== step 2: pre-flight ==
+  pre-flight: existing leases on this machine
+    no leases recorded in /private/tmp/mojolearn-amd-mlp-20260907/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[02:14:06 amd] dead-man ARMED before the create: pid 25768, fires in 4500s, keyed by name mojolearn-gemm-amd-2026-09-07_021405
+[02:14:06 amd]   cancel by hand only after the pod is confirmed gone:  kill 25768; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-25696
+[02:14:06 amd] creating mojolearn-gemm-amd-2026-09-07_021405 (AMD Instinct MI300X OAM, rocm/pytorch:rocm6.4.1_ubuntu22.04_py3.10_pytorch_release_2.6.0)
+[02:14:06 amd]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[02:14:08 amd] pod te8216hat3pxi4 created
+[02:21:40 amd] ssh target: -p 13190 root@213.173.96.55
+[02:21:41 amd] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[02:21:41 amd] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod te8216hat3pxi4 ...
+    ARMED. Pod te8216hat3pxi4 is TERMINATED through the API in 60 minutes.
+      lease: /private/tmp/mojolearn-amd-mlp-20260907/tools/../bench/results/runpod_leases/te8216hat3pxi4.lease
+      extend with: tools/runpod_guard.sh extend te8216hat3pxi4 '-p 13190 root@213.173.96.55' <minutes>
+    te8216hat3pxi4: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep  7 06:21 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[02:21:45 amd] shipping the COMMIT (8f6ed4112a3c140326011f908e8caf14c0dee4af), not the working tree
+[02:21:45 amd]   bounded Mamba source archive: 4164022 bytes compressed
+[02:21:46 amd]   archive source sha256: 7e4e6b7bc28bd2b05fa67f3ec9023e4d
+[02:23:27 amd] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=792
+[02:23:28 amd]   remote pid 792; polling every 30s, giving up after 3196s
+[02:26:04 amd]   the payload finished (its sentinel is on the box)
+    REMOTE_BODY_DONE
+
+== step 7: fetch ==
+    source_sha256.txt
+    uname.txt
+    pixi_env.log
+    gpu.txt
+    cpu-affinity.log
+    source_inventory.json
+    training-validation
+    pixi_install.log
+    training-validation-console.log
+    leg.txt
+
+== step 8: what came home ==
+{
+  "jobs": [
+    "training-venv",
+    "training-dependencies",
+    "dependencies",
+    "dependency-freeze",
+    "guard-checks",
+    "gradient-build",
+    "gradient-capture",
+    "gradient-oracle",
+    "training-build",
+    "linalg-build",
+    "mlp-surface-and-reference",
+    "mlp-numerical-edges",
+    "mlp-continuous",
+    "mlp-head",
+    "mlp-resume",
+    "mlp-compare",
+    "retain-training",
+    "retain-linalg"
+  ],
+  "passed": true,
+  "retained_sha256": {
+    "bindings/_mojolearn_linalg.so": "e0d28eddd303fe97674210c0e67f658e74a49befacd954e8471d9179a174a534",
+    "bindings/_mojolearn_training.so": "3fb1c805bcf360e01692b71c9d6d9a8157ad3032b07477fb30cee4cf43e1f674",
+    "train-gradient-capture": "42dbf6dc366a0a7ba35903797ba0e03194e05a0fb0f246533a9973a9f82e9f83"
+  },
+  "schema": "mojolearn.training.admission.v1",
+  "scope": "Single-vendor integration and fixed-profile FP64 tolerance checks only; no cross-vendor, bitwise, or performance certificate",
+  "vendor": "hip"
+}
+  source sha256 MATCHES on both ends (7e4e6b7bc28bd2b0...)
+  gpu on the box:
+    
+    
+    ============================ ROCm System Management Interface ============================
+    ====================================== Product Info ======================================
+    vendor=amd
+    payload=mamba
+    knn_layout_only=0
+    nvidia_campaign=4
+    commit=8f6ed4112a3c140326011f908e8caf14c0dee4af
+    started=2026-09-07T06:23:28Z
+    device_memory_pool_bytes=1073741824
+    device_memory_pool_only=true
+    device_memory_pool_chunk_percent=100
+    pixi_install_exit=0
+    training_validation_exit=0
+    scope=bounded amd training integration and independent gradient checks; no cross-vendor or performance certificate
+
+== step 9: bounded amd training integration and independent gradients ==
+  Results: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-07-root-mlp-amd/run1/remote/training-validation
+  Admission requires every job and the retained independent gradient oracle.
+  This is not a cross-vendor identity or performance certificate.
+
+== step 10: terminate at the end of the WORK ==
+  lease at exit:
+    te8216hat3pxi4: 55 minutes left of a 60-minute lease
+  terminating te8216hat3pxi4 (layer two, from this machine)
+    DELETE /v1/pods/te8216hat3pxi4 -> HTTP 204
+  VERIFIED: te8216hat3pxi4 is gone (HTTP 404).
+
+artifacts: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-07-root-mlp-amd/run1
+the training validation results: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-07-root-mlp-amd/run1/remote/training-validation
+read training-validation-console.log and training_validation_exit together.
+
+== teardown (exit 0) ==
+  lease at exit:
+    NO LEASE for te8216hat3pxi4 -- it is unguarded.
+  dead-man cancelled (pid 25768)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-25696/gemm_remote_leg.sh: line 2275: 25768 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

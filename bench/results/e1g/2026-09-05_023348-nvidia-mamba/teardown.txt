@@ -1,0 +1,6 @@
+pod=qcb6ghraitaem7
+armed=1
+terminated=1
+deadman_pid=67872
+exit=1
+at=2026-09-05T06:35:52Z

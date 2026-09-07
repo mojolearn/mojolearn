@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/tmp/mojolearn-root-validation-20260906/bin/python",
+    "-m",
+    "pip",
+    "install",
+    "--only-binary=:all:",
+    "--disable-pip-version-check",
+    "PyYAML==6.0.3"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 62256,
+  "elapsed_seconds": 0.8404949169998872,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

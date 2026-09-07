@@ -114,10 +114,17 @@ def refine_transform(
     initial: List[Float32], training: List[Float32], indices: List[UInt32],
     weights: List[Float32], rows: Int, n_train: Int, k: Int, components: Int,
     epochs: Int, a: Float32, b: Float32, seed: UInt64,
+    learning_rate: Float32 = Float32(1),
+    repulsion_strength: Float32 = Float32(1),
+    negative_sample_rate: Int = 5,
 ) raises -> List[Float32]:
     # The public transform validates all shapes and inputs before this helper.
     if epochs < 1 or not isfinite(a) or not isfinite(b) or a <= Float32(0) or b <= Float32(0):
         raise Error("UMAP transform refinement requires positive finite parameters")
+    if not isfinite(learning_rate) or learning_rate <= Float32(0) or (
+        not isfinite(repulsion_strength) or repulsion_strength < Float32(0)
+    ) or negative_sample_rate < 0 or negative_sample_rate > 2147483647:
+        raise Error("UMAP transform optimizer controls are invalid")
     if len(initial) != rows * components:
         raise Error("UMAP transform refinement initialization shape mismatch")
     _ = initialize_transform(indices, weights, training, rows, n_train, k, components)
@@ -129,7 +136,7 @@ def refine_transform(
     for weight in weights:
         maximum = max(maximum, weight)
     for epoch in range(epochs):
-        var alpha = Float32(0.25) * Float32(Float64(epochs - epoch) / Float64(epochs))
+        var alpha = (Float32(0.25) * learning_rate) * Float32(Float64(epochs - epoch) / Float64(epochs))
         for row in range(rows):
             for j in range(k):
                 var edge = row * k + j
@@ -137,7 +144,7 @@ def refine_transform(
                 if Int(Float64(epoch + 1) * scaled) <= Int(Float64(epoch) * scaled):
                     continue
                 var tail = Int(indices[edge])
-                for slot in range(6):
+                for slot in range(negative_sample_rate + 1):
                     var other = tail
                     if slot > 0:
                         var counter = seed ^ (UInt64(epoch) * UInt64(0xD1B54A32D192ED03)) ^ (UInt64(edge) * UInt64(0x94D049BB133111EB)) ^ UInt64(slot - 1)
@@ -155,7 +162,7 @@ def refine_transform(
                     if slot == 0:
                         coeff = -Float32(2) * a * b * (powered / distance) / (a * powered + Float32(1))
                     else:
-                        coeff = Float32(2) * b / ((Float32(0.001) + distance) * (a * powered + Float32(1)))
+                        coeff = Float32(2) * repulsion_strength * b / ((Float32(0.001) + distance) * (a * powered + Float32(1)))
                     if not isfinite(coeff):
                         raise Error("UMAP transform gradient is not finite")
                     for c in range(components):
@@ -215,4 +222,5 @@ def transform(
         epochs = 100 if n_queries <= 10000 else 30
     var curve = fit_umap_curve(params.min_dist, params.spread)
     return refine_transform(initial, training_embedding, indices, weights, n_queries,
-                            n_train, k, params.n_components, epochs, curve.a, curve.b, params.random_seed)
+                            n_train, k, params.n_components, epochs, curve.a, curve.b, params.random_seed,
+                            params.learning_rate, params.repulsion_strength, params.negative_sample_rate)

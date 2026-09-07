@@ -1,0 +1,1 @@
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:20/0000:20:01.1/0000:21:00.0/0000:22:01.0/0000:24:00.0/0000:25:00.0/0000:26:00.0", "vram_total_bytes": 206141652992, "returncode": 0}

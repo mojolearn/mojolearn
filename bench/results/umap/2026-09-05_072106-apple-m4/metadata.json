@@ -1,0 +1,26 @@
+{
+  "commit": "a796f850fbb544fdaa9539838e268625e03d7866",
+  "numeric_mode": "IDENTICAL",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "device": "Apple M4",
+  "architecture": "arm64",
+  "scope": "186 stage cells, 8x1 input, 2D, four epochs, seed 19; local repeatability only",
+  "source_sha256": {
+    "umap/__init__.mojo": "930592d51aadb6fe62bf23fa3db0f61c7dada0015ba2cc4848713b7844061774",
+    "umap/bench/optimizer_bench.mojo": "0a27c340b877cc13896542e796c89ee2418b236bf3b4105f72fdb0cd6421119e",
+    "umap/checks/curve_check.mojo": "2105b904798b136a41c54f186e1669fc370dfff22f754972ffe05d64b196f8bb",
+    "umap/checks/estimator_check.mojo": "d35ff399df6ed41c352a31e83d7b1a38cd67db178be1bfb3348b605d3559c276",
+    "umap/checks/finite_params_check.mojo": "76b46d602c2cface98d93aa9af4a93096c339a188739cf46abf688cf283356b7",
+    "umap/checks/graph_check.mojo": "7e23a44a06753a41144b73a51b7602db23b2a74a779bf46ef9d939f81224d7e6",
+    "umap/checks/identity_check.mojo": "7f622bdf2c6d60eb40801e057b921f75e1595c7d004cb043ebf98d33c4da37d0",
+    "umap/checks/optimizer_check.mojo": "6a871f770b840f557fa9ad3cd589d75ad923bd2b1ba02c0c9b9063b6e3c4aa3b",
+    "umap/checks/spectral_init_check.mojo": "a7862fda0cf16143fb50b5cf2a2c8aaf733cc6766dd43d61c9b92fb52c149b68",
+    "umap/curve.mojo": "3ae9990c550a059eafc48a4abb687174f123b466cd718b0226cf02c8fa51d84f",
+    "umap/estimator.mojo": "fe359295fe0efeb964203a9cbe56a5733d564101453446dd63b196f1a79bfd1b",
+    "umap/graph.mojo": "79ec869cf0521bd9e07d4151ff80bd9097057d8b25c566fae8cdbc9385312bb1",
+    "umap/optimizer.mojo": "79dbf6d75e5cde6fded5471f1d2ab8c9bee0783ad10977825c23823d834ce7d6",
+    "umap/optimizer_fast.mojo": "ed78b08a592a1f596da3eea9b268728a23952bbcaf4ea6318f4674dc4c4d7c02",
+    "umap/params.mojo": "fc0741f8338c02a491be3c57e4a9cd2726f2ceae4476bf47b48291666c4cd9aa",
+    "umap/spectral_init.mojo": "7b6d360a93fbe2a2abdb78edca12bc469bc35b6e17a3d7c9caeb51f60003cb80"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "command": [
+    "python3",
+    "tools/apple_byte_lm_first_step.py",
+    "--source",
+    "/tmp/mojolearn-byte-lm-metal-20260907",
+    "--environment",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default",
+    "--common-source",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/resume/2026-09-07-root-metal-preparation/common-source-expanded.json",
+    "--output",
+    "/private/tmp/mojolearn-apple-byte-lm-preparation-20260907"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 3920,
+  "elapsed_seconds": 0.11174379200383555,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

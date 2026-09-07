@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/tmp/mojolearn-root-validation-20260906/bin/python",
+    "tools/byte_lm_validation_admit.py",
+    "bench/results/resume/2026-09-07-root-byte-lm-do-amd/run6/remote/byte-lm-do-output/byte-lm-validation"
+  ],
+  "returncode": 0,
+  "reason": null,
+  "peak_rss_kib": 32560,
+  "elapsed_seconds": 2.535555624999688,
+  "thread_limit": 2,
+  "cpu_affinity": null,
+  "scope": "Root bounded file checks, mocks or document build; no native GPU compiler/model; sampled RSS bound, no hard Darwin CPU affinity"
+}

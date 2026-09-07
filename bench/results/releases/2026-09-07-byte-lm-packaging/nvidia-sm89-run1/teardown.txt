@@ -1,0 +1,6 @@
+pod=mhr5nj6bmivga9
+armed=1
+terminated=1
+deadman_pid=28612
+exit=0
+at=2026-09-07T16:51:12Z

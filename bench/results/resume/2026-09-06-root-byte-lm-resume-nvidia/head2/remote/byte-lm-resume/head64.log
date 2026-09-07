@@ -1,0 +1,33 @@
+580 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72af80000000, nodemask=1)
+##(##(cuda[0]:0x40550a80)##: memory_manager(chunk_size: 4294967296 ; max_cache_size: 4294967296 ; free_list: 0x418754c0)
+cuda[0])##: oom log ===== begin =====
+##(cuda[0])##: oom log request=136.50KB reason="memory manager free lists could not satisfy request"
+##(cuda[0])##: oom log mm max_cache=4GB cache_used=0B free=16GB free_blocks=1 chunk_size=4GB chunks=1
+##(cuda[0])##: oom log freelist=[freeList]@0x41875550 primary=0
+##(cuda[0])##: oom log   bucket=0 empty
+##(cuda[0])##: oom log   bucket=1 empty
+##(cuda[0])##: oom log freelist=[mm:root]@0x418754c0 primary=0
+##(cuda[0])##: oom log   bucket=0 count=1 total=16GB smallest=16GB largest=16GB
+##(cuda[0])##: oom log   bucket=0 hist 2^34=1
+##(cuda[0])##: oom log   bucket=0 top1=16GB
+##(cuda[0])##: oom log   bucket=1 empty
+##(cuda[0])##: oom log chunk=0 base=0x302000000 size=16GB in_use_blocks=0 in_use=0B free_blocks=1 free=16GB largest_free=16GB
+##(cuda[0])##: oom log ===== end =====
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/byte_lm_real_text_capture.py", line 414, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/root/mojolearn/tools/byte_lm_real_text_capture.py", line 375, in main
+    initial_eval = None if skip_evaluation else evaluate_heldout(trainer, raw, args.output / 'heldout-initial')
+                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/byte_lm_real_text_capture.py", line 215, in evaluate_heldout
+    value = trainer.evaluate(ids)
+            ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 363, in evaluate
+    return self._run(ids, False)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 331, in _run
+    completed = binding.byte_lm_run(addresses, parameters)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: Memory manager cannot satisfy allocation (memory manager free lists could not satisfy request): cuda[0] on [freeList]@0x41875550 (request: 136.50KB ; free: 16GB ; free_blocks: 1 ; available: 4GB ; chunk_size: 4GB ; chunk_count: 1 ; cache_size: 0B ; max_cache_size: 4GB)
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 1}

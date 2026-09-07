@@ -1,0 +1,25 @@
+{"ms": 1175.160005, "hashes": ["b783e9ae49288cd37215cb8c1653012849f2dbeacfb48441b7e7f3398ee98c1e"], "arm": "fast", "round": 0, "warmup": true}
+{"ms": 1118.076856, "hashes": ["998ee37b8e873518e481f1b3b937a9dacaed2f39a53d10be21b8dc63fef4a211"], "arm": "identical", "round": 0, "warmup": true}
+{"ms": 229.124872, "hashes": ["7ffdd1f8e59ae4bc1531c6a544863c0482cf874f01255480a54aa4b6764fc77d"], "arm": "external", "round": 0, "warmup": true}
+{"ms": 25.502308, "hashes": ["998ee37b8e873518e481f1b3b937a9dacaed2f39a53d10be21b8dc63fef4a211"], "arm": "identical", "round": 1, "warmup": false}
+{"ms": 156.703826, "hashes": ["7ffdd1f8e59ae4bc1531c6a544863c0482cf874f01255480a54aa4b6764fc77d"], "arm": "external", "round": 1, "warmup": false}
+{"ms": 26.291638, "hashes": ["b783e9ae49288cd37215cb8c1653012849f2dbeacfb48441b7e7f3398ee98c1e"], "arm": "fast", "round": 1, "warmup": false}
+{"ms": 156.276689, "hashes": ["7ffdd1f8e59ae4bc1531c6a544863c0482cf874f01255480a54aa4b6764fc77d"], "arm": "external", "round": 2, "warmup": false}
+{"ms": 25.572358, "hashes": ["b783e9ae49288cd37215cb8c1653012849f2dbeacfb48441b7e7f3398ee98c1e"], "arm": "fast", "round": 2, "warmup": false}
+{"ms": 24.669337, "hashes": ["998ee37b8e873518e481f1b3b937a9dacaed2f39a53d10be21b8dc63fef4a211"], "arm": "identical", "round": 2, "warmup": false}
+{"ms": 18.018025, "hashes": ["b783e9ae49288cd37215cb8c1653012849f2dbeacfb48441b7e7f3398ee98c1e"], "arm": "fast", "round": 3, "warmup": false}
+{"ms": 13.726727, "hashes": ["998ee37b8e873518e481f1b3b937a9dacaed2f39a53d10be21b8dc63fef4a211"], "arm": "identical", "round": 3, "warmup": false}
+{"ms": 151.633256, "hashes": ["7ffdd1f8e59ae4bc1531c6a544863c0482cf874f01255480a54aa4b6764fc77d"], "arm": "external", "round": 3, "warmup": false}
+{"ms": 25.567838, "hashes": ["998ee37b8e873518e481f1b3b937a9dacaed2f39a53d10be21b8dc63fef4a211"], "arm": "identical", "round": 4, "warmup": false}
+{"ms": 155.329897, "hashes": ["7ffdd1f8e59ae4bc1531c6a544863c0482cf874f01255480a54aa4b6764fc77d"], "arm": "external", "round": 4, "warmup": false}
+{"ms": 26.643023, "hashes": ["b783e9ae49288cd37215cb8c1653012849f2dbeacfb48441b7e7f3398ee98c1e"], "arm": "fast", "round": 4, "warmup": false}
+{"ms": 154.528276, "hashes": ["7ffdd1f8e59ae4bc1531c6a544863c0482cf874f01255480a54aa4b6764fc77d"], "arm": "external", "round": 5, "warmup": false}
+{"ms": 25.570568, "hashes": ["b783e9ae49288cd37215cb8c1653012849f2dbeacfb48441b7e7f3398ee98c1e"], "arm": "fast", "round": 5, "warmup": false}
+{"ms": 24.722147, "hashes": ["998ee37b8e873518e481f1b3b937a9dacaed2f39a53d10be21b8dc63fef4a211"], "arm": "identical", "round": 5, "warmup": false}
+{"ms": 18.113147, "hashes": ["b783e9ae49288cd37215cb8c1653012849f2dbeacfb48441b7e7f3398ee98c1e"], "arm": "fast", "round": 6, "warmup": false}
+{"ms": 14.312575, "hashes": ["998ee37b8e873518e481f1b3b937a9dacaed2f39a53d10be21b8dc63fef4a211"], "arm": "identical", "round": 6, "warmup": false}
+{"ms": 151.868729, "hashes": ["7ffdd1f8e59ae4bc1531c6a544863c0482cf874f01255480a54aa4b6764fc77d"], "arm": "external", "round": 6, "warmup": false}
+{"ms": 25.599469, "hashes": ["998ee37b8e873518e481f1b3b937a9dacaed2f39a53d10be21b8dc63fef4a211"], "arm": "identical", "round": 7, "warmup": false}
+{"ms": 156.407542, "hashes": ["7ffdd1f8e59ae4bc1531c6a544863c0482cf874f01255480a54aa4b6764fc77d"], "arm": "external", "round": 7, "warmup": false}
+{"ms": 24.524414, "hashes": ["b783e9ae49288cd37215cb8c1653012849f2dbeacfb48441b7e7f3398ee98c1e"], "arm": "fast", "round": 7, "warmup": false}
+{"guard": "nvidia-root-serial-v1", "reason": null, "returncode": 0}

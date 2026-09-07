@@ -1,0 +1,2 @@
+faf2d98f61250c1cdc0b114323133d3c58da04f5c5d28bb78e4bde3c936a75b1
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

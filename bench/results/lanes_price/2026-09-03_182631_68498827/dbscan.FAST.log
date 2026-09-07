@@ -1,0 +1,40 @@
+== leg lane=dbscan mode=FAST round=1 18:32:57 ==
+== bench/lanes_price_main.mojo [FAST] lane=dbscan rounds=1 smoke=False ==
+   dbscan passes 2 (scheduling, NOT hashed)
+LPRICE dbscan FAST warmup 20000x8 0.599455 9cda87ce5c6b3c85
+   dbscan passes 2 (scheduling, NOT hashed)
+LPRICE dbscan FAST 1 20000x8 0.624391 9cda87ce5c6b3c85
+HASH-STABLE dbscan FAST 2 rounds all 9cda87ce5c6b3c85
+== done [FAST] lane=dbscan ==
+== leg lane=dbscan mode=FAST round=2 18:33:01 ==
+== bench/lanes_price_main.mojo [FAST] lane=dbscan rounds=1 smoke=False ==
+   dbscan passes 2 (scheduling, NOT hashed)
+LPRICE dbscan FAST warmup 20000x8 0.589872 9cda87ce5c6b3c85
+   dbscan passes 2 (scheduling, NOT hashed)
+LPRICE dbscan FAST 1 20000x8 0.621197 9cda87ce5c6b3c85
+HASH-STABLE dbscan FAST 2 rounds all 9cda87ce5c6b3c85
+== done [FAST] lane=dbscan ==
+== leg lane=dbscan mode=FAST round=3 18:33:04 ==
+== bench/lanes_price_main.mojo [FAST] lane=dbscan rounds=1 smoke=False ==
+   dbscan passes 2 (scheduling, NOT hashed)
+LPRICE dbscan FAST warmup 20000x8 0.612965 9cda87ce5c6b3c85
+   dbscan passes 2 (scheduling, NOT hashed)
+LPRICE dbscan FAST 1 20000x8 0.572363 9cda87ce5c6b3c85
+HASH-STABLE dbscan FAST 2 rounds all 9cda87ce5c6b3c85
+== done [FAST] lane=dbscan ==
+== leg lane=dbscan mode=FAST round=4 18:33:07 ==
+== bench/lanes_price_main.mojo [FAST] lane=dbscan rounds=1 smoke=False ==
+   dbscan passes 2 (scheduling, NOT hashed)
+LPRICE dbscan FAST warmup 20000x8 0.653871 9cda87ce5c6b3c85
+   dbscan passes 2 (scheduling, NOT hashed)
+LPRICE dbscan FAST 1 20000x8 0.621118 9cda87ce5c6b3c85
+HASH-STABLE dbscan FAST 2 rounds all 9cda87ce5c6b3c85
+== done [FAST] lane=dbscan ==
+== leg lane=dbscan mode=FAST round=5 18:33:11 ==
+== bench/lanes_price_main.mojo [FAST] lane=dbscan rounds=1 smoke=False ==
+   dbscan passes 2 (scheduling, NOT hashed)
+LPRICE dbscan FAST warmup 20000x8 0.799979 9cda87ce5c6b3c85
+   dbscan passes 2 (scheduling, NOT hashed)
+LPRICE dbscan FAST 1 20000x8 0.765038 9cda87ce5c6b3c85
+HASH-STABLE dbscan FAST 2 rounds all 9cda87ce5c6b3c85
+== done [FAST] lane=dbscan ==
