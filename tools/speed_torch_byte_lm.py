@@ -8,6 +8,7 @@ sides consume identical bytes.
 
     python3 tools/speed_torch_byte_lm.py --lane lm-train --arm torch
     python3 tools/speed_torch_byte_lm.py --lane lm-train --arm torch-deterministic
+    python3 tools/speed_torch_byte_lm.py --lane lm-train --arm torch-fast
     python3 tools/speed_torch_byte_lm.py --lane lm-infer --arm torch --rounds 20
 
 AUTHORED, NOT EXECUTED. No model, benchmark, build or install was run to
@@ -22,9 +23,11 @@ How much does our IDENTICAL byte-LM trainer -- the one whose 128-step run is
 bitwise identical on NVIDIA CUDA, AMD HIP and Apple Metal -- cost against
 what a PyTorch user would run for the EXACT same model, on the same H100,
 for training (128 steps, lane `lm-train`) and for a forward/evaluate (lane
-`lm-infer`). Torch is measured twice: as it ships (arm `torch`) and in its
-own documented deterministic configuration (arm `torch-deterministic`), so
-the price of torch's determinism and the price of ours sit in one table.
+`lm-infer`). Torch is measured as it ships (arm `torch`), in its documented
+deterministic configuration (arm `torch-deterministic`), and on its
+strongest precision-relaxed default path (arm `torch-fast`), so the price
+of torch's determinism, the price of ours, and the speed torch reaches when
+it is allowed to stop being FP32 all sit in one table.
 
 THIS IS A LATENCY COMPARISON, NOT A THROUGHPUT ONE (DEVIATION 2191)
 ====================================================================
@@ -54,7 +57,7 @@ oracle on purpose and are numbered:
     sum over the expanded dimension instead of through `index_add_`. The
     docs list `torch.repeat_interleave()` as deterministic-when-
     differentiated anyway; the respelling removes one indexing backward
-    from the hot loop on both torch arms and is NOT what makes the
+    from the hot loop on every torch arm and is NOT what makes the
     deterministic arm pass or fail.
 
 THE DATA RECIPE IS `tools/byte_lm_real_text_capture.py`, REPRODUCED
@@ -87,19 +90,21 @@ checkout this arm must not depend on. The pieces:
     2190 at `LR` below: the pinned run used lr .003, not the trainer's
     1e-3 default.
 
-THE TWO TORCH ARMS, AND THE SENTENCES THEY REST ON (DEVIATION 2197)
-====================================================================
+THE TORCH ARMS, AND THE SENTENCES THEY REST ON
+===============================================
 `torch` is torch as it ships: nothing about determinism or TF32 is touched,
 and the TF32 switches are READ and printed in a note so the reader knows
 what the default was on the day (DEVIATION 2201; `allow_tf32` for matmul
 has shipped False since 1.12 and `set_float32_matmul_precision` defaults
 to "highest", so the default arm is genuine FP32 GEMM, but it is reported,
-not assumed).
+not assumed). Eager attention (matmul, mask, softmax, matmul), the oracle's
+spelling; `torch.optim.AdamW(foreach=False, fused=False)`, the plain
+single-tensor algorithm.
 
-`torch-deterministic` is torch's own documented recipe, applied in this
-order: `CUBLAS_WORKSPACE_CONFIG=:4096:8` placed in `os.environ` BEFORE
-`import torch` (which is why `main` parses argv before importing), then
-`torch.use_deterministic_algorithms(True)`,
+`torch-deterministic` is torch's own documented recipe (DEVIATION 2197),
+applied in this order: `CUBLAS_WORKSPACE_CONFIG=:4096:8` placed in
+`os.environ` BEFORE `import torch` (which is why `main` parses argv before
+importing), then `torch.use_deterministic_algorithms(True)`,
 `torch.backends.cudnn.deterministic = True`,
 `torch.backends.cudnn.benchmark = False`. The sentences relied on, fetched
 2026-09-07:
@@ -138,10 +143,68 @@ implementation is printed as `FSPEED-REFUSED` with the first line of the
 error and the process exits 0 (DEVIATION 2203; any other failure also
 prints a refusal but exits 1). That refusal is a finding: torch's
 documented deterministic configuration cannot train this model as written.
-`--loss gather` (DEVIATION 2205) is the OPT-IN respelling `-(log_softmax
-.gather(target)).mean()`, whose ops are all on the documented deterministic
-list; it changes the arm name to `<arm>-gatherloss` so the two spellings can
-never share a row. It is not run unless asked.
+`torch-deterministic-gatherloss` (DEVIATION 2205, also reachable as
+`--arm torch-deterministic --loss gather`) is the respelling
+`-(log_softmax.gather(target)).mean()`, whose ops are all on the documented
+deterministic list; it is its own arm name so the two spellings can never
+share a row, and it is not run unless asked.
+
+`torch-fast` (DEVIATION 2206) is PyTorch's strongest precision-relaxed
+default path on an H100, and it is NOT FP32; its header says
+`mode=TF32` so no table can read it beside the FP32 arms without the label
+(`bench/speed/README.md`: "TF32 and other reduced-precision paths must be
+named"). It differs from `torch` in exactly four ways, each named:
+
+  * `torch.set_float32_matmul_precision("high")`,
+    `torch.backends.cuda.matmul.allow_tf32 = True` and
+    `torch.backends.cudnn.allow_tf32 = True`: every FP32 GEMM may run on
+    TF32 tensor cores, ten explicit mantissa bits instead of twenty-three.
+    `tools/speed_torch_seq.py` measured the same GEMM at about 5x between
+    the two settings on an H100, which is why this is a separate arm and
+    not a footnote.
+  * attention through `torch.nn.functional.scaled_dot_product_attention(q,
+    k, v, is_causal=True)` (DEVIATION 2207), with K and V expanded from 2
+    to 4 heads by the same expand + reshape as the eager path, so the
+    function computed is the reference's (the SDPA page's own equivalent
+    listing is `attn_weight = softmax(q @ k^T * 1/sqrt(E) + causal bias)
+    @ v`, which is what the eager path spells with `scale = 1/sqrt(8)`).
+    The BACKEND IS AUTO-SELECTED BY TORCH AND IS NOT NAMED HERE; the
+    enabled backends are printed in a note, which backend actually ran is
+    not observable from Python without a profiler and is reported as
+    unverified. What the docs say (fetched 2026-09-07 from
+    https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html,
+    the 2.14 page): "Scaled dot product attention attempts to
+    automatically select the most optimal implementation based on the
+    inputs." "Due to the nature of fusing floating point operations, the
+    output of this function may be different depending on what backend
+    kernel is chosen." "In some circumstances when given tensors on a CUDA
+    device and using CuDNN, this operator may select a nondeterministic
+    algorithm to increase performance. If this is undesirable, you can try
+    to make the operation deterministic (potentially at a performance
+    cost) by setting torch.backends.cudnn.deterministic = True." And the
+    Reproducibility page's SDPA table: SDPBackend.MATH is "Deterministic"
+    forward and backward, FLASH_ATTENTION, EFFICIENT_ATTENTION and
+    CUDNN_ATTENTION are "Deterministic" forward and "Non-deterministic"
+    backward ("The backward pass uses non-deterministic atomic operations
+    by default."), and "Bitwise matching numerics across different SDPA
+    backends are not guaranteed, even for the same inputs and dtype." So
+    `torch-fast`'s per-round parameter hash is EXPECTED to be free to move
+    and is printed as a finding, not a defect.
+  * forward + loss compiled with
+    `torch.compile(mode="max-autotune-no-cudagraphs")` (DEVIATION 2208).
+    The compile happens on the FIRST CALL, so the warm-up (at least one is
+    forced for this arm) contains it and the `FSPEED-WARMUP` line for this
+    arm is expected to be seconds, not milliseconds; the timed rounds
+    re-use the compiled graph. If the compile raises at the first call the
+    arm falls back to the uncompiled function, prints an `FSPEED-NOTE`
+    saying so, and continues, because a `torch-fast` row without
+    `torch.compile` is still the strongest eager path and worth having;
+    the note is what keeps the two from being confused. The optimizer step
+    is not compiled.
+  * `torch.optim.AdamW(fused=True)` (DEVIATION 2209), torch's fused CUDA
+    kernel for the whole parameter list.
+
+Init, batches, lr, hashing and ACC metrics are the `torch` arm's, unchanged.
 
 WHAT IS AND IS NOT INSIDE THE TIMER (DEVIATIONS 2193, 2194)
 ============================================================
@@ -173,7 +236,8 @@ bits. The `FSPEED` line carries the first 16 hex digits, which is the
 contract's field width (`tools/speed_gbdt_arm.py::hash_predictions` does
 the same truncation); the full digest is printed in an `FSPEED-NOTE` beside
 it. Torch's per-round hashes are what show whether torch repeats; the
-`torch` arm may move between rounds and that is a finding, not an error.
+`torch` and `torch-fast` arms may move between rounds and that is a
+finding, not an error.
 
 OUTPUT CONTRACT (the `FSPEED-*` family, `bench/speed/README.md`)
 =================================================================
@@ -185,10 +249,11 @@ OUTPUT CONTRACT (the `FSPEED-*` family, `bench/speed/README.md`)
     FSPEED-NOTE lane=<l> arm=<a> <one line>
 
 Shape tags: `bytelm-2x33-steps128` (lm-train), `bytelm-2x33-forward`
-(lm-infer). Mode labels (DEVIATION 2198): the `torch` arm prints
-`mode=FAST`, as `tools/speed_torch_seq.py` does for torch; the
-`torch-deterministic` arm prints `mode=DETERMINISTIC`; our arm prints the
-tier `mojolearn.numeric_mode()` read back after import.
+(lm-infer). Mode labels (DEVIATION 2198): `torch` prints `mode=FAST`, as
+`tools/speed_torch_seq.py` does for torch; `torch-deterministic` and
+`torch-deterministic-gatherloss` print `mode=DETERMINISTIC`; `torch-fast`
+prints `mode=TF32`; our arm prints the tier `mojolearn.numeric_mode()`
+reads back after import.
 """
 
 import argparse
@@ -213,7 +278,7 @@ SHAPE_TAGS = {"lm-train": "bytelm-2x33-steps128", "lm-infer": "bytelm-2x33-forwa
 #: says otherwise. A training round is a full 128-step run, so three; a
 #: forward is microseconds of work, so twenty.
 DEFAULT_ROUNDS = {"lm-train": 3, "lm-infer": 20}
-ARMS = ("torch", "torch-deterministic")
+ARMS = ("torch", "torch-deterministic", "torch-deterministic-gatherloss", "torch-fast")
 SIZE = "shipped"
 
 # --------------------------------------------------------------------------
@@ -274,6 +339,7 @@ SHAPES = [("embed", (256, 32))]
 for _block in range(2):
     SHAPES.extend(("block%d.%s" % (_block, name), shape) for name, shape in _BLOCK_SHAPES)
 SHAPES.append(("lm_head", (256, 32)))
+NAMES = tuple(name for name, _ in SHAPES)
 
 
 def registry():
@@ -514,7 +580,9 @@ def build_parser(prog, with_arm):
                    help="untimed rounds of the same shape before the timed ones "
                         "(DEVIATION 2200: for lm-train a warm-up is a full "
                         "128-step run, so the warm-up line is the same shape "
-                        "as the rounds and is never a different program)")
+                        "as the rounds and is never a different program; "
+                        "torch-fast forces at least one because the compile "
+                        "lands on the first call)")
     if with_arm:
         p.add_argument("--arm", required=True, choices=ARMS)
         p.add_argument("--loss", default="cross_entropy", choices=("cross_entropy", "gather"),
@@ -522,8 +590,20 @@ def build_parser(prog, with_arm):
                             "(F.cross_entropy) and the default; `gather` respells the "
                             "loss as -(log_softmax.gather(target)).mean(), whose ops are "
                             "on torch's documented deterministic list, and renames the "
-                            "arm to <arm>-gatherloss")
+                            "arm to <arm>-gatherloss. `--arm torch-deterministic-gatherloss` "
+                            "is the same thing as an explicit arm name")
     return p
+
+
+def resolve_arm(arm, loss):
+    """(base arm, loss spelling, reported arm name). The explicit
+    `torch-deterministic-gatherloss` arm and `torch-deterministic --loss
+    gather` are one row and get one name (DEVIATION 2205/2209)."""
+    if arm == "torch-deterministic-gatherloss":
+        return "torch-deterministic", "gather", arm
+    if loss == "gather":
+        return arm, "gather", arm + "-gatherloss"
+    return arm, "cross_entropy", arm
 
 
 # --------------------------------------------------------------------------
@@ -561,9 +641,11 @@ def torch_tables(torch, device):
     return cosine, sine, mask
 
 
-def torch_forward(torch, F, weights, tokens, tables, loss_spelling="cross_entropy"):
+def torch_forward(torch, F, weights, tokens, tables, loss_spelling="cross_entropy", attention="eager"):
     """tools/byte_lm_gradient_oracle.py:103-137 in FP32. `tokens` is a
-    long[2,33] on the device; returns the scalar mean loss over 64 targets."""
+    long[2,33] on the device; returns the scalar mean loss over 64 targets.
+    `attention` is `eager` (the oracle's matmul/mask/softmax/matmul) or
+    `sdpa` (DEVIATION 2207, `torch-fast` only)."""
     cosine, sine, mask = tables
     h = F.embedding(tokens[:, :-1], weights["embed"])
 
@@ -587,12 +669,21 @@ def torch_forward(torch, F, weights, tokens, tables, loss_spelling="cross_entrop
         q, k = rotate(q), rotate(k)
         # DEVIATION 2204: `repeat_interleave(2, dim=1)` as expand + reshape;
         # [B, 2, L, 8] -> [B, 2, 1, L, 8] -> [B, 2, 2, L, 8] -> [B, 4, L, 8],
-        # head order kv0, kv0, kv1, kv1, the same as repeat_interleave.
+        # head order kv0, kv0, kv1, kv1, the same as repeat_interleave. The
+        # same expansion feeds SDPA, so GQA is handled outside the kernel
+        # exactly as the reference does it and `enable_gqa` is not used.
         k = k[:, :, None].expand(2, 2, 2, 32, 8).reshape(2, 4, 32, 8)
         v = v[:, :, None].expand(2, 2, 2, 32, 8).reshape(2, 4, 32, 8)
-        scores = q @ k.transpose(-1, -2) / math.sqrt(8)
-        probability = scores.masked_fill(mask, -torch.inf).softmax(-1)
-        attended = (probability @ v).transpose(1, 2).reshape(2, 32, 32)
+        if attention == "sdpa":
+            # DEVIATION 2207: default scale is 1/sqrt(E) = 1/sqrt(8), the
+            # eager path's `/ math.sqrt(8)`; is_causal=True is the eager
+            # path's `triu(1)` mask filled with -inf. Backend auto-selected.
+            attended = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+        else:
+            scores = q @ k.transpose(-1, -2) / math.sqrt(8)
+            probability = scores.masked_fill(mask, -torch.inf).softmax(-1)
+            attended = probability @ v
+        attended = attended.transpose(1, 2).reshape(2, 32, 32)
         residual = h + linear(attended, "w_o")
         z = norm(residual, "norm2_w")
         gate = linear(z, "w_gate")
@@ -624,13 +715,32 @@ def first_line(exc):
     return one_line(str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__)
 
 
-def configure_arm(torch, arm):
-    """Apply the arm's documented configuration and return the mode label
-    and a description for the header note (DEVIATION 2197, 2198, 2201)."""
-    tf32 = dict(matmul_allow_tf32=getattr(getattr(torch.backends.cuda, "matmul", None), "allow_tf32", None),
+def tf32_switches(torch):
+    return dict(matmul_allow_tf32=getattr(getattr(torch.backends.cuda, "matmul", None), "allow_tf32", None),
                 cudnn_allow_tf32=getattr(torch.backends.cudnn, "allow_tf32", None),
                 float32_matmul_precision=getattr(torch, "get_float32_matmul_precision", lambda: None)())
-    if arm == "torch-deterministic":
+
+
+def sdpa_backends(torch):
+    """Which SDPA backends torch has ENABLED. Not which one ran."""
+    cuda = torch.backends.cuda
+    out = {}
+    for label, probe in (("flash", "flash_sdp_enabled"), ("mem_efficient", "mem_efficient_sdp_enabled"),
+                         ("math", "math_sdp_enabled"), ("cudnn", "cudnn_sdp_enabled")):
+        fn = getattr(cuda, probe, None)
+        try:
+            out[label] = None if fn is None else bool(fn())
+        except Exception:                           # noqa: BLE001
+            out[label] = None
+    return out
+
+
+def configure_arm(torch, base_arm):
+    """Apply the base arm's documented configuration and return (mode label,
+    description for the header note, arm settings dict). DEVIATIONS 2197,
+    2198, 2201, 2206."""
+    settings = dict(attention="eager", compile=False, fused=False)
+    if base_arm == "torch-deterministic":
         if os.environ.get("CUBLAS_WORKSPACE_CONFIG") != ":4096:8":
             raise RuntimeError("CUBLAS_WORKSPACE_CONFIG was not set before torch was imported")
         torch.use_deterministic_algorithms(True)
@@ -639,45 +749,113 @@ def configure_arm(torch, arm):
         mode = "DETERMINISTIC"
         applied = ("CUBLAS_WORKSPACE_CONFIG=:4096:8 (pre-import) "
                    "use_deterministic_algorithms(True) cudnn.deterministic=True cudnn.benchmark=False")
+    elif base_arm == "torch-fast":
+        # DEVIATION 2206. NOT FP32. Every switch named, in the order applied.
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        settings = dict(attention="sdpa", compile=True, fused=True)
+        mode = "TF32"
+        applied = ("set_float32_matmul_precision('high') cuda.matmul.allow_tf32=True cudnn.allow_tf32=True "
+                   "attention=scaled_dot_product_attention(is_causal=True, backend auto-selected, "
+                   "enabled=%s) compile=torch.compile(mode='max-autotune-no-cudagraphs') "
+                   "optimizer=AdamW(fused=True); deterministic_algorithms=%s untouched"
+                   % (sdpa_backends(torch), torch.are_deterministic_algorithms_enabled()))
     else:
         mode = "FAST"
         applied = ("torch default configuration; deterministic_algorithms=%s cudnn.deterministic=%s "
                    "cudnn.benchmark=%s, none of them changed by this arm"
                    % (torch.are_deterministic_algorithms_enabled(), torch.backends.cudnn.deterministic,
                       torch.backends.cudnn.benchmark))
-    description = "%s; tf32 switches as found: %s" % (applied, tf32)
-    return mode, description
+    description = "%s; tf32 switches as found after configuration: %s" % (applied, tf32_switches(torch))
+    return mode, description, settings
 
 
-def run_train_lane(torch, F, lane, arm, initial, batches, heldout, device, n_rounds, warmups, loss_spelling):
+class Forward:
+    """The forward+loss callable for one arm: `fn(tensors, tokens)` over the
+    20 tensors IN REGISTRY ORDER (a list, not the dict, so a fresh
+    parameter set per round hits the same compiled graph; DEVIATION 2208).
+
+    For `torch-fast` the callable is `torch.compile`d and the compile lands
+    on the FIRST CALL, inside the warm-up. If that first call raises, the
+    arm falls back to the eager callable for the rest of the process and
+    says so in an `FSPEED-NOTE`; the fallback is NOT silent."""
+
+    def __init__(self, torch, F, tables, loss_spelling, settings, lane, arm):
+        self.torch, self.lane, self.arm = torch, lane, arm
+        self.compiled_active = False
+        self.fallback_reason = None
+
+        def eager(tensors, tokens):
+            return torch_forward(torch, F, dict(zip(NAMES, tensors)), tokens, tables,
+                                 loss_spelling, settings["attention"])
+
+        self.eager = eager
+        self.fn = eager
+        if settings["compile"]:
+            try:
+                self.fn = torch.compile(eager, mode="max-autotune-no-cudagraphs")
+                self.compiled_active = True
+            except Exception as exc:                # noqa: BLE001
+                self._fallback("torch.compile() raised at construction: %s: %s"
+                               % (exc.__class__.__name__, first_line(exc)))
+
+    def _fallback(self, reason):
+        self.fn = self.eager
+        self.compiled_active = False
+        self.fallback_reason = reason
+        emit_note(self.lane, self.arm, "COMPILE FALLBACK to the uncompiled forward: %s" % reason)
+
+    def __call__(self, tensors, tokens):
+        if not self.compiled_active:
+            return self.eager(tensors, tokens)
+        try:
+            return self.fn(tensors, tokens)
+        except Exception as exc:                    # noqa: BLE001
+            if is_nondeterministic_refusal(exc):
+                raise
+            self._fallback("first compiled call raised %s: %s" % (exc.__class__.__name__, first_line(exc)))
+            return self.eager(tensors, tokens)
+
+
+def make_optimizer(torch, tensors, settings):
+    """DEVIATION 2196: the float32-rounded scalars. `torch`/`torch-deterministic`:
+    foreach/fused OFF, the plain single-tensor AdamW (decoupled decay).
+    `torch-fast`: DEVIATION 2209, `fused=True`."""
+    scalars = optimizer_scalars()
+    if settings["fused"]:
+        return torch.optim.AdamW(tensors, lr=scalars["lr"], betas=scalars["betas"], eps=scalars["eps"],
+                                 weight_decay=scalars["weight_decay"], fused=True)
+    return torch.optim.AdamW(tensors, lr=scalars["lr"], betas=scalars["betas"], eps=scalars["eps"],
+                             weight_decay=scalars["weight_decay"], foreach=False, fused=False)
+
+
+def ordered(weights):
+    return [weights[name] for name in NAMES]
+
+
+def run_train_lane(torch, lane, arm, forward, settings, initial, batches, heldout, device, n_rounds, warmups):
     """Lane `lm-train`: `n_rounds` fresh 128-step runs, each timed end to
     end between two `torch.cuda.synchronize()` calls, plus the held-out
     losses before and after (outside the timer) and the per-step medians."""
     shape = SHAPE_TAGS[lane]
-    tables = torch_tables(torch, device)
-    scalars = optimizer_scalars()
     host_batches = [np.ascontiguousarray(b, dtype=np.int64) for b in batches]
     heldout_dev = [torch.from_numpy(np.ascontiguousarray(b, dtype=np.int64)).to(device) for b in heldout]
 
     def fresh():
         weights = torch_parameters(torch, initial, device)
-        # DEVIATION 2196: the float32-rounded scalars; foreach/fused OFF so
-        # this is the plain single-tensor AdamW algorithm, decoupled decay.
-        optimizer = torch.optim.AdamW([weights[e["name"]] for e in registry()],
-                                      lr=scalars["lr"], betas=scalars["betas"], eps=scalars["eps"],
-                                      weight_decay=scalars["weight_decay"], foreach=False, fused=False)
-        return weights, optimizer
+        tensors = ordered(weights)
+        return weights, tensors, make_optimizer(torch, tensors, settings)
 
-    def evaluate(weights):
+    def evaluate(tensors):
         losses = []
         with torch.no_grad():
             for tokens in heldout_dev:
-                losses.append(float(torch_forward(torch, F, weights, tokens, tables, loss_spelling)
-                                    .detach().to(torch.float32).cpu()))
+                losses.append(float(forward(tensors, tokens).detach().to(torch.float32).cpu()))
         torch.cuda.synchronize()
         return heldout_mean(losses)
 
-    def one_run(weights, optimizer):
+    def one_run(tensors, optimizer):
         """Returns (end-to-end ms, list of per-step ms from CUDA events)."""
         starts = [torch.cuda.Event(enable_timing=True) for _ in range(STEPS)]
         ends = [torch.cuda.Event(enable_timing=True) for _ in range(STEPS)]
@@ -687,7 +865,7 @@ def run_train_lane(torch, F, lane, arm, initial, batches, heldout, device, n_rou
             starts[step].record()
             tokens = torch.from_numpy(host_batches[step]).to(device, non_blocking=False)  # DEVIATION 2194
             optimizer.zero_grad(set_to_none=True)
-            loss = torch_forward(torch, F, weights, tokens, tables, loss_spelling)
+            loss = forward(tensors, tokens)
             loss.backward()
             optimizer.step()
             ends[step].record()
@@ -696,19 +874,23 @@ def run_train_lane(torch, F, lane, arm, initial, batches, heldout, device, n_rou
         step_ms = [starts[i].elapsed_time(ends[i]) for i in range(STEPS)]   # DEVIATION 2193
         return total_ms, step_ms
 
-    initial_weights, _ = fresh()
-    emit_acc(lane, arm, "heldout_loss_initial", evaluate(initial_weights))
-    del initial_weights
+    _, initial_tensors, _ = fresh()
+    emit_acc(lane, arm, "heldout_loss_initial", evaluate(initial_tensors))
+    del initial_tensors
 
     for _ in range(warmups):
-        weights, optimizer = fresh()
-        ms, _ = one_run(weights, optimizer)
+        _, tensors, optimizer = fresh()
+        ms, _ = one_run(tensors, optimizer)
         emit_warmup(lane, arm, shape, ms)
+    if settings["compile"]:
+        emit_note(lane, arm, "compiled_forward_active=%s after warm-up%s"
+                  % (forward.compiled_active, "" if forward.fallback_reason is None
+                     else "; fallback: " + forward.fallback_reason))
 
     all_step_ms, finals, hashes = [], [], []
     for index in range(1, n_rounds + 1):
-        weights, optimizer = fresh()
-        ms, step_ms = one_run(weights, optimizer)
+        weights, tensors, optimizer = fresh()
+        ms, step_ms = one_run(tensors, optimizer)
         flat = torch_flat(torch, weights)
         if not np.isfinite(flat).all():
             raise RuntimeError("round %d produced nonfinite parameters" % index)
@@ -719,7 +901,7 @@ def run_train_lane(torch, F, lane, arm, initial, batches, heldout, device, n_rou
         emit_note(lane, arm, "round=%d step_ms_median=%.4f step_ms_min=%.4f step_ms_max=%.4f"
                   % (index, statistics.median(step_ms), min(step_ms), max(step_ms)))
         all_step_ms.extend(step_ms)
-        finals.append(evaluate(weights))
+        finals.append(evaluate(tensors))
     if len(set(hashes)) > 1:
         emit_note(lane, arm, "hash moved across rounds: %s %s"
                   % (hashes[0][:16], next(h for h in hashes if h != hashes[0])[:16]))
@@ -731,12 +913,11 @@ def run_train_lane(torch, F, lane, arm, initial, batches, heldout, device, n_rou
     emit_acc(lane, arm, "step_ms_median", statistics.median(all_step_ms))
 
 
-def run_infer_lane(torch, F, lane, arm, initial, heldout, device, n_rounds, warmups, loss_spelling):
+def run_infer_lane(torch, lane, arm, forward, settings, initial, heldout, device, n_rounds, warmups):
     """Lane `lm-infer`: one forward over `VALIDATION_STARTS[0]` on the
     initial parameters per round (DEVIATION 2199), no gradient."""
     shape = SHAPE_TAGS[lane]
-    tables = torch_tables(torch, device)
-    weights = torch_parameters(torch, initial, device)
+    tensors = ordered(torch_parameters(torch, initial, device))
     host = np.ascontiguousarray(heldout[0], dtype=np.int64)
 
     def one_forward():
@@ -744,7 +925,7 @@ def run_infer_lane(torch, F, lane, arm, initial, heldout, device, n_rounds, warm
         t0 = time.perf_counter()
         with torch.no_grad():
             tokens = torch.from_numpy(host).to(device, non_blocking=False)   # DEVIATION 2194
-            loss = torch_forward(torch, F, weights, tokens, tables, loss_spelling)
+            loss = forward(tensors, tokens)
             value = float(loss.to(torch.float32).cpu())
         torch.cuda.synchronize()
         return (time.perf_counter() - t0) * 1000.0, value
@@ -752,6 +933,10 @@ def run_infer_lane(torch, F, lane, arm, initial, heldout, device, n_rounds, warm
     for _ in range(warmups):
         ms, _ = one_forward()
         emit_warmup(lane, arm, shape, ms)
+    if settings["compile"]:
+        emit_note(lane, arm, "compiled_forward_active=%s after warm-up%s"
+                  % (forward.compiled_active, "" if forward.fallback_reason is None
+                     else "; fallback: " + forward.fallback_reason))
     hashes, last = [], None
     for index in range(1, n_rounds + 1):
         ms, value = one_forward()
@@ -771,15 +956,17 @@ def run_infer_lane(torch, F, lane, arm, initial, heldout, device, n_rounds, warm
 
 def main(argv=None):
     args = build_parser("speed_torch_byte_lm", with_arm=True).parse_args(argv)
-    lane, arm = args.lane, args.arm
-    if args.loss == "gather":
-        arm = arm + "-gatherloss"      # DEVIATION 2205
+    lane = args.lane
+    base_arm, loss_spelling, arm = resolve_arm(args.arm, args.loss)
     n_rounds = round_count(args.rounds, lane)
-    if args.warmups < 0:
+    warmups = args.warmups
+    if warmups < 0:
         raise SystemExit("warmups must be nonnegative")
+    if base_arm == "torch-fast" and warmups < 1:
+        warmups = 1        # DEVIATION 2208: the compile must land in a warm-up
 
     # DEVIATION 2197: the workspace variable must precede `import torch`.
-    if args.arm == "torch-deterministic":
+    if base_arm == "torch-deterministic":
         if "torch" in sys.modules:
             emit_refused(lane, arm, "torch was imported before CUBLAS_WORKSPACE_CONFIG could be set; "
                                     "run this file as its own process")
@@ -806,7 +993,7 @@ def main(argv=None):
     build = ("ROCm " + str(hip)) if hip else ("CUDA " + str(getattr(torch.version, "cuda", "?")))
 
     try:
-        mode, description = configure_arm(torch, args.arm)
+        mode, description, settings = configure_arm(torch, base_arm)
     except Exception as exc:                        # noqa: BLE001
         emit_refused(lane, arm, "%s: %s" % (exc.__class__.__name__, first_line(exc)))
         return 1
@@ -819,26 +1006,35 @@ def main(argv=None):
         return 1
     batches = train_batches(raw)
     heldout = heldout_batches(raw)
+    scalars = optimizer_scalars()
 
     emit_header(lane, arm, mode, device_name, n_rounds)
     emit_note(lane, arm, "torch=%s build=%s %s" % (torch.__version__, build, description))
     emit_note(lane, arm, "model=%s definition=tools/byte_lm_gradient_oracle.py::reference ported to FP32 "
-                         "leaf tensors; loss_spelling=%s" % (PROFILE, args.loss))
+                         "leaf tensors; loss_spelling=%s attention=%s"
+              % (PROFILE, loss_spelling, settings["attention"]))
     emit_note(lane, arm, "recipe init=%s corpus_sha256=%s initial_parameters_sha256=%s steps=%d "
-                         "optimizer=AdamW(lr=%r,betas=%r,eps=%r,weight_decay=%r,foreach=False,fused=False)"
+                         "optimizer=AdamW(lr=%r,betas=%r,eps=%r,weight_decay=%r,%s)"
               % (INIT_ID, CORPUS_SHA, sha256_hex(flat_bytes(initial)), STEPS,
-                 optimizer_scalars()["lr"], optimizer_scalars()["betas"], optimizer_scalars()["eps"],
-                 optimizer_scalars()["weight_decay"]))
+                 scalars["lr"], scalars["betas"], scalars["eps"], scalars["weight_decay"],
+                 "fused=True" if settings["fused"] else "foreach=False,fused=False"))
     emit_latency_note(lane, arm)
+    if base_arm == "torch-fast":
+        emit_note(lane, arm, "NOT FP32: TF32 GEMM, auto-selected SDPA backend (which one ran is "
+                             "UNVERIFIED from Python), torch.compile, fused AdamW; hash movement "
+                             "across rounds is expected here and is a finding, not a defect")
     if hip:
         emit_note(lane, arm, "this is a ROCm build; the device string is torch's and the "
                              "CUBLAS_WORKSPACE_CONFIG sentence is written for CUDA")
 
     try:
+        tables = torch_tables(torch, device)
+        forward = Forward(torch, F, tables, loss_spelling, settings, lane, arm)
         if lane == "lm-train":
-            run_train_lane(torch, F, lane, arm, initial, batches, heldout, device, n_rounds, args.warmups, args.loss)
+            run_train_lane(torch, lane, arm, forward, settings, initial, batches, heldout, device,
+                           n_rounds, warmups)
         else:
-            run_infer_lane(torch, F, lane, arm, initial, heldout, device, n_rounds, args.warmups, args.loss)
+            run_infer_lane(torch, lane, arm, forward, settings, initial, heldout, device, n_rounds, warmups)
     except Exception as exc:                        # noqa: BLE001
         if is_nondeterministic_refusal(exc):
             # DEVIATION 2203: the documented deterministic configuration
