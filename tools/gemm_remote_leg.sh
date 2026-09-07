@@ -832,9 +832,10 @@ if [ "$PAYLOAD" = "speed" ]; then
         gemmseq)   SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gemm transformer attention mlp rmsnorm mamba selective_scan mamba2 mamba3}" ;;
         classical) SPEED_LANES="${MOJOLEARN_SPEED_LANES:-kmeans dbscan pca ols knn cd kde linkage svm metrics ivf hdbscan cholesky gmm gp krr nystroem rbfsampler resample spectral holtwinters kpss umap}" ;;
         forest)    SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gbdt-symmetric gbdt-depthwise gbdt-lossguide rf et iforest}" ;;
+        lm)        SPEED_LANES="${MOJOLEARN_SPEED_LANES:-lm-train lm-infer}" ;;
     esac
     case "$SPEED_FAMILY" in
-        gemmseq|classical|forest) : ;;
+        gemmseq|classical|forest|lm) : ;;
         *)
             echo "gemm_remote_leg: --family must be one of gemmseq, classical," >&2
             echo "  trees (alias: forest). Got '$SPEED_FAMILY'." >&2
@@ -2029,9 +2030,11 @@ leg_archive_required() {
         # nothing.
         case "$SPEED_FAMILY" in
             gemmseq)
-                echo "bench/speed/gemm_speed_main.mojo bench/speed/seq_speed_main.mojo tools/speed_gemm_arm.py tools/speed_torch_seq.py tools/fast_speed_table.py tools/leg_status.py" ;;
+                echo "bench/speed/gemm_speed_main.mojo bench/speed/seq_speed_main.mojo bench/speed/seq_py_speed_arm.py tools/speed_gemm_arm.py tools/speed_torch_seq.py tools/fast_speed_table.py tools/leg_status.py" ;;
             classical)
-                echo "bench/speed/classical_speed_main.mojo tools/speed_cuml_arm.py tools/fast_speed_table.py tools/leg_status.py" ;;
+                echo "bench/speed/classical_speed_main.mojo bench/speed/classical_py_speed_arm.py bench/speed/umap_speed_arm.py tools/speed_cuml_arm.py tools/fast_speed_table.py tools/leg_status.py" ;;
+            lm)
+                echo "bench/speed/byte_lm_speed_arm.py tools/speed_torch_byte_lm.py python/mojolearn/_byte_lm_impl.py bindings/build_byte_lm.sh training/corpus/tinyshakespeare/input.txt tools/fast_speed_table.py tools/leg_status.py" ;;
             forest)
                 echo "bench/speed/forest_speed_arm.py tools/speed_gbdt_arm.py tools/fast_speed_table.py tools/leg_status.py" ;;
         esac
@@ -3509,6 +3512,68 @@ pipget() {
     return 0
 }
 
+# DEVIATION 2100/2130/2160/2190: every family now has Python-API ours arms
+# (seq_py_speed_arm, classical_py_speed_arm, umap_speed_arm,
+# byte_lm_speed_arm), so the bindings build that the forest family
+# pioneered is one function, called by each family before its arms.
+build_python_bindings() {
+    _bscripts="bindings/build.sh $(ls bindings/build_*.sh 2>/dev/null | tr '\n' ' ')"
+    # The build scripts' own smoke gates run `python3 - <<PY` with numpy.
+    # On the AMD images /opt/conda's python3 has no numpy, so on the
+    # 2026-08-27_181248 leg the gbdt MOJO BUILD SUCCEEDED and the gate then
+    # died on `import numpy` -- reported as a build failure. Same cure as
+    # the forest driver: pixi's interpreter first on PATH, but ONLY for
+    # these build invocations -- the later pip step must keep installing
+    # into the image's python, not pixi's env.
+    _BPATH="$PATH"
+    if [ "@VENDOR@" = "amd" ]; then
+        _BPATH="$PWD/.pixi/envs/default/bin:$PATH"
+    fi
+    for _pass in 1 2; do
+        for _bs in $_bscripts; do
+            _b=$(basename "$_bs" .sh | sed 's/^build_//; s/^build$/base/')
+            printf '\n=== pass %s: %s ===\n' "$_pass" "$_bs" >> "$OUT/console.log"
+            if [ "$_pass" = "1" ]; then
+                _skip=1
+            else
+                _skip=""
+            fi
+            if command -v timeout > /dev/null 2>&1; then
+                PATH="$_BPATH" MOJOLEARN_SKIP_BUILD_GATE="$_skip" timeout -k 30 @BUILDBUDGET@ \
+                    bash "$_bs" > "$LOGS/build.binding.$_b.pass$_pass.log" 2>&1
+            else
+                PATH="$_BPATH" MOJOLEARN_SKIP_BUILD_GATE="$_skip" \
+                    bash "$_bs" > "$LOGS/build.binding.$_b.pass$_pass.log" 2>&1
+            fi
+            _brc=$?
+            if [ "$_pass" = "1" ]; then
+                echo "binding_install_exit ${_b}=$_brc" >> "$OUT/leg.txt"
+            else
+                echo "binding_build_exit ${_b}=$_brc" >> "$OUT/leg.txt"
+            fi
+            tail -4 "$LOGS/build.binding.$_b.pass$_pass.log" >> "$OUT/console.log" 2>&1 || true
+        done
+    done
+    # THE ONE CHECK THAT ACTUALLY PREDICTS WHETHER THE ARMS CAN RUN. Every
+    # gate above is per-extension; this is the thing the arms themselves do.
+    # Recorded rather than fatal: if it fails the lanes will refuse by name
+    # anyway, and this line says WHY in one place instead of six times.
+    # FROM `python/`, WHICH IS WHERE THE PACKAGE LIVES. The first version of
+    # this check ran from the repo root and reported
+    # `ModuleNotFoundError: No module named 'mojolearn'` while all ten
+    # extensions were built, installed and importable -- a red light on a
+    # healthy build, which is the worst kind of check to have. The arms get
+    # this right on their own (`forest_speed_arm.py` puts `python/` on
+    # sys.path), so the check has to do what the arms do rather than
+    # something adjacent to it.
+    ( cd python && python3 -c "import mojolearn; print('mojolearn imports OK', mojolearn.__file__)" ) \
+        > "$LOGS/import_mojolearn.log" 2>&1
+    echo "import_mojolearn_exit=$?" >> "$OUT/leg.txt"
+    tail -3 "$LOGS/import_mojolearn.log" >> "$OUT/console.log" 2>&1 || true
+    ls -la python/mojolearn/*.so > "$OUT/bindings_listing.txt" 2>&1 \
+        || echo "NO .so BUILT AT ALL" > "$OUT/bindings_listing.txt"
+}
+
 case "@FAMILY@" in
 gemmseq)
     # torch is already in the image, so this family installs almost nothing.
@@ -3638,6 +3703,7 @@ MMPROBE
     # tying them together.
     buildone gemmspeed bench/speed/gemm_speed_main.mojo
     buildone seqspeed  bench/speed/seq_speed_main.mojo
+    build_python_bindings
     for L in @SPEEDLANES@; do
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
         case "$L" in
@@ -3645,8 +3711,16 @@ MMPROBE
             # DEVIATION 2100: Mamba-2 and Mamba-3 have no lane in the Mojo
             # driver; their ours arm runs through the public Python API on
             # the bindings this leg built (mode from MOJOLEARN_NUMERIC_MODE).
-            mamba1|mamba2|mamba3) runarm "seq.$L.ours.log" \
+            mamba2|mamba3) runarm "seq.$L.ours.log" \
                 python3 bench/speed/seq_py_speed_arm.py --lane "$L" --rounds "@SPEEDROUNDS@" ;;
+            # DEVIATION 2104: the Mojo driver owns its own rows; the two
+            # large narrow/wide rows of mamba and transformer run through the
+            # public Python API in a second process with distinct tags.
+            mamba|transformer)
+                builtok seqspeed && runarm "seq.$L.ours.log" "$OUT/bin_seqspeed"
+                _pl="$L"; [ "$L" = "mamba" ] && _pl="mamba1"
+                runarm "seq.$L.ours-py.log" \
+                    python3 bench/speed/seq_py_speed_arm.py --lane "$_pl" --rows large --rounds "@SPEEDROUNDS@" ;;
             *)    builtok seqspeed  && runarm "seq.$L.ours.log"    "$OUT/bin_seqspeed" ;;
         esac
     done
@@ -3702,6 +3776,7 @@ classical)
     pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12" "cuvs-cu12"
     pipget scikit-learn scipy
     buildone classicalspeed bench/speed/classical_speed_main.mojo
+    build_python_bindings
     for L in @SPEEDLANES@; do
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
         case "$L" in
@@ -3736,6 +3811,21 @@ classical)
         runarm "classical.$L.vendor-deterministic.log" \
             python3 tools/speed_cuml_arm.py
         unset MOJOLEARN_SPEED_ARM
+    done
+    ;;
+lm)
+    # DEVIATION 2190: the byte-level language model, TRAINING (128 steps) and
+    # INFERENCE, ours in the mode this leg was asked for against a PyTorch
+    # twin of the same model in torch's default, fastest and documented
+    # deterministic configurations. build_byte_lm.sh needs an explicit
+    # MOJOLEARN_GPU_ARCHS (one sm_NN), which the driving host must set.
+    build_python_bindings
+    for L in @SPEEDLANES@; do
+        MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
+        runarm "lm.$L.ours.log" python3 bench/speed/byte_lm_speed_arm.py --lane "$L" --rounds "@SPEEDROUNDS@"
+        for _A in torch torch-fast torch-deterministic torch-deterministic-gatherloss; do
+            runarm "lm.$L.$_A.log" python3 tools/speed_torch_byte_lm.py --lane "$L" --rounds "@SPEEDROUNDS@" --arm "$_A"
+        done
     done
     ;;
 forest)
@@ -3822,61 +3912,7 @@ forest)
     # cannot drift the way the six-name list did. `bindings/build.sh` is
     # named on its own because it is the one script that is not
     # `build_<name>.sh`, which is what hid it in the first place.
-    _bscripts="bindings/build.sh $(ls bindings/build_*.sh 2>/dev/null | tr '\n' ' ')"
-    # The build scripts' own smoke gates run `python3 - <<PY` with numpy.
-    # On the AMD images /opt/conda's python3 has no numpy, so on the
-    # 2026-08-27_181248 leg the gbdt MOJO BUILD SUCCEEDED and the gate then
-    # died on `import numpy` -- reported as a build failure. Same cure as
-    # the forest driver: pixi's interpreter first on PATH, but ONLY for
-    # these build invocations -- the later pip step must keep installing
-    # into the image's python, not pixi's env.
-    _BPATH="$PATH"
-    if [ "@VENDOR@" = "amd" ]; then
-        _BPATH="$PWD/.pixi/envs/default/bin:$PATH"
-    fi
-    for _pass in 1 2; do
-        for _bs in $_bscripts; do
-            _b=$(basename "$_bs" .sh | sed 's/^build_//; s/^build$/base/')
-            printf '\n=== pass %s: %s ===\n' "$_pass" "$_bs" >> "$OUT/console.log"
-            if [ "$_pass" = "1" ]; then
-                _skip=1
-            else
-                _skip=""
-            fi
-            if command -v timeout > /dev/null 2>&1; then
-                PATH="$_BPATH" MOJOLEARN_SKIP_BUILD_GATE="$_skip" timeout -k 30 @BUILDBUDGET@ \
-                    bash "$_bs" > "$LOGS/build.binding.$_b.pass$_pass.log" 2>&1
-            else
-                PATH="$_BPATH" MOJOLEARN_SKIP_BUILD_GATE="$_skip" \
-                    bash "$_bs" > "$LOGS/build.binding.$_b.pass$_pass.log" 2>&1
-            fi
-            _brc=$?
-            if [ "$_pass" = "1" ]; then
-                echo "binding_install_exit ${_b}=$_brc" >> "$OUT/leg.txt"
-            else
-                echo "binding_build_exit ${_b}=$_brc" >> "$OUT/leg.txt"
-            fi
-            tail -4 "$LOGS/build.binding.$_b.pass$_pass.log" >> "$OUT/console.log" 2>&1 || true
-        done
-    done
-    # THE ONE CHECK THAT ACTUALLY PREDICTS WHETHER THE ARMS CAN RUN. Every
-    # gate above is per-extension; this is the thing the arms themselves do.
-    # Recorded rather than fatal: if it fails the lanes will refuse by name
-    # anyway, and this line says WHY in one place instead of six times.
-    # FROM `python/`, WHICH IS WHERE THE PACKAGE LIVES. The first version of
-    # this check ran from the repo root and reported
-    # `ModuleNotFoundError: No module named 'mojolearn'` while all ten
-    # extensions were built, installed and importable -- a red light on a
-    # healthy build, which is the worst kind of check to have. The arms get
-    # this right on their own (`forest_speed_arm.py` puts `python/` on
-    # sys.path), so the check has to do what the arms do rather than
-    # something adjacent to it.
-    ( cd python && python3 -c "import mojolearn; print('mojolearn imports OK', mojolearn.__file__)" ) \
-        > "$LOGS/import_mojolearn.log" 2>&1
-    echo "import_mojolearn_exit=$?" >> "$OUT/leg.txt"
-    tail -3 "$LOGS/import_mojolearn.log" >> "$OUT/console.log" 2>&1 || true
-    ls -la python/mojolearn/*.so > "$OUT/bindings_listing.txt" 2>&1 \
-        || echo "NO .so BUILT AT ALL" > "$OUT/bindings_listing.txt"
+    build_python_bindings
 
     pipget catboost xgboost lightgbm scikit-learn
     # THE DATASETS ARE FETCHED AS THEIR OWN NAMED STEP, ONCE, BEFORE ANY ARM.
