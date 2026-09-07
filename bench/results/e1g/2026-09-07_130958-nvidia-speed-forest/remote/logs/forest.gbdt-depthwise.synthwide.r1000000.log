@@ -1,0 +1,41 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5643 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a1280000000, nodemask=2)
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-gpu-deterministic reason=NOT-OFFERED: CatBoost documents no deterministic GPU configuration; official doc (features/training-on-gpu): "Training on GPU is non-deterministic, because the order of floating point summations is non-deterministic in this implementation."
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu-deterministic reason=NOT-OFFERED: no documented deterministic parameter for tree_method='hist' on device='cuda' (no deterministic_histogram in the current Parameters page); the fast arm's per-round hash column records whether it repeats.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+5643 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a12c0000000, nodemask=2)
+5643 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x380cc0000000, nodemask=2)
+5643 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x380d00000000, nodemask=2)
+5712 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x380d40000000, nodemask=2)
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=synthwide-1000000x500 ms=18893.231
+FSPEED-WARMUP lane=gbdt-depthwise arm=catboost-gpu shape=synthwide-1000000x500 ms=4245.805
+FSPEED-WARMUP lane=gbdt-depthwise arm=xgboost-gpu shape=synthwide-1000000x500 ms=5871.810
+5643 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x380d80000000, nodemask=2)
+5720 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71d240000000, nodemask=1)
+FSPEED lane=gbdt-depthwise arm=ours shape=synthwide-1000000x500 round=1 ms=11966.057 hash=8f2f38bf0d0128b5
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=synthwide-1000000x500 round=1 ms=4076.784 hash=0eb88415fa55d029
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=synthwide-1000000x500 round=1 ms=5939.046 hash=41877608c99d4fde
+5643 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x380df7400000, nodemask=2)
+FSPEED lane=gbdt-depthwise arm=ours shape=synthwide-1000000x500 round=2 ms=12510.273 hash=8f2f38bf0d0128b5
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=synthwide-1000000x500 round=2 ms=3773.024 hash=97ed20c9337d003d
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=synthwide-1000000x500 round=2 ms=5318.418 hash=41877608c99d4fde
+FSPEED lane=gbdt-depthwise arm=ours shape=synthwide-1000000x500 round=3 ms=9566.757 hash=8f2f38bf0d0128b5
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=synthwide-1000000x500 round=3 ms=4138.972 hash=a74831c5304f9cab
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=synthwide-1000000x500 round=3 ms=5266.459 hash=41877608c99d4fde
+5643 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x380e6e800000, nodemask=2)
+FSPEED lane=gbdt-depthwise arm=ours shape=synthwide-1000000x500 round=4 ms=9914.154 hash=8f2f38bf0d0128b5
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=synthwide-1000000x500 round=4 ms=4090.285 hash=dfba1c9af87f7607
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=synthwide-1000000x500 round=4 ms=5351.199 hash=41877608c99d4fde
+FSPEED lane=gbdt-depthwise arm=ours shape=synthwide-1000000x500 round=5 ms=9317.644 hash=8f2f38bf0d0128b5
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=synthwide-1000000x500 round=5 ms=3947.962 hash=3fd1a77be5493e49
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=synthwide-1000000x500 round=5 ms=5413.103 hash=41877608c99d4fde
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.218811
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.978662
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=logloss value=0.222242
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=auc value=0.977151
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=logloss value=0.257351
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=auc value=0.965212

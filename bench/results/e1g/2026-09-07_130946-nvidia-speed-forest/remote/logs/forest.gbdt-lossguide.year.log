@@ -1,0 +1,41 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+6931 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b2380000000, nodemask=2)
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-gpu-deterministic reason=NOT-OFFERED: CatBoost documents no deterministic GPU configuration; official doc (features/training-on-gpu): "Training on GPU is non-deterministic, because the order of floating point summations is non-deterministic in this implementation."
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-gpu-deterministic reason=NOT-OFFERED: no documented deterministic parameter for tree_method='hist' on device='cuda' (no deterministic_histogram in the current Parameters page); the fast arm's per-round hash column records whether it repeats.
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda-deterministic reason=NOT-OFFERED: LightGBM's `deterministic` parameter is documented "used only with cpu device type" (Parameters page); there is no deterministic configuration for device_type='cuda'
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+7008 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x734f80000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=year-463715x90 ms=2273.808
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 ms=1309.172
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 ms=1046.883
+FSPEED-WARMUP lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 ms=1872.134
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=1 ms=1939.047 hash=bfa44d1d9866a7e4
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 round=1 ms=1322.147 hash=c84b6e6d2bb3a7c4
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 round=1 ms=893.732 hash=d5584403bb15cfe9
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 round=1 ms=1918.018 hash=aa53ae78408bf561
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=2 ms=1580.761 hash=bfa44d1d9866a7e4
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 round=2 ms=1323.665 hash=c84b6e6d2bb3a7c4
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 round=2 ms=903.946 hash=d5584403bb15cfe9
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 round=2 ms=1984.529 hash=6769d4e0d176fcea
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=3 ms=1580.980 hash=bfa44d1d9866a7e4
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 round=3 ms=1456.524 hash=c84b6e6d2bb3a7c4
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 round=3 ms=879.426 hash=d5584403bb15cfe9
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 round=3 ms=1836.683 hash=0504d19a61439007
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=4 ms=1585.132 hash=bfa44d1d9866a7e4
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 round=4 ms=1358.488 hash=c84b6e6d2bb3a7c4
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 round=4 ms=858.012 hash=d5584403bb15cfe9
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 round=4 ms=1879.798 hash=de176f723a05c3d1
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=5 ms=1584.023 hash=bfa44d1d9866a7e4
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 round=5 ms=1367.749 hash=c84b6e6d2bb3a7c4
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 round=5 ms=901.644 hash=d5584403bb15cfe9
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 round=5 ms=1936.357 hash=9e786b6da8648ad8
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=rmse value=9.091606
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-gpu metric=rmse value=9.092819
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=rmse value=9.094946
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cuda metric=rmse value=9.060141

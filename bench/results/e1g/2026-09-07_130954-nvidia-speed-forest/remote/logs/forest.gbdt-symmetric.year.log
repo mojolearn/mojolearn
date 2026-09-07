@@ -1,0 +1,20 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5058 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x721fc0000000, nodemask=1)
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-gpu-deterministic reason=NOT-OFFERED: CatBoost documents no deterministic GPU configuration; official doc (features/training-on-gpu): "Training on GPU is non-deterministic, because the order of floating point summations is non-deterministic in this implementation."
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=year-463715x90 ms=1365.826
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=year-463715x90 ms=874.422
+FSPEED lane=gbdt-symmetric arm=ours shape=year-463715x90 round=1 ms=815.852 hash=2868341a9401e697
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=year-463715x90 round=1 ms=749.507 hash=b1095e34aadd5b19
+FSPEED lane=gbdt-symmetric arm=ours shape=year-463715x90 round=2 ms=696.690 hash=2868341a9401e697
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=year-463715x90 round=2 ms=719.530 hash=b1095e34aadd5b19
+FSPEED lane=gbdt-symmetric arm=ours shape=year-463715x90 round=3 ms=698.705 hash=2868341a9401e697
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=year-463715x90 round=3 ms=747.879 hash=b1095e34aadd5b19
+FSPEED lane=gbdt-symmetric arm=ours shape=year-463715x90 round=4 ms=682.351 hash=2868341a9401e697
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=year-463715x90 round=4 ms=762.768 hash=b1095e34aadd5b19
+FSPEED lane=gbdt-symmetric arm=ours shape=year-463715x90 round=5 ms=2030.207 hash=2868341a9401e697
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=year-463715x90 round=5 ms=732.352 hash=b1095e34aadd5b19
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=rmse value=9.215942
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=rmse value=9.217464

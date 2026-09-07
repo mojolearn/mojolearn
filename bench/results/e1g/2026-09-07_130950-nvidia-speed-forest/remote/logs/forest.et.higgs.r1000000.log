@@ -1,0 +1,21 @@
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5088 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b51c0000000, nodemask=2)
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresholds that define ExtraTrees. The like-for-like comparator for `et` is sklearn.
+FSPEED-REFUSED lane=et arm=sklearn-et-cpu reason=GPU-PATH-ONLY: sklearn-et-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=et arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=et arm=lightgbm-cuda-deterministic reason=NOT-OFFERED: LightGBM's `deterministic` parameter is documented "used only with cpu device type" (Parameters page); there is no deterministic configuration for device_type='cuda'
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=higgs-1000000x28 ms=6524.469
+FSPEED-WARMUP lane=et arm=lightgbm-cuda shape=higgs-1000000x28 ms=180120.081
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=1 ms=5838.784 hash=2c192f6b12dbb6c5
+FSPEED lane=et arm=lightgbm-cuda shape=higgs-1000000x28 round=1 ms=176773.368 hash=d8e40e99bcf8a5ed
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=2 ms=5799.563 hash=2c192f6b12dbb6c5
+FSPEED-REFUSED lane=et arm=lightgbm-cuda reason=per-arm budget 300s exceeded after 356.9s; remaining rounds skipped
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=3 ms=5760.365 hash=2c192f6b12dbb6c5
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=4 ms=5807.888 hash=2c192f6b12dbb6c5
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=5 ms=5723.201 hash=2c192f6b12dbb6c5
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.622379
+FSPEED-ACC lane=et arm=ours metric=auc value=0.762400
+FSPEED-ACC lane=et arm=lightgbm-cuda metric=logloss value=0.644513
+FSPEED-ACC lane=et arm=lightgbm-cuda metric=auc value=0.760199

@@ -36,16 +36,32 @@ def read_leg(leg_dir):
     if not os.path.isdir(logs):
         logs = leg_dir
     leg = {"dir": leg_dir, "commit": None, "device": None, "ours_mode": None,
-           "lines": []}
-    lt = os.path.join(leg_dir, "leg.txt")
-    if os.path.exists(lt):
+           "lanes": None, "pod": None, "started": None, "finished": None,
+           "lightgbm_cuda": None, "lines": []}
+    # The local leg.txt carries the rental (pod, started, finished) and an
+    # abbreviated `commit=<short> parent <short>`; the box's remote/leg.txt
+    # carries the 40-hex commit it was built from, the mode our arm was
+    # compiled in (DEVIATION 1898) and the device it read back. The remote
+    # record wins for the source facts; the local one for the rental facts.
+    for rel in ("leg.txt", os.path.join("remote", "leg.txt")):
+        lt = os.path.join(leg_dir, rel)
+        if not os.path.exists(lt):
+            continue
         for line in open(lt, encoding="utf-8", errors="replace"):
-            if line.startswith("commit="):
-                leg["commit"] = line.split("=", 1)[1].strip()
-            elif line.startswith("device="):
-                leg["device"] = line.split("=", 1)[1].strip()
-            elif line.startswith("ours_mode="):
-                leg["ours_mode"] = line.split("=", 1)[1].strip()
+            k, eq, v = line.rstrip("\n").partition("=")
+            if not eq:
+                continue
+            v = v.strip()
+            if k == "commit" and re.fullmatch(r"[0-9a-f]{40}", v):
+                leg["commit"] = v
+            elif k == "commit" and leg["commit"] is None:
+                leg["commit"] = v.split()[0]
+            elif k in ("device", "ours_mode", "lanes", "pod", "started", "finished"):
+                if k in ("started", "finished") and rel != "leg.txt":
+                    continue
+                leg[k] = v
+            elif k in ("lightgbm_cuda_build", "lightgbm_cuda_works", "lightgbm_cuda_build_exit"):
+                leg["lightgbm_cuda"] = ((leg["lightgbm_cuda"] + "; ") if leg["lightgbm_cuda"] else "") + k + "=" + v
     for name in sorted(os.listdir(logs)):
         if not name.endswith(".log"):
             continue
@@ -100,16 +116,36 @@ def build(legs):
     for (lane, shape, arm), c in sorted(cells.items()):
         h = headers.get((lane, arm), {})
         ms = c["ms"]
+        if not ms:
+            # A warm-up with no timed round is not a measurement; it is
+            # recorded as a note so the absence is visible, not silent.
+            notes.append({"lane": lane, "log": c["log"],
+                          "text": "arm=%s shape=%s warm-up only (%s ms), no timed round"
+                                  % (arm, shape, c["warmup_ms"])})
+            continue
+        # The FSPEED-HEADER `mode=` field is the HARNESS PROCESS's numeric
+        # mode label (tools/speed_gbdt_arm.py::numeric_mode_label), which is
+        # only a statement about OUR arm. A vendor arm's configuration is
+        # what its name says: the plain name is the vendor's default (its
+        # fast configuration) and the `-deterministic` sibling is the
+        # vendor's documented deterministic configuration.
+        if arm == "ours":
+            mode = h.get("mode")
+        elif arm.endswith("-deterministic"):
+            mode = "VENDOR-DETERMINISTIC"
+        else:
+            mode = "VENDOR-DEFAULT"
         out_cells.append({
             "lane": lane, "shape": shape, "arm": arm,
-            "mode": h.get("mode"), "device": h.get("device"),
+            "mode": mode, "device": h.get("device"),
             "rounds": len(ms),
             "median_ms": statistics.median(ms) if ms else None,
             "min_ms": min(ms) if ms else None,
             "max_ms": max(ms) if ms else None,
             "warmup_ms": c["warmup_ms"],
             "distinct_hashes": len(set(x for x in c["hashes"] if x)),
-            "repeats_run_to_run": (len(set(x for x in c["hashes"] if x)) == 1) if ms else None,
+            # One round cannot witness repetition; the field is None below two.
+            "repeats_run_to_run": (len(set(x for x in c["hashes"] if x)) == 1) if len(ms) >= 2 else None,
             "metrics": c["metrics"],
             "log": c["log"], "leg": c["leg"],
         })
@@ -117,8 +153,9 @@ def build(legs):
                 "not_offered": r.startswith("NOT-OFFERED"), "reason": r}
                for (l, a, f), r in sorted(refusals.items())]
     return {"cells": out_cells, "refusals": out_ref, "notes": notes,
-            "legs": [{"dir": g["dir"], "commit": g["commit"], "device": g["device"],
-                      "ours_mode": g["ours_mode"]} for g in legs]}
+            "legs": [{k: g[k] for k in ("dir", "commit", "device", "ours_mode", "lanes",
+                                        "pod", "started", "finished", "lightgbm_cuda")}
+                     for g in legs]}
 
 
 def main():

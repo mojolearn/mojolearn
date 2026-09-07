@@ -1,0 +1,38 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+3598 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1bff80000000, nodemask=2)
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda-deterministic reason=NOT-OFFERED: LightGBM's `deterministic` parameter is documented "used only with cpu device type" (Parameters page); there is no deterministic configuration for device_type='cuda'
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu-deterministic mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+3598 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1bffc0000000, nodemask=2)
+3598 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x791580000000, nodemask=2)
+FSPEED-WARMUP lane=rf arm=ours shape=higgs-1000000x28 ms=5557.371
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 ms=6712.145
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu-deterministic shape=higgs-1000000x28 ms=3398.279
+[LightGBM] [Fatal] CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=4941.880 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=1 ms=3007.669 hash=a372de7ab27df595
+FSPEED lane=rf arm=cuml-rf-gpu-deterministic shape=higgs-1000000x28 round=1 ms=3656.424 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=2 ms=4912.041 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=2 ms=3144.482 hash=a372de7ab27df595
+FSPEED lane=rf arm=cuml-rf-gpu-deterministic shape=higgs-1000000x28 round=2 ms=3654.073 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=3 ms=4850.890 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=3 ms=3020.315 hash=a372de7ab27df595
+FSPEED lane=rf arm=cuml-rf-gpu-deterministic shape=higgs-1000000x28 round=3 ms=3587.257 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=4 ms=4913.331 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=4 ms=3039.141 hash=a372de7ab27df595
+FSPEED lane=rf arm=cuml-rf-gpu-deterministic shape=higgs-1000000x28 round=4 ms=3670.774 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=5 ms=4989.521 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=5 ms=3065.212 hash=a372de7ab27df595
+FSPEED lane=rf arm=cuml-rf-gpu-deterministic shape=higgs-1000000x28 round=5 ms=3656.168 hash=a372de7ab27df595
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538850
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.538814
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.809834
+FSPEED-ACC lane=rf arm=cuml-rf-gpu-deterministic metric=logloss value=0.538814
+FSPEED-ACC lane=rf arm=cuml-rf-gpu-deterministic metric=auc value=0.809834

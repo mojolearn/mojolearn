@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod 8viht4duoh5zu2 ...
+ARMED. Pod 8viht4duoh5zu2 is TERMINATED through the API in 60 minutes.
+  lease: /Users/andrewhendel/CascadeProjects/mojolearn-grid/tools/../bench/results/runpod_leases/8viht4duoh5zu2.lease
+  extend with: tools/runpod_guard.sh extend 8viht4duoh5zu2 '-p 18159 root@216.243.220.223' <minutes>

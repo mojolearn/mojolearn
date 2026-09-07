@@ -1,0 +1,26 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5644 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30d640000000, nodemask=1)
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-gpu-deterministic reason=NOT-OFFERED: CatBoost documents no deterministic GPU configuration; official doc (features/training-on-gpu): "Training on GPU is non-deterministic, because the order of floating point summations is non-deterministic in this implementation."
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+5644 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30d680000000, nodemask=1)
+5644 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10be80000000, nodemask=1)
+5644 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10bec0000000, nodemask=1)
+5790 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10bf00000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=synthwide-1000000x500 ms=116813.479
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=synthwide-1000000x500 ms=4046.642
+5644 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10bf40000000, nodemask=1)
+FSPEED lane=gbdt-symmetric arm=ours shape=synthwide-1000000x500 round=1 ms=109028.264 hash=917489272db1e5e7
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=synthwide-1000000x500 round=1 ms=3463.929 hash=3138e9f2300a0502
+5644 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10bfb7400000, nodemask=1)
+FSPEED lane=gbdt-symmetric arm=ours shape=synthwide-1000000x500 round=2 ms=111685.119 hash=917489272db1e5e7
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=synthwide-1000000x500 round=2 ms=3383.405 hash=0280551302ad6337
+FSPEED-REFUSED lane=gbdt-symmetric arm=ours reason=per-arm budget 300s exceeded after 337.5s; remaining rounds skipped
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=synthwide-1000000x500 round=3 ms=3565.931 hash=66118bba7430b2d0
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=synthwide-1000000x500 round=4 ms=3583.085 hash=e4843066483e34af
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=synthwide-1000000x500 round=5 ms=3665.171 hash=c0b0f1d0636e2608
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.245742
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.972299
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.247086
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.971412
