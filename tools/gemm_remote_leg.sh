@@ -1191,8 +1191,16 @@ leg_git_archive() {
         # shellcheck disable=SC2086
         git archive --format=tar "$_archive_ref" -- $LEG_ARCHIVE_PATHS_MAMBA
     else
+        # DEVIATION 1899: the tracked Mamba corpus (61 MB of f64 fixtures)
+        # and the bench oracle text (28 MB) ship nothing the speed, gemm or
+        # phase8 payloads compile or read, and five concurrent legs on one
+        # uplink moved 20 MB each in five minutes with them in. The archive
+        # is still `git archive` at the pinned sha; only the pathspec is
+        # narrower. Anything a payload needs from those paths must be added
+        # back here, never copied from the working tree.
         git archive --format=tar "$_archive_ref" -- . \
-            ':!bench/results'
+            ':!bench/results' ':!mamba/corpus' ':!bench/oracle_*' \
+            ':!bench/minentropy_oracle.txt'
     fi
 }
 
