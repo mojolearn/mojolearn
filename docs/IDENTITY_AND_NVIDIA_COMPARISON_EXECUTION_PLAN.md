@@ -166,13 +166,13 @@ Execution checklist:
 - [ ] Root validate integrated file fixtures and fix all failures.
 - [ ] Finish export-by-export old-evidence audit and small three-vendor gap list.
 - [ ] Freeze candidate source, manifests, dependencies and deterministic policies.
-- [ ] Build and qualify final tiny-LM-inclusive0.6.1 wheel on actual sm89/sm90/gfx942;
+- [ ] Build and qualify final tiny-LM-inclusive0.7.0 (the combined-Linux profile authored as 0.7.0; that number was never published) wheel on actual sm89/sm90/gfx942;
   preserve legacy0.6.0 evidence. Three sets138extensions,25installed jobs perarch.
 - [ ] Execute missing small identity rows on NVIDIA/AMD/M4 and retain a new matrix.
 - [ ] Implement missing scalable adapters and fixed per-feature quality gates.
 - [ ] Run NVIDIA small/medium/large rows, ourIDENTICAL versus incumbentfast/deterministic.
 - [ ] Generate reviewable grids from retained records; never manually mark cells green.
-- [ ] Publish0.6.1 after exact final-byte admission and verify public file hashes.
+- [ ] Publish0.7.0 after exact final-byte admission and verify public file hashes.
 
 Publication of a default mode or API does not turn every feature into a certified
 configuration. Each matrix cell carries its actual evidence boundary.

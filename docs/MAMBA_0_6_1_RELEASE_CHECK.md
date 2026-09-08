@@ -1,3 +1,5 @@
+> The 0.6.1 number was never published; this check applies to the 0.7.0 release, which ships the same combined-Linux profile.
+
 # Mamba 0.6.1: source and retained evidence check
 
 Source-only audit; no new test, build, timing, or GPU execution occurred.
