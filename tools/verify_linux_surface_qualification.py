@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import struct
 
 MODES = {'fast': 0, 'deterministic': 2, 'identical': 1}
@@ -25,11 +26,35 @@ FIXTURES = {
 
 BYTE_LM_PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 BYTE_FILES = {'byte-lm-identical.json', 'byte-lm-before.json', 'byte-lm-after.json', 'byte-lm-restored.json'}
+# DEVIATION 2290. The combined three-architecture Linux profile is named for its
+# shape, `release-linux3` (CUDA sm_89, CUDA sm_90, HIP gfx942), not for a version.
+# It was authored as `release-0.6.1`, a number that was never published; that
+# name stays accepted as a deprecated alias mapping to the same code path, so
+# the retained 2026-09-07 preparation evidence and the older documents still
+# parse. Everything emitted says RELEASE_PROFILE. The version the profile ships
+# is never a literal on the release path: release_version() below is the ONE
+# reader of python/mojolearn/_version.py, shared by the packer, the release
+# qualification checker and the alpha artifact verifier.
+RELEASE_PROFILE = 'release-linux3'
+RELEASE_PROFILES = frozenset({RELEASE_PROFILE, 'release-0.6.1'})
+VERSION_PATTERN = re.compile(r'''^__version__\s*=\s*(['"])([^'"]+)\1\s*$''', re.MULTILINE)
+
+
+def release_version(root):
+    """The release version: `__version__` in ROOT/python/mojolearn/_version.py."""
+    match = VERSION_PATTERN.search((Path(root) / 'python/mojolearn/_version.py').read_text())
+    require(match is not None, 'No __version__ in python/mojolearn/_version.py')
+    return match[2]
+
+
+def is_release_profile(audit):
+    """True for the combined profile under its current name or its deprecated alias."""
+    return audit.get('assembly_profile') in RELEASE_PROFILES
 
 
 def expected_jobs(audit):
     jobs = {(s, m) for s in SURFACES for m in MODES}
-    if audit.get('assembly_profile') == 'release-0.6.1':
+    if is_release_profile(audit):  # DEVIATION 2290
         jobs.add(('byte-lm', 'identical'))
     return jobs
 
@@ -191,7 +216,7 @@ def verify(root, out):
         require(package.is_relative_to(out / 'venv') and 'site-packages' in package.parts,
                 'Package outside isolated installation')
         bindings = record['installed_bindings']
-        require(set(bindings) == expected_bindings(mode, audit.get('assembly_profile') == 'release-0.6.1'), 'Incomplete binding inventory')
+        require(set(bindings) == expected_bindings(mode, is_release_profile(audit)), 'Incomplete binding inventory')  # DEVIATION 2290
         for row in bindings.values():
             member = str(Path(row['path']).relative_to(package))
             require(row['sha256'] == audit['extension_hashes'].get(member), 'Binding differs from wheel')

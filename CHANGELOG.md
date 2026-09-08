@@ -5,7 +5,41 @@ contain the detailed investigation record.
 
 ## Unreleased
 
-### 0.6.0 release candidate
+### 0.7.0 release candidate
+
+- The identical path no longer calls the host C library. The seven host
+  calls for float64 log and log2, float32 log and exp, and ceil (random-forest
+  feature rule, boosting loss constant, min-entropy bin construction,
+  extremely-randomized-trees builder) use the library's own portable
+  implementations, the same code the device runs under identical mode, so
+  every host computes the same bits by construction (DEVIATIONS 2260 to 2266).
+  Verified on the M4 and an H100: the CatBoost bias oracle matches to the bit
+  on every ported arm, min-entropy and GreedyLogSum borders match CatBoost on
+  every case, the RF predict check passes in both modes. Fast-mode bits at
+  those three sites move; the fast profile carries no bit promise across
+  versions.
+- One Linux x86-64 wheel carrying CUDA sm_89, CUDA sm_90 and HIP gfx942, each
+  in fast, deterministic and identical, plus the identical-mode byte-LM
+  trainer extension per architecture (the combined-Linux profile authored
+  for 0.6.1, published as 0.7.0). The 0.6.1 version number was never
+  published.
+- Repository size fences: pre-commit and pre-push hooks under tools/hooks
+  refuse oversized blobs and wheels, tarballs or fixture dumps under
+  bench/results; the incident is recorded in CONTRIBUTING.md.
+- README rewritten around the gap the port fills and the identity contract,
+  with a project-status section.
+- Leg tool: a `checks` family runs named conformance checks on a rented GPU;
+  `--allow-concurrent` covers recorded leases; the release-build gate ignores
+  bench/results; the pixi installer has a 300 s budget with one retry.
+
+### 0.6.1 (unpublished candidate)
+
+- Version bump, alpha overlay, Linux and macOS packaging, serial job guards
+  and release qualification tooling. Superseded by 0.7.0 without a PyPI
+  release.
+
+## 0.6.0 (published 2026-09-06)
+
 
 - Added `UMAP.transform` to embed unseen samples against a frozen fitted model.
   Training input, embedding and fitted parameters are retained privately;

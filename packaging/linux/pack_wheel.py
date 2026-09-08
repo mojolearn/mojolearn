@@ -104,20 +104,33 @@ TIERS = ("fast", "deterministic", "identical")
 ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
 PYPI_LIMIT = 100 * 1024 * 1024
 LINUX_VENDORS = ("cuda", "hip")
+# The combined three-architecture set. The name keeps the number the profile was
+# authored under; the profile itself is RELEASE_PROFILE (`release-linux3`) and
+# ships whatever version python/mojolearn/_version.py says. DEVIATION 2290.
 RELEASE_061_SETS = {("cuda", "sm_89"), ("cuda", "sm_90"), ("hip", "gfx942")}
+# DEVIATION 2290. ONE reader for the release version and ONE spelling of the
+# profile name, owned by tools/verify_linux_surface_qualification.py and shared
+# with the qualification checker and the alpha artifact verifier. This packer
+# used to carry its own regex over _version.py and the literals '0.6.1' and
+# 'release-0.6.1'; the version was never published under that number.
+sys.path.append(str(REPO / "tools"))
+from verify_linux_surface_qualification import (  # noqa: E402
+    RELEASE_PROFILE, RELEASE_PROFILES, release_version)
 
 
 def release_inventory(sets, proof_paths, version, source_root=REPO):
-    """Bind the explicit 0.6.1 payload to complete per-architecture builds.
+    """Bind the explicit release-linux3 payload to complete per-architecture builds.
 
     File inspection only. Build provenance is not installed/runtime admission.
     Byte-LM is required only in IDENTICAL; legacy generic sets remain unchanged.
+    `version` must be the version SOURCE_ROOT's _version.py declares
+    (DEVIATION 2290); a literal never decides it.
     """
     keys = [(v, a) for v, a, _, _, _ in sets]
-    if version != '0.6.1' or len(keys) != 3 or set(keys) != RELEASE_061_SETS:
-        raise SystemExit('release-0.6.1 requires exactly CUDA sm_89/sm_90 and HIP gfx942')
+    if version != read_version(source_root) or len(keys) != 3 or set(keys) != RELEASE_061_SETS:
+        raise SystemExit(RELEASE_PROFILE + ' requires exactly CUDA sm_89/sm_90 and HIP gfx942')
     if len(proof_paths) != 3:
-        raise SystemExit('release-0.6.1 requires three complete architecture build proofs')
+        raise SystemExit(RELEASE_PROFILE + ' requires three complete architecture build proofs')
     payload = {f'mojolearn/{rel}': sha(path).hex()
                for _, _, files, _, _ in sets for rel, path in files.items()}
     proofs, inventories, commits = {}, [], set()
@@ -166,7 +179,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
     if len(commits) != 1 or any(i != inventories[0] for i in inventories[1:]):
         raise SystemExit('Architecture sets were built from different sources')
     return dict(schema='mojolearn.linux-payload.v1', version=version,
-                release_profile='alpha-api', assembly_profile='release-0.6.1',
+                release_profile='alpha-api', assembly_profile=RELEASE_PROFILE,
                 source_commit=next(iter(commits)), source_inventory=inventories[0],
                 sets={'/'.join(k): proofs[k] for k in sorted(proofs)},
                 extensions=payload,
@@ -181,12 +194,12 @@ def urlsafe_b64(digest):
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
 
 
-def read_version():
-    src = (PKG / "_version.py").read_text()
-    m = re.search(r'__version__\s*=\s*"([^"]+)"', src)
-    if not m:
-        raise SystemExit("pack_wheel: no __version__ in _version.py")
-    return m.group(1)
+def read_version(root=REPO):
+    """`__version__` of ROOT/python/mojolearn/_version.py through the shared reader (DEVIATION 2290)."""
+    try:
+        return release_version(root)
+    except (OSError, ValueError) as exc:
+        raise SystemExit("pack_wheel: " + str(exc))
 
 
 def metadata_text(proj, readme):
@@ -298,12 +311,15 @@ def main():
                     help="a sets/<vendor> directory from build_sets.sh; give both")
     ap.add_argument("--out", default=str(PY_DIR / "dist"))
     ap.add_argument("--plat", default="linux_x86_64")
-    ap.add_argument('--profile', choices=('generic', 'release-0.6.1'), default='generic')
+    # DEVIATION 2290: `release-0.6.1` is the deprecated alias of release-linux3.
+    ap.add_argument('--profile', choices=('generic', RELEASE_PROFILE, 'release-0.6.1'), default='generic')
     ap.add_argument('--build-proof', action='append', default=[],
-                    help='complete per-architecture build-provenance.json; three required for release-0.6.1')
+                    help='complete per-architecture build-provenance.json; three required for ' + RELEASE_PROFILE)
     ap.add_argument("--check-against", default="",
                     help="a macOS wheel whose METADATA must match this one's")
     a = ap.parse_args()
+    if a.profile in RELEASE_PROFILES:
+        a.profile = RELEASE_PROFILE  # DEVIATION 2290: the alias maps to the same path
 
     proj = tomllib.loads((PY_DIR / "pyproject.toml").read_text())["project"]
     version = read_version()
@@ -312,14 +328,14 @@ def main():
                          f"_version.py says {version}")
     readme = (REPO / "README.md").read_text()
 
-    sets = [t for s in a.set for t in load_set(s, include_byte_lm=a.profile == 'release-0.6.1')]
+    sets = [t for s in a.set for t in load_set(s, include_byte_lm=a.profile == RELEASE_PROFILE)]
     keys = [(v, arch) for v, arch, _, _, _ in sets]
     if len(set(keys)) != len(keys):
         raise SystemExit(f"pack_wheel: the same (vendor, arch) given twice: {keys}")
     if a.profile == 'generic' and a.build_proof:
         raise SystemExit('--build-proof requires an explicit release profile')
     inventory = (release_inventory(sets, a.build_proof, version)
-                 if a.profile == 'release-0.6.1' else None)
+                 if a.profile == RELEASE_PROFILE else None)
 
     # .libs layout: ONE shared mojolearn/.libs when every closure across
     # every (vendor, arch) set matches by name AND sha256 (2026-08-30

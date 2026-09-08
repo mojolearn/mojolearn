@@ -1,9 +1,11 @@
-"""Inert file-only 0.6.1 admission fixtures. Root alone executes these tests.
+"""Inert file-only release-linux3 admission fixtures. Root alone executes these tests.
 
 All native files are text and never loaded. The ordered numerical comparator
 alone is mocked; RECORD, source/build proofs, all75 installed records, corpus
 fingerprints, retained evidence and UMAP raw-byte comparisons use real gates.
 Synthetic passing quality numbers exercise admission plumbing, not ML quality.
+DEVIATION 2290: the fixture declares its own `_version.py` and every version
+and profile string below comes from the shared reader; nothing pins a number.
 """
 import base64
 import csv
@@ -50,7 +52,7 @@ def seal_evidence(out):
     record = json.loads((out / 'qualification.json').read_text())
     record['installed_records'] = {
         s + '-' + m: gate.digest_file(out / (s + '-' + m + '.installed.json'))
-        for s, m in gate.surface.expected_jobs({'assembly_profile': 'release-0.6.1'})}
+        for s, m in gate.surface.expected_jobs({'assembly_profile': gate.surface.RELEASE_PROFILE})}
     record['evidence_sha256'] = {
         p.name: gate.digest_file(p) for p in out.iterdir()
         if p.is_file() and p.name not in ('qualification.json', 'exit_code')}
@@ -90,6 +92,11 @@ def fixture(root):
     wrapper = root / 'python/mojolearn/__init__.py'
     wrapper.parent.mkdir(parents=True)
     wrapper.write_bytes(b'# inert wrapper fixture\n')
+    # DEVIATION 2290: the fixture's own _version.py is the only version source;
+    # it is packaged like every other python/mojolearn/*.py (flat_python check).
+    version_file = root / 'python/mojolearn/_version.py'
+    version_file.write_bytes(b'__version__ = "9.9.9"\n')
+    version = gate.surface.release_version(root)
     snapshot = {}
     for case in gate.surface.CORPUS_CASES:
         p = root / 'mamba/corpus' / case / 'x.f32'
@@ -98,7 +105,8 @@ def fixture(root):
         snapshot[p.relative_to(root).as_posix()] = gate.digest_file(p)
     inventory = gate.native_inventory(root)
     source_sha = gate.inventory_digest(inventory)
-    files = {'mojolearn/__init__.py': wrapper.read_bytes(), 'mojolearn/.libs/libfixture.so': b'inert runtime'}
+    files = {'mojolearn/__init__.py': wrapper.read_bytes(), 'mojolearn/_version.py': version_file.read_bytes(),
+             'mojolearn/.libs/libfixture.so': b'inert runtime'}
     qualification_root = root / 'qualification'
     proof_root = qualification_root / 'build-proofs'
     proof_root.mkdir(parents=True)
@@ -116,16 +124,17 @@ def fixture(root):
             complete=True, build_exit=0, action='build', source_commit='a' * 40,
             source_inventory=inventory, source_sha256=source_sha, extensions=extensions))
         proof_sets[key] = dict(sha256=gate.digest_file(proof_path), source_sha256=source_sha)
-    payload = dict(schema='mojolearn.linux-payload.v1', version='0.6.1',
-        assembly_profile='release-0.6.1', release_profile='alpha-api', source_commit='a' * 40,
+    payload = dict(schema='mojolearn.linux-payload.v1', version=version,
+        assembly_profile=gate.surface.RELEASE_PROFILE, release_profile='alpha-api', source_commit='a' * 40,
         source_inventory=inventory, sets=proof_sets,
         extensions={n: hashlib.sha256(b).hexdigest() for n, b in files.items() if '/_mojolearn' in n},
-        python_sha256={'mojolearn/__init__.py': gate.digest_file(wrapper)},
+        python_sha256={'mojolearn/__init__.py': gate.digest_file(wrapper),
+                       'mojolearn/_version.py': gate.digest_file(version_file)},
         runtime_sha256={'mojolearn/.libs/libfixture.so': hashlib.sha256(b'inert runtime').hexdigest()},
         optional_native={'_mojolearn_byte_lm': {'included': True, 'supported_modes': ['identical'], 'unsupported_modes': ['fast', 'deterministic']}})
-    dist = 'mojolearn-0.6.1.dist-info/'
+    dist = 'mojolearn-' + version + '.dist-info/'
     files[dist + 'LINUX_PAYLOAD.json'] = json.dumps(payload).encode()
-    files[dist + 'METADATA'] = b'Metadata-Version: 2.4\nName: mojolearn\nVersion: 0.6.1\n'
+    files[dist + 'METADATA'] = ('Metadata-Version: 2.4\nName: mojolearn\nVersion: ' + version + '\n').encode()
     record_path = dist + 'RECORD'
     rows = io.StringIO()
     writer = csv.writer(rows)
@@ -134,7 +143,7 @@ def fixture(root):
         writer.writerow([name, 'sha256=' + digest, str(len(data))])
     writer.writerow([record_path, '', ''])
     files[record_path] = rows.getvalue().encode()
-    wheel = root / 'mojolearn-0.6.1-py3-none-manylinux_2_35_x86_64.whl'
+    wheel = root / ('mojolearn-' + version + '-py3-none-manylinux_2_35_x86_64.whl')
     with zipfile.ZipFile(wheel, 'w') as archive:
         for name, data in files.items():
             archive.writestr(name, data)
@@ -222,6 +231,34 @@ class EndToEndRelease061(unittest.TestCase):
                         self.assertEqual(set(result['runtime_coverage']), gate.RELEASE_ARCHES)
                         self.assertEqual(result['jobs_per_runtime_architecture'], 25)
                         self.assertEqual(ordered.call_count, 2)
+                        self.assertEqual(result['assembly_profile'], gate.surface.RELEASE_PROFILE)
+
+    def test_deprecated_profile_alias_in_retained_audit_still_admits(self):
+        # DEVIATION 2290: evidence written under `release-0.6.1` parses as
+        # release-linux3 and the admission record says the current name.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheel, qualification = fixture(root)
+            out = qualification / 'hip/gfx942'
+            path = out / 'wheel-audit.json'
+            audit = json.loads(path.read_text())
+            audit['assembly_profile'] = 'release-0.6.1'
+            write_json(path, audit)
+            seal_evidence(out)
+            with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}):
+                result = gate.check_release061(wheel, qualification, root)
+            self.assertEqual(result['status'], 'PASSED')
+            self.assertEqual(result['assembly_profile'], gate.surface.RELEASE_PROFILE)
+
+    def test_wheel_of_another_version_refused(self):
+        # DEVIATION 2290: the wheel must carry the version the source root declares.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheel, qualification = fixture(root)
+            (root / 'python/mojolearn/_version.py').write_bytes(b'__version__ = "9.9.10"\n')
+            with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}), \
+                    self.assertRaises((ValueError, OSError, KeyError)):
+                gate.check_release061(wheel, qualification, root)
 
 
 if __name__ == '__main__':

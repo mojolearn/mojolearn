@@ -1,12 +1,19 @@
 # 0.6.1 combined Linux execution plan
 
+The 0.6.1 number in this file's name was never published: the profile it
+describes, now named `release-linux3`, ships the version in
+`python/mojolearn/_version.py` (0.7.0 at the time of writing), and no script
+on the release path compares against a version literal any more (DEVIATION
+2290; `release-0.6.1` remains accepted as a deprecated alias of the profile).
+
 Source-only implementation, no executions or publication by the author.
 Root/main alone runs all jobs, tests, builds and measurements; subagents never
 run them. Preserve PyPI 0.6.0 immutable files and all historical failures.
 
 Root follow-up: bounded packer, three-architecture admission, legacy and alpha
-publication fixtures passed. Source version metadata is 0.6.1. These are file
-checks, not native/runtime qualification or publication.
+publication fixtures passed on September 7 against the then-declared 0.6.1
+metadata; the same fixtures now derive the version from `_version.py`. These
+are file checks, not native/runtime qualification or publication.
 [Retained checks](../bench/results/releases/2026-09-07-combined-linux-preparation/README.md).
 
 The requested payload is one Linux wheel containing CUDA sm_89, CUDA sm_90
@@ -17,7 +24,7 @@ not successful execution on that architecture.
 
 ## Implemented source contract
 
-`packaging/linux/pack_wheel.py --profile release-0.6.1` now requires exactly
+`packaging/linux/pack_wheel.py --profile release-linux3` now requires exactly
 those three sets and three corresponding complete build proofs, all from the
 same full source commit and identical current source inventory. Binary hashes
 must equal the proof's exact 45 standard outputs plus one IDENTICAL-only
@@ -25,7 +32,9 @@ byte-LM extension per architecture: 46 per architecture, 138 in the combined
 wheel. Unexpected native files are
 refused rather than silently omitted. Existing artifacts cannot be overwritten.
 
-The RECORD-covered `mojolearn-0.6.1.dist-info/LINUX_PAYLOAD.json` records every
+The RECORD-covered `mojolearn-<version>.dist-info/LINUX_PAYLOAD.json`
+(`mojolearn-0.7.0.dist-info/LINUX_PAYLOAD.json` for the version in
+`python/mojolearn/_version.py` at the time of writing) records every
 extension, runtime and Python hash, per-architecture proof/source hashes,
 runtime layout and source inventory. Its runtime coverage is explicitly
 pending until separate exact-wheel installed evidence exists. It does not
@@ -42,7 +51,8 @@ needs explicit installed symbol/step coverage beyond the old 24 surfaces.
 
 ## Sequential root jobs and evidence
 
-1. Freeze 0.6.1 source/version metadata and all packaging/qualification changes.
+1. Freeze the source/version metadata (`python/mojolearn/_version.py`, 0.7.0 at
+   the time of writing) and all packaging/qualification changes.
    Run bounded file/host checks in the main thread only. Known corrections
    must include context lifetime/full-FP32 work after `eb835021` and the later
    Mamba3 FAST dt-softplus repair validated at `4a271ae6`, not only `3963a0fc`.
@@ -72,7 +82,7 @@ needs explicit installed symbol/step coverage beyond the old 24 surfaces.
 4. Pack the exact three retained sets with three proofs:
 
    ```sh
-   python packaging/linux/pack_wheel.py --profile release-0.6.1 \
+   python packaging/linux/pack_wheel.py --profile release-linux3 \
      --set "$CUDA89_SET" --set "$CUDA90_SET" --set "$HIP942_SET" \
      --build-proof "$CUDA89_PROOF" --build-proof "$CUDA90_PROOF" \
      --build-proof "$HIP942_PROOF" --out "$NEW_OUTPUT"
@@ -81,7 +91,7 @@ needs explicit installed symbol/step coverage beyond the old 24 surfaces.
    All variables identify root-retained fresh outputs, not historical overlays.
    Shared runtime bytes are deduplicated only when hashes agree; disagreeing
    CUDA runtime closures are refused. Root measures actual compressed size
-   after packing using the emitted `SIZES-0.6.1-linux.json`; there is no size
+   after packing using the emitted `SIZES-<version>-linux.json`; there is no size
    estimate or assumption of PyPI admission here. Audit/repair to the measured
    manylinux floor on remote Linux. Bind the repaired final SHA and preserve
    original payload/repair evidence. Audit changes may change binary hashes;
@@ -92,7 +102,7 @@ needs explicit installed symbol/step coverage beyond the old 24 surfaces.
    `cuda-sm_89.json`, `cuda-sm_90.json`, `hip-gfx942.json`. Root runs:
 
    ```sh
-   tools/linux_surface_qualification.sh qualify-release-0.6.1 \
+   tools/linux_surface_qualification.sh qualify-release-linux3 \
      "$FINAL_WHEEL" "$FINAL_SHA256" cuda "$NEW_SM89_OUT" "$PROOF_DIRECTORY" sm_89
    ```
 
@@ -108,7 +118,7 @@ needs explicit installed symbol/step coverage beyond the old 24 surfaces.
    ```sh
    python tools/check_linux_release_qualification.py "$FINAL_WHEEL" \
      --qualification-root "$QUALIFICATION_ROOT" --source-root "$SOURCE_ROOT" \
-     --profile release-0.6.1
+     --profile release-linux3
    ```
 
    It recomputes all three architecture audits, all24 standard installed records plus
@@ -127,7 +137,7 @@ needs explicit installed symbol/step coverage beyond the old 24 surfaces.
    remains separate from configuration-specific numerical certification.
 
 7. Root validates final-byte receipts and scope, then stages the explicitly
-   alpha 0.6.1 artifact through the user-authorized Trusted Publisher route
+   alpha artifact of the declared version through the user-authorized Trusted Publisher route
    described in `docs/PYPI_RELEASE.md`. If an alpha overlay is used, qualify
    its final bytes rather than borrowing admission from the pre-overlay wheel.
    Do not dispatch an Apple build or invent a new macOS qualification.

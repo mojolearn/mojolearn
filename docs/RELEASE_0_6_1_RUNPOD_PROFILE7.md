@@ -1,5 +1,10 @@
 # Root-only RunPod release build profile 7
 
+The `0_6_1` in this file's name is historical (DEVIATION 2290): the build it
+describes ships the version in `python/mojolearn/_version.py` (0.7.0 at the
+time of writing) under the `release-linux3` assembly profile; 0.6.1 was never
+published.
+
 Authored source only; no controller dry run, syntax check, test, build, rental
 or API call has been executed by the author. Root must review and exercise
 the dry-run path before renting. This recipe does not qualify a wheel.

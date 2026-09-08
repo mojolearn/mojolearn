@@ -28,6 +28,9 @@ EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
 MODE_READBACK = surface.BINDINGS - {'_mojolearn_estimators', '_mojolearn_rf',
                                  '_mojolearn_trees', '_mojolearn_solver', '_mojolearn_tsa'}
 RELEASE_ARCHES = {'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'}
+# DEVIATION 2290. No version literal on this path: the version is whatever the
+# source root's python/mojolearn/_version.py says (surface.release_version) and
+# the profile is surface.RELEASE_PROFILE, with `release-0.6.1` as its alias.
 
 
 def digest_file(path):
@@ -162,7 +165,7 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
                     'Installed record differs from qualification manifest')
             installed = json.loads(path.read_text())
             if arch is not None:
-                require(audit.get('assembly_profile') == 'release-0.6.1'
+                require(surface.is_release_profile(audit)  # DEVIATION 2290
                         and audit.get('runtime_architecture') == arch,
                         'Missing architecture-specific wheel audit')
                 require(installed.get('device_architecture') == arch
@@ -201,16 +204,17 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
     wheel, source_root, proof_root = map(Path, (wheel, source_root, proof_root))
     require(runtime_key in RELEASE_ARCHES, 'Unknown runtime architecture')
     extensions, sets = inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True)
+    version = surface.release_version(source_root)  # DEVIATION 2290: the source root's, never a literal
     require({'/'.join(k.split('/')[:2]) for k in sets} == RELEASE_ARCHES,
-            '0.6.1 requires exactly sm_89, sm_90 and gfx942')
+            version + ' requires exactly sm_89, sm_90 and gfx942')
     inventory = native_inventory(source_root)
     source_sha = inventory_digest(inventory)
     with zipfile.ZipFile(wheel) as archive:
-        member = 'mojolearn-0.6.1.dist-info/LINUX_PAYLOAD.json'
+        member = 'mojolearn-' + version + '.dist-info/LINUX_PAYLOAD.json'
         payload = json.loads(archive.read(member))
         require(payload.get('schema') == 'mojolearn.linux-payload.v1'
-                and payload.get('version') == '0.6.1'
-                and payload.get('assembly_profile') == 'release-0.6.1', 'Wrong payload profile')
+                and payload.get('version') == version
+                and surface.is_release_profile(payload), 'Wrong payload profile')
         require(payload.get('extensions') == {'mojolearn/' + n: h for n, h in extensions.items()}
                 and payload.get('source_inventory') == inventory,
                 'Final payload or source differs from assembly inventory')
@@ -240,7 +244,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
                 'Assembly proof linkage differs')
     vendor, arch = runtime_key.split('/')
     return dict(sha256=digest_file(wheel), wheel=str(wheel.resolve()), advertised_vendors=['cuda', 'hip'],
-                assembly_profile='release-0.6.1', qualification_vendor=vendor, runtime_architecture=arch,
+                assembly_profile=surface.RELEASE_PROFILE, qualification_vendor=vendor, runtime_architecture=arch,
                 source_sha256=source_sha, build_provenance_sha256=proof_hashes[runtime_key],
                 architecture_build_proofs=proof_hashes, extension_hashes=extensions, sets=sets)
 
@@ -255,8 +259,12 @@ def check_release061(wheel, qualification_root, source_root):
         directory = qualification_root / vendor / arch
         expected = release_audit(wheel, source_root, proof_root, key)
         recorded = json.loads((directory / 'wheel-audit.json').read_text())
-        require({k: v for k, v in recorded.items() if k != 'wheel'} ==
-                {k: v for k, v in expected.items() if k != 'wheel'}, 'Architecture audit differs')
+        # DEVIATION 2290: an audit retained under the deprecated alias name
+        # compares equal to the one recomputed under the current name.
+        require(surface.is_release_profile(recorded) and
+                {k: v for k, v in recorded.items() if k not in ('wheel', 'assembly_profile')} ==
+                {k: v for k, v in expected.items() if k not in ('wheel', 'assembly_profile')},
+                'Architecture audit differs')
         check_vendor(directory, vendor, expected['sha256'], inventory,
                      expected['extension_hashes'], expected['sets'], arch)
         check_corpora(directory, source_root)
@@ -268,7 +276,7 @@ def check_release061(wheel, qualification_root, source_root):
         require(umap.get('status') == ordered.get('status') == 'PASSED', 'Architecture identity comparison failed')
         comparisons[cuda] = dict(umap=umap, ordered=ordered)
     return dict(schema='mojolearn.linux.release-admission.v2', status='PASSED',
-                assembly_profile='release-0.6.1', wheel=wheel.name, wheel_sha256=digest_file(wheel),
+                assembly_profile=surface.RELEASE_PROFILE, wheel=wheel.name, wheel_sha256=digest_file(wheel),
                 source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=25,
                 runtime_coverage={key: digest_file(path / 'qualification.json') for key, path in directories.items()},
                 comparisons=comparisons,
@@ -317,10 +325,12 @@ def main():
     parser.add_argument('wheel', type=Path)
     parser.add_argument('--qualification-root', required=True, type=Path)
     parser.add_argument('--source-root', required=True, type=Path)
-    parser.add_argument('--profile', choices=('legacy', 'release-0.6.1'), default='legacy')
+    # DEVIATION 2290: `release-0.6.1` is the deprecated alias of release-linux3.
+    parser.add_argument('--profile', choices=('legacy', surface.RELEASE_PROFILE, 'release-0.6.1'),
+                        default='legacy')
     args = parser.parse_args()
     try:
-        action = check_release061 if args.profile == 'release-0.6.1' else check
+        action = check_release061 if args.profile in surface.RELEASE_PROFILES else check
         result = action(args.wheel, args.qualification_root, args.source_root)
     except (ValueError, OSError, KeyError, TypeError, AttributeError, zipfile.BadZipFile) as exc:
         result = {'status': 'FAILED', 'reason': str(exc)}

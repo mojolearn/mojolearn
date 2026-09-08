@@ -134,7 +134,8 @@ class ReleaseAdmissionTests(unittest.TestCase):
                 self.assertEqual(quality.call_count, 3)
 
     def test_runtime_architecture_requires_device_and_selection_in_every_job(self):
-        # Use the full 0.6.1 inert fixture: 25 jobs and 16 IDENTICAL bindings.
+        # Use the full release-linux3 inert fixture (DEVIATION 2290): 25 jobs
+        # and 16 IDENTICAL bindings.
         # Re-seal mutated evidence so this checks actual architecture admission,
         # not merely stale hashes. Neither this fixture nor gate loads natives.
         from test_release061_end_to_end import fixture, seal_evidence

@@ -110,6 +110,9 @@ actual_arch, how = backend._device_arch(vendor)
 if actual_arch != arch:
     raise SystemExit('Physical device does not match requested architecture: ' + repr((actual_arch, arch, how)))
 inventory = native_inventory(root)
+# DEVIATION 2290: this schema string names the script (release061_remote_build.sh,
+# kept by name for its controllers), not the version built. The version is
+# python/mojolearn/_version.py and the assembly profile is release-linux3.
 record = dict(schema='mojolearn.release061.build-preflight.v1', source_commit=commit,
               source_inventory=inventory, source_sha256=inventory_digest(inventory),
               vendor=vendor, device_architecture=actual_arch, architecture_probe=how,

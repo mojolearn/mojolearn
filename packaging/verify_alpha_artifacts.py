@@ -21,6 +21,22 @@ from alpha_overlay import (
     require, safe_name,
 )
 
+# DEVIATION 2290. The version the combined Linux profile ships and the profile's
+# name come from the tools-side reader, never from a literal here:
+# python/mojolearn/_version.py is the one source of truth (0.7.0 at the time of
+# writing; 0.6.1 was never published) and `release-linux3` the profile, with
+# `release-0.6.1` accepted as its deprecated alias.
+REPO = Path(__file__).resolve().parents[1]
+TOOLS = str(REPO / 'tools')
+if TOOLS not in sys.path:
+    sys.path.insert(0, TOOLS)
+from verify_linux_surface_qualification import RELEASE_PROFILE, RELEASE_PROFILES, release_version  # noqa: E402
+
+
+def released_version(source_root=None):
+    """The version SOURCE_ROOT's _version.py declares; this checkout's when no root is given."""
+    return release_version(REPO if source_root is None else Path(source_root))
+
 
 def unique(pairs):
     result = {}
@@ -102,25 +118,24 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
         require(all('\n' not in value and '\r' not in value
                     for value in metadata.get_all('Summary', [])),
                 'package Summary must be a single line')
-        if version == '0.6.1' and ('linux' in parts[-1]):
+        released = released_version(source_root)  # DEVIATION 2290: never a literal
+        if version == released and ('linux' in parts[-1]):
             require(dist + 'LINUX_PAYLOAD.json' in files,
-                    'Linux 0.6.1 requires a fresh combined payload, not an inherited native overlay')
+                    'Linux ' + released + ' requires a fresh combined payload, not an inherited native overlay')
         if dist + 'LINUX_PAYLOAD.json' in files:
-            require(version == '0.6.1' and release_profile == 'alpha-api'
+            require(version == released and release_profile == 'alpha-api'
                     and parts[-1].startswith('manylinux_')
                     and dist + 'ALPHA_PROVENANCE.json' not in files,
                     'fresh combined Linux payload cannot masquerade as inherited alpha overlay')
             payload = decode(small(dist + 'LINUX_PAYLOAD.json'))
             require(payload.get('schema') == 'mojolearn.linux-payload.v1'
                     and payload.get('release_profile') == 'alpha-api'
-                    and payload.get('assembly_profile') == 'release-0.6.1'
+                    and payload.get('assembly_profile') in RELEASE_PROFILES
                     and payload.get('version') == version, 'fresh Linux payload profile mismatch')
             require(qualification_root is not None and source_root is not None,
                     'fresh Linux wheel requires full final-wheel installed qualification and source root')
             # Trusted repository file-only checker; never import package/native code.
-            tools_dir = str(Path(__file__).resolve().parents[1] / 'tools')
-            if tools_dir not in sys.path:
-                sys.path.insert(0, tools_dir)
+            # (tools/ is on sys.path from the module top, DEVIATION 2290.)
             from check_linux_release_qualification import check_release061
             result = check_release061(path, qualification_root, source_root)
             require(result.get('status') == 'PASSED'
@@ -232,7 +247,7 @@ def verify(directory, manifest_sha256, qualification_archive=None, source_root=N
             'artifact directory has missing or injected files')
     qualification = manifest.get('linux_qualification')
     if qualification is not None:
-        require(version == '0.6.1' and release_profile == 'alpha-api'
+        require(version == released_version(source_root) and release_profile == 'alpha-api'  # DEVIATION 2290
                 and isinstance(qualification, dict)
                 and set(qualification) == {'file', 'sha256', 'wheel'}
                 and qualification['file'] == 'linux-qualification.tar.gz'
@@ -252,11 +267,12 @@ def verify(directory, manifest_sha256, qualification_archive=None, source_root=N
                 extracted = Path(temporary)
                 extract_qualification(qualification_archive, qualification['sha256'], extracted)
                 with zipfile.ZipFile(path) as archive:
-                    require('mojolearn-0.6.1.dist-info/LINUX_PAYLOAD.json' in archive.namelist(),
-                            'qualified wheel must carry a fresh Linux payload inventory')
+                    require('mojolearn-' + version + '.dist-info/LINUX_PAYLOAD.json' in archive.namelist(),
+                            'qualified wheel must carry a fresh Linux payload inventory')  # DEVIATION 2290
                 tags[name] = verify_wheel(path, version, release_profile, extracted, source_root)
         else:
-            tags[name] = verify_wheel(path, version, release_profile)
+            # DEVIATION 2290: the source root only decides which _version.py is read.
+            tags[name] = verify_wheel(path, version, release_profile, None, source_root)
     return dict(schema='mojolearn.alpha-artifact-verification.v1', passed=True, version=version,
                 manifest_sha256=manifest_sha256, files=files, tags=tags, release_profile=release_profile,
                 linux_qualification=qualification,
