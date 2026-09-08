@@ -195,8 +195,8 @@ def main():
     a = ap.parse_args()
     # DEVIATION 2259: each leg argument is dir[:lane,lane][|drop=sub,sub].
     def _spec(arg):
-        d, _, rest = arg.partition(":")
-        lanes, _, drops = rest.partition("|drop=")
+        head, _, drops = arg.partition("|drop=")
+        d, _, lanes = head.partition(":")
         return d, (set(lanes.split(",")) if lanes else None), [x for x in drops.split(",") if x]
     legs = [read_leg(d, lanes, drops) for d, lanes, drops in (_spec(x) for x in a.legs)]
     rec = build(legs)
