@@ -150,6 +150,21 @@ given identical configurations, whatever the config dict says, and a timing
 table that does not say so is reporting the speed of two different problems.
 A parser keyed on the four contract prefixes ignores it.
 
+Three more additive lines, 2026-09-08, none of which changes a contract line:
+
+    FSPEED-ACC-ROUND lane=<l> arm=<a> round=<i> metric=<m> value=<f>
+    FSPEED-NOTE lane=<l> arm=<a> DIAG: <base arm> with <one change>
+    FSPEED-NOTE lane=<l> arm=- QUALITY-SPREAD metric=<m> min=<a>:<f> max=<a>:<f>
+
+`FSPEED-ACC-ROUND` (DEVIATION 2282) scores EVERY timed round's model, not
+only the last one, so a nondeterministic arm's run-to-run quality spread is
+measured rather than sampled once. `DIAG:` (DEVIATION 2283) marks a
+diagnostic variant arm, built only when `MOJOLEARN_SPEED_VARIANTS` is set:
+the base arm's full configuration plus ONE named change, every name
+carrying `-diag-` so a table can exclude it. `QUALITY-SPREAD` (DEVIATION
+2284) fires once per lane and metric when the best and worst incumbent
+(non-`-diag-`) arms differ by more than 5% relative on a shared metric.
+
 BUDGET, BECAUSE THE BOX IS RENTED AND THE HOUR IS SHORT
 --------------------------------------------------------
 `MOJOLEARN_SPEED_BUDGET_S` (default 300) is a per-arm wall budget and
@@ -307,6 +322,26 @@ def emit_note(lane, arms, metric, delta, reason):
     one_line = " ".join(str(reason).split())[:240]
     print("FSPEED-NOTE lane=%s arms=%s metric=%s delta=%.6f reason=%s"
           % (lane, ",".join(arms), metric, delta, one_line))
+    sys.stdout.flush()
+
+
+def emit_arm_note(lane, arm, text):
+    """DEVIATION 2280/2283/2284. The single-arm note shape that DEVIATION
+    2257 introduced (`FSPEED-NOTE lane=<l> arm=<a> <TAG>: ...`), spelled
+    once. `text` starts with its own upper-case tag (DIAG, QUALITY-SPREAD,
+    ...) so a parser can key on the word after `arm=`. Additive, like
+    `emit_note`: a parser keyed on the four contract prefixes ignores it."""
+    one_line = " ".join(str(text).split())[:320]
+    print("FSPEED-NOTE lane=%s arm=%s %s" % (lane, arm, one_line))
+    sys.stdout.flush()
+
+
+def emit_acc_round(lane, arm, index, metric, value):
+    """DEVIATION 2282. The accuracy of the model from ONE timed round, so a
+    nondeterministic arm's run-to-run quality spread is on the card instead
+    of only the last model's number. Additive; `FSPEED-ACC` is unchanged."""
+    print("FSPEED-ACC-ROUND lane=%s arm=%s round=%d metric=%s value=%.6f"
+          % (lane, arm, index, metric, value))
     sys.stdout.flush()
 
 
@@ -901,8 +936,35 @@ def lane_config(lane, size):
       n_estimators 100   Matches `tools/nvidia_forest_bench.sh`'s default so
                          this run and that one are the same size of job.
                          CatBoost's own default is 1000 and sklearn's is 100.
-      max_depth 6        CatBoost's default. XGBoost's is 6 too; LightGBM has
-                         no depth limit by default (-1) and is pinned here.
+      max_depth 6        SYMMETRIC AND DEPTHWISE LANES. CatBoost's default.
+                         XGBoost's is 6 too; LightGBM has no depth limit by
+                         default (-1), and it is not in either of these
+                         lanes.
+      max_depth UNBOUNDED, max_leaves 64
+                         LOSSGUIDE LANE, DEVIATION 2281. Leaf-wise growth is
+                         defined by a LEAF budget: one leaf per step until
+                         `max_leaves`, with no depth limit -- that is
+                         LightGBM's algorithm and XGBoost's `lossguide`. The
+                         lane used to pass max_depth=6 AND max_leaves=64,
+                         and 64 leaves under a depth-6 cap is exactly the
+                         full depth-6 tree: XGBoost's lossguide model hashed
+                         IDENTICAL to its depthwise model on every shape, so
+                         the lane was timing depthwise twice under two
+                         names. Now every arm gets 64 leaves and its own
+                         spelling of "no depth limit":
+                           xgboost   max_depth=0   (its documented no-limit)
+                           lightgbm  max_depth=-1  (its default no-limit)
+                           catboost  depth=16      (CB_ENSURE MaxDepth <= 16
+                                                    is their full-binary-tree
+                                                    cap; 64 leaves can never
+                                                    reach it)
+                           ours      max_depth=16  (the same cap, mirrored)
+                         The per-opponent spellings live in
+                         `cfg["max_depth_opponent"]`, which `xgboost_arms`
+                         and `lightgbm_arms` read; CatBoost and ours read
+                         `cfg["max_depth"]` = 16. LightGBM's CUDA learner
+                         would have ignored the 6 anyway (DEVIATION 2280),
+                         so its CPU and CUDA arms were ALSO two problems.
       learning_rate 0.1  Set explicitly on every arm. CatBoost's constructor
                          value is 0.03 but a CatBoost user with the rate
                          unset gets a value FITTED from the pool
@@ -978,13 +1040,38 @@ def lane_config(lane, size):
             learning_rate=0.1,
             l2=1.0,
             borders=254,       # CatBoost border count; max_bin = borders + 1
-            max_leaves=64,     # 2 ** 6, so the lossguide lane matches depth 6
+            # The Lossguide LEAF budget; read by the lossguide lane only
+            # (every other policy pins max_leaves to 2 ** max_depth on
+            # CatBoost and ours, and XGBoost/LightGBM ignore it there).
+            max_leaves=64,
+            # DEVIATION 2281: per-opponent spellings of max_depth, consumed by
+            # `xgboost_arms` and `lightgbm_arms` in preference to
+            # cfg["max_depth"]. Empty for the depth-bounded lanes, where
+            # every arm takes the one shared value.
+            max_depth_opponent={},
             grow_policy={
                 "gbdt-symmetric": "SymmetricTree",
                 "gbdt-depthwise": "Depthwise",
                 "gbdt-lossguide": "Lossguide",
             }[lane],
         )
+        if lane == "gbdt-lossguide":
+            # DEVIATION 2281: lossguide = 64 leaves, depth UNBOUNDED, on
+            # every arm. See the docstring entry above; max_depth=6 here
+            # made the lane the depth-6 tree under a second name.
+            cfg["max_depth"] = 10   # not 16: see the DEVIATION 2285 note below                     # CatBoost's and ours
+            # DEVIATION 2285 (2026-09-08). CatBoost's Lossguide cap is 16, but OUR
+            # fit sizes the shared histogram workspace by 1 << max_depth
+            # (greedy_search_helper.mojo hist_cells) and memsets it per tree: at 16
+            # that is ~3.7 GB on HIGGS and ~67 GB on the 500-feature rung. A 64-leaf
+            # best-first tree essentially never reaches depth 10, so 10 (a ~1 GB
+            # workspace) is the effective no-limit on the CatBoost-family arms until
+            # the workspace is sized by min(max_depth, ceil_log2(max_leaves)) (OWED,
+            # Mojo lane). XGBoost (0) and LightGBM (-1) are unbounded as they define it.
+            cfg["max_depth_opponent"] = {
+                "xgboost": 0,                          # XGBoost: no limit
+                "lightgbm": -1,                        # LightGBM: no limit
+            }
         return cfg
     if lane in ("rf", "et"):
         cfg = dict(common)
@@ -1124,9 +1211,40 @@ NOT_OFFERED = {
 
 # ---- CatBoost -------------------------------------------------------------
 
-def catboost_arms(lane, cfg, data, devices):
+def _variant_name(base, variant):
+    """DEVIATION 2283. `<base>-diag-<tag>` for a diagnostic variant arm,
+    the base name otherwise. `-diag-` is the marker downstream tables
+    exclude on, and it is spelled in exactly one place."""
+    return base if variant is None else "%s-diag-%s" % (base, variant[0])
+
+
+def _apply_variant(p, variant):
+    """DEVIATION 2283. The base arm's full parameter dict plus the variant's
+    ONE change (a dict of the vendor's own spellings), applied LAST so it
+    wins over every lane knob. Returns `p` for chaining."""
+    if variant is not None:
+        p.update(variant[1])
+    return p
+
+
+def _emit_variant_note(lane, name, base, variant):
+    """DEVIATION 2283. Every diagnostic variant arm announces, at build
+    time, which base arm it is and the one thing that differs."""
+    if variant is None:
+        return
+    change = ", ".join("%s=%r" % kv for kv in sorted(variant[1].items()))
+    emit_arm_note(lane, name,
+                  "DIAG: %s with %s -- %s; NOT an incumbent row "
+                  "(DEVIATION 2283)" % (base, change, variant[2]))
+
+
+def catboost_arms(lane, cfg, data, devices, variant=None):
     """CatBoost CPU and CatBoost's CUDA learner. The symmetric-tree opponent,
-    and per Andrew's standing order the ONLY opponent in `gbdt-symmetric`."""
+    and per Andrew's standing order the ONLY opponent in `gbdt-symmetric`.
+
+    `variant` (DEVIATION 2283) is `None` for the incumbent arms, or a
+    `(tag, overrides, why)` triple from `VARIANTS` for a `-diag-` arm: the
+    same configuration plus the one change in `overrides`."""
     import catboost
 
     def _params(task_type):
@@ -1148,7 +1266,7 @@ def catboost_arms(lane, cfg, data, devices):
             p["max_leaves"] = cfg["max_leaves"]
         if task_type == "GPU":
             p["devices"] = "0"
-        return p
+        return _apply_variant(p, variant)              # DEVIATION 2283
 
     def make(task_type):
         p = _params(task_type)
@@ -1161,26 +1279,32 @@ def catboost_arms(lane, cfg, data, devices):
     out = []
     for dev in devices:
         task_type = "CPU" if dev == "cpu" else "GPU"
+        base = "catboost-" + dev
+        name = _variant_name(base, variant)            # DEVIATION 2283
         out.append(Arm(
-            "catboost-" + dev,
+            name,
             (lambda tt: (lambda: make(tt)))(task_type),
             lambda m, d: m.fit(d.X_train, d.y_train),
             _score_sklearn_like,
             sync=lambda: _blocking("catboost"),
             library="catboost",
         ))
+        _emit_variant_note(lane, name, base, variant)
     return out
 
 
 # ---- XGBoost --------------------------------------------------------------
 
-def xgboost_arms(lane, cfg, data, devices):
+def xgboost_arms(lane, cfg, data, devices, variant=None):
     """XGBoost `tree_method='hist'` on CPU and on CUDA.
 
     DEVIATION 1831: XGBoost never appears in `gbdt-symmetric`. Its
     `grow_policy` is depthwise or lossguide and it has no symmetric mode, so
     the same argument that keeps LightGBM out of the symmetric pair keeps
-    XGBoost out of it."""
+    XGBoost out of it.
+
+    `variant` (DEVIATION 2283): `None` for the incumbents, or a
+    `(tag, overrides, why)` triple for a `-diag-` arm."""
     import xgboost as xgb
 
     policy = {"Depthwise": "depthwise", "Lossguide": "lossguide"}.get(
@@ -1191,11 +1315,16 @@ def xgboost_arms(lane, cfg, data, devices):
             "comparison is CatBoost ONLY (standing order 2026-08-22, "
             "DEVIATION 1831)"
         )
+    # DEVIATION 2281: the lossguide lane spells "no depth limit" per
+    # opponent; XGBoost's is max_depth=0. The depth-bounded lanes carry no
+    # override and every arm takes the shared value.
+    max_depth = cfg.get("max_depth_opponent", {}).get("xgboost",
+                                                       cfg["max_depth"])
 
     def _params(device):
         p = dict(
             n_estimators=cfg["n_estimators"],
-            max_depth=cfg["max_depth"],
+            max_depth=max_depth,
             learning_rate=cfg["learning_rate"],
             reg_lambda=cfg["l2"],
             reg_alpha=0.0,
@@ -1215,7 +1344,7 @@ def xgboost_arms(lane, cfg, data, devices):
         )
         if policy == "lossguide":
             p["max_leaves"] = cfg["max_leaves"]
-        return p
+        return _apply_variant(p, variant)              # DEVIATION 2283
 
     def make(device):
         p = _params(device)
@@ -1229,20 +1358,23 @@ def xgboost_arms(lane, cfg, data, devices):
     out = []
     for dev in devices:
         device = "cpu" if dev == "cpu" else "cuda"
+        base = "xgboost-" + dev
+        name = _variant_name(base, variant)            # DEVIATION 2283
         out.append(Arm(
-            "xgboost-" + dev,
+            name,
             (lambda dv: (lambda: make(dv)))(device),
             lambda m, d: m.fit(d.X_train, d.y_train),
             _score_sklearn_like,
             sync=_cuda_sync,
             library="xgboost",
         ))
+        _emit_variant_note(lane, name, base, variant)
     return out
 
 
 # ---- LightGBM -------------------------------------------------------------
 
-def lightgbm_arms(lane, cfg, data, devices):
+def lightgbm_arms(lane, cfg, data, devices, variant=None):
     """LightGBM CPU and LightGBM CUDA.
 
     THE PIP AND CONDA WHEELS HAVE NO CUDA SUPPORT. `device_type='cuda'`
@@ -1254,7 +1386,22 @@ def lightgbm_arms(lane, cfg, data, devices):
     algorithm (Andrew's standing order, 2026-08-22). In the forest lanes it
     runs `boosting_type='rf'`, which is what
     `PARITY_NOTES['lgbm-rf-bagging']` and `tools/nvidia_forest_bench.sh`
-    already compare against."""
+    already compare against.
+
+    THE CUDA LEARNER HAS NO DEPTH CHECK (DEVIATION 2280). Verified against
+    upstream 2026-09-08: nothing under `src/treelearner/cuda/` reads
+    `max_depth` or a leaf depth; only `serial_tree_learner.cpp` (the CPU
+    learner) enforces it. A `max_depth` handed to `device_type='cuda'` is
+    accepted and silently ignored, and the tree is bounded by `num_leaves`
+    alone. So on the boosting path `max_depth` is pinned to -1 on EVERY
+    device: the CUDA arm cannot honor it, and a CPU arm that did would be
+    solving a different problem from the CUDA arm beside it. The forest
+    path keeps `cfg["max_depth"]` because the CPU learner honors it there
+    and the forest lanes are depth-bounded by definition, and the cuda arm
+    says on the card that its own shape is bounded by `num_leaves` only.
+
+    `variant` (DEVIATION 2283): `None` for the incumbents, or a
+    `(tag, overrides, why)` triple for a `-diag-` arm."""
     import lightgbm as lgb
 
     forest = lane in ("rf", "et")
@@ -1295,7 +1442,12 @@ def lightgbm_arms(lane, cfg, data, devices):
                 "order 2026-08-22); LightGBM has no symmetric mode"
             )
         p.update(
-            max_depth=cfg["max_depth"],
+            # DEVIATION 2280: -1 (no limit) on EVERY device, because the
+            # CUDA learner never reads max_depth (see the docstring) and
+            # the CPU arm must solve the same problem. DEVIATION 2281: the
+            # lossguide lane's own spelling for LightGBM is also -1; the
+            # override is read so the two deviations cannot drift apart.
+            max_depth=cfg.get("max_depth_opponent", {}).get("lightgbm", -1),
             num_leaves=cfg["max_leaves"],
             learning_rate=cfg["learning_rate"],
             reg_lambda=cfg["l2"],
@@ -1303,6 +1455,7 @@ def lightgbm_arms(lane, cfg, data, devices):
             bagging_fraction=1.0,            # DEVIATION 1833
             feature_fraction=1.0,
         )
+    _apply_variant(p, variant)                         # DEVIATION 2283
 
     def make(device_type):
         q = dict(p)
@@ -1317,14 +1470,26 @@ def lightgbm_arms(lane, cfg, data, devices):
     out = []
     for dev in devices:
         device_type = "cpu" if dev == "cpu" else "cuda"
+        base = "lightgbm-" + ("cpu" if dev == "cpu" else "cuda")
+        name = _variant_name(base, variant)            # DEVIATION 2283
         out.append(Arm(
-            "lightgbm-" + ("cpu" if dev == "cpu" else "cuda"),
+            name,
             (lambda dt: (lambda: make(dt)))(device_type),
             lambda m, d: m.fit(d.X_train, d.y_train),
             _score_sklearn_like,
             sync=_cuda_sync,
             library="lightgbm",
         ))
+        if forest and device_type == "cuda" and variant is None:
+            # DEVIATION 2280: the forest path passes cfg["max_depth"] for
+            # the CPU learner's sake; the CUDA learner ignores it, and the
+            # card must say so beside the arm rather than in a docstring.
+            emit_arm_note(lane, name,
+                          "max_depth is not enforced by LightGBM's CUDA "
+                          "learner; the tree shape is bounded by "
+                          "num_leaves=%d only (DEVIATION 2280)"
+                          % p["num_leaves"])
+        _emit_variant_note(lane, name, base, variant)
     return out
 
 
@@ -1630,7 +1795,129 @@ def opponent_builders(lane, cfg, data, devices):
                          lambda: [sklearn_iforest_arm(cfg, data)]))
     else:
         raise SystemExit("unknown lane " + repr(lane))
+    # DEVIATION 2283: the diagnostic variants are registered HERE, beside
+    # the incumbents, so that `--list-arms`, the `--arms` roster check and
+    # `build_opponents` all see the same names from the same place. Empty
+    # unless MOJOLEARN_SPEED_VARIANTS is set.
+    builders.extend(variant_builders(lane, cfg, data, devices))
     return builders
+
+
+# ---- the diagnostic variant arms (DEVIATION 2283) --------------------------
+
+#: DEVIATION 2283. Each entry is `(tag, overrides, why)`: the arm is named
+#: `<base>-diag-<tag>`, gets the base arm's FULL lane configuration plus
+#: `overrides` (the vendor's own spellings, applied last), and announces
+#: `why` on an FSPEED-NOTE at build time. They exist to SHOW, on the same
+#: box in the same process, the mechanisms the incumbents' surfaces cannot
+#: be asked to switch off: XGBoost cannot be told to take CatBoost's ten
+#: backtracking Newton steps or to score splits by Cosine, so the CatBoost
+#: arm is walked TOWARD XGBoost instead (one Newton step, L2 gain) and the
+#: XGBoost arm toward CatBoost (a finer grid, no child-weight floor). Every
+#: name carries `-diag-`, which is what downstream tables exclude on, and
+#: `run()` keeps them out of the same-library agreement check and the
+#: quality-spread note. GPU arms only: the question is about the vendor's
+#: GPU learner and the diagnostics are read beside it.
+VARIANTS = {
+    "xgboost": [
+        ("maxbin1024", {"max_bin": 1024},
+         "a finer quantization grid than the lane's 255 bins; does XGBoost's "
+         "GPU learner leave accuracy on the grid"),
+        ("mcw0", {"min_child_weight": 0},
+         "no hessian floor on a child (XGBoost's default is 1.0; CatBoost "
+         "and ours have no such floor)"),
+    ],
+    "catboost": [
+        ("newton1", {"leaf_estimation_iterations": 1},
+         "ONE Newton step per leaf instead of CatBoost's ten with "
+         "backtracking, which is XGBoost's leaf estimator"),
+        ("l2newton1", {"score_function": "L2",
+                       "leaf_estimation_iterations": 1},
+         "L2 split gain (XGBoost's) instead of Cosine, plus one Newton step: "
+         "CatBoost walked all the way to XGBoost's estimation arm"),
+        ("rs0", {"random_strength": 0},
+         "no random split-score noise (CatBoost's default random_strength "
+         "is 1; XGBoost and ours add none)"),
+    ],
+}
+
+#: DEVIATION 2283. Lane-specific variants: XGBoost's lossguide under a leaf
+#: budget of 64 with NO depth cap, run in the DEPTHWISE lane so that the
+#: leaf-wise tree is timed beside the level-wise one on the same data; and
+#: LightGBM's OLD lossguide configuration (max_depth=6 AND num_leaves=64,
+#: the depth-6 tree, DEVIATION 2281) kept as a diagnostic in the LOSSGUIDE
+#: lane so the change of definition is measured rather than asserted. Its
+#: CUDA learner ignores max_depth (DEVIATION 2280), so this arm is expected
+#: to hash identical to `lightgbm-cuda`; if it does not, finding (1) was
+#: wrong and the card says so.
+VARIANTS_BY_LANE = {
+    "gbdt-depthwise": {
+        "xgboost": [
+            ("lossguide64", {"grow_policy": "lossguide", "max_depth": 0,
+                             "max_leaves": 64},
+             "leaf-wise growth, 64 leaves, depth unbounded, beside the "
+             "level-wise depth-6 tree on the same data"),
+        ],
+    },
+    "gbdt-lossguide": {
+        "lightgbm": [
+            ("depth6", {"max_depth": 6},
+             "the lane's configuration BEFORE DEVIATION 2281 (max_depth=6 "
+             "and num_leaves=64, the depth-6 tree); the CUDA learner "
+             "ignores max_depth (DEVIATION 2280), so this should hash "
+             "identical to lightgbm-cuda"),
+        ],
+    },
+}
+
+#: Which base builder each variant family calls, and the GPU arm's name.
+_VARIANT_BASES = {
+    "xgboost": (xgboost_arms, "xgboost-gpu"),
+    "catboost": (catboost_arms, "catboost-gpu"),
+    "lightgbm": (lightgbm_arms, "lightgbm-cuda"),
+}
+
+
+def variants_enabled():
+    """DEVIATION 2283. Non-empty `MOJOLEARN_SPEED_VARIANTS` switches the
+    diagnostic arms on; nothing else does."""
+    return bool(os.environ.get("MOJOLEARN_SPEED_VARIANTS", "").strip())
+
+
+def variant_builders(lane, cfg, data, devices):
+    """DEVIATION 2283. `[(arm_names, thunk)]` for the lane's diagnostic
+    variants, in the same shape `opponent_builders` uses, one builder per
+    variant so a runtime failure in one refuses that one arm by name.
+
+    Empty unless `MOJOLEARN_SPEED_VARIANTS` is set AND the GPU device is in
+    play: these are siblings of the GPU arms, and on the MacBook the GPU
+    arm itself is silently absent, so its diagnostics are too. Only the
+    libraries the lane already fields get variants, by the same roster
+    `opponent_builders` spells: CatBoost in every boosting lane, XGBoost in
+    the two non-symmetric ones, LightGBM in lossguide only."""
+    if not variants_enabled() or "gpu" not in devices:
+        return []
+    if lane == "gbdt-symmetric":
+        families = ["catboost"]
+    elif lane == "gbdt-depthwise":
+        families = ["catboost", "xgboost"]
+    elif lane == "gbdt-lossguide":
+        families = ["catboost", "xgboost", "lightgbm"]
+    else:
+        return []
+    out = []
+    for family in families:
+        builder, gpu_name = _VARIANT_BASES[family]
+        table = list(VARIANTS.get(family, []))
+        table += VARIANTS_BY_LANE.get(lane, {}).get(family, [])
+        for variant in table:
+            name = _variant_name(gpu_name, variant)
+            out.append((
+                [name],
+                (lambda b, v: (lambda: b(lane, cfg, data, ["gpu"],
+                                         variant=v)))(builder, variant),
+            ))
+    return out
 
 
 def accel_visible():
@@ -1733,7 +2020,12 @@ def build_opponents(lane, cfg, data, devices):
         # It is a GPU arm's sibling, so it is only spoken of when the GPU
         # device is in play: on the MacBook the GPU arm itself is silently
         # absent and its sibling is too.
-        not_offered = [n for n in names if n in NOT_OFFERED]
+        # DEVIATION 2283: a `-diag-` variant is never a NOT-OFFERED
+        # sibling. `NOT_OFFERED` is keyed by exact name and no variant name
+        # is a key, so the guard is belt and braces; it is here so that a
+        # future key that happens to contain `-diag-` cannot refuse one.
+        not_offered = [n for n in names
+                       if n in NOT_OFFERED and "-diag-" not in n]
         if "gpu" in devices:
             for name in not_offered:
                 emit_refused(lane, name, NOT_OFFERED[name].reason)
@@ -1855,7 +2147,13 @@ def run(lane, arms, data, n_rounds, size, dev=None):
                 continue
             spent[arm.name] += ms / 1000.0
             last_model[arm.name] = model
+            # The timer stopped at `ms` above and the next arm's starts at
+            # its own `t0`; everything from here to `emit_round` was
+            # already outside both (the hash needs a scoring pass), and
+            # DEVIATION 2282 adds only the printing of what that pass
+            # already computed. It cannot touch a timed region.
             digest = None
+            triples = []
             try:
                 triples = arm.score(model, data)
                 for _, _, vec in triples:
@@ -1865,27 +2163,70 @@ def run(lane, arms, data, n_rounds, size, dev=None):
             except Exception:                      # noqa: BLE001
                 digest = None
             emit_round(lane, arm.name, data.tag, r, ms, digest)
+            # DEVIATION 2282: this round's model's accuracy, every metric,
+            # so a nondeterministic arm's run-to-run quality spread is
+            # measured. The round line above is unchanged and precedes it.
+            for metric, value, _ in triples:
+                emit_acc_round(lane, arm.name, r, metric, value)
 
     # Accuracy, once per arm, from the last model each arm produced. Outside
     # every timer, and after the whole table, so a scoring failure cannot
     # perturb a timing.
     scores = {}
+    final = {}
     for arm in arms:
         model = last_model.get(arm.name)
         if model is None:
             continue
+        # DEVIATION 2283: a `-diag-` variant differs from its base arm BY
+        # DESIGN, so it is scored and printed like every arm but is kept
+        # out of the same-library agreement check (DEVIATION 1839, which
+        # would otherwise report the designed difference as a
+        # misconfiguration) and out of the quality-spread note (DEVIATION
+        # 2284, which is about the incumbents).
+        incumbent = "-diag-" not in arm.name
         try:
             for metric, value, _ in arm.score(model, data):
                 emit_acc(lane, arm.name, metric, value)
-                scores.setdefault((arm.library, metric), []).append(
-                    (arm.name, value))
+                if incumbent:
+                    scores.setdefault((arm.library, metric), []).append(
+                        (arm.name, value))
+                    final.setdefault(metric, []).append((arm.name, value))
         except Exception as exc:                   # noqa: BLE001
             emit_refused(lane, arm.name, "%s while scoring: %s"
                          % (exc.__class__.__name__,
                             " ".join(str(exc).split())))
 
     _check_same_library_agreement(lane, scores)
+    _check_quality_spread(lane, final)
     return live
+
+
+#: DEVIATION 2284. Relative spread between the best and worst incumbent arm
+#: on one metric above which the lane says so. Wider than any two
+#: same-library arms should differ (`_ACC_TOL`), because arms of DIFFERENT
+#: libraries legitimately solve the same problem differently; the note is
+#: there so a speed ratio is never read without the quality beside it.
+_SPREAD_TOL = 0.05
+
+
+def _check_quality_spread(lane, final):
+    """DEVIATION 2284. Across the lane's incumbent (non-`-diag-`) arms, for
+    every metric more than one of them produced: if the max and min differ
+    by more than `_SPREAD_TOL` relative, one FSPEED-NOTE naming both ends.
+    `final` is `{metric: [(arm, value), ...]}` from the final scoring pass,
+    so it reads the same numbers the FSPEED-ACC lines carry."""
+    for metric, entries in sorted(final.items()):
+        vals = [(n, v) for n, v in entries if v == v]     # drop NaN
+        if len(vals) < 2:
+            continue
+        lo_arm, lo = min(vals, key=lambda nv: nv[1])
+        hi_arm, hi = max(vals, key=lambda nv: nv[1])
+        scale = max(abs(lo), abs(hi), 1e-12)
+        if (hi - lo) / scale > _SPREAD_TOL:
+            emit_arm_note(lane, "-",
+                          "QUALITY-SPREAD metric=%s min=%s:%.6f max=%s:%.6f"
+                          % (metric, lo_arm, lo, hi_arm, hi))
 
 
 def _check_same_library_agreement(lane, scores):
