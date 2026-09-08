@@ -9,6 +9,8 @@ sides consume identical bytes.
     python3 tools/speed_torch_byte_lm.py --lane lm-train --arm torch
     python3 tools/speed_torch_byte_lm.py --lane lm-train --arm torch-deterministic
     python3 tools/speed_torch_byte_lm.py --lane lm-train --arm torch-fast
+    python3 tools/speed_torch_byte_lm.py --lane lm-train --arm torch-compiled
+    python3 tools/speed_torch_byte_lm.py --lane lm-train --arm torch-compiled-deterministic
     python3 tools/speed_torch_byte_lm.py --lane lm-infer --arm torch --rounds 20
 
 AUTHORED, NOT EXECUTED. No model, benchmark, build or install was run to
@@ -24,10 +26,17 @@ bitwise identical on NVIDIA CUDA, AMD HIP and Apple Metal -- cost against
 what a PyTorch user would run for the EXACT same model, on the same H100,
 for training (128 steps, lane `lm-train`) and for a forward/evaluate (lane
 `lm-infer`). Torch is measured as it ships (arm `torch`), in its documented
-deterministic configuration (arm `torch-deterministic`), and on its
-strongest precision-relaxed default path (arm `torch-fast`), so the price
-of torch's determinism, the price of ours, and the speed torch reaches when
-it is allowed to stop being FP32 all sit in one table.
+deterministic configuration (arm `torch-deterministic`), on its strongest
+precision-relaxed default path (arm `torch-fast`), and on its strongest
+FULL-FP32 path, compiled, in both its default form (arm `torch-compiled`)
+and its documented deterministic form (arm `torch-compiled-deterministic`),
+so the price of torch's determinism, the price of ours, the speed torch
+reaches when it is allowed to stop being FP32, and the speed it reaches
+when it stays FP32 but stops being eager all sit in one table. The last two
+arms exist because eager FP32 torch is not torch's strongest FP32
+configuration on a launch-bound program, and "faster than PyTorch" is not a
+fair sentence until torch's strongest matched-precision configuration is in
+the same table (DEVIATIONS 2220, 2221).
 
 THIS IS A LATENCY COMPARISON, NOT A THROUGHPUT ONE (DEVIATION 2191)
 ====================================================================
@@ -204,6 +213,127 @@ named"). It differs from `torch` in exactly four ways, each named:
   * `torch.optim.AdamW(fused=True)` (DEVIATION 2209), torch's fused CUDA
     kernel for the whole parameter list.
 
+`torch-compiled` (DEVIATION 2220) is torch's strongest configuration AT
+MATCHED PRECISION: full FP32, no TF32 anywhere, and everything else that
+`torch-fast` turns on. It exists because the eager `torch` arm measured
+SLOWER than our identical-mode trainer on the H100 (2.20 s against 1.09 s
+for 128 steps), and a reader is right to object that eager dispatch on a
+34,944-parameter model is torch paying per-op launch cost, not torch at its
+strongest; the FP32 sentence is only fair against this arm. It is
+`torch-fast` with the precision switches inverted, each stated even though
+it is the shipped default, and READ BACK after configuration into the
+header note (DEVIATION 2222), so the row carries its own witness that no
+TF32 path was open:
+
+  * `torch.set_float32_matmul_precision("highest")`,
+    `torch.backends.cuda.matmul.allow_tf32 = False`,
+    `torch.backends.cudnn.allow_tf32 = False`. The sentence relied on,
+    fetched 2026-09-08 from
+    https://docs.pytorch.org/docs/2.4/generated/torch.set_float32_matmul_precision.html
+    (the page for the torch that ran, 2.4.1+cu124 on the
+    runpod/pytorch:2.4.0-py3.11-cuda12.4.1 image): "highest": "float32
+    matrix multiplications use the float32 datatype (24 mantissa bits with
+    23 bits explicitly stored) for internal computations." and, on the
+    switch as a whole: "This does not change the output dtype of float32
+    matrix multiplications, it controls how the internal computation of
+    the matrix multiplication is performed."
+  * attention through `scaled_dot_product_attention(q, k, v,
+    is_causal=True)` exactly as `torch-fast` (DEVIATION 2207; backend
+    auto-selected, enabled backends printed in their own `FSPEED-NOTE`,
+    DEVIATION 2227, which backend ran is not observable from Python).
+  * forward + loss compiled with
+    `torch.compile(mode="max-autotune-no-cudagraphs")`, the same mode
+    string and the same first-call compile and non-silent fallback as
+    `torch-fast` (DEVIATION 2208). From
+    https://docs.pytorch.org/docs/2.4/generated/torch.compile.html, fetched
+    2026-09-08: torch.compile "Optimizes given model/function using
+    TorchDynamo and specified backend."; "max-autotune" "is a mode that
+    leverages Triton based matrix multiplications and convolutions It
+    enables CUDA graphs by default."; "max-autotune-no-cudagraphs" "is a
+    mode similar to "max-autotune" but without CUDA graphs". No CUDA graphs
+    because the per-step token copy and the uncompiled optimizer step sit
+    between compiled calls, as on `torch-fast`.
+  * `torch.optim.AdamW(fused=True)` (DEVIATION 2209).
+
+Its header says `mode=FP32-COMPILED` (DEVIATION 2228). Its per-round
+parameter hash is free to move for the same reason `torch-fast`'s is: the
+SDPA backward "uses non-deterministic atomic operations by default" on
+every backend but MATH, and nothing about determinism is touched on this
+arm; movement is printed as a finding.
+
+`torch-compiled-deterministic` (DEVIATION 2221) is `torch-compiled` under
+the FULL `torch-deterministic` recipe, applied FIRST and in the same order
+(`CUBLAS_WORKSPACE_CONFIG=:4096:8` before `import torch`, then
+`torch.use_deterministic_algorithms(True)`,
+`torch.backends.cudnn.deterministic = True`,
+`torch.backends.cudnn.benchmark = False`), then the three FP32 switches
+above, then SDPA + compile + fused AdamW. Its header says
+`mode=FP32-COMPILED-DETERMINISTIC`. The sentences relied on, fetched
+2026-09-08 from the 2.4 pages:
+
+  * https://docs.pytorch.org/docs/2.4/generated/torch.use_deterministic_algorithms.html:
+    "Sets whether PyTorch operations must use "deterministic" algorithms.
+    That is, algorithms which, given the same input, and when run on the
+    same software and hardware, always produce the same output. When
+    enabled, operations will use deterministic algorithms when available,
+    and if only nondeterministic algorithms are available they will throw
+    a RuntimeError when called." The same page: "A handful of CUDA
+    operations are nondeterministic if the CUDA version is 10.2 or greater,
+    unless the environment variable CUBLAS_WORKSPACE_CONFIG=:4096:8 or
+    CUBLAS_WORKSPACE_CONFIG=:16:8 is set." and it lists "torch.nn.NLLLoss
+    when called on a CUDA tensor" among the operations that throw.
+  * https://docs.pytorch.org/docs/2.4/generated/torch.nn.functional.scaled_dot_product_attention.html:
+    "In some circumstances when given tensors on a CUDA device and using
+    CuDNN, this operator may select a nondeterministic algorithm to
+    increase performance. If this is undesirable, you can try to make the
+    operation deterministic (potentially at a performance cost) by setting
+    torch.backends.cudnn.deterministic = True." The 2.4 page names the
+    backends as "FlashAttention-2", "Memory-Efficient Attention" and the
+    "PyTorch C++ implementation" (MATH); it carries NO per-backend
+    determinism table. THE 2.4 REPRODUCIBILITY PAGE
+    (https://docs.pytorch.org/docs/2.4/notes/randomness.html) CARRIES NO
+    SDPA TABLE EITHER; the per-backend table quoted under `torch-fast`
+    above (MATH deterministic both ways, FLASH/EFFICIENT/CUDNN
+    "Non-deterministic" backward, "The backward pass uses non-deterministic
+    atomic operations by default.") is from the STABLE (2.14) page and is
+    what a reader of the current docs will find. Which backend torch 2.4
+    selects under `use_deterministic_algorithms(True)`, and whether it
+    swaps to a deterministic backward or refuses, is NOT stated on any 2.4
+    page fetched; it is what the run finds out, and the run prints it.
+
+What the deterministic recipe does to a COMPILED forward is not written
+down anywhere fetched: `torch.use_deterministic_algorithms` documents ATen
+operators, and the kernels `torch.compile` generates are not on that list
+either way. So this arm's documented promise is weaker than
+`torch-deterministic`'s, and its hash is EXPECTED to repeat but movement
+is a finding, not a defect. Three consequences are wired in:
+
+  * a RuntimeError of the "does not have a deterministic implementation"
+    kind raised INSIDE the compiled forward is NOT re-raised as the
+    refusal on this arm (on `torch-deterministic` it is, DEVIATION 2203):
+    it is caught by the same non-silent compile fallback as any other
+    first-call failure, the `FSPEED-NOTE` names the exception text, and
+    the uncompiled forward runs (DEVIATION 2223). If the uncompiled
+    forward then refuses too, THAT refusal propagates and is printed as
+    `FSPEED-REFUSED`, exit 0, exactly as on `torch-deterministic`; the
+    note before it says whether the compiled graph refused as well or only
+    eager did. That distinction is the point: `torch.compile` decomposes
+    `cross_entropy` into its own kernels and may well run the model that
+    eager deterministic torch refuses (the NLLLoss CUDA refusal is an ATen
+    kernel's check), and a table needs to know which of the two happened.
+  * the same for a raise inside the compiled BACKWARD (DEVIATION 2224):
+    `loss.backward()` on a compiled forward runs the AOTAutograd-compiled
+    backward graph, which is where an SDPA backend's backward would
+    refuse. `Forward.backward` wraps it; on this arm a raise there drops
+    the partial gradients (`.grad = None` on every leaf), recomputes the
+    loss uncompiled, back-propagates that, prints the note with the
+    exception text, and stays uncompiled for the rest of the process. On
+    every other arm `Forward.backward` IS `loss.backward()` and a raise
+    propagates as before.
+  * `--loss gather` renames it `torch-compiled-deterministic-gatherloss`
+    by the rule `torch-deterministic` uses (DEVIATION 2225); it is not run
+    unless asked.
+
 Init, batches, lr, hashing and ACC metrics are the `torch` arm's, unchanged.
 
 WHAT IS AND IS NOT INSIDE THE TIMER (DEVIATIONS 2193, 2194)
@@ -252,8 +382,12 @@ Shape tags: `bytelm-2x33-steps128` (lm-train), `bytelm-2x33-forward`
 (lm-infer). Mode labels (DEVIATION 2198): `torch` prints `mode=FAST`, as
 `tools/speed_torch_seq.py` does for torch; `torch-deterministic` and
 `torch-deterministic-gatherloss` print `mode=DETERMINISTIC`; `torch-fast`
-prints `mode=TF32`; our arm prints the tier `mojolearn.numeric_mode()`
-reads back after import.
+prints `mode=TF32`; `torch-compiled` prints `mode=FP32-COMPILED` and
+`torch-compiled-deterministic` prints `mode=FP32-COMPILED-DETERMINISTIC`
+(DEVIATION 2228; the label is informational on a vendor arm, the parser
+`tools/identity_grid_json.py` classifies a vendor arm only by whether its
+NAME contains `-deterministic`, which both new names honor); our arm prints
+the tier `mojolearn.numeric_mode()` reads back after import.
 """
 
 import argparse
@@ -278,7 +412,17 @@ SHAPE_TAGS = {"lm-train": "bytelm-2x33-steps128", "lm-infer": "bytelm-2x33-forwa
 #: says otherwise. A training round is a full 128-step run, so three; a
 #: forward is microseconds of work, so twenty.
 DEFAULT_ROUNDS = {"lm-train": 3, "lm-infer": 20}
-ARMS = ("torch", "torch-deterministic", "torch-deterministic-gatherloss", "torch-fast")
+ARMS = ("torch", "torch-deterministic", "torch-deterministic-gatherloss", "torch-fast",
+        "torch-compiled", "torch-compiled-deterministic")
+#: DEVIATION 2226. The base arms that run torch's documented deterministic
+#: recipe (and therefore need CUBLAS_WORKSPACE_CONFIG in the environment
+#: BEFORE `import torch`), and the base arms whose forward is
+#: `torch.compile`d (and therefore need at least one warm-up for the
+#: compile to land in). `main` keys its pre-import arrangement and its
+#: warm-up floor on these sets, so a new arm cannot silently miss either.
+DETERMINISTIC_BASE_ARMS = ("torch-deterministic", "torch-compiled-deterministic")
+COMPILED_BASE_ARMS = ("torch-fast", "torch-compiled", "torch-compiled-deterministic")
+COMPILE_MODE = "max-autotune-no-cudagraphs"      # DEVIATION 2208, shared by every compiled arm
 SIZE = "shipped"
 
 # --------------------------------------------------------------------------
@@ -581,8 +725,9 @@ def build_parser(prog, with_arm):
                         "(DEVIATION 2200: for lm-train a warm-up is a full "
                         "128-step run, so the warm-up line is the same shape "
                         "as the rounds and is never a different program; "
-                        "torch-fast forces at least one because the compile "
-                        "lands on the first call)")
+                        "the compiled arms torch-fast, torch-compiled and "
+                        "torch-compiled-deterministic force at least one "
+                        "because the compile lands on the first call)")
     if with_arm:
         p.add_argument("--arm", required=True, choices=ARMS)
         p.add_argument("--loss", default="cross_entropy", choices=("cross_entropy", "gather"),
@@ -598,9 +743,16 @@ def build_parser(prog, with_arm):
 def resolve_arm(arm, loss):
     """(base arm, loss spelling, reported arm name). The explicit
     `torch-deterministic-gatherloss` arm and `torch-deterministic --loss
-    gather` are one row and get one name (DEVIATION 2205/2209)."""
-    if arm == "torch-deterministic-gatherloss":
-        return "torch-deterministic", "gather", arm
+    gather` are one row and get one name (DEVIATION 2205/2209).
+
+    DEVIATION 2225: the explicit-name rule is the suffix, not the one
+    spelling, so `torch-compiled-deterministic --loss gather` is named
+    `torch-compiled-deterministic-gatherloss` and that name, should it ever
+    be added to `ARMS`, resolves back to its base by the same rule. For
+    `torch-deterministic-gatherloss` the result is unchanged. Every other
+    name is its own base arm."""
+    if arm.endswith("-gatherloss"):
+        return arm[:-len("-gatherloss")], "gather", arm
     if loss == "gather":
         return arm, "gather", arm + "-gatherloss"
     return arm, "cross_entropy", arm
@@ -645,7 +797,8 @@ def torch_forward(torch, F, weights, tokens, tables, loss_spelling="cross_entrop
     """tools/byte_lm_gradient_oracle.py:103-137 in FP32. `tokens` is a
     long[2,33] on the device; returns the scalar mean loss over 64 targets.
     `attention` is `eager` (the oracle's matmul/mask/softmax/matmul) or
-    `sdpa` (DEVIATION 2207, `torch-fast` only)."""
+    `sdpa` (DEVIATION 2207: `torch-fast`, `torch-compiled` and
+    `torch-compiled-deterministic`)."""
     cosine, sine, mask = tables
     h = F.embedding(tokens[:, :-1], weights["embed"])
 
@@ -735,20 +888,69 @@ def sdpa_backends(torch):
     return out
 
 
+def apply_deterministic_recipe(torch):
+    """DEVIATION 2197, torch's documented deterministic recipe in its
+    documented order, shared by `torch-deterministic` and
+    `torch-compiled-deterministic` (DEVIATION 2221) so the two arms cannot
+    drift apart in what "deterministic" means. Returns the applied-switches
+    text for the header note."""
+    if os.environ.get("CUBLAS_WORKSPACE_CONFIG") != ":4096:8":
+        raise RuntimeError("CUBLAS_WORKSPACE_CONFIG was not set before torch was imported")
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    return ("CUBLAS_WORKSPACE_CONFIG=:4096:8 (pre-import) "
+            "use_deterministic_algorithms(True) cudnn.deterministic=True cudnn.benchmark=False")
+
+
+def apply_full_fp32(torch):
+    """DEVIATION 2222. The three precision switches stated explicitly at
+    their shipped-default values, so the FP32 claim of the compiled arms
+    rests on a line in this file and not on the day's defaults; the
+    values are read back by `tf32_switches` afterwards and printed, so the
+    row also carries the witness. Returns the applied-switches text."""
+    torch.set_float32_matmul_precision("highest")
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    return "set_float32_matmul_precision('highest') cuda.matmul.allow_tf32=False cudnn.allow_tf32=False"
+
+
+def compiled_settings_text(torch):
+    """The SDPA + compile + fused-AdamW part of the header note, shared by
+    every compiled arm so the three describe the same three switches in
+    the same words."""
+    return ("attention=scaled_dot_product_attention(is_causal=True, backend auto-selected, "
+            "enabled=%s) compile=torch.compile(mode=%r) optimizer=AdamW(fused=True)"
+            % (sdpa_backends(torch), COMPILE_MODE))
+
+
 def configure_arm(torch, base_arm):
     """Apply the base arm's documented configuration and return (mode label,
     description for the header note, arm settings dict). DEVIATIONS 2197,
-    2198, 2201, 2206."""
-    settings = dict(attention="eager", compile=False, fused=False)
+    2198, 2201, 2206, 2220, 2221, 2228. `settings["deterministic"]` is
+    what `Forward` keys its refusal handling on (DEVIATIONS 2223, 2224)."""
+    settings = dict(attention="eager", compile=False, fused=False, deterministic=False)
     if base_arm == "torch-deterministic":
-        if os.environ.get("CUBLAS_WORKSPACE_CONFIG") != ":4096:8":
-            raise RuntimeError("CUBLAS_WORKSPACE_CONFIG was not set before torch was imported")
-        torch.use_deterministic_algorithms(True)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        applied = apply_deterministic_recipe(torch)
+        settings["deterministic"] = True
         mode = "DETERMINISTIC"
-        applied = ("CUBLAS_WORKSPACE_CONFIG=:4096:8 (pre-import) "
-                   "use_deterministic_algorithms(True) cudnn.deterministic=True cudnn.benchmark=False")
+    elif base_arm == "torch-compiled":
+        # DEVIATION 2220. FP32 at full precision, then everything
+        # `torch-fast` turns on that is not a precision switch.
+        applied_fp32 = apply_full_fp32(torch)
+        settings = dict(attention="sdpa", compile=True, fused=True, deterministic=False)
+        mode = "FP32-COMPILED"
+        applied = ("%s %s; deterministic_algorithms=%s untouched"
+                   % (applied_fp32, compiled_settings_text(torch),
+                      torch.are_deterministic_algorithms_enabled()))
+    elif base_arm == "torch-compiled-deterministic":
+        # DEVIATION 2221. The deterministic recipe FIRST, in its documented
+        # order, then the FP32 switches, then SDPA + compile + fused AdamW.
+        applied_det = apply_deterministic_recipe(torch)
+        applied_fp32 = apply_full_fp32(torch)
+        settings = dict(attention="sdpa", compile=True, fused=True, deterministic=True)
+        mode = "FP32-COMPILED-DETERMINISTIC"
+        applied = "%s %s %s" % (applied_det, applied_fp32, compiled_settings_text(torch))
     elif base_arm == "torch-fast":
         # DEVIATION 2206. NOT FP32. Every switch named, in the order applied.
         torch.set_float32_matmul_precision("high")
@@ -776,15 +978,24 @@ class Forward:
     20 tensors IN REGISTRY ORDER (a list, not the dict, so a fresh
     parameter set per round hits the same compiled graph; DEVIATION 2208).
 
-    For `torch-fast` the callable is `torch.compile`d and the compile lands
-    on the FIRST CALL, inside the warm-up. If that first call raises, the
-    arm falls back to the eager callable for the rest of the process and
-    says so in an `FSPEED-NOTE`; the fallback is NOT silent."""
+    For the compiled arms (`torch-fast`, `torch-compiled`,
+    `torch-compiled-deterministic`) the callable is `torch.compile`d and the
+    compile lands on the FIRST CALL, inside the warm-up. If that first call
+    raises, the arm falls back to the eager callable for the rest of the
+    process and says so in an `FSPEED-NOTE`; the fallback is NOT silent.
+
+    A deterministic-mode refusal (`is_nondeterministic_refusal`) raised by
+    the compiled call is re-raised unchanged on every arm except the
+    deterministic compiled one, where it takes the same non-silent fallback
+    with the exception text in the note and the uncompiled forward is then
+    given its own chance to refuse (DEVIATION 2223). `backward` does the
+    same for the compiled backward graph (DEVIATION 2224)."""
 
     def __init__(self, torch, F, tables, loss_spelling, settings, lane, arm):
         self.torch, self.lane, self.arm = torch, lane, arm
         self.compiled_active = False
         self.fallback_reason = None
+        self.deterministic = bool(settings.get("deterministic", False))
 
         def eager(tensors, tokens):
             return torch_forward(torch, F, dict(zip(NAMES, tensors)), tokens, tables,
@@ -794,7 +1005,7 @@ class Forward:
         self.fn = eager
         if settings["compile"]:
             try:
-                self.fn = torch.compile(eager, mode="max-autotune-no-cudagraphs")
+                self.fn = torch.compile(eager, mode=COMPILE_MODE)
                 self.compiled_active = True
             except Exception as exc:                # noqa: BLE001
                 self._fallback("torch.compile() raised at construction: %s: %s"
@@ -806,6 +1017,13 @@ class Forward:
         self.fallback_reason = reason
         emit_note(self.lane, self.arm, "COMPILE FALLBACK to the uncompiled forward: %s" % reason)
 
+    def _refusal_text(self, where, exc):
+        """DEVIATION 2223/2224: the note names the exception text, and says
+        it was the deterministic mode that refused, so a reader can tell a
+        compiled-graph refusal from an unrelated compile failure."""
+        return ("%s raised a deterministic-mode refusal %s: %s; the uncompiled forward "
+                "gets its own chance to refuse next" % (where, exc.__class__.__name__, first_line(exc)))
+
     def __call__(self, tensors, tokens):
         if not self.compiled_active:
             return self.eager(tensors, tokens)
@@ -813,15 +1031,46 @@ class Forward:
             return self.fn(tensors, tokens)
         except Exception as exc:                    # noqa: BLE001
             if is_nondeterministic_refusal(exc):
-                raise
+                if not self.deterministic:
+                    raise
+                # DEVIATION 2223: on the deterministic compiled arm the
+                # refusal inside the compiled graph is a fallback, not the
+                # verdict; eager's own refusal, if any, is the verdict.
+                self._fallback(self._refusal_text("first compiled call", exc))
+                return self.eager(tensors, tokens)
             self._fallback("first compiled call raised %s: %s" % (exc.__class__.__name__, first_line(exc)))
             return self.eager(tensors, tokens)
+
+    def backward(self, loss, tensors, tokens):
+        """`loss.backward()`, verbatim, on every arm and every call where
+        the compiled graph is not active. DEVIATION 2224: on the
+        deterministic compiled arm, while the compiled graph IS active, a
+        deterministic-mode refusal raised by the compiled backward is
+        caught, the partial gradients that backward may have written are
+        dropped (`.grad = None` on every leaf, which is what the loop's
+        `zero_grad(set_to_none=True)` had left them as), the loss is
+        recomputed by the uncompiled forward and back-propagated, and the
+        fallback note names the exception text. Any other exception, on
+        any arm, propagates exactly as `loss.backward()` would have."""
+        if not (self.compiled_active and self.deterministic):
+            loss.backward()
+            return
+        try:
+            loss.backward()
+        except Exception as exc:                    # noqa: BLE001
+            if not is_nondeterministic_refusal(exc):
+                raise
+            self._fallback(self._refusal_text("first compiled backward", exc))
+            for tensor in tensors:
+                tensor.grad = None
+            self.eager(tensors, tokens).backward()
 
 
 def make_optimizer(torch, tensors, settings):
     """DEVIATION 2196: the float32-rounded scalars. `torch`/`torch-deterministic`:
     foreach/fused OFF, the plain single-tensor AdamW (decoupled decay).
-    `torch-fast`: DEVIATION 2209, `fused=True`."""
+    `torch-fast`, `torch-compiled`, `torch-compiled-deterministic`:
+    DEVIATION 2209, `fused=True`."""
     scalars = optimizer_scalars()
     if settings["fused"]:
         return torch.optim.AdamW(tensors, lr=scalars["lr"], betas=scalars["betas"], eps=scalars["eps"],
@@ -866,7 +1115,7 @@ def run_train_lane(torch, lane, arm, forward, settings, initial, batches, heldou
             tokens = torch.from_numpy(host_batches[step]).to(device, non_blocking=False)  # DEVIATION 2194
             optimizer.zero_grad(set_to_none=True)
             loss = forward(tensors, tokens)
-            loss.backward()
+            forward.backward(loss, tensors, tokens)     # `loss.backward()` on every arm but DEVIATION 2224
             optimizer.step()
             ends[step].record()
         torch.cuda.synchronize()
@@ -962,11 +1211,12 @@ def main(argv=None):
     warmups = args.warmups
     if warmups < 0:
         raise SystemExit("warmups must be nonnegative")
-    if base_arm == "torch-fast" and warmups < 1:
-        warmups = 1        # DEVIATION 2208: the compile must land in a warm-up
+    if base_arm in COMPILED_BASE_ARMS and warmups < 1:
+        warmups = 1        # DEVIATION 2208/2226: the compile must land in a warm-up
 
-    # DEVIATION 2197: the workspace variable must precede `import torch`.
-    if base_arm == "torch-deterministic":
+    # DEVIATION 2197/2226: the workspace variable must precede `import torch`
+    # on EVERY arm whose base runs the deterministic recipe.
+    if base_arm in DETERMINISTIC_BASE_ARMS:
         if "torch" in sys.modules:
             emit_refused(lane, arm, "torch was imported before CUBLAS_WORKSPACE_CONFIG could be set; "
                                     "run this file as its own process")
@@ -1023,6 +1273,31 @@ def main(argv=None):
         emit_note(lane, arm, "NOT FP32: TF32 GEMM, auto-selected SDPA backend (which one ran is "
                              "UNVERIFIED from Python), torch.compile, fused AdamW; hash movement "
                              "across rounds is expected here and is a finding, not a defect")
+    if base_arm in ("torch-compiled", "torch-compiled-deterministic"):
+        # DEVIATION 2220/2221: the FP32 claim, with its witness, on the card.
+        switches = tf32_switches(torch)
+        emit_note(lane, arm, "FULL FP32: float32_matmul_precision=%s cuda.matmul.allow_tf32=%s "
+                             "cudnn.allow_tf32=%s as read back after configuration; "
+                             "torch.compile(mode=%r) + auto-selected SDPA backend (which one ran is "
+                             "UNVERIFIED from Python) + fused AdamW; this is torch's strongest "
+                             "configuration at matched precision, %s"
+                  % (switches["float32_matmul_precision"], switches["matmul_allow_tf32"],
+                     switches["cudnn_allow_tf32"], COMPILE_MODE,
+                     "deterministic algorithms untouched, so hash movement across rounds is "
+                     "expected and is a finding, not a defect" if base_arm == "torch-compiled" else
+                     "under torch's documented deterministic recipe; the hash is expected to "
+                     "repeat and movement is a finding, since torch.compile's generated kernels "
+                     "are not on use_deterministic_algorithms' documented operator list"))
+        if any(v not in (False, "highest") for v in switches.values()):
+            emit_note(lane, arm, "WARNING: a precision switch did not read back closed after "
+                                 "configuration: %s; do not quote this run as FP32 until that is "
+                                 "explained" % switches)
+        # DEVIATION 2227: which SDPA backends torch has ENABLED, on its own
+        # line, for both compiled FP32 arms; not which one ran.
+        emit_note(lane, arm, "sdpa_backends_enabled=%s deterministic_algorithms=%s "
+                             "cudnn.deterministic=%s cudnn.benchmark=%s"
+                  % (sdpa_backends(torch), torch.are_deterministic_algorithms_enabled(),
+                     torch.backends.cudnn.deterministic, torch.backends.cudnn.benchmark))
     if hip:
         emit_note(lane, arm, "this is a ROCm build; the device string is torch's and the "
                              "CUBLAS_WORKSPACE_CONFIG sentence is written for CUDA")
