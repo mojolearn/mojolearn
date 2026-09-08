@@ -3691,6 +3691,10 @@ MMTAG
                 --no-build-isolation "$_w" >> "$OUT/pip.log" 2>&1
             echo "mamba_wheel_exit $(basename "$_w" | cut -c1-24)=$?" >> "$OUT/leg.txt"
         done < /root/mamba_urls.txt
+        # DEVIATION 2258: mamba_ssm 2.3.0 imports GenerateDecoderOnlyOutput from
+        # transformers.generation, which transformers 5.x (pulled as its
+        # dependency on 2026-09-08) removed; pin the 4.x line it was written for.
+        pipget "transformers<5"
     else
         echo "mamba_ssm_install=SKIPPED, no matching wheel was discovered" >> "$OUT/leg.txt"
     fi

@@ -1261,7 +1261,7 @@ def lightgbm_arms(lane, cfg, data, devices):
     p = dict(
         n_estimators=cfg["n_estimators"],
         random_state=cfg["seed"],
-        verbose=-1,
+        verbose=0,           # DEVIATION 2257: warnings (a silent CPU fallback) reach the log
         min_child_samples=1,
         min_child_weight=0.0,
         min_split_gain=0.0,
@@ -1703,7 +1703,14 @@ def build_opponents(lane, cfg, data, devices):
     not install on a rented box is the NORMAL case, not the exception."""
     arms = []
     allow_cpu = "cpu" in devices
-    for names, thunk in opponent_builders(lane, cfg, data, devices):
+    # DEVIATION 2257: a CPU arm named in MOJOLEARN_SPEED_CPU_DIAGNOSTIC may run
+    # on a GPU box as a DIAGNOSTIC of the vendor's own GPU learner (is
+    # LightGBM's CUDA extra-trees learner slower than LightGBM's CPU one at
+    # depth 16?). It is renamed `<arm>-diagnostic` so no table reads it as
+    # an incumbent, and the GPU-PATH-ONLY rule stands for every other CPU arm.
+    diag = set(os.environ.get("MOJOLEARN_SPEED_CPU_DIAGNOSTIC", "").split())
+    build_devices = list(devices) + (["cpu"] if (diag and not allow_cpu) else [])
+    for names, thunk in opponent_builders(lane, cfg, data, build_devices):
         # THE CHOKEPOINT FOR THE GPU-PATH-ONLY RULE, and it is here rather
         # than in each builder because two of the forest builders --
         # `sklearn_forest_arm` and `sklearn_iforest_arm` -- never took
@@ -1711,7 +1718,7 @@ def build_opponents(lane, cfg, data, devices):
         # two running scikit-learn on an H100's host CPU while every other
         # arm obeyed the rule, which is the worst of both: the table would
         # look GPU-only and would not be.
-        blocked = [n for n in names if n.endswith("-cpu")] if not allow_cpu else []
+        blocked = [n for n in names if n.endswith("-cpu") and n not in diag] if not allow_cpu else []
         for name in blocked:
             emit_refused(lane, name,
                          "GPU-PATH-ONLY: %s is a CPU arm and this box has an "
@@ -1751,6 +1758,13 @@ def build_opponents(lane, cfg, data, devices):
             if isinstance(arm, NotOffered):
                 emit_refused(lane, arm.name, arm.reason)
                 continue
+            if not allow_cpu and arm.name.endswith("-cpu"):
+                if arm.name not in diag:
+                    continue                 # refused above by name
+                print("FSPEED-NOTE lane=%s arm=%s-diagnostic DIAGNOSTIC: a CPU arm run on "
+                      "a GPU box only to bound the vendor's GPU learner; NOT an "
+                      "incumbent row (DEVIATION 2257)" % (lane, arm.name), flush=True)
+                arm.name = arm.name + "-diagnostic"
             arms.append(arm)
     return arms
 
