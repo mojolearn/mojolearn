@@ -37,7 +37,7 @@ def read_leg(leg_dir):
         logs = leg_dir
     leg = {"dir": leg_dir, "commit": None, "device": None, "ours_mode": None,
            "lanes": None, "pod": None, "started": None, "finished": None,
-           "lightgbm_cuda": None, "lines": []}
+           "lightgbm_cuda": None, "size": None, "lines": []}
     # The local leg.txt carries the rental (pod, started, finished) and an
     # abbreviated `commit=<short> parent <short>`; the box's remote/leg.txt
     # carries the 40-hex commit it was built from, the mode our arm was
@@ -56,7 +56,7 @@ def read_leg(leg_dir):
                 leg["commit"] = v
             elif k == "commit" and leg["commit"] is None:
                 leg["commit"] = v.split()[0]
-            elif k in ("device", "ours_mode", "lanes", "pod", "started", "finished"):
+            elif k in ("device", "ours_mode", "lanes", "pod", "started", "finished", "size"):
                 if k in ("started", "finished") and rel != "leg.txt":
                     continue
                 leg[k] = v
@@ -75,7 +75,10 @@ def read_leg(leg_dir):
 def build(legs):
     cells = {}       # (lane, shape, arm) -> dict
     refusals = {}    # (lane, arm) -> reason (shape-less: refusals carry no shape)
-    headers = {}     # (lane, arm) -> {mode, device, rounds}
+    headers = {}     # (leg dir, lane, arm) -> {mode, device, rounds}; DEVIATION 2252:
+                     # keyed PER LEG, because two legs that ran the same (lane, arm)
+                     # at different tiers used to share one header, the last one read
+    legs_by_dir = {leg["dir"]: leg for leg in legs}
     notes = []
     acc = []
     for leg in legs:
@@ -90,7 +93,7 @@ def build(legs):
             if arm == "ours" and fname.endswith(".ours-native.log"):
                 arm = "ours-native"
             if kind == "FSPEED-HEADER":
-                headers[(lane, arm)] = {"mode": kv.get("mode"),
+                headers[(leg["dir"], lane, arm)] = {"mode": kv.get("mode"),
                                        "device": kv.get("device"),
                                        "family": kv.get("family"),
                                        "size": kv.get("size"),
@@ -125,7 +128,7 @@ def build(legs):
                 c["metrics"][metric] = value
     out_cells = []
     for (lane, shape, arm), c in sorted(cells.items()):
-        h = headers.get((lane, arm), {})
+        h = headers.get((c["leg"], lane, arm), {})
         ms = c["ms"]
         if not ms:
             # A warm-up with no timed round is not a measurement; it is
@@ -148,7 +151,11 @@ def build(legs):
             mode = "VENDOR-DEFAULT"
         out_cells.append({
             "lane": lane, "shape": shape, "arm": arm,
-            "family": h.get("family"), "size": h.get("size"),
+            # DEVIATION 2252: the tier is the one the leg was ASKED for (leg.txt
+            # size=), not the one an arm printed; the Python classical arms printed
+            # `wide` at the large tier and mislabelled 76 cells on 2026-09-07.
+            "family": h.get("family"),
+            "size": legs_by_dir[c["leg"]].get("size") or h.get("size"),
             "mode": mode, "device": h.get("device"),
             "rounds": len(ms),
             "median_ms": statistics.median(ms) if ms else None,

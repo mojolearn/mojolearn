@@ -717,6 +717,7 @@ while [ $# -gt 0 ]; do
         --smoke)         SPEED_SIZE="smoke" ;;
         --large)         SPEED_SIZE="large" ;;
         --wide)          SPEED_SIZE="wide" ;;   # DEVIATION 2130: 512-feature tier
+        --scale)         SPEED_SIZE="scale" ;;  # DEVIATION 2250: narrow tier above the row floor, Python-generated like wide
         --apple-dir)     shift; APPLE_DIR="${1:-}" ;;
         --work-timeout)  shift; WORK_TIMEOUT="${1:-}" ;;
         -h|--help|help)  leg_usage; exit 0 ;;
@@ -3804,7 +3805,7 @@ classical)
                 # then ours through the PUBLIC PYTHON API, called from Python
                 # exactly as the vendor arm is, as `ours`. `wide` is
                 # generated, never dumped, and the driver has no wide tier.
-                if [ "@SPEEDSIZE@" != "wide" ]; then
+                if [ "@SPEEDSIZE@" != "wide" ] && [ "@SPEEDSIZE@" != "scale" ]; then   # DEVIATION 2250: scale is generated too
                     builtok classicalspeed && runarm "classical.$L.ours-native.log" "$OUT/bin_classicalspeed"
                 fi
                 runarm "classical.$L.ours.log" \
@@ -3836,7 +3837,9 @@ lm)
     for L in @SPEEDLANES@; do
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
         runarm "lm.$L.ours.log" python3 bench/speed/byte_lm_speed_arm.py --lane "$L" --rounds "@SPEEDROUNDS@"
-        for _A in torch torch-fast torch-deterministic torch-deterministic-gatherloss; do
+        # DEVIATION 2251: torch-compiled and its deterministic sibling are
+        # PyTorch's strongest FP32 configuration at matched precision.
+        for _A in torch torch-compiled torch-fast torch-deterministic torch-compiled-deterministic torch-deterministic-gatherloss; do
             runarm "lm.$L.$_A.log" python3 tools/speed_torch_byte_lm.py --lane "$L" --rounds "@SPEEDROUNDS@" --arm "$_A"
         done
     done
