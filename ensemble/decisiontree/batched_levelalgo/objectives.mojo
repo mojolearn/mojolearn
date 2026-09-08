@@ -111,6 +111,14 @@ because no libm is reachable there." These three gains are `HDI`/`DI`
 functions called from inside the split kernel. There is no libm on a GPU
 and there is no float64 on this one, so the recorded fix cannot be
 applied and no new one is invented here.
+UPDATED BY DEVIATION 2265 (2026-09-08). The host-only libm fix quoted
+above no longer exists anywhere: every host site that carried it
+(`binarization.mojo`, `optimal_const_for_loss.mojo`, `randomforest.mojo`,
+ET's `builder_kernels.mojo`) now calls the library's own
+`portable_log64` / `portable_log2_64` / `portable_logf` / `portable_expf`
+(DEVIATIONS 2261-2264, IDENTITY_PATHS row 18 closed), so "host = libm,
+device = something else" is history and this file's device-side answer
+(DEVIATION 406 below) is the same construction as the host's.
 UPDATED BY DEVIATION 406 (2026-08-23). The call sites now route through
 `_log_seam` / `numerics.identical_log`. Under NUMERIC_FAST that wrapper
 IS `std.math.log`, so everything priced here stands unchanged for the

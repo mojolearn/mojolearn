@@ -20,6 +20,15 @@ contain the detailed investigation record.
   `MOJOLEARN_COMPILE_JOBS`.
 - Retained an experimental specialized small-k selector behind an explicit
   build flag. It is not enabled in normal wheel builds.
+- Removed the identical path's last host-libm dependency (IDENTITY_PATHS row 18,
+  DEVIATION 2260). The eight `external_call` sites for `log`, `log2`, `logf`,
+  `expf` and `ceil` in the random forest `max_features='log2'` rule, the extra
+  trees host feature sampler, the MinEntropy border penalty and the
+  boost-from-average logit now use the library's own portable logarithm and
+  exponential (new `portable_log2_64`, exact at powers of two) and an exact
+  `ceil`, so those bits are the same on every host and device. The two
+  CatBoost-fidelity sites may differ from CatBoost's libm-computed value by one
+  ulp on a near-tie; the CatBoost oracle cards are owed a re-baseline run.
 
 ## 0.5.0 — 2026-09-05
 

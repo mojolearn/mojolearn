@@ -56,7 +56,7 @@ def split_not_valid(
 
 
 
-from std.ffi import external_call
+from std.math import ceil
 from std.sys.compile import is_defined
 
 from extratrees.checks.pcg_rng import (
@@ -71,30 +71,54 @@ from checks.numerics import (
     NUMERIC_IDENTICAL,
     identical_exp,
     identical_log,
+    portable_expf,
+    portable_log64,
     portable_logf,
 )
 
 
+# ------------------------------------------- DEVIATION 2264 (2026-09-08) --
+# THE HOST TRANSCENDENTALS ARE THE LIBRARY'S OWN. The four wrappers below
+# were the host libm through `external_call` -- `log`, `logf`, `expf`,
+# `ceil` -- chosen (DEVIATION 158) because `std.math.log` on the host
+# carries ~5e-8 absolute error (`objectives.mojo` DEVIATION 113,
+# `binarization.mojo` archive/reference/PORTING.md 54) and cuML's types are
+# `double`/`float` through `std::` exactly. That made the HOST algo-L
+# sampler -- which IS the identical path on a device without float64
+# (`builder.mojo`'s `sample_features_*` dispatch) -- depend on which C
+# library the host links: macOS and glibc differ in the last bit, and
+# `Int(log(u) / log(1 - W)) + 1` truncates. Now: `portable_log64` /
+# `portable_logf` / `portable_expf` from `checks/numerics.mojo` (Cephes
+# through fma and basic ops only; log64 within 2 ulp of libm by
+# `check-portable-log64`, logf/expf within 4 ulp of a float64 reference by
+# `check-portable-translog`; the same bits on every host and every device),
+# and `std.math.ceil`, which is EXACT for every finite float64 (a rounding
+# to integer has one correct answer; no library can disagree), so no
+# numerical question arises there. The wrapper names are kept because the
+# call sites and the checks name them; their meaning changed, not their
+# shape. cuML comparability: unchanged in kind -- their `std::log` was
+# never ours bit for bit either; what this buys is that OUR count is the
+# same on every host.
 
 
 def _log64(x: Float64) -> Float64:
-    """`std::log(double)`, which is what `raft::log` becomes for a `double` argument on the host (`raft/core/math.hpp:324-331`)."""
-    return external_call["log", Float64](x)
+    """`std::log(double)`, which is what `raft::log` becomes for a `double` argument on the host (`raft/core/math.hpp:324-331`). DEVIATION 2264: `portable_log64`, not the host libm."""
+    return portable_log64(x)
 
 
 def _logf32(x: Float32) -> Float32:
-    """`std::log(float)`, i.e."""
-    return external_call["logf", Float32](x)
+    """`std::log(float)`, i.e. `logf`. DEVIATION 2264: `portable_logf`, not the host libm."""
+    return portable_logf(x)
 
 
 def _expf32(x: Float32) -> Float32:
-    """`std::exp(float)`, i.e. `expf`. Same genericity as `_logf32`."""
-    return external_call["expf", Float32](x)
+    """`std::exp(float)`, i.e. `expf`. Same genericity as `_logf32`. DEVIATION 2264: `portable_expf`, not the host libm."""
+    return portable_expf(x)
 
 
 def _ceil64(x: Float64) -> Float64:
-    """`std::ceil(double)`, `builder.cuh:420`."""
-    return external_call["ceil", Float64](x)
+    """`std::ceil(double)`, `builder.cuh:420`. DEVIATION 2264: `std.math.ceil`, which is exact for every finite float64 -- rounding toward +inf to an integer has exactly one correct answer, so libm, the stdlib and any device agree bit for bit and no accuracy question arises."""
+    return ceil(x)
 
 
 
@@ -202,7 +226,7 @@ def n_parallel_samples_for(n: Int, k: Int) -> Int:
 
 
 def n_parallel_samples_libm(n: Int, k: Int) -> Int:
-    """DEVIATION 158's arm of `n_parallel_samples_for` -- both logs through HOST libm in double, cuML's types exactly."""
+    """DEVIATION 158's arm of `n_parallel_samples_for` -- both logs in DOUBLE, cuML's types exactly. NAMED FOR ITS HISTORY: until DEVIATION 2264 (2026-09-08) the two logs were the host libm's; they are now `portable_log64` (same bits on every host, within 2 ulp of libm), and the `ceil` is `std.math.ceil` (exact). The name is kept because `feature_sampler_check.mojo` pins this arm against the float32 portable arm by it. The FAST build routes here; what changed is that a glibc host and a macOS host now compute the SAME count from the same `(n, k)` on this arm too."""
     var ratio = _log64(1.0 - Float64(k) / Float64(n))
     var per_draw = _log64(1.0 - 1.0 / Float64(n))
     return Int(_ceil64(ratio / per_draw))
@@ -383,7 +407,7 @@ def algo_l_sample(
     n: Int,
     k: Int,
 ):
-    """`algo_L_sample_kernel`, `builder_kernels.cuh:268-316`. `colids` is `[work_items_size, k]` row-major, their `:259`."""
+    """`algo_L_sample_kernel`, `builder_kernels.cuh:268-316`, ON THE HOST. `colids` is `[work_items_size, k]` row-major, their `:259`. This is the arm the identical path runs on a device without float64 (`builder.mojo`'s dispatch), so its `logf`/`expf`/`log` are the library's own since DEVIATION 2264 -- see the block above the wrappers."""
     for tid in range(len(work_items)):
         var node_id = UInt32(work_items[tid].idx)  # `:279`
         var gen = PCGenerator(

@@ -5,7 +5,12 @@
 from std.gpu import global_idx
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    portable_log2_64,
+)
 
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
 from ensemble.decisiontree.batched_levelalgo.builder import (
@@ -47,7 +52,6 @@ from core.segmented_sort import (
     seg_scan_block_sums_kernel,
     seg_scan_key_bit_kernel,
 )
-from std.ffi import external_call
 from std.math import isfinite, isinf, sqrt
 
 from ensemble.decisiontree.decisiontree import (
@@ -363,22 +367,34 @@ def compute_max_features_sqrt(n_cols: Int) -> Float64:
 def compute_max_features_log2(n_cols: Int) -> Float64:
     """`randomforest_common.pyx:166-167` -- `math.log2(n_cols) / n_cols`.
 
-    Through libm, NOT `std.math.log2`. See the knife-edge note in the
-    module docstring: this ratio is multiplied back by `n_cols` and
-    TRUNCATED to an int column count (`builder.cuh:240`), and this
-    repository has measured `std.math.log` at ~5e-8 absolute error
-    against libm -- enough to turn 4.0 into 3.9999998 and take a column
-    away. `math.log2` in CPython is libm's `log2`, so libm's is the
-    oracle.
+    THE KNIFE EDGE: this ratio is narrowed to float32, multiplied back by
+    `n_cols` and TRUNCATED to an int column count (`builder.cuh:240`,
+    `n_sampled_cols` below). One ulp low at a power of two turns 4.0 into
+    3.9999998 and takes a column away.
 
-    Measured this round: the two disagree at the bit level on 4051 of
-    the 4095 integer inputs in [2, 4096], first at 3, and on none of
-    them does the disagreement reach the column count. See the module
-    docstring.
+    HISTORY. The first port called `std.math.log2`, which this repository
+    measured at ~5e-8 absolute error on the float64 host path -- enough to
+    cross that edge. The recorded fix was the host libm's `log2` through
+    `external_call` (CPython's `math.log2` is libm's, so libm was the
+    oracle). Measured then: libm and `std.math.log2` disagree at the bit
+    level on 4051 of the 4095 integer inputs in [2, 4096], first at 3, and
+    on none of them does the disagreement reach the column count.
+
+    NOW (DEVIATION 2261, 2026-09-08, IDENTITY_PATHS row 18 closed): the
+    library's own `portable_log2_64` -- `portable_log64`'s Cephes reduction
+    with `log2.c`'s exponent re-entry, fma and basic ops only, so it is the
+    same bits on every host and every device, and it is EXACT at every
+    power of two by construction (`checks/numerics.mojo`). No libm on any
+    host is consulted, so macOS-vs-glibc last-bit differences can no
+    longer pick the column count. Accuracy bound: within 2 ulp of libm on
+    [2, 4096], gated in `ensemble/checks/predict_check.mojo`, which ALSO
+    asserts that the truncated column count equals the exact integer
+    `bit_length(n_cols) - 1` for every `n_cols` in [2, 4096] -- the proof
+    that the replacement is inert where it matters. The float spelling is
+    kept because the result is a Float64 fraction consumed as a ratio
+    elsewhere (`randomforest_common.pyx:516` narrows it to float32).
     """
-    return (
-        external_call["log2", Float64](Float64(n_cols)) / Float64(n_cols)
-    )
+    return portable_log2_64(Float64(n_cols)) / Float64(n_cols)
 
 
 def compute_max_features_int(max_features: Int, n_cols: Int) -> Float64:
