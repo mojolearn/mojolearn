@@ -31,7 +31,12 @@ def parse_kv(line):
     return dict(KV.findall(line))
 
 
-def read_leg(leg_dir):
+def read_leg(leg_dir, lanes=None, drop_shapes=()):
+    """DEVIATION 2259: `lanes` keeps only those lanes from this leg and
+    `drop_shapes` drops any line whose shape= contains one of the substrings,
+    BEFORE cells are merged across legs, so a superseded leg contributes
+    nothing outside its surviving lanes (a cell keyed by lane, shape and arm
+    pools every leg's rounds, and a post-hoc filter cannot separate them)."""
     logs = os.path.join(leg_dir, "remote", "logs")
     if not os.path.isdir(logs):
         logs = leg_dir
@@ -68,6 +73,12 @@ def read_leg(leg_dir):
         path = os.path.join(logs, name)
         for line in open(path, encoding="utf-8", errors="replace"):
             if line.startswith("FSPEED"):
+                if lanes is not None or drop_shapes:
+                    _kv = parse_kv(line.partition(" ")[2])
+                    if lanes is not None and _kv.get("lane") not in lanes:
+                        continue
+                    if any(ds in (_kv.get("shape") or "") for ds in drop_shapes):
+                        continue
                 leg["lines"].append((name, line.rstrip("\n")))
     return leg
 
@@ -182,7 +193,12 @@ def main():
     ap.add_argument("legs", nargs="+")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
-    legs = [read_leg(d) for d in a.legs]
+    # DEVIATION 2259: each leg argument is dir[:lane,lane][|drop=sub,sub].
+    def _spec(arg):
+        d, _, rest = arg.partition(":")
+        lanes, _, drops = rest.partition("|drop=")
+        return d, (set(lanes.split(",")) if lanes else None), [x for x in drops.split(",") if x]
+    legs = [read_leg(d, lanes, drops) for d, lanes, drops in (_spec(x) for x in a.legs)]
     rec = build(legs)
     with open(a.out, "w") as f:
         json.dump(rec, f, indent=1, sort_keys=True)
