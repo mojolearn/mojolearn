@@ -1395,7 +1395,11 @@ leg_check_tree_clean() {
     if [ "$PAYLOAD" = "phase8" ]; then _paths="$LEG_SOURCE_PATHS_PHASE8"; fi
     if [ "$PAYLOAD" = "speed" ]; then _paths="$LEG_SOURCE_PATHS_SPEED"; fi
     if [ "$PAYLOAD" = "mamba" ]; then _paths="$LEG_SOURCE_PATHS_MAMBA"; fi
-    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then _paths=.; fi
+    # DEVIATION 2267: the whole tree, minus results and lease records, which
+    # cannot reach a float and which THIS LEG creates before the gate runs
+    # (its own bench/results/e1g/<stamp>-nvidia-mamba/ refused two release
+    # builds on 2026-09-08).
+    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then _paths=". :!bench/results"; fi
     # The list is a deliberate word list, so it is unquoted.
     # shellcheck disable=SC2086
     _dirty=$(git status --porcelain -- $_paths 2>/dev/null || true)
