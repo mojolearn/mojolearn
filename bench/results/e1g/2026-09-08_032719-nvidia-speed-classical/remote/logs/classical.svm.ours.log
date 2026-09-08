@@ -1,0 +1,18 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+3502 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b8340000000, nodemask=2)
+FSPEED-HEADER family=classical lane=svm arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+FSPEED-NOTE lane=svm arm=ours surface=python: this is the python/mojolearn/ ours arm (DEVIATION 2160); the Mojo driver's arm=ours rows time the entry points directly
+FSPEED-NOTE lane=svm arm=ours tier read back from mojolearn.numeric_mode()=identical; MOJOLEARN_NUMERIC_MODE='identical' in the environment (DEVIATION 2162)
+FSPEED-NOTE lane=svm arm=ours hash is sha256/16 over dtype+shape+bytes (hash_predictions), within-arm only, never gated (DEVIATION 2164)
+FSPEED-NOTE lane=svm arm=ours binaries: vendor=cuda gpu_arch=None (read back from the loaded set)
+FSPEED-NOTE lane=svm arm=ours FIT ONLY. kernel=rbf C=10 gamma=0.03125 tol=0.001 nochange_steps=1000, all explicit; cache_size is the class default (the PREDICTION buffer here, DEVIATION 871) and is not a parameter of the answer
+3502 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x334dc0000000, nodemask=1)
+FSPEED-WARMUP lane=svm arm=ours shape=scale.100000x32 ms=1721.286880
+FSPEED lane=svm arm=ours shape=scale.100000x32 round=1 ms=509.406227 hash=5ea3a1a2993192a9
+FSPEED lane=svm arm=ours shape=scale.100000x32 round=2 ms=504.748835 hash=5ea3a1a2993192a9
+FSPEED lane=svm arm=ours shape=scale.100000x32 round=3 ms=509.659578 hash=5ea3a1a2993192a9
+FSPEED lane=svm arm=ours shape=scale.100000x32 round=4 ms=503.066115 hash=5ea3a1a2993192a9
+FSPEED lane=svm arm=ours shape=scale.100000x32 round=5 ms=503.396685 hash=5ea3a1a2993192a9

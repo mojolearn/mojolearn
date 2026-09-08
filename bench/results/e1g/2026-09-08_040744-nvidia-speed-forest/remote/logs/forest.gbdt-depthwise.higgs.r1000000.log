@@ -1,0 +1,34 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5436 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x312c00000000, nodemask=1)
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-gpu-deterministic reason=NOT-OFFERED: CatBoost documents no deterministic GPU configuration; official doc (features/training-on-gpu): "Training on GPU is non-deterministic, because the order of floating point summations is non-deterministic in this implementation."
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu-deterministic reason=NOT-OFFERED: no documented deterministic parameter for tree_method='hist' on device='cuda' (no deterministic_histogram in the current Parameters page); the fast arm's per-round hash column records whether it repeats.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 ms=1891.786
+FSPEED-WARMUP lane=gbdt-depthwise arm=catboost-gpu shape=higgs-1000000x28 ms=1209.638
+FSPEED-WARMUP lane=gbdt-depthwise arm=xgboost-gpu shape=higgs-1000000x28 ms=827.664
+5436 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bffc0000000, nodemask=2)
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=1 ms=1230.513 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=higgs-1000000x28 round=1 ms=1339.716 hash=fa16feb0fdc82b78
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=higgs-1000000x28 round=1 ms=701.096 hash=13505f62978a068d
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=2 ms=1216.900 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=higgs-1000000x28 round=2 ms=1227.375 hash=d83c5ba1eedc62c7
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=higgs-1000000x28 round=2 ms=670.389 hash=13505f62978a068d
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=3 ms=1175.114 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=higgs-1000000x28 round=3 ms=1368.733 hash=7c3c5346cea94ba7
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=higgs-1000000x28 round=3 ms=770.968 hash=13505f62978a068d
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=4 ms=1169.301 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=higgs-1000000x28 round=4 ms=1232.420 hash=037d536f205f698d
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=higgs-1000000x28 round=4 ms=671.711 hash=13505f62978a068d
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=5 ms=1205.640 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=higgs-1000000x28 round=5 ms=1185.285 hash=f8e11a2856014681
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=higgs-1000000x28 round=5 ms=674.484 hash=13505f62978a068d
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.525450
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.813518
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=logloss value=0.524583
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=auc value=0.814207
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=logloss value=0.526563
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=auc value=0.812395

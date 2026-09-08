@@ -1,0 +1,211 @@
+FSPEED-HEADER family=lm lane=lm-train arm=torch-compiled mode=FP32-COMPILED device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=lm-train arm=torch-compiled torch=2.4.1+cu124 build=CUDA 12.4 set_float32_matmul_precision('highest') cuda.matmul.allow_tf32=False cudnn.allow_tf32=False attention=scaled_dot_product_attention(is_causal=True, backend auto-selected, enabled={'flash': True, 'mem_efficient': True, 'math': True, 'cudnn': False}) compile=torch.compile(mode='max-autotune-no-cudagraphs') optimizer=AdamW(fused=True); deterministic_algorithms=False u
+FSPEED-NOTE lane=lm-train arm=torch-compiled model=mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1 definition=tools/byte_lm_gradient_oracle.py::reference ported to FP32 leaf tensors; loss_spelling=cross_entropy attention=sdpa
+FSPEED-NOTE lane=lm-train arm=torch-compiled recipe init=u32-avalanche-index-xor-42595445-top8-centered128-div1024-norm1.v1 corpus_sha256=86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed initial_parameters_sha256=b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424 steps=128 optimizer=AdamW(lr=0.003000000026077032,betas=(0.8999999761581421, 0.9990000128746033),eps=9.99999993922529e-09,weight_decay=0.00999999977648
+FSPEED-NOTE lane=lm-train arm=torch-compiled fixed tiny shape B2/L32/DM32/H4/KV2/FF64/V256 (34944 FP32 parameters): this is a LATENCY comparison of a launch-bound program, not a throughput comparison; no number here describes either side at a size that fills the device
+FSPEED-NOTE lane=lm-train arm=torch-compiled FULL FP32: float32_matmul_precision=highest cuda.matmul.allow_tf32=False cudnn.allow_tf32=False as read back after configuration; torch.compile(mode='max-autotune-no-cudagraphs') + auto-selected SDPA backend (which one ran is UNVERIFIED from Python) + fused AdamW; this is torch's strongest configuration at matched precision, deterministic algorithms untouched, so hash movement across rounds is exp
+FSPEED-NOTE lane=lm-train arm=torch-compiled sdpa_backends_enabled={'flash': True, 'mem_efficient': True, 'math': True, 'cudnn': False} deterministic_algorithms=False cudnn.deterministic=False cudnn.benchmark=False
+/usr/local/lib/python3.11/dist-packages/torch/_inductor/compile_fx.py:150: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+AUTOTUNE mm(64x32, 32x64)
+  triton_mm_55 0.0067 ms 100.0%
+  triton_mm_54 0.0074 ms 89.7%
+  triton_mm_57 0.0079 ms 84.6%
+  triton_mm_56 0.0081 ms 81.9%
+  triton_mm_58 0.0082 ms 81.6%
+  triton_mm_62 0.0084 ms 79.7%
+  triton_mm_65 0.0084 ms 79.7%
+  triton_mm_63 0.0085 ms 78.2%
+  triton_mm_60 0.0086 ms 77.3%
+  triton_mm_59 0.0092 ms 72.7%
+SingleProcess AUTOTUNE benchmarking takes 1.7481 seconds and 0.0208 seconds precompiling
+AUTOTUNE mm(64x64, 64x32)
+  triton_mm_152 0.0080 ms 100.0%
+  triton_mm_151 0.0083 ms 96.1%
+  triton_mm_150 0.0101 ms 78.8%
+  triton_mm_157 0.0102 ms 77.8%
+  mm 0.0103 ms 77.6%
+  triton_mm_163 0.0103 ms 77.1%
+  triton_mm_153 0.0105 ms 76.1%
+  triton_mm_160 0.0106 ms 75.5%
+  triton_mm_159 0.0106 ms 75.2%
+  triton_mm_161 0.0106 ms 75.0%
+SingleProcess AUTOTUNE benchmarking takes 1.6537 seconds and 0.0051 seconds precompiling
+AUTOTUNE mm(64x32, 32x32)
+  triton_mm_2 0.0066 ms 100.0%
+  triton_mm_1 0.0067 ms 99.0%
+  triton_mm_0 0.0076 ms 86.6%
+  triton_mm_8 0.0079 ms 83.7%
+  triton_mm_10 0.0079 ms 83.7%
+  triton_mm_3 0.0079 ms 83.4%
+  triton_mm_4 0.0081 ms 81.7%
+  triton_mm_11 0.0081 ms 81.7%
+  triton_mm_7 0.0081 ms 81.4%
+  triton_mm_6 0.0081 ms 81.1%
+SingleProcess AUTOTUNE benchmarking takes 1.6052 seconds and 0.0047 seconds precompiling
+AUTOTUNE mm(64x32, 32x16)
+  triton_mm_13 0.0062 ms 100.0%
+  triton_mm_14 0.0064 ms 96.5%
+  triton_mm_12 0.0067 ms 92.3%
+  triton_mm_15 0.0067 ms 91.9%
+  triton_mm_17 0.0068 ms 91.5%
+  triton_mm_18 0.0068 ms 91.5%
+  triton_mm_19 0.0068 ms 91.5%
+  triton_mm_16 0.0074 ms 83.5%
+  mm 0.0105 ms 59.0%
+SingleProcess AUTOTUNE benchmarking takes 1.0049 seconds and 0.0017 seconds precompiling
+AUTOTUNE mm(64x32, 32x256)
+  triton_mm_165 0.0068 ms 100.0%
+  mm 0.0071 ms 95.9%
+  triton_mm_164 0.0075 ms 91.4%
+  triton_mm_168 0.0080 ms 85.5%
+  triton_mm_167 0.0081 ms 83.9%
+  triton_mm_166 0.0083 ms 82.6%
+  triton_mm_170 0.0084 ms 81.0%
+  triton_mm_176 0.0086 ms 79.2%
+  triton_mm_172 0.0087 ms 78.6%
+  triton_mm_169 0.0092 ms 73.7%
+SingleProcess AUTOTUNE benchmarking takes 1.9107 seconds and 0.0046 seconds precompiling
+FSPEED-ACC lane=lm-train arm=torch-compiled metric=heldout_loss_initial value=5.541299
+AUTOTUNE mm(64x32, 32x64)
+  triton_mm_407 0.0058 ms 100.0%
+  triton_mm_408 0.0061 ms 94.2%
+  triton_mm_409 0.0061 ms 94.2%
+  triton_mm_410 0.0064 ms 90.5%
+  triton_mm_406 0.0066 ms 87.8%
+  triton_mm_414 0.0066 ms 87.8%
+  triton_mm_413 0.0066 ms 87.0%
+  triton_mm_416 0.0066 ms 87.0%
+  triton_mm_418 0.0066 ms 87.0%
+  triton_mm_417 0.0067 ms 86.1%
+SingleProcess AUTOTUNE benchmarking takes 1.6985 seconds and 0.0019 seconds precompiling
+AUTOTUNE mm(256x64, 64x32)
+  triton_mm_362 0.0064 ms 100.0%
+  triton_mm_361 0.0065 ms 99.0%
+  triton_mm_368 0.0068 ms 93.9%
+  triton_mm_371 0.0069 ms 93.1%
+  triton_mm_369 0.0069 ms 92.6%
+  triton_mm_367 0.0071 ms 90.5%
+  triton_mm_364 0.0071 ms 90.1%
+  triton_mm_370 0.0071 ms 90.1%
+  triton_mm_366 0.0075 ms 86.3%
+  triton_mm_363 0.0075 ms 85.9%
+SingleProcess AUTOTUNE benchmarking takes 2.0406 seconds and 0.0039 seconds precompiling
+AUTOTUNE mm(64x256, 256x32)
+  triton_mm_379 0.0095 ms 100.0%
+  triton_mm_378 0.0099 ms 96.4%
+  mm 0.0104 ms 92.0%
+  triton_mm_390 0.0106 ms 89.8%
+  triton_mm_388 0.0108 ms 88.7%
+  triton_mm_386 0.0108 ms 88.2%
+  triton_mm_381 0.0108 ms 87.9%
+  triton_mm_380 0.0110 ms 86.4%
+  triton_mm_387 0.0113 ms 84.7%
+  triton_mm_384 0.0115 ms 83.2%
+SingleProcess AUTOTUNE benchmarking takes 1.6965 seconds and 0.0060 seconds precompiling
+AUTOTUNE mm(32x64, 64x64)
+  triton_mm_394 0.0064 ms 100.0%
+  triton_mm_400 0.0068 ms 94.4%
+  triton_mm_399 0.0069 ms 93.1%
+  triton_mm_392 0.0071 ms 91.0%
+  triton_mm_402 0.0071 ms 91.0%
+  triton_mm_405 0.0071 ms 91.0%
+  triton_mm_395 0.0071 ms 90.5%
+  triton_mm_403 0.0071 ms 90.5%
+  triton_mm_398 0.0072 ms 88.9%
+  triton_mm_401 0.0072 ms 88.9%
+SingleProcess AUTOTUNE benchmarking takes 1.8116 seconds and 0.0041 seconds precompiling
+AUTOTUNE mm(64x64, 64x32)
+  triton_mm_422 0.0064 ms 100.0%
+  triton_mm_421 0.0069 ms 93.5%
+  triton_mm_430 0.0069 ms 93.5%
+  triton_mm_429 0.0069 ms 93.1%
+  triton_mm_431 0.0069 ms 93.1%
+  triton_mm_428 0.0070 ms 91.8%
+  triton_mm_423 0.0071 ms 91.0%
+  triton_mm_424 0.0071 ms 91.0%
+  triton_mm_427 0.0072 ms 89.3%
+  triton_mm_433 0.0072 ms 88.9%
+SingleProcess AUTOTUNE benchmarking takes 1.6979 seconds and 0.0030 seconds precompiling
+AUTOTUNE mm(64x64, 64x32)
+  triton_mm_435 0.0066 ms 100.0%
+  triton_mm_436 0.0066 ms 99.5%
+  triton_mm_443 0.0068 ms 96.3%
+  triton_mm_442 0.0069 ms 95.8%
+  triton_mm_447 0.0071 ms 93.2%
+  triton_mm_437 0.0071 ms 92.4%
+  triton_mm_441 0.0072 ms 91.2%
+  triton_mm_446 0.0073 ms 90.7%
+  triton_mm_444 0.0073 ms 90.4%
+  triton_mm_438 0.0075 ms 88.0%
+SingleProcess AUTOTUNE benchmarking takes 1.6968 seconds and 0.0027 seconds precompiling
+AUTOTUNE mm(32x64, 64x32)
+  triton_mm_478 0.0063 ms 100.0%
+  triton_mm_484 0.0063 ms 100.0%
+  triton_mm_477 0.0066 ms 96.1%
+  triton_mm_483 0.0066 ms 96.1%
+  triton_mm_485 0.0066 ms 95.6%
+  triton_mm_479 0.0068 ms 93.4%
+  triton_mm_481 0.0068 ms 92.5%
+  triton_mm_482 0.0068 ms 92.5%
+  mm 0.0080 ms 78.8%
+  triton_mm_476 0.0083 ms 76.4%
+SingleProcess AUTOTUNE benchmarking takes 1.2469 seconds and 0.0045 seconds precompiling
+AUTOTUNE mm(64x32, 32x32)
+  triton_mm_487 0.0057 ms 100.0%
+  triton_mm_488 0.0060 ms 95.7%
+  triton_mm_495 0.0060 ms 95.2%
+  triton_mm_489 0.0061 ms 94.2%
+  triton_mm_497 0.0061 ms 94.2%
+  triton_mm_490 0.0061 ms 93.7%
+  triton_mm_492 0.0061 ms 93.7%
+  triton_mm_493 0.0063 ms 91.3%
+  triton_mm_494 0.0063 ms 90.4%
+  triton_mm_496 0.0063 ms 90.4%
+SingleProcess AUTOTUNE benchmarking takes 1.4747 seconds and 0.0028 seconds precompiling
+AUTOTUNE mm(16x64, 64x32)
+  triton_mm_505 0.0068 ms 100.0%
+  triton_mm_506 0.0068 ms 100.0%
+  triton_mm_500 0.0068 ms 99.1%
+  triton_mm_507 0.0069 ms 97.7%
+  triton_mm_501 0.0070 ms 96.8%
+  triton_mm_499 0.0071 ms 95.1%
+  triton_mm_504 0.0072 ms 94.2%
+  triton_mm_503 0.0075 ms 90.6%
+  triton_mm_502 0.0076 ms 88.7%
+  triton_mm_498 0.0080 ms 85.1%
+SingleProcess AUTOTUNE benchmarking takes 1.2506 seconds and 0.0044 seconds precompiling
+AUTOTUNE mm(64x16, 16x32)
+  triton_mm_509 0.0056 ms 100.0%
+  triton_mm_508 0.0057 ms 98.3%
+  triton_mm_511 0.0057 ms 98.3%
+  triton_mm_518 0.0057 ms 98.3%
+  triton_mm_514 0.0058 ms 96.7%
+  triton_mm_510 0.0059 ms 95.6%
+  triton_mm_512 0.0059 ms 95.6%
+  triton_mm_513 0.0060 ms 93.6%
+  triton_mm_515 0.0060 ms 92.6%
+  triton_mm_516 0.0060 ms 92.6%
+SingleProcess AUTOTUNE benchmarking takes 1.3627 seconds and 0.0031 seconds precompiling
+FSPEED-WARMUP lane=lm-train arm=torch-compiled shape=bytelm-2x33-steps128 ms=77761.243
+FSPEED-NOTE lane=lm-train arm=torch-compiled compiled_forward_active=True after warm-up
+FSPEED lane=lm-train arm=torch-compiled shape=bytelm-2x33-steps128 round=1 ms=700.834 hash=7f87357dbebf61e8
+FSPEED-NOTE lane=lm-train arm=torch-compiled round=1 final_parameters_sha256=7f87357dbebf61e8a95a064eb67b0534db1feb7c672089b08745a4839d55c700
+FSPEED-NOTE lane=lm-train arm=torch-compiled round=1 step_ms_median=5.4178 step_ms_min=5.2963 step_ms_max=7.0422
+FSPEED lane=lm-train arm=torch-compiled shape=bytelm-2x33-steps128 round=2 ms=693.917 hash=9e7a3afb551f09e1
+FSPEED-NOTE lane=lm-train arm=torch-compiled round=2 final_parameters_sha256=9e7a3afb551f09e1080f9648cf11a9039c4761f3e47f3d4d01f877d0dbe8111d
+FSPEED-NOTE lane=lm-train arm=torch-compiled round=2 step_ms_median=5.4088 step_ms_min=4.6368 step_ms_max=5.7962
+FSPEED lane=lm-train arm=torch-compiled shape=bytelm-2x33-steps128 round=3 ms=693.027 hash=b5d43168e3cdc36c
+FSPEED-NOTE lane=lm-train arm=torch-compiled round=3 final_parameters_sha256=b5d43168e3cdc36ce54ca57dab9c0ca569776228bbd250fb700b3078b303c840
+FSPEED-NOTE lane=lm-train arm=torch-compiled round=3 step_ms_median=5.3650 step_ms_min=5.0600 step_ms_max=6.2694
+FSPEED lane=lm-train arm=torch-compiled shape=bytelm-2x33-steps128 round=4 ms=696.272 hash=3bf83456178db79d
+FSPEED-NOTE lane=lm-train arm=torch-compiled round=4 final_parameters_sha256=3bf83456178db79d14ba3f63c0c5e0c4f18327022ff497bdd4f4c077b937b332
+FSPEED-NOTE lane=lm-train arm=torch-compiled round=4 step_ms_median=5.3760 step_ms_min=4.9636 step_ms_max=8.0031
+FSPEED lane=lm-train arm=torch-compiled shape=bytelm-2x33-steps128 round=5 ms=698.414 hash=bf0eaf4a32813db6
+FSPEED-NOTE lane=lm-train arm=torch-compiled round=5 final_parameters_sha256=bf0eaf4a32813db6915df71ae42f2d9d8551b74e70c93bb2ab9083f618254fb9
+FSPEED-NOTE lane=lm-train arm=torch-compiled round=5 step_ms_median=5.3654 step_ms_min=4.9965 step_ms_max=9.2746
+FSPEED-NOTE lane=lm-train arm=torch-compiled hash moved across rounds: 7f87357dbebf61e8 9e7a3afb551f09e1
+FSPEED-ACC lane=lm-train arm=torch-compiled metric=heldout_loss_final value=2.843640
+FSPEED-NOTE lane=lm-train arm=torch-compiled heldout_loss_final moved across rounds: [2.8436396718025208, 2.843639612197876, 2.8436397910118103, 2.8436396420001984, 2.843639701604843]
+FSPEED-ACC lane=lm-train arm=torch-compiled metric=step_ms_median value=5.385024
+FSPEED-DONE lane=lm-train arm=torch-compiled

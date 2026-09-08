@@ -1,0 +1,18 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+5747 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3866c0000000, nodemask=2)
+FSPEED-HEADER family=classical lane=cd arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-NOTE lane=cd arm=ours surface=python: this is the python/mojolearn/ ours arm (DEVIATION 2160); the Mojo driver's arm=ours rows time the entry points directly
+FSPEED-NOTE lane=cd arm=ours tier read back from mojolearn.numeric_mode()=identical; MOJOLEARN_NUMERIC_MODE='identical' in the environment (DEVIATION 2162)
+FSPEED-NOTE lane=cd arm=ours hash is sha256/16 over dtype+shape+bytes (hash_predictions), within-arm only, never gated (DEVIATION 2164)
+FSPEED-NOTE lane=cd arm=ours binaries: vendor=cuda gpu_arch=None (read back from the loaded set)
+FSPEED-NOTE lane=cd arm=ours alpha=0.01 max_iter=1000 tol=0.001 fit_intercept=True selection=cyclic, all explicit, the vendor arm's values
+FSPEED-NOTE lane=cd arm=ours Lasso.fit copies X to Fortran order INSIDE fit (cdFit reads column-major), so that copy is inside the timer; it is a cost of this surface and it stays (DEVIATION 2167)
+FSPEED-WARMUP lane=cd arm=ours shape=1000000x32 ms=6556.110880
+FSPEED lane=cd arm=ours shape=1000000x32 round=1 ms=1021.968415 hash=4b5773506a52cba8
+FSPEED lane=cd arm=ours shape=1000000x32 round=2 ms=7651.477869 hash=4b5773506a52cba8
+FSPEED lane=cd arm=ours shape=1000000x32 round=3 ms=10042.684307 hash=4b5773506a52cba8
+FSPEED lane=cd arm=ours shape=1000000x32 round=4 ms=7971.211137 hash=4b5773506a52cba8
+FSPEED lane=cd arm=ours shape=1000000x32 round=5 ms=8726.978424 hash=4b5773506a52cba8

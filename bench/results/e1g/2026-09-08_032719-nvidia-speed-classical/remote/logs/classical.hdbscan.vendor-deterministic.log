@@ -1,0 +1,5 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=hdbscan arm=cuml-gpu-deterministic reason=DETERMINISTIC-BY-DEFAULT: "Note that while the algorithm is generally deterministic and should provide matching results between RAPIDS and the Scikit-learn Contrib versions, the construction of the k-nearest neighbors graph and minimum spanning tree can introduce differences between the two algorithms, especially when several nearest neighbors around a point might have the same distance." (https://docs.nvidia.com/cuml/latest/api/generated/cuml.cluster.hdbscan.HDBSCAN/)

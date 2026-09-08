@@ -1,0 +1,31 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5305 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7969c0000000, nodemask=2)
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-gpu-deterministic reason=NOT-OFFERED: CatBoost documents no deterministic GPU configuration; official doc (features/training-on-gpu): "Training on GPU is non-deterministic, because the order of floating point summations is non-deterministic in this implementation."
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu-deterministic reason=NOT-OFFERED: no documented deterministic parameter for tree_method='hist' on device='cuda' (no deterministic_histogram in the current Parameters page); the fast arm's per-round hash column records whether it repeats.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+5391 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5184c0000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=year-463715x90 ms=1712.485
+FSPEED-WARMUP lane=gbdt-depthwise arm=catboost-gpu shape=year-463715x90 ms=1041.358
+FSPEED-WARMUP lane=gbdt-depthwise arm=xgboost-gpu shape=year-463715x90 ms=1012.030
+FSPEED lane=gbdt-depthwise arm=ours shape=year-463715x90 round=1 ms=1053.839 hash=953410e30ad2016b
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=year-463715x90 round=1 ms=1066.349 hash=7d3396f12d7942c2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=year-463715x90 round=1 ms=902.874 hash=d5584403bb15cfe9
+FSPEED lane=gbdt-depthwise arm=ours shape=year-463715x90 round=2 ms=1480.855 hash=953410e30ad2016b
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=year-463715x90 round=2 ms=1025.927 hash=7d3396f12d7942c2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=year-463715x90 round=2 ms=841.688 hash=d5584403bb15cfe9
+FSPEED lane=gbdt-depthwise arm=ours shape=year-463715x90 round=3 ms=1043.227 hash=953410e30ad2016b
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=year-463715x90 round=3 ms=930.206 hash=7d3396f12d7942c2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=year-463715x90 round=3 ms=847.576 hash=d5584403bb15cfe9
+FSPEED lane=gbdt-depthwise arm=ours shape=year-463715x90 round=4 ms=1031.529 hash=953410e30ad2016b
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=year-463715x90 round=4 ms=935.915 hash=7d3396f12d7942c2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=year-463715x90 round=4 ms=947.087 hash=d5584403bb15cfe9
+FSPEED lane=gbdt-depthwise arm=ours shape=year-463715x90 round=5 ms=1119.249 hash=953410e30ad2016b
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=year-463715x90 round=5 ms=1038.046 hash=7d3396f12d7942c2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=year-463715x90 round=5 ms=950.882 hash=d5584403bb15cfe9
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=rmse value=9.091622
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=rmse value=9.096660
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=rmse value=9.094946

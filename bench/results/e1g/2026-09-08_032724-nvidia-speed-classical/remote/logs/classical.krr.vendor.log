@@ -1,0 +1,23 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=krr arm=cuml-gpu size=scale fixture_source=splitmix64 shape=scale.50000x32
+FSPEED-NOTE lane=krr arm=cuml-gpu kernel=rbf, gamma and alpha passed explicitly; fit plus predict inside the clock, matching our lane
+FSPEED-HEADER family=classical lane=krr arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+FSPEED-NOTE lane=krr arm=cuml-gpu output is 400000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=krr arm=cuml-gpu shape=scale.50000x32 ms=9066.195888
+FSPEED-NOTE lane=krr arm=cuml-gpu output is 400000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=krr arm=cuml-gpu shape=scale.50000x32 round=1 ms=1166.667324 hash=-
+FSPEED-NOTE lane=krr arm=cuml-gpu output is 400000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=krr arm=cuml-gpu shape=scale.50000x32 round=2 ms=1229.475280 hash=-
+FSPEED-NOTE lane=krr arm=cuml-gpu output is 400000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=krr arm=cuml-gpu shape=scale.50000x32 round=3 ms=1190.254195 hash=-
+FSPEED-NOTE lane=krr arm=cuml-gpu output is 400000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=krr arm=cuml-gpu shape=scale.50000x32 round=4 ms=1209.617211 hash=-
+FSPEED-NOTE lane=krr arm=cuml-gpu output is 400000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=krr arm=cuml-gpu shape=scale.50000x32 round=5 ms=1192.907538 hash=-

@@ -1,0 +1,3 @@
+downloading https://archive.ics.uci.edu/ml/machine-learning-databases/00203/YearPredictionMSD.txt.zip -> /root/datasets/gbm-bench/year/YearPredictionMSD.txt.zip (about 211 MB)
+year: 211.0 MB
+year decoded to /root/datasets/gbm-bench/year/year_speed.npz

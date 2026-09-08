@@ -1,0 +1,15 @@
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5619 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78d1c0000000, nodemask=2)
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresholds that define ExtraTrees. The like-for-like comparator for `et` is sklearn.
+FSPEED-REFUSED lane=et arm=sklearn-et-cpu reason=GPU-PATH-ONLY: sklearn-et-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=et arm=lightgbm-cuda-deterministic reason=NOT-OFFERED: LightGBM's `deterministic` parameter is documented "used only with cpu device type" (Parameters page); there is no deterministic configuration for device_type='cuda'
+FSPEED-NOTE lane=et arm=lightgbm-cpu-diagnostic DIAGNOSTIC: a CPU arm run on a GPU box only to bound the vendor's GPU learner; NOT an incumbent row (DEVIATION 2257)
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=lightgbm-cpu-diagnostic mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+5619 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78d200000000, nodemask=2)
+FSPEED-WARMUP lane=et arm=ours shape=synthwide-1000000x500 ms=19120.004
+[LightGBM] [Fatal] [CUDA] out of memory /tmp/pip-install-qmjrdil1/lightgbm_a0e647c470e14d56b5f0690b72a05c57/include/LightGBM/cuda/cuda_utils.hu 152
+
+timeout: the monitored command dumped core
+Segmentation fault

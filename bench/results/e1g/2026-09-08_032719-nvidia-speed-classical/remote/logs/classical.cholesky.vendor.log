@@ -1,0 +1,23 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=cholesky arm=torch-gpu size=scale fixture_source=splitmix64 shape=scale.8192x8192r16
+FSPEED-NOTE lane=cholesky arm=torch-gpu torch.linalg.cholesky is cuSOLVER potrf and torch.cholesky_solve is potrs; the ridge, the logdet and the solve are all inside the clock on both sides
+FSPEED-HEADER family=classical lane=cholesky arm=torch-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+FSPEED-NOTE lane=cholesky arm=torch-gpu output is 268959748 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=cholesky arm=torch-gpu shape=scale.8192x8192r16 ms=186.779027
+FSPEED-NOTE lane=cholesky arm=torch-gpu output is 268959748 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=cholesky arm=torch-gpu shape=scale.8192x8192r16 round=1 ms=15.367878 hash=-
+FSPEED-NOTE lane=cholesky arm=torch-gpu output is 268959748 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=cholesky arm=torch-gpu shape=scale.8192x8192r16 round=2 ms=14.893166 hash=-
+FSPEED-NOTE lane=cholesky arm=torch-gpu output is 268959748 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=cholesky arm=torch-gpu shape=scale.8192x8192r16 round=3 ms=14.868531 hash=-
+FSPEED-NOTE lane=cholesky arm=torch-gpu output is 268959748 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=cholesky arm=torch-gpu shape=scale.8192x8192r16 round=4 ms=14.948374 hash=-
+FSPEED-NOTE lane=cholesky arm=torch-gpu output is 268959748 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=cholesky arm=torch-gpu shape=scale.8192x8192r16 round=5 ms=14.843080 hash=-

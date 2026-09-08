@@ -1,0 +1,11 @@
+[transformers] Disabling PyTorch because PyTorch >= 2.5 is required but found 2.4.1+cu124
+[transformers] PyTorch was not found. Models won't be available and only tokenizers, configuration and file/data utilities can be used.
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+  File "/usr/local/lib/python3.11/dist-packages/mamba_ssm/__init__.py", line 6, in <module>
+    from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
+  File "/usr/local/lib/python3.11/dist-packages/mamba_ssm/models/mixer_seq_simple.py", line 20, in <module>
+    from mamba_ssm.utils.generation import GenerationMixin
+  File "/usr/local/lib/python3.11/dist-packages/mamba_ssm/utils/generation.py", line 14, in <module>
+    from transformers.generation import GenerateDecoderOnlyOutput, TextStreamer
+ImportError: cannot import name 'GenerateDecoderOnlyOutput' from 'transformers.generation' (/usr/local/lib/python3.11/dist-packages/transformers/generation/__init__.py)

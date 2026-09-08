@@ -1,0 +1,22 @@
+5257 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31c740000000, nodemask=1)
+FSPEED-HEADER family=classical lane=knn arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large scale=throughput
+FSPEED-WARMUP lane=knn arm=ours shape=400000x32q4000k10 ms=437.465466
+FSPEED lane=knn arm=ours shape=400000x32q4000k10 round=1 ms=436.086742 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours shape=400000x32q4000k10 round=2 ms=437.175527 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours shape=400000x32q4000k10 round=3 ms=436.170533 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours shape=400000x32q4000k10 round=4 ms=436.038888 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours shape=400000x32q4000k10 round=5 ms=436.371059 hash=c07ab69619951ff1
+FSPEED-HEADER family=classical lane=knn arm=ours-fused mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large scale=throughput
+FSPEED-WARMUP lane=knn arm=ours-fused shape=400000x32q4000k10 ms=42.612646
+FSPEED lane=knn arm=ours-fused shape=400000x32q4000k10 round=1 ms=40.932221 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours-fused shape=400000x32q4000k10 round=2 ms=40.986128 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours-fused shape=400000x32q4000k10 round=3 ms=40.472055 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours-fused shape=400000x32q4000k10 round=4 ms=40.515088 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours-fused shape=400000x32q4000k10 round=5 ms=40.5154 hash=c07ab69619951ff1
+FSPEED-HEADER family=classical lane=knn arm=ours-tiled mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large scale=throughput
+FSPEED-WARMUP lane=knn arm=ours-tiled shape=400000x32q4000k10 ms=435.431835
+FSPEED lane=knn arm=ours-tiled shape=400000x32q4000k10 round=1 ms=434.88633 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours-tiled shape=400000x32q4000k10 round=2 ms=435.557022 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours-tiled shape=400000x32q4000k10 round=3 ms=433.962977 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours-tiled shape=400000x32q4000k10 round=4 ms=434.827693 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours-tiled shape=400000x32q4000k10 round=5 ms=434.095436 hash=c07ab69619951ff1

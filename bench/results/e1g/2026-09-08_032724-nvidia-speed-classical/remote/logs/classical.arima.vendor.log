@@ -1,0 +1,22 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=arima arm=cuml-gpu size=scale fixture_source=splitmix64 shape=10000x512p1d1q1
+FSPEED-NOTE lane=arima arm=cuml-gpu order=(1,1,1) seasonal_order=(0,0,0,0) fit_intercept=False simple_differencing=True method=ml maxiter=1000; our ARIMA's trend=None resolves to k=0 on this order, which is this fit_intercept
+FSPEED-NOTE lane=arima arm=cuml-gpu cuML takes endog as (n_obs, batch_size) with each series in a COLUMN; the fixture is series-major and was handed over as its Fortran-ordered transpose (same bytes), widened to float64 because cuML's ARIMA is float64 only while ours is float32; that width difference cannot be turned off on their side
+FSPEED-HEADER family=classical lane=arima arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+/root/mojolearn/tools/speed_cuml_arm.py:2781: FutureWarning: `cuml.tsa.ARIMA`, along with the entire `cuml.tsa` module, was deprecated in version 26.08 and will be removed in version 26.12.
+  m = ARIMA(endog, order=(p, d, q), seasonal_order=(0, 0, 0, 0),
+FSPEED-WARMUP lane=arima arm=cuml-gpu shape=10000x512p1d1q1 ms=2635.700138
+FSPEED lane=arima arm=cuml-gpu shape=10000x512p1d1q1 round=1 ms=2543.296797 hash=a61f11487d423d89
+FSPEED lane=arima arm=cuml-gpu shape=10000x512p1d1q1 round=2 ms=2513.488960 hash=a61f11487d423d89
+FSPEED lane=arima arm=cuml-gpu shape=10000x512p1d1q1 round=3 ms=2524.687495 hash=a61f11487d423d89
+FSPEED lane=arima arm=cuml-gpu shape=10000x512p1d1q1 round=4 ms=2455.143247 hash=a61f11487d423d89
+FSPEED lane=arima arm=cuml-gpu shape=10000x512p1d1q1 round=5 ms=2538.545927 hash=a61f11487d423d89
+[2026-09-08 07:53:49.408] [CUML] [warning] Predictions before 1 are undefined when using simple_differencing=True, will be set to NaN
+FSPEED-ACC lane=arima arm=cuml-gpu metric=insample_rmse_skip1 value=0.288230

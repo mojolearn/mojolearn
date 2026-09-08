@@ -1,0 +1,1 @@
+FSPEED-REFUSED lane=ivf arm=ours reason=NO-PYTHON-SURFACE: looked for an IVF-Flat index in mojolearn.neighbors (NearestNeighbors accepts algorithm= 'brute'/'auto'/'rbc' only, all EXACT; no ivf_flat build/search is exported from bindings/_mojolearn.mojo); the Mojo driver covers ivf/

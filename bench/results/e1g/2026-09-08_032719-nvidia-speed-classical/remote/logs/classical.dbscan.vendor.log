@@ -1,0 +1,29 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=dbscan arm=cuml-gpu size=scale fixture_source=splitmix64 shape=scale.200000x32
+FSPEED-NOTE lane=dbscan arm=cuml-gpu calc_core_sample_indices=False: our dbscan_fit_impl returns labels only, and computing their core-sample index array would be work our arm does not do
+FSPEED-HEADER family=classical lane=dbscan arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+[2026-09-08 07:52:48.656] [CUML] [info] Batch size limited by the chosen integer type (4 bytes). 67986 -> 10737. Using the larger integer type might result in better performance
+FSPEED-NOTE lane=dbscan arm=cuml-gpu output is 800000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=dbscan arm=cuml-gpu shape=scale.200000x32 ms=877.768274
+[2026-09-08 07:52:49.369] [CUML] [info] Batch size limited by the chosen integer type (4 bytes). 67986 -> 10737. Using the larger integer type might result in better performance
+FSPEED-NOTE lane=dbscan arm=cuml-gpu output is 800000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=dbscan arm=cuml-gpu shape=scale.200000x32 round=1 ms=678.504967 hash=-
+[2026-09-08 07:52:49.955] [CUML] [info] Batch size limited by the chosen integer type (4 bytes). 67986 -> 10737. Using the larger integer type might result in better performance
+FSPEED-NOTE lane=dbscan arm=cuml-gpu output is 800000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=dbscan arm=cuml-gpu shape=scale.200000x32 round=2 ms=585.006297 hash=-
+[2026-09-08 07:52:50.541] [CUML] [info] Batch size limited by the chosen integer type (4 bytes). 67986 -> 10737. Using the larger integer type might result in better performance
+FSPEED-NOTE lane=dbscan arm=cuml-gpu output is 800000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=dbscan arm=cuml-gpu shape=scale.200000x32 round=3 ms=586.866626 hash=-
+[2026-09-08 07:52:51.128] [CUML] [info] Batch size limited by the chosen integer type (4 bytes). 67986 -> 10737. Using the larger integer type might result in better performance
+FSPEED-NOTE lane=dbscan arm=cuml-gpu output is 800000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=dbscan arm=cuml-gpu shape=scale.200000x32 round=4 ms=600.890125 hash=-
+[2026-09-08 07:52:51.728] [CUML] [info] Batch size limited by the chosen integer type (4 bytes). 67986 -> 10737. Using the larger integer type might result in better performance
+FSPEED-NOTE lane=dbscan arm=cuml-gpu output is 800000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=dbscan arm=cuml-gpu shape=scale.200000x32 round=5 ms=586.521194 hash=-

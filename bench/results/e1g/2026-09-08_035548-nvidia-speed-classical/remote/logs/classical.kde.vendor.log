@@ -1,0 +1,16 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=kde arm=cuml-gpu size=large fixture_source=mojo-dump shape=200000x20000x8
+FSPEED-HEADER family=classical lane=kde arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=large
+FSPEED-WARMUP lane=kde arm=cuml-gpu shape=200000x20000x8 ms=70.789944
+FSPEED lane=kde arm=cuml-gpu shape=200000x20000x8 round=1 ms=17.923459 hash=26cbb2037eb72300
+FSPEED lane=kde arm=cuml-gpu shape=200000x20000x8 round=2 ms=17.693914 hash=26cbb2037eb72300
+FSPEED lane=kde arm=cuml-gpu shape=200000x20000x8 round=3 ms=17.620295 hash=26cbb2037eb72300
+FSPEED lane=kde arm=cuml-gpu shape=200000x20000x8 round=4 ms=17.581431 hash=26cbb2037eb72300
+FSPEED lane=kde arm=cuml-gpu shape=200000x20000x8 round=5 ms=17.695660 hash=26cbb2037eb72300

@@ -1,0 +1,189 @@
+
+=== pass 1: bindings/build.sh ===
+./neighbors/estimator.mojo:985:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_arima.sh ===
+/root/mojolearn/bindings/_mojolearn_arima.mojo:366:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_arima.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_byte_lm.sh ===
+byte LM: one explicit sm_NN or gfxNNN target required
+
+=== pass 1: bindings/build_estimators.sh ===
+./glm/impl/glm/qn/qn_solvers.mojo:458:15: warning: assignment to 'ret' was never used; assign to '_' instead?
+    var ret = OPT_MAX_ITERS_REACHED
+              ^
+built python/mojolearn/identical/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_gbdt.sh ===
+./gbdt/methods/pointwise_optimization_subsets.mojo:481:24: warning: assignment to 'adapt_blocks' was never used; assign to '_' instead?
+        adapt_blocks = 1
+                       ^
+built python/mojolearn/identical/_mojolearn_gbdt.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_gp.sh ===
+/root/mojolearn/bindings/_mojolearn_gp.mojo:585:21: warning: assignment to 'n_clamped' was never used; assign to '_' instead?
+    var n_clamped = 0
+                    ^
+built python/mojolearn/identical/_mojolearn_gp.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_linalg.sh ===
+1317 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79f240000000, nodemask=2)
+built python/mojolearn/identical/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_mamba.sh ===
+/root/mojolearn/bindings/_mojolearn_mamba.mojo:944:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_mamba.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_metrics.sh ===
+/root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:198:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/identical/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_rf.sh ===
+/root/mojolearn/bindings/_mojolearn_rf.mojo:584:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/identical/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_solver.sh ===
+/root/mojolearn/bindings/_mojolearn_solver.mojo:204:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/identical/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_svm.sh ===
+/root/mojolearn/bindings/_mojolearn_svm.mojo:520:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/identical/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_training.sh ===
+./training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built python/mojolearn/identical/_mojolearn_training.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_transformer.sh ===
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:433:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_transformer.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_trees.sh ===
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+built python/mojolearn/identical/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_tsa.sh ===
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:267:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/identical/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build.sh ===
+./neighbors/estimator.mojo:985:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_arima.sh ===
+/root/mojolearn/bindings/_mojolearn_arima.mojo:366:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_arima.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_byte_lm.sh ===
+byte LM: one explicit sm_NN or gfxNNN target required
+
+=== pass 2: bindings/build_estimators.sh ===
+./glm/impl/glm/qn/qn_solvers.mojo:458:15: warning: assignment to 'ret' was never used; assign to '_' instead?
+    var ret = OPT_MAX_ITERS_REACHED
+              ^
+built python/mojolearn/identical/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_gbdt.sh ===
+./gbdt/methods/pointwise_optimization_subsets.mojo:481:24: warning: assignment to 'adapt_blocks' was never used; assign to '_' instead?
+        adapt_blocks = 1
+                       ^
+built python/mojolearn/identical/_mojolearn_gbdt.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_gp.sh ===
+/root/mojolearn/bindings/_mojolearn_gp.mojo:585:21: warning: assignment to 'n_clamped' was never used; assign to '_' instead?
+    var n_clamped = 0
+                    ^
+built python/mojolearn/identical/_mojolearn_gp.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_linalg.sh ===
+2445 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a8d00000000, nodemask=2)
+built python/mojolearn/identical/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_mamba.sh ===
+/root/mojolearn/bindings/_mojolearn_mamba.mojo:944:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_mamba.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_metrics.sh ===
+/root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:198:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/identical/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_rf.sh ===
+/root/mojolearn/bindings/_mojolearn_rf.mojo:584:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/identical/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_solver.sh ===
+/root/mojolearn/bindings/_mojolearn_solver.mojo:204:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/identical/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_svm.sh ===
+/root/mojolearn/bindings/_mojolearn_svm.mojo:520:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/identical/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_training.sh ===
+./training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built python/mojolearn/identical/_mojolearn_training.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_transformer.sh ===
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:433:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_transformer.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_trees.sh ===
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+built python/mojolearn/identical/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_tsa.sh ===
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:267:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/identical/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+3072 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x387180000000, nodemask=2)
+mojolearn imports OK /root/mojolearn/python/mojolearn/__init__.py
+
+=== forest.rf.default.log :: python3 bench/speed/forest_speed_arm.py --lane rf ===
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu shape=covtype-522911x54 ms=6170.386
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu-deterministic shape=covtype-522911x54 ms=2333.260
+FSPEED-NOTE lane=forest.rf.default.log arm=- KILLED BY THE PER-ARM BUDGET (600s)

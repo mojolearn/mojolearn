@@ -1,0 +1,5 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=ivf arm=cuvs-gpu-deterministic reason=NOT-DOCUMENTED: cuVS's IVF-Flat Python documentation (IndexParams: n_lists, metric, kmeans_n_iters, kmeans_trainset_fraction, add_data_on_build, adaptive_centers) states nothing about determinism and takes no seed (https://docs.nvidia.com/cuvs/api-reference/python-api-neighbors-ivf-flat)

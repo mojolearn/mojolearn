@@ -1,0 +1,442 @@
+3322 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x518cc0000000, nodemask=1)
+Imported from /root/mojolearn/transformer/checks/transformer_check.mojo:242:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_check.mojo:242:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_check.mojo:242:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+=== transformer block identity gate, profile mojolearn.identical.transformer.fp32.v1
+=== transformer_check: the FORWARD lane is bit-identical on THREE vendors. transformer.identical.card is md5 8ce661b4 on Apple, NVIDIA and AMD, 30 of 30 stages, 262634 cells. The BACKWARD card has never been emitted on any box. Read the header.
+mode FAST   block sabotage: none
+ledger: this binary is CLEAN -- no sabotage arm is compiled in. Set MOJOLEARN_TRANSFORMER_EXPECT_SABOTAGE to have the binary check its own -D.
+preflight: the assertions the fixture and the oracle asked for
+  frozen constants OK: eps 0x358637bd, theta 0x461c4000, mask fill 0xff7fffff
+  identical_mul == identical_mul_add(a, b, -0.0) on 64 probes including both zero signs
+  +1e35 0x799a130c + mask -> 0xff7fecbd   (a SELECT would leave 0xff7fffff)
+  -1e35 0xf99a130c + mask -> 0xff800000   (the -inf mask arm would give 0xff800000)
+  attention scale: head_dim 16 -> 0x3e800000 (wants 0x3e800000, EXACT, blind to the spelling), head_dim 24 -> 0x3e5105eb (INEXACT, the only shape that can see DEVIATION 802)
+  splitmix64: the transformer copy and mamba's agree on 5 seeds (DEVIATION 1000's stated cost, checked)
+clause (a): 13 fixture cases, every stage, device vs host oracle, BITWISE
+  case 0 base_b1_l4_nrep1  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=2 hd=16 inter=64  11296 cells: 27 of 30 stages MOVED, first at norm1.out on 48 of 128 cells
+  OK    input.x  (128 cells)
+  OK    norm1.sumsq  (4 cells)
+  MOVED norm1.out  48 of 128 cells, first cell 32  a 0x400ce74e  b 0x400ce74f
+  MOVED q_proj.out  53 of 128 cells, first cell 32  a 0xbf13c2a8  b 0xbf13c2a4
+  MOVED k_proj.out  48 of 128 cells, first cell 32  a 0xbe1d73a7  b 0xbe1d73ac
+  MOVED v_proj.out  53 of 128 cells, first cell 32  a 0xc04631d5  b 0xc04631d6
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  77 of 128 cells, first cell 34  a 0x3fd3b7e0  b 0x3fd3b7e1
+  MOVED k_rope.out  83 of 128 cells, first cell 33  a 0x3e4b8790  b 0x3e4b877f
+  MOVED kv.k_cache  83 of 128 cells, first cell 17  a 0x3e4b8790  b 0x3e4b877f
+  MOVED kv.v_cache  53 of 128 cells, first cell 16  a 0xc04631d5  b 0xc04631d6
+  MOVED attn.scores  25 of 32 cells, first cell 1  a 0xbf533cee  b 0xbf533ce6
+  MOVED attn.masked  15 of 32 cells, first cell 4  a 0x40a0ec3c  b 0x40a0ec3a
+  MOVED attn.max  5 of 8 cells, first cell 1  a 0x40a0ec3c  b 0x40a0ec3a
+  MOVED attn.exp  11 of 32 cells, first cell 5  a 0x3d5cea71  b 0x3d5cea74
+  MOVED attn.denom  4 of 8 cells, first cell 2  a 0x3fa998ec  b 0x3fa998eb
+  MOVED attn.weights  16 of 32 cells, first cell 5  a 0x3d519c4c  b 0x3d519c4f
+  MOVED attn.ctx  69 of 128 cells, first cell 39  a 0x3fbec70a  b 0x3fbec709
+  MOVED o_proj.out  82 of 128 cells, first cell 33  a 0xbf2268e9  b 0xbf2268ec
+  MOVED residual1.out  78 of 128 cells, first cell 33  a 0x3ef456b6  b 0x3ef456b0
+  MOVED norm2.sumsq  1 of 4 cells, first cell 2  a 0x42d51f9b  b 0x42d51f9d
+  MOVED norm2.out  72 of 128 cells, first cell 33  a 0x3ecdbd1f  b 0x3ecdbd1b
+  MOVED gate_proj.out  161 of 256 cells, first cell 64  a 0xbf161c16  b 0xbf161c18
+  MOVED up_proj.out  165 of 256 cells, first cell 64  a 0xbd6764c4  b 0xbd6764b1
+  MOVED silu.out  157 of 256 cells, first cell 15  a 0xbe8c44a4  b 0xbe8c44a3
+  MOVED mlp.gated  186 of 256 cells, first cell 15  a 0xbe5e92cc  b 0xbe5e92cb
+  MOVED down_proj.out  95 of 128 cells, first cell 0  a 0xbb855646  b 0xbb855636
+  MOVED residual2.out  85 of 128 cells, first cell 13  a 0xbf830669  b 0xbf830668
+  case 1 base_b2_l4_nrep2  B=2 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  13752 cells: 27 of 30 stages MOVED, first at norm1.out on 35 of 256 cells
+  OK    input.x  (256 cells)
+  OK    norm1.sumsq  (8 cells)
+  MOVED norm1.out  35 of 256 cells, first cell 128  a 0x3f9c7f88  b 0x3f9c7f89
+  MOVED q_proj.out  44 of 256 cells, first cell 128  a 0xbe108213  b 0xbe108203
+  MOVED k_proj.out  23 of 128 cells, first cell 64  a 0xc001f362  b 0xc001f361
+  MOVED v_proj.out  26 of 128 cells, first cell 64  a 0x3f7ac90d  b 0x3f7ac90e
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  174 of 256 cells, first cell 32  a 0x3f8f22f9  b 0x3f8f22f8
+  MOVED k_rope.out  84 of 128 cells, first cell 17  a 0xbfb05a37  b 0xbfb05a35
+  MOVED kv.k_cache  84 of 128 cells, first cell 17  a 0xbfb05a37  b 0xbfb05a35
+  MOVED kv.v_cache  26 of 128 cells, first cell 64  a 0x3f7ac90d  b 0x3f7ac90e
+  MOVED attn.scores  54 of 64 cells, first cell 1  a 0xc0061786  b 0xc0061785
+  MOVED attn.masked  33 of 64 cells, first cell 4  a 0xc0321b84  b 0xc0321b83
+  MOVED attn.max  12 of 16 cells, first cell 2  a 0xbea9b14c  b 0xbea9b151
+  MOVED attn.exp  23 of 64 cells, first cell 4  a 0x3e08b5dc  b 0x3e08b5de
+  MOVED attn.denom  5 of 16 cells, first cell 2  a 0x3fd5d679  b 0x3fd5d67d
+  MOVED attn.weights  29 of 64 cells, first cell 4  a 0x3df13781  b 0x3df13785
+  MOVED attn.ctx  151 of 256 cells, first cell 33  a 0xbeb664ca  b 0xbeb664c8
+  MOVED o_proj.out  184 of 256 cells, first cell 32  a 0xbfa15f20  b 0xbfa15f1f
+  MOVED residual1.out  169 of 256 cells, first cell 33  a 0xbee6026b  b 0xbee6026f
+  MOVED norm2.sumsq  6 of 8 cells, first cell 1  a 0x42bee93f  b 0x42bee93e
+  MOVED norm2.out  183 of 256 cells, first cell 32  a 0xbfb7bd6f  b 0xbfb7bd72
+  MOVED gate_proj.out  388 of 512 cells, first cell 64  a 0x3fa2d234  b 0x3fa2d236
+  MOVED up_proj.out  407 of 512 cells, first cell 64  a 0xbeae0dab  b 0xbeae0dac
+  MOVED silu.out  385 of 512 cells, first cell 4  a 0xbe8a473b  b 0xbe8a473a
+  MOVED mlp.gated  433 of 512 cells, first cell 4  a 0x3d14d8dc  b 0x3d14d8db
+  MOVED down_proj.out  231 of 256 cells, first cell 2  a 0x3e22799f  b 0x3e2279a0
+  MOVED residual2.out  194 of 256 cells, first cell 10  a 0xbe04592d  b 0xbe04592c
+  case 2 base_b1_l1_nrep2  B=1 L=1 S=1 cap=1 dm=32 nh=2 nkv=1 hd=16 inter=64  8870 cells: 23 of 30 stages MOVED, first at norm1.out on 18 of 32 cells
+  OK    input.x  (32 cells)
+  OK    norm1.sumsq  (1 cells)
+  MOVED norm1.out  18 of 32 cells, first cell 0  a 0x3feec1b9  b 0x3feec1b8
+  MOVED q_proj.out  24 of 32 cells, first cell 1  a 0x3f7ae6f3  b 0x3f7ae6f2
+  MOVED k_proj.out  12 of 16 cells, first cell 0  a 0x3eac5ace  b 0x3eac5acb
+  MOVED v_proj.out  9 of 16 cells, first cell 2  a 0x3f503899  b 0x3f50389e
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  24 of 32 cells, first cell 1  a 0x3f7ae6f3  b 0x3f7ae6f2
+  MOVED k_rope.out  12 of 16 cells, first cell 0  a 0x3eac5ace  b 0x3eac5acb
+  MOVED kv.k_cache  12 of 16 cells, first cell 0  a 0x3eac5ace  b 0x3eac5acb
+  MOVED kv.v_cache  9 of 16 cells, first cell 2  a 0x3f503899  b 0x3f50389e
+  MOVED attn.scores  2 of 2 cells, first cell 0  a 0xc08912a6  b 0xc08912a5
+  MOVED attn.masked  2 of 2 cells, first cell 0  a 0xc08912a6  b 0xc08912a5
+  MOVED attn.max  2 of 2 cells, first cell 0  a 0xc08912a6  b 0xc08912a5
+  OK    attn.exp  (2 cells)
+  OK    attn.denom  (2 cells)
+  OK    attn.weights  (2 cells)
+  MOVED attn.ctx  18 of 32 cells, first cell 2  a 0x3f503899  b 0x3f50389e
+  MOVED o_proj.out  27 of 32 cells, first cell 1  a 0x3f86caef  b 0x3f86caee
+  MOVED residual1.out  26 of 32 cells, first cell 1  a 0x3fbbdcaf  b 0x3fbbdcae
+  OK    norm2.sumsq  (1 cells)
+  MOVED norm2.out  25 of 32 cells, first cell 1  a 0x3f8600f3  b 0x3f8600f2
+  MOVED gate_proj.out  48 of 64 cells, first cell 0  a 0xbe899b46  b 0xbe899b47
+  MOVED up_proj.out  54 of 64 cells, first cell 0  a 0xbf8561e6  b 0xbf8561e7
+  MOVED silu.out  49 of 64 cells, first cell 0  a 0xbdee7359  b 0xbdee735a
+  MOVED mlp.gated  60 of 64 cells, first cell 0  a 0x3df87a3a  b 0x3df87a3d
+  MOVED down_proj.out  29 of 32 cells, first cell 0  a 0x3dbeb5fd  b 0x3dbeb5f5
+  MOVED residual2.out  27 of 32 cells, first cell 1  a 0x3fc209e9  b 0x3fc209e8
+  case 3 base_b3_l16_nrep2  B=3 L=16 S=16 cap=16 dm=32 nh=2 nkv=1 hd=16 inter=64  46120 cells: 27 of 30 stages MOVED, first at norm1.out on 457 of 1536 cells
+  OK    input.x  (1536 cells)
+  OK    norm1.sumsq  (48 cells)
+  MOVED norm1.out  457 of 1536 cells, first cell 1  a 0xbe5d48d6  b 0xbe5d48d4
+  MOVED q_proj.out  515 of 1536 cells, first cell 1  a 0x4050fc6d  b 0x4050fc6b
+  MOVED k_proj.out  255 of 768 cells, first cell 0  a 0x3f7c3cd4  b 0x3f7c3ccf
+  MOVED v_proj.out  251 of 768 cells, first cell 0  a 0xbf80163e  b 0xbf80163d
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  1226 of 1536 cells, first cell 1  a 0x4050fc6d  b 0x4050fc6b
+  MOVED k_rope.out  616 of 768 cells, first cell 0  a 0x3f7c3cd4  b 0x3f7c3ccf
+  MOVED kv.k_cache  616 of 768 cells, first cell 0  a 0x3f7c3cd4  b 0x3f7c3ccf
+  MOVED kv.v_cache  251 of 768 cells, first cell 0  a 0xbf80163e  b 0xbf80163d
+  MOVED attn.scores  1386 of 1536 cells, first cell 0  a 0xbeb9d025  b 0xbeb9d014
+  MOVED attn.masked  726 of 1536 cells, first cell 0  a 0xbeb9d025  b 0xbeb9d014
+  MOVED attn.max  80 of 96 cells, first cell 0  a 0xbeb9d025  b 0xbeb9d014
+  MOVED attn.exp  683 of 1536 cells, first cell 32  a 0x3e8f4458  b 0x3e8f445c
+  MOVED attn.denom  63 of 96 cells, first cell 5  a 0x4021466e  b 0x40214675
+  MOVED attn.weights  746 of 1536 cells, first cell 32  a 0x3e570c22  b 0x3e570c28
+  MOVED attn.ctx  1241 of 1536 cells, first cell 0  a 0xbf80163e  b 0xbf80163d
+  MOVED o_proj.out  1353 of 1536 cells, first cell 0  a 0x400c61cf  b 0x400c61cd
+  MOVED residual1.out  1206 of 1536 cells, first cell 0  a 0x4010be3a  b 0x4010be38
+  MOVED norm2.sumsq  34 of 48 cells, first cell 0  a 0x430d71e8  b 0x430d71e7
+  MOVED norm2.out  1214 of 1536 cells, first cell 0  a 0x3f188d33  b 0x3f188d2f
+  MOVED gate_proj.out  2649 of 3072 cells, first cell 0  a 0x3e67729d  b 0x3e6772a1
+  MOVED up_proj.out  2661 of 3072 cells, first cell 0  a 0x3f1d94c9  b 0x3f1d94cb
+  MOVED silu.out  2415 of 3072 cells, first cell 0  a 0x3e00bf21  b 0x3e00bf23
+  MOVED mlp.gated  2797 of 3072 cells, first cell 0  a 0x3d9e8016  b 0x3d9e801a
+  MOVED down_proj.out  1424 of 1536 cells, first cell 0  a 0x3e74f705  b 0x3e74f701
+  MOVED residual2.out  1266 of 1536 cells, first cell 0  a 0x40200daa  b 0x40200da8
+  case 4 wide_inter300  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=300  14752 cells: 27 of 30 stages MOVED, first at norm1.out on 46 of 128 cells
+  OK    input.x  (128 cells)
+  OK    norm1.sumsq  (4 cells)
+  MOVED norm1.out  46 of 128 cells, first cell 64  a 0x3d182c29  b 0x3d182c28
+  MOVED q_proj.out  50 of 128 cells, first cell 65  a 0x3f54976a  b 0x3f54976c
+  MOVED k_proj.out  29 of 64 cells, first cell 32  a 0xc002547d  b 0xc002547e
+  MOVED v_proj.out  23 of 64 cells, first cell 32  a 0xbfd27cf2  b 0xbfd27cf0
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  74 of 128 cells, first cell 32  a 0x402040b4  b 0x402040b3
+  MOVED k_rope.out  36 of 64 cells, first cell 17  a 0x3f58e03a  b 0x3f58e03d
+  MOVED kv.k_cache  36 of 64 cells, first cell 17  a 0x3f58e03a  b 0x3f58e03d
+  MOVED kv.v_cache  23 of 64 cells, first cell 32  a 0xbfd27cf2  b 0xbfd27cf0
+  MOVED attn.scores  28 of 32 cells, first cell 1  a 0xbf6bd1d4  b 0xbf6bd1cd
+  MOVED attn.masked  16 of 32 cells, first cell 5  a 0x4015cf02  b 0x4015cf03
+  MOVED attn.max  4 of 8 cells, first cell 3  a 0x404d779b  b 0x404d779c
+  MOVED attn.exp  11 of 32 cells, first cell 5  a 0x3f3a14ed  b 0x3f3a14ef
+  MOVED attn.denom  3 of 8 cells, first cell 1  a 0x3fdd0a76  b 0x3fdd0a78
+  MOVED attn.weights  12 of 32 cells, first cell 4  a 0x3f143e7c  b 0x3f143e7b
+  MOVED attn.ctx  45 of 128 cells, first cell 32  a 0x3ebaf863  b 0x3ebaf861
+  MOVED o_proj.out  62 of 128 cells, first cell 32  a 0x3ea7009c  b 0x3ea700a0
+  MOVED residual1.out  52 of 128 cells, first cell 32  a 0x400d3666  b 0x400d3667
+  MOVED norm2.sumsq  1 of 4 cells, first cell 3  a 0x4290579d  b 0x4290579c
+  MOVED norm2.out  62 of 128 cells, first cell 32  a 0x3ff65c51  b 0x3ff65c53
+  MOVED gate_proj.out  726 of 1200 cells, first cell 301  a 0x3e26bbc4  b 0x3e26bbbf
+  MOVED up_proj.out  732 of 1200 cells, first cell 300  a 0xbe6e7d1d  b 0xbe6e7d19
+  MOVED silu.out  729 of 1200 cells, first cell 9  a 0xbe858a30  b 0xbe858a2f
+  MOVED mlp.gated  858 of 1200 cells, first cell 9  a 0x3e59d5f0  b 0x3e59d5ee
+  MOVED down_proj.out  103 of 128 cells, first cell 2  a 0xbe570626  b 0xbe57062a
+  MOVED residual2.out  85 of 128 cells, first cell 2  a 0x40179956  b 0x40179955
+  case 5 odd_head_dim_24  B=1 L=4 S=4 cap=4 dm=48 nh=2 nkv=1 hd=24 inter=64  15876 cells: 27 of 30 stages MOVED, first at norm1.out on 74 of 192 cells
+  OK    input.x  (192 cells)
+  OK    norm1.sumsq  (4 cells)
+  MOVED norm1.out  74 of 192 cells, first cell 1  a 0xbf7c2f57  b 0xbf7c2f55
+  MOVED q_proj.out  79 of 192 cells, first cell 0  a 0xc059612d  b 0xc059612e
+  MOVED k_proj.out  38 of 96 cells, first cell 1  a 0xbef36151  b 0xbef36152
+  MOVED v_proj.out  41 of 96 cells, first cell 0  a 0x3f3d1e38  b 0x3f3d1e35
+  OK    rope.inv_freq  (12 cells)
+  MOVED rope.cos  5045 of 6144 cells, first cell 12  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  5727 of 6144 cells, first cell 12  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  150 of 192 cells, first cell 0  a 0xc059612d  b 0xc059612e
+  MOVED k_rope.out  77 of 96 cells, first cell 1  a 0xbef36151  b 0xbef36152
+  MOVED kv.k_cache  77 of 96 cells, first cell 1  a 0xbef36151  b 0xbef36152
+  MOVED kv.v_cache  41 of 96 cells, first cell 0  a 0x3f3d1e38  b 0x3f3d1e35
+  MOVED attn.scores  26 of 32 cells, first cell 1  a 0xbf4a5fd1  b 0xbf4a5fd9
+  MOVED attn.masked  17 of 32 cells, first cell 4  a 0xbe6db23c  b 0xbe6db234
+  MOVED attn.max  6 of 8 cells, first cell 1  a 0xbe6db23c  b 0xbe6db234
+  MOVED attn.exp  11 of 32 cells, first cell 5  a 0x3e1471b0  b 0x3e1471b1
+  MOVED attn.denom  1 of 8 cells, first cell 2  a 0x3faaa73e  b 0x3faaa740
+  MOVED attn.weights  12 of 32 cells, first cell 5  a 0x3e01a643  b 0x3e01a644
+  MOVED attn.ctx  114 of 192 cells, first cell 0  a 0x3f3d1e38  b 0x3f3d1e35
+  MOVED o_proj.out  155 of 192 cells, first cell 0  a 0xbf5c49e9  b 0xbf5c49ea
+  MOVED residual1.out  146 of 192 cells, first cell 0  a 0xbe5cba64  b 0xbe5cba68
+  MOVED norm2.sumsq  2 of 4 cells, first cell 0  a 0x430f4793  b 0x430f4791
+  MOVED norm2.out  144 of 192 cells, first cell 0  a 0xbdfb7e64  b 0xbdfb7e6a
+  MOVED gate_proj.out  222 of 256 cells, first cell 0  a 0x3fc7ddbe  b 0x3fc7ddbd
+  MOVED up_proj.out  221 of 256 cells, first cell 0  a 0xbf167053  b 0xbf167050
+  MOVED silu.out  211 of 256 cells, first cell 0  a 0x3fa533a8  b 0x3fa533a7
+  MOVED mlp.gated  243 of 256 cells, first cell 0  a 0xbf422981  b 0xbf42297c
+  MOVED down_proj.out  176 of 192 cells, first cell 0  a 0x3eb6a30c  b 0x3eb6a30d
+  MOVED residual2.out  162 of 192 cells, first cell 0  a 0x3e108bb4  b 0x3e108bb2
+  case 7 long_l64  B=1 L=64 S=64 cap=64 dm=32 nh=2 nkv=1 hd=16 inter=64  83336 cells: 27 of 30 stages MOVED, first at norm1.out on 527 of 2048 cells
+  OK    input.x  (2048 cells)
+  OK    norm1.sumsq  (64 cells)
+  MOVED norm1.out  527 of 2048 cells, first cell 64  a 0x400741c1  b 0x400741c2
+  MOVED q_proj.out  592 of 2048 cells, first cell 64  a 0x4003c7a4  b 0x4003c7a5
+  MOVED k_proj.out  291 of 1024 cells, first cell 32  a 0xbdf1e804  b 0xbdf1e803
+  MOVED v_proj.out  297 of 1024 cells, first cell 32  a 0x40374835  b 0x40374834
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  1703 of 2048 cells, first cell 32  a 0x3f640c5c  b 0x3f640c5e
+  MOVED k_rope.out  865 of 1024 cells, first cell 17  a 0xbf8cbeb8  b 0xbf8cbeb7
+  MOVED kv.k_cache  865 of 1024 cells, first cell 17  a 0xbf8cbeb8  b 0xbf8cbeb7
+  MOVED kv.v_cache  297 of 1024 cells, first cell 32  a 0x40374835  b 0x40374834
+  MOVED attn.scores  7789 of 8192 cells, first cell 1  a 0xbe25be22  b 0xbe25be28
+  MOVED attn.masked  3951 of 8192 cells, first cell 65  a 0xbf06b1c3  b 0xbf06b1bc
+  MOVED attn.max  109 of 128 cells, first cell 1  a 0xbf06b1c3  b 0xbf06b1bc
+  MOVED attn.exp  3933 of 8192 cells, first cell 64  a 0x3ef5cab1  b 0x3ef5caaa
+  MOVED attn.denom  115 of 128 cells, first cell 1  a 0x3fbd72ac  b 0x3fbd72aa
+  MOVED attn.weights  4067 of 8192 cells, first cell 64  a 0x3ea6118d  b 0x3ea6118a
+  MOVED attn.ctx  1844 of 2048 cells, first cell 32  a 0x3f0b0c83  b 0x3f0b0c81
+  MOVED o_proj.out  1868 of 2048 cells, first cell 32  a 0x3da72dd2  b 0x3da72dcd
+  MOVED residual1.out  1748 of 2048 cells, first cell 34  a 0xbe9800fa  b 0xbe9800fe
+  MOVED norm2.sumsq  47 of 64 cells, first cell 3  a 0x430db737  b 0x430db739
+  MOVED norm2.out  1781 of 2048 cells, first cell 0  a 0xbf79b990  b 0xbf79b98e
+  MOVED gate_proj.out  3719 of 4096 cells, first cell 1  a 0x3f46a832  b 0x3f46a831
+  MOVED up_proj.out  3737 of 4096 cells, first cell 0  a 0xbc5808c5  b 0xbc580904
+  MOVED silu.out  3543 of 4096 cells, first cell 2  a 0x3ea335b6  b 0x3ea335b4
+  MOVED mlp.gated  3898 of 4096 cells, first cell 0  a 0xbc4e6e89  b 0xbc4e6ec5
+  MOVED down_proj.out  1942 of 2048 cells, first cell 0  a 0xbe9d099b  b 0xbe9d099a
+  MOVED residual2.out  1810 of 2048 cells, first cell 3  a 0x3f42e23f  b 0x3f42e23e
+  case 9 adv_signed_zeros  B=2 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  13752 cells: 27 of 30 stages MOVED, first at norm1.out on 18 of 256 cells
+  OK    input.x  (256 cells)
+  OK    norm1.sumsq  (8 cells)
+  MOVED norm1.out  18 of 256 cells, first cell 33  a 0xbf20ebac  b 0xbf20ebab
+  MOVED q_proj.out  25 of 256 cells, first cell 32  a 0x403a9ec2  b 0x403a9ec1
+  MOVED k_proj.out  12 of 128 cells, first cell 16  a 0x3febd6e0  b 0x3febd6e1
+  MOVED v_proj.out  9 of 128 cells, first cell 17  a 0x40040481  b 0x40040480
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  102 of 256 cells, first cell 32  a 0x3f793daa  b 0x3f793dae
+  MOVED k_rope.out  47 of 128 cells, first cell 16  a 0x3f1e8496  b 0x3f1e849a
+  MOVED kv.k_cache  47 of 128 cells, first cell 16  a 0x3f1e8496  b 0x3f1e849a
+  MOVED kv.v_cache  9 of 128 cells, first cell 17  a 0x40040481  b 0x40040480
+  MOVED attn.scores  12 of 64 cells, first cell 5  a 0x404346be  b 0x404346b7
+  MOVED attn.masked  9 of 64 cells, first cell 5  a 0x404346be  b 0x404346b7
+  MOVED attn.max  5 of 16 cells, first cell 1  a 0x404346be  b 0x404346b7
+  MOVED attn.exp  12 of 64 cells, first cell 4  a 0x3d41c03c  b 0x3d41c053
+  MOVED attn.denom  3 of 16 cells, first cell 1  a 0x3f860e02  b 0x3f860e03
+  MOVED attn.weights  15 of 64 cells, first cell 4  a 0x3d38fffd  b 0x3d390012
+  MOVED attn.ctx  99 of 256 cells, first cell 32  a 0xc033d98f  b 0xc033d98d
+  MOVED o_proj.out  123 of 256 cells, first cell 32  a 0x3f4a2a84  b 0x3f4a2a83
+  MOVED residual1.out  89 of 256 cells, first cell 33  a 0x3f8d9bfb  b 0x3f8d9bf8
+  MOVED norm2.sumsq  1 of 8 cells, first cell 1  a 0x42a1208e  b 0x42a1208c
+  MOVED norm2.out  107 of 256 cells, first cell 32  a 0xbf400485  b 0xbf400486
+  MOVED gate_proj.out  210 of 512 cells, first cell 65  a 0x3f918f5e  b 0x3f918f5c
+  MOVED up_proj.out  227 of 512 cells, first cell 64  a 0x3fee25f3  b 0x3fee25f2
+  MOVED silu.out  207 of 512 cells, first cell 65  a 0x3f5c6ce1  b 0x3f5c6cde
+  MOVED mlp.gated  253 of 512 cells, first cell 64  a 0xbeba8ba6  b 0xbeba8ba5
+  MOVED down_proj.out  130 of 256 cells, first cell 32  a 0xbe466b61  b 0xbe466b56
+  MOVED residual2.out  110 of 256 cells, first cell 32  a 0xbfafb9ba  b 0xbfafb9b9
+  case 10 adv_subnormal_x  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  10976 cells: 27 of 30 stages MOVED, first at norm1.out on 33 of 128 cells
+  OK    input.x  (128 cells)
+  OK    norm1.sumsq  (4 cells)
+  MOVED norm1.out  33 of 128 cells, first cell 32  a 0x3ff7c378  b 0x3ff7c377
+  MOVED q_proj.out  44 of 128 cells, first cell 32  a 0x3f2f7263  b 0x3f2f7260
+  MOVED k_proj.out  23 of 64 cells, first cell 16  a 0x3f53065d  b 0x3f530661
+  MOVED v_proj.out  25 of 64 cells, first cell 16  a 0xc021d473  b 0xc021d472
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  71 of 128 cells, first cell 32  a 0x3f362d82  b 0x3f362d7d
+  MOVED k_rope.out  35 of 64 cells, first cell 16  a 0x401501ab  b 0x401501ac
+  MOVED kv.k_cache  35 of 64 cells, first cell 16  a 0x401501ab  b 0x401501ac
+  MOVED kv.v_cache  25 of 64 cells, first cell 16  a 0xc021d473  b 0xc021d472
+  MOVED attn.scores  26 of 32 cells, first cell 1  a 0xbfddda7d  b 0xbfddda80
+  MOVED attn.masked  16 of 32 cells, first cell 4  a 0xbe1cd5a4  b 0xbe1cd5b7
+  MOVED attn.max  4 of 8 cells, first cell 1  a 0x3f97fc0b  b 0x3f97fc04
+  MOVED attn.exp  10 of 32 cells, first cell 4  a 0x3e85fe2d  b 0x3e85fe32
+  MOVED attn.denom  3 of 8 cells, first cell 1  a 0x3fa17f8b  b 0x3fa17f8c
+  MOVED attn.weights  13 of 32 cells, first cell 4  a 0x3e546654  b 0x3e54665b
+  MOVED attn.ctx  70 of 128 cells, first cell 32  a 0xbff9e268  b 0xbff9e265
+  MOVED o_proj.out  83 of 128 cells, first cell 32  a 0x3f8a9bab  b 0x3f8a9baa
+  MOVED residual1.out  66 of 128 cells, first cell 33  a 0xbee32196  b 0xbee3219a
+  MOVED norm2.sumsq  1 of 4 cells, first cell 2  a 0x427df6ef  b 0x427df6ee
+  MOVED norm2.out  90 of 128 cells, first cell 0  a 0x3e674eb3  b 0x3e674eb4
+  MOVED gate_proj.out  215 of 256 cells, first cell 0  a 0x3ed42808  b 0x3ed4280a
+  MOVED up_proj.out  198 of 256 cells, first cell 0  a 0xbf4e89c1  b 0xbf4e89c3
+  MOVED silu.out  191 of 256 cells, first cell 0  a 0x3e7f7e53  b 0x3e7f7e56
+  MOVED mlp.gated  219 of 256 cells, first cell 0  a 0xbe4e2122  b 0xbe4e2126
+  MOVED down_proj.out  111 of 128 cells, first cell 0  a 0x3e3a2799  b 0x3e3a279b
+  MOVED residual2.out  92 of 128 cells, first cell 0  a 0x3f1711e1  b 0x3f1711e2
+  case 11 adv_score_neg_zero  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  10976 cells: 27 of 30 stages MOVED, first at norm1.out on 70 of 128 cells
+  OK    input.x  (128 cells)
+  OK    norm1.sumsq  (4 cells)
+  MOVED norm1.out  70 of 128 cells, first cell 0  a 0xbe38d1ca  b 0xbe38d1cb
+  MOVED q_proj.out  74 of 128 cells, first cell 1  a 0xbf1e47a5  b 0xbf1e47a3
+  MOVED k_proj.out  40 of 64 cells, first cell 0  a 0xc042a86c  b 0xc042a86d
+  MOVED v_proj.out  38 of 64 cells, first cell 0  a 0xbf4726ed  b 0xbf4726eb
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  104 of 128 cells, first cell 1  a 0xbf1e47a5  b 0xbf1e47a3
+  MOVED k_rope.out  48 of 64 cells, first cell 0  a 0xc042a86c  b 0xc042a86d
+  MOVED kv.k_cache  48 of 64 cells, first cell 0  a 0xc042a86c  b 0xc042a86d
+  MOVED kv.v_cache  38 of 64 cells, first cell 0  a 0xbf4726ed  b 0xbf4726eb
+  MOVED attn.scores  27 of 32 cells, first cell 0  a 0x3f3b18e6  b 0x3f3b18dd
+  MOVED attn.masked  17 of 32 cells, first cell 0  a 0x3f3b18e6  b 0x3f3b18dd
+  MOVED attn.max  8 of 8 cells, first cell 0  a 0x3f3b18e6  b 0x3f3b18dd
+  MOVED attn.exp  11 of 32 cells, first cell 5  a 0x3db86d80  b 0x3db86d89
+  MOVED attn.denom  3 of 8 cells, first cell 1  a 0x3f8b86d8  b 0x3f8b86d9
+  MOVED attn.weights  15 of 32 cells, first cell 4  a 0x3f6ad9de  b 0x3f6ad9dd
+  MOVED attn.ctx  111 of 128 cells, first cell 0  a 0xbf4726ed  b 0xbf4726eb
+  MOVED o_proj.out  118 of 128 cells, first cell 0  a 0x3dfdeaa0  b 0x3dfdeaa8
+  MOVED residual1.out  107 of 128 cells, first cell 0  a 0xbd907ca0  b 0xbd907c98
+  MOVED norm2.sumsq  3 of 4 cells, first cell 0  a 0x43075290  b 0x43075291
+  MOVED norm2.out  105 of 128 cells, first cell 0  a 0xbd1b47f4  b 0xbd1b47ea
+  MOVED gate_proj.out  223 of 256 cells, first cell 0  a 0xbf565609  b 0xbf565608
+  MOVED up_proj.out  227 of 256 cells, first cell 0  a 0x3f6c2620  b 0x3f6c2621
+  MOVED silu.out  207 of 256 cells, first cell 1  a 0xbd82058e  b 0xbd820591
+  MOVED mlp.gated  244 of 256 cells, first cell 0  a 0xbe6eee54  b 0xbe6eee55
+  MOVED down_proj.out  119 of 128 cells, first cell 0  a 0x3cc75ec2  b 0x3cc75ebe
+  MOVED residual2.out  116 of 128 cells, first cell 0  a 0xbd3d49df  b 0xbd3d49d1
+  case 12 adv_score_extreme  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  10976 cells: 27 of 30 stages MOVED, first at norm1.out on 23 of 128 cells
+  OK    input.x  (128 cells)
+  OK    norm1.sumsq  (4 cells)
+  MOVED norm1.out  23 of 128 cells, first cell 64  a 0xbfb22398  b 0xbfb22399
+  MOVED q_proj.out  23 of 128 cells, first cell 64  a 0xbf3850bf  b 0xbf3850c3
+  MOVED k_proj.out  13 of 64 cells, first cell 32  a 0xbf01f28b  b 0xbf01f290
+  MOVED v_proj.out  12 of 64 cells, first cell 32  a 0xbf11c832  b 0xbf11c831
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  75 of 128 cells, first cell 32  a 0xbf066b60  b 0xbf066b5f
+  MOVED k_rope.out  36 of 64 cells, first cell 16  a 0x3fad80ed  b 0x3fad80ee
+  MOVED kv.k_cache  36 of 64 cells, first cell 16  a 0x3fad80ed  b 0x3fad80ee
+  MOVED kv.v_cache  12 of 64 cells, first cell 32  a 0xbf11c832  b 0xbf11c831
+  MOVED attn.scores  25 of 32 cells, first cell 3  a 0xc097a03f  b 0xc097a03e
+  MOVED attn.masked  16 of 32 cells, first cell 4  a 0xc02c49c0  b 0xc02c49bf
+  MOVED attn.max  6 of 8 cells, first cell 1  a 0x3f943dc2  b 0x3f943dbf
+  MOVED attn.exp  12 of 32 cells, first cell 4  a 0x3cae4cc6  b 0x3cae4ccd
+  MOVED attn.denom  2 of 8 cells, first cell 2  a 0x3fe599bc  b 0x3fe599ba
+  MOVED attn.weights  13 of 32 cells, first cell 4  a 0x3caaab2a  b 0x3caaab31
+  MOVED attn.ctx  66 of 128 cells, first cell 34  a 0x3e72d602  b 0x3e72d603
+  MOVED o_proj.out  78 of 128 cells, first cell 32  a 0x3f3d6f26  b 0x3f3d6f25
+  MOVED residual1.out  61 of 128 cells, first cell 32  a 0xbeae2fec  b 0xbeae2fee
+  MOVED norm2.sumsq  1 of 4 cells, first cell 2  a 0x425d6549  b 0x425d6548
+  MOVED norm2.out  69 of 128 cells, first cell 32  a 0xbe6d32d2  b 0xbe6d32d6
+  MOVED gate_proj.out  174 of 256 cells, first cell 64  a 0xbe51c490  b 0xbe51c492
+  MOVED up_proj.out  171 of 256 cells, first cell 65  a 0x3e86720c  b 0x3e867208
+  MOVED silu.out  170 of 256 cells, first cell 5  a 0x3f233ec1  b 0x3f233ec2
+  MOVED mlp.gated  189 of 256 cells, first cell 5  a 0xbec7a698  b 0xbec7a699
+  MOVED down_proj.out  93 of 128 cells, first cell 0  a 0x3e71a6cb  b 0x3e71a6c9
+  MOVED residual2.out  76 of 128 cells, first cell 0  a 0xbecfcdea  b 0xbecfcdec
+  case 13 adv_cache_hot_tail  B=1 L=4 S=4 cap=16 dm=32 nh=2 nkv=1 hd=16 inter=64  10976 cells: 22 of 30 stages MOVED, first at rope.cos on 3420 of 4096 cells
+  OK    input.x  (128 cells)
+  OK    norm1.sumsq  (4 cells)
+  OK    norm1.out  (128 cells)
+  OK    q_proj.out  (128 cells)
+  OK    k_proj.out  (64 cells)
+  OK    v_proj.out  (64 cells)
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  69 of 128 cells, first cell 32  a 0x3fc83877  b 0x3fc83876
+  MOVED k_rope.out  37 of 64 cells, first cell 17  a 0x3f6af3ce  b 0x3f6af3cb
+  MOVED kv.k_cache  37 of 64 cells, first cell 17  a 0x3f6af3ce  b 0x3f6af3cb
+  OK    kv.v_cache  (64 cells)
+  MOVED attn.scores  21 of 32 cells, first cell 1  a 0xc01b5956  b 0xc01b5957
+  MOVED attn.masked  13 of 32 cells, first cell 4  a 0xbe7ded0e  b 0xbe7ded08
+  MOVED attn.max  3 of 8 cells, first cell 1  a 0x4000b0fb  b 0x4000b0fc
+  MOVED attn.exp  10 of 32 cells, first cell 4  a 0x3dd5f8ad  b 0x3dd5f8ac
+  MOVED attn.denom  2 of 8 cells, first cell 3  a 0x3fe7daf4  b 0x3fe7daf2
+  MOVED attn.weights  13 of 32 cells, first cell 4  a 0x3dc1bb12  b 0x3dc1bb11
+  MOVED attn.ctx  33 of 128 cells, first cell 36  a 0xbfbb3444  b 0xbfbb3443
+  MOVED o_proj.out  33 of 128 cells, first cell 32  a 0x3f85e3ff  b 0x3f85e3fe
+  MOVED residual1.out  28 of 128 cells, first cell 32  a 0x4023e7aa  b 0x4023e7a9
+  MOVED norm2.sumsq  2 of 4 cells, first cell 1  a 0x42da43c3  b 0x42da43c1
+  MOVED norm2.out  80 of 128 cells, first cell 0  a 0x3f3a21f6  b 0x3f3a21f5
+  MOVED gate_proj.out  154 of 256 cells, first cell 0  a 0x3f6617e9  b 0x3f6617e4
+  MOVED up_proj.out  161 of 256 cells, first cell 0  a 0x3b083fc9  b 0x3b083f39
+  MOVED silu.out  153 of 256 cells, first cell 0  a 0x3f238735  b 0x3f238730
+  MOVED mlp.gated  183 of 256 cells, first cell 0  a 0x3aae1126  b 0x3aae1068
+  MOVED down_proj.out  102 of 128 cells, first cell 0  a 0x3e3216b9  b 0x3e3216b7
+  MOVED residual2.out  69 of 128 cells, first cell 0  a 0x40126c2a  b 0x40126c29
+  case 14 adv_masked_zero_row  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  10976 cells: 27 of 30 stages MOVED, first at norm1.out on 25 of 128 cells
+  OK    input.x  (128 cells)
+  OK    norm1.sumsq  (4 cells)
+  MOVED norm1.out  25 of 128 cells, first cell 0  a 0x3f92670c  b 0x3f92670d
+  MOVED q_proj.out  27 of 128 cells, first cell 1  a 0xbfbeac34  b 0xbfbeac35
+  MOVED k_proj.out  13 of 64 cells, first cell 0  a 0x4009ac98  b 0x4009ac99
+  MOVED v_proj.out  15 of 64 cells, first cell 0  a 0xc033cd26  b 0xc033cd28
+  OK    rope.inv_freq  (8 cells)
+  MOVED rope.cos  3420 of 4096 cells, first cell 8  a 0x3f0a5140  b 0x3f0a5141
+  MOVED rope.sin  3808 of 4096 cells, first cell 8  a 0x3f576aa4  b 0x3f576aa3
+  MOVED q_rope.out  104 of 128 cells, first cell 1  a 0xbfbeac34  b 0xbfbeac35
+  MOVED k_rope.out  52 of 64 cells, first cell 0  a 0x4009ac98  b 0x4009ac99
+  MOVED kv.k_cache  52 of 64 cells, first cell 0  a 0x4009ac98  b 0x4009ac99
+  MOVED kv.v_cache  15 of 64 cells, first cell 0  a 0xc033cd26  b 0xc033cd28
+  MOVED attn.scores  26 of 32 cells, first cell 0  a 0xbeb7195d  b 0xbeb7195f
+  MOVED attn.masked  12 of 32 cells, first cell 0  a 0xbeb7195d  b 0xbeb7195f
+  MOVED attn.max  6 of 8 cells, first cell 0  a 0xbeb7195d  b 0xbeb7195f
+  MOVED attn.exp  9 of 32 cells, first cell 5  a 0x3eb5bc44  b 0x3eb5bc48
+  MOVED attn.denom  4 of 8 cells, first cell 1  a 0x3fad6f11  b 0x3fad6f12
+  MOVED attn.weights  12 of 32 cells, first cell 4  a 0x3f3cefc4  b 0x3f3cefc3
+  MOVED attn.ctx  103 of 128 cells, first cell 0  a 0xc033cd26  b 0xc033cd28
+  MOVED o_proj.out  114 of 128 cells, first cell 1  a 0x3d8387fc  b 0x3d8387da
+  MOVED residual1.out  104 of 128 cells, first cell 1  a 0xbfb44c0c  b 0xbfb44c0e
+  MOVED norm2.sumsq  4 of 4 cells, first cell 0  a 0x429dad6a  b 0x429dad6c
+  MOVED norm2.out  106 of 128 cells, first cell 0  a 0xbc6f7c83  b 0xbc6f7c81
+  MOVED gate_proj.out  225 of 256 cells, first cell 0  a 0x3fa40eb8  b 0x3fa40ebb
+  MOVED up_proj.out  236 of 256 cells, first cell 0  a 0xbe83af46  b 0xbe83af4a
+  MOVED silu.out  209 of 256 cells, first cell 0  a 0x3f806a08  b 0x3f806a0b
+  MOVED mlp.gated  240 of 256 cells, first cell 0  a 0xbe841c5b  b 0xbe841c62
+  MOVED down_proj.out  123 of 128 cells, first cell 1  a 0xbe99e563  b 0xbe99e561
+  MOVED residual2.out  109 of 128 cells, first cell 1  a 0xbfdac565  b 0xbfdac566
+card: 30 records at /tmp/mojolearn_transformer_block.trace, contract section 9 wants 30
+card: 30/30 tags in contract section 9's order, all unique
+clause (a) [FAST]: RECORDED, NOT ASSERTED. 13 of 13 cases differ from the oracle, first at base_b1_l4_nrep1 at norm1.out. FAST is unversioned and makes no identity claim (contract section 0's header).
+clause (b): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_B=1)
+clause (c): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_C=1). BOTH HALVES ARE SKIPPED TOGETHER and that is deliberate: batch composition and sequence length are two different fixtures and a lane that ran one would have half a clause with a whole clause's name.
+clause (d): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_D=1). NOTE: two sabotage arms (S07_ROPE_RELATIVE_POSITION and S19_VALUE_SUM_VIA_GEMM) are falsifiable ONLY here, so a lane that never runs clause (d) has eleven arms and not thirteen.
+clause (e): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_E=1)
+SCOPE: this build, this column, FAST only. What is NOT closed by anything printed above: an INDEPENDENT reference (transformer/corpus/ does not exist, so every clause here is our device against our oracle and both are ours); FAST mode; every column that is not this one; and the twelve sabotage builds this binary is not. Contract section 11: nothing cross-vendor until a leg runs, and two backends agreeing closes nothing -- Apple and AMD agreed bit for bit through 302 GEMM stages while NVIDIA diverged at tree001.winners.scores.

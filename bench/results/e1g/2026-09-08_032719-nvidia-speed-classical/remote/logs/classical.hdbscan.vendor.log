@@ -1,0 +1,23 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=hdbscan arm=cuml-gpu size=scale fixture_source=splitmix64 shape=scale.200000x32
+FSPEED-NOTE lane=hdbscan arm=cuml-gpu min_samples, min_cluster_size, metric and cluster_selection_method are passed explicitly. At 200000 rows both arms are dominated by launch latency; this is the fixture the lane ships and it has no size knob
+FSPEED-HEADER family=classical lane=hdbscan arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+FSPEED-NOTE lane=hdbscan arm=cuml-gpu output is 1600000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=hdbscan arm=cuml-gpu shape=scale.200000x32 ms=1571.834214
+FSPEED-NOTE lane=hdbscan arm=cuml-gpu output is 1600000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=hdbscan arm=cuml-gpu shape=scale.200000x32 round=1 ms=1024.919682 hash=-
+FSPEED-NOTE lane=hdbscan arm=cuml-gpu output is 1600000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=hdbscan arm=cuml-gpu shape=scale.200000x32 round=2 ms=1094.487434 hash=-
+FSPEED-NOTE lane=hdbscan arm=cuml-gpu output is 1600000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=hdbscan arm=cuml-gpu shape=scale.200000x32 round=3 ms=1026.733972 hash=-
+FSPEED-NOTE lane=hdbscan arm=cuml-gpu output is 1600000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=hdbscan arm=cuml-gpu shape=scale.200000x32 round=4 ms=1048.911437 hash=-
+FSPEED-NOTE lane=hdbscan arm=cuml-gpu output is 1600000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=hdbscan arm=cuml-gpu shape=scale.200000x32 round=5 ms=1021.783312 hash=-

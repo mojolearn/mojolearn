@@ -1,0 +1,5 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=arima arm=cuml-gpu reason=NOT-INSTALLED: cuml.tsa.arima.ARIMA did not import (ImportError('libcuml.so: cannot open shared object file: No such file or directory')); cuML's own page says "cuml.tsa is deprecated in cuML 26.08 and will be removed in the cuML 26.12 release." (https://docs.nvidia.com/cuml/latest/api/cuml.tsa/)

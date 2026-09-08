@@ -1,0 +1,19 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=ivf arm=cuvs-gpu size=scale fixture_source=splitmix64 shape=scale.1000000x64q10000L1024p32k10
+FSPEED-NOTE lane=ivf arm=cuvs-gpu ONE build plus ONE search inside the clock, matching ivf_flat_build_and_search_host. metric=sqeuclidean, kmeans_trainset_fraction=1.0, n_probes and n_lists passed explicitly (cuVS defaults n_probes to 20)
+FSPEED-HEADER family=classical lane=ivf arm=cuvs-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+FSPEED-NOTE lane=ivf arm=cuvs-gpu output is 1200000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=ivf arm=cuvs-gpu shape=scale.1000000x64q10000L1024p32k10 ms=795.058751
+FSPEED-NOTE lane=ivf arm=cuvs-gpu output is 1200000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=ivf arm=cuvs-gpu shape=scale.1000000x64q10000L1024p32k10 round=1 ms=430.739939 hash=-
+FSPEED-NOTE lane=ivf arm=cuvs-gpu output is 1200000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=ivf arm=cuvs-gpu shape=scale.1000000x64q10000L1024p32k10 round=2 ms=425.523146 hash=-
+FSPEED-NOTE lane=ivf arm=cuvs-gpu output is 1200000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=ivf arm=cuvs-gpu shape=scale.1000000x64q10000L1024p32k10 round=3 ms=303.297899 hash=-
+FSPEED-NOTE lane=ivf arm=cuvs-gpu output is 1200000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=ivf arm=cuvs-gpu shape=scale.1000000x64q10000L1024p32k10 round=4 ms=422.299215 hash=-
+FSPEED-NOTE lane=ivf arm=cuvs-gpu output is 1200000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=ivf arm=cuvs-gpu shape=scale.1000000x64q10000L1024p32k10 round=5 ms=302.605578 hash=-

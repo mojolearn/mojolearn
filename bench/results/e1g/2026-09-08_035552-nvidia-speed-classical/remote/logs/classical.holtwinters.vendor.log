@@ -1,0 +1,25 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu size=scale fixture_source=splitmix64 shape=scale.20000x1200f12
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu seasonal=additive, seasonal_periods, start_periods, ts_num and eps all passed explicitly. The dump is series-major (batch_size x n), which is cuML's own (ts_num, n) layout, so no transpose is needed
+FSPEED-HEADER family=classical lane=holtwinters arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+/root/mojolearn/tools/speed_cuml_arm.py:2593: FutureWarning: `cuml.tsa.ExponentialSmoothing`, along with the entire `cuml.tsa` module, was deprecated in version 26.08 and will be removed in version 26.12.
+  m = ExponentialSmoothing(y, seasonal="additive",
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 ms=11086.818569
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 round=1 ms=10599.295303 hash=-
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 round=2 ms=10723.311990 hash=-
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 round=3 ms=10539.319370 hash=-
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 round=4 ms=9963.398261 hash=-
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 round=5 ms=10082.467755 hash=-

@@ -1,0 +1,30 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:285: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:285: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu size=scale fixture_source=splitmix64 shape=scale.20000x1200f12
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu seasonal=additive, seasonal_periods, start_periods, ts_num and eps all passed explicitly. The dump is series-major (batch_size x n), which is cuML's own (ts_num, n) layout, so no transpose is needed
+FSPEED-HEADER family=classical lane=holtwinters arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+/root/mojolearn/tools/speed_cuml_arm.py:2764: FutureWarning: `cuml.tsa.ExponentialSmoothing`, along with the entire `cuml.tsa` module, was deprecated in version 26.08 and will be removed in version 26.12.
+  m = ExponentialSmoothing(y, seasonal="additive",
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 ms=8730.366939
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 round=1 ms=8289.245639 hash=-
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 round=2 ms=8242.543453 hash=-
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 round=3 ms=8204.384326 hash=-
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 round=4 ms=8128.822555 hash=-
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu output is 95040000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=holtwinters arm=cuml-gpu shape=scale.20000x1200f12 round=5 ms=8201.686178 hash=-
+/root/mojolearn/tools/speed_cuml_arm.py:2782: FutureWarning: `cuml.tsa.ExponentialSmoothing`, along with the entire `cuml.tsa` module, was deprecated in version 26.08 and will be removed in version 26.12.
+  m_hold = ExponentialSmoothing(y_fit, seasonal="additive",
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu holdout: the last h=24 observations of each of the 20000 series are held out; the score is the RMSE of forecast(24) from a fit on the first 1176 observations, over every series and horizon, outside the clock (DEVIATION 2270)
+FSPEED-ACC lane=holtwinters arm=cuml-gpu metric=holdout_rmse_h24 value=0.362687
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu fitted smoothing parameters of the holdout (n-h=1176) fit: alpha: no accessor on ExponentialSmoothing (looked for alpha_ and get_alpha); beta: no accessor on ExponentialSmoothing (looked for beta_ and get_beta); gamma: no accessor on ExponentialSmoothing (looked for gamma_ and get_gamma) (DEVIATION 2270)

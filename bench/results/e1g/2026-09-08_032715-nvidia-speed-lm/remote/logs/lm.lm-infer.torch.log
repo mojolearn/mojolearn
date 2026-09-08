@@ -1,0 +1,15 @@
+FSPEED-HEADER family=lm lane=lm-infer arm=torch mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=lm-infer arm=torch torch=2.4.1+cu124 build=CUDA 12.4 torch default configuration; deterministic_algorithms=False cudnn.deterministic=False cudnn.benchmark=False, none of them changed by this arm; tf32 switches as found after configuration: {'matmul_allow_tf32': False, 'cudnn_allow_tf32': True, 'float32_matmul_precision': 'highest'}
+FSPEED-NOTE lane=lm-infer arm=torch model=mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1 definition=tools/byte_lm_gradient_oracle.py::reference ported to FP32 leaf tensors; loss_spelling=cross_entropy attention=eager
+FSPEED-NOTE lane=lm-infer arm=torch recipe init=u32-avalanche-index-xor-42595445-top8-centered128-div1024-norm1.v1 corpus_sha256=86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed initial_parameters_sha256=b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424 steps=128 optimizer=AdamW(lr=0.003000000026077032,betas=(0.8999999761581421, 0.9990000128746033),eps=9.99999993922529e-09,weight_decay=0.00999999977648
+FSPEED-NOTE lane=lm-infer arm=torch fixed tiny shape B2/L32/DM32/H4/KV2/FF64/V256 (34944 FP32 parameters): this is a LATENCY comparison of a launch-bound program, not a throughput comparison; no number here describes either side at a size that fills the device
+FSPEED-WARMUP lane=lm-infer arm=torch shape=bytelm-2x33-forward ms=290.366
+FSPEED lane=lm-infer arm=torch shape=bytelm-2x33-forward round=1 ms=1.561 hash=c2c683a2d68c5daa
+FSPEED lane=lm-infer arm=torch shape=bytelm-2x33-forward round=2 ms=1.308 hash=c2c683a2d68c5daa
+FSPEED lane=lm-infer arm=torch shape=bytelm-2x33-forward round=3 ms=1.269 hash=c2c683a2d68c5daa
+FSPEED lane=lm-infer arm=torch shape=bytelm-2x33-forward round=4 ms=1.256 hash=c2c683a2d68c5daa
+FSPEED lane=lm-infer arm=torch shape=bytelm-2x33-forward round=5 ms=1.234 hash=c2c683a2d68c5daa
+FSPEED-NOTE lane=lm-infer arm=torch hash repeated across 5 rounds
+FSPEED-ACC lane=lm-infer arm=torch metric=forward_loss value=5.540777
+FSPEED-NOTE lane=lm-infer arm=torch forward_loss_fp32_bits=0x40b14e0b forward_loss_sha256=c2c683a2d68c5daa5293d51cd28ecbae5d2b5d5779190c254c59fd95f1027077 batch_start=65536
+FSPEED-DONE lane=lm-infer arm=torch

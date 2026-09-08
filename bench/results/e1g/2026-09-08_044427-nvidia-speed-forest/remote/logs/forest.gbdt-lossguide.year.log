@@ -1,0 +1,103 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+6983 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3938c0000000, nodemask=2)
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-gpu-deterministic reason=NOT-OFFERED: CatBoost documents no deterministic GPU configuration; official doc (features/training-on-gpu): "Training on GPU is non-deterministic, because the order of floating point summations is non-deterministic in this implementation."
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-gpu-deterministic reason=NOT-OFFERED: no documented deterministic parameter for tree_method='hist' on device='cuda' (no deterministic_histogram in the current Parameters page); the fast arm's per-round hash column records whether it repeats.
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda-deterministic reason=NOT-OFFERED: LightGBM's `deterministic` parameter is documented "used only with cpu device type" (Parameters page); there is no deterministic configuration for device_type='cuda'
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+7068 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x336c40000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=year-463715x90 ms=2998.737
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 ms=1657.326
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 ms=1426.000
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] Using sparse features with CUDA is currently not supported.
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+FSPEED-WARMUP lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 ms=2119.341
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=1 ms=2236.799 hash=e7dbb3b09b46afd3
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=ours round=1 metric=rmse value=9.045183
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 round=1 ms=1587.035 hash=bda5ea4da9f42518
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=catboost-gpu round=1 metric=rmse value=9.049031
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 round=1 ms=1328.196 hash=fe5d29f8ee353056
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=xgboost-gpu round=1 metric=rmse value=9.047584
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] Using sparse features with CUDA is currently not supported.
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 round=1 ms=2199.061 hash=3ff3fbb7f2342617
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=lightgbm-cuda round=1 metric=rmse value=9.060042
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=2 ms=2240.871 hash=e7dbb3b09b46afd3
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=ours round=2 metric=rmse value=9.045183
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 round=2 ms=1599.198 hash=bda5ea4da9f42518
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=catboost-gpu round=2 metric=rmse value=9.049031
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 round=2 ms=1293.814 hash=fe5d29f8ee353056
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=xgboost-gpu round=2 metric=rmse value=9.047584
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] Using sparse features with CUDA is currently not supported.
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 round=2 ms=2185.219 hash=c1e5296a6a762e64
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=lightgbm-cuda round=2 metric=rmse value=9.060042
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=3 ms=2213.602 hash=e7dbb3b09b46afd3
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=ours round=3 metric=rmse value=9.045183
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 round=3 ms=1600.448 hash=bda5ea4da9f42518
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=catboost-gpu round=3 metric=rmse value=9.049031
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 round=3 ms=1326.080 hash=fe5d29f8ee353056
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=xgboost-gpu round=3 metric=rmse value=9.047584
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] Using sparse features with CUDA is currently not supported.
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 round=3 ms=2127.312 hash=dc6c8f768c10752a
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=lightgbm-cuda round=3 metric=rmse value=9.060042
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=4 ms=2224.270 hash=e7dbb3b09b46afd3
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=ours round=4 metric=rmse value=9.045183
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 round=4 ms=1635.940 hash=bda5ea4da9f42518
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=catboost-gpu round=4 metric=rmse value=9.049031
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 round=4 ms=1375.513 hash=fe5d29f8ee353056
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=xgboost-gpu round=4 metric=rmse value=9.047584
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] Using sparse features with CUDA is currently not supported.
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 round=4 ms=2105.831 hash=7208813664877210
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=lightgbm-cuda round=4 metric=rmse value=9.060042
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=5 ms=2201.873 hash=e7dbb3b09b46afd3
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=ours round=5 metric=rmse value=9.045183
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=year-463715x90 round=5 ms=1630.931 hash=bda5ea4da9f42518
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=catboost-gpu round=5 metric=rmse value=9.049031
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=year-463715x90 round=5 ms=1286.678 hash=fe5d29f8ee353056
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=xgboost-gpu round=5 metric=rmse value=9.047584
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] Using sparse features with CUDA is currently not supported.
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=year-463715x90 round=5 ms=2127.917 hash=5e2b07157253d02a
+FSPEED-ACC-ROUND lane=gbdt-lossguide arm=lightgbm-cuda round=5 metric=rmse value=9.060141
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=rmse value=9.045183
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-gpu metric=rmse value=9.049031
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=rmse value=9.047584
+[LightGBM] [Warning] feature_fraction is set=1.0, colsample_bytree=1.0 will be ignored. Current value: feature_fraction=1.0
+[LightGBM] [Warning] bagging_fraction is set=1.0, subsample=1.0 will be ignored. Current value: bagging_fraction=1.0
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cuda metric=rmse value=9.060141

@@ -1,0 +1,5 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=kpss arm=cuml-gpu-deterministic reason=NOT-DOCUMENTED: cuML's API reference has no page for kpss_test; the cuml.tsa page names it only in "cuml.tsa is deprecated in cuML 26.08 and will be removed in the cuML 26.12 release. This includes ... cuml.tsa.stationarity.kpss_test ..." and states nothing about determinism (https://docs.nvidia.com/cuml/latest/api/cuml.tsa/)

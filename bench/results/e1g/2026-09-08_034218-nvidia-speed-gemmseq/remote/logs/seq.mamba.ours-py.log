@@ -1,0 +1,65 @@
+FSPEED-HEADER family=seq lane=mamba arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=mamba arm=ours entry=mojolearn.mamba.Mamba1Block(weights).forward(x) -> mamba/ via _mojolearn_mamba; our arm through the public Python API (DEVIATION 2100); cli_lane=mamba1 rows=large
+3042 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x394e40000000, nodemask=2)
+3042 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x106b80000000, nodemask=1)
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=norm.weight n=512 hash=7388978f7e9545b5
+FSPEED-INPUT-SHA256 lane=mamba shape=narrow.b8_l4096_d512 tensor=norm.weight bytes=2048 sha256=088c0fc28cfedcea302d9ad606471c81809345a5fceb7934f08a0bc8f8450aec
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=in_proj.weight n=1048576 hash=481754feb85f36f6
+FSPEED-INPUT-SHA256 lane=mamba shape=narrow.b8_l4096_d512 tensor=in_proj.weight bytes=4194304 sha256=b66205c650750b9b13c8b1099f20890d81a120edff2aebf08c1c2ed5faa068e5
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=conv1d.weight n=4096 hash=67976f721eb82707
+FSPEED-INPUT-SHA256 lane=mamba shape=narrow.b8_l4096_d512 tensor=conv1d.weight bytes=16384 sha256=a5bf783aab23ecb624208a9003239cc936cfc69923f071eef6244c1a799ae116
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=conv1d.bias n=1024 hash=7f62c8391f8f063d
+FSPEED-INPUT-SHA256 lane=mamba shape=narrow.b8_l4096_d512 tensor=conv1d.bias bytes=4096 sha256=aea9d4aea37a95f47bfc1e03b8829185cb0f1d37bd1e82df034b8d03a02b69ab
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=x_proj.weight n=65536 hash=49c2e64cf704c795
+FSPEED-INPUT-SHA256 lane=mamba shape=narrow.b8_l4096_d512 tensor=x_proj.weight bytes=262144 sha256=956fb6cb2ffaed4fb1f6789a46dd89528b45bfa71dbfd03fd94c247cf8618822
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=dt_proj.weight n=32768 hash=e21136ce5055447f
+FSPEED-INPUT-SHA256 lane=mamba shape=narrow.b8_l4096_d512 tensor=dt_proj.weight bytes=131072 sha256=1c810cba19d5ce8522275c56a67350a3556394d9042992aa0bfd46da4f1fb52c
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=dt_proj.bias n=1024 hash=c0b096986c35c02d
+FSPEED-INPUT-SHA256 lane=mamba shape=narrow.b8_l4096_d512 tensor=dt_proj.bias bytes=4096 sha256=0d3f1ca87949d6416a7486d17a4506a75cf45b61e1f6d8b05eeeb021a2a3b706
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=A_log n=16384 hash=e11fd54467cdeeb6
+FSPEED-INPUT-SHA256 lane=mamba shape=narrow.b8_l4096_d512 tensor=A_log bytes=65536 sha256=a1487124ff58bf36de78c7fb53d355b3b3860ad7222b621ae34c465267f7d4f5
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=D n=1024 hash=eded0715a9278dbb
+FSPEED-INPUT-SHA256 lane=mamba shape=narrow.b8_l4096_d512 tensor=D bytes=4096 sha256=2763c0cd81e9539142d657482d86ce1eb6975456dfc4791db82c8bad6dc4c7a9
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=out_proj.weight n=524288 hash=57b08ebd6ad71117
+FSPEED-INPUT-SHA256 lane=mamba shape=narrow.b8_l4096_d512 tensor=out_proj.weight bytes=2097152 sha256=aa7f213a9727d874a102c7d9756dceb77bac377b5cd6854c7c65261b4722040f
+FSPEED-WEIGHTS lane=mamba shape=narrow.b8_l4096_d512 tensor=x n=16777216 hash=b5d9d4c71b1268d2
+FSPEED-NOTE lane=mamba arm=ours binary read-back shape=narrow.b8_l4096_d512 numeric_mode_used=identical vendor_used=cuda entry=mojolearn.mamba.Mamba1Block(weights).forward(x) -> mamba/ via _mojolearn_mamba
+FSPEED-NOTE lane=mamba arm=ours one round at shape narrow.b8_l4096_d512 = one public forward() including the weight host-list copy + upload, the non-finite refusal scan and the output download; the return is the synchronization (DEVIATION 2111)
+FSPEED-WARMUP lane=mamba arm=ours shape=narrow.b8_l4096_d512 ms=1140.388660
+FSPEED lane=mamba arm=ours shape=narrow.b8_l4096_d512 round=1 ms=302.596420 hash=0df7ce03fc2924a7
+FSPEED lane=mamba arm=ours shape=narrow.b8_l4096_d512 round=2 ms=300.237767 hash=0df7ce03fc2924a7
+FSPEED lane=mamba arm=ours shape=narrow.b8_l4096_d512 round=3 ms=301.132239 hash=0df7ce03fc2924a7
+FSPEED lane=mamba arm=ours shape=narrow.b8_l4096_d512 round=4 ms=301.809292 hash=0df7ce03fc2924a7
+FSPEED lane=mamba arm=ours shape=narrow.b8_l4096_d512 round=5 ms=298.019659 hash=0df7ce03fc2924a7
+FSPEED-NOTE lane=mamba arm=ours output witness shape=narrow.b8_l4096_d512 n=16777216 hash=2bd591394a55ab00
+FSPEED-NOTE lane=mamba arm=ours dump shape=narrow.b8_l4096_d512 n=16777216 path=/root/gemm_leg_out/dump/seq.mamba.narrow.b8_l4096_d512.f32.bin
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=norm.weight n=2048 hash=e24a83d2183244f5
+FSPEED-INPUT-SHA256 lane=mamba shape=wide.b8_l1024_d2048 tensor=norm.weight bytes=8192 sha256=6bc67e1a759149c940db92afaa0550da13f9618635c36aee58eff853b3b1aec3
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=in_proj.weight n=16777216 hash=2502b9ba170828db
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=conv1d.weight n=16384 hash=a430287a8b23f478
+FSPEED-INPUT-SHA256 lane=mamba shape=wide.b8_l1024_d2048 tensor=conv1d.weight bytes=65536 sha256=9a989afde3cfa8af4333c4749529df43e59b053e79dd20c1a385477a0b1c2cae
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=conv1d.bias n=4096 hash=92a5d8c62b5c6e8c
+FSPEED-INPUT-SHA256 lane=mamba shape=wide.b8_l1024_d2048 tensor=conv1d.bias bytes=16384 sha256=62cd13c7de4a41f1632efdd84793fcbc50d1a043f08215aa38207c7b67da1a9e
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=x_proj.weight n=655360 hash=9445a84864b289c7
+FSPEED-INPUT-SHA256 lane=mamba shape=wide.b8_l1024_d2048 tensor=x_proj.weight bytes=2621440 sha256=46b68cf3991ba04597f1a9dd80aa6ebedff07c17477a5287cc019f4d006f9f61
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=dt_proj.weight n=524288 hash=019dc1310448a3ac
+FSPEED-INPUT-SHA256 lane=mamba shape=wide.b8_l1024_d2048 tensor=dt_proj.weight bytes=2097152 sha256=de20dea4bdf6f853563bf3f7c67546d65781fc4345cf2bd3195d1c91a535acab
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=dt_proj.bias n=4096 hash=4d26f8359566ed42
+FSPEED-INPUT-SHA256 lane=mamba shape=wide.b8_l1024_d2048 tensor=dt_proj.bias bytes=16384 sha256=a750fb25abcbcf1e0e4eac3cd2c0265485cfb0feeb36ca55e5396df22f2b5a92
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=A_log n=65536 hash=5779baf7d916288b
+FSPEED-INPUT-SHA256 lane=mamba shape=wide.b8_l1024_d2048 tensor=A_log bytes=262144 sha256=5e679fa54401ae66bd094ba7e5c7a65fe6dd6a91e88863546ddda0a7fcd53515
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=D n=4096 hash=5c26ae66edb9f10d
+FSPEED-INPUT-SHA256 lane=mamba shape=wide.b8_l1024_d2048 tensor=D bytes=16384 sha256=40aab14f3a66117e689d005e0b138041551ef1efb54dadc7122d96f663050b0b
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=out_proj.weight n=8388608 hash=49156d0ecbbb580c
+FSPEED-WEIGHTS lane=mamba shape=wide.b8_l1024_d2048 tensor=x n=16777216 hash=b5d9d4c71b1268d2
+FSPEED-NOTE lane=mamba arm=ours binary read-back shape=wide.b8_l1024_d2048 numeric_mode_used=identical vendor_used=cuda entry=mojolearn.mamba.Mamba1Block(weights).forward(x) -> mamba/ via _mojolearn_mamba
+FSPEED-NOTE lane=mamba arm=ours one round at shape wide.b8_l1024_d2048 = one public forward() including the weight host-list copy + upload, the non-finite refusal scan and the output download; the return is the synchronization (DEVIATION 2111)
+FSPEED-WARMUP lane=mamba arm=ours shape=wide.b8_l1024_d2048 ms=638.312660
+FSPEED lane=mamba arm=ours shape=wide.b8_l1024_d2048 round=1 ms=685.784258 hash=81704d95cd7b748f
+FSPEED lane=mamba arm=ours shape=wide.b8_l1024_d2048 round=2 ms=652.889438 hash=81704d95cd7b748f
+FSPEED lane=mamba arm=ours shape=wide.b8_l1024_d2048 round=3 ms=644.058485 hash=81704d95cd7b748f
+FSPEED lane=mamba arm=ours shape=wide.b8_l1024_d2048 round=4 ms=631.806079 hash=81704d95cd7b748f
+FSPEED lane=mamba arm=ours shape=wide.b8_l1024_d2048 round=5 ms=646.155611 hash=81704d95cd7b748f
+FSPEED-NOTE lane=mamba arm=ours output witness shape=wide.b8_l1024_d2048 n=16777216 hash=c1983adb216b3705
+FSPEED-NOTE lane=mamba arm=ours dump shape=wide.b8_l1024_d2048 n=16777216 path=/root/gemm_leg_out/dump/seq.mamba.wide.b8_l1024_d2048.f32.bin
+FSPEED-DONE lane=mamba arm=ours mode=IDENTICAL

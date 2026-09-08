@@ -1,0 +1,19 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=logistic arm=cuml-gpu size=scale fixture_source=splitmix64 shape=4000000x32h400000
+FSPEED-NOTE lane=logistic arm=cuml-gpu penalty=l2 C=1 max_iter=100 tol=0.0001 fit_intercept=True solver=qn, all explicit and equal on both arms; the fit is rows [0, 3600000) and rows [3600000, 4000000) are held out for the log loss
+FSPEED-HEADER family=classical lane=logistic arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+FSPEED-WARMUP lane=logistic arm=cuml-gpu shape=4000000x32h400000 ms=4563.096942
+FSPEED lane=logistic arm=cuml-gpu shape=4000000x32h400000 round=1 ms=12.162935 hash=285091e0d4881c8e
+FSPEED lane=logistic arm=cuml-gpu shape=4000000x32h400000 round=2 ms=13.265053 hash=664f742b52148397
+FSPEED lane=logistic arm=cuml-gpu shape=4000000x32h400000 round=3 ms=12.345204 hash=03d0ab55bcc408e6
+FSPEED lane=logistic arm=cuml-gpu shape=4000000x32h400000 round=4 ms=11.720249 hash=2eb6df0c0b480262
+FSPEED lane=logistic arm=cuml-gpu shape=4000000x32h400000 round=5 ms=14.065180 hash=00991037b15d232f
+FSPEED-NOTE lane=logistic arm=cuml-gpu hash moved across rounds: 285091e0d4881c8e 664f742b52148397
+FSPEED-ACC lane=logistic arm=cuml-gpu metric=holdout_logloss_n400000 value=0.463779

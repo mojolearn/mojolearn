@@ -1,0 +1,15 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:285: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=gp arm=gpytorch-gpu size=scale fixture_source=splitmix64 shape=scale.20000x32s20000
+FSPEED-NOTE lane=gp arm=gpytorch-gpu gpytorch.models.ExactGP, ZeroMean, ScaleKernel(RBFKernel(ard_num_dims=32)) outputscale=1, GaussianLikelihood noise=alpha=9.53674e-07, NO hyperparameter optimization, FP32, allow_tf32=False; latent posterior mean and std at the stars (the noise is not added, matching return_std)
+FSPEED-NOTE lane=gp arm=gpytorch-gpu Cholesky forced: max_cholesky_size(20001) and fast_computations(covar_root_decomposition=False, log_prob=False, solves=False); GPyTorch's defaults would use conjugate gradients above 800 training rows
+FSPEED-NOTE lane=gp arm=gpytorch-gpu read-back after the constraint transforms: noise=9.53673862e-07 (fixture 9.53674316e-07), max |lengthscale - fixture| = 4.77e-07; GPyTorch stores both through a softplus and that is the only deviation from the fixed values
+FSPEED-HEADER family=classical lane=gp arm=gpytorch-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=scale
+FSPEED-REFUSED lane=gp arm=gpytorch-gpu reason=the 20000x20000 float32 RBF Gram with alpha=9.53674316e-07 did not factor (or GPyTorch tried to add jitter to make it): NumericalWarning: A not p.d., added jitter of 1.0e-06 to the diagonal
+FSPEED-REFUSED lane=gp arm=cuml-gpu reason=RAPIDS ships no Gaussian process regressor; the arm below is scikit-learn on the CPU and is labeled sklearn-cpu
+FSPEED-NOTE lane=gp arm=sklearn-cpu size=scale fixture_source=splitmix64 shape=scale.20000x32s20000
+FSPEED-NOTE lane=gp arm=sklearn-cpu optimizer=None and normalize_y=False on both sides: our gpr_fit_host implements no hyperparameter optimizer (DEVIATION 1761), so an arm that optimized would be doing different work
+FSPEED-NOTE lane=gp arm=sklearn-cpu scikit-learn works in float64 and we work in float32; that is a real difference in the amount of arithmetic and it cannot be turned off on their side
+FSPEED-REFUSED lane=gp arm=sklearn-cpu reason=GPU-PATH-ONLY: this box is a GPU vendor's box and sklearn-cpu is their CPU path. On NVIDIA and AMD we compare against the vendor's GPU arm only; the CPU arm is the MacBook's. This lane therefore has no legal opponent here, which is a fact about the vendor's GPU coverage and not a failure of this run.

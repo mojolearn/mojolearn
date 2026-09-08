@@ -1,0 +1,7 @@
+/root/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:256: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=gp arm=gpytorch-gpu-deterministic reason=NOT-DOCUMENTED: GPyTorch's ExactGP documentation (models.html#exactgp) and its settings page state nothing about determinism and take no seed; the settings page's one use of the word is deterministic_probes, "If True, we use the same set of probe vectors for computing log determinants each iteration. This introduces small amounts of bias in to the MLL, but allows us to compute a deterministic estimate of it which makes optimizers like L-BFGS more viable choices.", which concerns hyperparameter training and not the exact prediction this lane times (https://docs.gpytorch.ai/en/stable/settings.html)
+FSPEED-REFUSED lane=gp arm=cuml-gpu-deterministic reason=NOT-OFFERED: RAPIDS ships no Gaussian process regressor, so there is no GPU arm and no deterministic sibling of one; the CPU fallback arm is seeded by random_state in its default configuration and is GPU-PATH-ONLY refused on a GPU vendor's box (https://docs.nvidia.com/cuml/latest/api/)
+FSPEED-REFUSED lane=gp arm=sklearn-cpu-deterministic reason=NOT-APPLICABLE: the sklearn-cpu arm passes random_state in its default configuration already and is a CPU library; there is no separate deterministic configuration to time
