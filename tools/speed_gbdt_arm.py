@@ -1279,7 +1279,10 @@ def lightgbm_arms(lane, cfg, data, devices):
             feature_fraction=frac,
             max_depth=cfg["max_depth"],
             num_leaves=2 ** min(cfg["max_depth"], 15),
-            max_bin=255,
+            # DEVIATION 2255: the forest lanes quantize to cfg["n_bins"] (128,
+            # cuML's and ours); LightGBM was histogramming at 255, more work
+            # than either forest arm it was timed against. Matched, 2026-09-08.
+            max_bin=cfg["n_bins"],
             reg_lambda=0.0,
             learning_rate=1.0,   # ignored by rf boosting; pinned, not left
         )

@@ -3647,7 +3647,12 @@ except Exception as e:
     raise SystemExit(0)
 py = "cp%d%d" % (sys.version_info[0], sys.version_info[1])
 want = "%storch%scxx11abi%s" % (cu, tv, abi)
-sys.stderr.write("mamba wheel tag wanted: %s / %s\n" % (want, py))
+# DEVIATION 2254: the platform tag is part of the tuple. On 2026-09-07 the
+# newest matching asset was the linux_aarch64 wheel, pip refused it on the
+# x86_64 box, and the Mamba lanes were measured against the reference loop.
+import platform
+plat = "linux_%s" % platform.machine()
+sys.stderr.write("mamba wheel tag wanted: %s / %s / %s\n" % (want, py, plat))
 
 for repo in ("state-spaces/mamba", "Dao-AILab/causal-conv1d"):
     try:
@@ -3663,7 +3668,7 @@ for repo in ("state-spaces/mamba", "Dao-AILab/causal-conv1d"):
     for rel in rels:                      # newest first
         for a in rel.get("assets") or []:
             n = a.get("name", "")
-            if want in n and py in n and n.endswith(".whl"):
+            if want in n and py in n and plat in n and n.endswith(".whl"):
                 hit = a["browser_download_url"]
                 break
         if hit:
