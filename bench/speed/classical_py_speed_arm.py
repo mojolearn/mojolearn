@@ -82,15 +82,33 @@ anyway, because the within-arm question is the one this grid asks
 ACCURACY. `tools/speed_cuml_arm.py` emits no `FSPEED-ACC` line for any
 classical lane, by its own design ("a speed harness that also scores
 accuracy invites a reader to trade one against the other"), so this arm
-emits none either -- with two exceptions since 2026-09-08 (DEVIATION
+emits none either -- with three exceptions since 2026-09-08 (DEVIATION
 2239): the `logistic` lane scores log loss on the held-out last 10% of
-rows and the `arima` lane scores in-sample one-step RMSE, EACH THROUGH THE
-VENDOR MODULE'S OWN HELPER (`binary_log_loss`, `arima_insample_rmse`),
-imported by name, so the two arms score with one piece of arithmetic. A
-lane that scores returns a third element, `after()`, which `main` calls
-once after the race and prints as `FSPEED-ACC lane= arm=ours metric=
-value=`; a helper that is missing is a refusal before the race, because a
-row with a speed and no score is not the row this grid asks for.
+rows, the `arima` lane scores in-sample one-step RMSE, and the
+`holtwinters` lane (DEVIATION 2270) scores the RMSE of `forecast(h)`,
+`h = 2 * seasonal_periods`, from an UNTIMED fit on the first `n - h`
+observations of every series against the held-out last `h` (the timed
+fit stays on the full series), EACH THROUGH THE VENDOR MODULE'S OWN
+HELPER (`binary_log_loss`, `arima_insample_rmse`,
+`holtwinters_holdout_rmse`), imported by name, so the two arms score with
+one piece of arithmetic. A lane that scores returns a third element,
+`after()`, which `main` calls once after the race and prints as
+`FSPEED-ACC lane= arm=ours metric= value=`; a helper that is missing is a
+refusal before the race, because a row with a speed and no score is not
+the row this grid asks for. holtwinters' `after()` also NOTEs the batch
+means of the fitted `alpha_` / `beta_` / `gamma_` of that holdout fit, as
+the vendor arm does for cuML (which exposes none, and says so), and a
+fixture too short for the holdout is a NOTE, not a refusal.
+
+THE gp LANE AT scale (DEVIATION 2271). The vendor module's `scale` tier
+for `gp` carries alpha = 2**-20, the one positive jitter this arm's
+`identical` profile accepts (DEVIATION 2169), so the tier is the
+identical-mode profile and this arm no longer refuses it; `wide` keeps
+alpha 0.1 and is refused under `identical` exactly as before. If the
+20,000 x 20,000 float32 RBF Gram does not factor at that jitter, the
+lane's `call` raises `Refuse` with the factorization error's text and
+`main` prints it as one `FSPEED-REFUSED` on this arm, as it already does
+for any exception inside the race.
 
 THE FIFTH SIZE, scale (DEVIATION 2236). `tools/speed_cuml_arm.py`'s
 `scale` tier (DEVIATION 2230) is a narrow, generated fixture above the
@@ -115,7 +133,7 @@ THE OUTPUT CONTRACT is `tools/fast_speed_table.py`'s, unchanged:
     FSPEED-NOTE lane=<l> arm=ours <free text>
     FSPEED-REFUSED lane=<l> arm=ours reason=<one line>
     FSPEED-ACC lane=<l> arm=ours metric=<name> value=<float>   (logistic,
-        arima only; DEVIATION 2239)
+        arima, DEVIATION 2239; holtwinters, DEVIATION 2270)
 
 `arm=ours` is the label the brief fixes and the Mojo driver already uses,
 so a run directory that holds BOTH drivers' logs for one lane needs the
@@ -130,7 +148,8 @@ Environment (each a fallback for the flag of the same name):
     MOJOLEARN_NUMERIC_MODE    read by mojolearn at import, never by this file
 
 DEVIATION numbers 2160-2189 are this file's, plus 2236-2239 from the
-2026-09-08 block (2230-2249, shared with the vendor module); the ones
+2026-09-08 block (2230-2249, shared with the vendor module) and 2270-2271
+from the later block of the same day (2270-2274, also shared); the ones
 spent are listed at `DEVIATIONS` below so the next reader can see the gaps.
 """
 
@@ -243,6 +262,14 @@ DEVIATIONS = {
     2239: "FSPEED-ACC is emitted by an `after()` hook through the vendor "
           "module's helper (binary_log_loss, arima_insample_rmse), never "
           "a local scorer",
+    2270: "holtwinters: FSPEED-ACC holdout_rmse_h<2*seasonal_periods> from "
+          "an untimed fit on the first n-h observations, scored by the "
+          "vendor module's holtwinters_holdout_rmse; the timed fit is "
+          "untouched; alpha_/beta_/gamma_ batch means NOTEd; a fixture "
+          "too short for the holdout is a NOTE, not a refusal",
+    2271: "gp: the vendor module's scale tier carries alpha=2**-20, the "
+          "identical-mode jitter, so this arm runs it; a Gram that does "
+          "not factor is a Refuse carrying the factorization error",
 }
 
 
@@ -919,19 +946,34 @@ def lane_gp(ml, ctx):
     probe = ml.GaussianProcessRegressor(kernel=ml.RBF(length_scale=kernel_ls),
                                         alpha=alpha)
     _tier_check(lane, probe, ctx.loaded)
+    n_train = X.shape[0]
 
     def call():
         m = ml.GaussianProcessRegressor(kernel=ml.RBF(length_scale=kernel_ls),
                                         alpha=alpha, optimizer=None,
                                         normalize_y=False)
-        m.fit(X, y)
-        mean, std = m.predict(Xs, return_std=True)
+        try:
+            m.fit(X, y)
+            mean, std = m.predict(Xs, return_std=True)
+        except Exception as exc:                           # noqa: BLE001
+            # DEVIATION 2271: a Gram that does not factor at this alpha
+            # (the scale tier's 2**-20 on a 20,000 x 20,000 float32 RBF
+            # Gram is the case this was written for) is a refusal that
+            # carries the factorization error, on this arm's label; main
+            # prints it as one FSPEED-REFUSED and the process lives.
+            raise Refuse("the %dx%d float32 RBF Gram with alpha=%.9g did "
+                         "not factor (or fit/predict raised): %s: %s"
+                         % (n_train, n_train, alpha, exc.__class__.__name__,
+                            " ".join(str(exc).split())))
         return (mean, std)
 
     return call, [
         "kernel=RBF(length_scale from the fixture), alpha=%g, optimizer="
         "None, normalize_y=False on both arms; fit plus predict(return_std="
-        "True) inside the clock, matching the vendor" % alpha,
+        "True) inside the clock, matching the vendor%s"
+        % (alpha, " (alpha=2**-20 is the identical-mode jitter the scale "
+                  "tier carries, DEVIATION 2271)"
+                  if alpha == 2.0 ** -20 else ""),
         "this arm is float32 end to end; the vendor's sklearn-cpu fallback "
         "is float64 (a difference that cannot be turned off on either side, "
         "DEVIATION 2169) and its gpytorch-gpu incumbent is float32 with the "
@@ -1022,6 +1064,14 @@ def lane_holtwinters(ml, ctx):
     if not np.isfinite(y).all():
         raise Refuse("ExponentialSmoothing bound: endog must be finite "
                      "(DEVIATION 664 refuses a non-finite value by name)")
+    # DEVIATION 2270. The scorer is the vendor module's, looked up BEFORE
+    # the race so a missing helper is a refusal and never a scoreless row;
+    # the holdout is sliced here, outside the clock, and the timed fit
+    # below stays on the full-length `y` exactly as before.
+    holdout_rmse = vendor_helper("holtwinters_holdout_rmse")
+    h = 2 * freq
+    y_fit = np.ascontiguousarray(y[:, :n - h])
+    y_hold = np.ascontiguousarray(y[:, n - h:])
 
     def call():
         m = ml.ExponentialSmoothing(y, seasonal="additive",
@@ -1030,13 +1080,66 @@ def lane_holtwinters(ml, ctx):
         m.fit()
         return (np.ascontiguousarray(m.get_level(), dtype=np.float32),)
 
+    def after():
+        # DEVIATION 2270. One more fit on the first n - h observations of
+        # every series, outside the clock, then forecast(h) against the
+        # held-out block through the vendor module's helper. The class's
+        # forecast(h) with index=None returns cuML's (h, ts_num) block for
+        # ts_num > 1 and a flat array of h for one series (_tsa_impl.py);
+        # both are brought to series-major (ts_num, h) here.
+        if n - h < sp * freq:
+            emit_note(lane, "FSPEED-ACC skipped: holding out h=2*seasonal_"
+                            "periods=%d of n=%d leaves %d < start_periods*"
+                            "seasonal_periods=%d observations, below the "
+                            "estimator's own bound (DEVIATION 2270)"
+                      % (h, n, n - h, sp * freq))
+            return []
+        m = ml.ExponentialSmoothing(y_fit, seasonal="additive",
+                                    seasonal_periods=freq, start_periods=sp,
+                                    ts_num=batch, eps=eps)
+        m.fit()
+        fc = np.asarray(m.forecast(h), dtype=np.float64)
+        if fc.ndim == 1:
+            fc = fc.reshape(h, batch)
+        if fc.shape == (h, batch):
+            fc = fc.T
+        elif fc.shape != (batch, h):
+            raise Refuse("ExponentialSmoothing.forecast(%d) returned %s; "
+                         "expected (h, ts_num)=(%d, %d) or (ts_num, h)"
+                         % (h, fc.shape, h, batch))
+        fc = np.ascontiguousarray(fc)
+        emit_note(lane, "holdout: the last h=%d observations of each of the "
+                        "%d series are held out; the score is the RMSE of "
+                        "forecast(%d) from a fit on the first %d "
+                        "observations, over every series and horizon, "
+                        "outside the clock (DEVIATION 2270)"
+                  % (h, batch, h, n - h))
+        parts = []
+        for name in ("alpha_", "beta_", "gamma_"):
+            v = getattr(m, name, None)
+            if v is None:
+                parts.append("%s: no accessor on ExponentialSmoothing"
+                             % name)
+                continue
+            v = np.asarray(v, dtype=np.float64).reshape(-1)
+            parts.append("%s(%s) mean=%.6g min=%.6g max=%.6g"
+                         % (name[:-1], name, float(v.mean()), float(v.min()),
+                            float(v.max())))
+        emit_note(lane, "fitted smoothing parameters of the holdout "
+                        "(n-h=%d) fit: %s (DEVIATION 2270)"
+                  % (n - h, "; ".join(parts)))
+        return [("holdout_rmse_h%d" % h, holdout_rmse(y_hold, fc))]
+
     return call, [
         "seasonal=additive seasonal_periods=%d start_periods=%d ts_num=%d "
         "eps=%g, all explicit, the vendor arm's; the fixture is series-major "
         "(ts_num x n), which is this class's own (ts_num, n) layout, so no "
         "transpose is needed" % (freq, sp, batch, eps),
-        "get_level() is hashed, as the vendor hashes cuML's get_level()",
-    ]
+        "get_level() is hashed, as the vendor hashes cuML's get_level(); "
+        "FSPEED-ACC is the vendor module's holtwinters_holdout_rmse on "
+        "forecast(%d) from an untimed fit on the first %d observations "
+        "(DEVIATION 2270)" % (h, n - h),
+    ], after
 
 
 def lane_kpss(ml, ctx):
@@ -1258,7 +1361,8 @@ OUR_ENTRY_POINTS = {
     "spectral": "mojolearn.SpectralClustering(affinity='nearest_neighbors')"
                 ".fit -> hash(labels_)",
     "holtwinters": "mojolearn.ExponentialSmoothing(seasonal='additive')"
-                   ".fit -> hash(get_level())",
+                   ".fit -> hash(get_level()); FSPEED-ACC holdout RMSE of "
+                   "forecast(2 * seasonal_periods)",
     "kpss": "mojolearn.kpss_test(d=1) -> hash(stationary flags)",
     "logistic": "mojolearn.LogisticRegression(penalty='l2', C=1.0, "
                 "max_iter=100, tol=1e-4, fit_intercept=True).fit -> "

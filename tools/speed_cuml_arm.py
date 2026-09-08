@@ -86,11 +86,12 @@ Pure-Python FNV is about a microsecond a byte, so outputs above
 `FSPEED-NOTE`. Hashing four megabytes of k-means labels five times would cost
 more than the benchmark.
 
-ACCURACY IS NOT MEASURED HERE, WITH THREE EXCEPTIONS
-=====================================================
+ACCURACY IS NOT MEASURED HERE, WITH FOUR EXCEPTIONS
+====================================================
 `tools/fast_speed_table.py` understands an `FSPEED-ACC` line. This file emits
 one for the `umap` lane (DEVIATION 2136) and, since 2026-09-08, for the
-`logistic` and `arima` lanes (DEVIATION 2235). A speed harness that also
+`logistic` and `arima` lanes (DEVIATION 2235) and the `holtwinters` lane
+(DEVIATION 2270, below). A speed harness that also
 scores accuracy invites a reader to trade one against the other in a single
 table, and the lanes that need an accuracy statement have gates that make it
 properly. UMAP is the exception because its two arms share NO bits (two
@@ -103,6 +104,22 @@ rule can be fast by stopping early -- and their scorers are ONE helper each
 (`binary_log_loss` on the held-out last 10% of rows; `arima_insample_rmse`
 on the one-step in-sample prediction), imported by the `ours` arm from this
 file so both sides score with the same arithmetic.
+
+holtwinters (DEVIATION 2270, 2026-09-08) is the fourth exception for a
+different reason: on 2026-09-08 our arm ran 2.5x FASTER than cuML at
+20,000 x 1,200 and a row where the faster arm might simply have done less
+work cannot be printed until both arms prove they did equivalent work.
+Both arms hold out the LAST `h = 2 * seasonal_periods` observations of
+every series, fit once more on the first `n - h` OUTSIDE the clock after
+the timed rounds (the timed fit stays on the full-length series, byte
+for byte as before), call `forecast(h)`, and score the forecast against
+the held-out block through ONE helper, `holtwinters_holdout_rmse`, as
+`metric=holdout_rmse_h<h>`. A fixture too short for the holdout is a
+NOTE saying the score was skipped and why, never a refusal. Each arm
+also NOTEs the batch means of the fitted alpha / beta / gamma when the
+estimator exposes them (ours does; cuML's Python surface reads none
+back, and the note says so), so a reader can see whether the two fits
+converged to comparable smoothing parameters.
 
 THE SECOND ARM SELECTOR: THE VENDOR'S DETERMINISTIC CONFIGURATION
 ==================================================================
@@ -169,6 +186,17 @@ else, and the tag that comes back is the `large` tag. `scale` has no Mojo
 driver twin; it pairs `bench/speed/classical_py_speed_arm.py` with this
 file, as `wide` does.
 
+The `gp` lane's `scale` tier is the IDENTICAL-MODE PROFILE (DEVIATION
+2271, 2026-09-08): alpha = 2**-20, the one positive jitter our
+`GaussianProcessRegressor` accepts under `identical` (DEVIATION 2169),
+on the same planted data as before; `wide` keeps alpha = 0.1 byte for
+byte. Both arms catch a Gram that fails to factor at that jitter and
+refuse with the factorization error as the reason (`_gen_gp`'s
+docstring has the rest). The `gpytorch-gpu` arm additionally turns
+GPyTorch's automatic add-jitter-and-retry into that refusal (DEVIATION
+2272), because a Cholesky that silently succeeded at 1e-6 of added
+noise would not be the work at the fixture's alpha.
+
 TWO MORE LANES AND ONE MORE ARM (2026-09-08)
 ============================================
 `logistic` (DEVIATION 2232) times `cuml.linear_model.LogisticRegression`
@@ -200,6 +228,7 @@ import os
 import sys
 import shutil
 import time
+import warnings
 
 import numpy as np
 
@@ -353,9 +382,9 @@ def header(lane, arm, device, rounds, size, mode="FAST"):
 
 
 def acc(lane, arm, metric, value):
-    """DEVIATION 2136. Emitted by the umap lane, and (DEVIATION 2235) by
-    the logistic and arima lanes; see the module docstring for why every
-    other lane emits none."""
+    """DEVIATION 2136. Emitted by the umap lane, (DEVIATION 2235) by the
+    logistic and arima lanes, and (DEVIATION 2270) by the holtwinters
+    lane; see the module docstring for why every other lane emits none."""
     print("FSPEED-ACC lane=%s arm=%s metric=%s value=%.6f"
           % (lane, arm, metric, value), flush=True)
 
@@ -1272,18 +1301,33 @@ def _gen_gmm(size):
              "random_state": 0})
 
 
+#: DEVIATION 2271. The `scale` tier's ridge: the one positive jitter our
+#: `GaussianProcessRegressor` accepts under `identical` (DEVIATION 1637 /
+#: 2169). Spelled as a power of two so it is the same float64 on both
+#: arms and survives `float()` unchanged.
+GP_SCALE_ALPHA = 2.0 ** -20
+
+
 def _gen_gp(size):
     """`scale` (DEVIATION 2230) is the wide construction at 20,000 x 32
     with 20,000 stars: same planted linear target, same hashed ARD length
-    scales in [0.5, 7.5), same alpha 0.1. NOTE for the `ours` arm: under
-    `identical` its Cholesky profile accepts alpha in {+0.0, 2**-20} only
-    (DEVIATION 1637 / 2169), and that is as true of this tier as of
-    `wide`; the alpha is kept because a 2**-20 ridge on a 20,000 x 20,000
-    float32 RBF Gram matrix with these length scales does not factor."""
+    scales in [0.5, 7.5). `wide` keeps alpha 0.1, byte for byte.
+
+    THE SCALE TIER IS THE IDENTICAL-MODE PROFILE (DEVIATION 2271,
+    2026-09-08). Under `identical` our Cholesky profile accepts alpha in
+    {+0.0, 2**-20} only (DEVIATION 1637 / 2169), so with alpha 0.1 our arm
+    refused at this tier and the row had one side. `scale` now carries
+    alpha = `GP_SCALE_ALPHA` = 2**-20 on the same planted data; the
+    `gpytorch-gpu` arm reads that alpha from `params` as its fixed
+    likelihood noise exactly as it read 0.1 before. If the 20,000 x 20,000
+    float32 RBF Gram with this jitter fails to factor on EITHER arm, that
+    arm refuses with the factorization error in its reason -- which is the
+    finding, not a crash -- and the shape tag (`scale.20000x32s20000`)
+    stays distinct from wide's (`wide.8000x512s1000`)."""
     if size == "scale":
-        n, d, ns, fx = 20000, 32, 20000, "scale"
+        n, d, ns, fx, alpha = 20000, 32, 20000, "scale", GP_SCALE_ALPHA
     else:
-        n, d, ns, fx = 8000, 512, 1000, "wide"
+        n, d, ns, fx, alpha = 8000, 512, 1000, "wide", 0.1
     x = _u01_f32(n, d, 60)
     w = _u01_f32(d, 1, 61, add=-0.5)[:, 0].astype(np.float64)
     y = np.ascontiguousarray(x @ w, dtype=np.float32)
@@ -1292,7 +1336,7 @@ def _gen_gp(size):
     return ({"x": x, "y": y, "x_star": xs, "length_scale": ls},
             "%s.%dx%ds%d" % (fx, n, d, ns),
             {"fixture": fx, "n_train": n, "n_star": ns, "d": d,
-             "alpha": 0.1, "kernel": "rbf_ard"})
+             "alpha": alpha, "kernel": "rbf_ard"})
 
 
 def _gen_km(lane, size):
@@ -1559,7 +1603,8 @@ def fixture(lane, size):
                 cholesky    a (n, n), b (n, nrhs)
                 gmm         x (n, d)
                 gp          x (n_train, d), y, x_star (n_star, d),
-                            length_scale (d,)
+                            length_scale (d,); params["alpha"] is 0.1 at
+                            wide and 2**-20 at scale (DEVIATION 2271)
                 krr, nystroem, rbfsampler
                             x (n, d), y (n,), x_query (n_query, d)
                 resample    x (n, d)
@@ -1679,6 +1724,94 @@ def arima_insample_rmse(pred, y, skip):
                          "%s" % (p.shape, t.shape))
     diff = p[:, skip:] - t[:, skip:]
     return float(np.sqrt(np.mean(diff * diff)))
+
+
+def holtwinters_holdout_rmse(y_true, y_fc):
+    """DEVIATION 2270. Root mean squared error of an `h`-step forecast
+    against the held-out last `h` observations, over EVERY series and
+    EVERY horizon at once; both arguments are series-major
+    `(batch_size, h)`, and a 1-D pair (one series) is accepted as
+    `(1, h)`. ONE helper for both arms of the holtwinters lane; the
+    `ours` arm imports it from here so the accuracy column compares two
+    fits and not two scorers. Computed in float64 whatever the inputs'
+    width."""
+    t = np.asarray(to_numpy(y_true), dtype=np.float64)
+    f = np.asarray(to_numpy(y_fc), dtype=np.float64)
+    if t.ndim == 1:
+        t = t.reshape(1, -1)
+    if f.ndim == 1:
+        f = f.reshape(1, -1)
+    if t.shape != f.shape:
+        raise ValueError("holtwinters_holdout_rmse: forecast %s against "
+                         "held-out block %s" % (f.shape, t.shape))
+    diff = f - t
+    return float(np.sqrt(np.mean(diff * diff)))
+
+
+def _holtwinters_forecast_matrix(fc, batch, h):
+    """DEVIATION 2270. cuML's `ExponentialSmoothing.forecast(h)` with
+    `index=None` returns the `(h, ts_num)` block, or a flat array of `h`
+    when `ts_num == 1` (holtwinters.pyx, forecast; our port keeps those
+    shapes). Whatever came back is returned as series-major `(batch, h)`
+    float64, and a shape that is neither orientation is an error naming
+    both, so a surface change on either side is one readable line and
+    not a silently transposed score."""
+    a = np.asarray(to_numpy(fc), dtype=np.float64)
+    if a.ndim == 1:
+        if a.shape[0] != batch * h:
+            raise ValueError("forecast returned %d values for ts_num=%d h=%d"
+                             % (a.shape[0], batch, h))
+        # A flat return is the single-series case (batch == 1) or, if a
+        # surface ever raveled the block, time-major like the block is.
+        a = a.reshape(h, batch)
+    if a.shape == (h, batch):
+        # The documented orientation on both surfaces; when h == batch the
+        # two orientations are the same tuple and this branch, the
+        # documented one, is the one taken.
+        a = a.T
+    elif a.shape != (batch, h):
+        raise ValueError("forecast returned %s; expected (h=%d, ts_num=%d) "
+                         "or (ts_num=%d, h=%d)" % (a.shape, h, batch,
+                                                   batch, h))
+    return np.ascontiguousarray(a)
+
+
+def _holtwinters_params_note(lane, arm, m, batch, what):
+    """DEVIATION 2270. One NOTE with the batch means of the fitted
+    alpha / beta / gamma, read from whichever accessor the estimator
+    carries (`alpha_` etc. on ours; cuML's Python surface reads none of
+    the three back from device scratch, and then the note says so), so a
+    reader can see whether both fits converged to comparable smoothing
+    parameters. Never raises: a failed read-back is the note's text."""
+    parts = []
+    for name in ("alpha", "beta", "gamma"):
+        text = None
+        # The fitted attribute first (ours), then a getter (the shape cuML
+        # uses for level / trend / season); never the bare name, which on
+        # another estimator would be a constructor argument.
+        for attr in (name + "_", "get_" + name):
+            cand = getattr(m, attr, None)
+            if cand is None:
+                continue
+            try:
+                v = cand() if callable(cand) else cand
+                v = np.asarray(to_numpy(v), dtype=np.float64).reshape(-1)
+                if v.shape[0] not in (batch, 1):
+                    text = ("%s: %s has %d entries for ts_num=%d"
+                            % (name, attr, v.shape[0], batch))
+                else:
+                    text = ("%s(%s) mean=%.6g min=%.6g max=%.6g"
+                            % (name, attr, float(v.mean()), float(v.min()),
+                               float(v.max())))
+            except Exception as e:                        # noqa: BLE001
+                text = "%s: %s raised %r" % (name, attr, e)
+            break
+        if text is None:
+            text = ("%s: no accessor on %s (looked for %s_ and get_%s)"
+                    % (name, type(m).__name__, name, name))
+        parts.append(text)
+    note(lane, arm, "fitted smoothing parameters of the %s fit: %s "
+                    "(DEVIATION 2270)" % (what, "; ".join(parts)))
 
 
 def lane_kmeans(rounds, size, smoke):
@@ -2259,6 +2392,16 @@ def _lane_gp_gpytorch(rounds, size, arrays, tag, prm):
     per round, because GPyTorch caches its prediction strategy on the
     instance and a second predict on the same object would time a cache
     hit.
+
+    A GRAM THAT DOES NOT FACTOR IS A REFUSAL, NOT A JITTERED SUCCESS
+    (DEVIATIONS 2271, 2272). At `scale` the fixture's alpha is 2**-20 and
+    a 20,000 x 20,000 float32 RBF Gram may not be positive definite at
+    that ridge. GPyTorch's `psd_safe_cholesky` would then WARN
+    (`NumericalWarning: A not p.d., added jitter of 1.0e-06 to the
+    diagonal`) and retry with more noise up to three times, which is a
+    different problem from the fixture's, so that warning is turned into
+    an error inside the call and any exception from the race is emitted
+    as `FSPEED-REFUSED` with the exception's text, on THIS arm's label.
     """
     lane = "gp"
     arm, run = deterministic_gate(lane, "gpytorch-gpu")
@@ -2356,13 +2499,26 @@ def _lane_gp_gpytorch(rounds, size, arrays, tag, prm):
         with torch.no_grad(), \
                 gpytorch.settings.max_cholesky_size(n + 1), \
                 gpytorch.settings.fast_computations(False, False, False), \
-                gpytorch.settings.fast_pred_var(False):
+                gpytorch.settings.fast_pred_var(False), \
+                warnings.catch_warnings():
+            # DEVIATION 2272: GPyTorch's add-jitter-and-retry is refused
+            # by name rather than accepted; the message is
+            # linear_operator's `psd_safe_cholesky` text.
+            warnings.filterwarnings("error", message=r"A not p\.d\.")
             post = m(Xs)
             mean = post.mean
             std = post.variance.sqrt()
         return (mean, std)
 
-    race(lane, arm, tag, rounds, size, gpu_device_name(), call, mode=_mode())
+    try:
+        race(lane, arm, tag, rounds, size, gpu_device_name(), call,
+             mode=_mode())
+    except Exception as e:                                # noqa: BLE001
+        # DEVIATION 2271: the factorization error IS the reason.
+        refuse(lane, arm, "the %dx%d float32 RBF Gram with alpha=%.9g did "
+                          "not factor (or GPyTorch tried to add jitter to "
+                          "make it): %s: %s"
+               % (n, n, alpha, type(e).__name__, e))
 
 
 def lane_gp(rounds, size, smoke):
@@ -2410,7 +2566,15 @@ def lane_gp(rounds, size, smoke):
         mean, std = m.predict(Xs, return_std=True)
         return (mean.astype(np.float32), std.astype(np.float32))
 
-    race(lane, arm, tag, rounds, size, cpu_device_name(), call)
+    try:
+        race(lane, arm, tag, rounds, size, cpu_device_name(), call)
+    except Exception as e:                                # noqa: BLE001
+        # DEVIATION 2271: scikit-learn raises LinAlgError from its
+        # Cholesky when K + alpha I is not positive definite; that text
+        # is the reason, on this arm's label, and the process lives.
+        refuse(lane, arm, "the %dx%d float64 RBF Gram with alpha=%.9g did "
+                          "not factor: %s: %s"
+               % (X.shape[0], X.shape[0], float(alpha), type(e).__name__, e))
 
 
 def lane_krr(rounds, size, smoke):
@@ -2588,6 +2752,13 @@ def lane_holtwinters(rounds, size, smoke):
                     "ts_num and eps all passed explicitly. The dump is "
                     "series-major (batch_size x n), which is cuML's own "
                     "(ts_num, n) layout, so no transpose is needed")
+    # DEVIATION 2270. The holdout is sliced HERE, outside the clock, and
+    # the timed fit below is on the full-length `y` exactly as before.
+    n = int(y.shape[1])
+    h = 2 * int(freq)
+    sp = int(prm["start_periods"])
+    y_fit = np.ascontiguousarray(y[:, :n - h])
+    y_hold = np.ascontiguousarray(y[:, n - h:])
 
     def call():
         m = ExponentialSmoothing(y, seasonal="additive",
@@ -2598,6 +2769,35 @@ def lane_holtwinters(rounds, size, smoke):
         return (to_numpy(m.get_level()).astype(np.float32),)
 
     race(lane, arm, tag, rounds, size, gpu_device_name(), call, mode=_mode())
+    # DEVIATION 2270. One more fit on the first n - h observations of every
+    # series, outside the clock, then forecast(h) scored against the
+    # held-out block through the ONE shared helper.
+    if n - h < sp * freq:
+        note(lane, arm, "FSPEED-ACC skipped: holding out h=2*seasonal_periods"
+                        "=%d of n=%d leaves %d < start_periods*seasonal_"
+                        "periods=%d observations, below the estimator's own "
+                        "bound (DEVIATION 2270)" % (h, n, n - h, sp * freq))
+        return
+    try:
+        m_hold = ExponentialSmoothing(y_fit, seasonal="additive",
+                                      seasonal_periods=freq,
+                                      start_periods=sp,
+                                      ts_num=batch, eps=prm["eps"])
+        m_hold.fit()
+        _sync()
+        fc = _holtwinters_forecast_matrix(m_hold.forecast(h), batch, h)
+        value = holtwinters_holdout_rmse(y_hold, fc)
+        note(lane, arm, "holdout: the last h=%d observations of each of the "
+                        "%d series are held out; the score is the RMSE of "
+                        "forecast(%d) from a fit on the first %d "
+                        "observations, over every series and horizon, "
+                        "outside the clock (DEVIATION 2270)"
+             % (h, batch, h, n - h))
+        acc(lane, arm, "holdout_rmse_h%d" % h, value)
+        _holtwinters_params_note(lane, arm, m_hold, batch,
+                                 "holdout (n-h=%d)" % (n - h))
+    except Exception as e:                                # noqa: BLE001
+        refuse(lane, arm, "FSPEED-ACC not emitted: %r" % (e,))
 
 
 def lane_kpss(rounds, size, smoke):
@@ -2944,7 +3144,8 @@ VENDOR_ARMS = {
     "spectral": "sklearn-cpu  sklearn.cluster.SpectralClustering(arpack).fit "
                 "-> hash=-; RAPIDS ships none",
     "holtwinters": "cuml-gpu  cuml.ExponentialSmoothing(additive).fit -> "
-                   "hash(get_level())",
+                   "hash(get_level()); FSPEED-ACC holdout RMSE of "
+                   "forecast(2 * seasonal_periods)",
     "kpss": "cuml-gpu  cuml.tsa.stationarity.kpss_test(d=1) -> hash(flags); "
             "statsmodels-cpu when the build has no cuml.tsa",
     "umap": "cuml-gpu  cuml.manifold.UMAP.fit_transform -> hash(embedding); "
