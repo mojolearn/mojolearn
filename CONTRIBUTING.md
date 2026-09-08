@@ -176,3 +176,39 @@ maintainers. See [GOVERNANCE.md](GOVERNANCE.md).
 
 By contributing, you agree that your contribution is licensed under the
 repository's Apache-2.0 license and that you have the right to submit it.
+
+## Repository size and where evidence lives
+
+On 2026-09-08 a push of the previous day's evidence ran for hours and was
+then rejected by GitHub, because one file, a 119 MB `artifacts.tar` under
+`bench/results/`, was over GitHub's 100 MiB hard limit. Deleting a file in a
+later commit does not help: the push still carries the blob. The only fix
+was to rewrite nineteen commits that had never reached the remote, which
+this repository otherwise never does. Three rules follow, and two hooks
+enforce them.
+
+1. No committed file may exceed 50 MiB. GitHub warns at 50 MiB and rejects
+   at 100 MiB; the margin covers a compressed push and a careless copy.
+2. Wheels, tarballs and fixture dumps never go under `bench/results/`.
+   Wheels are on PyPI (record the sha256 and the release), tarballs are the
+   packed form of files that sit beside them, and fixture dumps are
+   regenerable from the Mojo driver. An evidence directory records what was
+   measured and how, not the bytes that were shipped.
+3. Large evidence belongs outside this repository. `bench/results/` was
+   already 1.16 GB at 0.6.0 and every campaign adds hundreds of megabytes,
+   which is why a push and a rented leg's source archive are slow. A
+   campaign's raw output goes to the evidence store (a separate repository
+   with Git LFS, or a Zenodo record per campaign cited by DOI), and this
+   repository commits the summary, the sha256 of the raw archive and where
+   it lives.
+
+Install the hooks once per clone; they then run in every worktree on every
+branch:
+
+    sh tools/hooks/install.sh
+
+`tools/hooks/pre-commit` refuses a staged file over 50 MiB or any wheel,
+tarball or dump under `bench/results/`. `tools/hooks/pre-push` scans every
+blob a push would send and refuses before the upload starts if one is over
+100 MiB, the case the commit hook cannot catch when a commit was made in a
+clone without the hook.

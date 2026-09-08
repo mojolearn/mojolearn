@@ -1,0 +1,49 @@
+#!/bin/sh
+# Refuse a commit that GitHub would refuse to receive, BEFORE it exists.
+#
+# WHY THIS HOOK EXISTS (2026-09-08). The 2026-09-07 evidence commit carried a
+# 119,654,400-byte artifacts.tar and two 99 MB wheel copies under
+# bench/results/. GitHub rejects any blob over 100 MiB at push time
+# ("GH001: Large files detected"), so the commit, and every commit built on
+# it across three branches, could not be pushed. Deleting the file in a new
+# commit does not help: the push still carries the old blob. The only fix was
+# rewriting nineteen never-pushed commits, which this repository's rules
+# otherwise forbid. This hook makes that impossible to repeat by refusing the
+# commit at the moment the file is staged.
+#
+# THE RULES. (1) No staged blob may exceed 50 MiB (GitHub warns at 50 MiB and
+# rejects at 100 MiB; 50 keeps a margin for a compressed push). (2) Wheels,
+# tarballs and fixture dumps never belong under bench/results/: wheels live
+# on PyPI, tarballs are the packed form of files that sit beside them, and
+# fixture dumps are regenerable from the Mojo driver. Evidence directories
+# record what was measured, not the bytes that were shipped.
+#
+# ESCAPE HATCH. MOJOLEARN_ALLOW_LARGE=1 skips the size check for one commit,
+# and prints that it did so. There is no escape hatch for rule (2).
+#
+# INSTALL. tools/hooks/install.sh copies this file into the repository's
+# shared hooks directory, so it runs in every worktree on every branch.
+
+limit=$((50 * 1024 * 1024))
+bad=0
+for path in $(git diff --cached --name-only --diff-filter=AM); do
+    case "$path" in
+        bench/results/*.whl|bench/results/*.tar|bench/results/*.tar.gz|bench/results/*.tgz|bench/results/*.fixture|bench/results/*/remote/dump/*)
+            echo "pre-commit: REFUSED $path" >&2
+            echo "   wheels, tarballs and fixture dumps never belong under bench/results/ (tools/hooks/pre-commit)" >&2
+            bad=1
+            continue
+            ;;
+    esac
+    size=$(git cat-file -s ":$path" 2>/dev/null || echo 0)
+    if [ "$size" -gt "$limit" ]; then
+        if [ "${MOJOLEARN_ALLOW_LARGE:-0}" = "1" ]; then
+            echo "pre-commit: ALLOWED $path at $size bytes because MOJOLEARN_ALLOW_LARGE=1" >&2
+        else
+            echo "pre-commit: REFUSED $path is $size bytes, over the 50 MiB limit (GitHub rejects 100 MiB)" >&2
+            echo "   put it in the evidence store outside this repository and commit its sha256 and location instead" >&2
+            bad=1
+        fi
+    fi
+done
+exit $bad

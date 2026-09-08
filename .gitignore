@@ -82,3 +82,14 @@ bench/**/*.tar.gz
 # cites a COUNT out of it, and E1_RESULTS.md:71 and E2_RESULTS.md:126 list it
 # by name as part of the evidence bundle. Six documents reference it. An
 # artifact a result cites is evidence, whatever its signal-to-noise ratio.
+
+# 2026-09-08: bytes that are never evidence and once blocked every push for a
+# day (a 119 MB artifacts.tar over GitHub's 100 MiB limit). Wheels live on
+# PyPI, tarballs are packed copies of files beside them, fixture dumps are
+# regenerable from the Mojo driver. tools/hooks/pre-commit refuses them too.
+bench/results/**/*.whl
+bench/results/**/*.tar
+bench/results/**/*.tar.gz
+bench/results/**/*.tgz
+bench/results/**/*.fixture
+bench/results/**/remote/dump/

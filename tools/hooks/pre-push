@@ -1,0 +1,36 @@
+#!/bin/sh
+# Refuse a push that GitHub would refuse, before hours of upload are spent.
+#
+# The pre-commit hook stops an oversized file at commit time in worktrees
+# that installed it. This hook is the second fence: it scans every blob the
+# push would send and refuses if any exceeds 100 MiB, GitHub's hard limit.
+# On 2026-09-08 a push ran for hours and was then rejected for one 119 MB
+# file (see tools/hooks/pre-commit for the record). Reading the blob sizes
+# takes seconds; the upload took hours.
+#
+# Arguments and stdin follow git's pre-push contract:
+#   $1 remote name, $2 remote URL; stdin lines "<local ref> <local sha> <remote ref> <remote sha>".
+
+limit=$((100 * 1024 * 1024))
+zero=0000000000000000000000000000000000000000
+bad=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" = "$zero" ] && continue        # deleting a remote ref
+    if [ "$remote_sha" = "$zero" ]; then
+        range="$local_sha --not --remotes=$1"
+    else
+        range="$local_sha ^$remote_sha"
+    fi
+    # shellcheck disable=SC2086
+    git rev-list --objects $range 2>/dev/null | cut -d' ' -f1 \
+        | git cat-file --batch-check='%(objectname) %(objecttype) %(objectsize)' \
+        | awk -v lim="$limit" '$2 == "blob" && $3 > lim { print $1, $3 }' \
+        | while read -r blob size; do
+            path=$(git rev-list --objects $range | grep "^$blob " | cut -d' ' -f2-)
+            echo "pre-push: REFUSED blob $blob ($size bytes) at $path is over GitHub's 100 MiB limit" >&2
+            echo "   the commit that added it must be rewritten before this ref can be pushed" >&2
+            exit 3
+        done
+    [ $? -eq 3 ] && bad=1
+done
+exit $bad
