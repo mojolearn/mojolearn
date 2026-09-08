@@ -1,5 +1,5 @@
 {
-  "title": "mojolearn: GPU machine-learning algorithms in Mojo, portable to Apple Silicon",
+  "title": "mojolearn: bitwise-identical GPU machine learning in Mojo on Apple Metal, NVIDIA CUDA and AMD HIP",
   "upload_type": "software",
   "license": "Apache-2.0",
   "access_right": "open",
@@ -10,7 +10,7 @@
       "affiliation": "Latent Archon"
     }
   ],
-  "description": "<p>Ports of GPU machine-learning algorithms into Mojo from the CUDA implementations that established them, targeting Apple Silicon via Metal first and CUDA and ROCm from the same source. Gradient-boosted oblivious (symmetric) trees mirror CatBoost; random forests, extremely randomized trees, DBSCAN, PCA, ridge and logistic regression, coordinate descent, support vector classification, kernel density estimation, single-linkage and spectral clustering, isolation forests, Holt-Winters and the scoring metrics mirror cuML; k-means and brute-force k-nearest-neighbors mirror cuVS; ordinary least squares, top-k selection and the MST and Lanczos primitives mirror RAFT. Every derivation is recorded per file in PORTED_MAP.tsv and the license obligations each carries are in NOTICE.</p><p>Each estimator runs in one of three numeric modes, selected per estimator or per process from Python: FAST promises speed only and its bits move run to run, DETERMINISTIC promises the same bits on every run of one box and says nothing about a second, and IDENTICAL promises both plus the same bits across vendors. All three ship in the one wheel. IDENTICAL pins the seams that make a GPU result depend on its vendor, and where a lane has been measured on three vendors its card is bit-identical across Metal, HIP and CUDA; the certificates are in E1_RESULTS.md, E2_RESULTS.md and E3_RESULTS.md, and the per-lane ledger is IDENTITY_PATHS.md. That measurement does not cover every lane: several have run on one Apple M4 and nowhere else, each such class says so, and FAST makes no cross-vendor claim anywhere.</p>",
+  "description": "<p>mojolearn is a GPU machine-learning library written in Mojo whose opt-in <em>identical</em> numeric mode makes supported inference and training return the same bits on Apple Metal, NVIDIA CUDA and AMD HIP. One Mojo source implements a shared numerical profile across the three backends: fixed reductions, portable arithmetic and explicit refusal of unsupported configurations. The claim is established by stage-level identity cards and separating sabotage tests, never inferred from a final-output hash, and applies only to configurations recorded in SUPPORT_MATRIX.md.</p><p>The contract covers Mamba and transformer inference and fixed-shape training (a byte-level language model trained on real text reproduces its parameters, gradients, optimizer state and checkpoint bytes on all three vendors, with checkpoint continuation between NVIDIA and AMD), gradient-boosted and randomized trees, classical estimators and UMAP. The classical side ports the GPU kernels of CatBoost, cuML, cuVS, RAFT and FAISS into one Mojo source under a copy-do-not-improve rule, so GPU tree training and classical learning also run on Apple silicon, which the originals do not reach. Two further modes ship beside identical: <em>fast</em> (throughput, bits may move run to run) and <em>deterministic</em> (same bits on repeated runs of one device). Bitwise identity has a cost: identical mode is competitive on some tree workloads and substantially slower on many classical, matrix and neural workloads against cuML, cuBLAS and PyTorch; the measurements and certificates are in the repository's bench/results and in the accompanying paper.</p>",
   "keywords": [
     "machine learning",
     "gpu",
@@ -22,7 +22,13 @@
     "gradient boosting",
     "random forest",
     "k-means",
-    "bitwise reproducibility"
+    "bitwise reproducibility",
+    "nvidia",
+    "amd",
+    "hip",
+    "bitwise identical",
+    "reproducibility",
+    "cross-vendor"
   ],
   "related_identifiers": [
     {
