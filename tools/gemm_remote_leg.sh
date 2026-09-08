@@ -3791,12 +3791,16 @@ MMPROBE
 classical)
     # RAPIDS is the install that can eat the lease. It runs FIRST so that a
     # failure is known before any Mojo time is spent, and it is bounded.
+    # DEVIATION 2253/2256: the gp lane's GPU incumbent (exact GP on CUDA),
+    # pure Python on top of the image's torch. It MUST go BEFORE RAPIDS:
+    # on 2026-09-08 pip resolved gpytorch's torch dependency by putting the
+    # image's nvidia-*-cu12 12.4 libraries back over the 12.9 ones cuML had
+    # just installed, and libcuml.so could not load on two legs. RAPIDS
+    # installs last so its CUDA libraries are the ones on disk; torch 2.4
+    # loads the 12.9 libraries fine (the 2026-09-07 legs ran that way).
+    pipget gpytorch
     pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12" "cuvs-cu12"
     pipget scikit-learn scipy
-    # DEVIATION 2253: the gp lane's GPU incumbent (exact GP on CUDA); pure
-    # Python on top of the image's torch, and the arm refuses by name if
-    # this did not land.
-    pipget gpytorch
     buildone classicalspeed bench/speed/classical_speed_main.mojo
     build_python_bindings
     for L in @SPEEDLANES@; do
