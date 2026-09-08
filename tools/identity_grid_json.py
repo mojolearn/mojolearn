@@ -119,9 +119,9 @@ def build(legs):
                 acc.append((lane, arm, fname, kv["metric"], float(kv["value"])))
             elif kind == "FSPEED-REFUSED":
                 reason = rest.split("reason=", 1)[1] if "reason=" in rest else rest
-                refusals.setdefault((lane, arm, fname), reason)
+                refusals.setdefault((lane, arm, fname, leg["dir"]), reason)
             elif kind == "FSPEED-NOTE":
-                notes.append({"lane": lane, "log": fname, "text": rest})
+                notes.append({"lane": lane, "log": fname, "text": rest, "leg": leg["dir"]})
     for lane, arm, fname, metric, value in acc:
         for key, c in cells.items():
             if key[0] == lane and key[2] == arm and c["log"] == fname:
@@ -168,9 +168,9 @@ def build(legs):
             "metrics": c["metrics"],
             "log": c["log"], "leg": c["leg"],
         })
-    out_ref = [{"lane": l, "arm": a, "log": f,
+    out_ref = [{"lane": l, "arm": a, "log": f, "leg": g,
                 "not_offered": r.startswith("NOT-OFFERED"), "reason": r}
-               for (l, a, f), r in sorted(refusals.items())]
+               for (l, a, f, g), r in sorted(refusals.items())]
     return {"cells": out_cells, "refusals": out_ref, "notes": notes,
             "legs": [{k: g[k] for k in ("dir", "commit", "device", "ours_mode", "lanes",
                                         "pod", "started", "finished", "lightgbm_cuda")}
