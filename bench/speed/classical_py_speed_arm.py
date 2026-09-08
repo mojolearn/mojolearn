@@ -82,10 +82,23 @@ anyway, because the within-arm question is the one this grid asks
 ACCURACY. `tools/speed_cuml_arm.py` emits no `FSPEED-ACC` line for any
 classical lane, by its own design ("a speed harness that also scores
 accuracy invites a reader to trade one against the other"), so this arm
-emits none either. If the vendor arm grows one, add the same metric by the
-same computation here and nowhere else.
+emits none either -- with two exceptions since 2026-09-08 (DEVIATION
+2239): the `logistic` lane scores log loss on the held-out last 10% of
+rows and the `arima` lane scores in-sample one-step RMSE, EACH THROUGH THE
+VENDOR MODULE'S OWN HELPER (`binary_log_loss`, `arima_insample_rmse`),
+imported by name, so the two arms score with one piece of arithmetic. A
+lane that scores returns a third element, `after()`, which `main` calls
+once after the race and prints as `FSPEED-ACC lane= arm=ours metric=
+value=`; a helper that is missing is a refusal before the race, because a
+row with a speed and no score is not the row this grid asks for.
 
-NO PYTHON SURFACE (DEVIATION 2171). Eight of the twenty-two vendor lanes
+THE FIFTH SIZE, scale (DEVIATION 2236). `tools/speed_cuml_arm.py`'s
+`scale` tier (DEVIATION 2230) is a narrow, generated fixture above the
+paper's floor for the lanes whose `large` was a tiny dump, and IS `large`
+for every other lane. This file only forwards the size; the tag and the
+bytes are the vendor module's, as at every other size.
+
+NO PYTHON SURFACE (DEVIATION 2171). Eight of the twenty-four vendor lanes
 have no public Python door in `python/mojolearn/` -- `ivf`, `hdbscan`,
 `cholesky`, `gmm`, `krr`, `nystroem`, `rbfsampler`, `resample`. Each
 prints exactly one `FSPEED-REFUSED ... reason=NO-PYTHON-SURFACE: <what was
@@ -101,6 +114,8 @@ THE OUTPUT CONTRACT is `tools/fast_speed_table.py`'s, unchanged:
     FSPEED lane=<l> arm=ours shape=<tag> round=<i> ms=<float> hash=<16 hex|->
     FSPEED-NOTE lane=<l> arm=ours <free text>
     FSPEED-REFUSED lane=<l> arm=ours reason=<one line>
+    FSPEED-ACC lane=<l> arm=ours metric=<name> value=<float>   (logistic,
+        arima only; DEVIATION 2239)
 
 `arm=ours` is the label the brief fixes and the Mojo driver already uses,
 so a run directory that holds BOTH drivers' logs for one lane needs the
@@ -111,11 +126,12 @@ leg body to name the files apart; the first NOTE of every run carries
 Environment (each a fallback for the flag of the same name):
     MOJOLEARN_SPEED_LANE      the lane
     MOJOLEARN_SPEED_ROUNDS    timed rounds (default 5, the vendor arm's)
-    MOJOLEARN_SPEED_SIZE      shipped | smoke | large | wide
+    MOJOLEARN_SPEED_SIZE      shipped | smoke | large | wide | scale
     MOJOLEARN_NUMERIC_MODE    read by mojolearn at import, never by this file
 
-DEVIATION numbers 2160-2189 are this file's; the ones spent are listed at
-`DEVIATIONS` below so the next reader can see the gaps.
+DEVIATION numbers 2160-2189 are this file's, plus 2236-2239 from the
+2026-09-08 block (2230-2249, shared with the vendor module); the ones
+spent are listed at `DEVIATIONS` below so the next reader can see the gaps.
 """
 
 import argparse
@@ -141,13 +157,15 @@ for _p in (_ROOT, os.path.join(_ROOT, "tools"), os.path.join(_ROOT, "python")):
 FAMILY = "classical"
 ARM = "ours"
 
-SIZES = ("shipped", "smoke", "large", "wide")
+SIZES = ("shipped", "smoke", "large", "wide", "scale")
 
-#: The twenty-two lanes the vendor arm knows, in its order.
+#: The twenty-four lanes the vendor arm knows, in its order (logistic and
+#: arima since 2026-09-08, DEVIATIONS 2237-2238).
 VENDOR_LANES = (
     "kmeans", "dbscan", "pca", "ols", "knn", "cd", "kde", "linkage", "svm",
     "metrics", "ivf", "hdbscan", "cholesky", "gmm", "gp", "krr", "nystroem",
     "rbfsampler", "resample", "spectral", "holtwinters", "kpss",
+    "logistic", "arima",
 )
 
 #: DEVIATION 2171. Lanes with no public Python door, and WHAT WAS LOOKED
@@ -215,6 +233,16 @@ DEVIATIONS = {
     2174: "dbscan runs algorithm='rbc' (the class default and the Mojo "
           "driver's EPS_NN_RBC) at the class's max_iterations=None fixed "
           "point where the Mojo entry defaults to 200",
+    2236: "size=scale is accepted and forwarded to the vendor module's "
+          "fixture(); nothing else about the tier is decided here",
+    2237: "logistic: mojolearn.LogisticRegression(qn) on rows [0, n_fit), "
+          "hash(coef_, intercept_); predict_proba on the held-out rows",
+    2238: "arima: mojolearn.ARIMA(order=(p,d,q), trend='c'|'n' from the "
+          "fixture's fit_intercept) on series-major y, hash(ar_, ma_, "
+          "sigma2_); predict(0, n_obs) for the score",
+    2239: "FSPEED-ACC is emitted by an `after()` hook through the vendor "
+          "module's helper (binary_log_loss, arima_insample_rmse), never "
+          "a local scorer",
 }
 
 
@@ -246,6 +274,12 @@ def emit_note(lane, text):
 def emit_refused(lane, reason):
     print("FSPEED-REFUSED lane=%s arm=%s reason=%s"
           % (lane, ARM, " ".join(str(reason).split())), flush=True)
+
+
+def emit_acc(lane, metric, value):
+    """DEVIATION 2239. The vendor arm's `acc` line, same format."""
+    print("FSPEED-ACC lane=%s arm=%s metric=%s value=%.6f"
+          % (lane, ARM, metric, float(value)), flush=True)
 
 
 class Refuse(Exception):
@@ -381,6 +415,24 @@ def load_fixture(lane, size):
                      "must be dicts" % (lane, size, type(arrays).__name__,
                                         type(params).__name__))
     return arrays, str(shape_tag), params
+
+
+def vendor_helper(name):
+    """A scorer from `tools/speed_cuml_arm.py`, by name (DEVIATION 2239).
+    The vendor arm scores its own row with the same function, so the
+    accuracy column compares two fits and never two scorers. Missing is a
+    refusal that names it."""
+    try:
+        import speed_cuml_arm as vendor                    # noqa: PLC0415
+    except Exception as exc:                               # noqa: BLE001
+        raise Refuse("cannot import tools/speed_cuml_arm.py for its %s: %s: "
+                     "%s" % (name, exc.__class__.__name__, exc))
+    f = getattr(vendor, name, None)
+    if not callable(f):
+        raise Refuse("tools/speed_cuml_arm.py exports no %s; the FSPEED-ACC "
+                     "line is computed by ONE helper on both arms or not at "
+                     "all, and this lane does not run without it" % name)
+    return f
 
 
 def _need(arrays, lane, *names):
@@ -880,9 +932,10 @@ def lane_gp(ml, ctx):
         "kernel=RBF(length_scale from the fixture), alpha=%g, optimizer="
         "None, normalize_y=False on both arms; fit plus predict(return_std="
         "True) inside the clock, matching the vendor" % alpha,
-        "this arm is float32 end to end and the vendor's scikit-learn is "
-        "float64; that difference in arithmetic cannot be turned off on "
-        "either side (DEVIATION 2169)",
+        "this arm is float32 end to end; the vendor's sklearn-cpu fallback "
+        "is float64 (a difference that cannot be turned off on either side, "
+        "DEVIATION 2169) and its gpytorch-gpu incumbent is float32 with the "
+        "solver forced to Cholesky (DEVIATION 2231)",
     ]
 
 
@@ -1026,6 +1079,142 @@ def lane_kpss(ml, ctx):
     ]
 
 
+def lane_logistic(ml, ctx):
+    """DEVIATION 2237. `mojolearn.LogisticRegression`, cuML's QN solver
+    ported, with the five knobs the fixture fixes passed explicitly on
+    both arms. Returns a third element, `after`, that scores the held-out
+    rows through the vendor module's `binary_log_loss` (DEVIATION 2239)."""
+    lane, arrays, params = ctx.lane, ctx.arrays, ctx.params
+    X = _f32_matrix(_need(arrays, lane, "x", "X"), "x", lane,
+                    cols=params.get("cols"))
+    y = _f32_vector(_need(arrays, lane, "y"), "y", lane)
+    n = X.shape[0]
+    n_fit = _param(params, lane, ("n_fit",), cast=int)
+    penalty = _param(params, lane, ("penalty",), fallback="l2", cast=str)
+    C = _param(params, lane, ("C",), cast=float)
+    max_iter = _param(params, lane, ("max_iter",), cast=int)
+    tol = _param(params, lane, ("tol",), cast=float)
+    fit_intercept = bool(_param(params, lane, ("fit_intercept",), cast=int))
+    log_loss = vendor_helper("binary_log_loss")
+    if y.shape[0] != n:
+        raise Refuse("LogisticRegression bound: X and y lengths differ "
+                     "(%d vs %d)" % (n, y.shape[0]))
+    if n_fit < 2 or n_fit >= n:
+        raise Refuse("logistic: n_fit=%d must leave at least one held-out "
+                     "row of %d and at least two fitted" % (n_fit, n))
+    if C <= 0.0:
+        raise Refuse("LogisticRegression bound: C must be positive "
+                     "(linear_model.py), fixture gives %r" % C)
+    if penalty not in ("l1", "l2", "elasticnet", None):
+        raise Refuse("LogisticRegression bound: penalty %r not supported"
+                     % penalty)
+    Xf, yf = np.ascontiguousarray(X[:n_fit]), np.ascontiguousarray(y[:n_fit])
+    Xh, yh = np.ascontiguousarray(X[n_fit:]), np.ascontiguousarray(y[n_fit:])
+    classes = np.unique(yf)
+    if classes.shape[0] != 2:
+        raise Refuse("LogisticRegression bound: binary only (softmax is not "
+                     "ported, glm/NOT_IMPLEMENTED.tsv), fitted rows carry %d "
+                     "classes" % classes.shape[0])
+    kw = dict(penalty=penalty, C=C, max_iter=max_iter, tol=tol,
+              fit_intercept=fit_intercept, solver="qn")
+    _tier_check(lane, ml.LogisticRegression(**kw), ctx.loaded)
+    last = {}
+
+    def call():
+        m = ml.LogisticRegression(**kw)
+        m.fit(Xf, yf)
+        last["m"] = m
+        return (m.coef_, m.intercept_)
+
+    def after():
+        m = last.get("m")
+        if m is None:
+            return []
+        proba = np.asarray(m.predict_proba(Xh))[:, 1]
+        return [("holdout_logloss_n%d" % yh.shape[0], log_loss(proba, yh))]
+
+    return call, [
+        "penalty=%s C=%g max_iter=%d tol=%g fit_intercept=%s solver=qn, all "
+        "explicit, the vendor arm's values (linesearch_max_iter=50 and "
+        "lbfgs_memory=5 are the shared defaults); the fit is rows [0, %d) "
+        "and rows [%d, %d) are held out for the log loss"
+        % (penalty, C, max_iter, tol, fit_intercept, n_fit, n_fit, n),
+        "hash(coef_, intercept_); FSPEED-ACC is the vendor module's "
+        "binary_log_loss on predict_proba[:, 1] of the held-out rows, "
+        "outside the clock (DEVIATION 2239)",
+    ], after
+
+
+def lane_arima(ml, ctx):
+    """DEVIATION 2238. `mojolearn.ARIMA(order=(p, d, q))` on the
+    series-major fixture, which is this class's own layout; `trend` is
+    spelled from the fixture's `fit_intercept` so both arms carry the same
+    `k`. Returns `after`, which scores `predict(0, n_obs)` through the
+    vendor module's `arima_insample_rmse` (DEVIATION 2239)."""
+    lane, arrays, params = ctx.lane, ctx.arrays, ctx.params
+    batch = _param(params, lane, ("batch_size",), cast=int)
+    n_obs = params.get("n_obs")
+    y = np.asarray(_need(arrays, lane, "y"))
+    if y.ndim == 1:
+        if n_obs is None:
+            raise Refuse("arima: y is flat and params carry no n_obs to "
+                         "reshape it by")
+        y = y.reshape(int(batch), int(n_obs))
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    if y.shape[0] != batch:
+        raise Refuse("ARIMA: fixture y is %s for batch_size=%d; expected "
+                     "(batch_size, n_obs) series-major" % (y.shape, batch))
+    n_obs = y.shape[1]
+    p = _param(params, lane, ("p",), cast=int)
+    d = _param(params, lane, ("d",), cast=int)
+    q = _param(params, lane, ("q",), cast=int)
+    maxiter = _param(params, lane, ("maxiter", "max_iter"), fallback=1000,
+                     cast=int)
+    fit_intercept = bool(_param(params, lane, ("fit_intercept",), cast=int))
+    rmse = vendor_helper("arima_insample_rmse")
+    if p > 8 or q > 8 or d > 2 or p + q == 0:
+        raise Refuse("ARIMA bound: p <= 8, q <= 8, d <= 2 and at least one "
+                     "parameter (arima_common.mojo::validate_order, cuML's "
+                     "words), fixture asks (%d, %d, %d)" % (p, d, q))
+    if not np.isfinite(y).all():
+        raise Refuse("ARIMA bound: y must be finite (batched_arima.mojo "
+                     "refuses a non-finite value by name)")
+    # cuML's fit_intercept is this class's `trend`: 'c' is True, 'n' is
+    # False; `trend=None` would resolve by statsmodels' rule (no intercept
+    # once differenced), so it is spelled out rather than left to a rule.
+    trend = "c" if fit_intercept else "n"
+    _tier_check(lane, ml.ARIMA(order=(p, d, q), trend=trend, maxiter=maxiter),
+                ctx.loaded)
+    last = {}
+
+    def call():
+        m = ml.ARIMA(order=(p, d, q), seasonal_order=(0, 0, 0, 0),
+                     trend=trend, method="ml", maxiter=maxiter)
+        m.fit(y)
+        last["m"] = m
+        return (m.ar_, m.ma_, m.sigma2_)
+
+    def after():
+        m = last.get("m")
+        if m is None:
+            return []
+        pred = m.predict(0, n_obs)              # (batch_size, n_obs)
+        return [("insample_rmse_skip%d" % d, rmse(pred, y, d))]
+
+    return call, [
+        "order=(%d,%d,%d) seasonal_order=(0,0,0,0) trend=%r (cuML's "
+        "fit_intercept=%s, k=%d) method=ml maxiter=%d, the vendor arm's "
+        "values; y is series-major (batch_size x n_obs), this class's own "
+        "layout, so no transpose on this side; this arm is float32 and "
+        "cuML's ARIMA is float64 only"
+        % (p, d, q, trend, fit_intercept, 1 if fit_intercept else 0, maxiter),
+        "hash(ar_, ma_, sigma2_), the three blocks of params_ this order "
+        "has; FSPEED-ACC is the vendor module's arima_insample_rmse on "
+        "predict(0, n_obs) skipping the first %d differenced observations, "
+        "outside the clock (DEVIATION 2239)" % d,
+    ], after
+
+
 LANES = {
     "kmeans": lane_kmeans,
     "dbscan": lane_dbscan,
@@ -1041,6 +1230,8 @@ LANES = {
     "spectral": lane_spectral,
     "holtwinters": lane_holtwinters,
     "kpss": lane_kpss,
+    "logistic": lane_logistic,
+    "arima": lane_arima,
 }
 
 #: What each lane calls in `python/mojolearn/`, for `--list-arms` and the
@@ -1069,6 +1260,11 @@ OUR_ENTRY_POINTS = {
     "holtwinters": "mojolearn.ExponentialSmoothing(seasonal='additive')"
                    ".fit -> hash(get_level())",
     "kpss": "mojolearn.kpss_test(d=1) -> hash(stationary flags)",
+    "logistic": "mojolearn.LogisticRegression(penalty='l2', C=1.0, "
+                "max_iter=100, tol=1e-4, fit_intercept=True).fit -> "
+                "hash(coef_, intercept_); FSPEED-ACC holdout log loss",
+    "arima": "mojolearn.ARIMA(order=(1,1,1), trend='n').fit -> hash(ar_, "
+             "ma_, sigma2_); FSPEED-ACC in-sample one-step RMSE",
 }
 
 
@@ -1102,7 +1298,7 @@ def build_parser():
                         "MOJOLEARN_SPEED_ROUNDS, default 5)")
     p.add_argument("--size", choices=SIZES,
                    default=os.environ.get("MOJOLEARN_SPEED_SIZE", "shipped"),
-                   help="shipped | smoke | large | wide (env "
+                   help="shipped | smoke | large | wide | scale (env "
                         "MOJOLEARN_SPEED_SIZE)")
     p.add_argument("--list-arms", action="store_true",
                    help="print the lane's public entry point and exit")
@@ -1188,7 +1384,10 @@ def main(argv=None):
 
     ctx = _Ctx(lane, arrays, params, loaded)
     try:
-        call, lane_notes = LANES[lane](mojolearn, ctx)
+        prepared = LANES[lane](mojolearn, ctx)
+        # DEVIATION 2239: a scoring lane returns (call, notes, after).
+        call, lane_notes = prepared[0], prepared[1]
+        after = prepared[2] if len(prepared) > 2 else None
     except Refuse as exc:
         emit_refused(lane, exc)
         return 0
@@ -1206,6 +1405,17 @@ def main(argv=None):
     except Exception as exc:                               # noqa: BLE001
         emit_refused(lane, "raised at run time: %s: %s"
                      % (exc.__class__.__name__, " ".join(str(exc).split())))
+        return 0
+    if after is not None:
+        # DEVIATION 2239: the score, outside the clock, after the rounds,
+        # exactly where the vendor arm prints its own.
+        try:
+            for metric, value in after():
+                emit_acc(lane, metric, value)
+        except Exception as exc:                           # noqa: BLE001
+            emit_refused(lane, "FSPEED-ACC not emitted: %s: %s"
+                         % (exc.__class__.__name__,
+                            " ".join(str(exc).split())))
     return 0
 
 

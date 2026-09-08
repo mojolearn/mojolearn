@@ -20,6 +20,7 @@ WHAT AN ARM LABEL MEANS, AND IT MEANS EXACTLY WHAT IT SAYS
     cuml-gpu          a RAPIDS cuML estimator on the GPU
     cuvs-gpu          a cuVS index on the GPU
     torch-gpu         PyTorch, which is cuSOLVER / cuBLAS underneath
+    gpytorch-gpu      GPyTorch's ExactGP on CUDA (the gp lane, DEVIATION 2231)
     sklearn-cpu       scikit-learn on the host CPU
     scipy-cpu         SciPy on the host CPU
     statsmodels-cpu   statsmodels on the host CPU
@@ -85,17 +86,23 @@ Pure-Python FNV is about a microsecond a byte, so outputs above
 `FSPEED-NOTE`. Hashing four megabytes of k-means labels five times would cost
 more than the benchmark.
 
-ACCURACY IS NOT MEASURED HERE, WITH ONE EXCEPTION
-==================================================
+ACCURACY IS NOT MEASURED HERE, WITH THREE EXCEPTIONS
+=====================================================
 `tools/fast_speed_table.py` understands an `FSPEED-ACC` line. This file emits
-one only for the `umap` lane (DEVIATION 2136). A speed harness that also
+one for the `umap` lane (DEVIATION 2136) and, since 2026-09-08, for the
+`logistic` and `arima` lanes (DEVIATION 2235). A speed harness that also
 scores accuracy invites a reader to trade one against the other in a single
 table, and the lanes that need an accuracy statement have gates that make it
 properly. UMAP is the exception because its two arms share NO bits (two
 different optimizers, two different neighbor graphs) and the only statement
 that ties the timed embedding to a sane one is a trustworthiness score,
 computed by ONE helper (`trustworthiness_subsample`) on the same 10,000-row
-subsample for every arm, ours included.
+subsample for every arm, ours included. logistic and arima are exceptions
+for the same reason -- an iterative solver that stops by its own tolerance
+rule can be fast by stopping early -- and their scorers are ONE helper each
+(`binary_log_loss` on the held-out last 10% of rows; `arima_insample_rmse`
+on the one-step in-sample prediction), imported by the `ours` arm from this
+file so both sides score with the same arithmetic.
 
 THE SECOND ARM SELECTOR: THE VENDOR'S DETERMINISTIC CONFIGURATION
 ==================================================================
@@ -129,7 +136,8 @@ made, and a page that is silent is recorded as silent.
 
 SIZES: shipped, smoke, large, wide
 ==================================
-DEVIATION 2132. `MOJOLEARN_SPEED_SIZE` takes four values. `shipped` and
+DEVIATION 2132. `MOJOLEARN_SPEED_SIZE` takes four values (five since
+DEVIATION 2230 added `scale`, described below). `shipped` and
 `smoke` are unchanged. `large` reproduces, per lane, EXACTLY the `large_v`
 value `bench/speed/classical_speed_main.mojo` passes to its `_sz(size,
 smoke_v, shipped_v, large_v)` helper, so the shape tag the Mojo driver prints
@@ -145,11 +153,44 @@ consumes the same `fixture()` and therefore the same bytes.
 `fixture(lane, size)` (DEVIATION 2134) is the ONE importable entry every arm
 consumes, ours and the vendor's; see its docstring for the key contract.
 
+THE FIFTH SIZE: scale (DEVIATION 2230, 2026-09-08)
+==================================================
+`large` for a dumped lane is the Mojo driver's shipped fixture, and several
+of those are tiny (svm 240 rows, cholesky 4,096, holtwinters and kpss 512
+series, linkage / hdbscan / ivf / krr / gp small or fixed), so those lanes
+had NO narrow-tier row above the paper's floor of 10,000 rows (or a
+1,024-wide matrix). `scale` is a Python-generated NARROW fixture (32
+features unless the lane says otherwise) well above that floor, for the
+twelve lanes listed in `SCALE_LANES`; its shape tags all start with
+`scale.` so they cannot collide with any dump tag or with `wide.`. For
+every other lane `scale` IS `large`: `_pick`'s `scale_v` defaults to
+`large_v`, `fixture()` maps the size to `large` before it does anything
+else, and the tag that comes back is the `large` tag. `scale` has no Mojo
+driver twin; it pairs `bench/speed/classical_py_speed_arm.py` with this
+file, as `wide` does.
+
+TWO MORE LANES AND ONE MORE ARM (2026-09-08)
+============================================
+`logistic` (DEVIATION 2232) times `cuml.linear_model.LogisticRegression`
+(the QN solver our `mojolearn.LogisticRegression` mirrors) and `arima`
+(DEVIATION 2233) times `cuml.tsa.arima.ARIMA`, both on fixtures generated
+here at every size, both with an `FSPEED-ACC` line. The `gp` lane's fast
+candidate is now `gpytorch-gpu` (DEVIATION 2231): an exact GP on CUDA in
+FP32 at the fixture's FIXED length scale and noise with no hyperparameter
+optimization, which is the work our lane does; `sklearn-cpu` stays as the
+CPU fallback and is GPU-PATH-ONLY refused on a GPU box as before. GPyTorch
+missing is `FSPEED-REFUSED ... reason=NOT-INSTALLED` naming the pip
+package, so the arm is recorded rather than skipped. `--list-arms`
+(DEVIATION 2234) prints, per lane, the fast arm, what it calls, and the
+deterministic sibling's verdict.
+
 Environment:
-    MOJOLEARN_SPEED_LANE      required
+    MOJOLEARN_SPEED_LANE      required (unless --list-arms, which then
+                              lists every lane)
     MOJOLEARN_SPEED_ARM       `default` (absent) or `deterministic`
     MOJOLEARN_SPEED_ROUNDS    timed rounds (default 5)
-    MOJOLEARN_SPEED_SIZE      `shipped` (default), `smoke`, `large`, `wide`
+    MOJOLEARN_SPEED_SIZE      `shipped` (default), `smoke`, `large`, `wide`,
+                              `scale`
     MOJOLEARN_SPEED_DUMP      directory holding <lane>.fixture
     MOJOLEARN_SPEED_HASH_MAX  bytes hashed before giving up (default 262144)
 """
@@ -312,8 +353,9 @@ def header(lane, arm, device, rounds, size, mode="FAST"):
 
 
 def acc(lane, arm, metric, value):
-    """DEVIATION 2136. Emitted by the umap lane only; see the module
-    docstring for why every other lane emits none."""
+    """DEVIATION 2136. Emitted by the umap lane, and (DEVIATION 2235) by
+    the logistic and arima lanes; see the module docstring for why every
+    other lane emits none."""
     print("FSPEED-ACC lane=%s arm=%s metric=%s value=%.6f"
           % (lane, arm, metric, value), flush=True)
 
@@ -679,9 +721,18 @@ def _no_estimator(name, what):
                    "https://docs.nvidia.com/cuml/latest/api/")
 
 
+#: DEVIATION 2231. The gp lane's RAPIDS verdict, unchanged, kept beside
+#: the GPyTorch sibling that replaced it in the table: the sklearn-cpu
+#: fallback still refuses it by name under `deterministic`.
+GP_CUML_SIBLING = _no_estimator("cuml-gpu-deterministic",
+                                "Gaussian process regressor")
+
+_GPYTORCH_DOCS = "https://docs.gpytorch.ai/en/stable/settings.html"
+
 #: Keyed by LANE. Every sentence in `words` was read from `url` on
-#: 2026-09-07 and is quoted, not paraphrased. The leg's log reader finds a
-#: refused sibling by its `FSPEED-REFUSED ... reason=<KIND>:` prefix.
+#: 2026-09-07 (the gp, logistic and arima entries on 2026-09-08) and is
+#: quoted, not paraphrased. The leg's log reader finds a refused sibling
+#: by its `FSPEED-REFUSED ... reason=<KIND>:` prefix.
 DETERMINISTIC_SIBLINGS = {
     # DEVIATION 2142. The one knob KMeans documents. With `init=` an array
     # and `n_init=1` the seed selects nothing our fixture leaves to chance,
@@ -769,8 +820,40 @@ DETERMINISTIC_SIBLINGS = {
         "https://docs.pytorch.org/docs/2.14/generated/"
         "torch.use_deterministic_algorithms.html"),
     "gmm": _no_estimator("cuml-gpu-deterministic", "GaussianMixture"),
-    "gp": _no_estimator("cuml-gpu-deterministic",
-                        "Gaussian process regressor"),
+    # DEVIATION 2231. GPyTorch's pages for ExactGP (models.html#exactgp)
+    # and for its settings, read 2026-09-08, state nothing about
+    # determinism of a fit or a prediction. The settings page uses the
+    # word once, on `deterministic_probes`, and that is about the MLL
+    # estimate during training, which this lane does not run.
+    "gp": Sibling(
+        "gpytorch-gpu-deterministic", NOT_DOCUMENTED,
+        "GPyTorch's ExactGP documentation (models.html#exactgp) and its "
+        "settings page state nothing about determinism and take no seed; "
+        "the settings page's one use of the word is deterministic_probes, "
+        "\"If True, we use the same set of probe vectors for computing log "
+        "determinants each iteration. This introduces small amounts of "
+        "bias in to the MLL, but allows us to compute a deterministic "
+        "estimate of it which makes optimizers like L-BFGS more viable "
+        "choices.\", which concerns hyperparameter training and not the "
+        "exact prediction this lane times",
+        _GPYTORCH_DOCS),
+    # DEVIATION 2232. Read 2026-09-08: the page lists penalty, tol, C,
+    # fit_intercept, class_weight, max_iter, linesearch_max_iter,
+    # l1_ratio, solver, lbfgs_memory, penalty_normalized, verbose and
+    # output_type, and no seed.
+    "logistic": _not_documented(
+        "cuml-gpu-deterministic", "LogisticRegression",
+        _CUML + "cuml.linear_model.LogisticRegression/",
+        " and its constructor takes no random_state"),
+    # DEVIATION 2233. Read 2026-09-08 at the `cuml.tsa.ARIMA` page (the
+    # `cuml.tsa.arima.ARIMA` path is a 404 there). Its parent page carries
+    # the deprecation sentence quoted on the kpss entry.
+    "arima": _not_documented(
+        "cuml-gpu-deterministic", "ARIMA",
+        _CUML + "cuml.tsa.ARIMA/",
+        " and its constructor takes no random_state; the cuml.tsa page "
+        "says \"cuml.tsa is deprecated in cuML 26.08 and will be removed "
+        "in the cuML 26.12 release.\""),
     "krr": _not_documented("cuml-gpu-deterministic", "KernelRidge",
                            _CUML + "cuml.kernel_ridge.KernelRidge/"),
     "nystroem": _no_estimator("cuml-gpu-deterministic", "Nystroem"),
@@ -835,13 +918,22 @@ def deterministic_gate(lane, base_arm):
 # shapes move, these move.
 # ===========================================================================
 
-SIZES = ("shipped", "smoke", "large", "wide")
+SIZES = ("shipped", "smoke", "large", "wide", "scale")
 
 #: The lanes whose fixture is the splitmix64 recurrence at EVERY size
-#: (group 1 plus umap, DEVIATION 2135). Every other lane reads the Mojo
-#: driver's dump at `shipped`/`smoke`, and at `large` where the driver has
-#: no `large_v` for it (DEVIATION 2132).
-GENERATED_LANES = ("kmeans", "dbscan", "pca", "ols", "knn", "umap")
+#: (group 1 plus umap, DEVIATION 2135, plus logistic and arima, DEVIATIONS
+#: 2232-2233, which have no Mojo driver at all). Every other lane reads
+#: the Mojo driver's dump at `shipped`/`smoke`, and at `large` where the
+#: driver has no `large_v` for it (DEVIATION 2132).
+GENERATED_LANES = ("kmeans", "dbscan", "pca", "ols", "knn", "umap",
+                   "logistic", "arima")
+
+#: DEVIATION 2230. The lanes with a generated NARROW `scale` fixture above
+#: the paper's floor. For every lane NOT listed here `scale` is `large`,
+#: tag included; `fixture()` does the mapping.
+SCALE_LANES = ("svm", "linkage", "hdbscan", "cholesky", "holtwinters",
+               "kpss", "dbscan", "ivf", "krr", "nystroem", "rbfsampler",
+               "gp")
 
 #: The three lanes the Mojo driver sizes with `_sz(size, smoke, shipped,
 #: large)`. At `large` these are generated here from the recurrence when
@@ -886,10 +978,13 @@ def _blobs_f32(rows, cols, k, salt, spread=10.0):
     return np.ascontiguousarray(x, dtype=np.float32)
 
 
-def _pick(size, smoke_v, shipped_v, large_v, wide_v):
-    """The Python twin of the Mojo driver's `_sz`, plus the `wide` tier."""
+def _pick(size, smoke_v, shipped_v, large_v, wide_v, scale_v=None):
+    """The Python twin of the Mojo driver's `_sz`, plus the `wide` tier,
+    plus `scale` (DEVIATION 2230), which is `large_v` unless the lane
+    passes a `scale_v`, so every lane that does not is unchanged."""
     return {"smoke": smoke_v, "shipped": shipped_v, "large": large_v,
-            "wide": wide_v}[size]
+            "wide": wide_v,
+            "scale": large_v if scale_v is None else scale_v}[size]
 
 
 # ---- per-lane generators. Each returns (arrays, tag, params). ------------
@@ -915,8 +1010,8 @@ def _gen_kmeans(size):
 
 
 def _gen_dbscan(size):
-    rows = _pick(size, 512, 4000, 4000, 20000)
-    cols = _pick(size, 16, 16, 16, 512)
+    rows = _pick(size, 512, 4000, 4000, 20000, scale_v=200000)
+    cols = _pick(size, 16, 16, 16, 512, scale_v=32)
     x = _u01_f32(rows, cols, 4, mul=2.0)
     # DEVIATION 2140. eps 0.35 is the shipped value in 16 dimensions. In 512
     # dimensions the pairwise distance of two points of this fixture is
@@ -924,8 +1019,17 @@ def _gen_dbscan(size):
     # 0.35 every point is noise and the BFS half of the algorithm never
     # runs. 17.0 is three standard deviations below the mean: about 0.13%
     # of pairs are neighbors, ~27 per point, so the expansion is exercised.
-    eps = 0.35 if cols == 16 else 17.0
-    return ({"x": x}, "%dx%d" % (rows, cols),
+    # DEVIATION 2230. The same rule at the 32-dimensional `scale` tier:
+    # mean distance sqrt(32 * 2/3) = 4.62, standard deviation
+    # sqrt(32 * 28/45) / (2 * 4.62) = 0.48, three below the mean is 3.17.
+    if cols == 16:
+        eps = 0.35
+    elif cols == 512:
+        eps = 17.0
+    else:
+        eps = 3.17
+    tag = ("scale.%dx%d" if size == "scale" else "%dx%d") % (rows, cols)
+    return ({"x": x}, tag,
             {"eps": eps, "min_samples": 5, "rows": rows, "cols": cols})
 
 
@@ -1056,6 +1160,20 @@ def _gen_metrics(size):
 
 
 def _gen_ivf(size):
+    if size == "scale":
+        # DEVIATION 2230. Narrow (64-wide, the campaign's umap width) and
+        # a million rows; 1,024 lists at 32 probes is the same 1/32
+        # fraction of lists visited as the wide tier's 16 of 256.
+        n_rows, n_q, dim = 1000000, 10000, 64
+        n_lists, n_probes, k, iters = 1024, 32, 10, 20
+        return ({"index": _u01_f32(n_rows, dim, 1),
+                 "queries": _u01_f32(n_q, dim, 2)},
+                "scale.%dx%dq%dL%dp%dk%d" % (n_rows, dim, n_q, n_lists,
+                                             n_probes, k),
+                {"n_rows": n_rows, "n_queries": n_q, "dim": dim,
+                 "n_lists": n_lists, "n_probes": n_probes, "k": k,
+                 "kmeans_n_iters": iters, "metric": "sqeuclidean",
+                 "seed": 0})
     n_rows, n_q, dim = 200000, 2000, 512
     n_lists, n_probes, k, iters = 256, 16, 10, 20
     return ({"index": _u01_f32(n_rows, dim, 1),
@@ -1067,12 +1185,37 @@ def _gen_ivf(size):
 
 
 def _gen_linkage(size):
+    if size == "scale":
+        # DEVIATION 2230. 40,000 rather than the 50,000 the tier was
+        # briefed at: both arms build the dense m x m int connectivity
+        # matrix and both refuse past 46,340 rows (python/mojolearn/
+        # _hierarchy_impl.py::PAIRWISE_MAX_ROWS, cuVS's int). 40,000 is
+        # the largest round number under that bound.
+        n, d, k = 40000, 32, 8
+        return ({"x": _blobs_f32(n, d, k, 30)}, "scale.%dx%dk%d" % (n, d, k),
+                {"n": n, "d": d, "n_clusters": k, "fixture": "scale"})
     n, d, k = 10000, 512, 3
     return ({"x": _blobs_f32(n, d, k, 30)}, "wide.%dx%d" % (n, d),
             {"n": n, "d": d, "n_clusters": k, "fixture": "wide"})
 
 
 def _gen_svm(size):
+    if size == "scale":
+        # DEVIATION 2230. The wide tier's planted hyperplane (alternating
+        # +-1 weights) plus a uniform [-0.5, 0.5) margin noise from salt
+        # 41, so the labels are linearly separable WITH NOISE: the margin
+        # has standard deviation 1.63 and the noise 0.29, so about 3% of
+        # the labels sit on the wrong side of the plane. Hyperparameters
+        # are the wide tier's.
+        n, d = 100000, 32
+        x = _u01_f32(n, d, 40, add=-0.5)
+        w = np.where(np.arange(d) % 2 == 0, 1.0, -1.0)
+        noise = _u01_f32(n, 1, 41, add=-0.5)[:, 0].astype(np.float64)
+        y = np.where(x @ w + noise >= 0.0, 1.0, -1.0).astype(np.float32)
+        return ({"x": x, "y": y}, "scale.%dx%d" % (n, d),
+                {"fixture": "scale", "n": n, "d": d, "C": 10.0,
+                 "gamma": 1.0 / d, "tol": 1e-3, "kernel": "rbf",
+                 "nochange_steps": 1000})
     n, d = 20000, 512
     x = _u01_f32(n, d, 40, add=-0.5)
     w = np.where(np.arange(d) % 2 == 0, 1.0, -1.0)
@@ -1084,6 +1227,13 @@ def _gen_svm(size):
 
 
 def _gen_hdbscan(size):
+    if size == "scale":
+        # DEVIATION 2230.
+        n, d = 200000, 32
+        return ({"x": _blobs_f32(n, d, 5, 45)}, "scale.%dx%d" % (n, d),
+                {"fixture": "scale", "n": n, "d": d, "min_samples": 5,
+                 "min_cluster_size": 5, "metric": "euclidean",
+                 "cluster_selection_method": "eom"})
     n, d = 10000, 512
     return ({"x": _blobs_f32(n, d, 5, 45)}, "wide.%dx%d" % (n, d),
             {"fixture": "wide", "n": n, "d": d, "min_samples": 5,
@@ -1094,8 +1244,12 @@ def _gen_hdbscan(size):
 def _gen_cholesky(size):
     """An RBF Gram matrix of 4,096 hashed points in 8 dimensions, which is
     SPD for distinct points, plus a planted solution. n x n is the knob
-    here, not a feature count."""
-    n, nrhs, jitter = 4096, 4, 1e-3
+    here, not a feature count. `scale` (DEVIATION 2230) is the same
+    construction at n = 8,192 with 16 right-hand sides."""
+    if size == "scale":
+        n, nrhs, jitter, fx = 8192, 16, 1e-3, "scale"
+    else:
+        n, nrhs, jitter, fx = 4096, 4, 1e-3, "wide"
     pts = _u01_f32(n, 8, 50, mul=4.0).astype(np.float64)
     sq_norm = (pts * pts).sum(axis=1)
     sq = np.maximum(sq_norm[:, None] + sq_norm[None, :] - 2.0 * (pts @ pts.T),
@@ -1105,8 +1259,8 @@ def _gen_cholesky(size):
     b = (a + jitter * np.eye(n)) @ x_planted
     return ({"a": np.ascontiguousarray(a, dtype=np.float32),
              "b": np.ascontiguousarray(b, dtype=np.float32)},
-            "wide.%dx%dr%d" % (n, n, nrhs),
-            {"fixture": "wide", "n": n, "nrhs": nrhs, "jitter": jitter})
+            "%s.%dx%dr%d" % (fx, n, n, nrhs),
+            {"fixture": fx, "n": n, "nrhs": nrhs, "jitter": jitter})
 
 
 def _gen_gmm(size):
@@ -1119,34 +1273,51 @@ def _gen_gmm(size):
 
 
 def _gen_gp(size):
-    n, d, ns = 8000, 512, 1000
+    """`scale` (DEVIATION 2230) is the wide construction at 20,000 x 32
+    with 20,000 stars: same planted linear target, same hashed ARD length
+    scales in [0.5, 7.5), same alpha 0.1. NOTE for the `ours` arm: under
+    `identical` its Cholesky profile accepts alpha in {+0.0, 2**-20} only
+    (DEVIATION 1637 / 2169), and that is as true of this tier as of
+    `wide`; the alpha is kept because a 2**-20 ridge on a 20,000 x 20,000
+    float32 RBF Gram matrix with these length scales does not factor."""
+    if size == "scale":
+        n, d, ns, fx = 20000, 32, 20000, "scale"
+    else:
+        n, d, ns, fx = 8000, 512, 1000, "wide"
     x = _u01_f32(n, d, 60)
     w = _u01_f32(d, 1, 61, add=-0.5)[:, 0].astype(np.float64)
     y = np.ascontiguousarray(x @ w, dtype=np.float32)
     xs = _u01_f32(ns, d, 62)
     ls = _u01_f32(d, 1, 63, mul=7.0, add=0.5)[:, 0].copy()
     return ({"x": x, "y": y, "x_star": xs, "length_scale": ls},
-            "wide.%dx%ds%d" % (n, d, ns),
-            {"fixture": "wide", "n_train": n, "n_star": ns, "d": d,
+            "%s.%dx%ds%d" % (fx, n, d, ns),
+            {"fixture": fx, "n_train": n, "n_star": ns, "d": d,
              "alpha": 0.1, "kernel": "rbf_ard"})
 
 
 def _gen_km(lane, size):
-    n = {"krr": 10000, "nystroem": 100000, "rbfsampler": 100000}[lane]
-    d, nq, q = 512, {"krr": 1000, "nystroem": 10000,
-                     "rbfsampler": 10000}[lane], 256
+    if size == "scale":
+        # DEVIATION 2230. One shape for all three kernel-method lanes.
+        n, d, nq, q, fx = 50000, 32, 50000, 256, "scale"
+    else:
+        n = {"krr": 10000, "nystroem": 100000, "rbfsampler": 100000}[lane]
+        d, nq, q = 512, {"krr": 1000, "nystroem": 10000,
+                         "rbfsampler": 10000}[lane], 256
+        fx = "wide"
     x = _u01_f32(n, d, 70)
     w = _u01_f32(d, 1, 71, add=-0.5)[:, 0].astype(np.float64)
     y = np.ascontiguousarray(x @ w, dtype=np.float32)
     xq = _u01_f32(nq, d, 72)
     if lane == "krr":
-        tag = "wide.%dx%d" % (n, d)
+        tag = "%s.%dx%d" % (fx, n, d)
     elif lane == "nystroem":
-        tag = "wide.%dx%dq%d" % (n, d, q)
+        tag = "%s.%dx%dq%d" % (fx, n, d, q)
+    elif size == "scale":
+        tag = "scale.%dx%dq%d" % (nq, d, q)
     else:
         tag = "%dx%dq%d" % (nq, d, q)
     return ({"x": x, "y": y, "x_query": xq}, tag,
-            {"fixture": "wide", "n": n, "d": d, "n_query": nq,
+            {"fixture": fx, "n": n, "d": d, "n_query": nq,
              "n_components": q, "gamma": 1.0 / d, "alpha": 0.5,
              "kernel": "rbf", "seed": 20260825})
 
@@ -1167,25 +1338,80 @@ def _gen_spectral(size):
 
 
 def _gen_holtwinters(size):
-    batch, n, freq = 512, 1200, 12
+    # DEVIATION 2230: `scale` is the same series at 20,000 of them.
+    batch = 20000 if size == "scale" else 512
+    n, freq = 1200, 12
     t = np.arange(n, dtype=np.float64)[None, :]
     y = (10.0 + 0.01 * t + 2.0 * np.sin(2.0 * np.pi * t / freq)
          + _u01_f32(batch, n, 90, add=-0.5).astype(np.float64))
     return ({"y": np.ascontiguousarray(y, dtype=np.float32)},
-            "%dx%df%d" % (batch, n, freq),
+            ("scale.%dx%df%d" if size == "scale" else "%dx%df%d")
+            % (batch, n, freq),
             {"n": n, "batch_size": batch, "frequency": freq,
              "start_periods": 2, "seasonal": "additive", "eps": 2.24e-3,
              "layout": "series-major (batch_size x n)"})
 
 
 def _gen_kpss(size):
-    batch, n_obs = 512, 5200
+    # DEVIATION 2230: `scale` is the same random walk, 20,000 of them.
+    batch, n_obs = (20000 if size == "scale" else 512), 5200
     steps = _u01_f32(batch, n_obs, 95, add=-0.5).astype(np.float64)
     y = np.cumsum(steps, axis=1)
     return ({"y": np.ascontiguousarray(y, dtype=np.float32)},
-            "%dx%d" % (batch, n_obs),
+            ("scale.%dx%d" if size == "scale" else "%dx%d") % (batch, n_obs),
             {"n_obs": n_obs, "batch_size": batch, "d": 1, "D": 0, "s": 0,
              "pval_threshold": 0.05,
+             "layout": "series-major (batch_size x n_obs)"})
+
+
+def _gen_logistic(size):
+    """DEVIATION 2232. Planted logits: `x` uniform in [-0.5, 0.5)^cols
+    (salt 100), `w` uniform in [-2, 2) scaled by sqrt(32 / cols) (salt
+    101) so `x . w` has standard deviation 1.9 at every width, bias 0.25,
+    and each label is a Bernoulli draw `u < sigmoid(x . w + b)` from salt
+    102. The LAST `rows // 10` rows are held out (`n_fit` is where the fit
+    stops) and both arms score log loss on them (DEVIATION 2235). `large`
+    and `scale` are the same 4,000,000 x 32; `wide` is 1,000,000 x 512;
+    `smoke` and `shipped` are this file's own (no Mojo driver twin)."""
+    rows = _pick(size, 40000, 400000, 4000000, 1000000)
+    cols = _pick(size, 32, 32, 32, 512)
+    x = _u01_f32(rows, cols, 100, add=-0.5)
+    w = (_u01_f32(cols, 1, 101, mul=4.0, add=-2.0)[:, 0].astype(np.float64)
+         * float(np.sqrt(32.0 / cols)))
+    b = 0.25
+    # Full-matrix product, not chunked, for the same reason as `_gen_ols`.
+    logits = x @ w + b
+    prob = 1.0 / (1.0 + np.exp(-logits))
+    u = _u01_f32(rows, 1, 102)[:, 0].astype(np.float64)
+    y = np.ascontiguousarray((u < prob), dtype=np.float32)
+    n_hold = rows // 10
+    n_fit = rows - n_hold
+    return ({"x": x, "y": y}, "%dx%dh%d" % (rows, cols, n_hold),
+            {"rows": rows, "cols": cols, "n_fit": n_fit, "n_holdout": n_hold,
+             "penalty": "l2", "C": 1.0, "max_iter": 100, "tol": 1e-4,
+             "fit_intercept": 1})
+
+
+def _gen_arima(size):
+    """DEVIATION 2233. ARMA(1, 1) innovations on a random walk, so that
+    ARIMA(1, 1, 1) is the planted model: `e` uniform in [-0.5, 0.5) (salt
+    110), `z_t = 0.5 z_{t-1} + e_t + 0.3 e_{t-1}`, `y = 50 + cumsum(z)`.
+    Series-major `(batch_size, n_obs)`, our layout; the vendor arm
+    transposes for cuML. `large` and `scale` are 10,000 x 512; `wide` is
+    1,000 x 5,000; `smoke` and `shipped` are this file's own."""
+    batch = _pick(size, 100, 1000, 10000, 1000)
+    n_obs = _pick(size, 256, 512, 512, 5000)
+    phi, theta = 0.5, 0.3
+    e = _u01_f32(batch, n_obs, 110, add=-0.5).astype(np.float64)
+    z = np.empty_like(e)
+    z[:, 0] = e[:, 0]
+    for t in range(1, n_obs):
+        z[:, t] = phi * z[:, t - 1] + e[:, t] + theta * e[:, t - 1]
+    y = 50.0 + np.cumsum(z, axis=1)
+    return ({"y": np.ascontiguousarray(y, dtype=np.float32)},
+            "%dx%dp1d1q1" % (batch, n_obs),
+            {"batch_size": batch, "n_obs": n_obs, "p": 1, "d": 1, "q": 1,
+             "fit_intercept": 0, "maxiter": 1000, "method": "ml",
              "layout": "series-major (batch_size x n_obs)"})
 
 
@@ -1200,6 +1426,7 @@ GENERATORS = {
     "rbfsampler": lambda s: _gen_km("rbfsampler", s),
     "resample": _gen_resample, "spectral": _gen_spectral,
     "holtwinters": _gen_holtwinters, "kpss": _gen_kpss,
+    "logistic": _gen_logistic, "arima": _gen_arima,
 }
 
 #: How a dump's arrays are reshaped and its params typed, per lane, so the
@@ -1339,9 +1566,16 @@ def fixture(lane, size):
                 spectral    x (n, d)
                 holtwinters y (batch_size, n), series-major
                 kpss        y (batch_size, n_obs), series-major
+                logistic    x (rows, cols), y (rows,) in {0, 1}; the fit
+                            is rows [0, n_fit) and the log loss is scored
+                            on rows [n_fit, rows) (DEVIATION 2232)
+                arima       y (batch_size, n_obs), series-major
+                            (DEVIATION 2233)
       tag     the shape string EXACTLY as the vendor arm prints it in
               `shape=`, which at `shipped`/`smoke`/`large` is exactly what
               `bench/speed/classical_speed_main.mojo` prints for the lane.
+              At `scale` (DEVIATION 2230) it starts with `scale.` for the
+              lanes in `SCALE_LANES` and IS the `large` tag for the rest.
       params  the hyperparameters the vendor arm passes, by the dump's
               names (see the generators above), plus two meta keys:
               `_source` in {"splitmix64", "mojo-dump"} and, for a dump,
@@ -1365,11 +1599,16 @@ def fixture(lane, size):
         raise ValueError("size must be one of %s, got %r" % (SIZES, size))
     if lane not in GENERATORS:
         raise ValueError("unknown lane %r" % (lane,))
+    # DEVIATION 2230: `scale` is `large` for every lane without a scale
+    # generator, tag and source included, so the mapping happens BEFORE
+    # any other decision and the rest of this function never sees it.
+    if size == "scale" and lane not in SCALE_LANES:
+        size = "large"
     # An importer of this function (bench/speed/umap_speed_arm.py,
     # bench/speed/classical_py_speed_arm.py) never passes through `main`,
     # so the recurrence self-check runs here too; it is one 37 x 11 block.
     _check_u01_variant()
-    generate = (lane in GENERATED_LANES or size == "wide"
+    generate = (lane in GENERATED_LANES or size in ("wide", "scale")
                 or (size == "large" and lane in SZ_LANES
                     and not _dump_present(lane)))
     if generate:
@@ -1404,11 +1643,42 @@ def _mode():
 
 
 def _source_note(lane, arm, size, tag, prm):
-    """Printed at `large` and `wide` only, so the `shipped` and `smoke`
-    output is byte for byte what it was (DEVIATION 2132)."""
-    if size in ("large", "wide"):
+    """Printed at `large`, `wide` and `scale` only, so the `shipped` and
+    `smoke` output is byte for byte what it was (DEVIATIONS 2132, 2230)."""
+    if size in ("large", "wide", "scale"):
         note(lane, arm, "size=%s fixture_source=%s shape=%s"
              % (size, prm["_source"], tag))
+
+
+def binary_log_loss(p_positive, y01):
+    """DEVIATION 2235. Mean negative log likelihood of binary labels
+    `y01` in {0, 1} under predicted P(y = 1) `p_positive`, probabilities
+    clipped to [1e-15, 1 - 1e-15] as scikit-learn's log_loss clips. ONE
+    helper for both arms of the logistic lane; the `ours` arm imports it
+    from here so the accuracy column compares two fits and not two
+    scorers."""
+    p = np.clip(np.asarray(to_numpy(p_positive), dtype=np.float64).reshape(-1),
+                1e-15, 1.0 - 1e-15)
+    t = np.asarray(to_numpy(y01), dtype=np.float64).reshape(-1)
+    if p.shape[0] != t.shape[0]:
+        raise ValueError("binary_log_loss: %d probabilities for %d labels"
+                         % (p.shape[0], t.shape[0]))
+    return float(-np.mean(t * np.log(p) + (1.0 - t) * np.log1p(-p)))
+
+
+def arima_insample_rmse(pred, y, skip):
+    """DEVIATION 2235. Root mean squared one-step in-sample error over
+    observations `skip..n_obs-1` of every series; `pred` and `y` are
+    series-major `(batch_size, n_obs)` and `skip` is `d + s * D`, the
+    observations differencing consumes (both libraries write NaN there).
+    ONE helper for both arms of the arima lane."""
+    p = np.asarray(to_numpy(pred), dtype=np.float64)
+    t = np.asarray(to_numpy(y), dtype=np.float64)
+    if p.shape != t.shape:
+        raise ValueError("arima_insample_rmse: prediction %s against series "
+                         "%s" % (p.shape, t.shape))
+    diff = p[:, skip:] - t[:, skip:]
+    return float(np.sqrt(np.mean(diff * diff)))
 
 
 def lane_kmeans(rounds, size, smoke):
@@ -1916,15 +2186,16 @@ def lane_cholesky(rounds, size, smoke):
     race(lane, arm, tag, rounds, size, gpu_device_name(), call, mode=_mode())
 
 
-def _cpu_fallback_gate(lane, cpu_arm, what):
+def _cpu_fallback_gate(lane, cpu_arm, what, sib=None):
     """The six lanes with no RAPIDS estimator. Under the default selector
     the GPU arm is refused by name (as before) and the CPU arm proceeds.
     Under `deterministic` BOTH siblings are refused: the GPU one from the
     table (NOT-OFFERED), and the CPU one because its default configuration
     is already seeded and it is not the arm this campaign compares against.
-    Returns `(arm, run)`."""
+    Returns `(arm, run)`. `sib` (DEVIATION 2231) lets the gp lane pass its
+    RAPIDS verdict explicitly now that the table entry is GPyTorch's."""
     if deterministic():
-        sib = DETERMINISTIC_SIBLINGS[lane]
+        sib = DETERMINISTIC_SIBLINGS[lane] if sib is None else sib
         refuse(lane, sib.name, sib.reason())
         refuse(lane, cpu_arm + "-deterministic",
                "NOT-APPLICABLE: the %s arm passes random_state in its "
@@ -1966,17 +2237,155 @@ def lane_gmm(rounds, size, smoke):
     race(lane, arm, tag, rounds, size, cpu_device_name(), call)
 
 
+def _lane_gp_gpytorch(rounds, size, arrays, tag, prm):
+    """DEVIATION 2231. The gp lane's GPU incumbent: `gpytorch.models.
+    ExactGP` with `ScaleKernel(RBFKernel(ard_num_dims=d))` at the
+    fixture's FIXED length scales, outputscale 1 (our RBF has none),
+    `GaussianLikelihood` noise = the fixture's alpha (our ridge), NO
+    hyperparameter optimization, FP32 on CUDA, and the latent posterior
+    at the stars (`model(x_star)`, not `likelihood(model(x_star))`, because
+    sklearn's and our `return_std` is the latent std without the noise).
+
+    THE SOLVER IS FORCED TO CHOLESKY. GPyTorch's default switches to
+    conjugate gradients above `max_cholesky_size` (800) and to Lanczos
+    variance estimates under `fast_pred_var`; both are approximations and
+    neither is the work our lane does. `max_cholesky_size(n_train + 1)`
+    plus `fast_computations(False, False, False)` selects the exact route
+    and the note on the row says so.
+
+    THE MODEL IS BUILT INSIDE THE CLOCK, as sklearn's is on the CPU arm
+    and ours is: ExactGP does no linear algebra until the first predict,
+    so construction + predict is the fit + predict region. A fresh model
+    per round, because GPyTorch caches its prediction strategy on the
+    instance and a second predict on the same object would time a cache
+    hit.
+    """
+    lane = "gp"
+    arm, run = deterministic_gate(lane, "gpytorch-gpu")
+    if not run:
+        return
+    try:
+        import torch
+    except Exception as e:
+        refuse(lane, arm, "NOT-INSTALLED: torch did not import (%r); "
+                          "pip install torch" % (e,))
+        return
+    try:
+        import gpytorch
+    except Exception as e:
+        refuse(lane, arm, "NOT-INSTALLED: gpytorch did not import (%r); "
+                          "pip install gpytorch (it is not in any of this "
+                          "repository's dependency files, on purpose)"
+               % (e,))
+        return
+    if not torch.cuda.is_available():
+        refuse(lane, arm, "torch reports no CUDA device")
+        return
+    _source_note(lane, arm, size, tag, prm)
+    alpha = float(prm["alpha"])
+    if not (alpha > 0.0):
+        refuse(lane, arm, "GaussianLikelihood's noise is a positive "
+                          "parameter and the fixture's alpha is %r; an "
+                          "exact GP with a zero ridge is not expressible as "
+                          "a GPyTorch likelihood" % (alpha,))
+        return
+    n, d = arrays["x"].shape
+    X = torch.tensor(arrays["x"], device="cuda", dtype=torch.float32)
+    y = torch.tensor(arrays["y"], device="cuda", dtype=torch.float32)
+    Xs = torch.tensor(arrays["x_star"], device="cuda", dtype=torch.float32)
+    ls = torch.tensor(np.asarray(arrays["length_scale"], dtype=np.float32)
+                      .reshape(1, -1), device="cuda")
+    if ls.shape[1] not in (1, d):
+        refuse(lane, arm, "length_scale has %d entries for %d features"
+               % (ls.shape[1], d))
+        return
+    ard = d if ls.shape[1] == d else None
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.cuda.synchronize()
+
+    class _Exact(gpytorch.models.ExactGP):
+        def __init__(self, tx, ty, lik):
+            super(_Exact, self).__init__(tx, ty, lik)
+            self.mean_module = gpytorch.means.ZeroMean()
+            self.covar_module = gpytorch.kernels.ScaleKernel(
+                gpytorch.kernels.RBFKernel(ard_num_dims=ard))
+
+        def forward(self, x):
+            return gpytorch.distributions.MultivariateNormal(
+                self.mean_module(x), self.covar_module(x))
+
+    def build():
+        # GreaterThan(0.0) rather than the class default GreaterThan(1e-4),
+        # which would silently clamp a fixture alpha below 1e-4.
+        lik = gpytorch.likelihoods.GaussianLikelihood(
+            noise_constraint=gpytorch.constraints.GreaterThan(0.0)).cuda()
+        lik.noise = alpha
+        m = _Exact(X, y, lik).cuda()
+        m.covar_module.outputscale = 1.0
+        m.covar_module.base_kernel.lengthscale = ls
+        m.eval()
+        lik.eval()
+        return m
+
+    probe = build()
+    note(lane, arm, "gpytorch.models.ExactGP, ZeroMean, ScaleKernel(RBFKernel"
+                    "(ard_num_dims=%s)) outputscale=1, GaussianLikelihood "
+                    "noise=alpha=%g, NO hyperparameter optimization, FP32, "
+                    "allow_tf32=False; latent posterior mean and std at the "
+                    "stars (the noise is not added, matching return_std)"
+         % (ard, alpha))
+    note(lane, arm, "Cholesky forced: max_cholesky_size(%d) and "
+                    "fast_computations(covar_root_decomposition=False, "
+                    "log_prob=False, solves=False); GPyTorch's defaults "
+                    "would use conjugate gradients above 800 training rows"
+         % (n + 1))
+    # The two fixed hyperparameters cross a softplus and back in float32;
+    # the read-back says by how much that moved them.
+    ls_back = probe.covar_module.base_kernel.lengthscale.detach()
+    noise_back = float(probe.likelihood.noise.detach().reshape(-1)[0])
+    ls_err = float((ls_back.reshape(-1) - ls.reshape(-1)).abs().max())
+    note(lane, arm, "read-back after the constraint transforms: noise=%.9g "
+                    "(fixture %.9g), max |lengthscale - fixture| = %.3g; "
+                    "GPyTorch stores both through a softplus and that is the "
+                    "only deviation from the fixed values" % (noise_back,
+                                                               alpha, ls_err))
+    del probe
+
+    def call():
+        m = build()
+        with torch.no_grad(), \
+                gpytorch.settings.max_cholesky_size(n + 1), \
+                gpytorch.settings.fast_computations(False, False, False), \
+                gpytorch.settings.fast_pred_var(False):
+            post = m(Xs)
+            mean = post.mean
+            std = post.variance.sqrt()
+        return (mean, std)
+
+    race(lane, arm, tag, rounds, size, gpu_device_name(), call, mode=_mode())
+
+
 def lane_gp(rounds, size, smoke):
     lane = "gp"
     try:
+        arrays, tag, prm = fixture(lane, size)
+    except Exception as e:
+        # Both arms are recorded as refused, because both needed it.
+        refuse(lane, "gpytorch-gpu", "%r" % (e,))
+        refuse(lane, "sklearn-cpu", "%r" % (e,))
+        return
+    # DEVIATION 2231: the GPU incumbent first, then the CPU fallback
+    # exactly as it was (GPU-PATH-ONLY refused inside `race` on a GPU box).
+    _lane_gp_gpytorch(rounds, size, arrays, tag, prm)
+    try:
         from sklearn.gaussian_process import GaussianProcessRegressor
         from sklearn.gaussian_process.kernels import RBF
-        arrays, tag, prm = fixture(lane, size)
     except Exception as e:
         refuse(lane, "sklearn-cpu", "%r" % (e,))
         return
     arm, run = _cpu_fallback_gate(lane, "sklearn-cpu",
-                                  "Gaussian process regressor")
+                                  "Gaussian process regressor",
+                                  sib=GP_CUML_SIBLING)
     if not run:
         return
     _source_note(lane, arm, size, tag, prm)
@@ -2261,6 +2670,133 @@ def lane_kpss(rounds, size, smoke):
 
 
 # ===========================================================================
+# logistic and arima -- DEVIATIONS 2232-2233, two more lanes with no
+# Mojo-driver twin (2026-09-08)
+# ===========================================================================
+
+def lane_logistic(rounds, size, smoke):
+    """`cuml.linear_model.LogisticRegression(penalty, C, max_iter, tol,
+    fit_intercept)` fit on rows `[0, n_fit)`; the QN solver our
+    `mojolearn.LogisticRegression` mirrors, with every knob it honors
+    passed explicitly and equal on both sides. The ACC line (DEVIATION
+    2235) is `binary_log_loss` on the held-out last 10% of rows."""
+    lane = "logistic"
+    arm, run = deterministic_gate(lane, "cuml-gpu")
+    if not run:
+        return
+    try:
+        from cuml.linear_model import LogisticRegression
+    except Exception as e:
+        refuse(lane, arm, "import failed: %r" % (e,))
+        return
+    arrays, tag, prm = fixture(lane, size)
+    _source_note(lane, arm, size, tag, prm)
+    n_fit = int(prm["n_fit"])
+    x, y = arrays["x"], arrays["y"]
+    y_hold = y[n_fit:]
+    note(lane, arm, "penalty=%s C=%g max_iter=%d tol=%g fit_intercept=%s "
+                    "solver=qn, all explicit and equal on both arms; the "
+                    "fit is rows [0, %d) and rows [%d, %d) are held out for "
+                    "the log loss" % (prm["penalty"], prm["C"],
+                                      prm["max_iter"], prm["tol"],
+                                      bool(prm["fit_intercept"]), n_fit,
+                                      n_fit, x.shape[0]))
+    # ON THE DEVICE BEFORE THE CLOCK, matching every other cuML lane.
+    X, Y, Xh = to_device(lane, arm, np.ascontiguousarray(x[:n_fit]),
+                         np.ascontiguousarray(y[:n_fit]),
+                         np.ascontiguousarray(x[n_fit:]))
+    last = {}
+
+    def call():
+        m = LogisticRegression(penalty=prm["penalty"], C=prm["C"],
+                               max_iter=prm["max_iter"], tol=prm["tol"],
+                               fit_intercept=bool(prm["fit_intercept"]),
+                               solver="qn", output_type="cupy")
+        m.fit(X, Y)
+        last["m"] = m
+        return (m.coef_, m.intercept_)
+
+    race(lane, arm, tag, rounds, size, gpu_device_name(), call, mode=_mode())
+    if "m" in last:
+        try:
+            proba = to_numpy(last["m"].predict_proba(Xh))
+            value = binary_log_loss(proba[:, 1], y_hold)
+            acc(lane, arm, "holdout_logloss_n%d" % y_hold.shape[0], value)
+        except Exception as e:                            # noqa: BLE001
+            refuse(lane, arm, "FSPEED-ACC not emitted: %r" % (e,))
+
+
+_CUML_TSA_DEPRECATION = ("cuml.tsa is deprecated in cuML 26.08 and will be "
+                         "removed in the cuML 26.12 release.")
+
+
+def lane_arima(rounds, size, smoke):
+    """`cuml.tsa.arima.ARIMA(endog, order=(p, d, q), fit_intercept)` then
+    `.fit(maxiter, method='ml')`, hashing the fitted `ar`, `ma` and
+    `sigma2` blocks, the three our `mojolearn.ARIMA(order=(1, 1, 1))`
+    exposes as `ar_`, `ma_`, `sigma2_` (its `trend=None` resolves to no
+    intercept on a differenced series, so the vendor passes
+    fit_intercept=False; DEVIATION 2233). The ACC line (DEVIATION 2235)
+    is `arima_insample_rmse` on `predict(0, n_obs)`."""
+    lane = "arima"
+    arm, run = deterministic_gate(lane, "cuml-gpu")
+    if not run:
+        return
+    try:
+        from cuml.tsa.arima import ARIMA
+    except Exception as e:
+        refuse(lane, arm, "NOT-INSTALLED: cuml.tsa.arima.ARIMA did not import "
+                          "(%r); cuML's own page says \"%s\" (%s)"
+               % (e, _CUML_TSA_DEPRECATION,
+                  "https://docs.nvidia.com/cuml/latest/api/cuml.tsa/"))
+        return
+    arrays, tag, prm = fixture(lane, size)
+    _source_note(lane, arm, size, tag, prm)
+    y = arrays["y"]
+    batch, n_obs = y.shape
+    p, d, q = int(prm["p"]), int(prm["d"]), int(prm["q"])
+    fit_intercept = bool(prm["fit_intercept"])
+    maxiter = int(prm["maxiter"])
+    # cuML's docstring: endog is "(n_obs, batch_size)", "each time series
+    # in columns", float64. A Fortran-ordered (n_obs, batch_size) float64
+    # array is BYTE FOR BYTE our series-major (batch_size, n_obs) layout
+    # widened to float64, so the transpose costs nothing but the widening,
+    # and it happens here, outside the clock.
+    endog = np.asfortranarray(y.T, dtype=np.float64)
+    note(lane, arm, "order=(%d,%d,%d) seasonal_order=(0,0,0,0) "
+                    "fit_intercept=%s simple_differencing=True method=ml "
+                    "maxiter=%d; our ARIMA's trend=None resolves to k=%d on "
+                    "this order, which is this fit_intercept"
+         % (p, d, q, fit_intercept, maxiter, 1 if fit_intercept else 0))
+    note(lane, arm, "cuML takes endog as (n_obs, batch_size) with each series "
+                    "in a COLUMN; the fixture is series-major and was handed "
+                    "over as its Fortran-ordered transpose (same bytes), "
+                    "widened to float64 because cuML's ARIMA is float64 only "
+                    "while ours is float32; that width difference cannot be "
+                    "turned off on their side")
+    endog = to_device(lane, arm, endog)
+    last = {}
+
+    def call():
+        m = ARIMA(endog, order=(p, d, q), seasonal_order=(0, 0, 0, 0),
+                  fit_intercept=fit_intercept, simple_differencing=True,
+                  output_type="cupy")
+        m.fit(maxiter=maxiter, method="ml")
+        last["m"] = m
+        fp = m.get_fit_params()
+        return (fp["ar"], fp["ma"], fp["sigma2"])
+
+    race(lane, arm, tag, rounds, size, gpu_device_name(), call, mode=_mode())
+    if "m" in last:
+        try:
+            pred = to_numpy(last["m"].predict(0, n_obs))   # (n_obs, batch)
+            value = arima_insample_rmse(np.ascontiguousarray(pred.T), y, d)
+            acc(lane, arm, "insample_rmse_skip%d" % d, value)
+        except Exception as e:                            # noqa: BLE001
+            refuse(lane, arm, "FSPEED-ACC not emitted: %r" % (e,))
+
+
+# ===========================================================================
 # umap -- DEVIATION 2135, the lane with no Mojo-driver twin
 # ===========================================================================
 
@@ -2361,13 +2897,89 @@ LANES = {
     "holtwinters": lane_holtwinters,
     "kpss": lane_kpss,
     "umap": lane_umap,
+    "logistic": lane_logistic,
+    "arima": lane_arima,
 }
+
+#: DEVIATION 2234. The FAST arm of every lane, what it calls, and what is
+#: hashed, for `--list-arms`; the deterministic sibling is read from
+#: `DETERMINISTIC_SIBLINGS` beside it. A CPU arm listed here is
+#: GPU-PATH-ONLY refused on a GPU vendor's box.
+VENDOR_ARMS = {
+    "kmeans": "cuml-gpu  cuml.cluster.KMeans(init=array, n_init=1).fit -> "
+              "hash(cluster_centers_, labels_)",
+    "dbscan": "cuml-gpu  cuml.cluster.DBSCAN.fit -> hash(labels_)",
+    "pca": "cuml-gpu  cuml.decomposition.PCA(svd_solver=jacobi|full).fit -> "
+           "hash(components_, explained_variance_, singular_values_)",
+    "ols": "cuml-gpu  cuml.linear_model.LinearRegression(algorithm=eig).fit "
+           "-> hash(coef_)",
+    "knn": "cuml-gpu  cuml.neighbors.NearestNeighbors(brute).kneighbors -> "
+           "hash(dist, ind); fit outside the clock",
+    "cd": "cuml-gpu  cuml.linear_model.Lasso(selection=cyclic).fit -> "
+          "hash(coef_)",
+    "kde": "cuml-gpu  cuml.neighbors.KernelDensity.score_samples -> "
+           "hash(log density); fit outside the clock",
+    "linkage": "cuml-gpu  cuml.cluster.AgglomerativeClustering(single, "
+               "pairwise).fit -> hash(labels_)",
+    "svm": "cuml-gpu  cuml.svm.SVC(rbf).fit -> hash(dual_coef_, support_)",
+    "metrics": "cuml-gpu  cuml.metrics.{eleven} -> hash=-",
+    "ivf": "cuvs-gpu  cuvs.neighbors.ivf_flat build + search -> "
+           "hash(dist, ind)",
+    "hdbscan": "cuml-gpu  cuml.cluster.HDBSCAN.fit -> hash(labels_)",
+    "cholesky": "torch-gpu  torch.linalg.cholesky + cholesky_solve -> "
+                "hash(L, X, logdet)",
+    "gmm": "sklearn-cpu  sklearn.mixture.GaussianMixture.fit -> "
+           "hash(weights_, means_); RAPIDS ships none",
+    "gp": "gpytorch-gpu  gpytorch.models.ExactGP(ScaleKernel(RBFKernel)) "
+          "build + predict -> hash(mean, std); then sklearn-cpu "
+          "GaussianProcessRegressor(optimizer=None) as the CPU fallback",
+    "krr": "cuml-gpu  cuml.kernel_ridge.KernelRidge(rbf).fit + predict -> "
+           "hash(dual_coef_, predict)",
+    "nystroem": "sklearn-cpu  sklearn.kernel_approximation.Nystroem.fit + "
+                "transform -> hash=-; RAPIDS ships none",
+    "rbfsampler": "sklearn-cpu  sklearn.kernel_approximation.RBFSampler.fit "
+                  "+ transform -> hash=-; RAPIDS ships none",
+    "resample": "scipy-cpu  scipy.stats.bootstrap(percentile) -> "
+                "hash(standard_error); RAPIDS ships none",
+    "spectral": "sklearn-cpu  sklearn.cluster.SpectralClustering(arpack).fit "
+                "-> hash=-; RAPIDS ships none",
+    "holtwinters": "cuml-gpu  cuml.ExponentialSmoothing(additive).fit -> "
+                   "hash(get_level())",
+    "kpss": "cuml-gpu  cuml.tsa.stationarity.kpss_test(d=1) -> hash(flags); "
+            "statsmodels-cpu when the build has no cuml.tsa",
+    "umap": "cuml-gpu  cuml.manifold.UMAP.fit_transform -> hash(embedding); "
+            "FSPEED-ACC trustworthiness",
+    "logistic": "cuml-gpu  cuml.linear_model.LogisticRegression(qn, l2, "
+                "C=1, max_iter=100, tol=1e-4).fit -> hash(coef_, "
+                "intercept_); FSPEED-ACC holdout log loss",
+    "arima": "cuml-gpu  cuml.tsa.arima.ARIMA(order=(1,1,1), "
+             "fit_intercept=False).fit -> hash(ar, ma, sigma2); FSPEED-ACC "
+             "in-sample one-step RMSE",
+}
+
+
+def list_arms(lane):
+    """DEVIATION 2234. One lane when MOJOLEARN_SPEED_LANE is set, every
+    lane otherwise; the second line of each is the deterministic
+    sibling's name and verdict from the table."""
+    for name in ([lane] if lane else sorted(LANES)):
+        sib = DETERMINISTIC_SIBLINGS[name]
+        print("%-12s %s" % (name, VENDOR_ARMS[name]))
+        print("%-12s deterministic sibling %s: %s" % ("", sib.name, sib.kind))
 
 
 def main():
     lane = os.environ.get("MOJOLEARN_SPEED_LANE", "")
     rounds = int(os.environ.get("MOJOLEARN_SPEED_ROUNDS", "5"))
     size = os.environ.get("MOJOLEARN_SPEED_SIZE", "shipped")
+    if "--list-arms" in sys.argv[1:]:
+        # DEVIATION 2234. The only flag this file takes; everything else
+        # stays in the environment, as the Mojo driver has it.
+        if lane and lane not in LANES:
+            raise SystemExit("MOJOLEARN_SPEED_LANE must be one of: %s; got %r"
+                             % (" ".join(sorted(LANES)), lane))
+        list_arms(lane)
+        return 0
     if size not in SIZES:
         raise SystemExit("MOJOLEARN_SPEED_SIZE must be one of %s"
                          % " ".join(SIZES))
