@@ -90,25 +90,41 @@ def pinned_block_sum[block_size: Int](value: Float32) -> Float32:
     bits are the same bits everywhere.
     """
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var tid = Int(thread_idx.x)
-        var red = stack_allocation[
-            block_size,
-            Scalar[DType.float32],
-            address_space = AddressSpace.SHARED,
-        ]()
-        red[tid] = value
-        barrier()
-        var step = block_size // 2
-        while step > 0:
-            if tid < step:
-                red[tid] = red[tid] + red[tid + step]
-            barrier()
-            step //= 2
-        var total = red[0]
-        barrier()
-        return total
+        return halving_block_sum[block_size](value)
     else:
         return block_sum[block_size=block_size](value)
+
+
+def halving_block_sum[block_size: Int](value: Float32) -> Float32:
+    """The IDENTICAL arm of `pinned_block_sum`, callable in EVERY mode.
+
+    DEVIATION 2291 (2026-09-08): `block_sum` refuses block sizes that are
+    not greater than the warp size ("Block size must be a greater than warp
+    size", block.mojo:186), so a 32-thread block cannot use the library
+    fold on a 64-wide wavefront at all: the FAST and DETERMINISTIC builds of
+    the estimators binding failed to instantiate `qr_panel_kernel` on
+    gfx942 (the 0.7.0 release build, 2026-09-08). A kernel whose block is
+    narrower than every vendor's widest warp calls this tree directly; the
+    tree is the same sequence of additions on every backend, so IDENTICAL
+    bits are untouched and FAST bits on that kernel move to the same value.
+    """
+    var tid = Int(thread_idx.x)
+    var red = stack_allocation[
+        block_size,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    red[tid] = value
+    barrier()
+    var step = block_size // 2
+    while step > 0:
+        if tid < step:
+            red[tid] = red[tid] + red[tid + step]
+        barrier()
+        step //= 2
+    var total = red[0]
+    barrier()
+    return total
 
 
 # ===========================================================================
