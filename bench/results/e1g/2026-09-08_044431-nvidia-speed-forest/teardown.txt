@@ -1,0 +1,6 @@
+pod=loz6esz74qm7fj
+armed=1
+terminated=1
+deadman_pid=28712
+exit=0
+at=2026-09-08T09:19:18Z
