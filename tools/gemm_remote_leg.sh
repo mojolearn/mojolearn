@@ -2367,7 +2367,13 @@ leg_preflight() {
     echo "  pre-flight: existing leases on this machine"
     tools/runpod_guard.sh list 2>&1 | sed 's/^/    /' || true
     _live=$(tools/runpod_guard.sh list 2>/dev/null | grep -c 'min left' || true)
-    if [ "${_live:-0}" -gt 0 ]; then
+    if [ "${_live:-0}" -gt 0 ] && [ "${LEG_ALLOW_CONCURRENT:-0}" = "1" ]; then
+        # DEVIATION 2210 (ported from the grid branch): --allow-concurrent covers
+        # recorded leases as well as pods; each leg terminates by its own pod id
+        # and arms its own dead-man, and the caller owns confirming every lease
+        # is gone.
+        echo "    CONCURRENT: $_live unexpired lease(s) recorded; --allow-concurrent was passed."
+    elif [ "${_live:-0}" -gt 0 ]; then
         leg_die "REFUSING to rent: $_live unexpired lease(s) are recorded above.
   Another leg is running, or one ended without terminating its box. Deal
   with that first -- 'tools/gemm_remote_leg.sh reap' terminates and VERIFIES.
