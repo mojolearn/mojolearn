@@ -3788,6 +3788,10 @@ classical)
     # failure is known before any Mojo time is spent, and it is bounded.
     pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12" "cuvs-cu12"
     pipget scikit-learn scipy
+    # DEVIATION 2253: the gp lane's GPU incumbent (exact GP on CUDA); pure
+    # Python on top of the image's torch, and the arm refuses by name if
+    # this did not land.
+    pipget gpytorch
     buildone classicalspeed bench/speed/classical_speed_main.mojo
     build_python_bindings
     for L in @SPEEDLANES@; do
