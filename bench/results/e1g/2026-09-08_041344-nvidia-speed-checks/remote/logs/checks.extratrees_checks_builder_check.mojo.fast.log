@@ -1,0 +1,5 @@
+1056 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x718400000000, nodemask=1)
+depth-6 build:  111 nodes, 56 leaves, depth 6
+batch-width independence: 5 widths x 111 nodes
+builder:  1082 cells
+builder_check: PASS

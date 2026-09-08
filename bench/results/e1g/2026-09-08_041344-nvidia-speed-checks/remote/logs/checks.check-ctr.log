@@ -1,0 +1,24 @@
+✨ Pixi task (check-ctr in default): mojo run -I . checks/ctr_check.mojo
+1343 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a7b40000000, nodemask=2)
+/root/mojolearn/checks/ctr_check.mojo:355:16: warning: 'if' condition always evaluates to 'True'; 'else' branch is unreachable
+            if True:
+               ^
+CTR option surface and calcers:
+  default simple_ctr configs for ONE categorical feature:
+     Borders  prior { 0.0 , 1.0 } param_id 0  binarization Uniform 15
+     Borders  prior { 0.5 , 1.0 } param_id 0  binarization Uniform 15
+     Borders  prior { 1.0 , 1.0 } param_id 0  binarization Uniform 15
+     FeatureFreq  prior { 0.0 , 1.0 } param_id 0  binarization MinEntropy 15
+  target binarization: 15 of 15 cases match CatBoost's own MinEntropy borders exactly
+  FeatureFreq: 11 cardinalities, both counter_calc_method arms, every cell equal to the planted count/(n+1)
+  Borders ordered statistic: 4 cardinalities x 3 priors, every row equal to an independent O(n^2) tally over the preceding same-category rows
+  cat-feature option refusals:
+    both shipped configurations pass
+    refused: max_ctr_complexity=4, CatBoost's own default
+    refused: counter_calc_method=7
+    refused: target_binarization border_type=Uniform
+    refused: ctr_target_border_count=0
+    refused: simple_ctr=Counter
+    refused: simple_ctr=Buckets
+    refused: a CTR with no priors
+  all five sections green

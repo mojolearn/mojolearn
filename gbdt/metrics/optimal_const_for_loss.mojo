@@ -26,12 +26,24 @@ answer, widened back to double by the `TMaybe<double>` return; for Logloss
 port that kept the average in double end to end would be one ulp off their
 bias on real data.
 
-`Logit` is their `math_utils.h` log(x / (1 - x)), taken through libm's
-`log` by `external_call` and NOT through `std.math.log`, whose ~5e-8 error
-re-decides last bits (the `checks/pointwise_target_check.mojo` finding).
+`Logit` is their `math_utils.h` `-log(1 / x - 1)`. HISTORY: the first port
+took `std.math.log`, whose ~5e-8 error re-decides last bits (the
+`checks/pointwise_target_check.mojo` finding); the recorded fix was the
+host libm's `log` through `external_call`. NOW (DEVIATION 2262, 2026-09-08):
+the library's own `portable_log64` (`checks/numerics.mojo` -- Cephes double
+log through fma and basic ops only, measured within 2 ulp of libm by
+`check-portable-log64`, the same bits on every host and every device), so
+the identical path no longer depends on which C library the host links.
+CONSEQUENCE, stated rather than hoped away: the bias's bits now come from
+OUR log rather than the host's libm. CatBoost computes theirs with the
+host's libm, so the recorded bias can differ from CatBoost's by the ULP
+difference between the two logs at that one operand; `check-bfa-oracle`
+demands `==` on the bits and may need re-baselining to a documented
+1-ULP tolerance on that arm (its RMSE arms carry no log and are
+unaffected). Operand order and spelling are theirs, unchanged.
 """
 
-from std.ffi import external_call
+from checks.numerics import portable_log64
 
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_CROSSENTROPY,
@@ -113,11 +125,11 @@ def calc_one_dimensional_optimum_const_approx(
         # their `Logit` is `-log(1 / x - 1)` (`math_utils.h:27-29`), NOT
         # `log(x / (1 - x))`: the two round differently and the
         # check-bfa-oracle differential measured the naive spelling ONE
-        # ULP off CatBoost's bias on both Logloss fixtures. Same libm
-        # `log`, their operand order.
-        return -external_call["log", Float64](
-            1.0 / best_probability - 1.0
-        )
+        # ULP off CatBoost's bias on both Logloss fixtures. Their operand
+        # order, kept exactly; the log is `portable_log64` since
+        # DEVIATION 2262 (was the host libm through `external_call`) --
+        # see the module docstring for the ULP consequence.
+        return -portable_log64(1.0 / best_probability - 1.0)
     raise Error(
         "boost_from_average is not ported for this loss yet: only RMSE,"
         " Logloss and CrossEntropy have CalcOptimumConstApprox arms here."

@@ -444,6 +444,85 @@ def identical_log64(x: Float64) -> Float64:
     return log(x)
 
 
+def portable_log2_64(x_in: Float64) -> Float64:
+    """HOST-ONLY (no float64 on device): `log2` for Float64 as one arithmetic. DEVIATION 2260 (2026-09-08). `portable_log64`'s argument reduction and BOTH of its Cephes rational approximations VERBATIM (same fma spellings, same association), with `log2.c`'s re-entry in place of `log.c`'s: the fraction's log is scaled by `LOG2EA = log2(e) - 1` and re-added to itself, so the exponent enters as an exact integer and `portable_log2_64(2^k) == k` bit for bit -- the property RF's `max_features='log2'` truncation (`randomforest.mojo::compute_max_features_log2`, `builder.cuh:240`) stands on. Replaces the host libm `log2` there, the one foreign call that IDENTITY_PATHS row 18 could not pin. Accuracy claim: within 2 ulp of the host libm on [2, 4096] (gated in `ensemble/checks/predict_check.mojo` beside the truncation rule); a 2^18-hashed-input gate like `check-portable-log64`'s is OWED, not yet written."""
+    from std.math import fma
+    from std.memory import bitcast
+
+    var x = x_in
+    if x != x:
+        return x
+    if x == Float64(0.0):
+        return bitcast[DType.float64](UInt64(0xFFF0000000000000))  # -inf
+    if x < Float64(0.0):
+        return bitcast[DType.float64](UInt64(0x7FF8000000000000))  # nan
+    var bits = bitcast[DType.uint64](x)
+    if bits == UInt64(0x7FF0000000000000):
+        return x  # +inf
+    var e = 0
+    if (bits >> 52) == UInt64(0):
+        x = x * 18014398509481984.0
+        bits = bitcast[DType.uint64](x)
+        e = -54
+    e += Int((bits >> 52) & UInt64(0x7FF)) - 1022
+    var m = bitcast[DType.float64]((bits & UInt64(0x000FFFFFFFFFFFFF)) | UInt64(0x3FE0000000000000))
+    comptime SQRTH = 0.70710678118654752440
+    # `log2.c`'s LOG2EA = log2(e) - 1, split off so the exponent's integer
+    # part is added exactly and only the fraction's log is scaled.
+    comptime LOG2EA = 0.44269504088896340735992
+    var z: Float64
+    var y: Float64
+    var xm: Float64
+    if e > 2 or e < -2:
+        # `log2.c:154-186` -- log(x) = z + z^3 R(z)/S(z), z = 2(m-1)/(m+1)
+        if m < SQRTH:
+            e -= 1
+            z = m - 0.5
+            y = fma(0.5, z, 0.5)
+        else:
+            z = m - 0.5
+            z = z - 0.5
+            y = fma(0.5, m, 0.5)
+        xm = z / y
+        z = xm * xm
+        var r = fma(-7.89580278884799154124e-1, z, 1.63866645699558079767e1)
+        r = fma(r, z, -6.41409952958715622951e1)
+        var sq = z + -3.56722798256324312549e1
+        sq = fma(sq, z, 3.12093766372244180303e2)
+        sq = fma(sq, z, -7.69691943550460008604e2)
+        y = xm * (z * r / sq)
+    else:
+        # `log2.c:190-215` -- log(1+xm) = xm - xm^2/2 + xm^3 P(xm)/Q(xm)
+        if m < SQRTH:
+            e -= 1
+            xm = fma(2.0, m, -1.0)
+        else:
+            xm = m - 1.0
+        z = xm * xm
+        var pp = fma(1.01875663804580931796e-4, xm, 4.97494994976747001425e-1)
+        pp = fma(pp, xm, 4.70579119878881725854e0)
+        pp = fma(pp, xm, 1.44989225341610930846e1)
+        pp = fma(pp, xm, 1.79368678507819816313e1)
+        pp = fma(pp, xm, 7.70838733755885391666e0)
+        var qq = xm + 1.12873587189167450590e1
+        qq = fma(qq, xm, 4.52279145837532221105e1)
+        qq = fma(qq, xm, 8.29875266912776603211e1)
+        qq = fma(qq, xm, 7.11544750618563894466e1)
+        qq = fma(qq, xm, 2.31251620126765340583e1)
+        y = xm * (z * pp / qq)
+        y = fma(z, -0.5, y)
+    # `log2.c:217-224` -- multiply the fraction's log by log2(e) as
+    # (1 + LOG2EA), then add the base-2 exponent as an exact integer:
+    #     z = y*LOG2EA; z += x*LOG2EA; z += y; z += x; z += e;
+    # At a power of two xm == y == 0, so the result is exactly `e`.
+    var out = y * LOG2EA
+    out = fma(xm, LOG2EA, out)
+    out = out + y
+    out = out + xm
+    out = out + Float64(e)
+    return out
+
+
 def identical_sqrt(x: Float32) -> Float32:
     """Row 10's sqrt seam call: IDENTICAL routes through `portable_sqrtf` (one arithmetic, correctly rounded, the same bits on the approximate- sqrt column too); FAST is the stdlib's device path verbatim."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
