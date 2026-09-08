@@ -2673,7 +2673,10 @@ uname -a > "$OUT/uname.txt" 2>&1
   | awk '{print $1}' > "$OUT/source_sha256.txt"
 if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi >/dev/null 2>&1; then
   if [ "@NVIDIACAMPAIGN@" != 0 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
-    timeout -k 10 120 sh -c 'curl -fsSL --max-time 30 https://pixi.sh/install.sh | sh' > "$OUT/pixi_install.log" 2>&1
+    # DEVIATION 2269: 30 s was not enough for the pod to fetch the pixi tarball
+    # from GitHub on 2026-09-08 (two release builds died at bootstrap, exit 127);
+    # the unbounded installer the speed legs use never failed. 300 s, one retry.
+    timeout -k 10 400 sh -c 'curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh || (sleep 10; curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh)' > "$OUT/pixi_install.log" 2>&1
   else
     curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
   fi
