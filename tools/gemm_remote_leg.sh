@@ -817,9 +817,13 @@ if [ "$PAYLOAD" = "speed" ]; then
         gemmseq)   SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gemm transformer attention mlp rmsnorm mamba selective_scan}" ;;
         classical) SPEED_LANES="${MOJOLEARN_SPEED_LANES:-kmeans dbscan pca ols knn cd kde linkage svm metrics ivf hdbscan cholesky gmm gp krr nystroem rbfsampler resample spectral holtwinters kpss}" ;;
         forest)    SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gbdt-symmetric gbdt-depthwise gbdt-lossguide rf et iforest}" ;;
+        # DEVIATION 2266: named conformance checks on the box. Each lane is a
+        # .mojo check file (run in FAST and IDENTICAL), a pixi task, or
+        # `bench:<task>` for the bench environment (the CatBoost oracles).
+        checks)    SPEED_LANES="${MOJOLEARN_SPEED_LANES:-}" ;;
     esac
     case "$SPEED_FAMILY" in
-        gemmseq|classical|forest) : ;;
+        gemmseq|classical|forest|checks) : ;;
         *)
             echo "gemm_remote_leg: --family must be one of gemmseq, classical," >&2
             echo "  trees (alias: forest). Got '$SPEED_FAMILY'." >&2
@@ -3952,6 +3956,37 @@ LGBMPROBE
                         $_dsflag --rows "$R"
             done
         fi
+    done
+    ;;
+checks)
+    # DEVIATION 2266: conformance checks on a rented GPU. A `bench:` lane
+    # needs the gbdt binding (check-bfa-oracle imports _mojolearn_gbdt) and
+    # the bench environment, which pixi installs on first use inside the
+    # arm's budget; the other lanes need only the default environment.
+    case " @SPEEDLANES@ " in
+        *" bench:"*)
+            for _pass in 1 2; do
+                if [ "$_pass" = "1" ]; then _skip=1; else _skip=""; fi
+                MOJOLEARN_SKIP_BUILD_GATE="$_skip" bash bindings/build_gbdt.sh \
+                    > "$LOGS/build.binding.gbdt.pass$_pass.log" 2>&1
+                echo "binding_build_exit gbdt.pass$_pass=$?" >> "$OUT/leg.txt"
+            done
+            ;;
+    esac
+    for L in @SPEEDLANES@; do
+        _tag=$(printf '%s' "$L" | tr '/:' '__')
+        case "$L" in
+            *.mojo)
+                runarm "checks.$_tag.fast.log" pixi run mojo run -I . "$L"
+                runarm "checks.$_tag.identical.log" pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . "$L"
+                ;;
+            bench:*)
+                runarm "checks.$_tag.log" pixi run -e bench "${L#bench:}"
+                ;;
+            *)
+                runarm "checks.$_tag.log" pixi run "$L"
+                ;;
+        esac
     done
     ;;
 esac
