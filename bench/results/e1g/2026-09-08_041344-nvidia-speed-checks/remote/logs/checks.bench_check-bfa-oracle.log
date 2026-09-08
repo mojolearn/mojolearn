@@ -1,0 +1,24 @@
+✨ Pixi task (check-bfa-oracle in bench): python tools/bfa_oracle_check.py
+ WARN Skipped running the post-link scripts because `run-post-link-scripts` = `false`
+	- bin/.librsvg-pre-unlink.sh
+
+To enable them, run:
+	pixi config set --local run-post-link-scripts insecure
+
+More info:
+	https://pixi.sh/latest/reference/pixi_configuration/#run-post-link-scripts
+
+1626 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7af300000000, nodemask=2)
+1626 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x336c40000000, nodemask=1)
+/root/mojolearn/tools/bfa_oracle_check.py:43: RuntimeWarning: overflow encountered in scalar multiply
+  h = (np.uint64(i * 1000003 + salt) * np.uint64(0x9E3779B97F4A7C15)) \
+/root/mojolearn/tools/bfa_oracle_check.py:45: RuntimeWarning: overflow encountered in scalar multiply
+  h = ((h ^ (h >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)) \
+  RMSE explicit true, unweighted: catboost 2005.046630859375 ours 2005.046630859375 BIT-EQUAL
+  RMSE explicit true, weighted: catboost 2005.04443359375 ours 2005.04443359375 BIT-EQUAL
+  RMSE unset (their auto-TRUE): catboost 2005.046630859375 ours 2005.046630859375 BIT-EQUAL
+  Logloss explicit true, unweighted: catboost -0.43034911693465844 ours -0.43034911693465844 BIT-EQUAL
+  Logloss explicit true, weighted: catboost -0.4366086094565408 ours -0.4366086094565408 BIT-EQUAL
+  Logloss unset: catboost 0.0 ours 0.0 (both must be 0.0)
+  SABOTAGE weighted-vs-unweighted: 2005.04443359375 vs 2005.046630859375
+  ok   every ported arm matches CatBoost's own bias to the bit, and the default rule matches their adjust list

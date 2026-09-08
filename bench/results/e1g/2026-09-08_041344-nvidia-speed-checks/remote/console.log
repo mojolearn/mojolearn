@@ -1,0 +1,60 @@
+
+=== checks.ensemble_checks_predict_check.mojo.fast.log :: pixi run mojo run -I . ensemble/checks/predict_check.mojo ===
+        var ours = portable_log2_64(Float64(n))
+                   ^~~~~~~~~~~~~~~~
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+
+=== checks.ensemble_checks_predict_check.mojo.identical.log :: pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . ensemble/checks/predict_check.mojo ===
+        var ours = portable_log2_64(Float64(n))
+                   ^~~~~~~~~~~~~~~~
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+
+=== checks.extratrees_checks_feature_sampler_check.mojo.fast.log :: pixi run mojo run -I . extratrees/checks/feature_sampler_check.mojo ===
+    EXCESS_MAX_ITERATIONS = 1024 (DEVIATION 159); no case above reached it
+feature_sampler:  1063783 cells
+feature_sampler_check: PASS
+
+=== checks.extratrees_checks_feature_sampler_check.mojo.identical.log :: pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . extratrees/checks/feature_sampler_check.mojo ===
+    EXCESS_MAX_ITERATIONS = 1024 (DEVIATION 159); no case above reached it
+feature_sampler:  1063831 cells
+feature_sampler_check: PASS
+
+=== checks.extratrees_checks_sampler_kernel_check.mojo.fast.log :: pixi run mojo run -I . extratrees/checks/sampler_kernel_check.mojo ===
+    fixed rule: per-column counts 682 .. 754 around 714 ; cuML's smallest-k arm: 273 .. 836 -- RED as required
+sampler_kernel:  23518  cells
+sampler_kernel_check: PASS
+
+=== checks.extratrees_checks_sampler_kernel_check.mojo.identical.log :: pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . extratrees/checks/sampler_kernel_check.mojo ===
+    fixed rule: per-column counts 682 .. 754 around 714 ; cuML's smallest-k arm: 273 .. 836 -- RED as required
+sampler_kernel:  23518  cells
+sampler_kernel_check: PASS
+
+=== checks.extratrees_checks_builder_check.mojo.fast.log :: pixi run mojo run -I . extratrees/checks/builder_check.mojo ===
+batch-width independence: 5 widths x 111 nodes
+builder:  1082 cells
+builder_check: PASS
+
+=== checks.extratrees_checks_builder_check.mojo.identical.log :: pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . extratrees/checks/builder_check.mojo ===
+batch-width independence: 5 widths x 111 nodes
+builder:  1082 cells
+builder_check: PASS
+
+=== checks.check-pointwise-target.log :: pixi run check-pointwise-target ===
+worst honest relative gap: 2.471181810393475e-06  REL_TOL: 5e-06  headroom: 2.0233234070316635
+
+pointwise target check: PASS
+
+=== checks.check-multiclass-oracle.log :: pixi run check-multiclass-oracle ===
+  ok   C3 class plane 0 of the cursor shifted -> 36
+
+multiclass oracle check: PASS
+
+=== checks.check-ctr.log :: pixi run check-ctr ===
+    refused: simple_ctr=Buckets
+    refused: a CTR with no priors
+  all five sections green
+
+=== checks.bench_check-bfa-oracle.log :: pixi run -e bench check-bfa-oracle ===
+  Logloss unset: catboost 0.0 ours 0.0 (both must be 0.0)
+  SABOTAGE weighted-vs-unweighted: 2005.04443359375 vs 2005.046630859375
+  ok   every ported arm matches CatBoost's own bias to the bit, and the default rule matches their adjust list

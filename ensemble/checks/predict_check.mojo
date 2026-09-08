@@ -100,6 +100,7 @@ from ensemble.decisiontree.decisiontree import (
     get_tree_summary_text,
 )
 from ensemble.flatnode import SparseTreeNode
+from checks.numerics import portable_log2_64   # DEVIATION 2261: the RF rule's log2, gated here against libm
 from ensemble.randomforest import (
     CLASSIFICATION,
     INT32_MAX,

@@ -1,0 +1,155 @@
+✨ Pixi task (check-multiclass-oracle in default): mojo run -I . checks/multiclass_oracle_check.mojo
+1261 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x315880000000, nodemask=1)
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+/root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:357:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+/root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:382:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:233:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:279:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:294:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:410:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:432:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:440:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:706:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:739:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:779:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:838:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:80:
+Imported from /root/mojolearn/gbdt/methods/leaves_estimation/pointwise_oracle.mojo:108:
+/root/mojolearn/gbdt/targets/kernel/multilogit.mojo:848:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:177:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:182:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:182:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:182:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:185:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:988:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:1017:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:1023:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:745:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:752:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:359:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:432:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/multiclass_oracle_check.mojo:85:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:495:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+-- honest run: gradient, blocked Hessian, gauge --
+1261 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38b300000000, nodemask=2)
+  ok   numClasses 2
+  ok   numClasses 3
+  ok   numClasses 7
+
+-- sabotages --
+  ok   C1 lambda + 1 (reaches the Hessian diagonal) -> 49
+  ok   C2 device segmentation swapped against the host tally -> 12
+  ok   C3 class plane 0 of the cursor shifted -> 36
+
+multiclass oracle check: PASS

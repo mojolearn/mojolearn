@@ -1,0 +1,53 @@
+838 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3af3c0000000, nodemask=2)
+[dispatch] builder.cuh:398-471, every arm named
+    constants: block_threads = 128  max_samples_per_thread = 72  so the excess arm is taken while n_parallel_samples <= 9216
+    n= 20000  k= 7385  n_parallel_samples= 9216  ->  excess-with-replacement
+    n= 20000  k= 7386  n_parallel_samples= 9217  ->  algo-L-reservoir
+[dispatch] DEVIATION 457: libm arm vs portable arm, swept
+838 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x327dc0000000, nodemask=1)
+    swept 23559 (n, k); counts differ on 17496 ; dispatch-boundary flips: 1
+    ARM FLIP at n= 20000  k= 7385  libm= 9217  portable= 9216
+    n= 20000  k= 127  n_parallel_samples= 128  ->  excess-with-replacement  instantiation M= 1
+    n= 20000  k= 128  n_parallel_samples= 129  ->  excess-with-replacement  instantiation M= 72
+[excess M=1] builder_kernels.cuh:152-248, one draw per thread
+    small  n= 64  k= 8  ->  excess-with-replacement  n_parallel_samples= 9  max_samples_per_thread= 1
+    wide  n= 1000  k= 20  ->  excess-with-replacement  n_parallel_samples= 21  max_samples_per_thread= 1
+    k==1  n= 100  k= 1  ->  excess-with-replacement  n_parallel_samples= 1  max_samples_per_thread= 1
+[excess M=72] the same kernel at the other instantiation
+    k==n-1  n= 100  k= 99  ->  excess-with-replacement  n_parallel_samples= 459  max_samples_per_thread= 72
+    just over the M boundary  n= 20000  k= 128  ->  excess-with-replacement  n_parallel_samples= 129  max_samples_per_thread= 72
+    dense  n= 2000  k= 1500  ->  excess-with-replacement  n_parallel_samples= 2772  max_samples_per_thread= 72
+    M=1 vs M=72 at (n=1000, k=20):  157 of 160 slots differ
+[algo-L] builder_kernels.cuh:268-316, one thread per work item
+    frontier  n= 20000  k= 7386  ->  algo-L-reservoir  n_parallel_samples= 9217  max_samples_per_thread= 0
+    k near n  n= 2000  k= 1990  ->  algo-L-reservoir  n_parallel_samples= 10594  max_samples_per_thread= 0
+[keying] node id, not batch position
+     excess-with-replacement : node 41 at batch slots 0 and 2 agree in 20 of 20 columns; node 9 differs in 19
+     algo-L-reservoir : node 41 at batch slots 0 and 2 agree in 7386 of 7386 columns; node 9 differs in 6408
+[independence] pairwise-distinct samples over many (tree, node)
+    excess:  1024 samples over 8 trees x 128 nodes,  523776 pairs compared,  0 identical pairs
+    algo-L:  64 samples over 2 trees x 32 nodes,  2016 pairs compared,  0 identical pairs
+    seed: two seeds differ in 20 of 20 slots
+[uniformity] a smoke test, stated as one
+    algo-L:  100 buckets of 200 columns, k/n = 0.3693 , worst bucket deviates 1.6968335364202503 % (bucket 70 ), band +/-5%
+    excess: columns 1.. 32 within +/-25% of 512.0 ; measured spread over that band:
+        min 470 max 541
+[uniformity] no column starved, none favoured (deviations 164/165)
+    column 0 chosen 527 times against 512.0 expected (ratio 1.029296875 )
+    column n-1 chosen 517 times against 512.0 expected (ratio 1.009765625 )
+    n=2, k=1 over 64 nodes: column 1 returned 39 times, column 0 25 times
+[edges] k==n, k==1, n==1, k==n-1
+    n = 1  k = n ->  all-features , identity permutation
+    n = 2  k = n ->  all-features , identity permutation
+    n = 17  k = n ->  all-features , identity permutation
+    n = 256  k = n ->  all-features , identity permutation
+    n = 2  k = 1 ->  excess-with-replacement , 64 nodes drew 2 distinct columns
+    n = 3  k = 1 ->  excess-with-replacement , 64 nodes drew 3 distinct columns
+    n = 100  k = 1 ->  excess-with-replacement , 64 nodes drew 47 distinct columns
+    n = 5000  k = 1 ->  excess-with-replacement , 64 nodes drew 64 distinct columns
+    n = 3  k = n-1 ->  excess-with-replacement  M= 1
+    n = 100  k = n-1 ->  excess-with-replacement  M= 72
+    n = 2000  k = n-1 ->  algo-L-reservoir  M= 0
+    EXCESS_MAX_ITERATIONS = 1024 (DEVIATION 159); no case above reached it
+feature_sampler:  1063831 cells
+feature_sampler_check: PASS
