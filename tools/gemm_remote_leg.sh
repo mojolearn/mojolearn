@@ -501,6 +501,9 @@ esac
 LEG_ALLOW_CONCURRENT="${MOJOLEARN_LEG_ALLOW_CONCURRENT:-0}"
 SPEED_DATASET="${MOJOLEARN_SPEED_DATASET:-}"
 SPEED_ROWS="${MOJOLEARN_SPEED_ROWS:-}"
+# DEVIATION 2257: space-separated CPU arm names allowed to run on a GPU box
+# as a labelled DIAGNOSTIC of the vendor's GPU learner (never an incumbent row).
+CPU_DIAG="${MOJOLEARN_SPEED_CPU_DIAGNOSTIC:-}"
 SPEED_ROUNDS="${MOJOLEARN_SPEED_ROUNDS:-5}"
 SPEED_SIZE="${MOJOLEARN_SPEED_SIZE:-shipped}"
 # PER ARM, in seconds. One lane that hangs must not eat the lease that
@@ -3361,6 +3364,7 @@ cd "$ROOT" || exit 9
   echo "dataset=@SPEEDDATASET@"
   echo "rows_ladder=@SPEEDROWS@"
   echo "arm_budget=@ARMBUDGET@"
+  echo "cpu_diagnostic=@CPUDIAG@"
   echo "work_timeout=@WORKTIMEOUT@"
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
@@ -3389,6 +3393,7 @@ python3 -c 'import sys; print(sys.version)' >> "$OUT/python_which.txt" 2>&1 || t
 
 export MOJOLEARN_SPEED_ROUNDS="@SPEEDROUNDS@"
 export MOJOLEARN_SPEED_SIZE="@SPEEDSIZE@"
+export MOJOLEARN_SPEED_CPU_DIAGNOSTIC="@CPUDIAG@"
 # DEVIATION 1898: the mode of OUR arm, explicit, before any binding is built
 # and before any arm imports the package. Read back on every header.
 export MOJOLEARN_NUMERIC_MODE="@OURSMODE@"
@@ -4160,6 +4165,7 @@ leg_check_remote_body() {
         -e "s|@OURSMODE@|$SPEED_OURS_MODE|g" \
         -e "s|@SPEEDSIZE@|$SPEED_SIZE|g" \
         -e "s|@ARMBUDGET@|$ARM_BUDGET|g" \
+        -e "s|@CPUDIAG@|$CPU_DIAG|g" \
         -e "s|@BUILDBUDGET@|$BUILD_BUDGET|g" \
         -e "s|@PIPBUDGET@|$PIP_BUDGET|g" \
         -e "s|@LGBMBUILD@|$LGBM_BUILD|g" \
