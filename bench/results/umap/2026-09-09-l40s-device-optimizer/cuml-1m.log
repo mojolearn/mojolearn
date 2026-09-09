@@ -1,0 +1,2 @@
+CUML_UMAP rows=1000000 median_ms=7991.1 samples=['7946.4', '7979.7', '7991.1', '8008.7', '8031.6']
+CUML UMAP REFERENCE DONE /root/umap_out/cuml-umap-1m.json

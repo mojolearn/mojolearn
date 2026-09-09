@@ -105,6 +105,19 @@ quality)
 cuml1m)
     run cuml-1m /root/cuml-venv/bin/python tools/umap_cuml_reference.py --rows 1000000 --rounds 5 --out "$OUT/cuml-umap-1m.json"
     finish ;;
+knnprof)
+    # Task 2's first step: where the IDENTICAL k-NN request spends its time
+    # at many queries (nsys per-kernel summary), before touching the selector.
+    mkdir -p "$OUT/bin"
+    build knn-ref bench/knn_reference_price_main.mojo
+    NSYS=$(command -v nsys || ls /usr/local/cuda/bin/nsys /opt/nvidia/nsight-systems/*/bin/nsys 2>/dev/null | head -1)
+    echo "nsys=$NSYS" > "$OUT/knnprof-nsys.txt"
+    for shape in "100000 1000" "400000 4000" "100000 32"; do
+        set -- $shape
+        run "knnprof-$1-$2" env MOJOLEARN_KNN_REF_INDEX="$1" MOJOLEARN_KNN_REF_QUERIES="$2" MOJOLEARN_KNN_REF_K=10 \
+            MOJOLEARN_KNN_REF_ROUNDS=3 $NSYS profile --stats=true -o "$OUT/knnprof-$1-$2" "$OUT/bin/knn-ref"
+    done
+    finish ;;
 *)
     echo "unknown phase $phase"; rc=2; finish ;;
 esac
