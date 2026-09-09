@@ -116,7 +116,8 @@ for f in cluster/checks/kmeans_identity_check.mojo \
          neighbors/knn_main.mojo \
          dbscan/dbscan_main.mojo; do
     echo "--- $f"
-    pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} -I . "$f" 2>&1 | grep -E "^check_|^ball_cover|Unhandled|error:" \
+    opt=; case "$f" in dbscan/dbscan_main.mojo) opt=-O1;; esac  # compiler asserts above -O1 on this file
+    pixi run mojo run $opt ${MOJOLEARN_MOJO_DEFINES:-} -I . "$f" 2>&1 | grep -E "^check_|^ball_cover|Unhandled|error:" \
         || echo "PHASE2-FINDING: $f produced no check lines"
 done
 

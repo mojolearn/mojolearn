@@ -15,7 +15,11 @@ run() {
     shift
     remaining=$((deadline - $(date +%s)))
     if ((remaining < 1)); then printf '%s\t124\n' "$name" >> "$OUT/status.tsv"; return 124; fi
-    timeout -k 10 "$remaining" "$@" > "$OUT/$name.log" 2>&1 || code=$?
+    if command -v timeout >/dev/null 2>&1; then
+        timeout -k 10 "$remaining" "$@" > "$OUT/$name.log" 2>&1 || code=$?
+    else  # macOS ships no timeout(1); the deadline check above still bounds the run
+        "$@" > "$OUT/$name.log" 2>&1 || code=$?
+    fi
     printf '%s\t%s\n' "$name" "$code" >> "$OUT/status.tsv"
     return "$code"
 }

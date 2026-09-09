@@ -59,7 +59,10 @@ run_all() {
     fail=0
     for f in $FILES; do
         echo "  -- $f"
-        out=$(pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} $COLDEF -I . "$f" 2>&1) || fail=1
+        # dbscan_main builds only at -O1: -O2 and above assert in DeadArgumentElimination
+        # (Mojo compiler bug, measured 2026-09-01; pixi task check-dbscan carries the same level).
+        opt=; case "$f" in dbscan/dbscan_main.mojo) opt=-O1;; esac
+        out=$(pixi run mojo run $opt ${MOJOLEARN_MOJO_DEFINES:-} $COLDEF -I . "$f" 2>&1) || fail=1
         echo "$out" | grep -E "^check_|^ball_cover|^Unhandled|error:" || true
         if [ "$fail" -ne 0 ]; then
             echo "FAILED: $f"
