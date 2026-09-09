@@ -1,0 +1,13 @@
+6143 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x792d40000000, nodemask=2)
+6143 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x122c80000000, nodemask=1)
+  arm G0-shared-fine OK: 288 cells match per cell
+  arm G0-global-fine OK: 288 cells match per cell
+  arm G1-shared-coarse(2011) OK: 288 cells match per cell
+  arm G1-global-coarse(2011) OK: 288 cells match per cell
+  arm G2-table(2011) OK: update_workload_info(granularity=512) == 7 hand-derived entries
+  arm H1-shared-copies4(2012) OK: 288 cells match per cell
+  arm H2-shared-copies4-fallback(2012) OK: 288 cells match per cell
+  arm H3-sabotage(2012) OK: 115 cells moved, every one an undercount (reach proven)
+  arm S1-sort(2010) OK: ascending and multiset-identical over 4000 hashed keys ( 14 passes )
+  arm S2-sabotage(2010) OK: 348 inversions with the top two passes dropped (reach proven)
+rf_perf_candidates_check: ALL ARMS GREEN

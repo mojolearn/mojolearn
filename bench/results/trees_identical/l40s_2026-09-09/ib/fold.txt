@@ -1,0 +1,17 @@
+3787 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b89c0000000, nodemask=2)
+# identity_break  mode=identical  2026-09-09 13:39:28  Linux-6.8.0-110-generic-x86_64-with-glibc2.35
+| lane             | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| rf-clf           | c2867a6751f32d49 | e473c4b9fc28e1f8 | 2999ccbacdecfa28 | c66842e75d50fa6a | d29cd6e6a0db8c1c | d29cd6e6a0db8c1c | 5bbb22662db92628 | 9f005a915524f6d0 | ac3e9ae39327ecdc |
+| rf-reg           | f032017cfd1c73dd | ec6e7b28cd0d16a9 | c755113ac878c8b9 | 8d9b05172d7a3777 | feed3869ba06eaf7 | feed3869ba06eaf7 | 55f5becd2a3a172c | 33f207a8fab32866 | cd81c456c75aaaf0 |
+| et-clf           | 22334a0351e6ce65 | b23d563be1dcfa38 | 49420dd07b025bae | b27a85972e75b096 | 26affc1039ae729a | 26affc1039ae729a | 410ec72a72b14424 | 7370511549694aae | 10e38234095c04f9 |
+| et-reg           | 754d8c127ecfc04d | e7072e1c8fe0083c | 4e0a0d9a4670ed5f | b745e53515f59cac | 19a23f6fea44befd | 19a23f6fea44befd | 9a63fea590f79a67 | c9fe7c90673c2661 | 3fd3dff94cc79fc2 |
+3856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71f200000000, nodemask=1)
+| gbdt-symmetric   | 56560dec5bdb6cb9 | b32c469f812adf25 | cf3de2636433b65a | bc0084b9b1e30f87 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | 9d55545ce5f2ac2b | 0836bd47530040d0 | fb9966f26639c286 |
+| gbdt-depthwise   | 38726fc0c93c0bff | 465cb10f303e005a | 9455870882645f48 | 2a77ec865e62539a | 64ba350c759ff2e9 | 64ba350c759ff2e9 | e521424a96e216cb | fb9e5c03088814f6 | d77fc9f6a3eee0a2 |
+| gbdt-lossguide   | bc3017cb29615105 | 19d199f7bfa16c25 | 3841103ecb3ac05d | b9cc1b2b55425cdc | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c | b1546f9b3c4293a5 | 9fd309c55a93e6c3 | 67b332fcf8b5d0dd |
+| gbdt-rmse        | 3f8aef8d73be249c | 88cba1574daa922e | a89dba586c0f1ab4 | 5ea3a06d9df1d862 | 400f099e655dc453 | 400f099e655dc453 | 49848bfd3c26b52e | 7b54ca9d69e29714 | e54f74cdab3f29f0 |
+| kmeans           | 5aa44cc11034dec9 | 3de3e103006de69c | 0a570e84b0002723 | 6f0529fcb3d60536 | 993fe5caff144b0c | 993fe5caff144b0c | 2ae942d45a51757a | 43d8a3d3859f4143 | d4cc38e75f8e2d75 |
+
+cells=81 stable=81 moved=0 refused=0
+wrote /root/trees_out/ib/fold.json

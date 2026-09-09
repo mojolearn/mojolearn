@@ -59,6 +59,17 @@ track_pip() {
     python3 -c "import cuml; print('cuml', cuml.__version__)" >> "$OUT/versions.txt" 2>&1
     python3 -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda)" >> "$OUT/versions.txt" 2>&1
     : > "$OUT/track_pip_base.done"
+    # HIGGS from UCI's static zip: measured 6-8 MB/s per connection on
+    # 2026-09-09 where the /ml/machine-learning-databases path gave 0.2 MB/s.
+    # Same bytes (the zip holds the same HIGGS.csv.gz); decoded by the
+    # harness's own --download step into higgs_speed.npz.
+    _hd=/root/datasets/gbm-bench/higgs
+    mkdir -p "$_hd"
+    if [ ! -s "$_hd/HIGGS.csv.gz" ]; then
+        step higgs_zip 1800 curl -sSL --retry 3 -o "$_hd/higgs.zip" https://archive.ics.uci.edu/static/public/280/higgs.zip
+        step higgs_unzip 600 python3 -c "import zipfile; zipfile.ZipFile('$_hd/higgs.zip').extract('HIGGS.csv.gz', '$_hd')"
+        rm -f "$_hd/higgs.zip"
+    fi
     step download_higgs 2400 python3 tools/speed_gbdt_arm.py --download higgs
     : > "$OUT/track_pip.done"
 }
