@@ -1,0 +1,2 @@
+== gemm.fp32.v1 card: arm device, IDENTICAL ==
+  arm device: [IDENTICAL] 60 stages, 0 shapes skipped -> /root/gemm_leg_out/identical/capped.card
