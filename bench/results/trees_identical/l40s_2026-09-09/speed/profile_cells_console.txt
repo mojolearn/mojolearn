@@ -1,0 +1,96 @@
+speed_exit baseline.gbdt-symmetric.higgs.r1000000.full=0 13:45:17
+speed_exit baseline.gbdt-symmetric.higgsreg.r1000000.full=0 13:45:36
+speed_exit baseline.gbdt-symmetric.higgs.r1000000.stage=0 13:45:45
+speed_exit baseline.gbdt-symmetric.higgsreg.r1000000.stage=0 13:45:55
+== /root/trees_out/speed/baseline.gbdt-symmetric.higgs.r1000000.full.log
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_L40S rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_L40S rounds=7 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=466.552 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=1 ms=770.828 hash=87fe80a6014bd10e
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=2 ms=431.207 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=2 ms=787.089 hash=480261b2137b26b3
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=3 ms=427.662 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=3 ms=780.642 hash=f568e061825ba8db
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=4 ms=420.096 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=4 ms=781.257 hash=e762a487c26ae9fd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=5 ms=424.372 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=5 ms=781.209 hash=a7a68f60702bb683
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=6 ms=426.130 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=6 ms=782.517 hash=a0bae7b3f9a6ac60
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=7 ms=423.781 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=7 ms=788.148 hash=14d0c9640eb02ff6
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542067
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800716
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.542523
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800432
+== /root/trees_out/speed/baseline.gbdt-symmetric.higgsreg.r1000000.full.log
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_L40S rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_L40S rounds=7 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=1 ms=411.459 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=1 ms=848.693 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=2 ms=304.165 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=2 ms=907.047 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=3 ms=321.060 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=3 ms=940.699 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=4 ms=318.309 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=4 ms=915.428 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=5 ms=299.228 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=5 ms=921.439 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=6 ms=379.374 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=6 ms=854.861 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=7 ms=303.269 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=7 ms=917.838 hash=39aee82101851fbd
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=rmse value=0.429173
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=rmse value=0.429220
+== /root/trees_out/speed/baseline.gbdt-symmetric.higgs.r1000000.stage.log
+[stage-times] SymmetricTree fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   sym.hist	48.650 ms
+[stage-times]   sym.pstats	9.732 ms
+[stage-times]   sym.score	10.583 ms
+[stage-times]   sym.winner	4.253 ms
+[stage-times]   sym.split	39.162 ms
+[stage-times]   sym.drain	1.009 ms
+[stage-times]   est.move	11.157 ms
+[stage-times]   est.approx	15.823 ms
+[stage-times]   est.pstats	26.470 ms
+[stage-times]   est.readback	9.272 ms
+[stage-times]   (accounted 176.115 ms of 211.872 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] SymmetricTree fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   sym.hist	48.122 ms
+[stage-times]   sym.pstats	9.696 ms
+[stage-times]   sym.score	10.592 ms
+[stage-times]   sym.winner	4.262 ms
+[stage-times]   sym.split	38.843 ms
+[stage-times]   sym.drain	1.029 ms
+[stage-times]   est.move	11.142 ms
+[stage-times]   est.approx	15.813 ms
+[stage-times]   est.pstats	26.520 ms
+[stage-times]   est.readback	9.383 ms
+[stage-times]   (accounted 175.406 ms of 205.780 ms fit wall; the rest is un-wrapped host bookkeeping)
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=477.929 hash=dac2cf366e219cec
+== /root/trees_out/speed/baseline.gbdt-symmetric.higgsreg.r1000000.stage.log
+[stage-times] SymmetricTree fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   sym.hist	48.542 ms
+[stage-times]   sym.pstats	9.768 ms
+[stage-times]   sym.score	10.563 ms
+[stage-times]   sym.winner	4.247 ms
+[stage-times]   sym.split	38.824 ms
+[stage-times]   sym.drain	1.000 ms
+[stage-times]   sym.leaves	5.648 ms
+[stage-times]   (accounted 118.595 ms of 132.194 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] SymmetricTree fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   sym.hist	48.045 ms
+[stage-times]   sym.pstats	9.735 ms
+[stage-times]   sym.score	10.544 ms
+[stage-times]   sym.winner	4.218 ms
+[stage-times]   sym.split	38.450 ms
+[stage-times]   sym.drain	1.014 ms
+[stage-times]   sym.leaves	5.527 ms
+[stage-times]   (accounted 117.536 ms of 128.240 ms fit wall; the rest is un-wrapped host bookkeeping)
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=1 ms=399.249 hash=037aa3188d25c889
+
+[exited with code 0]

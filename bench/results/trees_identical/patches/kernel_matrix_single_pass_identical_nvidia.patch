@@ -1,0 +1,15 @@
+--- a/checks/kernel_matrix.mojo	2026-09-09 09:20:12
++++ b/checks/kernel_matrix.mojo	2026-09-09 09:47:29
+@@ -516,8 +516,10 @@
+ 
+ def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
+     """SCHEDULING row (DEVIATION 1907): whether the leaf reorder's stable one-bit partition may take the SINGLE-PASS decoupled-lookback path (`gbdt/gpu_util/kernel/reorder_single_pass.mojo`) for a level whose leaf bound is above CatBoost's `FastSortSize()` == 500,000 rows."""
+-    comptime if identical:
+-        return False
++    # IDENTICAL follows the same column rule: a stable one-bit partition
++    # has ONE result, and the single-pass kernel's integer scans are exact,
++    # so the permutation is the 3-launch path's by construction (trees
++    # lane, 2026-09-09: identical prediction hashes equal at higgs 1M/2M).
+     comptime if is_defined["MOJOLEARN_2042_FAST_NO_LOOKBACK"]():
+         return False
+     comptime if column == COLUMN_AMD:

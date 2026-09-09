@@ -1,0 +1,25 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+7000 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59d1c0000000, nodemask=2)
+7000 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x733540000000, nodemask=1)
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+[stage-times] SymmetricTree fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   sym.hist	67.787 ms
+[stage-times]   sym.pstats	15.782 ms
+[stage-times]   sym.score	14.567 ms
+[stage-times]   sym.winner	5.642 ms
+[stage-times]   sym.split	45.559 ms
+[stage-times]   sym.drain	1.438 ms
+[stage-times]   sym.leaves	6.071 ms
+[stage-times]   (accounted 156.849 ms of 168.947 ms fit wall; the rest is un-wrapped host bookkeeping)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 ms=1221.340
+[stage-times] SymmetricTree fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   sym.hist	67.984 ms
+[stage-times]   sym.pstats	15.964 ms
+[stage-times]   sym.score	14.646 ms
+[stage-times]   sym.winner	5.738 ms
+[stage-times]   sym.split	45.337 ms
+[stage-times]   sym.drain	1.471 ms
+[stage-times]   sym.leaves	6.066 ms
+[stage-times]   (accounted 157.209 ms of 169.101 ms fit wall; the rest is un-wrapped host bookkeeping)
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=1 ms=558.226 hash=037aa3188d25c889
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=rmse value=0.429173

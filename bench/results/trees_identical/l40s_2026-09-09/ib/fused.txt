@@ -1,0 +1,12 @@
+3903 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a88c0000000, nodemask=2)
+# identity_break  mode=identical  2026-09-09 13:39:43  Linux-6.8.0-110-generic-x86_64-with-glibc2.35
+| lane             | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+3975 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x329480000000, nodemask=1)
+| gbdt-symmetric   | 56560dec5bdb6cb9 | b32c469f812adf25 | cf3de2636433b65a | bc0084b9b1e30f87 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | 9d55545ce5f2ac2b | 0836bd47530040d0 | fb9966f26639c286 |
+| gbdt-depthwise   | 38726fc0c93c0bff | 465cb10f303e005a | 9455870882645f48 | 2a77ec865e62539a | 64ba350c759ff2e9 | 64ba350c759ff2e9 | e521424a96e216cb | fb9e5c03088814f6 | d77fc9f6a3eee0a2 |
+| gbdt-lossguide   | bc3017cb29615105 | 19d199f7bfa16c25 | 3841103ecb3ac05d | b9cc1b2b55425cdc | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c | b1546f9b3c4293a5 | 9fd309c55a93e6c3 | 67b332fcf8b5d0dd |
+| gbdt-rmse        | 3f8aef8d73be249c | 88cba1574daa922e | a89dba586c0f1ab4 | 5ea3a06d9df1d862 | 400f099e655dc453 | 400f099e655dc453 | 49848bfd3c26b52e | 7b54ca9d69e29714 | e54f74cdab3f29f0 |
+
+cells=36 stable=36 moved=0 refused=0
+wrote /root/trees_out/ib/fused.json

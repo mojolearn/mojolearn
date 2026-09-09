@@ -398,8 +398,10 @@ def build_parser():
     )
     p.add_argument("--lane", required=True, choices=spec.LANE_NAMES)
     p.add_argument("--dataset", default=None,
-                   help="higgs, year, covtype, covtype2, synth, synthclf, "
-                        "anomaly; the lane's own default if unset. `higgs` "
+                   help="higgs, higgsreg, year, covtype, covtype2, synth, "
+                        "synthclf, anomaly; the lane's own default if "
+                        "unset. `higgsreg` is higgs with its label as a "
+                        "float target (the RMSE cell). `higgs` "
                         "is the LARGE-LOAD dataset (11M x 28) and is what "
                         "--rows climbs.")
     p.add_argument("--devices", default="auto",

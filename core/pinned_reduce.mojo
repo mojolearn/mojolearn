@@ -26,29 +26,15 @@ call -- `core/row_norms.mojo`, `cluster/checks/reduce_by_key.mojo`,
 `cluster/checks/plus_plus.mojo` -- and no equivalent. This file is that
 equivalent, and rows 19-24 of the ledger route through it.
 
-WHY IT IS A SECOND COPY, WHICH IS A COST AND IS DELIBERATE
------------------------------------------------------------
-`gbdt/targets/kernel/pointwise_targets.mojo:68` already has
-`pinned_block_sum`, spelled the same way and folding the same shape.
-Importing THAT one here would make the identity claim ride on one
-implementation, which is what this repository normally insists on
-(`core/identity_trace.mojo`: "a second hash function in one repository is a
-second thing to get wrong").
-
-It is duplicated anyway because that file is a CatBoost-ported device-kernel
-module owned by another lane, importing it drags its whole compile into
-`cluster/` and `neighbors/`, and cross-lane edits to hot files are how two
-sessions collide. The duplication is therefore a LANE boundary, not a
-judgement that two folds are fine.
-
-**The debt is named, not hidden:** the two must stay the same shape, and
-`check_pinned_fold_shape` in `cluster/checks/kmeans_identity_check.mojo`
-gates the property that matters -- that this fold is a pure function of the
-value vector and NOT of the lane width -- by folding the same inputs at
-several block widths and requiring the halving tree to agree with a host
-computation done in the same order. When the GBDT lane next touches
-`pointwise_targets.mojo`, the merge is one import: delete its copy, import
-this one, run both suites.
+ONE FOLD, TWO CALLERS
+---------------------
+`gbdt/targets/kernel/pointwise_targets.mojo`'s `pinned_block_sum` used to
+carry its own copy of the halving tree (a lane boundary, not a judgement
+that two folds were fine). Since 2026-09-09 its IDENTICAL arm imports
+`two_phase_halving_sum` from here, so the identity claim rides on one
+implementation; `check_pinned_fold_shape` in
+`cluster/checks/kmeans_identity_check.mojo` gates that the fold is a pure
+function of the value vector and not of the lane width.
 
 THE CONTRACT, and it is the same one `block.sum` already carries
 -----------------------------------------------------------------
@@ -62,6 +48,7 @@ Under `NUMERIC_FAST` this is the library call, bit for bit, and compiles to
 exactly what was there before.
 """
 
+from std.bit import log2_floor
 from std.gpu import thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -108,6 +95,27 @@ def halving_block_sum[block_size: Int](value: Float32) -> Float32:
     tree is the same sequence of additions on every backend, so IDENTICAL
     bits are untouched and FAST bits on that kernel move to the same value.
     """
+    return two_phase_halving_sum[block_size](value)
+
+
+@always_inline
+def two_phase_halving_sum[block_size: Int](value: Float32) -> Float32:
+    """The halving tree `red[t] += red[t + step]`, `step = block_size/2 ..
+    1`, folded in THREE barriers instead of `log2(block_size) + 2`.
+
+    Same additions, same operands, same order, so the same bits: the tree's
+    first `log2(G)` steps only ever combine elements that share `t mod P`
+    (`P = min(block_size, 16)`, `G = block_size / P`), so thread `t < P`
+    folds its own strided group in registers (phase 1); the remaining
+    `log2(P)` steps read only the `P` partials, so every thread folds those
+    redundantly in registers (phase 2) and no broadcast is needed. The
+    trailing barrier keeps the slab safe across back-to-back calls.
+    """
+    comptime assert block_size > 0 and (block_size & (block_size - 1)) == 0, (
+        "the halving tree needs a power-of-two block"
+    )
+    comptime P = 16 if block_size > 16 else block_size
+    comptime G = block_size // P
     var tid = Int(thread_idx.x)
     var red = stack_allocation[
         block_size,
@@ -116,13 +124,25 @@ def halving_block_sum[block_size: Int](value: Float32) -> Float32:
     ]()
     red[tid] = value
     barrier()
-    var step = block_size // 2
-    while step > 0:
-        if tid < step:
-            red[tid] = red[tid] + red[tid + step]
-        barrier()
-        step //= 2
-    var total = red[0]
+    if tid < P:
+        var v = InlineArray[Float32, G](fill=Float32(0.0))
+        comptime for j in range(G):
+            v[j] = red[tid + j * P]
+        comptime for k in range(log2_floor(G)):
+            comptime S = G >> (k + 1)
+            comptime for j in range(S):
+                v[j] = v[j] + v[j + S]
+        # in place: red[tid] is read by this thread alone (j == 0 above)
+        red[tid] = v[0]
+    barrier()
+    var w = InlineArray[Float32, P](fill=Float32(0.0))
+    comptime for t in range(P):
+        w[t] = red[t]
+    comptime for k in range(log2_floor(P)):
+        comptime S = P >> (k + 1)
+        comptime for t in range(S):
+            w[t] = w[t] + w[t + S]
+    var total = w[0]
     barrier()
     return total
 

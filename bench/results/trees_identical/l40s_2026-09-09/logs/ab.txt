@@ -1,0 +1,44 @@
+ib_exit baseline=0 13:36:45
+build_exit fold.base=0 13:37:14
+2422ab9700cf07a48e56b71aba43aea23924c87fd85aededde7a320d8b5d2a04  /root/bins/fold/_mojolearn.so
+build_exit fold.gbdt=0 13:38:19
+97397ed0376bd37c201cd52131894ddc97cd48f020a62d33249235d9566b332a  /root/bins/fold/_mojolearn_gbdt.so
+build_exit fused.gbdt=0 13:39:20
+ed795874edea8978e53370ea13400055f9c163717709050094370de9903784f1  /root/bins/fused/_mojolearn_gbdt.so
+build_exit rf2010.rf=1 13:39:23
+build_exit rf2011.rf=1 13:39:25
+build_exit rf2012.rf=1 13:39:28
+ib_exit fold=0 13:39:42
+ib_exit fused=0 13:39:47
+ib_exit rf2010=0 13:39:51
+ib_exit rf2011=0 13:39:55
+ib_exit rf2012=0 13:39:58
+ib_diff baseline vs fold exit=0 13:39:58
+ib_diff baseline vs fused exit=0 13:39:59
+ib_diff baseline vs rf2010 exit=0 13:39:59
+ib_diff baseline vs rf2011 exit=0 13:39:59
+ib_diff baseline vs rf2012 exit=0 13:39:59
+rfgate_exit baseline=1 13:40:00
+rfgate_exit rf2010=1 13:40:00
+rfgate_exit rf2011=1 13:40:01
+rfgate_exit rf2012=1 13:40:01
+build_exit rf2010.rf=0 13:41:11
+de87aa60119828516772532c83a8b6bd8d178a5fbb2fa5225ba105b475c55beb  /root/bins/rf2010/_mojolearn_rf.so
+build_exit rf2011.rf=0 13:41:26
+ae61ce71bee11978a87647cb215ff09d800a9b02833278560011bd4dfeae7d97  /root/bins/rf2011/_mojolearn_rf.so
+build_exit rf2012.rf=0 13:41:43
+8860b2c5b7770335e0898993fbf154857657da685b211f88960f19754ecce7a5  /root/bins/rf2012/_mojolearn_rf.so
+build_exit rfsrc.rf=0 13:42:02
+bede5e6877e1efb79442a709f05d59bc1c99dfb1b2acb9de365ad7e703e69a0e  /root/bins/rfsrc/_mojolearn_rf.so
+ib_exit rf2010=0 13:42:05
+ib_exit rf2011=0 13:42:09
+ib_exit rf2012=0 13:42:13
+ib_exit rfsrc=0 13:42:17
+ib_diff baseline vs rf2010 exit=0 13:42:17
+ib_diff baseline vs rf2011 exit=0 13:42:17
+ib_diff baseline vs rf2012 exit=0 13:42:17
+ib_diff baseline vs rfsrc exit=0 13:42:17
+rfgate_exit rfsrc=0 13:42:24
+rfgate_exit rf2010=0 13:42:31
+rfgate_exit rf2011=0 13:42:39
+rfgate_exit rf2012=0 13:42:46

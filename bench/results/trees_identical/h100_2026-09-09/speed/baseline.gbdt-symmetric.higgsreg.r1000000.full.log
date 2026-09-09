@@ -1,0 +1,23 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+6175 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12a1c0000000, nodemask=1)
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 ms=1472.687
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 ms=733.786
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=1 ms=1256.990 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=1 ms=724.224 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=2 ms=827.250 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=2 ms=687.720 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=3 ms=1313.140 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=3 ms=680.376 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=4 ms=785.851 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=4 ms=758.990 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=5 ms=765.449 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=5 ms=750.920 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=6 ms=806.103 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=6 ms=681.154 hash=39aee82101851fbd
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=7 ms=793.895 hash=037aa3188d25c889
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgsreg-1000000x28 round=7 ms=699.234 hash=39aee82101851fbd
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=rmse value=0.429173
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=rmse value=0.429220
