@@ -53,12 +53,14 @@ chose. They train. They promise nothing about bits.
 
 WHAT IS NOT COVERED, REFUSED BY NAME RATHER THAN HALF-BUILT
 ------------------------------------------------------------
-**Mixed precision, stochastic layers such as dropout, and distributed
-training.** A paper draft lists those three as not covered and that stays
-true. Every entry point here refuses a non-float32 array by name rather than
-casting it, there is no random-number generator anywhere on this surface, and
-nothing here is aware of a second process. See `_NOT_COVERED` below, which is
-where each of the three raises from.
+**Mixed precision and distributed training.** Every entry point here refuses
+a non-float32 array by name rather than casting it, and nothing here is aware
+of a second process. See `_NOT_COVERED` below. Dropout, initialization and
+the learning-rate schedule JOINED this surface with the Samba stack lane:
+`Generator` (position-keyed Philox, `core/philox_neural.mojo`), the three
+`*LR` schedules (exact rational arithmetic, no host libm) and
+`accumulate_grads` (optimizer contract clause 9.2's balanced tree) are at
+the bottom of this file.
 
 THE ONE SHAPE DEPARTURE FROM TORCH, AND IT IS UNAVOIDABLE
 ----------------------------------------------------------
@@ -84,6 +86,9 @@ so the refusal can run before any device work. Both are stated there rather
 than hidden, and both have a cheaper device-side form that is OWED.
 """
 
+import math
+from fractions import Fraction
+
 import numpy as np
 
 from . import _backend
@@ -96,6 +101,12 @@ __all__ = [
     "AdamW",
     "clip_grad_norm_",
     "cross_entropy",
+    "ConstantLR",
+    "WarmupLinearLR",
+    "WarmupCosineLR",
+    "Generator",
+    "accumulate_grads",
+    "accumulation_is_aligned",
 ]
 
 _EXT_NAME = "_mojolearn_training"
@@ -142,12 +153,12 @@ _NOT_COVERED = {
         "and label it as an answer about float16."
     ),
     "dropout": (
-        "STOCHASTIC LAYERS ARE NOT COVERED. There is no dropout, no "
-        "stochastic depth and no sampling of any kind on this surface, and "
-        "no random-number generator in either profile. Identity across "
-        "vendors would additionally require a bit-pinned RNG whose stream is "
-        "a function of the seed and not of the launch geometry, and this "
-        "lane has not written one."
+        "dropout is not an OPTIMIZER option. It is an op on this surface: "
+        "`Generator(seed).dropout(x, p)` draws its mask from the "
+        "position-keyed Philox stream in core/philox_neural.mojo (a pure "
+        "function of seed, stream id and element index, never of the launch "
+        "geometry) and `Generator.dropout_backward(dy, key)` replays it. "
+        "Stochastic depth and any other sampling stay uncovered."
     ),
     "distributed": (
         "DISTRIBUTED TRAINING IS NOT COVERED. Nothing here is aware of a "
@@ -333,9 +344,29 @@ class _Optimizer(NumericModeMixin):
     _BINDING = _EXT_NAME
     _KIND = None
 
-    def __init__(self, params, where):
+    def __init__(self, params, where, lr_schedule=None, accumulation_steps=1):
         self._where = where
         self.params = _as_seq(params, "params", where)
+        #: A schedule object with `lr_at(t)` (t ONE-BASED), or None. When set,
+        #: `step` overwrites `self.lr` with `lr_at(self.t)` before the call,
+        #: so the learning rate is a pure function of (step, config).
+        if lr_schedule is not None and not hasattr(lr_schedule, "lr_at"):
+            raise TypeError(
+                "mojolearn.%s: lr_schedule must have an lr_at(step) method "
+                "(ConstantLR, WarmupLinearLR, WarmupCosineLR) "
+                "(python/mojolearn/_training_impl.py)" % where
+            )
+        self.lr_schedule = lr_schedule
+        #: The declared microbatch count A of optimizer contract clause 9.2.
+        #: `step_accumulated` refuses a different count by name.
+        a = int(accumulation_steps)
+        if a < 1 or (a & (a - 1)) != 0:
+            raise ValueError(
+                "mojolearn.%s: accumulation_steps must be a power of two >= 1 "
+                "(optimizer contract clause 9.2 condition 4), got %r "
+                "(python/mojolearn/_training_impl.py)" % (where, accumulation_steps)
+            )
+        self.accumulation_steps = a
         _check_dtype(self.params, "params", where)
         self.offsets = _offsets_for(self.params)
         self.n_total = int(self.offsets[-1])
@@ -442,6 +473,8 @@ class _Optimizer(NumericModeMixin):
                     "has %r" % (self._where, j, g.shape, j, p.shape)
                 )
 
+        if self.lr_schedule is not None:
+            self.lr = float(self.lr_schedule.lr_at(self.t + 1))
         cfg = self._config()
         max_norm_f = 0.0 if max_norm is None else float(max_norm)
         if max_norm is not None and not (max_norm_f > 0.0):
@@ -525,7 +558,30 @@ class _Optimizer(NumericModeMixin):
         else:
             self.total_norm_ = None
             self.clip_coef_ = None
+        #: The learning rate the step just used, as a float32 value.
+        self.lr_ = float(np.float32(cfg["lr"]))
         return self.total_norm_
+
+    def step_accumulated(self, microbatch_grads, tokens, max_norm=None):
+        """One step from `A = self.accumulation_steps` microbatch gradient
+        lists, combined on device by the clause 9.2 balanced tree in
+        ascending microbatch index, then `step`. `tokens` is the FULL step's
+        token count T; a split that clause 9.2 does not admit is refused by
+        name (no gradient is combined). Returns what `step` returns."""
+        parts = list(microbatch_grads)
+        if len(parts) != self.accumulation_steps:
+            raise ValueError(
+                "mojolearn.%s.step_accumulated: %d microbatch gradient lists "
+                "for accumulation_steps=%d; the count is part of the run's "
+                "numerical specification (optimizer contract clause 9.2) "
+                "(python/mojolearn/_training_impl.py)"
+                % (self._where, len(parts), self.accumulation_steps)
+            )
+        if self.accumulation_steps == 1:
+            return self.step(parts[0], max_norm=max_norm)
+        combined = accumulate_grads(
+            parts, tokens, numeric_mode=getattr(self, "numeric_mode", None))
+        return self.step(combined, max_norm=max_norm)
 
 
 class SGD(_Optimizer):
@@ -617,9 +673,10 @@ class SGD(_Optimizer):
     _KIND = _KIND_SGD
 
     def __init__(self, params, lr=1e-3, momentum=0.0, dampening=0.0,
-                 weight_decay=0.0, nesterov=False, **kwargs):
+                 weight_decay=0.0, nesterov=False, lr_schedule=None,
+                 accumulation_steps=1, **kwargs):
         _refuse_unknown(kwargs, "SGD")
-        super().__init__(params, "SGD")
+        super().__init__(params, "SGD", lr_schedule, accumulation_steps)
         if nesterov and (momentum == 0.0 or dampening != 0.0):
             raise ValueError(
                 "mojolearn.SGD: nesterov=True needs momentum > 0 and "
@@ -732,9 +789,11 @@ class Adam(_Optimizer):
     _KIND = _KIND_ADAM
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
-                 weight_decay=0.0, **kwargs):
+                 weight_decay=0.0, lr_schedule=None, accumulation_steps=1,
+                 **kwargs):
         _refuse_unknown(kwargs, type(self).__name__)
-        super().__init__(params, type(self).__name__)
+        super().__init__(params, type(self).__name__, lr_schedule,
+                         accumulation_steps)
         try:
             b1, b2 = betas
         except (TypeError, ValueError):
@@ -784,9 +843,11 @@ class AdamW(Adam):
     _KIND = _KIND_ADAMW
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
-                 weight_decay=0.01, **kwargs):
+                 weight_decay=0.01, lr_schedule=None, accumulation_steps=1,
+                 **kwargs):
         super().__init__(params, lr=lr, betas=betas, eps=eps,
-                         weight_decay=weight_decay, **kwargs)
+                         weight_decay=weight_decay, lr_schedule=lr_schedule,
+                         accumulation_steps=accumulation_steps, **kwargs)
 
 
 #: torch parameter names this surface does not have, and the reason each is
@@ -1230,3 +1291,567 @@ def vendor_used(numeric_mode=None):
     (`training_vendor()`, `checks/vendor.mojo`), not from the directory it
     was loaded from and not from the platform."""
     return _backend.read_vendor(_load(numeric_mode))
+
+
+# ===================================================================
+# LEARNING-RATE SCHEDULES: a float32 that is a pure function of (step, config)
+# ===================================================================
+# NO HOST LIBM. `math.cos` differs in the last bit between platforms, so a
+# cosine schedule spelled with it would train a different run on each box.
+# Every schedule below is computed EXACTLY in Python integers (`Fraction`)
+# and rounded ONCE to float32 with round-half-even, so the bits are the
+# same on every interpreter and every OS. The cosine is a Taylor series
+# evaluated on a rational interval enclosing pi; the remainder bound is
+# carried as an interval and the rounding is decided only when both ends
+# of the interval round to the same float32 (otherwise the precision is
+# raised, and a case that cannot be decided raises rather than guesses).
+# The value of `cos(pi p)` at the rational points where it is itself
+# rational (p in {0, 1/3, 1/2, 2/3, 1}, Niven) is taken exactly, so the
+# only exact ties float32 rounding could meet are handled by the exact
+# path and the irrational cases are never ties.
+
+_F32_MIN_NORMAL_EXP = -126
+_F32_MAX_EXP = 127
+
+#: pi to 60 decimal places, a constant string, bracketed below into a
+#: rational interval [PI_LO, PI_HI] with width 1e-60.
+_PI_DIGITS = "3.141592653589793238462643383279502884197169399375105820974944"
+_PI_LO = Fraction(_PI_DIGITS)
+_PI_HI = _PI_LO + Fraction(1, 10 ** 60)
+
+
+def _f32_round(q):
+    """The float32 nearest to the exact rational `q`, ties to even, flushed
+    to +0.0 below the smallest normal (the identical tier's ftz), as a
+    Python float holding exactly that float32 value."""
+    q = Fraction(q)
+    if q == 0:
+        return 0.0
+    sign = -1.0 if q < 0 else 1.0
+    q = abs(q)
+    num, den = q.numerator, q.denominator
+    e = num.bit_length() - den.bit_length() - 24
+
+    def scaled(exp):
+        if exp >= 0:
+            return Fraction(num, den * (1 << exp))
+        return Fraction(num * (1 << (-exp)), den)
+
+    while scaled(e) >= (1 << 24):
+        e += 1
+    while scaled(e) < (1 << 23):
+        e -= 1
+    sc = scaled(e)
+    m = sc.numerator // sc.denominator
+    rem = sc - m
+    if rem > Fraction(1, 2) or (rem == Fraction(1, 2) and (m & 1) == 1):
+        m += 1
+    if m == (1 << 24):
+        m = 1 << 23
+        e += 1
+    if e + 23 < _F32_MIN_NORMAL_EXP:
+        return 0.0
+    if e + 23 > _F32_MAX_EXP:
+        raise OverflowError("mojolearn: schedule value overflows float32")
+    return sign * float(m) * (2.0 ** e)
+
+
+def _f32_bits(value):
+    return int(np.asarray(np.float32(value)).view(np.uint32))
+
+
+def _cos_taylor(x, terms):
+    """sum_{k<terms} (-1)^k x^(2k) / (2k)!, exact rational, with the
+    remainder bound x^(2 terms) / (2 terms)!."""
+    total = Fraction(0)
+    term = Fraction(1)
+    x2 = x * x
+    for k in range(terms):
+        total += term
+        term = -term * x2 / ((2 * k + 1) * (2 * k + 2))
+    return total, abs(term)
+
+
+def _cos_pi_interval(p, terms):
+    """An exact rational interval [lo, hi] enclosing cos(pi * p) for a
+    rational p in [0, 1]. Exact at the five rational points."""
+    p = Fraction(p)
+    if p < 0 or p > 1:
+        raise ValueError("mojolearn: cosine progress must be in [0, 1]")
+    exact = {
+        Fraction(0): Fraction(1), Fraction(1, 3): Fraction(1, 2),
+        Fraction(1, 2): Fraction(0), Fraction(2, 3): Fraction(-1, 2),
+        Fraction(1): Fraction(-1),
+    }
+    if p in exact:
+        return exact[p], exact[p]
+    flip = False
+    if p > Fraction(1, 2):
+        p = 1 - p
+        flip = True
+    # x in [x_lo, x_hi], a subset of (0, pi/2); cos is decreasing there.
+    x_lo, x_hi = _PI_LO * p, _PI_HI * p
+    t_hi, r_hi = _cos_taylor(x_hi, terms)
+    t_lo, r_lo = _cos_taylor(x_lo, terms)
+    lo, hi = t_hi - r_hi, t_lo + r_lo
+    if flip:
+        lo, hi = -hi, -lo
+    return lo, hi
+
+
+def _decide_f32(fn):
+    """`fn(terms)` returns an exact rational interval; the float32 both ends
+    round to, raising the Taylor precision until they agree."""
+    for terms in (24, 32, 48, 64):
+        lo, hi = fn(terms)
+        a, b = _f32_round(lo), _f32_round(hi)
+        if a == b:
+            return a
+    raise ArithmeticError(
+        "mojolearn: the exact schedule value straddles a float32 rounding "
+        "boundary within 1e-60; refusing to guess a bit"
+    )
+
+
+class _Schedule(object):
+    """Shared half of the schedules. `t` is the optimizer's ONE-BASED step
+    counter, so `lr_at(1)` is the first step's learning rate."""
+
+    kind = ""
+
+    def __init__(self, peak_lr, warmup_steps=0, total_steps=None, min_lr=0.0):
+        self.peak_lr = float(np.float32(peak_lr))
+        self.min_lr = float(np.float32(min_lr))
+        self.warmup_steps = int(warmup_steps)
+        self.total_steps = None if total_steps is None else int(total_steps)
+        for name, v in (("peak_lr", self.peak_lr), ("min_lr", self.min_lr)):
+            if not math.isfinite(v) or v < 0.0:
+                raise ValueError(
+                    "mojolearn.%s: %s must be finite and >= 0, got %r"
+                    % (type(self).__name__, name, v))
+        if self.warmup_steps < 0:
+            raise ValueError("mojolearn.%s: warmup_steps must be >= 0"
+                             % type(self).__name__)
+        if (self.total_steps is not None
+                and self.total_steps < max(1, self.warmup_steps)):
+            raise ValueError(
+                "mojolearn.%s: total_steps must be >= max(1, warmup_steps), "
+                "got %r" % (type(self).__name__, self.total_steps))
+
+    def config(self):
+        return {"kind": self.kind, "peak_lr": self.peak_lr,
+                "min_lr": self.min_lr, "warmup_steps": self.warmup_steps,
+                "total_steps": self.total_steps}
+
+    @staticmethod
+    def from_config(cfg):
+        cls = {"constant": ConstantLR, "linear": WarmupLinearLR,
+               "cosine": WarmupCosineLR}[cfg["kind"]]
+        return cls(cfg["peak_lr"], warmup_steps=cfg["warmup_steps"],
+                   total_steps=cfg["total_steps"], min_lr=cfg["min_lr"])
+
+    def _progress(self, t):
+        """`(p, None)` with the rational progress p in (0, 1) of the decay
+        phase, or `(None, value)` with the exact value of the warmup /
+        after-total phases."""
+        t = int(t)
+        if t < 1:
+            raise ValueError(
+                "mojolearn schedule: step t is ONE-BASED, got %d" % t)
+        peak, lo = Fraction(self.peak_lr), Fraction(self.min_lr)
+        if t <= self.warmup_steps:
+            return None, peak * Fraction(t, self.warmup_steps)
+        if self.total_steps is None:
+            return None, peak
+        if t >= self.total_steps:
+            return None, lo
+        span = self.total_steps - self.warmup_steps
+        return Fraction(t - self.warmup_steps, span), None
+
+    def _decay(self, p):
+        raise NotImplementedError
+
+    def lr_at(self, t):
+        """The float32 learning rate of ONE-BASED step `t`, as a float."""
+        p, value = self._progress(t)
+        if p is None:
+            return _f32_round(value)
+        return self._decay(p)
+
+    def bits_at(self, t):
+        """`lr_at(t)` as its float32 bit pattern, for fixtures."""
+        return _f32_bits(self.lr_at(t))
+
+
+class ConstantLR(_Schedule):
+    """`peak_lr` at every step, after an optional linear warmup from
+    `peak_lr / warmup_steps`. `total_steps` and `min_lr` are ignored."""
+
+    kind = "constant"
+
+    def __init__(self, peak_lr, warmup_steps=0, total_steps=None,
+                 min_lr=0.0):
+        super(ConstantLR, self).__init__(peak_lr, warmup_steps, None, 0.0)
+
+
+class WarmupLinearLR(_Schedule):
+    """Linear warmup over `warmup_steps`, then a straight line from
+    `peak_lr` down to `min_lr` at `total_steps`, then `min_lr`."""
+
+    kind = "linear"
+
+    def _decay(self, p):
+        peak, lo = Fraction(self.peak_lr), Fraction(self.min_lr)
+        return _f32_round(peak + (lo - peak) * p)
+
+
+class WarmupCosineLR(_Schedule):
+    """Linear warmup over `warmup_steps`, then
+    `min_lr + (peak_lr - min_lr) * (1 + cos(pi p)) / 2` with
+    `p = (t - warmup) / (total - warmup)`, then `min_lr`. The cosine is
+    exact rational arithmetic (see the section comment), never `math.cos`.
+    """
+
+    kind = "cosine"
+
+    def _decay(self, p):
+        peak, lo = Fraction(self.peak_lr), Fraction(self.min_lr)
+
+        def interval(terms):
+            c_lo, c_hi = _cos_pi_interval(p, terms)
+            a = lo + (peak - lo) * (1 + c_lo) / 2
+            b = lo + (peak - lo) * (1 + c_hi) / 2
+            return (a, b) if a <= b else (b, a)
+        return _decide_f32(interval)
+
+
+# ===================================================================
+# GRADIENT ACCUMULATION (optimizer contract clause 9.2)
+# ===================================================================
+
+
+def accumulation_is_aligned(tokens, accumulation_steps, numeric_mode=None):
+    """`microbatch_split_is_identical(T, A)` from
+    `training/checks/optimizer_oracle.mojo`, contract clause 9.2: True when
+    A microbatches over T tokens combine, by the balanced tree, to the
+    unsplit weight-gradient bits."""
+    binding = _load(numeric_mode)
+    return bool(int(binding.accumulation_is_aligned(
+        [int(tokens), int(accumulation_steps)])))
+
+
+def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
+    """Combine A microbatch gradients into one, on device, by the v1
+    balanced tree in ascending microbatch index (`ftz(ftz(x) + ftz(y))` at
+    every node, contract clause 9.2 condition 5; NOT a running sum).
+
+    `microbatch_grads` is a list of A entries, each an array or a list of
+    arrays of one shape set. `tokens` is the whole step's token count T
+    and a split that clause 9.2 does not admit is REFUSED BY NAME; pass
+    `tokens=None` to make no alignment claim (a plain pair add). Returns a
+    list of arrays (or one array when the entries were arrays).
+    """
+    parts = list(microbatch_grads)
+    if not parts:
+        raise ValueError("mojolearn.accumulate_grads: no microbatches")
+    single = isinstance(parts[0], np.ndarray)
+    seqs = [_as_seq(p, "microbatch_grads[%d]" % i, "accumulate_grads")
+            for i, p in enumerate(parts)]
+    for i, sq in enumerate(seqs):
+        _check_dtype(sq, "microbatch_grads[%d]" % i, "accumulate_grads")
+        if len(sq) != len(seqs[0]):
+            raise ValueError(
+                "mojolearn.accumulate_grads: microbatch %d has %d tensors, "
+                "microbatch 0 has %d" % (i, len(sq), len(seqs[0])))
+        for j, (a, b) in enumerate(zip(sq, seqs[0])):
+            if a.shape != b.shape:
+                raise ValueError(
+                    "mojolearn.accumulate_grads: microbatch %d tensor %d has "
+                    "shape %r, microbatch 0 has %r" % (i, j, a.shape, b.shape))
+    a_count = len(seqs)
+    t_tokens = -1 if tokens is None else int(tokens)
+    if tokens is not None and t_tokens < 1:
+        raise ValueError("mojolearn.accumulate_grads: tokens must be >= 1")
+    flats = [_pack(sq)[0] for sq in seqs]
+    n = int(flats[0].size)
+    stacked = np.ascontiguousarray(np.stack(flats, axis=0), dtype=np.float32)
+    out = np.empty(n, dtype=np.float32)
+    binding = _load(numeric_mode)
+    # addresses = [out, parts]; params = [n, a, t_tokens] (mirrored word
+    # for word in bindings/_mojolearn_training.mojo::accumulate_binding).
+    binding.accumulate([_addr(out), _addr_ro(stacked)],
+                       [n, a_count, t_tokens])
+    result = [np.empty(a.shape, dtype=np.float32) for a in seqs[0]]
+    _unpack_into(out, result)
+    return result[0] if single else result
+
+
+# ===================================================================
+# THE NEURAL RANDOM STREAM: Generator, initializers, dropout
+# ===================================================================
+# `core/philox_neural.mojo` is the arithmetic and this class is its
+# bookkeeping: a seed, and a COUNTER that names the next stream id. Every
+# draw consumes one stream id, so the sequence of draws is a pure function
+# of (seed, counter) and the counter is CARRIED STATE that belongs in a
+# checkpoint beside the optimizer moments.
+
+_RNG_UNIFORM = 0
+_RNG_NORMAL = 1
+_RNG_DROPOUT_FORWARD = 2
+_RNG_DROPOUT_BACKWARD = 3
+
+
+def _rng_call(binding, kind, n, offset, seed, stream, a, b, inp=None):
+    out = np.empty(n, dtype=np.float32)
+    if inp is None:
+        inp = np.zeros(1, dtype=np.float32)
+    # addresses = [out, inp]; params = [n, offset, seed_lo, seed_hi,
+    # stream_id, kind, a, b] (mirrored word for word in
+    # bindings/_mojolearn_training.mojo::neural_rng_binding).
+    binding.neural_rng(
+        [_addr(out), _addr_ro(inp)],
+        [int(n), int(offset), int(seed & 0xFFFFFFFF),
+         int((seed >> 32) & 0xFFFFFFFF), int(stream), int(kind),
+         float(a), float(b)],
+    )
+    return out
+
+
+class Generator(object):
+    """A seeded, position-keyed random stream for neural training.
+
+    Every element of every draw is a pure function of (seed, stream id,
+    element index): the same call at the same counter yields the same bits
+    on every vendor and at every launch geometry. `state_dict()` is
+    `{"seed", "counter"}` and restoring it resumes the stream exactly.
+
+    The initializers compute their bound / std on the host in IEEE float64
+    with only +, -, *, / and sqrt (all correctly rounded on every platform),
+    round it to float32 and hand it to the device; the draw itself is
+    `core/philox_neural.mojo`'s fixed integer-to-float mapping.
+    """
+
+    def __init__(self, seed, numeric_mode=None):
+        seed = int(seed)
+        if seed < 0 or seed >= (1 << 64):
+            raise ValueError("mojolearn.Generator: seed must be in [0, 2^64)")
+        self.seed = seed
+        self.counter = 0
+        self.numeric_mode = numeric_mode
+
+    def state_dict(self):
+        return {"seed": int(self.seed), "counter": int(self.counter)}
+
+    def load_state_dict(self, state):
+        self.seed = int(state["seed"])
+        self.counter = int(state["counter"])
+        if self.counter < 0 or self.counter > 0xFFFFFFFF:
+            raise ValueError(
+                "mojolearn.Generator: counter must be a 32-bit unsigned")
+
+    def next_stream(self):
+        """Consume and return the next stream id (for ops that draw
+        several slices of one stream, such as dropout over microbatches)."""
+        return self._next_stream()
+
+    def _next_stream(self):
+        if self.counter > 0xFFFFFFFF:
+            raise RuntimeError(
+                "mojolearn.Generator: the stream counter is exhausted")
+        s = self.counter
+        self.counter += 1
+        return s
+
+    @staticmethod
+    def _shape(shape):
+        if isinstance(shape, (int, np.integer)):
+            shape = (int(shape),)
+        else:
+            shape = tuple(int(d) for d in shape)
+        n = 1
+        for d in shape:
+            if d < 1:
+                raise ValueError(
+                    "mojolearn.Generator: shape must be positive, got %r"
+                    % (shape,))
+            n *= d
+        return shape, n
+
+    def uniform(self, shape, low=0.0, high=1.0):
+        """`low + u * (high - low)` with `u` in [0, 1), one rounding."""
+        shape, n = self._shape(shape)
+        lo, hi = float(np.float32(low)), float(np.float32(high))
+        span = float(np.float32(hi - lo))
+        if not (span >= 0.0):
+            raise ValueError("mojolearn.Generator.uniform: high must be >= low")
+        out = _rng_call(_load(self.numeric_mode), _RNG_UNIFORM, n, 0,
+                        self.seed, self._next_stream(), lo, span)
+        return out.reshape(shape)
+
+    def normal(self, shape, mean=0.0, std=1.0):
+        """Box-Muller (log, sqrt, cos through the identical seams)."""
+        shape, n = self._shape(shape)
+        sd = float(np.float32(std))
+        if not (sd >= 0.0):
+            raise ValueError("mojolearn.Generator.normal: std must be >= 0")
+        out = _rng_call(_load(self.numeric_mode), _RNG_NORMAL, n, 0,
+                        self.seed, self._next_stream(),
+                        float(np.float32(mean)), sd)
+        return out.reshape(shape)
+
+    def kaiming_uniform(self, shape, fan_in, a=math.sqrt(5.0)):
+        """`torch.nn.init.kaiming_uniform_`'s bound
+        `sqrt(2 / (1 + a^2)) * sqrt(3 / fan_in)`; torch's Linear default is
+        `a = sqrt(5)`, which makes the bound `1 / sqrt(fan_in)`."""
+        gain = math.sqrt(2.0 / (1.0 + float(a) * float(a)))
+        bound = gain * math.sqrt(3.0 / float(int(fan_in)))
+        return self.uniform(shape, -bound, bound)
+
+    def xavier_uniform(self, shape, fan_in, fan_out, gain=1.0):
+        bound = float(gain) * math.sqrt(
+            6.0 / float(int(fan_in) + int(fan_out)))
+        return self.uniform(shape, -bound, bound)
+
+    def kaiming_normal(self, shape, fan_in, gain=math.sqrt(2.0)):
+        return self.normal(
+            shape, 0.0, float(gain) / math.sqrt(float(int(fan_in))))
+
+    def xavier_normal(self, shape, fan_in, fan_out, gain=1.0):
+        return self.normal(shape, 0.0, float(gain) * math.sqrt(
+            2.0 / float(int(fan_in) + int(fan_out))))
+
+    def dropout(self, x, p, offset=0, stream=None):
+        """Inverted dropout: keep where the element's uniform coin is
+        `>= p`, scaled by `1 / (1 - p)` (a host float32). Returns
+        `(y, key)`; `key` replays the mask in `dropout_backward`. `offset`
+        is the element index of `x[0]` in the stream and `stream` (default:
+        the next counter value) the stream id, so a microbatch of a larger
+        batch draws the same coins it would draw unsplit."""
+        p = float(np.float32(p))
+        if not (0.0 <= p < 1.0):
+            raise ValueError("mojolearn.Generator.dropout: p must be in [0, 1)")
+        x = np.ascontiguousarray(x)
+        _check_dtype([x], "x", "Generator.dropout")
+        scale = float(np.float32(1.0 / (1.0 - p)))
+        stream = self._next_stream() if stream is None else int(stream)
+        key = {"seed": self.seed, "stream": stream, "p": p, "scale": scale,
+               "offset": int(offset)}
+        y = _rng_call(_load(self.numeric_mode), _RNG_DROPOUT_FORWARD, x.size,
+                      key["offset"], self.seed, stream, p, scale,
+                      x.reshape(-1))
+        return y.reshape(x.shape), key
+
+    def dropout_backward(self, dy, key):
+        dy = np.ascontiguousarray(dy)
+        _check_dtype([dy], "dy", "Generator.dropout_backward")
+        dx = _rng_call(_load(self.numeric_mode), _RNG_DROPOUT_BACKWARD,
+                       dy.size, key["offset"], key["seed"], key["stream"],
+                       key["p"], key["scale"], dy.reshape(-1))
+        return dx.reshape(dy.shape)
+
+
+# ===================================================================
+# THE STACK'S OPS: embedding, RMSNorm, LM head (no arithmetic here)
+# ===================================================================
+
+
+def _c32(a, name, where):
+    a = np.ascontiguousarray(a)
+    _check_dtype([a], name, where)
+    return a
+
+
+def embedding_forward(weight, ids, numeric_mode=None):
+    """`weight[ids]` for `weight (V, D)` and integer `ids (N,)`; returns
+    `(N, D)`. `embedding/checks/embedding_identical.mojo`'s gather."""
+    w = _c32(weight, "weight", "embedding_forward")
+    if w.ndim != 2:
+        raise ValueError("mojolearn.embedding_forward: weight must be (V, D)")
+    ids = np.ascontiguousarray(np.asarray(ids).reshape(-1), dtype=np.int32)
+    n, (v, d) = int(ids.size), w.shape
+    y = np.empty((n, d), dtype=np.float32)
+    _load(numeric_mode).embedding_forward(
+        [_addr(y), _addr_ro(w), _addr_ro(ids)], [n, int(v), int(d)])
+    return y
+
+
+def embedding_backward(dy, ids, vocab, numeric_mode=None):
+    """The fresh `(V, D)` gradient of `embedding_forward` from `dy (N, D)`:
+    the run-sorted ascending fold, never atomics."""
+    dy = _c32(dy, "dy", "embedding_backward")
+    if dy.ndim != 2:
+        raise ValueError("mojolearn.embedding_backward: dy must be (N, D)")
+    ids = np.ascontiguousarray(np.asarray(ids).reshape(-1), dtype=np.int32)
+    n, d = dy.shape
+    if ids.size != n:
+        raise ValueError(
+            "mojolearn.embedding_backward: ids and dy row counts differ")
+    dw = np.empty((int(vocab), d), dtype=np.float32)
+    _load(numeric_mode).embedding_backward(
+        [_addr(dw), _addr_ro(dy), _addr_ro(ids)],
+        [int(n), int(vocab), int(d)])
+    return dw
+
+
+def rms_norm_forward(x, weight, eps, numeric_mode=None):
+    """`weight * x * rsqrt(mean(x^2) + eps)` per row of `x (M, D)`."""
+    x = _c32(x, "x", "rms_norm_forward")
+    w = _c32(weight, "weight", "rms_norm_forward")
+    m, d = x.reshape(-1, x.shape[-1]).shape
+    if w.shape != (d,):
+        raise ValueError("mojolearn.rms_norm_forward: weight must be (D,)")
+    y = np.empty((m, d), dtype=np.float32)
+    _load(numeric_mode).rms_norm_forward(
+        [_addr(y), _addr_ro(x), _addr_ro(w)], [int(m), int(d), float(eps)])
+    return y.reshape(x.shape)
+
+
+def rms_norm_backward(dy, x, weight, eps, numeric_mode=None):
+    """`(dx, dweight)` of `rms_norm_forward`; the forward's row sums are
+    recomputed by the same kernel."""
+    x = _c32(x, "x", "rms_norm_backward")
+    dy = _c32(dy, "dy", "rms_norm_backward")
+    w = _c32(weight, "weight", "rms_norm_backward")
+    if dy.shape != x.shape:
+        raise ValueError("mojolearn.rms_norm_backward: dy and x shapes differ")
+    m, d = x.reshape(-1, x.shape[-1]).shape
+    dx = np.empty((m, d), dtype=np.float32)
+    dw = np.empty((d,), dtype=np.float32)
+    _load(numeric_mode).rms_norm_backward(
+        [_addr(dx), _addr(dw), _addr_ro(dy), _addr_ro(x), _addr_ro(w)],
+        [int(m), int(d), float(eps)])
+    return dx.reshape(x.shape), dw
+
+
+def linear_forward(a, weight, numeric_mode=None):
+    """`a (M, K) . weight (N, K)^T -> (M, N)`, torch's Linear without bias,
+    through the certified GEMM at OP_NT."""
+    a = _c32(a, "a", "linear_forward")
+    w = _c32(weight, "weight", "linear_forward")
+    m, k = a.reshape(-1, a.shape[-1]).shape
+    n, k2 = w.shape
+    if k != k2:
+        raise ValueError(
+            "mojolearn.linear_forward: a has K=%d, weight has K=%d" % (k, k2))
+    c = np.empty((m, n), dtype=np.float32)
+    _load(numeric_mode).linear_forward(
+        [_addr(c), _addr_ro(a), _addr_ro(w)], [int(m), int(n), int(k)])
+    return c.reshape(a.shape[:-1] + (n,))
+
+
+def linear_backward(dc, a, weight, numeric_mode=None):
+    """`(da, dweight)` of `linear_forward`. `dweight`'s contraction is over
+    the M tokens, the clause 9.2 contraction."""
+    a = _c32(a, "a", "linear_backward")
+    w = _c32(weight, "weight", "linear_backward")
+    dc = _c32(dc, "dc", "linear_backward")
+    m, k = a.reshape(-1, a.shape[-1]).shape
+    n = w.shape[0]
+    if dc.reshape(-1, dc.shape[-1]).shape != (m, n):
+        raise ValueError("mojolearn.linear_backward: dc must be (M, N)")
+    da = np.empty((m, k), dtype=np.float32)
+    dw = np.empty((n, k), dtype=np.float32)
+    _load(numeric_mode).linear_backward(
+        [_addr(da), _addr(dw), _addr_ro(dc), _addr_ro(a), _addr_ro(w)],
+        [int(m), int(n), int(k)])
+    return da.reshape(a.shape), dw

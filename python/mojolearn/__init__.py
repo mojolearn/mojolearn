@@ -194,11 +194,18 @@ from ._mamba_impl import (
 # (transformer/README.md's "PyPI surface" section is the ledger).
 from . import transformer
 from ._transformer_impl import TransformerBlock, TransformerState
+# The Samba-shaped training stack (embedding, Mamba-3 / attention blocks,
+# final norm, LM head, cross-entropy, AdamW with schedule and clause 9.2
+# accumulation, position-keyed RNG, JSON checkpoint) over the training,
+# mamba and transformer bindings. `_samba_impl.py` holds no numerics.
+from ._samba_impl import SambaConfig, SambaStack
 
 __all__ = [
     "SGD",
     "Adam",
     "AdamW",
+    "SambaConfig",
+    "SambaStack",
     "ARIMA",
     "AgglomerativeClustering",
     "ConstantKernel",

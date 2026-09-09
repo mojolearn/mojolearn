@@ -20,11 +20,21 @@ from ._training_impl import (
     SGD,
     Adam,
     AdamW,
+    ConstantLR,
+    Generator,
+    WarmupCosineLR,
+    WarmupLinearLR,
+    accumulate_grads,
+    accumulation_is_aligned,
     clip_grad_norm_,
     cross_entropy,
     numeric_mode_used,
     vendor_used,
 )
+from ._samba_impl import SambaConfig, SambaStack
 
 __all__ = ['SGD', 'Adam', 'AdamW', 'clip_grad_norm_', 'cross_entropy',
-           'numeric_mode_used', 'vendor_used']
+           'numeric_mode_used', 'vendor_used', 'ConstantLR',
+           'WarmupLinearLR', 'WarmupCosineLR', 'Generator',
+           'accumulate_grads', 'accumulation_is_aligned', 'SambaConfig',
+           'SambaStack']

@@ -77,6 +77,17 @@ from training.mlp_ops import (
     mlp_bias_activation_host, mlp_relu_backward_host, mlp_sum_rows_host,
     mlp_validate_shape,
 )
+from training.checks.optimizer_oracle import microbatch_split_is_identical
+from training.samba_ops import (
+    samba_accumulate_host,
+    samba_embedding_backward_host,
+    samba_embedding_forward_host,
+    samba_linear_backward_host,
+    samba_linear_forward_host,
+    samba_rms_norm_backward_host,
+    samba_rms_norm_forward_host,
+)
+from core.philox_neural import neural_rng_host
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -420,6 +431,215 @@ def mlp_sum_rows_binding(
     return PythonObject(count)
 
 
+# ===========================================================================
+# THE SAMBA STACK'S OPS: embedding, RMSNorm, LM head, accumulate, RNG.
+# Every one takes (addresses, params) as two Python lists, the byte-LM
+# binding's shape, and the order of each list is written out once here and
+# once in python/mojolearn/_training_impl.py in the same words.
+# ===========================================================================
+
+
+def _addrs(addresses: PythonObject, want: Int, name: String) raises -> List[Int]:
+    if len(addresses) != want:
+        raise Error(
+            name + ": addresses must contain " + String(want) + " entries, got "
+            + String(len(addresses))
+        )
+    var out = List[Int]()
+    for i in range(want):
+        var a = Int(py=addresses[i])
+        if a == 0:
+            raise Error(name + ": null buffer address at slot " + String(i))
+        out.append(a)
+    return out^
+
+
+def _params(params: PythonObject, want: Int, name: String) raises:
+    if len(params) != want:
+        raise Error(
+            name + ": params must contain " + String(want) + " values, got "
+            + String(len(params))
+        )
+
+
+def embedding_forward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [y (n_positions*width f32, written), w (vocab*width f32),
+    ids (n_positions i32)]; params = [n_positions, vocab, width]."""
+    var a = _addrs(addresses, 3, "embedding_forward")
+    _params(params, 3, "embedding_forward")
+    var n_positions = Int(py=params[0])
+    var vocab = Int(py=params[1])
+    var width = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = samba_embedding_forward_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _i32_ptr(a[2]),
+            n_positions, vocab, width,
+        )
+    return PythonObject(count)
+
+
+def embedding_backward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [dw (vocab*width f32, written), dy (n_positions*width f32),
+    ids (n_positions i32)]; params = [n_positions, vocab, width]."""
+    var a = _addrs(addresses, 3, "embedding_backward")
+    _params(params, 3, "embedding_backward")
+    var n_positions = Int(py=params[0])
+    var vocab = Int(py=params[1])
+    var width = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = samba_embedding_backward_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _i32_ptr(a[2]),
+            n_positions, vocab, width,
+        )
+    return PythonObject(count)
+
+
+def rms_norm_forward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [y (m*dm f32, written), x (m*dm f32), w (dm f32)];
+    params = [m, dm, eps (float)]."""
+    var a = _addrs(addresses, 3, "rms_norm_forward")
+    _params(params, 3, "rms_norm_forward")
+    var m = Int(py=params[0])
+    var dm = Int(py=params[1])
+    var eps = Float32(Float64(py=params[2]))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = samba_rms_norm_forward_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), m, dm, eps,
+        )
+    return PythonObject(count)
+
+
+def rms_norm_backward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [dx (m*dm f32, written), dw (dm f32, written), dy (m*dm
+    f32), x (m*dm f32), w (dm f32)]; params = [m, dm, eps (float)]."""
+    var a = _addrs(addresses, 5, "rms_norm_backward")
+    _params(params, 3, "rms_norm_backward")
+    var m = Int(py=params[0])
+    var dm = Int(py=params[1])
+    var eps = Float32(Float64(py=params[2]))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = samba_rms_norm_backward_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
+            _f32_ptr(a[3]), _f32_ptr(a[4]), m, dm, eps,
+        )
+    return PythonObject(count)
+
+
+def linear_forward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`C[m, n] = A[m, k] . W[n, k]^T`. addresses = [c (written), a, w];
+    params = [m, n, k]."""
+    var a = _addrs(addresses, 3, "linear_forward")
+    _params(params, 3, "linear_forward")
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = samba_linear_forward_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), m, n, k,
+        )
+    return PythonObject(count)
+
+
+def linear_backward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [da (m*k, written), dw (n*k, written), dc (m*n), a (m*k),
+    w (n*k)]; params = [m, n, k]."""
+    var a = _addrs(addresses, 5, "linear_backward")
+    _params(params, 3, "linear_backward")
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = samba_linear_backward_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
+            _f32_ptr(a[3]), _f32_ptr(a[4]), m, n, k,
+        )
+    return PythonObject(count)
+
+
+def accumulate_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """The clause 9.2 balanced tree. addresses = [out (n f32, written),
+    parts (a*n f32, ascending microbatch index)]; params = [n, a, t_tokens]
+    where `t_tokens >= 1` asks for the alignment predicate and `-1` makes
+    no alignment claim."""
+    var a = _addrs(addresses, 2, "accumulate")
+    _params(params, 3, "accumulate")
+    var n = Int(py=params[0])
+    var steps = Int(py=params[1])
+    var t_tokens = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = samba_accumulate_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), n, steps, t_tokens,
+        )
+    return PythonObject(count)
+
+
+def accumulation_is_aligned_binding(params: PythonObject) raises -> PythonObject:
+    """`microbatch_split_is_identical(t_tokens, a)`, contract clause 9.2,
+    as 1 or 0. params = [t_tokens, a]. Host only, no device."""
+    _params(params, 2, "accumulation_is_aligned")
+    var t_tokens = Int(py=params[0])
+    var a = Int(py=params[1])
+    if microbatch_split_is_identical(t_tokens, a):
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+def neural_rng_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [out (n f32, written), inp (n f32 for the dropout kinds,
+    else a one-float placeholder)]; params = [n, offset, seed_lo, seed_hi,
+    stream_id, kind (0 uniform, 1 normal, 2 dropout forward, 3 dropout
+    backward), a (float), b (float)] where (a, b) is (lo, span), (mean, sd)
+    or (p, scale)."""
+    var a = _addrs(addresses, 2, "neural_rng")
+    _params(params, 8, "neural_rng")
+    var n = Int(py=params[0])
+    var offset = Int(py=params[1])
+    var seed_lo = Int(py=params[2])
+    var seed_hi = Int(py=params[3])
+    var stream_id = Int(py=params[4])
+    var kind = Int(py=params[5])
+    var pa = Float32(Float64(py=params[6]))
+    var pb = Float32(Float64(py=params[7]))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = neural_rng_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), n, offset, seed_lo, seed_hi,
+            stream_id, kind, pa, pb,
+        )
+    return PythonObject(count)
+
+
 @export
 def PyInit__mojolearn_training() abi("C") -> PythonObject:
     try:
@@ -432,6 +652,15 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
         m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
         m.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
+        m.def_function[embedding_forward_binding]("embedding_forward")
+        m.def_function[embedding_backward_binding]("embedding_backward")
+        m.def_function[rms_norm_forward_binding]("rms_norm_forward")
+        m.def_function[rms_norm_backward_binding]("rms_norm_backward")
+        m.def_function[linear_forward_binding]("linear_forward")
+        m.def_function[linear_backward_binding]("linear_backward")
+        m.def_function[accumulate_binding]("accumulate")
+        m.def_function[accumulation_is_aligned_binding]("accumulation_is_aligned")
+        m.def_function[neural_rng_binding]("neural_rng")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_training: ", e))

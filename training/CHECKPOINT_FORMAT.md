@@ -759,3 +759,23 @@ name; it is not evidence.
 9. **A second shape.** `checkpoint.mojo` compiles in no model constant and
    should serve `TRAINING_LOOP_PLAN.md` item 9 unchanged. **That is a
    prediction and it has not been tried.**
+
+---
+
+## 11. The Samba stack's JSON checkpoint (2026-09-09, Samba training lane)
+
+`python/mojolearn/_samba_impl.py::SambaStack.save_checkpoint` writes schema
+`mojolearn.samba-stack-json-checkpoint.v1`: the byte-LM's envelope
+(`{schema, payload, payload_sha256}` over canonical JSON, the four state
+arrays `parameters`, `exp_avg`, `exp_avg_sq`, `buf_initialized` as
+little-endian hex) generalized to an arbitrary tensor registry. The payload
+carries the `SambaConfig`, the registry (`name, shape, offset, size` in the
+clip's order), the optimizer configuration, the schedule configuration, the
+ONE-BASED step counter `t`, and **the RNG state `{seed, counter}`** -- the
+`Generator` counter names the next Philox stream id, so a resumed run
+draws the same dropout coins the unresumed run would have drawn. Every
+field is a pure function of the run's configuration and state, so two
+vendors writing the same state write the same bytes; `save_checkpoint`
+returns the file's sha256 and `from_checkpoint` refuses a payload whose
+sha256 does not match. The byte-LM's own schema and bytes are unchanged.
+The native binary format above is still unrun.
