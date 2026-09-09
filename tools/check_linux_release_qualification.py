@@ -86,7 +86,13 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False):
     require(re.fullmatch(r'.+-manylinux_[A-Za-z0-9_.]+_x86_64\.whl', wheel.name),
             'Final Linux wheel requires a repaired manylinux x86_64 tag')
     with zipfile.ZipFile(wheel) as archive:
-        paths = archive.namelist()
+        # DEVIATION 2295: zip DIRECTORY entries are not RECORD rows. The wheel
+        # spec lists files; RECORD has never named a directory. pack_wheel.py
+        # writes none, so this never mattered, but `auditwheel repair` rewrites
+        # the archive and adds 15 of them, and this check then refused the very
+        # wheel it exists to admit. Found by running the installed qualification
+        # on a real device for the first time.
+        paths = [n for n in archive.namelist() if not n.endswith('/')]
         require(len(paths) == len(set(paths)), 'Duplicate wheel member')
         require(all(not PurePosixPath(p).is_absolute() and '..' not in PurePosixPath(p).parts
                     and '\\' not in p for p in paths), 'Invalid wheel member path')
