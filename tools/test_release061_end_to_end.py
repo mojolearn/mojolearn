@@ -376,5 +376,71 @@ class SmokeTier(unittest.TestCase):
                 self._check(wheel, qualification, root)
 
 
+class DeclaredKnownFailures(unittest.TestCase):
+    """DEVIATION 2299. A full column may carry a KNOWN failing job, declared by
+    name and cited. An undeclared failure still refuses; a declaration for a job
+    that passed is refused as stale; the declaration is republished."""
+
+    def _fixture(self, tmp, fail_job=None, declare=None, citation='README.md'):
+        root = Path(tmp)
+        wheel, qualification = fixture(root)
+        # the citation is resolved against the SOURCE ROOT, which here is tmp
+        (root / 'README.md').write_text('fixture citation target\n')
+        col = qualification / 'cuda/sm_89'
+        if fail_job:
+            surf, mode = fail_job.split('/')
+            rows = (col / 'results.tsv').read_text().splitlines()
+            rows = [r if not r.startswith(surf + '\t' + mode) else surf + '\t' + mode + '\t1'
+                    for r in rows]
+            (col / 'results.tsv').write_text('\n'.join(rows) + '\n')
+            write_json(col / 'qualification.json',
+                       dict(status='FAILED', reason='Missing, duplicate or failed installed job'))
+        if declare:
+            write_json(col / 'KNOWN_FAILURES.json', dict(
+                schema='mojolearn.linux.known-failures.v1',
+                failures=[dict(job=declare, citation=citation, reason='fixture: known open item')]))
+        return wheel, qualification, root
+
+    def _check(self, w, q, r):
+        with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}):
+            return gate.check_release061(w, q, r)
+
+    def test_declared_failure_admits_and_is_republished(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._fixture(tmp, fail_job='mamba/deterministic', declare='mamba/deterministic')
+            result = self._check(w, q, r)
+            self.assertEqual(result['status'], 'PASSED')
+            self.assertEqual(result['qualification_tiers']['cuda/sm_89'], 'full')
+            declared = result['observed_job_failures']['cuda/sm_89']
+            self.assertEqual(declared[0]['job'], 'mamba/deterministic')
+            self.assertTrue(declared[0]['citation'])
+
+    def test_undeclared_failure_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._fixture(tmp, fail_job='mamba/deterministic')
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+    def test_declaring_one_job_does_not_excuse_another(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._fixture(tmp, fail_job='umap/fast', declare='mamba/deterministic')
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+    def test_stale_declaration_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._fixture(tmp, declare='mamba/deterministic')   # nothing failed
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+    def test_citation_must_exist_in_the_source_tree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._fixture(tmp, fail_job='mamba/deterministic',
+                                    declare='mamba/deterministic',
+                                    citation='docs/NO_SUCH_DOCUMENT.md')
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+
 if __name__ == '__main__':
     unittest.main()

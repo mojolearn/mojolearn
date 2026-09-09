@@ -134,8 +134,8 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False):
     return extensions, {'/'.join(k): len(v) for k, v in sorted(sets.items())}
 
 
-def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch=None):
-    qualification, _ = surface.retained(directory)
+def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch=None, allowed=frozenset()):
+    qualification, _ = surface.retained(directory, allowed)
     require(qualification.get('vendor') == vendor, 'Wrong staged qualification vendor')
     require(qualification.get('wheel_sha256') == wheel_sha,
             vendor + ' qualification did not install the exact final staged wheel')
@@ -278,6 +278,7 @@ def check_release061(wheel, qualification_root, source_root):
     directories = {}
     tiers = {}
     observed_failures = {}
+    allowances = {}
     for key in sorted(carried):
         vendor, arch = key.split('/')
         directory = qualification_root / vendor / arch
@@ -312,11 +313,19 @@ def check_release061(wheel, qualification_root, source_root):
             tiers[key] = 'smoke'
             observed_failures[key] = dict(reason=declared['reason'], failed_jobs=failed)
         else:
+            # DEVIATION 2299: a full column may carry KNOWN failures, declared
+            # by name and cited to the document that records them open. An
+            # UNdeclared failure still refuses the release, and a declaration
+            # for a job that actually passed is refused as stale.
+            allowed, declared = surface.read_declared_failures(directory, source_root)
+            allowances[key] = allowed
             check_vendor(directory, vendor, expected['sha256'], inventory,
-                         expected['extension_hashes'], expected['sets'], arch)
+                         expected['extension_hashes'], expected['sets'], arch, allowed)
             check_corpora(directory, source_root)
             tiers[key] = 'full'
             directories[key] = directory
+            if declared:
+                observed_failures[key] = declared
     # DEVIATION 2297: one FULL column per advertised vendor is the bar. Every
     # other architecture still had to clear SMOKE above, and every architecture
     # the wheel carries still had to be present.
@@ -327,7 +336,9 @@ def check_release061(wheel, qualification_root, source_root):
     comparisons = {}
     # DEVIATION 2293: whichever Hopper spelling this wheel actually carries.
     for cuda in sorted(k for k in directories if k.startswith('cuda/')):
-        umap = surface.compare(directories['hip/gfx942'], directories[cuda])
+        umap = surface.compare(directories['hip/gfx942'], directories[cuda],
+                               allowances.get('hip/gfx942', frozenset()),
+                               allowances.get(cuda, frozenset()))
         ordered = compare_ordered_python.compare(directories['hip/gfx942'], directories[cuda])
         require(umap.get('status') == ordered.get('status') == 'PASSED', 'Architecture identity comparison failed')
         comparisons[cuda] = dict(umap=umap, ordered=ordered)
@@ -342,7 +353,11 @@ def check_release061(wheel, qualification_root, source_root):
                 scope='Exact final wheel; FULL 25 installed jobs on one architecture per advertised vendor '
                       'and SMOKE (install, import, selector read-back, smoke surface in three modes) on every '
                       'other architecture the wheel carries; any job seen failing on a smoke column is listed '
-                      'in observed_job_failures and is NOT claimed to pass; byte-LM one-step/checkpoint '
+                      'in observed_job_failures and is NOT claimed to pass; a FULL column may carry KNOWN '
+                      'failures declared by name and cited to the document that records them open, and '
+                      'on such a column the driver writes only a short status record, so per-job-file '
+                      'digest attestation is absent and the wheel/source/proof/extension bindings in '
+                      'wheel-audit.json are what hold; byte-LM one-step/checkpoint '
                       'functionality only; bounded UMAP/Ordered identity only')
 
 

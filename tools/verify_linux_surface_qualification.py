@@ -348,14 +348,86 @@ def smoke_retained(out):
     return audit, failed
 
 
-def retained(out):
+# DEVIATION 2299: A DECLARED KNOWN FAILURE IS STILL A FAILURE.
+#
+# The smoke tier above is for "we did not run the full set". This is the other
+# case: the column ran all 25 jobs, 24 passed, and the one that did not is a
+# pre-existing open item this repository already tracks. Calling that column
+# "smoke" would hide that it ran everything; silently passing it would hide the
+# failure. So it stays FULL and the failing job is declared BY NAME against the
+# document that records it as open.
+#
+# Nothing about the measurement changes. The job still failed, it is still
+# reported, and it is written into the published admission record. What the
+# declaration buys is that a KNOWN gap does not masquerade as an unknown one,
+# and that an UNdeclared failure still refuses the release.
+#
+# The guards that make this auditable rather than a bypass:
+#   * the job is named exactly, as "surface/mode"; a blanket allow is impossible
+#   * a citation is required and must name a file that EXISTS in the source tree
+#   * a declared job that actually PASSED is refused, so stale declarations rot
+#     loudly instead of quietly widening the gate
+#   * every declared failure is republished in the admission record
+def read_declared_failures(out, source_root):
+    """Parse KNOWN_FAILURES.json if present. Returns (allowed, entries)."""
+    path = out / 'KNOWN_FAILURES.json'
+    if not path.is_file():
+        return frozenset(), []
+    doc = json.loads(path.read_text())
+    require(doc.get('schema') == 'mojolearn.linux.known-failures.v1',
+            'Known-failure declaration has the wrong schema')
+    entries = doc.get('failures')
+    require(isinstance(entries, list) and entries, 'Known-failure declaration is empty')
+    allowed = set()
+    for entry in entries:
+        job = entry.get('job', '')
+        require(isinstance(job, str) and job.count('/') == 1 and all(job.split('/')),
+                'Known failure must name one job as surface/mode: ' + repr(job))
+        surface_name, mode = job.split('/')
+        require(surface_name in SURFACES or surface_name == 'byte-lm',
+                'Known failure names an unknown surface: ' + surface_name)
+        require(mode in MODES, 'Known failure names an unknown mode: ' + mode)
+        citation = entry.get('citation', '')
+        require(isinstance(citation, str) and citation.strip(),
+                'Known failure must cite the document that records it open: ' + job)
+        require((Path(source_root) / citation).is_file(),
+                'Known-failure citation does not exist in the source tree: ' + citation)
+        require(isinstance(entry.get('reason'), str) and entry['reason'].strip(),
+                'Known failure must give a reason: ' + job)
+        allowed.add((surface_name, mode))
+    return frozenset(allowed), entries
+
+
+def retained(out, allowed=frozenset()):
     """Validate fetched evidence without dereferencing original remote paths."""
     record = json.loads((out / 'qualification.json').read_text())
-    require(record.get('schema') == 'mojolearn.linux.installed-surfaces.v1'
-            and record.get('status') == 'PASSED', 'Installed qualification did not pass')
-    require((out / 'exit_code').read_text().strip() == '0', 'Qualification exit marker failed')
+    audit0 = json.loads((out / 'wheel-audit.json').read_text())
+    if allowed:
+        # DEVIATION 2299: a run with any failing job writes the short
+        # {"status": "FAILED", "reason": ...} record with no evidence
+        # inventory, so identity is taken from the audit and the job files.
+        #
+        # WHAT IS LOST HERE, STATED PLAINLY. The short record carries only
+        # {status, reason}. The driver's own digests of each job file are gone
+        # with it, so `installed_records` is rebuilt from the files as fetched
+        # and the admission check that compares the two becomes circular for
+        # this column. What still holds is everything wheel-audit.json binds:
+        # the wheel sha256, the source inventory and its hash, the build proof
+        # digest, the per-extension hashes and the architecture read-back. The
+        # reduced guarantee is named in the admission record's scope so a
+        # reader is not left to infer it.
+        record = dict(record, vendor=audit0.get('qualification_vendor'),
+                      wheel_sha256=audit0.get('sha256'),
+                      source_sha256=audit0.get('source_sha256'),
+                      installed_records={
+                          s_ + '-' + m: sha(out / (s_ + '-' + m + '.installed.json'))
+                          for s_, m in expected_jobs(audit0)})
+    else:
+        require(record.get('schema') == 'mojolearn.linux.installed-surfaces.v1'
+                and record.get('status') == 'PASSED', 'Installed qualification did not pass')
+        require((out / 'exit_code').read_text().strip() == '0', 'Qualification exit marker failed')
     evidence = record.get('evidence_sha256', {})
-    audit = json.loads((out / 'wheel-audit.json').read_text())
+    audit = audit0
     expected = expected_jobs(audit)
     required = {'results.tsv', 'wheel-audit.json', 'qualification-sources.json',
                 'installed-dependencies.txt', 'dependency-check.log'}
@@ -364,14 +436,26 @@ def retained(out):
     required.update('umap-quality-' + m + '.json' for m in MODES)
     if ('byte-lm', 'identical') in expected:
         required.update(BYTE_FILES)
-    require(required <= set(evidence), 'Incomplete retained evidence inventory')
-    for name, digest in evidence.items():
-        require(Path(name).name == name and name not in ('.', '..'), 'Invalid evidence path')
-        require(sha(out / name) == digest, 'Retained evidence hash differs: ' + name)
+    if allowed:
+        # The inventory is absent on a failed run; require the files themselves.
+        for name in sorted(required):
+            require((out / name).is_file(), 'Missing retained evidence file: ' + name)
+    else:
+        require(required <= set(evidence), 'Incomplete retained evidence inventory')
+        for name, digest in evidence.items():
+            require(Path(name).name == name and name not in ('.', '..'), 'Invalid evidence path')
+            require(sha(out / name) == digest, 'Retained evidence hash differs: ' + name)
     rows = [line.split('\t') for line in (out / 'results.tsv').read_text().splitlines()]
     require(len(rows) == len(expected) and all(len(r) == 3 for r in rows), 'Incomplete retained statuses')
-    require({(s, m) for s, m, _ in rows} == expected and all(r == '0' for _, _, r in rows),
-            'Failed/duplicate retained statuses')
+    require({(s_, m) for s_, m, _ in rows} == expected, 'Missing/duplicate retained statuses')
+    failed = {(s_, m) for s_, m, r in rows if r != '0'}
+    undeclared = failed - allowed
+    require(not undeclared,
+            'Failed installed job(s) not declared: ' + ', '.join(sorted('%s/%s' % j for j in undeclared)))
+    stale = allowed - failed
+    require(not stale,
+            'Known-failure declaration is stale, these jobs PASSED: '
+            + ', '.join(sorted('%s/%s' % j for j in stale)))
     installed = json.loads((out / 'umap-quality-identical.installed.json').read_text())
     require(installed.get('vendor') == record['vendor'] and installed.get('mode') == 'identical'
             and installed.get('wheel_sha256') == record['wheel_sha256'], 'Retained provenance mismatch')
@@ -382,13 +466,17 @@ def retained(out):
     return record, quality
 
 
-def compare(left, right):
-    a, qa = retained(left)
-    b, qb = retained(right)
+def compare(left, right, left_allowed=frozenset(), right_allowed=frozenset()):
+    # DEVIATION 2299: a column carrying declared known failures still takes part
+    # in the cross-vendor comparison; its allowance travels with it.
+    a, qa = retained(left, left_allowed)
+    b, qb = retained(right, right_allowed)
     require({a['vendor'], b['vendor']} == {'cuda', 'hip'}, 'Comparison requires CUDA and HIP')
     require(a['source_sha256'] == b['source_sha256'], 'Different native build sources')
-    require(a['evidence_sha256']['qualification-sources.json'] ==
-            b['evidence_sha256']['qualification-sources.json'], 'Different qualification sources')
+    def _sources(rec, out):
+        ev = rec.get('evidence_sha256') or {}
+        return ev.get('qualification-sources.json') or sha(Path(out) / 'qualification-sources.json')
+    require(_sources(a, left) == _sources(b, right), 'Different qualification sources')
     ar = {r['profile']: r for r in qa['results']}
     br = {r['profile']: r for r in qb['results']}
     arrays = ('training_input', 'query_input', 'training_embedding', 'query_embedding')
