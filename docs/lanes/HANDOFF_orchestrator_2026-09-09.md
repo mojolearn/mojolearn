@@ -36,13 +36,12 @@ four round-2 lanes CONTINUE their full briefs; no further lanes until he says so
   transformer surface 116/116, training surface 69/69, samba surface green,
   loss card a87615d9 and optimizer card 97d160b0 unchanged, all three
   training builds compile.
-- UNCOMMITTED on main at the time of writing: the Apple kNN flip in
-  `checks/kernel_matrix.mojo` (`or column == COLUMN_APPLE` in
-  `_knn_identical_round_column`, docstring carries the numbers). Its
-  post-flip checks were running (`check-knn-identity`, `knn_main`,
-  unsupervised identity both modes, the 400k index-tile fingerprint gate,
-  the three UMAP checks). If they are green: commit that one file and push.
-  If not: revert the one line, record the failure here.
+- COMMITTED: the Apple kNN flip in `checks/kernel_matrix.mojo`
+  (`or column == COLUMN_APPLE` in `_knn_identical_round_column`, docstring
+  carries the numbers) landed on main at 3d798a1f after all eleven post-flip
+  checks went green on the M4 (`check-knn-identity`, `knn_main`, unsupervised
+  identity both modes, the 400k index-tile fingerprint gate with ref and
+  ref-notile equal, the three UMAP checks).
 - Apple flip evidence (M4, 100k x 32, k 10, 9 rounds, PRICE_MS medians,
   baseline -> both): 20.5 -> 15.1 ms at 32 queries, 26.9 -> 14.9 at 128,
   182.2 -> 66.6 at 1000; all four arms byte-equal to the NVIDIA baseline
