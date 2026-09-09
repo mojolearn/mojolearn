@@ -88,10 +88,10 @@ class CombinedLinuxTests(unittest.TestCase):
         self.assertEqual(checker.call_args.args[0], self.wheel)
         self.assertEqual(checker.call_args.args[2], self.root)
 
-    def test_missing_qualification_cannot_admit_fresh_wheel(self):
+    def test_missing_qualification_admits_fresh_wheel_as_unqualified(self):
+        # Alpha policy, 2026-09-09: the archive is optional; file checks still run.
         digest = self.stage(qualification=False)
-        with self.assertRaises(Exception):
-            gate.verify(self.dist, digest, None, self.root)  # DEVIATION 2290: the root names the version
+        gate.verify(self.dist, digest, None, self.root)
 
     def test_deprecated_profile_alias_in_payload_still_admits(self):
         # DEVIATION 2290: a payload written under `release-0.6.1` parses as release-linux3.
