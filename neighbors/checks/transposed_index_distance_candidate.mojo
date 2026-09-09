@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Unqualified opt-in index-layout experiment, never production-dispatched.
+"""Transposed-index distance tile, one cell per thread.
+
+Production-dispatched since 2026-09-09 through the kernel-matrix row
+`knn_transposed_index_for` when `knn_distance_register_tile_for` is off
+(`-D MOJOLEARN_KNN_IDENTICAL_SCALAR_TILE=1`); the default transposed kernel
+is the 4x4 register tile in `pinned_distance_tile.mojo`.
 
 The kernel takes Y TRANSPOSED [features, index_rows]. It otherwise copies
 pinned_distance_tile_kernel's exact arithmetic, FTZ points, clamp and sqrt.
 Norms remain the production norms of ORIGINAL row-major operands. Selection
 is unmodified. Adjacent distance threads read contiguous index operands;
 this adds an index transpose, scratch and a separate preparation cost.
-No speedup or identity result is claimed until the main lane qualifies it.
 
 Caller owns nonoverlapping Q,Y,YT,norms,Z and retains them through sync.
 """
@@ -25,10 +29,15 @@ def transposed_index_distance_kernel(
     y_norm: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32,
     n_cols_in: Int32,
+    y_stride_in: Int32,
     n_features_in: Int32,
     is_sqrt_in: Int32,
 ):
     """`z[i][j] = ||q_i||^2 + ||y_j||^2 - 2 q_i . y_j`, clamped at zero.
+
+    `y_stride` is the transposed index's row length (the WHOLE index's
+    column count); `n_cols` is the width of this column tile, which is the
+    same number unless the index axis is tiled.
 
     The dot product is accumulated in ONE thread over the whole feature
     axis, ascending, so it has one order everywhere. The norms are the ones
@@ -42,6 +51,7 @@ def transposed_index_distance_kernel(
     """
     var n_rows = Int(n_rows_in)
     var n_cols = Int(n_cols_in)
+    var y_stride = Int(y_stride_in)
     var d = Int(n_features_in)
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if idx >= n_rows * n_cols:
@@ -53,7 +63,7 @@ def transposed_index_distance_kernel(
     var acc = Float32(0.0)
     for f in range(d):
         var qv = ftz(q.unsafe_load(row * d + f))
-        var yv = ftz(y.unsafe_load(f * n_cols + col))
+        var yv = ftz(y.unsafe_load(f * y_stride + col))
         acc = ftz(identical_mul_add(qv, yv, acc))
 
     var dist = ftz(
@@ -98,7 +108,7 @@ def transposed_index_distance_into(
         )
     ctx.enqueue_function[transposed_index_distance_kernel](
         z.unsafe_ptr(), q.unsafe_ptr(), yt.unsafe_ptr(), qn.unsafe_ptr(), yn.unsafe_ptr(),
-        Int32(rows), Int32(cols), Int32(d), Int32(take_sqrt),
+        Int32(rows), Int32(cols), Int32(cols), Int32(d), Int32(take_sqrt),
         grid_dim=((rows * cols + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1),
         block_dim=(PINNED_TILE_TPB, 1, 1),
     )

@@ -117,3 +117,94 @@ def pinned_distance_tile_kernel(
         # native sqrt is correctly rounded, so this moves no Apple bit.
         dist = ftz(identical_sqrt(dist))
     z.unsafe_store(idx, dist)
+
+
+# ---------------------------------------------------------------------------
+# The register-tiled form, 2026-09-09. Reached only under IDENTICAL on the
+# columns `knn_distance_register_tile_for` admits, and only with the index
+# TRANSPOSED (`yt[f * y_stride + col]`), so adjacent threads read adjacent
+# index columns.
+#
+# Each thread owns RT_ROWS query rows x RT_COLS index columns and walks the
+# feature axis ONCE for all sixteen cells. The contract of the kernel above
+# is kept cell for cell: `acc = ftz(fma(ftz(q[f]), ftz(y[f]), acc))` for
+# f ascending, then the same epilogue. What changes is only how many cells
+# share one pass over `f` and which loads they share; no cell's chain is
+# split, folded, or reordered, so the bits are the scalar kernel's bits.
+# Threads at the tile's edge clamp their loads to the last valid row/column
+# and skip the store; the clamped chains are discarded, never written.
+# ---------------------------------------------------------------------------
+
+comptime RT_ROWS = 4
+comptime RT_COLS = 4
+comptime RT_TPB = 128
+comptime RT_TILE_COLS = RT_TPB * RT_COLS
+
+
+def pinned_distance_register_tile_kernel(
+    z: MutPointer[Float32, MutAnyOrigin],
+    q: MutPointer[Float32, MutAnyOrigin],
+    yt: MutPointer[Float32, MutAnyOrigin],
+    q_norm: MutPointer[Float32, MutAnyOrigin],
+    y_norm: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_cols_in: Int32,
+    y_stride_in: Int32,
+    n_features_in: Int32,
+    is_sqrt_in: Int32,
+):
+    """`z[i][j] = ||q_i||^2 + ||y_j||^2 - 2 q_i . y_j`, clamped at zero,
+    sixteen cells per thread, one ascending serial chain per cell."""
+    var n_rows = Int(n_rows_in)
+    var n_cols = Int(n_cols_in)
+    var y_stride = Int(y_stride_in)
+    var d = Int(n_features_in)
+    var col0 = (Int(block_idx.x) * RT_TPB + Int(thread_idx.x)) * RT_COLS
+    var row0 = Int(block_idx.y) * RT_ROWS
+    if col0 >= n_cols or row0 >= n_rows:
+        return
+
+    var acc = SIMD[DType.float32, RT_ROWS * RT_COLS](0.0)
+    var rows_idx = SIMD[DType.int32, RT_ROWS](0)
+    var cols_idx = SIMD[DType.int32, RT_COLS](0)
+    comptime for r in range(RT_ROWS):
+        var rr = row0 + r
+        if rr > n_rows - 1:
+            rr = n_rows - 1
+        rows_idx[r] = Int32(rr)
+    comptime for c in range(RT_COLS):
+        var cc = col0 + c
+        if cc > n_cols - 1:
+            cc = n_cols - 1
+        cols_idx[c] = Int32(cc)
+
+    for f in range(d):
+        var yv = SIMD[DType.float32, RT_COLS](0.0)
+        comptime for c in range(RT_COLS):
+            yv[c] = ftz(yt.unsafe_load(f * y_stride + Int(cols_idx[c])))
+        comptime for r in range(RT_ROWS):
+            var qv = ftz(q.unsafe_load(Int(rows_idx[r]) * d + f))
+            comptime for c in range(RT_COLS):
+                acc[r * RT_COLS + c] = ftz(
+                    identical_mul_add(qv, yv[c], acc[r * RT_COLS + c])
+                )
+
+    comptime for r in range(RT_ROWS):
+        var row = row0 + r
+        if row < n_rows:
+            var qn = ftz(q_norm.unsafe_load(row))
+            comptime for c in range(RT_COLS):
+                var col = col0 + c
+                if col < n_cols:
+                    var dist = ftz(
+                        identical_mul_add(
+                            Float32(-2.0),
+                            acc[r * RT_COLS + c],
+                            ftz(qn + ftz(y_norm.unsafe_load(col))),
+                        )
+                    )
+                    if dist <= Float32(0.0):
+                        dist = Float32(0.0)
+                    if is_sqrt_in != 0:
+                        dist = ftz(identical_sqrt(dist))
+                    z.unsafe_store(row * n_cols + col, dist)
