@@ -1,0 +1,3 @@
+QUALITY ours trustworthiness=0.591424 retention=0.036140 k=10 rows=5000
+QUALITY cuml trustworthiness=0.599767 retention=0.042820 k=10 rows=5000 fit_ms=2698.9
+UMAP QUALITY VS CUML DONE /root/umap_out/quality-5k.json

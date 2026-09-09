@@ -184,6 +184,18 @@ sequence 4096, batch 4, TF32 off, explicit sliding-window mask.
 | torch eager fp32 SDPA | 33.6 | 106.9 |
 | torch.compile | 34.7 | 93.6 |
 
+UMAP at 1M rows, 2026-09-09, worktree branch lane/umap-optimizer, pod
+ao1rwg13e6uph4 (NVIDIA L40S 46 GB, driver 580.126.09), cuML 26.08.00, cupy
+14.2.0, CUDA runtime 12.9, `bench/results/umap/2026-09-09-l40s-device-optimizer/cuml-1m.log`
+and `cuml-umap-1m.json` (5 rounds after one warm-up, `tools/umap_cuml_reference.py`,
+same dyadic-v1 fixture, n_neighbors 15, 2 components, 200 epochs, spectral
+init, cuML's default approximate build). This is an L40S row; the 20k and
+100k cuML rows above are H100 rows and are NOT its siblings.
+
+| UMAP (32 features, 15 neighbors, 2 components, 200 epochs) | cuML UMAP ms (L40S) |
+|---|---:|
+| 1,000,000 rows | 7991.1 (samples 7946.4, 7979.7, 7991.1, 8008.7, 8031.6) |
+
 ## NVIDIA RTX 4090, driver 580.126.20, torch 2.4.1+cu124
 
 Public-API host-array comparison (transfers included), 2026-09-05,
@@ -209,7 +221,10 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
 1b. Trees at 2M and 5M for the Sep 9 same-process protocol (only 1M exists).
 2. cuBLAS on H100 for the 2026-09-09 tuned plans (all 21 shapes).
 3. cuML DBSCAN and PCA at 1M rows or more (the fixtures above are small).
-4. cuML UMAP at 1M rows (20k and 100k exist above).
+4. cuML UMAP on the H100 at 1M rows, and on the L40S at 20k and 100k rows
+   (the H100 has 20k and 100k, the L40S has 1M; ours IDENTICAL was measured
+   on the L40S at all three on 2026-09-09, so no same-GPU ratio exists yet
+   below 1M).
 5. torch byte-LM training step time on H100 (the Sep 7 comparison in this
    tree is a correctness record with no torch timing).
 

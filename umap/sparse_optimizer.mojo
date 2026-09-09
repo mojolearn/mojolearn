@@ -8,8 +8,10 @@ row iteration, and positive-edge compaction. No n*n storage is created.
 """
 from std.math import isfinite, pow
 from max.gpu.host import DeviceContext
+from checks.kernel_matrix import TARGET_COLUMN, umap_device_optimizer_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.optimizer import _finite, _clip, _splitmix64
+from umap.optimizer_identical_device import optimize_sparse_layout_identical_device
 from umap.optimizer_fast import FAST_OPT_TPB, umap_jacobi_epoch_kernel
 from umap.sparse_graph import SparseFuzzySimplicialGraph
 
@@ -168,6 +170,48 @@ def optimize_sparse_layout_identical(
     return embedding^
 
 
+def optimize_sparse_layout_identical_on_device(
+    ctx: DeviceContext,
+    initial_embedding: List[Float32],
+    graph: SparseFuzzySimplicialGraph,
+    n_samples: Int,
+    n_components: Int,
+    n_epochs: Int,
+    initial_learning_rate: Float32,
+    negative_sample_rate: Int,
+    repulsion_strength: Float32,
+    a: Float32,
+    b: Float32,
+    seed: UInt64,
+) raises -> List[Float32]:
+    """The IDENTICAL device optimizer behind the serial loop's refusals (same messages, same order), kernel-matrix row `umap_device_optimizer_for`."""
+    if n_samples < 2 or (n_components != 2 and n_components != 3):
+        raise Error("UMAP optimizer supports at least two samples in 2D/3D")
+    if len(initial_embedding) != n_samples * n_components or graph.n_samples != n_samples:
+        raise Error("UMAP optimizer input shape mismatch")
+    if not isfinite(initial_learning_rate) or not isfinite(repulsion_strength) or (
+        not isfinite(a) or not isfinite(b)
+    ):
+        raise Error("UMAP optimizer scalar parameters must be finite")
+    if n_epochs < 1 or not (initial_learning_rate > Float32(0.0)):
+        raise Error("UMAP optimizer needs positive epochs and learning rate")
+    if negative_sample_rate < 0 or repulsion_strength < Float32(0.0):
+        raise Error("UMAP optimizer negative sampling parameters are invalid")
+    if not (a > Float32(0.0)) or not (b > Float32(0.0)):
+        raise Error("UMAP optimizer curve parameters must be positive")
+    var max_weight = validate_sparse_weights(graph)
+    if not (max_weight > Float32(0.0)):
+        raise Error("UMAP optimizer graph has no positive edges")
+    for i in range(len(initial_embedding)):
+        if not _finite(initial_embedding[i]):
+            raise Error("UMAP optimizer initialization is not finite")
+    return optimize_sparse_layout_identical_device(
+        ctx, initial_embedding, graph.offsets, graph.indices, graph.values,
+        max_weight, n_samples, n_components, n_epochs, initial_learning_rate,
+        negative_sample_rate, repulsion_strength, a, b, seed,
+    )
+
+
 def optimize_sparse_layout_fast(
     ctx: DeviceContext,
     initial: List[Float32],
@@ -313,6 +357,12 @@ def optimize_sparse_layout(
     seed: UInt64 = UInt64(0),
 ) raises -> List[Float32]:
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        comptime if umap_device_optimizer_for[TARGET_COLUMN, True]():
+            return optimize_sparse_layout_identical_on_device(
+                ctx, initial_embedding, graph, n_samples, n_components,
+                n_epochs, initial_learning_rate, negative_sample_rate,
+                repulsion_strength, a, b, seed,
+            )
         return optimize_sparse_layout_identical(
             initial_embedding, graph, n_samples, n_components, n_epochs,
             initial_learning_rate, negative_sample_rate, repulsion_strength,

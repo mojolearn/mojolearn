@@ -1,0 +1,29 @@
+{
+ "environment": {
+  "gpu": "NVIDIA L40S",
+  "driver": "580.126.09",
+  "cuml": "26.08.00",
+  "cupy": "14.2.0",
+  "numpy": "2.4.6",
+  "cuda_runtime": 12090,
+  "arm": "cuml-UMAP-fit_transform-fast",
+  "note": "cuML default build_algo (brute force below its threshold, NN-descent above), GPU optimizer; no deterministic configuration"
+ },
+ "results": [
+  {
+   "rows": 1000000,
+   "features": 32,
+   "neighbors": 15,
+   "epochs": 200,
+   "rounds": 5,
+   "fit_transform_ms": [
+    7946.374882943928,
+    7979.709218721837,
+    7991.102475207299,
+    8008.7267039343715,
+    8031.644553877413
+   ],
+   "median_ms": 7991.102475207299
+  }
+ ]
+}
