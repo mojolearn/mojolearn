@@ -921,6 +921,9 @@ fi
 # Replace gfx942 with the actual rented GPU target; it is not autodetected.
 # Root runs either command through the existing leased transport/guards.
 NVIDIA_CAMPAIGN=${MOJOLEARN_NVIDIA_CAMPAIGN:-0}
+LEG_QUALIFY=0
+QUAL_BASE=
+QUAL_SHA=
 MAMBA_CERT_ONLY=${MOJOLEARN_MAMBA_CERT_ONLY:-0}
 case "$MAMBA_CERT_ONLY" in 0|1) ;; *) echo 'MOJOLEARN_MAMBA_CERT_ONLY must be 0 or 1' >&2; exit 2 ;; esac
 CONTINUED_CERT_CHECKS=${MOJOLEARN_CONTINUED_CERT_CHECKS:-0}
@@ -936,6 +939,21 @@ if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
     # is still refused is any architecture that is not one of the three the
     # release profile ships.
     case "$GPU_ARCHS" in sm_89|sm_90|sm_90a) ;; *) leg_die 'Release profile 7 requires explicit actual sm_89, sm_90 or sm_90a' ;; esac
+    # DEVIATION 2298: the same profile-7 rental, doing the OTHER half. Ada
+    # (sm_89) is the one architecture DigitalOcean cannot supply -- its L40S
+    # and Ada cards report no available regions -- so the installed
+    # qualification for that column has to come from here. Same knobs as
+    # tools/do_release061_leg.sh's qualify mode, same meaning.
+    if [ -n "${MOJOLEARN_QUALIFY_WHEEL:-}" ]; then
+        QUAL_WHEEL="$MOJOLEARN_QUALIFY_WHEEL"
+        QUAL_PROOFS="${MOJOLEARN_QUALIFY_PROOFS:?qualify mode needs the proof directory}"
+        [ -f "$QUAL_WHEEL" ] || leg_die "no wheel at $QUAL_WHEEL"
+        [ -d "$QUAL_PROOFS" ] || leg_die "no proof directory at $QUAL_PROOFS"
+        case "$QUAL_WHEEL" in *manylinux*) ;; *) leg_die "REFUSING: qualify the REPAIRED wheel; $QUAL_WHEEL is not manylinux-tagged" ;; esac
+        LEG_QUALIFY=1
+        QUAL_BASE=$(basename "$QUAL_WHEEL")
+        QUAL_SHA=$(shasum -a 256 "$QUAL_WHEEL" | cut -d' ' -f1)
+    fi
 fi
 if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
     if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
@@ -2859,11 +2877,23 @@ RELEASE_TOOLS_SETUP
         release_seconds=$((work_remaining - 20))
         if [ "$release_seconds" -gt 2400 ]; then release_seconds=2400; fi
         printf '%s\n' '@COMMIT@' > "$ROOT/commit.txt"
+        if [ '@QUALIFY@' = 1 ]; then
+            # DEVIATION 2298: 25 installed jobs from the wheel's own bytes on
+            # THIS device. The driver refuses an architecture override and
+            # records the device it actually found.
+            MOJOLEARN_EXPECT_VENDOR=cuda \
+              timeout -k 20 "$work_remaining" bash tools/linux_surface_qualification.sh \
+                qualify-release-linux3 "/root/@QUALWHEEL@" '@QUALSHA@' cuda \
+                "$OUT/release-build" /root/proofs '@GPUARCHS@' \
+                > "$OUT/release-build-console.log" 2>&1
+            release_rc=$?
+        else
         MOJOLEARN_COMMIT='@COMMIT@' MOJOLEARN_PYTHON="$release_system_python" \
           MOJOLEARN_RELEASE_BUILD_SECONDS="$release_seconds" MOJOLEARN_BUILD_PIXI_ENV=default \
           timeout -k 20 "$work_remaining" bash tools/release061_remote_build.sh \
             cuda '@GPUARCHS@' "$OUT/release-build" > "$OUT/release-build-console.log" 2>&1
         release_rc=$?
+        fi
     fi
     echo "release_build_exit=$release_rc" >> "$OUT/leg.txt"
     echo 'scope=one actual CUDA architecture full46 build; no installed wheel qualification' >> "$OUT/leg.txt"
@@ -4112,6 +4142,9 @@ leg_check_remote_body() {
         -e "s|@DUMP@|$LEG_DUMP|g" \
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
         -e "s|@NVIDIACAMPAIGN@|$NVIDIA_CAMPAIGN|g" \
+        -e "s|@QUALIFY@|$LEG_QUALIFY|g" \
+        -e "s|@QUALWHEEL@|$QUAL_BASE|g" \
+        -e "s|@QUALSHA@|$QUAL_SHA|g" \
         -e "s|@MAMBACERTONLY@|$MAMBA_CERT_ONLY|g" \
         -e "s|@CONTINUEDCERT@|$CONTINUED_CERT_CHECKS|g" \
         -e "s|@KNNLAYOUTONLY@|$KNN_LAYOUT_ONLY|g" \
@@ -4300,6 +4333,29 @@ RELEASE_SOURCE
             leg_ssh 'cat > /root/byte-lm-handoffs/foreign.zip' < "$TMPD/foreign.zip"
             leg_ssh "python3 -B /root/mojolearn/tools/byte_lm_handoff_transport.py unpack /root/byte-lm-handoffs/foreign.zip --output /root/byte-lm-handoffs/foreign --sha256 $BYTE_FOREIGN_SHA --vendor $_foreign_vendor --kind head64" > "$OUT/foreign-transport.log" 2>&1 || leg_die "Remote foreign handoff refused"
         fi
+    fi
+    if [ "$LEG_QUALIFY" = 1 ]; then
+        # THE BYTES QUALIFIED ARE THE BYTES PUBLISHED: sha compared both ends.
+        leg_say "shipping the repaired wheel ($(wc -c < "$QUAL_WHEEL" | tr -d ' ') bytes, sha256 $QUAL_SHA)"
+        leg_ssh "cat > /root/$QUAL_BASE" < "$QUAL_WHEEL" || leg_die "wheel upload failed"
+        _rsha=$(leg_ssh "sha256sum /root/$QUAL_BASE" | cut -d' ' -f1)
+        [ "$_rsha" = "$QUAL_SHA" ] || leg_die "wheel sha mismatch after transfer ($_rsha)"
+        leg_ssh 'mkdir -p /root/proofs'
+        for _p in "$QUAL_PROOFS"/*.json; do
+            leg_ssh "cat > /root/proofs/$(basename "$_p")" < "$_p" || leg_die "proof upload failed: $_p"
+        done
+        # mamba/corpus is excluded from the archive on purpose; the INSTALLED
+        # jobs read it. Only the three CORPUS_CASES names, 4.6 MB not 63.
+        _cases=$(python3 -c "import sys;sys.path.insert(0,'$PWD/tools');from verify_linux_surface_qualification import CORPUS_CASES;print(' '.join(CORPUS_CASES))")
+        [ -n "$_cases" ] || leg_die "could not read CORPUS_CASES"
+        # shellcheck disable=SC2086
+        ( cd "$PWD" && tar czf "$TMPD/corpus.tgz" $(for _c in $_cases; do echo "mamba/corpus/$_c"; done) ) || leg_die "corpus tar failed"
+        leg_ssh 'cat > /root/corpus.tgz' < "$TMPD/corpus.tgz" || leg_die "corpus upload failed"
+        leg_ssh 'tar -xzf /root/corpus.tgz -C /root/mojolearn' || leg_die "corpus unpack failed"
+        for _c in $_cases; do
+            leg_ssh "test -f /root/mojolearn/mamba/corpus/$_c/x.f32" || leg_die "corpus case $_c did not land"
+        done
+        leg_say "shipped wheel, $(ls "$QUAL_PROOFS"/*.json | wc -l | tr -d ' ') proofs and the corpora"
     fi
     leg_ssh 'umask 022; cat > /root/gemm_leg.sh' < "$OUT/remote_body.sh"
     leg_run_payload
