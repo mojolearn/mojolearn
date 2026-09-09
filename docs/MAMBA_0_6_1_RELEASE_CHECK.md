@@ -22,17 +22,21 @@ must not be presented as an unresolved FAST failure at that followup snapshot.
 The archive and `run3/source-snapshot.json` retain source provenance; this audit
 does not assert whole-current-tree or current-wheel equality with that snapshot.
 
-**DETERMINISTIC is a separate open validation cell.** The current helper changes
-FAST only. DETERMINISTIC falls through `checks/numerics.mojo:633`
-`identical_softplus`, whose portable branch selects only IDENTICAL; its other
-branch evaluates `log(exp(x) + 1)`. Thus the cancellation mechanism remains
-possible in DETERMINISTIC source. The retained runner
-`tools/nvidia_feature_finish.sh` iterated `identical fast`, not deterministic.
-This is a reason to run the deterministic fixture, not proof it fails. If it
-fails at the same dt/angle seam, the bounded proposed repair is extending the
-Mamba3-local stable-log1p branch to DETERMINISTIC while preserving IDENTICAL
-arithmetic. Obtain root review and fresh per-mode evidence before that change;
-no numerical file was edited here.
+**DETERMINISTIC: the open cell closed the way this paragraph predicted
+(DEVIATION 2300, 2026-09-09).** The 0.7.0 installed qualification ran all
+25 jobs on an L40S (sm_89) and an H100 (sm_90a): mamba/deterministic failed
+`k_last_ matches ref64 ssd.k_last` at flat index 151 with excess 3.980e-07,
+the same index and the same excess the FAST column showed before its repair,
+bit-identically on both cards, while FAST and IDENTICAL passed. The
+mechanism is the one named here: `m3_dt_softplus` gated its stable log1p
+spelling on FAST alone, so DETERMINISTIC fell through to `identical_softplus`'s
+unpinned arm, `log(exp(x) + 1)`. The gate is now `!= NUMERIC_IDENTICAL`, so
+FAST and DETERMINISTIC share the stable spelling and IDENTICAL keeps its
+portable arithmetic verbatim. No tolerance changed. The 0.7.0 wheel is
+rebuilt and requalified at the fixed commit; the release record under
+`bench/results/releases/2026-09-08-linux-0.7.0/` carries the result.
+`tools/nvidia_feature_finish.sh` iterating `identical fast` only is why
+this was not caught at `4a271ae6`.
 
 ## Root-only targeted execution, serial and guarded
 
@@ -69,7 +73,7 @@ gate covers all three family fixtures and Mamba3 output/h_last/k_last reports.
 Its `Reporter.close` gate remains **atol 1e-6, rtol 1e-5**; do not change it.
 The key case is `mamba/corpus/mamba3/m3_base_b2_l4_d32`, B2/L4/model-width32,
 `ref64/ssd.k_last.f64`, shape `(2,1,128)`, formerly failing flat index151
-(batch1/head0/component23). Include continuation and chunk-boundary arms already
+(batch1/head0/component23) in FAST, then in DETERMINISTIC until DEVIATION 2300. Include continuation and chunk-boundary arms already
 in the surface gate. IDENTICAL asserts raw-bit continuation checks; FAST and
 DETERMINISTIC accuracy results cannot be renamed cross-vendor bitwise evidence.
 

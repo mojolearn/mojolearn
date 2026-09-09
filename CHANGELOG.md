@@ -18,6 +18,14 @@ contain the detailed investigation record.
   every case, the RF predict check passes in both modes. Fast-mode bits at
   those three sites move; the fast profile carries no bit promise across
   versions.
+- Mamba-3 deterministic mode on CUDA: the stable small-dt softplus
+  spelling (float32 log1p of the vendor exp) now covers DETERMINISTIC as
+  well as FAST. Before this, DETERMINISTIC evaluated log(exp(x) + 1) and the
+  installed qualification failed the Mamba-3 key-state report against the
+  float64 reference at one element on both an L40S and an H100, with the
+  same excess FAST had shown before its own repair (DEVIATION 2300).
+  IDENTICAL bits are untouched; DETERMINISTIC dt bits move on every vendor,
+  within its same-box same-build contract.
 - One Linux x86-64 wheel carrying CUDA sm_89, CUDA sm_90 and HIP gfx942, each
   in fast, deterministic and identical, plus the identical-mode byte-LM
   trainer extension per architecture (the combined-Linux profile authored

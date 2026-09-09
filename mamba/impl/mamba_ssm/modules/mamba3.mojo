@@ -85,7 +85,7 @@ from gemm.checks.gemm_oracle import OP_NT
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
-    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_clamp,
     identical_div,
@@ -422,15 +422,27 @@ struct Mamba3DeviceStages(Movable):
 
 
 def m3_dt_softplus(x: Float32) -> Float32:
-    """S6 softplus with a stable small-dt FAST path.
+    """S6 softplus with a stable small-dt path for every unpinned tier.
 
     Negative dt biases make exp(x) small. Rounding exp(x) + 1 before log
     discards significant dt bits, which accumulate in S10's rotary angle
     and can exceed the key-state tolerance after cancellation in rotation.
-    Retain FAST's vendor exp, but evaluate log1p directly in float32.
-    IDENTICAL and DETERMINISTIC keep their existing arithmetic verbatim.
+    Retain the vendor exp, but evaluate log1p directly in float32.
+
+    DEVIATION 2300 (2026-09-09). The repair above was gated on FAST alone,
+    so DETERMINISTIC fell through to `identical_softplus`'s unpinned arm,
+    `log(exp(x) + 1)`, the very cancellation this helper exists to avoid.
+    The installed 0.7.0 qualification showed it: mamba/deterministic failed
+    `k_last` against ref64 at flat index 151 with the SAME excess
+    (3.980e-07) the FAST column showed before its repair, bit-identically
+    on an L40S and an H100, while FAST and IDENTICAL passed. The gate is
+    now "not IDENTICAL": FAST and DETERMINISTIC share the stable spelling,
+    IDENTICAL keeps its portable arithmetic verbatim (its bits do not move;
+    the cross-vendor contract is untouched). DETERMINISTIC promises same
+    box, same build, same bits, which this keeps; it carries no bit promise
+    across versions, so its dt bits moving here is within contract.
     """
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         from std.math import exp
 
         if x <= Float32(20.0):
