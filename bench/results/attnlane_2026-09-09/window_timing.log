@@ -1,0 +1,8 @@
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 3
+ours: tier identical vendor cuda
+ours forward            median 685.7 ms  rounds ['685.7', '685.1', '687.1']
+ours forward+backward   median 1672.1 ms  rounds ['1656.3', '1672.1', '1735.1']
+torch-eager-fp32-sdpa forward            median 33.6 ms  rounds ['32.9', '33.6', '34.0']
+torch-eager-fp32-sdpa forward+backward   median 106.9 ms  rounds ['107.5', '106.9', '106.5']
+torch-eager-fp32-sdpa-compiled forward            median 34.7 ms  rounds ['33.2', '35.5', '34.7']
+torch-eager-fp32-sdpa-compiled forward+backward   median 93.6 ms  rounds ['82.2', '93.6', '97.0']
