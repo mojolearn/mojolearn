@@ -1,0 +1,15 @@
+started=2026-09-09T16:37:54Z commit=a9ba6818068906d1f70d5fa8c18695e271b64370
+pixi_install=0 16:38:01
+pip_base=0 16:38:14
+build_base=0 16:38:47
+build_gbdt=0 16:40:04
+build_rf=0 16:40:26
+pip_cuml=0 16:40:29
+build_trees=0 16:40:50
+import_identical=0 16:40:51
+higgs_zip=0 16:43:12
+higgs_unzip=0 16:43:16
+lightgbm_cuda_build=0 16:43:58
+lightgbm_cuda_works=yes
+download_higgs=0 16:44:43
+finished=2026-09-09T16:44:43Z

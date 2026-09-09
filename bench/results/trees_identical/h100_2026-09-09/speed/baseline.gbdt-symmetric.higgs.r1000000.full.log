@@ -1,0 +1,26 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5510 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x530880000000, nodemask=1)
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 ms=1451.997
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 ms=946.722
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=962.449 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=1 ms=900.191 hash=817c2b6c58bf70a5
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=2 ms=750.991 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=2 ms=937.452 hash=2b47d41cad36c7e9
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=3 ms=774.989 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=3 ms=881.359 hash=d3c8ca5e7d63515e
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=4 ms=696.542 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=4 ms=938.884 hash=fc2bed9780b01bf5
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=5 ms=1161.480 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=5 ms=909.976 hash=e34be2578c66358e
+5588 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1bbec0000000, nodemask=2)
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=6 ms=843.353 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=6 ms=864.440 hash=db664fd782bdf6c7
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=7 ms=697.383 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=7 ms=877.971 hash=5f5502db75a5718f
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542067
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800716
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.542524
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800431

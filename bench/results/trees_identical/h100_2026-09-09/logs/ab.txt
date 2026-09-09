@@ -1,0 +1,39 @@
+ib_exit baseline=0 16:45:03
+build_exit fold.base=0 16:45:20
+d2a8e6d92e93429de849b13e909102a953ebf81233fb4652a2efbc2da214da21  /root/bins/fold/_mojolearn.so
+build_exit fold.gbdt=0 16:45:36
+31387a5a5478f9b1bc6116fc0d6e9835bf069ba4390b78171e7ad68189162b7f  /root/bins/fold/_mojolearn_gbdt.so
+build_exit fused.gbdt=0 16:46:50
+905240c6e2eb3d1794eb2e5b7559c2cdb3c335f80da13e773e9893e2f1c84456  /root/bins/fused/_mojolearn_gbdt.so
+build_exit rf2010.rf=0 16:47:10
+7a4e507c74130cd0ee49908e6433ddabc1b03d784f37e2919afadcd9f95d72e7  /root/bins/rf2010/_mojolearn_rf.so
+build_exit rf2011.rf=0 16:47:30
+a8ef699ddacf28343cf21f6353162276c63fd4d3db6454da792fd127221abf92  /root/bins/rf2011/_mojolearn_rf.so
+build_exit rf2012.rf=0 16:47:49
+e5fa24f7067a650d28a63c2a04926c9a7e7027fbbed668f4b547cce3ad1e4825  /root/bins/rf2012/_mojolearn_rf.so
+build_exit spnf.gbdt=0 16:49:05
+62a248fa2bb21a8f64e15b0f021fc6a0c032da72ceb15ae24dc0f092fbfa86b7  /root/bins/spnf/_mojolearn_gbdt.so
+build_exit sp.gbdt=0 16:50:20
+287ed844a79408628d3f0edf875fb20287a068fdb8d59ea3b9d67735bb6b345d  /root/bins/sp/_mojolearn_gbdt.so
+ib_exit fold=0 16:50:30
+ib_exit fused=0 16:50:36
+ib_exit sp=0 16:50:41
+ib_exit rf2010=0 16:50:45
+ib_exit rf2011=0 16:50:49
+ib_exit rf2012=0 16:50:53
+ib_diff baseline vs fold exit=0 16:50:53
+ib_diff baseline vs fused exit=0 16:50:53
+ib_diff baseline vs sp exit=0 16:50:53
+ib_diff baseline vs rf2010 exit=0 16:50:53
+ib_diff baseline vs rf2011 exit=0 16:50:53
+ib_diff baseline vs rf2012 exit=0 16:50:54
+rfgate_exit src=0 16:51:03
+rfgate_exit rf2010=0 16:51:12
+rfgate_exit rf2011=0 16:51:21
+rfgate_exit rf2012=0 16:51:29
+speed_exit baseline.gbdt-symmetric.higgs.r1000000.full=0 16:51:54
+speed_exit baseline.gbdt-symmetric.higgsreg.r1000000.full=0 16:52:16
+speed_exit baseline.gbdt-symmetric.higgs.r1000000.stage=0 16:52:23
+speed_exit baseline.gbdt-symmetric.higgsreg.r1000000.stage=0 16:52:28
+speed_exit baseline.rf.higgs.r1000000.full=0 17:28:09
+speed_exit baseline.et.higgs.r1000000.full=143 17:28:35
