@@ -490,7 +490,7 @@ def gemm_plan_name(plan: Int) -> String:
     if plan == PLAN_TUNED_32_2X2:
         return _tuned_plan_name(TUNED_RPT // 2, TUNED_CPT // 2, 16)
     if plan == PLAN_TUNED_64_4X4:
-        return _tuned_plan_name(TUNED_RPT, TUNED_CPT, 16)
+        return _tuned_plan_name(TUNED_RPT, TUNED_CPT, TUNED_64_KS)
     if plan == PLAN_TUNED_128_8X8:
         return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, 16)
     if plan == PLAN_TUNED_64_4X4_K32:
@@ -1275,6 +1275,25 @@ comptime TUNED_BM_WIDE = TUNED_RPT * TUNED_TR
 comptime TUNED_BN_WIDE = TUNED_CPT * TUNED_TC
 comptime TUNED_BM_NARROW = (TUNED_RPT // 2) * TUNED_TR
 comptime TUNED_BN_NARROW = (TUNED_CPT // 2) * TUNED_TC
+
+#: The 64x64 tuned plan's K step (2026-09-09, the split-K lane's task-4
+#: probe). RAFT's `Kblk = 32` where TWO pages of the 64x64 operand pair
+#: (37 KB) fit under the column's shared limit, else 16. Measured on an
+#: H100 (`bench/results/e1g/2026-09-09_140650-nvidia-h100-identical-splitk3`,
+#: forced plan 16 against plan 9): 4% to 7% faster at every row the
+#: dispatcher sends to this tile, bits equal by the launch-invariance gate.
+#: The 128x128 pair is 37 KB a PAGE, one page everywhere, and at KS = 32 it
+#: LOST 17% (plan 17 against plan 10), so that plan stays at 16. Read
+#: through the matrix so Apple (32 KB) keeps its two pages at 16 and no
+#: vendor is named here.
+comptime TUNED_64_PAGE_BYTES_K32 = (
+    (TUNED_BM_WIDE + TUNED_BN_WIDE) * (TUNED_KBLK + TUNED_VECLEN) * 4
+)
+comptime TUNED_64_KS = (
+    TUNED_KBLK
+    if lib_smem_pages_for[TARGET_COLUMN, TUNED_64_PAGE_BYTES_K32]() == 2
+    else 16
+)
 
 #: The fold stack depth of every tuned plan: `P <= 2^16 - 1` covers the
 #: profile cap (`CONTRACT_MAX_LEAVES = 1024`) with room, and because the
@@ -2469,7 +2488,7 @@ def identical_gemm_with_plan(
         )
         return
     if plan == PLAN_TUNED_64_4X4:
-        _launch_tuned[TUNED_RPT, TUNED_CPT, TUNED_TC, 16, TUNED_FOLD_SLOTS](
+        _launch_tuned[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_64_KS, TUNED_FOLD_SLOTS](
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
         )
         return
