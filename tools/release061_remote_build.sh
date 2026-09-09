@@ -108,7 +108,12 @@ spec = importlib.util.spec_from_file_location('release_backend_probe', root / 'p
 backend = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(backend)
 actual_arch, how = backend._device_arch(vendor)
-if actual_arch != arch:
+# DEVIATION 2293: the device reports sm_90; an sm_90a build targets exactly
+# that chip. This is _backend.py's own selector rule (the `a` restricts WHICH
+# DEVICES, and this is one of them), applied to the build side so the box we
+# build on and the name we build under can differ by that suffix and nothing
+# else. cuda only: hip code objects are ISA-exact and take no suffix rule.
+if actual_arch != arch and not (vendor == 'cuda' and arch == actual_arch + 'a'):
     raise SystemExit('Physical device does not match requested architecture: ' + repr((actual_arch, arch, how)))
 inventory = native_inventory(root)
 # DEVIATION 2290: this schema string names the script (release061_remote_build.sh,

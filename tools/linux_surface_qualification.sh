@@ -242,7 +242,13 @@ if release_profile:
     assert not os.environ.get('MOJOLEARN_GPU_ARCH'), 'Architecture override forbidden'
     device_arch, probe = _backend._device_arch(os.environ['MOJOLEARN_EXPECT_VENDOR'])
     selected = _backend.gpu_arch()
-    assert device_arch == selected == audit['runtime_architecture'], ('Wrong actual GPU architecture', device_arch, selected)
+    # DEVIATION 2293: the selected binding may be the architecture-specific
+    # build for this exact device (device sm_90 -> selected sm_90a), which is
+    # what _backend.py prefers. The audit's runtime_architecture is the name
+    # the wheel carries, so it must equal the SELECTED one; the device must be
+    # the chip that selection targets. Anything else is still refused.
+    assert selected == audit['runtime_architecture'], ('Wrong actual GPU architecture', device_arch, selected)
+    assert selected in (device_arch, device_arch + 'a'), ('Wrong actual GPU architecture', device_arch, selected)
     architecture = dict(device_architecture=device_arch, selected_architecture=selected,
                         architecture_probe=probe, architecture_override_absent=True)
 # Older bindings expose vendor but no tier getter; report that gap explicitly.
