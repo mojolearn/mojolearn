@@ -26,7 +26,7 @@ moved out of the source repo under the oversized-blob rule to
 `~/mojolearn-evidence-local/2026-09-08-linux-0.7.0-refused-amd-build/build/`.
 Every log, exit code, provenance file and command transcript stays here.
 
-## `hip-gfx942/` (the retry at `de719ac9`)
+## `hip-gfx942.attempt2-de719ac9-uplink-lost/` (the retry at `de719ac9`)
 
 Prep succeeded through `PIXI_ENV_OK`. The build never started: `rc=9`,
 "could not start the build". This was NOT a defect on the droplet and NOT
@@ -47,5 +47,8 @@ its lease.
 See DEVIATION 2292 in `docs/RELEASE_0_6_1_RUNPOD_PROFILE7.md` for the
 guard added so a leg refuses to rent on a flapping uplink and so the logs
 name which end of the wire went quiet.
+
+The directory is named for its outcome so the eventual successful
+`hip-gfx942/` proof lands beside it without being confused for it.
 
 **No admissible 0.7.0 build proof exists in this directory yet.**
