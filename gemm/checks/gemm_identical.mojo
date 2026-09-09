@@ -485,22 +485,24 @@ def gemm_plan_name(plan: Int) -> String:
     if plan == PLAN_TUNED_128_8X8:
         return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2)
     if plan == PLAN_SPLIT_32_2X2:
-        return _split_plan_name(TUNED_RPT // 2, TUNED_CPT // 2, TUNED_TC)
+        return _split_plan_name(TUNED_RPT // 2, TUNED_CPT // 2, TUNED_TC, TUNED_KBLK)
     if plan == PLAN_SPLIT_16_1X1:
-        return _split_plan_name(1, 1, TUNED_TC)
+        return _split_plan_name(1, 1, TUNED_TC, TUNED_KBLK)
     if plan == PLAN_SPLIT_1X256:
-        return _split_plan_name(1, 1, TUNED_TPB)
+        return _split_plan_name(1, 1, TUNED_TPB, 16)
     if plan == PLAN_SPLIT_8X64:
-        return _split_plan_name(1, 2, TUNED_TPB // 8)
+        return _split_plan_name(1, 2, TUNED_TPB // 8, 16)
     return String("PLAN?")
 
 
-def _split_plan_name(rpt: Int, cpt: Int, tc: Int) -> String:
+def _split_plan_name(rpt: Int, cpt: Int, tc: Int, ks: Int) -> String:
     """Built from the resolved constants, never a literal."""
     var name = String("SPLIT ") + String(rpt * (TUNED_TPB // tc))
     name += "x" + String(cpt * tc)
     name += " reg" + String(rpt) + "x" + String(cpt)
-    name += " KS=16 leaves on grid.y -> workspace -> register-stack fold"
+    name += " KS=" + String(ks)
+    name += " leaves on grid.y -> workspace -> fold (block per cell <= "
+    name += String(SPLIT_BLOCK_FOLD_MAX_CELLS) + ", else register stack)"
     name += " tpb=" + String(TUNED_TPB)
     name += " hwftz=" + String(TUNED_HW_FTZ_FMA)
     return name + " (256 thr, 2-D grid, no swizzle)"
@@ -906,7 +908,9 @@ def identical_gemm_leaf_kernel(
     ws.unsafe_store(cell * stride + slot, ftz(acc))
 
 
-def identical_gemm_fold_kernel(
+def identical_gemm_fold_kernel[
+    LEAF_MAJOR: Bool = False
+](
     c: MutPointer[Float32, MutAnyOrigin],
     ws: MutPointer[Float32, MutAnyOrigin],
     mn_in: Int32,
@@ -914,7 +918,13 @@ def identical_gemm_fold_kernel(
     stride_in: Int32,
 ):
     """One BLOCK per output cell folds that cell's tree LEVEL BY LEVEL in
-    threadgroup memory. Contract 7.2.2's normative `(d, q)` addressing, run
+    threadgroup memory.
+
+    `LEAF_MAJOR` (the SPLIT plans, 2026-09-09): level 0 is laid out
+    `ws[t * mn + cell]` instead of `ws[cell * stride + t]`. Which address a
+    partial lives at is contract 7.2.2's "one legal layout"; the pairing
+    below reads `q` and nothing else, so the layout parameter cannot reach
+    a node. Contract 7.2.2's normative `(d, q)` addressing, run
     as the addressing rather than as a comment about it.
 
     Contract 13.4's design: `MAX_LEAVES = 1024` caps `P`, so 1024 partials is
@@ -958,7 +968,10 @@ def identical_gemm_fold_kernel(
 
     var q0 = tid
     while q0 < p_count:
-        buf[unsafe_offset = cur + q0] = ws.unsafe_load(cell * stride + q0)
+        comptime if LEAF_MAJOR:
+            buf[unsafe_offset = cur + q0] = ws.unsafe_load(q0 * mn + cell)
+        else:
+            buf[unsafe_offset = cur + q0] = ws.unsafe_load(cell * stride + q0)
         q0 += nth
     barrier()
 
@@ -1909,13 +1922,30 @@ def identical_gemm_fold_stack_kernel(
     var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
     var occ = 0
     var serial = Float32(0.0)
-    for t in range(p_count):
+    # The loads in batches of FOLD_BATCH, all issued before the first push of
+    # the batch, so the memory latency of `P` dependent-looking iterations
+    # overlaps (measured 2026-09-09 on an H100: one load per push was 0.19 ms
+    # at P = 512 whatever m n). The pushes still run in ascending `t`.
+    comptime FOLD_BATCH = 8
+    var t = 0
+    while t + FOLD_BATCH <= p_count:
+        var vals = SIMD[DType.float32, FOLD_BATCH](0.0)
+        comptime for e in range(FOLD_BATCH):
+            vals[e] = ws.unsafe_load((t + e) * mn + cell)
+        comptime for e2 in range(FOLD_BATCH):
+            comptime if SAB_FOLD_SERIAL:
+                # SABOTAGE: the SUPERSEDED serial ascending fold.
+                serial = ftz(ftz(serial) + ftz(vals[e2]))
+            else:
+                _ = _fold_push(stack, occ, vals[e2])
+        t += FOLD_BATCH
+    while t < p_count:
         var part = ws.unsafe_load(t * mn + cell)
         comptime if SAB_FOLD_SERIAL:
-            # SABOTAGE: the SUPERSEDED serial ascending fold.
             serial = ftz(ftz(serial) + ftz(part))
         else:
             _ = _fold_push(stack, occ, part)
+        t += 1
     comptime if SAB_PAD_PLUS_ZERO:
         # SABOTAGE: pad the level-0 width up to the next power of two with
         # `+0.0` instead of carrying the odd tail. Contract 7.2 clause 4.
@@ -1931,8 +1961,14 @@ def identical_gemm_fold_stack_kernel(
     c.unsafe_store(cell, ftz(out))
 
 
+#: Outputs of at most this many cells fold one BLOCK per cell (the level-wise
+#: threadgroup fold, `D` barriers); larger outputs fold one THREAD per cell
+#: (the register stack). Scheduling only: both are the contract's tree.
+comptime SPLIT_BLOCK_FOLD_MAX_CELLS = 16384
+
+
 def _launch_split[
-    RPT: Int, CPT: Int, TC: Int
+    RPT: Int, CPT: Int, TC: Int, KS: Int
 ](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -1948,8 +1984,7 @@ def _launch_split[
 ) raises:
     """Two launches: the tuned kernel in SPLIT mode over `(tiles, P)`, the
     partials to `ws` (`m * n * P` floats, `identical_gemm_workspace_floats`),
-    then the register-stack fold into `c`. `p_count > 0` by dispatch."""
-    comptime KS = 16
+    then the fold into `c`. `p_count > 0` by dispatch."""
     comptime NTH = TUNED_TPB
     comptime TR = NTH // TC
     comptime BM = RPT * TR
@@ -1977,6 +2012,17 @@ def _launch_split[
         grid_dim=(g[0], p_count, 1),
         block_dim=(NTH, 1, 1),
     )
+    if m * n <= SPLIT_BLOCK_FOLD_MAX_CELLS:
+        ctx.enqueue_function[identical_gemm_fold_kernel[True]](
+            c.unsafe_ptr(),
+            ws.unsafe_ptr(),
+            Int32(m * n),
+            Int32(p_count),
+            Int32(p_count),
+            grid_dim=(m * n, 1, 1),
+            block_dim=(SPLITK_FOLD_TPB, 1, 1),
+        )
+        return
     ctx.enqueue_function[identical_gemm_fold_stack_kernel](
         c.unsafe_ptr(),
         ws.unsafe_ptr(),
@@ -2303,7 +2349,7 @@ def identical_gemm_with_plan(
             block_dim=(SPLITK_LEAF_TPB, 1, 1),
         )
         if not staged:
-            ctx.enqueue_function[identical_gemm_fold_kernel](
+            ctx.enqueue_function[identical_gemm_fold_kernel[False]](
                 c.unsafe_ptr(),
                 ws.unsafe_ptr(),
                 Int32(m * n),
@@ -2350,20 +2396,23 @@ def identical_gemm_with_plan(
     if _is_split_plan(plan) and p_count > 0:
         # The per-thread tile and thread grid of each split plan; the
         # names in `gemm_plan_name` derive from the same numbers.
+        # KS = 32 (RAFT's Kblk) where two pages of both operands fit under
+        # every column's shared limit (32x32 and 16x16: 18 KB and 9 KB), 16
+        # for the wide decode tiles (1x256 at KS = 32 would be 37 KB a page).
         if plan == PLAN_SPLIT_32_2X2:
-            _launch_split[TUNED_RPT // 2, TUNED_CPT // 2, TUNED_TC](
+            _launch_split[TUNED_RPT // 2, TUNED_CPT // 2, TUNED_TC, TUNED_KBLK](
                 ctx, c, a, b, ws, m, n, k, leaf, p_count, st
             )
         elif plan == PLAN_SPLIT_16_1X1:
-            _launch_split[1, 1, TUNED_TC](
+            _launch_split[1, 1, TUNED_TC, TUNED_KBLK](
                 ctx, c, a, b, ws, m, n, k, leaf, p_count, st
             )
         elif plan == PLAN_SPLIT_1X256:
-            _launch_split[1, 1, TUNED_TPB](
+            _launch_split[1, 1, TUNED_TPB, 16](
                 ctx, c, a, b, ws, m, n, k, leaf, p_count, st
             )
         else:
-            _launch_split[1, 2, TUNED_TPB // 8](
+            _launch_split[1, 2, TUNED_TPB // 8, 16](
                 ctx, c, a, b, ws, m, n, k, leaf, p_count, st
             )
         return
