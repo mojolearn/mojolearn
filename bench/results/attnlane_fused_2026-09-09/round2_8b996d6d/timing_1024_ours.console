@@ -1,0 +1,6 @@
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 1024 batch 4 rounds 3
+1217 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x723440000000, nodemask=1)
+ours: tier identical vendor cuda
+ours forward            median 46.2 ms  rounds ['73.8', '46.2', '45.4']
+ours forward+backward   median 93.4 ms  rounds ['95.5', '92.2', '93.4']
