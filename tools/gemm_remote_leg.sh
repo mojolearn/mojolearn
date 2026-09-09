@@ -628,6 +628,9 @@ POD_TERMINATED=0
 DEADMAN_PID=""
 DEADMAN_DIR=""
 FETCH_RED=0
+# DEVIATION 2292: set when neutral hosts stop answering, so the leg record
+# says the silence was on THIS side rather than leaving a reader to guess.
+UPLINK_FAULT=0
 KEY_RED=0
 ARMED=0
 TMPD=""
@@ -658,6 +661,48 @@ leg_usage() {
 
 leg_say() { printf '[%s %s] %s\n' "$(date +%T)" "${VENDOR:-leg}" "$*"; }
 leg_die() { printf '\n%s\n' "$*" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# WHICH SIDE OF THE WIRE DIED (DEVIATION 2292)
+# ---------------------------------------------------------------------------
+# An unanswered ssh poll and an HTTP 000 say the same small thing: a packet
+# did not come back. They do NOT say whether the BOX is gone or whether THIS
+# MACHINE has no uplink, and the leg spends the rest of the hour acting on
+# that difference. On 2026-09-08 all three 0.7.0 release legs lost the Mac's
+# network about one minute after their boxes came up. Each one then polled a
+# box it could not reach until its deadline, fetched an empty directory, and
+# could not confirm its own terminate -- and NOTHING IN THE ARTIFACTS SAID
+# THE FAULT WAS HERE. Three hours of HTTP 000 in a log reads like a vendor
+# outage; it was this desk's Wi-Fi.
+#
+# Three neutral hosts, none of them a vendor API, settle it. If none of them
+# answers either, the fault is local, and that is written down as a finding
+# in the leg's own output where the next reader will see it.
+leg_uplink_down() {
+    for _uh in https://pypi.org/ https://github.com/ https://www.google.com/; do
+        if curl -s -o /dev/null --max-time 8 "$_uh" 2>/dev/null; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+# BEFORE THE BILL STARTS, not after. One probe proves nothing about the next
+# five minutes, so this is three rounds spaced apart: a link that is flapping
+# fails at least one of them, and a leg that never creates a box cannot lose
+# one. Twenty seconds against a one-hour rental.
+leg_uplink_stable() {
+    _ur=1
+    while [ "$_ur" -le 3 ]; do
+        if leg_uplink_down; then
+            echo "    uplink probe $_ur/3: NO neutral host answered."
+            return 1
+        fi
+        [ "$_ur" -lt 3 ] && sleep 7
+        _ur=$((_ur + 1))
+    done
+    return 0
+}
 
 # ---------------------------------------------------------------------------
 # argument validation -- refuse everything unknown BY NAME
@@ -2365,6 +2410,19 @@ leg_cancel_deadman() {
 # ---------------------------------------------------------------------------
 
 leg_preflight() {
+    # THIS MACHINE'S UPLINK IS PART OF THE RENTAL (DEVIATION 2292). Every
+    # later step -- polling, fetching, and the terminate that stops the bill
+    # -- runs over it, so a link that is already flapping is a reason not to
+    # create anything.
+    echo "  pre-flight: this machine's uplink"
+    if leg_uplink_stable; then
+        echo "    uplink up on all three probes"
+    else
+        leg_die "REFUSING to rent: this machine could not reach ANY neutral
+  host. Nothing was created, so nothing is billing. The box is not the
+  problem here and neither is the vendor API; fix this desk's network and
+  run the leg again."
+    fi
     # Two GETs, both free, both preventing an orphan rather than cleaning one
     # up. Re-running a leg that failed late is the ordinary way to end up
     # paying for two boxes.
@@ -4343,6 +4401,24 @@ leg_run_payload() {
                     echo "    poll $_unreach: the box did not answer. The payload is"
                     echo "    DETACHED, so this says nothing about the run itself."
                     echo "    Retrying until the deadline."
+                fi
+                # DEVIATION 2292: after three unanswered polls, ask a neutral
+                # host whether this machine has a network at all. Polling
+                # continues either way -- the payload is detached and the link
+                # may come back inside the lease -- but the log stops implying
+                # the box is at fault when it is not.
+                if [ "$_unreach" = "3" ] || [ "$_unreach" = "30" ] || [ "$_unreach" = "60" ]; then
+                    if leg_uplink_down; then
+                        echo "    THIS MACHINE HAS NO UPLINK. No neutral host answered"
+                        echo "    either, so the silence is HERE, not on the box. The"
+                        echo "    payload is detached and its own dead-man will end the"
+                        echo "    box at the lease whatever this end does. Still polling"
+                        echo "    in case the link returns before the lease expires."
+                        UPLINK_FAULT=1
+                    else
+                        echo "    poll $_unreach: neutral hosts DO answer, so this"
+                        echo "    machine has a network and the BOX is the silent end."
+                    fi
                 fi ;;
         esac
         sleep 30
@@ -5820,6 +5896,7 @@ fi
     echo "pod=$POD_ID"
     echo "gpu_requested=$GPU_ID"
     echo "red=$RED"
+    echo "uplink_fault=$UPLINK_FAULT"
     if [ "$PAYLOAD" = "phase8" ]; then
         echo "e1_dir=$E1_DEST"
         echo "apple_dir=${APPLE_DIR:-<none>}"

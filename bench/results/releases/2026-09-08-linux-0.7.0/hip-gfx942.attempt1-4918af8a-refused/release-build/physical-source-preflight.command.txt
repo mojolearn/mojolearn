@@ -1,0 +1,1 @@
+/usr/bin/python3 tools/amd_serial_guard.py --seconds 60 --rss-gib 12 -- /usr/bin/python3 /root/rel061-build/preflight.py /root/mojolearn /root/rel061-build hip gfx942 4918af8a0d03dff475b5a4e217eb3a9df63ec3fb 

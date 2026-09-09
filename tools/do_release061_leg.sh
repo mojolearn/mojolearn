@@ -46,6 +46,33 @@ TMPD="$(mktemp -d "${TMPDIR:-/tmp}/rel061.XXXXXX")"
 
 log() { echo "[$(date +%T) amd/rel061] $*"; }
 die() { log "REFUSING: $*"; exit "${2:-2}"; }
+
+# WHICH SIDE OF THE WIRE DIED (DEVIATION 2292). HTTP 000 is curl saying it
+# could not connect, and that is as true of a dead uplink here as of a dead
+# API there. On 2026-09-08 this leg lost the Mac's network one minute after
+# the droplet came up ("Can't assign requested address"), could not start the
+# build, and then logged HTTP 000 against every DELETE and GET for two and a
+# half hours. Read cold, that log accuses DigitalOcean. It was this desk.
+# Neutral hosts, none of them a vendor API, settle which end is silent.
+uplink_down() {
+  local h
+  for h in https://pypi.org/ https://github.com/ https://www.google.com/; do
+    curl -s -o /dev/null --max-time 8 "$h" 2>/dev/null && return 1
+  done
+  return 0
+}
+
+# Three rounds before the bill starts. A flapping link fails one of them, and
+# a leg that never creates a droplet cannot strand one.
+uplink_stable() {
+  local r=1
+  while [ "$r" -le 3 ]; do
+    if uplink_down; then log "uplink probe $r/3: NO neutral host answered"; return 1; fi
+    [ "$r" -lt 3 ] && sleep 7
+    r=$((r + 1))
+  done
+  return 0
+}
 sha256_of() { { shasum -a 256 "$1" 2>/dev/null || sha256sum "$1"; } | cut -d' ' -f1; }
 mode_of() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
 
@@ -92,6 +119,12 @@ d=json.load(sys.stdin); print(' '.join('%s:%s:%s'%(x['id'],x['name'],x.get('size
 [ -z "$GPU_LIVE" ] || die "GPU droplet(s) already live, destroy or adopt them first: $GPU_LIVE"
 log "API reachable, no GPU droplet live, no droplet named $NAME"
 
+# THIS DESK'S UPLINK IS PART OF THE RENTAL (DEVIATION 2292). The build start,
+# the fetch and the destroy that stops the bill all run over it.
+uplink_stable || die "this machine could not reach ANY neutral host. Nothing
+  was created, so nothing is billing. Fix this desk's network, then re-run." 2
+log "uplink up on all three probes"
+
 if [ $RENT = 0 ]; then
   cat <<EOF
 DRY RUN -- nothing rented. With --rent this leg would:
@@ -121,10 +154,20 @@ d=json.load(sys.stdin); print(' '.join(str(x['id']) for x in d.get('droplets',[]
     done
     return 0
   fi
+  UPLINK_FAULT=0
   for i in 1 2 3 4 5 6; do
     code=$(api -o /dev/null -w '%{http_code}' -X DELETE "$API/droplets/$DROPLET_ID")
     log "DELETE droplet $DROPLET_ID -> HTTP $code"
     case "$code" in 204|404) break ;; esac
+    # DEVIATION 2292: say which end is silent, once, rather than leaving a
+    # column of HTTP 000 that reads as a vendor outage.
+    if [ "$code" = 000 ] && [ "$UPLINK_FAULT" = 0 ] && uplink_down; then
+      UPLINK_FAULT=1
+      log "THIS MACHINE HAS NO UPLINK: no neutral host answered either, so the"
+      log "  HTTP 000 above is this desk, not DigitalOcean. The droplet's own"
+      log "  dead-man is the layer that can still end it. Still retrying."
+      echo "uplink_fault=1" >> "$STATE"
+    fi
     sleep 10
   done
   # DELETE 204 acknowledges an asynchronous request. Only GET 404 proves absence.

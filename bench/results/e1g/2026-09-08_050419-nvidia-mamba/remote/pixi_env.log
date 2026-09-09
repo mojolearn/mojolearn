@@ -1,0 +1,2 @@
+taskset: failed to execute pixi: No such file or directory
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 127}

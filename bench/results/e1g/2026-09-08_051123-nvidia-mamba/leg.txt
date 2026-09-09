@@ -1,0 +1,10 @@
+commit=7b736232 parent 1cf6b8ab
+source_ref=7b736232c17f12b666ff9ab84722b4c9ec0e73da
+vendor=nvidia
+gpu_requested=NVIDIA GeForce RTX 4090
+image=runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+minutes=60
+mode=rent
+card_full=<unset>
+trace_dump=<unset>
+started=2026-09-08T09:11:23Z

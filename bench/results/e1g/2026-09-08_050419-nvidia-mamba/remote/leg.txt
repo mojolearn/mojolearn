@@ -1,0 +1,8 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=7
+commit=1cf6b8aba2ec5b71d282f979218fe5affbc256c1
+started=2026-09-08T09:05:20Z
+pixi_install_exit=127
+release_build_status=NOT_STARTED_BOOTSTRAP_FAILED

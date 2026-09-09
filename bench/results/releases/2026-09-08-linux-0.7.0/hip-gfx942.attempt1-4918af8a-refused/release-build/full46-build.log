@@ -1,0 +1,92 @@
+pid 3531's current affinity list: 0,1
+pid 3531's new affinity list: 0,1
+pid 3542's current affinity list: 0,1
+pid 3542's new affinity list: 0,1
+[09:32:33 build_sets] repo /root/mojolearn, dest /root/rel061-build/build, tiers: fast deterministic identical, jobs: 1
+[09:32:33 build_sets] pixi env: default
+[09:34:23 build_sets] FINDING: fast bindings/build_estimators.sh did not build; first error:
+      /root/mojolearn/bindings/_mojolearn_estimators.mojo:1:1: error: failed to run the pass manager for offload functions
+      /root/mojolearn/./core/householder_qr.mojo:285:5: error: function instantiation failed
+[09:39:35 build_sets] FINDING: deterministic bindings/build_estimators.sh did not build; first error:
+      /root/mojolearn/bindings/_mojolearn_estimators.mojo:1:1: error: failed to run the pass manager for offload functions
+      /root/mojolearn/./core/householder_qr.mojo:285:5: error: function instantiation failed
+[09:49:03 build_sets] builds finished in 990s (rc=1)
+[09:49:06 build_sets] vendor read-back per binary:
+    fast _mojolearn hip
+    fast _mojolearn_gbdt hip
+    fast _mojolearn_estimators MISSING
+    fast _mojolearn_rf hip
+    fast _mojolearn_trees hip
+    fast _mojolearn_svm hip
+    fast _mojolearn_solver hip
+    fast _mojolearn_metrics hip
+    fast _mojolearn_tsa hip
+    fast _mojolearn_linalg hip
+    fast _mojolearn_arima hip
+    fast _mojolearn_training hip
+    fast _mojolearn_gp hip
+    fast _mojolearn_mamba hip
+    fast _mojolearn_transformer hip
+    deterministic _mojolearn hip
+    deterministic _mojolearn_gbdt hip
+    deterministic _mojolearn_estimators MISSING
+    deterministic _mojolearn_rf hip
+    deterministic _mojolearn_trees hip
+    deterministic _mojolearn_svm hip
+    deterministic _mojolearn_solver hip
+    deterministic _mojolearn_metrics hip
+    deterministic _mojolearn_tsa hip
+    deterministic _mojolearn_linalg hip
+    deterministic _mojolearn_arima hip
+    deterministic _mojolearn_training hip
+    deterministic _mojolearn_gp hip
+    deterministic _mojolearn_mamba hip
+    deterministic _mojolearn_transformer hip
+    identical _mojolearn hip
+    identical _mojolearn_gbdt hip
+    identical _mojolearn_estimators hip
+    identical _mojolearn_rf hip
+    identical _mojolearn_trees hip
+    identical _mojolearn_svm hip
+    identical _mojolearn_solver hip
+    identical _mojolearn_metrics hip
+    identical _mojolearn_tsa hip
+    identical _mojolearn_linalg hip
+    identical _mojolearn_arima hip
+    identical _mojolearn_training hip
+    identical _mojolearn_gp hip
+    identical _mojolearn_mamba hip
+    identical _mojolearn_transformer hip
+    identical _mojolearn_byte_lm hip
+[09:49:06 build_sets] GPU architectures embedded, per binary:
+         44 gfx942
+          2 MISSING
+[09:49:06 build_sets] architecture set: gfx942 
+[09:49:06 build_sets] architecture: gfx942 (requested: gfx942)
+[09:49:06 build_sets] vendor: hip
+[09:49:25 build_sets] CPU ISA baseline: clean at x86-64-v3 (44 binaries)
+[09:49:25 build_sets] patchelf: /usr/bin/patchelf
+[09:49:25 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/default/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 59.6 MB, runtime libraries 3.2 MB, uncompressed set 62.8 MB
+vendor=hip
+arch=gfx942
+gpu_archs_requested=gfx942
+build_rc=1 stage_rc=0
+build_seconds=1013
+set_fast_count=14
+set_fast_bytes=18850222
+set_deterministic_count=14
+set_deterministic_bytes=18862630
+set_identical_count=16
+set_identical_bytes=21849968
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=15637665
+Traceback (most recent call last):
+  File "<stdin>", line 21, in <module>
+AssertionError: Build/staging failed; retained provenance is not admissible
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0", "vram_total_bytes": 274542362624, "telemetry": {"initial_vram_bytes": 299687936, "peak_vram_bytes": 299687936, "last_vram_bytes": 299687936, "initial_rss_bytes": 3440640, "peak_rss_bytes": 2065141760, "last_rss_bytes": 13598720, "initial_host_available_bytes": 162318770176, "last_host_available_bytes": 162364743680, "samples": 1007, "last_elapsed_seconds": 1012.7106617750001, "crossing_sample": null}, "returncode": 1}
