@@ -185,7 +185,7 @@ def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
     var p = _f32_ptr(addr)
     var out = List[Float32](length=n, fill=Float32(0.0))
     if n > 0:
-        memcpy(out.unsafe_ptr(), p, n)
+        memcpy(dest=out.unsafe_ptr(), src=p, count=n)
     return out^
 
 
@@ -193,7 +193,7 @@ def _write_f32(addr: Int, values: List[Float32]) raises:
     """A host list into a borrowed NumPy buffer, one `memcpy`."""
     var p = _f32_ptr(addr)
     if len(values) > 0:
-        memcpy(p, values.unsafe_ptr(), len(values))
+        memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
 
 
 def _upload_addr(
@@ -211,7 +211,7 @@ def _upload_addr(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     ctx.synchronize()
     if n > 0:
-        memcpy(host.unsafe_ptr(), p, n)
+        memcpy(dest=host.unsafe_ptr(), src=p, count=n)
     ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^
@@ -233,7 +233,7 @@ def _download_addr(
         var view = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
-    memcpy(p, host.unsafe_ptr(), n)
+    memcpy(dest=p, src=host.unsafe_ptr(), count=n)
     _ = host^
 
 

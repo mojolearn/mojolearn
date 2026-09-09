@@ -1,0 +1,5 @@
+attention path: eager
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 3
+ours: tier identical vendor cuda
+ours forward            median 516.1 ms  rounds ['524.6', '516.1', '516.1']
+ours forward+backward   median 1129.4 ms  rounds ['1129.4', '1134.5', '1120.3']

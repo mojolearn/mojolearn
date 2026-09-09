@@ -1,0 +1,5 @@
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 16384 batch 4 rounds 3
+torch-eager-fp32-sdpa forward            median 291.6 ms  rounds ['289.1', '291.6', '298.6']
+torch-eager-fp32-sdpa forward+backward   median 931.6 ms  rounds ['931.6', '927.2', '936.4']
+torch-eager-fp32-sdpa-compiled FAILED: OutOfMemoryError('CUDA out of memory. Tried to allocate 64.00 GiB. GPU 0 has a total capacity of 44.39 GiB of which 42.29 GiB is free. Including non-PyTorch memory, this process has 2.09 GiB memory in use. Of the allocated memory 1.58 GiB is allocated by PyTorch, and 9.74 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)')
