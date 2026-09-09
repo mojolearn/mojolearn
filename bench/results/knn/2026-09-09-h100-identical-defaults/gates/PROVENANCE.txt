@@ -1,0 +1,1 @@
+commit 2b6edd12 parent 1c7ba943; cells-4090-baseline = bench/results/e1g/2026-09-05_163958-nvidia-mamba/remote/layout-price/check-baseline.log; adv-4090-both = bench/results/e1g/2026-09-06_033208-nvidia-mamba/remote/continued-lifetime/knn-both.log; card compared with bench/results/e1/2026-08-28_122543-runpod-nvidia/e1u/knn.card (IDENTICAL, 6 stages)

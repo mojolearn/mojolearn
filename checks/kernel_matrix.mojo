@@ -811,3 +811,57 @@ def quantize_search_for[column: Int]() -> Int:
     if column == COLUMN_APPLE:
         return QUANTIZE_SEARCH_TWO_LEVEL
     return QUANTIZE_SEARCH_LINEAR
+
+
+def _knn_identical_round_column(column: Int) -> Bool:
+    """The columns whose IDENTICAL k-NN defaults were flipped 2026-09-09: small-k selector, transposed index layout with the register tile, and index-axis tiling. Apple keeps the pre-flip kernels until the orchestrator measures it locally; adding `column == COLUMN_APPLE` here is that flip."""
+    return (
+        column == COLUMN_NVIDIA
+        or column == COLUMN_AMD
+        or column == COLUMN_AMD_RDNA
+    )
+
+
+def knn_smallk_select_for[column: Int, identical: Bool]() -> Bool:
+    """ROUTING row: whether the IDENTICAL tiled k-NN arm selects k <= KNN_SMALLK_MAX_K with the per-thread composite-key selector (`neighbors/checks/select_smallk_identical_candidate.mojo`) instead of the 64-bit radix. Both return the k smallest (distance, index) keys ascending, so the bits are equal by construction and the gate is the four-arm dispatch check. `-D MOJOLEARN_KNN_IDENTICAL_LEGACY_SELECT=1` forces the radix on every column; `-D MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL=1` forces the selector on every column."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_LEGACY_SELECT"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL"]():
+        return True
+    return _knn_identical_round_column(column)
+
+
+def knn_transposed_index_for[column: Int, identical: Bool]() -> Bool:
+    """ROUTING row: whether the IDENTICAL tiled k-NN arm transposes the index once per request so the pinned distance tile reads it coalesced. Same per-cell fma chain, so the bits are equal. `-D MOJOLEARN_KNN_IDENTICAL_LEGACY_LAYOUT=1` forces the row-major layout; `-D MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL=1` forces the transpose on every column."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_LEGACY_LAYOUT"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL"]():
+        return True
+    return _knn_identical_round_column(column)
+
+
+def knn_distance_register_tile_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row: whether the transposed IDENTICAL distance tile computes a 4x4 register tile per thread (`pinned_distance_tile.mojo::pinned_distance_register_tile_kernel`) instead of one cell per thread. Every cell's chain is still one ascending serial fma chain over the feature axis (IDENTITY_PATHS row 24), so the bits are equal. Only reachable when `knn_transposed_index_for` is true. `-D MOJOLEARN_KNN_IDENTICAL_SCALAR_TILE=1` keeps one cell per thread."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SCALAR_TILE"]():
+        return False
+    return knn_transposed_index_for[column, identical]()
+
+
+comptime KNN_IDENTICAL_INDEX_TILE = 65536
+
+
+def knn_index_tile_columns_for[column: Int, identical: Bool]() -> Int:
+    """SCHEDULING row: the widest index-axis column tile the IDENTICAL tiled k-NN arm computes per query tile before merging partial top-k lists under the composite total order (`select_smallk_identical_candidate.mojo::partial_topk_merge_kernel`). 0 means the index axis is never split. Merging sorted (distance, index) lists is order-independent, so the bits are equal to the untiled path. `-D MOJOLEARN_KNN_IDENTICAL_NO_INDEX_TILE=1` restores the untiled path."""
+    comptime if not identical:
+        return 0
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_INDEX_TILE"]():
+        return 0
+    if _knn_identical_round_column(column):
+        return KNN_IDENTICAL_INDEX_TILE
+    return 0

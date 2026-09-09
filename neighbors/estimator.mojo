@@ -131,6 +131,7 @@ from neighbors.impl.neighbors.detail.knn_brute_force import (
     METRIC_FROM_IS_SQRT,
     brute_force_knn_impl,
     compute_norms_for_metric,
+    identical_index_tile,
     resolve_metric,
 )
 from neighbors.impl.selection.distance_weights import (
@@ -442,8 +443,11 @@ def knn_search_traced(
     )
     var index_norm = ctx.enqueue_create_buffer[DType.float32](n_index)
     var query_norm = ctx.enqueue_create_buffer[DType.float32](n_queries)
+    # `identical_index_tile` is `n_index` on FAST and DETERMINISTIC builds;
+    # under IDENTICAL on the columns that tile the index axis it is the
+    # kernel-matrix row's width, so the tile is bounded whatever the index.
     var dist_tile = ctx.enqueue_create_buffer[DType.float32](
-        query_tile * n_index
+        query_tile * identical_index_tile(n_index)
     )
     var buf_val = ctx.enqueue_create_buffer[DType.float32](
         query_tile * 2 * buf_len

@@ -77,6 +77,10 @@ from checks.kernel_matrix import (
     K_LIB_SELECT_WARPSORT,
     TARGET_COLUMN,
     knn_auto_follows_their_dispatch_for,
+    knn_distance_register_tile_for,
+    knn_index_tile_columns_for,
+    knn_smallk_select_for,
+    knn_transposed_index_for,
     knn_warpsort_select_for,
     lib_block_size_for,
     lib_lane_width_for,
@@ -89,6 +93,10 @@ from checks.numerics import (
 )
 from neighbors.checks.pinned_distance_tile import (
     PINNED_TILE_TPB,
+    RT_ROWS,
+    RT_TILE_COLS,
+    RT_TPB,
+    pinned_distance_register_tile_kernel,
     pinned_distance_tile_kernel,
 )
 from neighbors.checks.select_radix_identical import (
@@ -96,34 +104,51 @@ from neighbors.checks.select_radix_identical import (
     IDENTICAL_MAX_K,
 )
 from neighbors.checks.select_smallk_identical_candidate import (
-    SMALLK_BLOCK,
-    smallk_specialized_kernel,
+    SMALLK_MAX_K,
+    partial_topk_merge_launch,
+    smallk_select_launch,
 )
 from neighbors.checks.transposed_index_distance_candidate import transposed_index_distance_kernel
 from layout import TileTensor
 from layout.tile_layout import row_major
 from nn.topk import top_k
 
-# Explicit experiment only. Omitting this define preserves the production
-# selector. Presence enables it (including a value of 0), as with is_defined
-# elsewhere in the tree. FAST and DETERMINISTIC cannot enter the experiment.
-# See neighbors/checks/SMALLK_DISPATCH_EXPERIMENT.md before measuring it.
-comptime EXPERIMENTAL_SMALLK_IDENTICAL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL"]()
-)
+# THE IDENTICAL k-NN ROUTING ROWS, read from the kernel matrix since
+# 2026-09-09. The names are kept because the bench and check drivers print
+# them; their values are per column now (NVIDIA and AMD on by default, Apple
+# off until measured), with `-D MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL=1` /
+# `-D MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL=1` forcing a row ON and
+# `-D MOJOLEARN_KNN_IDENTICAL_LEGACY_SELECT=1` /
+# `-D MOJOLEARN_KNN_IDENTICAL_LEGACY_LAYOUT=1` forcing it OFF on any column.
+# FAST and DETERMINISTIC never enter either.
+comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime EXPERIMENTAL_SMALLK_IDENTICAL = knn_smallk_select_for[
+    TARGET_COLUMN, IDENTICAL_BUILD
+]()
+comptime EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL = knn_transposed_index_for[
+    TARGET_COLUMN, IDENTICAL_BUILD
+]()
+comptime KNN_REGISTER_TILE_IDENTICAL = knn_distance_register_tile_for[
+    TARGET_COLUMN, IDENTICAL_BUILD
+]()
+comptime KNN_INDEX_TILE_IDENTICAL = knn_index_tile_columns_for[
+    TARGET_COLUMN, IDENTICAL_BUILD
+]()
 
-# Independent, default-OFF layout experiment. Enable with the compiler flag
-# -D MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL=1 in an IDENTICAL build.
-# Presence (even =0) enables it; omit for legacy. No environment-only switch.
-# Qualify baseline / selector-only / transpose-only / both separately. Existing
-# bench/knn_smallk_dispatch_check.mojo supplies full output records and varying
-# query tiles; bench/knn_smallk_dispatch_price.mojo includes request allocation,
-# the one index transpose, uploads and downloads in each timed public call.
-comptime EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL"]()
-)
+
+def identical_index_tile(n_index: Int) -> Int:
+    """How many index columns one distance tile holds on this build.
+
+    `n_index` unless the build tiles the index axis (IDENTICAL, kernel-matrix
+    row `knn_index_tile_columns_for`), in which case the row's width. The
+    estimator sizes `dist_tile` from this, so a 400,000-point index no longer
+    needs a 409 MB tile per 256 queries.
+    """
+    comptime if KNN_INDEX_TILE_IDENTICAL > 0:
+        if n_index > KNN_INDEX_TILE_IDENTICAL:
+            return KNN_INDEX_TILE_IDENTICAL
+    return n_index
+
 
 from neighbors.impl.matrix.detail.select_radix import (
     SELECT_BLOCK,
@@ -201,14 +226,13 @@ def compute_norms(
     Cosine wants the L2 norm and L2 wants the SQUARED norm, which is their
     comment at `:117-118` and is the same flag `cluster/` carries.
 
-    **DO NOT PASS `take_sqrt = True` HERE FOR COSINE.** Use
-    `compute_norms_for_metric` below. `row_norm_kernel`'s sqrt arm ends in
-    the STDLIB sqrt (`core/row_norms.mojo:102`), which is approximate on
-    NVIDIA (DEVIATION 258), so an IDENTICAL cosine taken through it agrees
-    on Apple and AMD and differs on the third column. That defect is
-    `core/`'s to fix and fixing it moves `cluster/`'s cosine k-means bits;
-    it is a row in `neighbors/NOT_IMPLEMENTED.tsv`. The parameter is left
-    in place, unchanged, for the callers that already pass it.
+    **FOR COSINE USE `compute_norms_for_metric` BELOW.** This paragraph
+    used to say the `row_norm_kernel` sqrt arm ended in the stdlib sqrt
+    (approximate on NVIDIA, DEVIATION 258) and that an IDENTICAL cosine
+    through it differed on that column. Both `core/row_norms.mojo` and the
+    cosine norm in `distance_ops.mojo` route through `identical_sqrt` now,
+    so the defect that sentence described is closed; the parameter stays
+    for the callers that already pass it.
     """
     ctx.enqueue_function[row_norm_kernel](
         a_norm.unsafe_ptr(),
@@ -486,56 +510,73 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     the bits it always got.
     """
     var mtr = resolve_metric(metric, is_sqrt)
+
+    # INDEX-AXIS TILING, 2026-09-09 (IDENTICAL only; kernel-matrix row
+    # `knn_index_tile_columns_for`). Their loop tiles both axes and merges
+    # the partial top-k lists (`:278-320`); this is that merge for the
+    # pinned arm, whose (distance, index) keys are unique, so merging two
+    # ascending lists is a rank computation and never an arrival order.
+    # Every column tile keeps at least `k` columns: the selectors cannot
+    # take `k > len`, so a remainder shorter than `k` is carved off the tile
+    # before it rather than left to stand alone. The vendor top-k arm
+    # consumes one whole row per call and is not tiled.
+    var index_tile = identical_index_tile(n_index)
+    if use_vendor_topk:
+        index_tile = n_index
+    if len(dist_tile) < query_tile * index_tile:
+        raise Error(
+            "tiled_brute_force_knn: the distance tile holds "
+            + String(len(dist_tile))
+            + " cells; query_tile x index_tile needs "
+            + String(query_tile * index_tile)
+        )
+    var tiled_index = index_tile < n_index
+    var part_cells = query_tile * k if tiled_index else 1
+    var part_dist = ctx.enqueue_create_buffer[DType.float32](part_cells)
+    var part_idx = ctx.enqueue_create_buffer[DType.uint32](part_cells)
+
     var q = 0
     while q < n_queries:
         var rows = min(query_tile, n_queries - q)
+        var c = 0
+        while c < n_index:
+            var cols = min(index_tile, n_index - c)
+            var remainder = n_index - c - cols
+            if remainder > 0 and remainder < k:
+                cols = n_index - c - k
+            var first = c == 0
+            var cells = rows * cols
 
-        # z = Q_tile . I^T
-        # A `create_sub_buffer` window rather than a pointer offset, because
-        # MAX's matmul takes a TileTensor over a DeviceBuffer and there is no
-        # offset form of that. Same bytes, no copy.
-        var cells = rows * n_index
+            # The selection writes the first column tile's answer straight
+            # into the caller's output at the outer query offset and every
+            # later tile's into the partial scratch, which is then merged.
+            var sel_dist = out_dist.unsafe_ptr().unsafe_offset(
+                q * k
+            ).unsafe_origin_cast[MutAnyOrigin]()
+            var sel_idx = out_idx.unsafe_ptr().unsafe_offset(
+                q * k
+            ).unsafe_origin_cast[MutAnyOrigin]()
+            if not first:
+                sel_dist = part_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                sel_idx = part_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
-        if not metric_uses_norms(mtr):
-            # THEIR `else` AT `:224`: the op did the whole cell, there is
-            # no epilogue and no norm. One kernel, both modes.
-            ctx.enqueue_function[metric_distance_kernel](
-                dist_tile.unsafe_ptr(),
-                queries.unsafe_ptr().unsafe_offset(q * n_features),
-                index.unsafe_ptr(),
-                # OFFSET EVEN THOUGH THE KERNEL DOES NOT READ THEM on this
-                # arm (`use_norms` is false for every metric that reaches
-                # it): the two norm arguments are then correct at every
-                # call site, so adding a norm-using metric to this branch
-                # later cannot introduce an off-by-tile that only shows up
-                # past the first tile.
-                query_norm.unsafe_ptr().unsafe_offset(q),
-                index_norm.unsafe_ptr(),
-                Int32(rows),
-                Int32(n_index),
-                Int32(n_features),
-                Int32(mtr),
-                metric_arg,
-                grid_dim=(
-                    (cells + METRIC_ELEM_TPB - 1) // METRIC_ELEM_TPB, 1, 1
-                ),
-                block_dim=(METRIC_ELEM_TPB, 1, 1),
-            )
-        elif mtr == DIST_COSINE_EXPANDED:
-            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-                # IDENTITY_PATHS row 24's argument, applied to cosine: the
-                # dot product and the epilogue in ONE thread over the whole
-                # feature axis. Same shape as `pinned_distance_tile_kernel`
-                # and for the same reason; the only difference is which
-                # epilogue runs on the accumulated product.
+            if not metric_uses_norms(mtr):
+                # THEIR `else` AT `:224`: the op did the whole cell, there is
+                # no epilogue and no norm. One kernel, both modes.
                 ctx.enqueue_function[metric_distance_kernel](
                     dist_tile.unsafe_ptr(),
                     queries.unsafe_ptr().unsafe_offset(q * n_features),
-                    index.unsafe_ptr(),
+                    index.unsafe_ptr().unsafe_offset(c * n_features),
+                    # OFFSET EVEN THOUGH THE KERNEL DOES NOT READ THEM on this
+                    # arm (`use_norms` is false for every metric that reaches
+                    # it): the two norm arguments are then correct at every
+                    # call site, so adding a norm-using metric to this branch
+                    # later cannot introduce an off-by-tile that only shows up
+                    # past the first tile.
                     query_norm.unsafe_ptr().unsafe_offset(q),
-                    index_norm.unsafe_ptr(),
+                    index_norm.unsafe_ptr().unsafe_offset(c),
                     Int32(rows),
-                    Int32(n_index),
+                    Int32(cols),
                     Int32(n_features),
                     Int32(mtr),
                     metric_arg,
@@ -544,266 +585,307 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     ),
                     block_dim=(METRIC_ELEM_TPB, 1, 1),
                 )
-            else:
-                # THEIR arm: `pairwise_metric = InnerProduct` (`:141`),
-                # the vendor product, then `1 - dot/(nx*ny)` by hand
-                # (`:215-223`).
-                var qc_tile = queries.create_sub_buffer[DType.float32](
-                    q * n_features, rows * n_features
-                )
-                gemm_nt(
-                    ctx, dist_tile, qc_tile, index, rows, n_index, n_features
-                )
-                ctx.enqueue_function[cosine_epilog_kernel](
-                    dist_tile.unsafe_ptr(),
-                    query_norm.unsafe_ptr().unsafe_offset(q),
-                    index_norm.unsafe_ptr(),
-                    Int32(rows),
-                    Int32(n_index),
-                    grid_dim=(
-                        (cells + METRIC_ELEM_TPB - 1) // METRIC_ELEM_TPB, 1, 1
-                    ),
-                    block_dim=(METRIC_ELEM_TPB, 1, 1),
-                )
-        else:
-            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-                # IDENTITY_PATHS row 24. The vendor matmul's k-split is a
-                # summation order nothing here can pin, so under IDENTICAL the
-                # product and the epilogue are ONE kernel with the feature axis
-                # walked ascending in a single thread. See
-                # `neighbors/checks/pinned_distance_tile.mojo` for the price
-                # and for why no faster shape was chosen.
-                var layout_distance_launched = False
-                comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
-                    if use_transposed_index:
-                        ctx.enqueue_function[transposed_index_distance_kernel](
-                            dist_tile.unsafe_ptr(),
-                            queries.unsafe_ptr().unsafe_offset(q * n_features),
-                            transposed_index.value(),
-                            query_norm.unsafe_ptr().unsafe_offset(q),
-                            index_norm.unsafe_ptr(),
-                            Int32(rows), Int32(n_index), Int32(n_features),
-                            Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
-                            grid_dim=((cells + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1),
-                            block_dim=(PINNED_TILE_TPB, 1, 1),
-                        )
-                        layout_distance_launched = True
-                if not layout_distance_launched:
-                    ctx.enqueue_function[pinned_distance_tile_kernel](
+            elif mtr == DIST_COSINE_EXPANDED:
+                comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+                    # IDENTITY_PATHS row 24's argument, applied to cosine: the
+                    # dot product and the epilogue in ONE thread over the whole
+                    # feature axis. Same shape as `pinned_distance_tile_kernel`
+                    # and for the same reason; the only difference is which
+                    # epilogue runs on the accumulated product.
+                    ctx.enqueue_function[metric_distance_kernel](
                         dist_tile.unsafe_ptr(),
                         queries.unsafe_ptr().unsafe_offset(q * n_features),
-                        index.unsafe_ptr(),
+                        index.unsafe_ptr().unsafe_offset(c * n_features),
+                        query_norm.unsafe_ptr().unsafe_offset(q),
+                        index_norm.unsafe_ptr().unsafe_offset(c),
+                        Int32(rows),
+                        Int32(cols),
+                        Int32(n_features),
+                        Int32(mtr),
+                        metric_arg,
+                        grid_dim=(
+                            (cells + METRIC_ELEM_TPB - 1) // METRIC_ELEM_TPB, 1, 1
+                        ),
+                        block_dim=(METRIC_ELEM_TPB, 1, 1),
+                    )
+                else:
+                    # THEIR arm: `pairwise_metric = InnerProduct` (`:141`),
+                    # the vendor product, then `1 - dot/(nx*ny)` by hand
+                    # (`:215-223`). FAST never tiles the index axis, so
+                    # `c == 0` and `cols == n_index` here.
+                    var qc_tile = queries.create_sub_buffer[DType.float32](
+                        q * n_features, rows * n_features
+                    )
+                    gemm_nt(
+                        ctx, dist_tile, qc_tile, index, rows, n_index, n_features
+                    )
+                    ctx.enqueue_function[cosine_epilog_kernel](
+                        dist_tile.unsafe_ptr(),
                         query_norm.unsafe_ptr().unsafe_offset(q),
                         index_norm.unsafe_ptr(),
                         Int32(rows),
                         Int32(n_index),
-                        Int32(n_features),
-                        # An explicit L2Expanded skips root even when the old
-                        # signature's is_sqrt=True; resolve_metric decides it.
-                        Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
                         grid_dim=(
-                            (cells + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1
+                            (cells + METRIC_ELEM_TPB - 1) // METRIC_ELEM_TPB, 1, 1
                         ),
-                        block_dim=(PINNED_TILE_TPB, 1, 1),
+                        block_dim=(METRIC_ELEM_TPB, 1, 1),
                     )
             else:
-                var q_tile = queries.create_sub_buffer[DType.float32](
-                    q * n_features, rows * n_features
-                )
-                gemm_nt(
-                    ctx, dist_tile, q_tile, index, rows, n_index, n_features
-                )
-
-                # The epilogue k-means fuses into its reduction has to be its
-                # own pass here, because the top-k needs every distance to
-                # survive.
-                ctx.enqueue_function[expand_distances_kernel](
-                    dist_tile.unsafe_ptr(),
-                    query_norm.unsafe_ptr().unsafe_offset(q),
-                    index_norm.unsafe_ptr(),
-                    Int32(rows),
-                    Int32(n_index),
-                    Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
-                    grid_dim=((cells + 255) // 256, 1, 1),
-                    block_dim=(256, 1, 1),
-                )
-
-        # THE SELECTION. Three implementations, and which one runs is a
-        # parameter or a kernel-matrix row, never a preference.
-        #
-        # The ported RAFT radix select is the base default; on the columns
-        # `knn_warpsort_select_for` admits (DEVIATION 1922), the FAST
-        # selector for `2 < k <= 256` is the ported RAFT warpsort, which is
-        # RAFT's own `select_k` choice for that band. `nn.topk.top_k` is a
-        # device-wide call that consumes a materialized matrix, which is
-        # exactly what this path already has, so it is a legitimate second
-        # opinion HERE - and it is the reason it can never be the fused
-        # path's selector, because a device-wide call cannot live inside a
-        # kernel. `neighbors/checks/knn_check.mojo` diffs the two.
-        if use_vendor_topk:
-            var dv = dist_tile.create_sub_buffer[DType.float32](
-                0, rows * n_index
-            )
-            var ov = out_dist.create_sub_buffer[DType.float32](q * k, rows * k)
-            var oi = out_idx32.create_sub_buffer[DType.int32](q * k, rows * k)
-            top_k[largest=False, target="gpu"](
-                TileTensor(dv, row_major(rows, n_index)),
-                k,
-                1,
-                TileTensor(ov, row_major(rows, k)),
-                TileTensor(oi, row_major(rows, k)),
-                False,
-                ctx,
-            )
-        else:
-            comptime if PIN_DETERMINISM:
-                # IDENTITY_PATHS row 11's closure, DEVIATIONS 500/501: the
-                # composite (distance, index) key and the ranked placement.
-                # The ported selector keeps RAFT's tie handling, which is
-                # atomic-ordered by construction; this one has no tie class
-                # and no arrival order in its output.
-                #
-                # **`PIN_DETERMINISM`, NOT `== NUMERIC_IDENTICAL`, SINCE
-                # 2026-08-29.** "Atomic-ordered by construction" is a
-                # RUN-TO-RUN property: two runs of the same fit on the same
-                # GPU can place a tied neighbour in different slots, because
-                # which thread's `atomicAdd` lands first is not a function of
-                # the input. That is the middle tier's whole promise, and the
-                # pin was keyed to the top tier only -- so a DETERMINISTIC
-                # k-NN build took RAFT's selector and was not deterministic.
-                # IDENTICAL is unmoved; `PIN_DETERMINISM` is true there too.
-                #
-                # Both pinned tiers share the bounded rank staging. The
-                # strided pass extends it beyond the 256-thread block; the
-                # cap still bounds shared storage and quadratic rank work.
-                if k > IDENTICAL_MAX_K:
-                    raise Error(
-                        "select_radix ("
-                        + numeric_mode_name()
-                        + "): k > "
-                        + String(IDENTICAL_MAX_K)
-                        + " is refused by the bounded pinned rank profile."
+                comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+                    # IDENTITY_PATHS row 24. The vendor matmul's k-split is a
+                    # summation order nothing here can pin, so under IDENTICAL
+                    # the product and the epilogue are ONE kernel with the
+                    # feature axis walked ascending in a single chain per
+                    # cell. Three spellings of that one chain, chosen by the
+                    # kernel matrix: row-major index one cell per thread
+                    # (`pinned_distance_tile_kernel`), transposed index one
+                    # cell per thread, and transposed index with a 4x4
+                    # register tile per thread. Same bits from all three.
+                    var is_sqrt_arg = Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0)
+                    var layout_distance_launched = False
+                    comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
+                        if use_transposed_index:
+                            comptime if KNN_REGISTER_TILE_IDENTICAL:
+                                ctx.enqueue_function[pinned_distance_register_tile_kernel](
+                                    dist_tile.unsafe_ptr(),
+                                    queries.unsafe_ptr().unsafe_offset(q * n_features),
+                                    transposed_index.value().unsafe_offset(c),
+                                    query_norm.unsafe_ptr().unsafe_offset(q),
+                                    index_norm.unsafe_ptr().unsafe_offset(c),
+                                    Int32(rows), Int32(cols), Int32(n_index),
+                                    Int32(n_features), is_sqrt_arg,
+                                    grid_dim=(
+                                        (cols + RT_TILE_COLS - 1) // RT_TILE_COLS,
+                                        (rows + RT_ROWS - 1) // RT_ROWS,
+                                        1,
+                                    ),
+                                    block_dim=(RT_TPB, 1, 1),
+                                )
+                            else:
+                                ctx.enqueue_function[transposed_index_distance_kernel](
+                                    dist_tile.unsafe_ptr(),
+                                    queries.unsafe_ptr().unsafe_offset(q * n_features),
+                                    transposed_index.value().unsafe_offset(c),
+                                    query_norm.unsafe_ptr().unsafe_offset(q),
+                                    index_norm.unsafe_ptr().unsafe_offset(c),
+                                    Int32(rows), Int32(cols), Int32(n_index),
+                                    Int32(n_features), is_sqrt_arg,
+                                    grid_dim=((cells + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1),
+                                    block_dim=(PINNED_TILE_TPB, 1, 1),
+                                )
+                            layout_distance_launched = True
+                    if not layout_distance_launched:
+                        ctx.enqueue_function[pinned_distance_tile_kernel](
+                            dist_tile.unsafe_ptr(),
+                            queries.unsafe_ptr().unsafe_offset(q * n_features),
+                            index.unsafe_ptr().unsafe_offset(c * n_features),
+                            query_norm.unsafe_ptr().unsafe_offset(q),
+                            index_norm.unsafe_ptr().unsafe_offset(c),
+                            Int32(rows),
+                            Int32(cols),
+                            Int32(n_features),
+                            # An explicit L2Expanded skips root even when the
+                            # old signature's is_sqrt=True; resolve_metric
+                            # decides it.
+                            is_sqrt_arg,
+                            grid_dim=(
+                                (cells + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1
+                            ),
+                            block_dim=(PINNED_TILE_TPB, 1, 1),
+                        )
+                else:
+                    var q_tile = queries.create_sub_buffer[DType.float32](
+                        q * n_features, rows * n_features
                     )
-                var selected_smallk = False
-                comptime if EXPERIMENTAL_SMALLK_IDENTICAL:
-                    # Direct output offsets retain the outer query-tile layout
-                    # without temporary DeviceBuffer views. No distance, norm,
-                    # sqrt, query tiling or FAST dispatch changes here.
-                    # Short index rows keep radix's existing padding behavior;
-                    # the candidate requires k real keys to avoid its sentinel.
-                    if n_index >= k and n_index <= 2147483647:
-                        if k == 8:
-                            ctx.enqueue_function[smallk_specialized_kernel[8]](
-                                dist_tile.unsafe_ptr(),
-                                out_dist.unsafe_ptr().unsafe_offset(q * k),
-                                out_idx.unsafe_ptr().unsafe_offset(q * k),
-                                Int32(n_index), Int32(k), Int32(1),
-                                grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
-                            )
-                            selected_smallk = True
-                        elif k == 10:
-                            ctx.enqueue_function[smallk_specialized_kernel[10]](
-                                dist_tile.unsafe_ptr(),
-                                out_dist.unsafe_ptr().unsafe_offset(q * k),
-                                out_idx.unsafe_ptr().unsafe_offset(q * k),
-                                Int32(n_index), Int32(k), Int32(1),
-                                grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
-                            )
-                            selected_smallk = True
-                        elif k == 16:
-                            ctx.enqueue_function[smallk_specialized_kernel[16]](
-                                dist_tile.unsafe_ptr(),
-                                out_dist.unsafe_ptr().unsafe_offset(q * k),
-                                out_idx.unsafe_ptr().unsafe_offset(q * k),
-                                Int32(n_index), Int32(k), Int32(1),
-                                grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
-                            )
-                            selected_smallk = True
-                if not selected_smallk:
-                    # Preserve the historical shared-memory footprint for
-                    # existing k. Only the extended range stages 1024 pairs.
-                    if k <= SELECT_BLOCK:
-                        ctx.enqueue_function[radix_topk_identical_kernel[SELECT_BLOCK]](
-                            dist_tile.unsafe_ptr(),
-                            out_dist.unsafe_ptr().unsafe_offset(q * k),
-                            out_idx.unsafe_ptr().unsafe_offset(q * k),
-                            buf_val.unsafe_ptr(),
-                            buf_idx.unsafe_ptr(),
-                            Int32(n_index),
-                            Int32(k),
-                            Int32(buf_len),
-                            Int32(1),
-                            grid_dim=(rows, 1, 1),
-                            block_dim=(SELECT_BLOCK, 1, 1),
-                        )
-                    else:
-                        ctx.enqueue_function[radix_topk_identical_kernel[IDENTICAL_MAX_K]](
-                            dist_tile.unsafe_ptr(),
-                            out_dist.unsafe_ptr().unsafe_offset(q * k),
-                            out_idx.unsafe_ptr().unsafe_offset(q * k),
-                            buf_val.unsafe_ptr(),
-                            buf_idx.unsafe_ptr(),
-                            Int32(n_index),
-                            Int32(k),
-                            Int32(buf_len),
-                            Int32(1),
-                            grid_dim=(rows, 1, 1),
-                            block_dim=(SELECT_BLOCK, 1, 1),
-                        )
+                    gemm_nt(
+                        ctx, dist_tile, q_tile, index, rows, n_index, n_features
+                    )
+
+                    # The epilogue k-means fuses into its reduction has to be
+                    # its own pass here, because the top-k needs every
+                    # distance to survive.
+                    ctx.enqueue_function[expand_distances_kernel](
+                        dist_tile.unsafe_ptr(),
+                        query_norm.unsafe_ptr().unsafe_offset(q),
+                        index_norm.unsafe_ptr(),
+                        Int32(rows),
+                        Int32(n_index),
+                        Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
+                        grid_dim=((cells + 255) // 256, 1, 1),
+                        block_dim=(256, 1, 1),
+                    )
+
+            # THE SELECTION. Three implementations, and which one runs is a
+            # parameter or a kernel-matrix row, never a preference.
+            #
+            # The ported RAFT radix select is the base default; on the columns
+            # `knn_warpsort_select_for` admits (DEVIATION 1922), the FAST
+            # selector for `2 < k <= 256` is the ported RAFT warpsort, which is
+            # RAFT's own `select_k` choice for that band. `nn.topk.top_k` is a
+            # device-wide call that consumes a materialized matrix, which is
+            # exactly what this path already has, so it is a legitimate second
+            # opinion HERE - and it is the reason it can never be the fused
+            # path's selector, because a device-wide call cannot live inside a
+            # kernel. `neighbors/checks/knn_check.mojo` diffs the two.
+            if use_vendor_topk:
+                var dv = dist_tile.create_sub_buffer[DType.float32](
+                    0, rows * n_index
+                )
+                var ov = out_dist.create_sub_buffer[DType.float32](q * k, rows * k)
+                var oi = out_idx32.create_sub_buffer[DType.int32](q * k, rows * k)
+                top_k[largest=False, target="gpu"](
+                    TileTensor(dv, row_major(rows, n_index)),
+                    k,
+                    1,
+                    TileTensor(ov, row_major(rows, k)),
+                    TileTensor(oi, row_major(rows, k)),
+                    False,
+                    ctx,
+                )
             else:
-                # DEVIATION 1922 (kernel-matrix row `knn_warpsort_select_for`):
-                # RAFT's OWN `select_k` dispatch sends `2 < k <= 256` to the
-                # WARPSORT family and only `k > 256` to radix
-                # (`select_k-inl.cuh:38`), and this tree ran radix alone
-                # across that whole band. On the columns the row admits
-                # (32-lane FAST), the band takes the ported warpsort in the
-                # single-pass block form; everything else -- k outside the
-                # band, excluded columns, and BOTH UPPER TIERS, whose
-                # selector is pinned above -- keeps radix byte for byte.
-                # The `comptime if` is load-bearing, not style: this
-                # function is non-generic, so any kernel named under a
-                # RUNTIME `if` here instantiates whenever the module
-                # builds, reachable or not -- the exact shape that killed
-                # the first MI300X gbdt build (DEVIATION 1910's lesson).
-                # The 32-lane warpsort kernel must not be INSTANTIATED on
-                # a column the row excludes, so the exclusion is comptime.
-                comptime if knn_warpsort_select_for[TARGET_COLUMN, False]():
-                    if k > 2 and k <= MAX_CAPACITY:
-                        # `bound_by_power_of_two(k)` with a floor of 32;
-                        # the four instantiations mirror RAFT's template
-                        # dispatch over capacities.
-                        if k <= 32:
-                            _warpsort_select_tile[32](
-                                ctx, dist_tile, buf_idx, out_dist, out_idx,
-                                q * k, rows, n_index, k,
+                comptime if PIN_DETERMINISM:
+                    # IDENTITY_PATHS row 11's closure, DEVIATIONS 500/501: the
+                    # composite (distance, index) key and the ranked placement.
+                    # The ported selector keeps RAFT's tie handling, which is
+                    # atomic-ordered by construction; this one has no tie class
+                    # and no arrival order in its output.
+                    #
+                    # **`PIN_DETERMINISM`, NOT `== NUMERIC_IDENTICAL`, SINCE
+                    # 2026-08-29.** "Atomic-ordered by construction" is a
+                    # RUN-TO-RUN property: two runs of the same fit on the same
+                    # GPU can place a tied neighbour in different slots, because
+                    # which thread's `atomicAdd` lands first is not a function of
+                    # the input. That is the middle tier's whole promise, and the
+                    # pin was keyed to the top tier only -- so a DETERMINISTIC
+                    # k-NN build took RAFT's selector and was not deterministic.
+                    # IDENTICAL is unmoved; `PIN_DETERMINISM` is true there too.
+                    #
+                    # Both pinned tiers share the bounded rank staging. The
+                    # strided pass extends it beyond the 256-thread block; the
+                    # cap still bounds shared storage and quadratic rank work.
+                    if k > IDENTICAL_MAX_K:
+                        raise Error(
+                            "select_radix ("
+                            + numeric_mode_name()
+                            + "): k > "
+                            + String(IDENTICAL_MAX_K)
+                            + " is refused by the bounded pinned rank profile."
+                        )
+                    var selected_smallk = False
+                    comptime if EXPERIMENTAL_SMALLK_IDENTICAL:
+                        # Kernel-matrix row `knn_smallk_select_for`: for
+                        # k <= 64 the per-thread composite-key selector,
+                        # which returns the same ascending (distance, index)
+                        # rows the radix rank pass does. It needs k real
+                        # keys in the row; every column tile has them.
+                        if cols >= k and k <= SMALLK_MAX_K and cols <= 2147483647:
+                            smallk_select_launch(
+                                ctx,
+                                dist_tile.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                                sel_dist, sel_idx, rows, cols, k, True,
                             )
-                        elif k <= 64:
-                            _warpsort_select_tile[64](
-                                ctx, dist_tile, buf_idx, out_dist, out_idx,
-                                q * k, rows, n_index, k,
-                            )
-                        elif k <= 128:
-                            _warpsort_select_tile[128](
-                                ctx, dist_tile, buf_idx, out_dist, out_idx,
-                                q * k, rows, n_index, k,
+                            selected_smallk = True
+                    if not selected_smallk:
+                        # Preserve the historical shared-memory footprint for
+                        # existing k. Only the extended range stages 1024 pairs.
+                        if k <= SELECT_BLOCK:
+                            ctx.enqueue_function[radix_topk_identical_kernel[SELECT_BLOCK]](
+                                dist_tile.unsafe_ptr(),
+                                sel_dist,
+                                sel_idx,
+                                buf_val.unsafe_ptr(),
+                                buf_idx.unsafe_ptr(),
+                                Int32(cols),
+                                Int32(k),
+                                Int32(buf_len),
+                                Int32(1),
+                                grid_dim=(rows, 1, 1),
+                                block_dim=(SELECT_BLOCK, 1, 1),
                             )
                         else:
-                            _warpsort_select_tile[256](
-                                ctx, dist_tile, buf_idx, out_dist, out_idx,
-                                q * k, rows, n_index, k,
+                            ctx.enqueue_function[radix_topk_identical_kernel[IDENTICAL_MAX_K]](
+                                dist_tile.unsafe_ptr(),
+                                sel_dist,
+                                sel_idx,
+                                buf_val.unsafe_ptr(),
+                                buf_idx.unsafe_ptr(),
+                                Int32(cols),
+                                Int32(k),
+                                Int32(buf_len),
+                                Int32(1),
+                                grid_dim=(rows, 1, 1),
+                                block_dim=(SELECT_BLOCK, 1, 1),
+                            )
+                    if not first:
+                        partial_topk_merge_launch(
+                            ctx,
+                            out_dist.unsafe_ptr().unsafe_offset(
+                                q * k
+                            ).unsafe_origin_cast[MutAnyOrigin](),
+                            out_idx.unsafe_ptr().unsafe_offset(
+                                q * k
+                            ).unsafe_origin_cast[MutAnyOrigin](),
+                            part_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            part_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            rows, k, c, True,
+                        )
+                else:
+                    # DEVIATION 1922 (kernel-matrix row `knn_warpsort_select_for`):
+                    # RAFT's OWN `select_k` dispatch sends `2 < k <= 256` to the
+                    # WARPSORT family and only `k > 256` to radix
+                    # (`select_k-inl.cuh:38`), and this tree ran radix alone
+                    # across that whole band. On the columns the row admits
+                    # (32-lane FAST), the band takes the ported warpsort in the
+                    # single-pass block form; everything else -- k outside the
+                    # band, excluded columns, and BOTH UPPER TIERS, whose
+                    # selector is pinned above -- keeps radix byte for byte.
+                    # The `comptime if` is load-bearing, not style: this
+                    # function is non-generic, so any kernel named under a
+                    # RUNTIME `if` here instantiates whenever the module
+                    # builds, reachable or not -- the exact shape that killed
+                    # the first MI300X gbdt build (DEVIATION 1910's lesson).
+                    # The 32-lane warpsort kernel must not be INSTANTIATED on
+                    # a column the row excludes, so the exclusion is comptime.
+                    comptime if knn_warpsort_select_for[TARGET_COLUMN, False]():
+                        if k > 2 and k <= MAX_CAPACITY:
+                            # `bound_by_power_of_two(k)` with a floor of 32;
+                            # the four instantiations mirror RAFT's template
+                            # dispatch over capacities.
+                            if k <= 32:
+                                _warpsort_select_tile[32](
+                                    ctx, dist_tile, buf_idx, out_dist, out_idx,
+                                    q * k, rows, n_index, k,
+                                )
+                            elif k <= 64:
+                                _warpsort_select_tile[64](
+                                    ctx, dist_tile, buf_idx, out_dist, out_idx,
+                                    q * k, rows, n_index, k,
+                                )
+                            elif k <= 128:
+                                _warpsort_select_tile[128](
+                                    ctx, dist_tile, buf_idx, out_dist, out_idx,
+                                    q * k, rows, n_index, k,
+                                )
+                            else:
+                                _warpsort_select_tile[256](
+                                    ctx, dist_tile, buf_idx, out_dist, out_idx,
+                                    q * k, rows, n_index, k,
+                                )
+                        else:
+                            _radix_select_tile(
+                                ctx, dist_tile, buf_val, buf_idx, out_dist,
+                                out_idx, q * k, rows, n_index, k, buf_len,
                             )
                     else:
                         _radix_select_tile(
                             ctx, dist_tile, buf_val, buf_idx, out_dist,
                             out_idx, q * k, rows, n_index, k, buf_len,
                         )
-                else:
-                    _radix_select_tile(
-                        ctx, dist_tile, buf_val, buf_idx, out_dist,
-                        out_idx, q * k, rows, n_index, k, buf_len,
-                    )
+            c += cols
         q += rows
     ctx.synchronize()
+    _ = part_dist^
+    _ = part_idx^
 
 
 #: WHICH SIDE OF `knn_brute_force.cuh:443` THIS PORT TAKES BY DEFAULT.

@@ -23,8 +23,17 @@ run() {
 arms=(baseline selector transpose both)
 for arm in "${arms[@]}"; do
     flags=(-D MOJOLEARN_NUMERIC_IDENTICAL=1)
-    case "$arm" in selector|both) flags+=(-D MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL=1);; esac
-    case "$arm" in transpose|both) flags+=(-D MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL=1);; esac
+    # Since 2026-09-09 the two rows are kernel-matrix defaults (on for
+    # NVIDIA/AMD, off for Apple), so every arm names BOTH rows explicitly
+    # and the same four binaries mean the same thing on every column.
+    case "$arm" in
+        selector|both) flags+=(-D MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL=1);;
+        *) flags+=(-D MOJOLEARN_KNN_IDENTICAL_LEGACY_SELECT=1);;
+    esac
+    case "$arm" in
+        transpose|both) flags+=(-D MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL=1);;
+        *) flags+=(-D MOJOLEARN_KNN_IDENTICAL_LEGACY_LAYOUT=1);;
+    esac
     for driver in check price; do
         run "build-$driver-$arm" pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-4}" -I . \
             "${flags[@]}" "bench/knn_layout_dispatch_$driver.mojo" -o "$OUT/$driver-$arm"
