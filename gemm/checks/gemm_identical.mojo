@@ -422,7 +422,32 @@ comptime PLAN_SPLITK_STAGED = 7
 comptime PLAN_TUNED_32_2X2 = 8
 comptime PLAN_TUNED_64_4X4 = 9
 comptime PLAN_TUNED_128_8X8 = 10
-comptime GEMM_PLAN_COUNT = 11
+#: The SPLIT plans (2026-09-09, the split-K lane): the SAME tuned kernel with
+#: the grid's y axis over the `P` logical leaves. One block owns a `BM x BN`
+#: tile of ONE leaf, stages that leaf's windows through shared memory exactly
+#: as the tuned plans do, and writes the leaf partial `ftz(acc)` (5d) to the
+#: workspace at `[t * m * n + cell]`; `identical_gemm_fold_stack_kernel`
+#: then folds each cell's `P` partials through `_fold_push`, the register
+#: stack the FLAT plan uses. Contract 13.5's first escape ("tile the OUTPUT
+#: and run one tile's split-K"), with the leaf stage of the tuned plans and
+#: the fold of the FLAT plan: no new arithmetic anywhere. They exist for the
+#: shapes whose output cannot fill the machine (small `m n`, and the decode
+#: rows `m <= 8`), where `PLAN_SPLITK`'s leaf kernel reads every operand
+#: uncoalesced (50 ms at `gram.32x32x1M` on an H100 against cuBLAS's 0.24).
+comptime PLAN_SPLIT_32_2X2 = 11
+comptime PLAN_SPLIT_16_1X1 = 12
+comptime PLAN_SPLIT_1X256 = 13
+comptime PLAN_SPLIT_8X64 = 14
+#: 64x64 reg4x4 split tile for the 64 <= m, n outputs under the tuned floor
+#: (gram.128sq: 4 tiles x 782 leaves instead of 16 x 782 on 32x32).
+comptime PLAN_SPLIT_64_4X4 = 15
+#: The task-4 probes: the two wide tuned plans at KS = 32 (RAFT's Kblk).
+#: Two pages of a 64x64 pair is 37 KB (fits NVIDIA and AMD, one page on
+#: Apple); a 128x128 pair is 37 KB a page, so one page everywhere.
+#: `choose_gemm_plan` does not pick them; the forced-plan sweep times them.
+comptime PLAN_TUNED_64_4X4_K32 = 16
+comptime PLAN_TUNED_128_8X8_K32 = 17
+comptime GEMM_PLAN_COUNT = 18
 
 #: Threads per block for `PLAN_FLAT`. SCHEDULING: each thread owns a whole
 #: output cell, so this moves WHICH thread computes a cell and never the
@@ -463,20 +488,47 @@ def gemm_plan_name(plan: Int) -> String:
     if plan == PLAN_SPLITK_STAGED:
         return String("SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)")
     if plan == PLAN_TUNED_32_2X2:
-        return _tuned_plan_name(TUNED_RPT // 2, TUNED_CPT // 2)
+        return _tuned_plan_name(TUNED_RPT // 2, TUNED_CPT // 2, 16)
     if plan == PLAN_TUNED_64_4X4:
-        return _tuned_plan_name(TUNED_RPT, TUNED_CPT)
+        return _tuned_plan_name(TUNED_RPT, TUNED_CPT, TUNED_64_KS)
     if plan == PLAN_TUNED_128_8X8:
-        return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2)
+        return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, 16)
+    if plan == PLAN_TUNED_64_4X4_K32:
+        return _tuned_plan_name(TUNED_RPT, TUNED_CPT, TUNED_KBLK)
+    if plan == PLAN_TUNED_128_8X8_K32:
+        return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, TUNED_KBLK)
+    if plan == PLAN_SPLIT_64_4X4:
+        return _split_plan_name(TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_KBLK)
+    if plan == PLAN_SPLIT_32_2X2:
+        return _split_plan_name(TUNED_RPT // 2, TUNED_CPT // 2, TUNED_TC, TUNED_KBLK)
+    if plan == PLAN_SPLIT_16_1X1:
+        return _split_plan_name(1, 1, TUNED_TC, TUNED_KBLK)
+    if plan == PLAN_SPLIT_1X256:
+        return _split_plan_name(1, 1, TUNED_TPB, 16)
+    if plan == PLAN_SPLIT_8X64:
+        return _split_plan_name(1, 2, TUNED_TPB // 8, 16)
     return String("PLAN?")
 
 
-def _tuned_plan_name(rpt: Int, cpt: Int) -> String:
+def _split_plan_name(rpt: Int, cpt: Int, tc: Int, ks: Int) -> String:
+    """Built from the resolved constants, never a literal."""
+    var name = String("SPLIT ") + String(rpt * (TUNED_TPB // tc))
+    name += "x" + String(cpt * tc)
+    name += " reg" + String(rpt) + "x" + String(cpt)
+    name += " KS=" + String(ks)
+    name += " leaves on grid.y -> workspace -> fold (block per cell <= "
+    name += String(SPLIT_BLOCK_FOLD_MAX_CELLS) + ", else register stack)"
+    name += " tpb=" + String(TUNED_TPB)
+    name += " hwftz=" + String(TUNED_HW_FTZ_FMA)
+    return name + " (256 thr, 2-D grid, no swizzle)"
+
+
+def _tuned_plan_name(rpt: Int, cpt: Int, ks: Int) -> String:
     """Built from the resolved kernel-matrix constants, never a literal."""
     var name = String("TUNED ") + String(rpt * TUNED_TR)
     name += "x" + String(cpt * TUNED_TC)
     name += " reg" + String(rpt) + "x" + String(cpt)
-    name += " KS=16 fold=" + String(TUNED_FOLD_SLOTS) + " local"
+    name += " KS=" + String(ks) + " fold=" + String(TUNED_FOLD_SLOTS) + " local"
     name += " tpb=" + String(TUNED_TPB)
     name += " hwftz=" + String(TUNED_HW_FTZ_FMA)
     return name + " (256 thr, 1-D grid, no swizzle)"
@@ -871,7 +923,9 @@ def identical_gemm_leaf_kernel(
     ws.unsafe_store(cell * stride + slot, ftz(acc))
 
 
-def identical_gemm_fold_kernel(
+def identical_gemm_fold_kernel[
+    LEAF_MAJOR: Bool = False
+](
     c: MutPointer[Float32, MutAnyOrigin],
     ws: MutPointer[Float32, MutAnyOrigin],
     mn_in: Int32,
@@ -879,7 +933,13 @@ def identical_gemm_fold_kernel(
     stride_in: Int32,
 ):
     """One BLOCK per output cell folds that cell's tree LEVEL BY LEVEL in
-    threadgroup memory. Contract 7.2.2's normative `(d, q)` addressing, run
+    threadgroup memory.
+
+    `LEAF_MAJOR` (the SPLIT plans, 2026-09-09): level 0 is laid out
+    `ws[t * mn + cell]` instead of `ws[cell * stride + t]`. Which address a
+    partial lives at is contract 7.2.2's "one legal layout"; the pairing
+    below reads `q` and nothing else, so the layout parameter cannot reach
+    a node. Contract 7.2.2's normative `(d, q)` addressing, run
     as the addressing rather than as a comment about it.
 
     Contract 13.4's design: `MAX_LEAVES = 1024` caps `P`, so 1024 partials is
@@ -923,7 +983,10 @@ def identical_gemm_fold_kernel(
 
     var q0 = tid
     while q0 < p_count:
-        buf[unsafe_offset = cur + q0] = ws.unsafe_load(cell * stride + q0)
+        comptime if LEAF_MAJOR:
+            buf[unsafe_offset = cur + q0] = ws.unsafe_load(q0 * mn + cell)
+        else:
+            buf[unsafe_offset = cur + q0] = ws.unsafe_load(cell * stride + q0)
         q0 += nth
     barrier()
 
@@ -1213,6 +1276,25 @@ comptime TUNED_BN_WIDE = TUNED_CPT * TUNED_TC
 comptime TUNED_BM_NARROW = (TUNED_RPT // 2) * TUNED_TR
 comptime TUNED_BN_NARROW = (TUNED_CPT // 2) * TUNED_TC
 
+#: The 64x64 tuned plan's K step (2026-09-09, the split-K lane's task-4
+#: probe). RAFT's `Kblk = 32` where TWO pages of the 64x64 operand pair
+#: (37 KB) fit under the column's shared limit, else 16. Measured on an
+#: H100 (`bench/results/e1g/2026-09-09_140650-nvidia-h100-identical-splitk3`,
+#: forced plan 16 against plan 9): 4% to 7% faster at every row the
+#: dispatcher sends to this tile, bits equal by the launch-invariance gate.
+#: The 128x128 pair is 37 KB a PAGE, one page everywhere, and at KS = 32 it
+#: LOST 17% (plan 17 against plan 10), so that plan stays at 16. Read
+#: through the matrix so Apple (32 KB) keeps its two pages at 16 and no
+#: vendor is named here.
+comptime TUNED_64_PAGE_BYTES_K32 = (
+    (TUNED_BM_WIDE + TUNED_BN_WIDE) * (TUNED_KBLK + TUNED_VECLEN) * 4
+)
+comptime TUNED_64_KS = (
+    TUNED_KBLK
+    if lib_smem_pages_for[TARGET_COLUMN, TUNED_64_PAGE_BYTES_K32]() == 2
+    else 16
+)
+
 #: The fold stack depth of every tuned plan: `P <= 2^16 - 1` covers the
 #: profile cap (`CONTRACT_MAX_LEAVES = 1024`) with room, and because the
 #: stack lives in thread-local memory (`_fold_push_local`) its depth costs
@@ -1375,6 +1457,29 @@ def _tuned_g2r[
     comptime NSLOT = SLOTS
     comptime NV = VEC
     var out = SIMD[DType.float32, SLOTS * VEC](0.0)
+    if k_stride != 1 and outer_stride == 1:
+        # THE OUTER-CONTIGUOUS MAPPING (2026-09-09): `OP_TN`'s A (`k x m`)
+        # and `OP_NN`'s B (`k x n`) are contiguous along the OUTER index, so
+        # here consecutive threads take consecutive outer rows at one `p`
+        # and the warp's load is one contiguous line instead of `NTH`
+        # scattered words. Element `e` of slot `s` is flat index
+        # `tid + (s * VEC + e) * NTH`, row `idx % ROWS`, window column
+        # `idx // ROWS`; the kernel's register-to-shared copy uses the SAME
+        # expression, so the staged page holds the same floats in the same
+        # slots as the `p`-contiguous mapping below. Which mapping ran is
+        # a property of two strides and can move no bit.
+        comptime for s0 in range(NSLOT):
+            comptime for e0 in range(NV):
+                var idx0 = tid + (s0 * VEC + e0) * NTH
+                if idx0 < ROWS * KV * VEC:
+                    var rr0 = idx0 % ROWS
+                    var cc0 = idx0 // ROWS
+                    var oi0 = base_outer + rr0
+                    if oi0 < outer_limit and cc0 < chunk:
+                        out[s0 * VEC + e0] = src.unsafe_load(
+                            oi0 * outer_stride + (p0 + cc0) * k_stride
+                        )
+        return out
     comptime for s in range(NSLOT):
         var idx = tid + s * NTH
         if idx < ROWS * KV:
@@ -1404,7 +1509,7 @@ def _tuned_g2r[
 
 
 def identical_gemm_tuned_kernel[
-    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int
+    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, SPLIT: Bool = False
 ](
     c: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -1421,6 +1526,14 @@ def identical_gemm_tuned_kernel[
     swizzle_in: Int32,
 ):
     """One block owns a `BM x BN` output tile and ALL of its `k` leaves.
+
+    **`SPLIT = True` (the SPLIT plans):** one block owns a `BM x BN` tile of
+    ONE logical leaf, `t = block_idx.y`, walks that leaf's `wpl` windows and
+    nothing else, and at the leaf boundary writes the partial `ftz(acc)`
+    (5d) to `c[t * m * n + cell]` -- `c` is then the WORKSPACE, and
+    `identical_gemm_fold_stack_kernel` folds the `P` partials of each cell.
+    The leaf stage is the same code; the push into the local stack is
+    replaced by a store, and the tile/leaf pair comes from the grid.
 
     RAFT's structure (`pairwise_distance_base.cuh:139-149`), contract 13.5's
     second workspace escape -- NO GLOBAL SCRATCH AT ANY SHAPE -- and
@@ -1498,6 +1611,9 @@ def identical_gemm_tuned_kernel[
     var b_sp = Int(b_sp_in)
     var b_sj = Int(b_sj_in)
     var swizzle = Int(swizzle_in)
+    # Block-uniform: which staging mapping each operand takes (`_tuned_g2r`).
+    var a_outer_fast = a_sp != 1 and a_si == 1
+    var b_outer_fast = b_sp != 1 and b_sj == 1
 
     comptime if SAB_LEAF_READS_LAUNCH:
         # SABOTAGE: the leaf boundary reads the LAUNCH. Contract section 6's
@@ -1525,6 +1641,12 @@ def identical_gemm_tuned_kernel[
     var tiles_j = (n + BN - 1) // BN
     var n_tiles = tiles_i * tiles_j
     var raw = Int(block_idx.y) * Int(grid_dim.x) + Int(block_idx.x)
+    var t_pos = 0
+    comptime if SPLIT:
+        # Tiles on x, the fold POSITION on y. `_tuned_window` maps the
+        # position to its logical leaf through `_leaf_at`, as every plan does.
+        raw = Int(block_idx.x)
+        t_pos = Int(block_idx.y)
     if raw >= n_tiles:
         return
     # The tile permutation: an EXACT bijection, so every tile runs once.
@@ -1559,6 +1681,9 @@ def identical_gemm_tuned_kernel[
         # `k == 0`, contract section 8: every cell is `+0.0`, and the
         # implementation must WRITE it rather than skip the store. The
         # dispatcher delegates this shape, so this arm is defensive.
+        comptime if SPLIT:
+            # No leaves, no partials; the dispatcher never launches this.
+            return
         comptime for u0 in range(NR):
             comptime for v0 in range(NCOL):
                 var zi = i0 + accrow + u0 * TR
@@ -1569,9 +1694,15 @@ def identical_gemm_tuned_kernel[
 
     var wpl = _tuned_windows_per_leaf[KS](leaf)
     var w_total = p_count * wpl
+    var w = 0
+    var w_end = w_total
+    comptime if SPLIT:
+        # This block's leaf only: the flat windows `[t * wpl, (t + 1) * wpl)`.
+        w = t_pos * wpl
+        w_end = w + wpl
 
-    # ---- PROLOGUE: window 0, DRAM to registers.
-    var w0 = _tuned_window[KS](0, wpl, leaf, k, p_count)
+    # ---- PROLOGUE: the first window, DRAM to registers.
+    var w0 = _tuned_window[KS](w, wpl, leaf, k, p_count)
     var pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
         a, a_si, a_sp, i0, m, w0[0], w0[1], tid
     )
@@ -1579,31 +1710,51 @@ def identical_gemm_tuned_kernel[
         b, b_sj, b_sp, j0, n, w0[0], w0[1], tid
     )
 
-    var w = 0
-    while w < w_total:
+    while w < w_end:
         var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
         var chunk = win[1]
         var pgw = w % PAGES
 
         # ---- REGISTERS TO SHARED, into page `w % PAGES`.
+        # The slot -> (row, column) expression is `_tuned_g2r`'s, in both
+        # mappings, so a staged float lands where the accumulate loop
+        # expects it whichever mapping loaded it.
         comptime for sa in range(ASLOTS):
-            var ia = tid + sa * NTH
-            if ia < BM * KV:
-                var rra = ia // KV
-                var cca = (ia - rra * KV) * VEC
-                var va = SIMD[DType.float32, VEC](0.0)
-                comptime for ea in range(VEC):
-                    va[ea] = pa[sa * VEC + ea]
-                as_.unsafe_store(pgw * APAGE + rra * SSTRIDE + cca, va)
+            if a_outer_fast:
+                comptime for ea0 in range(VEC):
+                    var ia0 = tid + (sa * VEC + ea0) * NTH
+                    if ia0 < BM * KS:
+                        as_.unsafe_store(
+                            pgw * APAGE + (ia0 % BM) * SSTRIDE + ia0 // BM,
+                            pa[sa * VEC + ea0],
+                        )
+            else:
+                var ia = tid + sa * NTH
+                if ia < BM * KV:
+                    var rra = ia // KV
+                    var cca = (ia - rra * KV) * VEC
+                    var va = SIMD[DType.float32, VEC](0.0)
+                    comptime for ea in range(VEC):
+                        va[ea] = pa[sa * VEC + ea]
+                    as_.unsafe_store(pgw * APAGE + rra * SSTRIDE + cca, va)
         comptime for sb in range(BSLOTS):
-            var ib = tid + sb * NTH
-            if ib < BN * KV:
-                var rrb = ib // KV
-                var ccb = (ib - rrb * KV) * VEC
-                var vb = SIMD[DType.float32, VEC](0.0)
-                comptime for eb in range(VEC):
-                    vb[eb] = pb[sb * VEC + eb]
-                bs_.unsafe_store(pgw * BPAGE + rrb * SSTRIDE + ccb, vb)
+            if b_outer_fast:
+                comptime for eb0 in range(VEC):
+                    var ib0 = tid + (sb * VEC + eb0) * NTH
+                    if ib0 < BN * KS:
+                        bs_.unsafe_store(
+                            pgw * BPAGE + (ib0 % BN) * SSTRIDE + ib0 // BN,
+                            pb[sb * VEC + eb0],
+                        )
+            else:
+                var ib = tid + sb * NTH
+                if ib < BN * KV:
+                    var rrb = ib // KV
+                    var ccb = (ib - rrb * KV) * VEC
+                    var vb = SIMD[DType.float32, VEC](0.0)
+                    comptime for eb in range(VEC):
+                        vb[eb] = pb[sb * VEC + eb]
+                    bs_.unsafe_store(pgw * BPAGE + rrb * SSTRIDE + ccb, vb)
         barrier()
 
         # ---- PREFETCH window w+1 while page `w % PAGES` is being consumed.
@@ -1614,7 +1765,7 @@ def identical_gemm_tuned_kernel[
         # DRAM latency of window `w+1` overlaps the arithmetic of window
         # `w`.
         comptime if PAGES == 2:
-            if w + 1 < w_total:
+            if w + 1 < w_end:
                 var wn = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
                 pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
                     a, a_si, a_sp, i0, m, wn[0], wn[1], tid
@@ -1687,7 +1838,7 @@ def identical_gemm_tuned_kernel[
             # window overwrites it, and the prefetch cannot overlap. This is
             # `identical_gemm_tiled_kernel`'s two-barrier shape exactly.
             barrier()
-            if w + 1 < w_total:
+            if w + 1 < w_end:
                 var wn1 = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
                 pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
                     a, a_si, a_sp, i0, m, wn1[0], wn1[1], tid
@@ -1701,28 +1852,52 @@ def identical_gemm_tuned_kernel[
             var part = SIMD[DType.float32, NCELL](0.0)
             comptime for pe in range(NCELL):
                 part[pe] = ftz(acc[pe])  # 5d, the leaf partial as written
-            comptime if SAB_FOLD_SERIAL:
-                # SABOTAGE: the SUPERSEDED serial ascending fold.
-                comptime for se in range(NCELL):
-                    serial[se] = ftz(ftz(serial[se]) + ftz(part[se]))
+            comptime if SPLIT:
+                # THE PARTIAL, TO THE WORKSPACE, at the address of its
+                # LOGICAL position: leaf-major, `[t * m * n + cell]`, one
+                # legal layout of contract 7.2.2's level 0. Consecutive
+                # threads own consecutive columns, so the store coalesces.
+                var slot = t_pos
+                comptime if SAB_NODE_ORDER:
+                    # SABOTAGE: address by the PHYSICAL block instead
+                    # (`identical_gemm_leaf_kernel`'s arm). Contract 7.2.2.
+                    slot = (t_pos + Int(block_idx.x)) % p_count
+                comptime for us in range(NR):
+                    comptime for vs in range(NCOL):
+                        var si = i0 + accrow + us * TR
+                        var sj = j0 + acccol + vs * TC
+                        if si < m and sj < n:
+                            c.unsafe_store(
+                                slot * (m * n) + si * n + sj, part[us * CPT + vs]
+                            )
             else:
-                comptime if FS == 1:
-                    # `P == 1` by dispatch (`tuned_plan_max_leaves` is 1 at
-                    # `FS = 1` and the host refuses otherwise). Contract 7.3:
-                    # the single leaf partial reaches the output through seam
-                    # 5g and through nothing else. There is no "skip the fold
-                    # at P == 1" optimization to get wrong -- at `P == 1` the
-                    # rule and the optimization are the same rule -- and this
-                    # branch exists to spend NO registers on a stack the tree
-                    # does not have.
-                    comptime for fe in range(NCELL):
-                        fstk[fe] = part[fe]
-                    occ = 1
+                comptime if SAB_FOLD_SERIAL:
+                    # SABOTAGE: the SUPERSEDED serial ascending fold.
+                    comptime for se in range(NCELL):
+                        serial[se] = ftz(ftz(serial[se]) + ftz(part[se]))
                 else:
-                    _ = _fold_push_local[NCELL, FS](fl, occ, part)
+                    comptime if FS == 1:
+                        # `P == 1` by dispatch (`tuned_plan_max_leaves` is 1
+                        # at `FS = 1` and the host refuses otherwise).
+                        # Contract 7.3: the single leaf partial reaches the
+                        # output through seam 5g and through nothing else.
+                        # There is no "skip the fold at P == 1" optimization
+                        # to get wrong -- at `P == 1` the rule and the
+                        # optimization are the same rule -- and this branch
+                        # exists to spend NO registers on a stack the tree
+                        # does not have.
+                        comptime for fe in range(NCELL):
+                            fstk[fe] = part[fe]
+                        occ = 1
+                    else:
+                        _ = _fold_push_local[NCELL, FS](fl, occ, part)
             acc = SIMD[DType.float32, NCELL](0.0)
 
         w = w + 1
+
+    comptime if SPLIT:
+        # Every partial is in the workspace; the fold is the next launch.
+        return
 
     comptime if SAB_PAD_PLUS_ZERO:
         # SABOTAGE: pad the level-0 width up to the next power of two with
@@ -1752,6 +1927,144 @@ def identical_gemm_tuned_kernel[
             if gi < m and gj < n:
                 # 5g: the output cell as stored.
                 c.unsafe_store(gi * n + gj, ftz(outv[u4 * CPT + v6]))
+
+
+# ===========================================================================
+# THE SPLIT PLANS' FOLD: one thread per cell, the FLAT plan's register stack
+# ===========================================================================
+
+
+def identical_gemm_fold_stack_kernel(
+    c: MutPointer[Float32, MutAnyOrigin],
+    ws: MutPointer[Float32, MutAnyOrigin],
+    mn_in: Int32,
+    p_in: Int32,
+):
+    """Fold each cell's `P` leaf partials, read leaf-major from the
+    workspace (`ws[t * mn + cell]`, so a warp's read is one line), through
+    `_fold_push` -- the register stack `identical_gemm_flat_kernel` folds
+    with and `check_stack_fold_is_the_contract_tree` proves against
+    `fold_balanced_tree` at every `P` in `1 .. 2049`. Same sabotage arms as
+    the FLAT plan, character for character. Contract 7.2, 7.3 and, at
+    `P == 0`, section 8 (`+0.0` STORED).
+    """
+    var mn = Int(mn_in)
+    var p_count = Int(p_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= mn:
+        return
+    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+    var occ = 0
+    var serial = Float32(0.0)
+    # The loads in batches of FOLD_BATCH, all issued before the first push of
+    # the batch, so the memory latency of `P` dependent-looking iterations
+    # overlaps (measured 2026-09-09 on an H100: one load per push was 0.19 ms
+    # at P = 512 whatever m n). The pushes still run in ascending `t`.
+    comptime FOLD_BATCH = 8
+    var t = 0
+    while t + FOLD_BATCH <= p_count:
+        var vals = SIMD[DType.float32, FOLD_BATCH](0.0)
+        comptime for e in range(FOLD_BATCH):
+            vals[e] = ws.unsafe_load((t + e) * mn + cell)
+        comptime for e2 in range(FOLD_BATCH):
+            comptime if SAB_FOLD_SERIAL:
+                # SABOTAGE: the SUPERSEDED serial ascending fold.
+                serial = ftz(ftz(serial) + ftz(vals[e2]))
+            else:
+                _ = _fold_push(stack, occ, vals[e2])
+        t += FOLD_BATCH
+    while t < p_count:
+        var part = ws.unsafe_load(t * mn + cell)
+        comptime if SAB_FOLD_SERIAL:
+            serial = ftz(ftz(serial) + ftz(part))
+        else:
+            _ = _fold_push(stack, occ, part)
+        t += 1
+    comptime if SAB_PAD_PLUS_ZERO:
+        # SABOTAGE: pad the level-0 width up to the next power of two with
+        # `+0.0` instead of carrying the odd tail. Contract 7.2 clause 4.
+        var padded = 1
+        while padded < p_count:
+            padded = padded * 2
+        for _pad in range(p_count, padded):
+            _ = _fold_push(stack, occ, Float32(0.0))
+    var out = _fold_drain(stack, occ)
+    comptime if SAB_FOLD_SERIAL:
+        out = serial
+    # 5g: the output cell as stored.
+    c.unsafe_store(cell, ftz(out))
+
+
+#: Outputs of at most this many cells fold one BLOCK per cell (the level-wise
+#: threadgroup fold, `D` barriers); larger outputs fold one THREAD per cell
+#: (the register stack). Scheduling only: both are the contract's tree.
+comptime SPLIT_BLOCK_FOLD_MAX_CELLS = 16384
+
+
+def _launch_split[
+    RPT: Int, CPT: Int, TC: Int, KS: Int
+](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    leaf: Int,
+    p_count: Int,
+    st: Tuple[Int, Int, Int, Int],
+) raises:
+    """Two launches: the tuned kernel in SPLIT mode over `(tiles, P)`, the
+    partials to `ws` (`m * n * P` floats, `identical_gemm_workspace_floats`),
+    then the fold into `c`. `p_count > 0` by dispatch."""
+    comptime NTH = TUNED_TPB
+    comptime TR = NTH // TC
+    comptime BM = RPT * TR
+    comptime BN = CPT * TC
+    comptime VEC = TUNED_VECLEN
+    comptime SSTRIDE = KS + VEC
+    comptime PAGE_BYTES = (BM + BN) * SSTRIDE * 4
+    comptime PAGES = lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
+    comptime kern = identical_gemm_tuned_kernel[RPT, CPT, TC, KS, 1, PAGES, True]
+    var g = _tile_grid(m, n, BM, BN, False)
+    ctx.enqueue_function[kern](
+        ws.unsafe_ptr(),
+        a.unsafe_ptr(),
+        b.unsafe_ptr(),
+        Int32(m),
+        Int32(n),
+        Int32(k),
+        Int32(leaf),
+        Int32(p_count),
+        Int32(st[0]),
+        Int32(st[1]),
+        Int32(st[2]),
+        Int32(st[3]),
+        Int32(SWIZZLE_NONE),
+        grid_dim=(g[0], p_count, 1),
+        block_dim=(NTH, 1, 1),
+    )
+    if m * n <= SPLIT_BLOCK_FOLD_MAX_CELLS:
+        ctx.enqueue_function[identical_gemm_fold_kernel[True]](
+            c.unsafe_ptr(),
+            ws.unsafe_ptr(),
+            Int32(m * n),
+            Int32(p_count),
+            Int32(p_count),
+            grid_dim=(m * n, 1, 1),
+            block_dim=(SPLITK_FOLD_TPB, 1, 1),
+        )
+        return
+    ctx.enqueue_function[identical_gemm_fold_stack_kernel](
+        c.unsafe_ptr(),
+        ws.unsafe_ptr(),
+        Int32(m * n),
+        Int32(p_count),
+        grid_dim=((m * n + FLAT_TPB - 1) // FLAT_TPB, 1, 1),
+        block_dim=(FLAT_TPB, 1, 1),
+    )
 
 
 # ===========================================================================
@@ -1785,11 +2098,21 @@ def identical_gemm_workspace_floats(m: Int, n: Int, k: Int, plan: Int) -> Int:
     if m <= 0 or n <= 0 or k <= 0:
         return 0
     var part = contract_partition(k)
-    if plan == PLAN_SPLITK:
+    if plan == PLAN_SPLITK or _is_split_plan(plan):
         return m * n * part[1]
     if plan == PLAN_SPLITK_STAGED:
         return m * n * fold_node_total(part[1])
     return 0
+
+
+def _is_split_plan(plan: Int) -> Bool:
+    return (
+        plan == PLAN_SPLIT_32_2X2
+        or plan == PLAN_SPLIT_64_4X4
+        or plan == PLAN_SPLIT_16_1X1
+        or plan == PLAN_SPLIT_1X256
+        or plan == PLAN_SPLIT_8X64
+    )
 
 
 #: The largest SPLITK workspace this file will allocate on its own: 64 M
@@ -1820,6 +2143,28 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
     if m <= 0 or n <= 0 or k <= 0:
         return choose_gemm_plan_untuned(m, n, k)
     var base = choose_gemm_plan_untuned(m, n, k)
+    # THE SPLIT PLANS (2026-09-09): where the output alone cannot fill the
+    # machine and there are leaves to spread, spread them. `P >= 4` keeps the
+    # shapes the batch-invariance fixtures name (`P = 3` at `k = 300`) on
+    # their documented plans, and the workspace bound is the same 256 MB
+    # `PLAN_SPLITK` honoured. The decode rows first: `m <= 8` with a wide
+    # `n` is a GEMV-shaped product and gets a 1 x 256 (m == 1) or 8 x 64
+    # tile so no thread row idles; then the small outputs under the tuned
+    # plans' 128 K-cell floor.
+    var p_count = contract_partition(k)[1]
+    if p_count >= 4 and identical_gemm_splitk_fits(m, n, k):
+        if m <= 8 and n >= 256:
+            if m == 1:
+                return PLAN_SPLIT_1X256
+            return PLAN_SPLIT_8X64
+        if m >= 64 and n >= 64 and m * n <= 128 * 1024:
+            return PLAN_SPLIT_64_4X4
+        if m >= 32 and n >= 32 and m * n <= 128 * 1024:
+            return PLAN_SPLIT_32_2X2
+        if m >= 16 and n >= 16 and m * n <= 128 * 1024:
+            return PLAN_SPLIT_16_1X1
+        if base == PLAN_SPLITK:
+            return PLAN_SPLIT_16_1X1
     if base == PLAN_SPLITK or base == PLAN_SPLITK_STAGED:
         return base
     if m < 32 or n < 32 or m * n < 128 * 1024:
@@ -2041,7 +2386,7 @@ def identical_gemm_with_plan(
             block_dim=(SPLITK_LEAF_TPB, 1, 1),
         )
         if not staged:
-            ctx.enqueue_function[identical_gemm_fold_kernel](
+            ctx.enqueue_function[identical_gemm_fold_kernel[False]](
                 c.unsafe_ptr(),
                 ws.unsafe_ptr(),
                 Int32(m * n),
@@ -2085,6 +2430,33 @@ def identical_gemm_with_plan(
             block_dim=(FLAT_TPB, 1, 1),
         )
         return
+    if _is_split_plan(plan) and p_count > 0:
+        # The per-thread tile and thread grid of each split plan; the
+        # names in `gemm_plan_name` derive from the same numbers.
+        # KS = 32 (RAFT's Kblk) where two pages of both operands fit under
+        # every column's shared limit (32x32 and 16x16: 18 KB and 9 KB), 16
+        # for the wide decode tiles (1x256 at KS = 32 would be 37 KB a page).
+        if plan == PLAN_SPLIT_32_2X2:
+            _launch_split[TUNED_RPT // 2, TUNED_CPT // 2, TUNED_TC, TUNED_KBLK](
+                ctx, c, a, b, ws, m, n, k, leaf, p_count, st
+            )
+        elif plan == PLAN_SPLIT_64_4X4:
+            _launch_split[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_KBLK](
+                ctx, c, a, b, ws, m, n, k, leaf, p_count, st
+            )
+        elif plan == PLAN_SPLIT_16_1X1:
+            _launch_split[1, 1, TUNED_TC, TUNED_KBLK](
+                ctx, c, a, b, ws, m, n, k, leaf, p_count, st
+            )
+        elif plan == PLAN_SPLIT_1X256:
+            _launch_split[1, 1, TUNED_TPB, 16](
+                ctx, c, a, b, ws, m, n, k, leaf, p_count, st
+            )
+        else:
+            _launch_split[1, 2, TUNED_TPB // 8, 16](
+                ctx, c, a, b, ws, m, n, k, leaf, p_count, st
+            )
+        return
     if plan == PLAN_TILE_16_16_32:
         _launch_tiled[16, 16, 32](
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
@@ -2116,7 +2488,7 @@ def identical_gemm_with_plan(
         )
         return
     if plan == PLAN_TUNED_64_4X4:
-        _launch_tuned[TUNED_RPT, TUNED_CPT, TUNED_TC, 16, TUNED_FOLD_SLOTS](
+        _launch_tuned[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_64_KS, TUNED_FOLD_SLOTS](
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
         )
         return
@@ -2125,8 +2497,18 @@ def identical_gemm_with_plan(
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
         )
         return
-    # PLAN_FLAT, and the fallback for both SPLITK plans at `k == 0` (there
-    # are no partials to write, and section 8 still requires `+0.0` to be
+    if plan == PLAN_TUNED_64_4X4_K32:
+        _launch_tuned[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_KBLK, TUNED_FOLD_SLOTS](
+            ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
+        )
+        return
+    if plan == PLAN_TUNED_128_8X8_K32:
+        _launch_tuned[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, TUNED_KBLK, TUNED_FOLD_SLOTS](
+            ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
+        )
+        return
+    # PLAN_FLAT, and the fallback for both SPLITK plans and the four SPLIT
+    # plans at `k == 0` (there are no partials to write, and section 8 still requires `+0.0` to be
     # STORED rather than the store skipped).
     ctx.enqueue_function[identical_gemm_flat_kernel](
         c.unsafe_ptr(),

@@ -116,17 +116,43 @@ them. k 15 rows are within 2% of k 10 (full table in the handoff).
 | 20k rows | 145.7 |
 | 100k rows | 321.3 |
 
-GEMM, cuBLAS through torch 2.4.1+cu124, `e1g/2026-08-25_155542-nvidia-speed-gemmseq`
-and `2026-08-25_160520` (5 rounds).
+GEMM, cuBLAS through torch 2.4.1+cu124 (`torch.matmul`, `allow_tf32`
+False for the fp32 column and True for the tf32 column), CUDA 12.4,
+`e1g/2026-08-25_155542-nvidia-speed-gemmseq/remote/logs/gemm.gemm.cublas.log`
+(5 rounds after 1 warm-up, medians). The repeat leg
+`e1g/2026-08-25_160520-nvidia-speed-gemmseq` agrees within 0.002 ms on
+every row except lm_head.t512 (10.820 / 1.387) and mlp_down.t512 tf32
+(0.212); quote the 155542 leg. Transcribed 2026-09-09 from the logs, no
+re-run. Shape names are `bench/gemm_shapes.mojo`'s; the t512 names
+carry m as the log reports it.
 
 | shape | cublas-fp32 | cublas-tf32 |
 |---|---|---|
-| llama8b.lm_head.t512 | 10.808 | 1.368 |
 | gram.32x32x1M | 0.240 | 0.115 |
+| gram.32x32x64K | 0.039 | 0.029 |
+| gram.128sq.x100003 | 0.096 | 0.060 |
+| ols.step1.16x16x64K | 0.038 | 0.028 |
+| pca.transform.8192x4x4 | 0.024 | 0.019 |
+| pca.transform.wide.8192x64x128 | 0.026 | 0.020 |
+| kmeans.dist.4096x64x64 | 0.023 | 0.019 |
+| ols.predict.gemv.64Kx16 | 0.020 | 0.019 |
+| llama8b.qkv.t1 | 0.042 | 0.043 |
+| llama8b.qkv.t8 | 0.061 | 0.048 |
+| llama8b.qkv.t512 | 0.374 | 0.071 |
+| llama8b.mlp_up.t1 | 0.096 | 0.097 |
+| llama8b.mlp_up.t8 | 0.160 | 0.109 |
+| llama8b.mlp_up.t512 | 1.379 | 0.187 |
+| llama8b.mlp_down.t1 | 0.097 | 0.098 |
+| llama8b.mlp_down.t8 | 0.198 | 0.110 |
+| llama8b.mlp_down.t512 | 1.185 | 0.220 |
+| llama8b.lm_head.t1 | 0.702 | 0.700 |
+| llama8b.lm_head.t8 | 1.154 | 0.793 |
+| llama8b.lm_head.t512 | 10.808 | 1.368 |
 
-The full 20-shape H100 cuBLAS table is in those logs; only the two rows
-above were transcribed. The H100 table for the 2026-09-09 tuned plans is
-OWED (the lane measured the L40S only).
+That is every cuBLAS row the Aug 25 legs measured (20 shapes). cuBLAS
+does not see our plans, so these rows serve any round of ours on an H100
+of this driver and torch pin; the OUR side of the H100 table is in
+`docs/lanes/HANDOFF_gemm_splitk.md`.
 
 Sequence models, torch 2.4.1+cu124, `e1g/2026-08-25_160520-nvidia-speed-gemmseq`
 (5 rounds), Llama-8B shapes at 512 tokens:
@@ -219,7 +245,8 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
    lane built USE_CUDA=ON but its ET rungs never ran; its rf-boosting row
    at 470 s per fit is not an ET row).
 1b. Trees at 2M and 5M for the Sep 9 same-process protocol (only 1M exists).
-2. cuBLAS on H100 for the 2026-09-09 tuned plans (all 21 shapes).
+2. (closed 2026-09-09: the 20 H100 cuBLAS rows above were transcribed
+   from the Aug 25 logs by the GEMM split-K lane; no re-run.)
 3. cuML DBSCAN and PCA at 1M rows or more (the fixtures above are small).
 4. cuML UMAP on the H100 at 1M rows, and on the L40S at 20k and 100k rows
    (the H100 has 20k and 100k, the L40S has 1M; ours IDENTICAL was measured
