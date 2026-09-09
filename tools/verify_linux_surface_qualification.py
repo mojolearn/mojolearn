@@ -294,6 +294,60 @@ def verify(root, out):
             'scope': str(len(expected)) + ' installed jobs; byte-LM when present is one step only; UMAP six held-out quality fixtures per mode; not universal identity'}
 
 
+# DEVIATION 2297: THE SMOKE TIER. Andrew's release policy, 2026-09-09.
+#
+# Re-proving every numerical surface on every architecture of every release
+# mostly re-proves the same thing: the kernels are one source, and a compile
+# failure for an architecture shows up at BUILD time, which is how the gfx942
+# QR defect surfaced. What does NOT transfer between architectures, and what
+# actually shipped broken once in 0.3.0, is the packaging: the wrong binary
+# selected, a broken runtime closure, a set installed under a name it cannot
+# serve. That is per-architecture risk and it is cheap to check.
+#
+# So: every architecture carries the SMOKE tier -- install, import, the
+# selector's own read-back, and the smoke surface in all three modes. One
+# architecture per vendor carries the FULL 25-job tier, plus any architecture
+# whose kernels changed.
+#
+# A smoke column is NOT a pass for the jobs it did not run, and this function
+# returns the ones it saw fail so the caller records them by name. Silence
+# about a known failure is the thing this whole path exists to prevent.
+SMOKE_JOBS = frozenset(('smoke', m) for m in MODES)
+
+
+def smoke_retained(out):
+    """Validate the reduced tier from the JOB FILES, not from the summary record.
+
+    A driver run that fails late writes a short {"status": "FAILED", ...}
+    qualification.json with no evidence inventory, so a smoke column cannot be
+    read out of that record. It is read out of results.tsv and the smoke job's
+    own installed records, which exist either way, and the wheel identity comes
+    from wheel-audit.json.
+
+    Returns (audit, failed_jobs). `failed_jobs` is every job in results.tsv with
+    a non-zero status -- not fatal at this tier, but never dropped: the caller
+    writes them into the admission record by name.
+    """
+    audit = json.loads((out / 'wheel-audit.json').read_text())
+    rows = [line.split('\t') for line in (out / 'results.tsv').read_text().splitlines() if line.strip()]
+    require(rows and all(len(r) == 3 for r in rows), 'Malformed retained statuses')
+    seen = {(s_, m): r for s_, m, r in rows}
+    require(SMOKE_JOBS <= set(seen), 'Smoke surface missing from retained statuses')
+    require(all(seen[j] == '0' for j in SMOKE_JOBS), 'Smoke surface failed on this architecture')
+    for mode in MODES:
+        installed = json.loads((out / ('smoke-' + mode + '.installed.json')).read_text())
+        require(installed.get('mode') == mode, 'Smoke record is for another mode')
+        require(installed.get('vendor') == audit.get('qualification_vendor'),
+                'Smoke record vendor differs from the audit')
+        require(installed.get('wheel_sha256') == audit.get('sha256'),
+                'Smoke run installed a different wheel than the audit describes')
+        require(installed.get('selected_architecture', audit.get('runtime_architecture'))
+                == audit.get('runtime_architecture'),
+                'Smoke run selected a different architecture than the audit describes')
+    failed = sorted('%s/%s' % j for j, r in seen.items() if r != '0')
+    return audit, failed
+
+
 def retained(out):
     """Validate fetched evidence without dereferencing original remote paths."""
     record = json.loads((out / 'qualification.json').read_text())

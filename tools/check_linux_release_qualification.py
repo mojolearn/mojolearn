@@ -276,6 +276,8 @@ def check_release061(wheel, qualification_root, source_root):
             surface.release_version(source_root)
             + ' requires exactly sm_89, sm_90 (or sm_90a) and gfx942')
     directories = {}
+    tiers = {}
+    observed_failures = {}
     for key in sorted(carried):
         vendor, arch = key.split('/')
         directory = qualification_root / vendor / arch
@@ -287,10 +289,41 @@ def check_release061(wheel, qualification_root, source_root):
                 {k: v for k, v in recorded.items() if k not in ('wheel', 'assembly_profile')} ==
                 {k: v for k, v in expected.items() if k not in ('wheel', 'assembly_profile')},
                 'Architecture audit differs')
-        check_vendor(directory, vendor, expected['sha256'], inventory,
-                     expected['extension_hashes'], expected['sets'], arch)
-        check_corpora(directory, source_root)
-        directories[key] = directory
+        # DEVIATION 2297: SMOKE IS DECLARED, NEVER INFERRED FROM FAILURE.
+        #
+        # The first draft of this ran the full check in a try/except and called
+        # the column 'smoke' if anything raised. The end-to-end suite caught it
+        # immediately: a mislabeled device, a mislabeled binding and a wrong
+        # byte-LM mode all stopped being refused and started being reported as
+        # a reduced tier. That turns every defect this gate exists to catch
+        # into a downgrade, which is worse than not having the tier at all.
+        #
+        # So a column is FULL unless a marker file says otherwise. The marker
+        # is written by a human decision and names its reason, and it is the
+        # only thing that lowers the bar.
+        marker = directory / 'SMOKE_TIER.json'
+        if marker.is_file():
+            declared = json.loads(marker.read_text())
+            require(declared.get('schema') == 'mojolearn.linux.smoke-tier.v1'
+                    and declared.get('architecture') == key
+                    and isinstance(declared.get('reason'), str) and declared['reason'].strip(),
+                    'Smoke-tier marker is malformed or does not name its architecture and reason')
+            _, failed = surface.smoke_retained(directory)
+            tiers[key] = 'smoke'
+            observed_failures[key] = dict(reason=declared['reason'], failed_jobs=failed)
+        else:
+            check_vendor(directory, vendor, expected['sha256'], inventory,
+                         expected['extension_hashes'], expected['sets'], arch)
+            check_corpora(directory, source_root)
+            tiers[key] = 'full'
+            directories[key] = directory
+    # DEVIATION 2297: one FULL column per advertised vendor is the bar. Every
+    # other architecture still had to clear SMOKE above, and every architecture
+    # the wheel carries still had to be present.
+    for vendor in ('cuda', 'hip'):
+        require(any(t == 'full' for k, t in tiers.items() if k.startswith(vendor + '/')),
+                'No full 25-job qualification for any ' + vendor + ' architecture')
+    require(set(tiers) == carried, 'An architecture the wheel carries has no qualification at all')
     comparisons = {}
     # DEVIATION 2293: whichever Hopper spelling this wheel actually carries.
     for cuda in sorted(k for k in directories if k.startswith('cuda/')):
@@ -301,9 +334,16 @@ def check_release061(wheel, qualification_root, source_root):
     return dict(schema='mojolearn.linux.release-admission.v2', status='PASSED',
                 assembly_profile=surface.RELEASE_PROFILE, wheel=wheel.name, wheel_sha256=digest_file(wheel),
                 source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=25,
-                runtime_coverage={key: digest_file(path / 'qualification.json') for key, path in directories.items()},
+                runtime_coverage={key: digest_file(qualification_root / key / 'qualification.json')
+                                  for key in sorted(tiers)},
+                qualification_tiers=tiers,
+                observed_job_failures=observed_failures,
                 comparisons=comparisons,
-                scope='Exact final wheel; 25 installed jobs on each of sm_89, sm_90 (or sm_90a), gfx942; byte-LM one-step/checkpoint functionality only; bounded UMAP/Ordered identity only')
+                scope='Exact final wheel; FULL 25 installed jobs on one architecture per advertised vendor '
+                      'and SMOKE (install, import, selector read-back, smoke surface in three modes) on every '
+                      'other architecture the wheel carries; any job seen failing on a smoke column is listed '
+                      'in observed_job_failures and is NOT claimed to pass; byte-LM one-step/checkpoint '
+                      'functionality only; bounded UMAP/Ordered identity only')
 
 
 def check_corpora(directory, source_root):

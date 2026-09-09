@@ -315,5 +315,66 @@ class HopperSpelling(unittest.TestCase):
             self._run({'cuda/sm_89', 'cuda/sm_86', 'hip/gfx942'})
 
 
+class SmokeTier(unittest.TestCase):
+    """DEVIATION 2297. One FULL 25-job column per advertised vendor; every other
+    architecture the wheel carries clears SMOKE. The tier is DECLARED by a
+    marker file, never inferred from a failing full check -- an earlier draft
+    inferred it and turned three injected defects into silent downgrades."""
+
+    def _root(self, tmp, smoke_keys):
+        root = Path(tmp)
+        wheel, qualification = fixture(root)
+        for key in smoke_keys:
+            write_json(qualification / key / 'SMOKE_TIER.json',
+                       dict(schema='mojolearn.linux.smoke-tier.v1', architecture=key,
+                            reason='fixture: reduced tier for this architecture'))
+        return wheel, qualification, root
+
+    def _check(self, wheel, qualification, root):
+        with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}):
+            return gate.check_release061(wheel, qualification, root)
+
+    def test_one_full_per_vendor_admits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._root(tmp, ['cuda/sm_90'])          # sm_89 full, gfx942 full
+            result = self._check(w, q, r)
+            self.assertEqual(result['status'], 'PASSED')
+            self.assertEqual(result['qualification_tiers']['cuda/sm_90'], 'smoke')
+            self.assertEqual(result['qualification_tiers']['cuda/sm_89'], 'full')
+            self.assertEqual(result['qualification_tiers']['hip/gfx942'], 'full')
+
+    def test_no_full_cuda_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._root(tmp, ['cuda/sm_89', 'cuda/sm_90'])
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+    def test_no_full_hip_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._root(tmp, ['hip/gfx942'])
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+    def test_marker_must_name_its_own_architecture(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheel, qualification = fixture(root)
+            write_json(qualification / 'cuda/sm_90' / 'SMOKE_TIER.json',
+                       dict(schema='mojolearn.linux.smoke-tier.v1',
+                            architecture='hip/gfx942', reason='wrong architecture'))
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(wheel, qualification, root)
+
+    def test_marker_must_give_a_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheel, qualification = fixture(root)
+            write_json(qualification / 'cuda/sm_90' / 'SMOKE_TIER.json',
+                       dict(schema='mojolearn.linux.smoke-tier.v1',
+                            architecture='cuda/sm_90', reason='   '))
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(wheel, qualification, root)
+
+
 if __name__ == '__main__':
     unittest.main()
