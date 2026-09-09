@@ -236,7 +236,7 @@ jobs:
                 echo "::error::python$v [$mode] is claimed but did not pass"; exit 1; }
             done
           done
-          grep -q '^all interpreters passed' build.log
+          grep -q '^all 5 interpreters passed' build.log
           rm -f build.log
 
       - name: Qualify installed UMAP fit, transform and held-out quality
