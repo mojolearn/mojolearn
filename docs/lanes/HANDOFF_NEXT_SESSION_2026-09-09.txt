@@ -42,13 +42,17 @@ Every merge above had its lane's RUN OWED run on the M4 and green before the pus
           FAST checks unchanged; estimators binding rebuilt IDENTICAL
 Uncommitted on main: nothing (bench/results/runpod_leases/ is an untracked guard dir; leave it).
 
+=== GEMM SPLIT-K LANE: LANDED 18:15 EDT (merge 294351db, Apple fix 5363419c, pushed) ===
+   Five H100 legs, all gates green, card byte-equal. gram.32x32x1M 210x -> 1.8x of cuBLAS FP32;
+   gram.128sq 90x -> 6.0x; decode rows 1.7-2.8x; t512 rows unchanged 4.4-4.9x (KS=32 on the
+   128x128 tile LOST 17%). 64x64 tuned plan steps K by 32 where two pages fit (matrix rule).
+   THE APPLE RUN OWED CAUGHT A REAL BUG: the 128x128 KS=32 probe plan needs 36,864 B of
+   threadgroup memory > Metal's 32 KB; every gate that enumerates the 18 plans failed on the
+   M4. Fix = kernel-matrix row lib_smem_page_fits_for + TUNED_128_KS (probe resolves to 16 on a
+   32 KB column). Lesson: a plan list that only ran on 48 KB boxes is unverified on Apple.
+   Handoff: docs/lanes/HANDOFF_gemm_splitk.md (its profile_dot command was wrong: run check-cd).
+
 === LANES STILL OPEN (resumed 18:05 EDT after a 14:20 rate-limit kill; their pods had expired) ===
-GEMM split-K + H100 table   agent a68e7f0e68dc3bc9f   branch lane/gemm-splitk
-   worktree .claude/worktrees/agent-a68e7f0e68dc3bc9f, clean at 540fcb14 (64x64 tuned plan,
-   KS=32). Legs 1-4 on H100 are committed on the branch with gates green and the card byte-equal;
-   leg 5 (verdict on the KS=32 probes + the 64x64 plan) was lost with the pod. Told to: decide if
-   leg 5 is still needed (one more H100 if so), write docs/lanes/HANDOFF_gemm_splitk.md with the
-   H100 opponent rows in a marked section, commit, terminate pods, report.
 fused attention (bits unchanged)   agent a94c0adce7c14179f   branch lane/fused-attention
    worktree .claude/worktrees/agent-a94c0adce7c14179f at 16430a44 with ONE uncommitted change
    (bindings/_mojolearn_transformer.mojo). Fused three-pass recompute + eager fallback + fused
