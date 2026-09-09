@@ -312,7 +312,26 @@ if [ "$LEG_MODE" = qualify ]; then
   [ "$RSHA" = "$QUAL_SHA" ] || { log "wheel sha mismatch after transfer ($RSHA)"; exit 6; }
   $SSH 'mkdir -p /root/proofs'
   scp -q $SSH_OPTS "$QUAL_PROOFS"/*.json "root@$IP:/root/proofs/" || { log "proof scp failed"; exit 6; }
-  log "shipped wheel and $(ls "$QUAL_PROOFS"/*.json | wc -l | tr -d ' ') proofs"
+  # THE CORPORA, WHICH THE BUILD ARCHIVE DELIBERATELY EXCLUDES. `git archive`
+  # drops mamba/corpus because a build never reads it and it is 63 MB; the
+  # INSTALLED qualification does read it, and refused this leg's first run with
+  # "Missing installed Mamba corpus: base_b2_l4_d8". Only the three cases
+  # CORPUS_CASES names are shipped, 4.6 MB, not the whole directory.
+  CORPUS_CASES=$(MOJOLEARN_QUIET=1 python3 -c "import sys;sys.path.insert(0,'$REPO/tools');from verify_linux_surface_qualification import CORPUS_CASES;print(' '.join(CORPUS_CASES))")
+  [ -n "$CORPUS_CASES" ] || { log "could not read CORPUS_CASES"; exit 6; }
+  ( cd "$REPO" && tar czf "$TMPD/corpus.tgz" $(for c in $CORPUS_CASES; do echo "mamba/corpus/$c"; done) ) \
+    || { log "corpus tar failed"; exit 6; }
+  CORPUS_SHA=$(sha256_of "$TMPD/corpus.tgz")
+  log "shipping the qualification corpora ($(wc -c < "$TMPD/corpus.tgz" | tr -d ' ') bytes, $(echo $CORPUS_CASES | wc -w | tr -d ' ') cases)"
+  scp -q $SSH_OPTS "$TMPD/corpus.tgz" "root@$IP:/root/corpus.tgz" || { log "corpus scp failed"; exit 6; }
+  RCS=$($SSH 'sha256sum /root/corpus.tgz' | cut -d' ' -f1)
+  [ "$RCS" = "$CORPUS_SHA" ] || { log "corpus sha mismatch after transfer ($RCS)"; exit 6; }
+  $SSH 'tar -xzf /root/corpus.tgz -C /root/mojolearn' || { log "corpus unpack failed"; exit 6; }
+  for c in $CORPUS_CASES; do
+    $SSH "test -f /root/mojolearn/mamba/corpus/$c/x.f32" || { log "corpus case $c did not land"; exit 6; }
+  done
+  echo "qualify_corpus_cases=$CORPUS_CASES" >> "$STATE"
+  log "shipped wheel, $(ls "$QUAL_PROOFS"/*.json | wc -l | tr -d ' ') proofs and the corpora"
   echo "qualify_wheel=$QUAL_BASE" >> "$STATE"
   echo "qualify_wheel_sha256=$QUAL_SHA" >> "$STATE"
 fi
