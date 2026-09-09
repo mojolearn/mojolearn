@@ -1,0 +1,59 @@
+1053 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50efc0000000, nodemask=1)
+/root/mojolearn/core/gemm_identity_check.mojo:255:36: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if GRAM_SPLITK_RESOLVED_COLUMN != expected:
+                                   ^
+/root/mojolearn/core/gemm_identity_check.mojo:384:22: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if GRAM_MAX_COLS >= 256:
+                     ^
+Imported from /root/mojolearn/core/gemm_identity_check.mojo:50:
+Imported from /root/mojolearn/core/gemm.mojo:287:
+/root/mojolearn/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/core/gemm_identity_check.mojo:50:
+Imported from /root/mojolearn/core/gemm.mojo:287:
+/root/mojolearn/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/core/gemm_identity_check.mojo:56:
+/root/mojolearn/core/gram_splitk.mojo:612:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/core/gemm_identity_check.mojo:56:
+/root/mojolearn/core/gram_splitk.mojo:617:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/core/gemm_identity_check.mojo:56:
+/root/mojolearn/core/gram_splitk.mojo:632:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/core/gemm_identity_check.mojo:56:
+/root/mojolearn/core/gram_splitk.mojo:634:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/core/gemm_identity_check.mojo:56:
+/root/mojolearn/core/gram_splitk.mojo:651:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/core/gemm_identity_check.mojo:56:
+/root/mojolearn/core/gram_splitk.mojo:656:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/core/gemm_identity_check.mojo:56:
+/root/mojolearn/core/gram_splitk.mojo:670:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/core/gemm_identity_check.mojo:56:
+/root/mojolearn/core/gram_splitk.mojo:671:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
