@@ -32,6 +32,27 @@ TOKFILE="${2:?token file (~/.mojolearn_do_token)}"
 RENT=0
 case "$#:${3:-}" in 2:|3:--rent) [ "${3:-}" = "--rent" ] && RENT=1 ;; *) echo "usage: $0 <commit> <token_file> [--rent]"; exit 2 ;; esac
 DEADMAN_SECONDS="${DEADMAN_SECONDS:-3600}"
+# DEVIATION 2294: the same guarded rental, doing the OTHER half of the release.
+# tools/linux_surface_qualification.sh runs ON the device, and until now nothing
+# carried a finished wheel to a device and brought the verdict home -- the
+# runbook says so itself, "authored but unexecuted". Everything this leg already
+# owns is what that job needs: a dead-man before the create, a second dead-man
+# ON the droplet, an uplink probe before the bill starts, a detached-and-polled
+# work phase, and a destroy verified by GET 404. So it is a MODE here, not a
+# second file that would drift from these guards.
+#   MOJOLEARN_LEG_MODE=qualify
+#   MOJOLEARN_QUALIFY_WHEEL=/abs/path/mojolearn-X.Y.Z-...manylinux....whl
+#   MOJOLEARN_QUALIFY_PROOFS=/abs/dir holding cuda-sm_89.json, cuda-sm_90a.json,
+#                            hip-gfx942.json  (the packer's three, unchanged)
+LEG_MODE="${MOJOLEARN_LEG_MODE:-build}"
+case "$LEG_MODE" in build|qualify) ;; *) echo "MOJOLEARN_LEG_MODE must be build or qualify" >&2; exit 2 ;; esac
+if [ "$LEG_MODE" = qualify ]; then
+  QUAL_WHEEL="${MOJOLEARN_QUALIFY_WHEEL:?qualify mode needs the repaired wheel}"
+  QUAL_PROOFS="${MOJOLEARN_QUALIFY_PROOFS:?qualify mode needs the proof directory}"
+  [ -f "$QUAL_WHEEL" ] || { echo "no wheel at $QUAL_WHEEL" >&2; exit 2; }
+  [ -d "$QUAL_PROOFS" ] || { echo "no proof directory at $QUAL_PROOFS" >&2; exit 2; }
+  case "$QUAL_WHEEL" in *manylinux*) ;; *) echo "REFUSING: qualify the REPAIRED wheel; $QUAL_WHEEL is not manylinux-tagged" >&2; exit 2 ;; esac
+fi
 FETCH_RESERVE="${FETCH_RESERVE:-900}"     # three tiers + MAX runtime closure come home in this
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API=https://api.digitalocean.com/v2
@@ -41,6 +62,11 @@ NAME=mojolearn-rel061-amd; TAG=rel061; REGION=tor1; SIZE=gpu-mi325x1-256gb; IMAG
 REMOTE_PY=/usr/bin/python3                 # the image's stdlib 3.12 (tools/do_byte_lm_setup.sh)
 REMOTE_OUT=/root/rel061-build; REMOTE_LOG=/root/rel061-build.log
 OUT="$REPO/bench/results/releases/2026-09-08-linux-0.7.0/hip-gfx942"
+# DEVIATION 2294: a qualification is not a build proof and must not land where
+# one lives; the packer reads that path and would find a directory of the
+# wrong shape. Its own destination, stamped, so two qualification runs of the
+# same wheel do not overwrite each other either.
+[ "$LEG_MODE" = qualify ] && OUT="$REPO/bench/results/releases/2026-09-08-linux-0.7.0/qualification/hip-gfx942-$(date -u +%Y%m%dT%H%M%SZ)"
 STATE="$OUT/leg.txt"
 TMPD="$(mktemp -d "${TMPDIR:-/tmp}/rel061.XXXXXX")"
 
@@ -126,14 +152,23 @@ uplink_stable || die "this machine could not reach ANY neutral host. Nothing
 log "uplink up on all three probes"
 
 if [ $RENT = 0 ]; then
+if [ "$LEG_MODE" = qualify ]; then
+  WOULD_RUN="  upload   $QUAL_WHEEL
+           + $(ls "$QUAL_PROOFS"/*.json 2>/dev/null | wc -l | tr -d ' ') build proofs -> /root/proofs/
+  qualify  bash tools/linux_surface_qualification.sh qualify-release-linux3 \\
+             /root/$(basename "$QUAL_WHEEL") <sha256> hip \$REMOTE_OUT /root/proofs gfx942"
+else
+  WOULD_RUN="  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=<=2400
+           bash tools/release061_remote_build.sh hip gfx942 \$REMOTE_OUT > \$REMOTE_LOG"
+fi
   cat <<EOF
 DRY RUN -- nothing rented. With --rent this leg would:
   create   $NAME  image=$IMAGE size=$SIZE region=$REGION key=$SSH_KEY_FP tag=$TAG
   dead-man local ${DEADMAN_SECONDS}s (tag+name) and on-droplet ${DEADMAN_SECONDS}s (id)
   upload   $TMPD/src.tgz ($ARCHIVE_BYTES bytes) -> /root/mojolearn + commit.txt=$COMMIT
   prepare  apt-get patchelf/binutils if absent; pixi; pixi install --locked --environment default (guarded)
-  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=<=2400
-           bash tools/release061_remote_build.sh hip gfx942 $REMOTE_OUT > $REMOTE_LOG
+  mode     $LEG_MODE
+$WOULD_RUN
   fetch    $REMOTE_OUT -> $OUT/release-build/ ; logs and leg.txt beside it
   destroy  DELETE then GET until 404; never deletes anything local
 EOF
@@ -265,6 +300,23 @@ $SSH "test ! -e /root/mojolearn && mkdir /root/mojolearn && tar -xzf /root/src.t
   && printf '%s\n' '$COMMIT' > /root/mojolearn/commit.txt && test -x $REMOTE_PY" || { log "remote unpack failed"; exit 6; }
 log "shipped $COMMIT"
 
+if [ "$LEG_MODE" = qualify ]; then
+  # THE BYTES THAT GET QUALIFIED ARE THE BYTES THAT GET PUBLISHED. The sha256
+  # is compared on both ends, because a wheel that arrived corrupted would
+  # qualify a file nobody will ever install.
+  QUAL_SHA=$(sha256_of "$QUAL_WHEEL")
+  QUAL_BASE=$(basename "$QUAL_WHEEL")
+  log "shipping the repaired wheel ($(wc -c < "$QUAL_WHEEL" | tr -d ' ') bytes, sha256 $QUAL_SHA)"
+  scp -q $SSH_OPTS "$QUAL_WHEEL" "root@$IP:/root/$QUAL_BASE" || { log "wheel scp failed"; exit 6; }
+  RSHA=$($SSH "sha256sum /root/$QUAL_BASE" | cut -d' ' -f1)
+  [ "$RSHA" = "$QUAL_SHA" ] || { log "wheel sha mismatch after transfer ($RSHA)"; exit 6; }
+  $SSH 'mkdir -p /root/proofs'
+  scp -q $SSH_OPTS "$QUAL_PROOFS"/*.json "root@$IP:/root/proofs/" || { log "proof scp failed"; exit 6; }
+  log "shipped wheel and $(ls "$QUAL_PROOFS"/*.json | wc -l | tr -d ' ') proofs"
+  echo "qualify_wheel=$QUAL_BASE" >> "$STATE"
+  echo "qualify_wheel_sha256=$QUAL_SHA" >> "$STATE"
+fi
+
 # HOST PREPARATION. release061_remote_build.sh refuses a missing patchelf or an
 # unprepared pixi default environment on purpose, so both are prepared HERE,
 # as named steps with their own exit codes. The locked install runs under the
@@ -295,10 +347,21 @@ WORK_SECONDS=$(( LEG_START + DEADMAN_SECONDS - $(date +%s) - FETCH_RESERVE ))
 [ "$WORK_SECONDS" -gt 2400 ] && WORK_SECONDS=2400
 [ "$WORK_SECONDS" -ge 300 ] || { echo "build_exit=NOT_STARTED_${WORK_SECONDS}s_LEFT" >> "$STATE"; log "only ${WORK_SECONDS}s left; skipping the build"; exit 7; }
 echo "work_seconds=$WORK_SECONDS" >> "$STATE"; log "build bound ${WORK_SECONDS}s"
+if [ "$LEG_MODE" = qualify ]; then
+  # 25 installed jobs on THIS device, from the wheel's own bytes. The driver
+  # refuses an architecture override and records the device it actually found,
+  # so it cannot be talked into agreeing with us.
+  $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/.pixi/bin:\$PATH; \
+    MOJOLEARN_EXPECT_VENDOR=hip \
+    timeout -k 20 $((WORK_SECONDS + 40)) bash tools/linux_surface_qualification.sh qualify-release-linux3 \
+      /root/$QUAL_BASE $QUAL_SHA hip $REMOTE_OUT /root/proofs gfx942 > $REMOTE_LOG 2>&1; \
+    echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the qualification"; exit 9; }
+else
 $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/.pixi/bin:\$PATH; \
   MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=$WORK_SECONDS \
   timeout -k 20 $((WORK_SECONDS + 40)) bash tools/release061_remote_build.sh hip gfx942 $REMOTE_OUT > $REMOTE_LOG 2>&1; \
   echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the build"; exit 9; }
+fi
 BUILD_EXIT=""
 while [ $(date +%s) -lt $(( LEG_START + DEADMAN_SECONDS - FETCH_RESERVE + 60 )) ]; do
   BUILD_EXIT=$($SSH 'cat /root/rel061.exit 2>/dev/null' 2>/dev/null | tr -d '[:space:]')
@@ -313,6 +376,35 @@ rsync -az -e "ssh $SSH_OPTS" "root@$IP:$REMOTE_OUT/" "$OUT/release-build/" && lo
 for f in rel061-build.log pixi_install.log pixi_bootstrap.log apt.log rel061.exit; do
   rsync -az -e "ssh $SSH_OPTS" "root@$IP:/root/$f" "$OUT/$f" 2>/dev/null || true
 done
+if [ "$LEG_MODE" = qualify ]; then
+  # THE VERDICT IS THE DRIVER'S, NOT THIS SCRIPT'S. All this checks is that a
+  # verdict came home, that it is about the wheel we shipped, and that the
+  # device it names is the one we rented. check_linux_release_qualification.py
+  # is what admits; it runs on the Mac, over all three architectures at once,
+  # and this leg supplies exactly one of its three columns.
+  python3 - "$OUT/release-build" "$QUAL_SHA" <<'PYQ' 2>&1 | tee -a "$STATE"
+import json, pathlib, sys
+out, sha = pathlib.Path(sys.argv[1]), sys.argv[2]
+try:
+    q = json.loads((out / 'qualification.json').read_text())
+    audit = json.loads((out / 'wheel-audit.json').read_text())
+    assert audit.get('sha256') == sha, 'audit is about a different wheel'
+    arch = audit.get('runtime_architecture')
+    assert arch == 'gfx942', 'runtime architecture is %r, not gfx942' % arch
+    rows = q.get('jobs') or q.get('rows') or []
+    bad = [r for r in rows if str(r.get('status', '')).upper() not in ('PASSED', 'OK', 'GREEN')]
+    print('qualify_arch=%s' % arch)
+    print('qualify_jobs=%d' % len(rows))
+    print('qualify_failed=%d' % len(bad))
+    print('qualify_admission=%s' % ('GREEN' if rows and not bad else 'RED'))
+    if bad:
+        for r in bad[:5]:
+            print('  FAILED %s %s' % (r.get('name', '?'), r.get('status', '?')))
+except Exception as exc:
+    print('qualify_admission=RED')
+    print('qualify_error=%s' % exc)
+PYQ
+else
 python3 - "$OUT/release-build" "$COMMIT" "$OUT/source_inventory_local.json" <<'PY' 2>&1 | tee -a "$STATE"
 import hashlib, json, pathlib, sys
 out, commit = pathlib.Path(sys.argv[1]), sys.argv[2]
@@ -332,4 +424,5 @@ try:
 except Exception as exc:
     print('admission=REFUSED ' + str(exc))
 PY
+fi
 log "done -- $OUT (leg.txt has the verdict; the droplet is destroyed by the EXIT trap next)"
