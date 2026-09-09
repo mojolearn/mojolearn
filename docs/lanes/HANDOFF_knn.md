@@ -13,7 +13,8 @@ Commits (`%h parent %p`):
   tiling), the cuML reference bench and scripts.
 - `2b6edd12 parent 1c7ba943` origin casts at the selector/merge seams; the
   UMAP phase-price bench and cuML UMAP reference script.
-- (this file and the H100 evidence directory: see `git log`.)
+- `4d768945 parent 2b6edd12` H100 evidence directory and the first handoff;
+  the UMAP evidence and this final handoff are the commit after it.
 
 Files:
 
@@ -165,12 +166,19 @@ as the tiled default.
 | rows | kNN ms | host graph ms | spectral ms | optimize ms | total ms |
 |---:|---:|---:|---:|---:|---:|
 | 20000 | 494.9 | 164.8 | 169.0 | 11990.9 | 12819.5 |
-| 100000 | see `umap/ours-100000.log` if present; NOT RUN otherwise | | | | |
+| 100000 | 904.2 | 836.2 | 623.5 | 60349.1 | 62713.0 |
 
-The host graph is NOT a top-two phase (optimize 94%, kNN 4%); the phase to
-move is the serial host optimizer
-(`umap/sparse_optimizer.mojo::optimize_sparse_layout_identical`). cuML UMAP
-numbers: `umap/cuml-umap.json` if present, else NOT RUN.
+Logs `umap/ours-20000.log`, `umap/ours-100000.log` (edges 415,362 and
+2,089,980). cuML UMAP (`cuml.manifold.UMAP`, n_neighbors 15, n_epochs 200,
+spectral init, its default approximate build, 3 rounds after one warmup):
+20,000 rows median 145.7 ms, 100,000 rows median 321.3 ms
+(`umap/cuml-umap.json`, `umap/cuml-umap.log`). So ours IDENTICAL is 88x
+(20k) and 195x (100k) slower than cuML's FAST UMAP, and 94-96% of our time
+is the serial host optimizer
+(`umap/sparse_optimizer.mojo::optimize_sparse_layout_identical`); the host
+graph is 1.3% and NOT a top-two phase, so it was not moved. The phase to
+move is the optimizer (a fixed-order device epoch with the same update
+order), which is outside this lane's brief and NOT started.
 
 ## RUN OWED on the Apple M4 (orchestrator runs; nothing here was run on the Mac)
 
