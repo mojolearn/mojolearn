@@ -950,7 +950,7 @@ def run_device_backward(
     var bst = LlamaBackwardStages(ctx, b, l, cap, ldims)
     llama_decoder_layer_backward(
         ctx, bst, stages, dw, rope.cos, rope.sin, dx, d_out, b, l, 0,
-        trace, prefix,
+        trace, prefix, materialize=True,
     )
     var out = backward_device_dump(ctx, bst, dims, b, l, l)
     _ = bst^
@@ -2475,7 +2475,7 @@ def clause_d_device(ctx: DeviceContext, k: Int) raises -> ChunkVerdict:
     var offb1 = IdentityTrace.disabled()
     llama_decoder_layer_backward(
         ctx, bst1, st1, dw, rope.cos, rope.sin, dx1, g1, 1, cut, 0,
-        offb1, "chunk1b",
+        offb1, "chunk1b", materialize=True,
     )
     _ = bst1^
     _ = st1^
@@ -2497,7 +2497,7 @@ def clause_d_device(ctx: DeviceContext, k: Int) raises -> ChunkVerdict:
     var offb2 = IdentityTrace.disabled()
     llama_decoder_layer_backward(
         ctx, bst2, st2, dw, rope.cos, rope.sin, dx2, g2, 1, l2, cut,
-        offb2, "chunk2b",
+        offb2, "chunk2b", materialize=True,
     )
     var ch = backward_device_dump(ctx, bst2, dims, 1, l2, l)
     _ = bst2^
@@ -3004,7 +3004,7 @@ def clause_e(ctx: DeviceContext, k: Int) raises:
     try:
         llama_decoder_layer_backward(
             ctx, bst, stages, dw, rope.cos, rope.sin, dxq, clean, b, l, 0,
-            offg, "gap",
+            offg, "gap", materialize=True,
         )
     except e:
         gap_raised = True

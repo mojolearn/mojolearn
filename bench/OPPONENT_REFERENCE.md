@@ -222,6 +222,28 @@ init, cuML's default approximate build). This is an L40S row; the 20k and
 |---|---:|
 | 1,000,000 rows | 7991.1 (samples 7946.4, 7979.7, 7991.1, 8008.7, 8031.6) |
 
+The same block at sequence 16384 (everything else as above), worktree
+branch lane/fused-attention, pod mmzcdqdbg27c6w, driver 580.126.09,
+`bench/results/attnlane_fused_2026-09-09/timing_16384_torch.log` (3 rounds
+after 1 warm-up). Ours is REFUSED at this length by name (the 8192
+absolute-position ceiling, DEVIATION 812), so no row of ours exists to
+quote against it; the torch.compile arm ran out of memory (64 GiB asked).
+
+| arm | forward | forward+backward |
+|---|---|---|
+| torch eager fp32 SDPA, seq 16384 | 291.6 | 931.6 |
+| torch.compile, seq 16384 | OOM | OOM |
+
+The same block at sequence 1024 (everything else as above), worktree
+branch lane/fused-attention, pod n5h6et424b5oj6, driver 580.159.03,
+`bench/results/attnlane_fused_2026-09-09/round2_8b996d6d/timing_1024_torch.log`
+(3 rounds after 1 warm-up).
+
+| arm | forward | forward+backward |
+|---|---|---|
+| torch eager fp32 SDPA, seq 1024 | 5.7 | 16.8 |
+| torch.compile, seq 1024 | 5.3 | 13.8 |
+
 ## NVIDIA RTX 4090, driver 580.126.20, torch 2.4.1+cu124
 
 Public-API host-array comparison (transfers included), 2026-09-05,

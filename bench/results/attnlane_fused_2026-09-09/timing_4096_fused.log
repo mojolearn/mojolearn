@@ -1,0 +1,5 @@
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 3
+ours: tier identical vendor cuda
+ours forward            median 480.8 ms  rounds ['503.0', '476.6', '480.8']
+ours forward+backward   median 812.5 ms  rounds ['844.6', '812.5', '789.6']

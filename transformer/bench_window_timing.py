@@ -191,6 +191,10 @@ def main():
     ap.add_argument("--log", default="")
     ap.add_argument("--skip-ours", action="store_true")
     ap.add_argument("--skip-torch", action="store_true")
+    ap.add_argument("--skip-compiled", action="store_true",
+                    help="no torch.compile arm")
+    ap.add_argument("--no-agreement", action="store_true",
+                    help="skip the ours-vs-torch value comparison at the end")
     args = ap.parse_args()
     lines = []
 
@@ -201,6 +205,8 @@ def main():
             with open(args.log, "a") as fh:
                 fh.write(msg + "\n")
 
+    log("attention path: %s" % (
+        os.environ.get("MOJOLEARN_TRANSFORMER_ATTN_PATH") or "auto"))
     log("shape: d_model %d heads %d kv %d head_dim %d inter %d window %d "
         "seq %d batch %d rounds %d" % (
             args.dm, args.heads, args.kv, args.dm // args.heads, args.inter,
@@ -217,8 +223,9 @@ def main():
         ours_out = ours(args, w, x, dy, log)
     if not args.skip_torch:
         t_e = theirs(args, w, x, dy, log, compiled=False)
-        t_c = theirs(args, w, x, dy, log, compiled=True)
-        if ours_out is not None and t_e is not None:
+        if not args.skip_compiled:
+            theirs(args, w, x, dy, log, compiled=True)
+        if ours_out is not None and t_e is not None and not args.no_agreement:
             y, g = ours_out
             dy_ = np.abs(y.astype(np.float64) - t_e[0]).max()
             dg = np.abs(g["x"].astype(np.float64) - t_e[1]).max()

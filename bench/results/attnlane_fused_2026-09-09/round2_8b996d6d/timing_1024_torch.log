@@ -1,0 +1,6 @@
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 1024 batch 4 rounds 3
+torch-eager-fp32-sdpa forward            median 5.7 ms  rounds ['5.7', '5.7', '5.7']
+torch-eager-fp32-sdpa forward+backward   median 16.8 ms  rounds ['16.8', '16.6', '17.2']
+torch-eager-fp32-sdpa-compiled forward            median 5.3 ms  rounds ['5.7', '5.3', '5.3']
+torch-eager-fp32-sdpa-compiled forward+backward   median 13.8 ms  rounds ['13.7', '13.8', '14.1']
