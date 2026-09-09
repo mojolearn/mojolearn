@@ -75,6 +75,28 @@ The classical fixtures above are small (thousands of rows) except knn,
 kmeans, ols, pca and iforest. Only those five are admissible as an
 identical-vs-opponent row; the rest measure launch overhead.
 
+kNN and UMAP, cuML 26.08.00, cupy 14.2.0, CUDA runtime 12.9, 2026-09-09,
+worktree branch lane/knn-identical,
+`bench/results/knn/2026-09-09-h100-identical-defaults/ref/summary.json` and
+`umap/` (7 rounds). "request" includes host transfers, "device" excludes
+them. k 15 rows are within 2% of k 10 (full table in the handoff).
+
+| index | queries | k | cuML brute NearestNeighbors request | device |
+|---:|---:|---:|---:|---:|
+| 100k x 32 | 32 | 10 | 1.125 | 0.669 |
+| 100k x 32 | 128 | 10 | 0.914 | 0.459 |
+| 100k x 32 | 1000 | 10 | 1.572 | 1.081 |
+| 100k x 32 | 4000 | 10 | 3.480 | 2.904 |
+| 400k x 32 | 32 | 10 | 1.546 | 1.200 |
+| 400k x 32 | 128 | 10 | 1.531 | 1.159 |
+| 400k x 32 | 1000 | 10 | 4.101 | 3.659 |
+| 400k x 32 | 4000 | 10 | 10.225 | 9.632 |
+
+| UMAP (32 features, 15 neighbors, 2 components, 200 epochs) | cuML UMAP ms |
+|---|---:|
+| 20k rows | 145.7 |
+| 100k rows | 321.3 |
+
 GEMM, cuBLAS through torch 2.4.1+cu124, `e1g/2026-08-25_155542-nvidia-speed-gemmseq`
 and `2026-08-25_160520` (5 rounds).
 
@@ -150,15 +172,11 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
 
 ## Rows that do not exist yet (owed, in priority order)
 
-1. cuML UMAP on any NVIDIA card (the Sep 5 attempt refused; the Sep 7 paper
-   number is not in this tree).
-2. cuML NearestNeighbors at the kNN lane's public shapes on H100 or L40S
-   (the H100 classical row above is the only cuML kNN number; the 4090 row
-   is torch).
-3. LightGBM CUDA extra_trees, valid build, HIGGS 1M/2M/5M.
-4. cuBLAS on H100 for the 2026-09-09 tuned plans (all 21 shapes).
-5. cuML DBSCAN and PCA at 1M rows or more (the fixtures above are small).
-6. torch byte-LM training step time on H100 (the Sep 7 comparison in this
+1. LightGBM CUDA extra_trees, valid build, HIGGS 1M/2M/5M.
+2. cuBLAS on H100 for the 2026-09-09 tuned plans (all 21 shapes).
+3. cuML DBSCAN and PCA at 1M rows or more (the fixtures above are small).
+4. cuML UMAP at 1M rows (20k and 100k exist above).
+5. torch byte-LM training step time on H100 (the Sep 7 comparison in this
    tree is a correctness record with no torch timing).
 
 ## Rows never to quote
