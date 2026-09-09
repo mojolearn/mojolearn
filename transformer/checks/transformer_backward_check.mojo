@@ -329,6 +329,7 @@ from transformer.checks.transformer_fixture import (
     f32_from_bits,
     fixture_case,
     fixture_case_by_name,
+    fixture_window,
     fixture_case_seed,
     fixture_dims,
     fixture_score_plant,
@@ -932,13 +933,14 @@ def run_device_backward(
     var cap = c.cache_cap
     if cap < l:
         cap = l
+    var window = fixture_window(String(c.name))
     var dw = LlamaDeviceWeights(
         ctx, ldims, RMS_EPS, w.norm1_w, w.norm2_w, w.w_q, w.w_k, w.w_v,
         w.w_o, w.w_gate, w.w_up, w.w_down,
     )
-    var kv = LlamaKVCache(ctx, b, ldims, cap)
+    var kv = LlamaKVCache(ctx, b, ldims, cap, window)
     var rope = LlamaRopeTable(ctx, ldims, ROPE_THETA, dims.rope_positions)
-    var stages = LlamaDeviceStages(ctx, b, l, cap, ldims)
+    var stages = LlamaDeviceStages(ctx, b, l, cap, ldims, window)
     var dx = _upload(ctx, x)
     var off = IdentityTrace.disabled()
     llama_decoder_layer_forward_planted(
@@ -975,11 +977,16 @@ def run_host_backward(
     backward, because that is what a backward call IS -- plan section 1's
     saved set is `TransformerStages` and nothing else. A gate that fed the
     backward synthetic stages would be gating a function nobody calls."""
-    var cache = TransformerKVCache(b, dims, c.cache_cap if c.cache_cap >= l else l)
+    var window = fixture_window(String(c.name))
+    var cache = TransformerKVCache(
+        b, dims, c.cache_cap if c.cache_cap >= l else l, window
+    )
     var rope = build_rope_table(dims)
     var plant = ScorePlant.none()
     var fwd = transformer_block_oracle(w, x, b, l, cache, rope, plant)
-    var st = transformer_block_backward_oracle(w, fwd, d_out, b, l, 0, rope)
+    var st = transformer_block_backward_oracle(
+        w, fwd, d_out, b, l, 0, rope, window
+    )
     var out = backward_oracle_dump(st)
     _ = st^
     _ = fwd^
@@ -1637,8 +1644,14 @@ def clause_a_cases() raises -> List[Int]:
       case 12  adv_score_extreme   a planted extreme score
       case 13  adv_cache_hot_tail  the fold walks [0, used), not [0, cap)
       case 14  adv_masked_zero_row a whole masked row
+      case 15  win4_b1_l16_nrep2   sliding window 4 over 16 tokens
+      case 16  win3_b2_l8_nrep1    window 3, B == 2, n_rep == 1
+      case 17  win5_b1_l12_hd24    window 5 at the inexact scale
+      case 18  win20_b1_l16_nrep2  a window wider than the sequence
     """
-    var out: List[Int] = [0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14]
+    var out: List[Int] = [
+        0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18
+    ]
     if env_on("MOJOLEARN_TFB_CHECK_LONG"):
         out.append(8)
     return out^

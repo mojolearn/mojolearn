@@ -28,6 +28,8 @@ from transformer.impl.transformers.models.llama.modeling_llama import (
     LlamaDeviceWeights,
     LlamaDims,
     llama_attention_scale,
+    llama_key_lo,
+    llama_key_span,
 )
 
 
@@ -409,6 +411,8 @@ def bwd_mask_grad_kernel(
     l_in: Int32,
     s_in: Int32,
     pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
 ):
     """S13's backward as its own kernel so that `B13_MASK_ZEROES_GRAD` has a
     body. In a clean build this is `bwd_copy_kernel` with a causal test it
@@ -427,6 +431,8 @@ def bwd_mask_grad_kernel(
     var l = Int(l_in)
     var s = Int(s_in)
     var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= b * nh * l * s:
         return
@@ -434,7 +440,12 @@ def bwd_mask_grad_kernel(
         var j = i % s
         var rest = i // s
         var t = rest % l
-        if j > pos0 + t:
+        var p_k = key_lo + j
+        var p_q = pos0 + t
+        var masked = p_k > p_q
+        if window > 0 and p_k <= p_q - window:
+            masked = True
+        if masked:
             # SABOTAGE: a positive zero where the profile passes a signed one.
             dst.unsafe_store(i, Float32(0.0))
             return
@@ -1565,19 +1576,20 @@ def bwd_kv_slice_kernel(
     nkv_in: Int32,
     hd_in: Int32,
     s_in: Int32,
-    pos0_in: Int32,
+    own0_in: Int32,
 ):
     """The KV append's backward: a SLICE, no arithmetic. This call's own
-    tokens occupy slots `[pos0, S)` and their gradient is read out at the
+    tokens occupy slots `[own0, S)` of the key span (`own0 = pos0 - key_lo`,
+    which is `pos0` in full causal) and their gradient is read out at the
     token-major `[M, n_kv*head_dim]` layout the projections expect. Slots
-    `[0, pos0)` are the HANDOFF of DEVIATION 1417 and are not consumed
+    `[0, own0)` are the HANDOFF of DEVIATION 1417 and are not consumed
     here."""
     var b = Int(b_in)
     var l = Int(l_in)
     var nkv = Int(nkv_in)
     var hd = Int(hd_in)
     var s = Int(s_in)
-    var pos0 = Int(pos0_in)
+    var pos0 = Int(own0_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= b * l * nkv * hd:
         return
@@ -2445,7 +2457,10 @@ def llama_decoder_layer_backward(
     var kw = dims.kv_width()
     var it = dims.intermediate
     var m = b * l
-    var s = pos0 + l
+    # The key span the forward read (`fwd.window == 0`: `[0, pos0 + l)`).
+    var window = fwd.window
+    var key_lo = llama_key_lo(pos0, window)
+    var s = llama_key_span(pos0, l, window)
     var cells = b * nh * l * s
 
     # ---- refusals, before ANY recorded stage --------------------------
@@ -2719,6 +2734,8 @@ def llama_decoder_layer_backward(
         Int32(l),
         Int32(s),
         Int32(pos0),
+        Int32(key_lo),
+        Int32(window),
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
@@ -2760,7 +2777,7 @@ def llama_decoder_layer_backward(
         Int32(nkv),
         Int32(hd),
         Int32(s),
-        Int32(pos0),
+        Int32(pos0 - key_lo),
         grid_dim=(_grid(m * kw), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
@@ -2772,7 +2789,7 @@ def llama_decoder_layer_backward(
         Int32(nkv),
         Int32(hd),
         Int32(s),
-        Int32(pos0),
+        Int32(pos0 - key_lo),
         grid_dim=(_grid(m * kw), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )

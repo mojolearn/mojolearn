@@ -1008,8 +1008,15 @@ def transformer_block_backward_oracle(
     l: Int,
     pos0: Int,
     rope: RopeTable,
+    window: Int = 0,
 ) raises -> TransformerBackwardStages:
     """The gradient of ONE `LlamaDecoderLayer.forward` call, stage by stage.
+
+    `window` is the forward's sliding window (0 = full causal). It decides
+    only the KEY SPAN `S` the forward's attention stages were recorded at
+    (`[max(0, pos0 - window + 1), pos0 + l)`) and where this call's own
+    tokens sit in it; the mask backward is the identity either way and the
+    masked cells' `attn.weights` are exactly `+0.0` either way.
 
     `fwd` is the SAVED forward stages of THIS SAME CALL, produced by
     `transformer_oracle.mojo::transformer_block_oracle`. `d_out` is
@@ -1070,7 +1077,13 @@ def transformer_block_backward_oracle(
     var inter = dims.intermediate
     var n_rep = dims.n_rep()
     var m = b * l
-    var s = pos0 + l
+    var key_lo = 0
+    if window > 0:
+        key_lo = pos0 - window + 1
+        if key_lo < 0:
+            key_lo = 0
+    var s = pos0 + l - key_lo
+    var own0 = pos0 - key_lo
     var cells = b * nh * l * s
     var st = TransformerBackwardStages()
 
@@ -1508,7 +1521,7 @@ def transformer_block_backward_oracle(
         for li in range(l):
             for kv in range(nkv):
                 for d in range(hd):
-                    var ix = (bb * nkv + kv) * s * hd + (pos0 + li) * hd + d
+                    var ix = (bb * nkv + kv) * s * hd + (own0 + li) * hd + d
                     st.d_k_rope.append(st.d_k_cache[ix])
                     st.d_v_proj_out.append(st.d_v_cache[ix])
 
