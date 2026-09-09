@@ -928,7 +928,14 @@ case "$CONTINUED_CERT_CHECKS" in 0|1) ;; *) echo 'MOJOLEARN_CONTINUED_CERT_CHECK
 case "$NVIDIA_CAMPAIGN" in 0|1|2|3|4|5|6|7) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0..7 (7 is one-architecture release build)" ;; esac
 if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
     [ "$VENDOR" = nvidia ] && [ "$PAYLOAD" = mamba ] || leg_die 'Release profile 7 requires nvidia --payload mamba'
-    case "$GPU_ARCHS" in sm_89|sm_90) ;; *) leg_die 'Release profile 7 requires explicit actual sm_89 or sm_90' ;; esac
+    # DEVIATION 2293: sm_90a is the Hopper slot's other legal spelling, and on
+    # an H100 it is the ONLY one the compiler will produce. Asking for sm_90
+    # there yields 46 binaries all carrying sm_90a and build_sets.sh refuses
+    # the set, correctly, for being named something it was not verified to
+    # carry. The packer's Hopper slot accepts either; so does this gate. What
+    # is still refused is any architecture that is not one of the three the
+    # release profile ships.
+    case "$GPU_ARCHS" in sm_89|sm_90|sm_90a) ;; *) leg_die 'Release profile 7 requires explicit actual sm_89, sm_90 or sm_90a' ;; esac
 fi
 if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
     if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
