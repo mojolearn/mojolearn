@@ -54,6 +54,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.primitives.block import sum as block_sum
+from core.pinned_reduce import two_phase_halving_sum
 
 # ============================ DEVIATION 254 ============================
 # EVERY DEVICE exp/log IN THIS FILE ROUTES THROUGH `identical_exp` /
@@ -168,23 +169,10 @@ def pinned_block_sum[block_size: Int](value: Float32) -> Float32:
     sites call this twice in a row).
     """
     comptime if BUILD_MODE == NUMERIC_IDENTICAL:
-        var tid = Int(thread_idx.x)
-        var red = stack_allocation[
-            block_size,
-            Scalar[DType.float32],
-            address_space = AddressSpace.SHARED,
-        ]()
-        red[tid] = value
-        barrier()
-        var step = block_size // 2
-        while step > 0:
-            if tid < step:
-                red[tid] = red[tid] + red[tid + step]
-            barrier()
-            step //= 2
-        var total = red[0]
-        barrier()
-        return total
+        # the same halving tree, folded in three barriers
+        # (`core/pinned_reduce.two_phase_halving_sum`): same additions in
+        # the same order, so the same bits as the barrier-per-step fold.
+        return two_phase_halving_sum[block_size](value)
     else:
         return block_sum[block_size=block_size](value)
 

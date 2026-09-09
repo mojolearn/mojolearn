@@ -3,6 +3,7 @@
 """Random Forest estimator surface, parameters, metrics, training dispatch, and host inference, aligned with pinned cuML behavior."""
 
 from std.gpu import global_idx
+from std.sys.compile import is_defined
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import (
@@ -91,7 +92,8 @@ comptime LABELS_SAMPLED_ORDER = True
 # partitioning then keeps node ranges ascending. Integer/fixed-point
 # histograms, counts, leaves, and the resulting forest remain identical, but
 # `row_ids` order and its diagnostic trace intentionally differ from upstream.
-comptime ROWS_SORTED_SAMPLE = False
+# `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
+comptime ROWS_SORTED_SAMPLE = is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
 
 
 # ---------------------------------------------------------------------------

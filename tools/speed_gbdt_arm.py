@@ -655,6 +655,15 @@ LANE_DEFAULT_DATASET = {
 def load_dataset(name, size, rows_cap=None):
     if name == "higgs":
         return load_higgs(size, rows_cap)
+    if name == "higgsreg":
+        # HIGGS with its 0/1 label as a float TARGET: the RMSE cell of the
+        # boosting lanes on the same bytes as the Logloss cell, so the two
+        # objectives (one with a Newton walker, one without) are timed on
+        # one fixture. RMSE on a 0/1 target is a legitimate regression
+        # (a Brier-style fit); it is not what CatBoost users run on HIGGS.
+        d = load_higgs(size, rows_cap)
+        return Data("higgsreg", d.X_train, d.X_test, d.y_train, d.y_test,
+                    "regression", 0)
     if name == "year":
         return load_year(size, rows_cap)
     if name == "covtype":
@@ -684,6 +693,8 @@ def load_with_fallback(name, size, rows_cap=None):
             % (name, exc)
         )
         if name in ("covtype", "covtype2", "synthclf", "higgs"):
+            return load_dataset("synthclf", size, rows_cap)
+        if name == "higgsreg":
             return load_dataset("synthclf", size, rows_cap)
         if name == "anomaly":
             return load_dataset("anomaly", size, rows_cap)

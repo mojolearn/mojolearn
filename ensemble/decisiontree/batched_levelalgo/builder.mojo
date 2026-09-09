@@ -3,6 +3,7 @@
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
 from std.gpu import WARP_SIZE
+from std.sys.compile import is_defined
 from std.math import ceildiv
 from std.sys.info import size_of
 
@@ -82,7 +83,8 @@ comptime ALIGN_VALUE = 512
 # tuned above one, partition-phase workload reuse must remain disabled because
 # its slot mapping requires TPB-granular rows; histogram integer accumulation
 # itself remains order-independent.
-comptime HIST_ITEMS_PER_THREAD = 1
+# `-D MOJOLEARN_2011_HIST_ITEMS4=1` selects 4 items per thread; 1 is shipped.
+comptime HIST_ITEMS_PER_THREAD = 4 if is_defined["MOJOLEARN_2011_HIST_ITEMS4"]() else 1
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
 
 
