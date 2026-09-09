@@ -1,0 +1,180 @@
+# Opponent reference table
+
+The opponents are measured once and stored here. A round measures OUR
+IDENTICAL arm only and reads the opponent's number from this file. A new
+opponent measurement is owed only when a row is missing for the tuple
+(GPU model, driver, library version, dataset or shape, parameters), or when
+a library pin changes. Never re-run an opponent to "refresh" a row that
+already exists; never quote a row against a run of ours on a different GPU
+model or a different dataset size.
+
+Why a table and not published numbers (checked 2026-09-09): NVIDIA
+gbm-bench is a harness with no results in its README; CatBoost's GPU
+benchmark page stops at the V100 with no version or iteration count;
+the cuML accelerator page gives speedup ratios against an unnamed CPU with
+no GPU model, version or absolute time; cuBLAS blog charts cover Hopper in
+FP16 and FP8. Nobody publishes absolute times on H100 or L40S at our sizes
+with a pinned version, so published numbers are only a sanity check that a
+row here is not misconfigured.
+
+Every number is a median in milliseconds unless stated. Paths are relative
+to the repository root. `e1g/<stamp>` means `bench/results/e1g/<stamp>/remote/logs/`.
+"Config" is the opponent's FAST arm as pinned by `bench/speed/`; the
+opponent's deterministic modes are not measured (see
+`docs/` and the standing rule in the memory index).
+
+## NVIDIA H100 80GB HBM3, driver 580.126.09, CUDA 12.4, torch 2.4.1+cu124
+
+Trees, HIGGS (28 float32 features), 100 estimators, depth 6, lr 0.1, seed 7.
+Source: `e1g/2026-08-28_030908-nvidia-speed-forest` (5 rounds, 1 warm-up
+dropped) unless another stamp is named.
+
+| opponent | version | config | 1M | 2M | 5M |
+|---|---|---|---|---|---|
+| CatBoost GPU symmetric | 1.2.10 | task_type GPU, SymmetricTree, l2 1.0, border_count 254, bootstrap No, Plain | 846.1 | 1227.2 | 2458.5 |
+| CatBoost GPU depthwise | 1.2.10 | same, grow_policy Depthwise | 1232.5 | 1560.6 | 2559.7 |
+| CatBoost GPU lossguide | 1.2.10 | same, grow_policy Lossguide | 1600.6 | 1954.5 | 2870.5 |
+| XGBoost GPU depthwise | 3.2.0 | reg_lambda 1.0, max_bin 255, subsample 1.0 | 617.3 | 1039.4 | 2165.9 |
+| XGBoost GPU lossguide | 3.2.0 | same, grow_policy lossguide | 816.9 | 1272.0 | 2413.4 |
+| LightGBM CUDA lossguide | 4.7.0 | num_leaves 2^depth, max_bin 255 (`e1g/2026-08-28_030911-nvidia-speed-forest`) | 1313.7 | 1669.3 | not run |
+| cuML RandomForest | 26.8.0 | n_estimators 100, max_depth 16, max_features sqrt, n_bins 128, bootstrap | 3231.5 | 4543.0 | 7284.7 |
+| LightGBM CUDA extra_trees | 4.7.0 | INVALID: 181 s / 227 s single samples in `030911`; build refusal in `030908` | invalid | invalid | invalid |
+
+Extra trees therefore has NO valid NVIDIA opponent row. That measurement
+is owed (a LightGBM build with USE_CUDA, or cuML RF with `split_criterion`
+random thresholds if cuML admits it).
+
+Accuracy alongside the timing (CatBoost GPU symmetric, HIGGS 1M): logloss
+0.542398, AUC 0.800529, from the same logs (`FSPEED-ACC` lines).
+
+Classical, cuML 26.8.0 / cuVS, FAST arm, `e1g/2026-08-28_040832-nvidia-speed-classical`
+(3 rounds per arm run; PCA row is the only H100 PCA opponent that did not
+refuse, the Aug 26 leg refused its solver).
+
+| lane | shape | opponent | ms |
+|---|---|---|---|
+| knn | 400,000 x 32, 4,000 queries, k 10 | cuML NearestNeighbors | 9.542 |
+| kmeans | 4M x 32, k 64, 20 iterations | cuML KMeans | 120.217 |
+| ols | 4M x 32 | cuML LinearRegression | 118.933 |
+| pca | 4M x 32, 8 components | cuML PCA | 119.669 |
+| iforest | 500,000 x 32 | cuML IsolationForest (`e1g/2026-08-28_040244`, 12 rounds) | 85.159 |
+| ivf | 512 x 8, 64 queries, 8 lists, 3 probes, k 8 | cuVS IVF-Flat (8 rounds) | 13.229 |
+| dbscan | 4,000 x 16 | cuML DBSCAN | 1.082 |
+| hdbscan | fixture | cuML HDBSCAN | 4.391 |
+| cd | 2,048 x 16 | cuML coordinate descent | 1.258 |
+| kde | 1,024 x 256 x 8 | cuML KernelDensity | 0.384 |
+| krr | RBF 16 x 5 | cuML KernelRidge | 1.808 |
+| linkage | fixture | cuML AgglomerativeClustering | 2.315 |
+| svm | xor 240 x 2 | cuML SVC | 4.864 |
+| holtwinters | 7 x 72, forecast 12 | cuML HoltWinters | 8.147 |
+| kpss | 8 x 520 | cuML kpss | 0.424 |
+| metrics | fixture | cuML metrics | 12.626 |
+| cholesky | RBF 64 x 64, 4 rhs | torch linalg (fixture solve) | 0.160 |
+
+The classical fixtures above are small (thousands of rows) except knn,
+kmeans, ols, pca and iforest. Only those five are admissible as an
+identical-vs-opponent row; the rest measure launch overhead.
+
+GEMM, cuBLAS through torch 2.4.1+cu124, `e1g/2026-08-25_155542-nvidia-speed-gemmseq`
+and `2026-08-25_160520` (5 rounds).
+
+| shape | cublas-fp32 | cublas-tf32 |
+|---|---|---|
+| llama8b.lm_head.t512 | 10.808 | 1.368 |
+| gram.32x32x1M | 0.240 | 0.115 |
+
+The full 20-shape H100 cuBLAS table is in those logs; only the two rows
+above were transcribed. The H100 table for the 2026-09-09 tuned plans is
+OWED (the lane measured the L40S only).
+
+Sequence models, torch 2.4.1+cu124, `e1g/2026-08-25_160520-nvidia-speed-gemmseq`
+(5 rounds), Llama-8B shapes at 512 tokens:
+
+| op | torch fp32 | torch tf32 | sdpa math fp32 | sdpa efficient fp32 |
+|---|---|---|---|---|
+| attention t512 | 1.418 | 0.684 | 1.275 | 1.198 |
+| mlp t512 | 4.068 | 0.726 | | |
+| rmsnorm t512 | 0.100 | 0.090 | | |
+| mamba130m prefill t512 (torch reference scan) | 29.556 | 29.957 | | |
+| selective_scan t512 | 30.064 | 31.151 | | |
+
+## NVIDIA L40S, driver 580.126.09, CUDA 12.4, torch 2.4.1+cu124, cuBLAS 120402, cupy 14.2.0
+
+GEMM, 2026-09-09, worktree branch lane/gemm-identical,
+`bench/results/e1g/2026-09-09_123601-nvidia-l40s-identical-gemm-merged/opponents_l40s2.log`
+(5 rounds plus warm-up). The earlier `2026-09-09_092558` leg agrees within
+noise; quote the 123601 leg.
+
+| shape | cublas-fp32 (torch) | cublas-tf32 (torch) | cublasSgemm fp32 (cupy) | torch-fp32 |
+|---|---|---|---|---|
+| llama8b.qkv.t512 | 0.536 | 0.153 | 0.507 | 0.518 |
+| llama8b.mlp_up.t512 | 1.828 | 0.725 | 1.835 | 1.840 |
+| llama8b.mlp_down.t512 | 1.686 | 0.571 | 1.681 | 1.683 |
+| llama8b.lm_head.t512 | 16.89 | 5.251 | 17.37 | 17.31 |
+| pca.transform.wide.8192x64x128 | 0.019 | 0.017 | 0.017 | 0.019 |
+| kmeans.dist.4096x64x64 | 0.015 | 0.015 | 0.015 | 0.015 |
+| gram.128sq.x100003 | 0.123 | 0.083 | 0.248 | 0.133 |
+| gram.32x32x1M | 0.378 | 0.363 | 0.374 | 0.377 |
+| ols.step1.16x16x64K | 0.024 | 0.023 | 0.023 | 0.024 |
+
+Note the 2x disagreement on gram.128sq between the torch route and the
+direct cublasSgemm route; both are cuBLAS. Quote the torch route (the one
+users hit) and say so.
+
+Attention, 2026-09-09, worktree branch lane/samba-attention,
+`bench/results/attnlane_2026-09-09/window_timing.log` (3 rounds after 1
+warm-up). d_model 1024, 16 heads, 4 kv heads, head_dim 64, window 2048,
+sequence 4096, batch 4, TF32 off, explicit sliding-window mask.
+
+| arm | forward | forward+backward |
+|---|---|---|
+| torch eager fp32 SDPA | 33.6 | 106.9 |
+| torch.compile | 34.7 | 93.6 |
+
+## NVIDIA RTX 4090, driver 580.126.20, torch 2.4.1+cu124
+
+Public-API host-array comparison (transfers included), 2026-09-05,
+`bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/final-supplement/torch-knn-*/results.json`
+and `remote/campaign/public-*/results.json` (7 rotating rounds). The kNN
+opponent here is torch `cdist` + `topk`, NOT cuML.
+
+| lane | shape | opponent | ms |
+|---|---|---|---|
+| knn q32 | 100k x 32, k 10 | torch cdist+topk fp32 | 1.108 |
+| knn q128 | same | same | 1.386 |
+| knn q1000 | same | same | 5.639 |
+| gemv | 2048 x 2048 | torch | 1.067 |
+| nt | 16384 x 64 x 64 | torch | 0.884 |
+| gram | 65536 x 32 | torch | 1.097 |
+| umap | 15 neighbors, 2 components, 50 epochs | cuML UMAP | REFUSED (no cupy in the venv) |
+
+## Rows that do not exist yet (owed, in priority order)
+
+1. cuML UMAP on any NVIDIA card (the Sep 5 attempt refused; the Sep 7 paper
+   number is not in this tree).
+2. cuML NearestNeighbors at the kNN lane's public shapes on H100 or L40S
+   (the H100 classical row above is the only cuML kNN number; the 4090 row
+   is torch).
+3. LightGBM CUDA extra_trees, valid build, HIGGS 1M/2M/5M.
+4. cuBLAS on H100 for the 2026-09-09 tuned plans (all 21 shapes).
+5. cuML DBSCAN and PCA at 1M rows or more (the fixtures above are small).
+6. torch byte-LM training step time on H100 (the Sep 7 comparison in this
+   tree is a correctness record with no torch timing).
+
+## Rows never to quote
+
+- Anything under `bench/results/fast_speed/mac-*`: Apple M4 CPU and MPS
+  numbers, some with NVIDIA-sounding arm names (`torch-gpu-fp32` on MPS).
+- Aug 26 and Aug 27 H100 forest legs: 3 rounds, and three different driver
+  builds across what reads as one campaign (580.159.04, 580.126.09,
+  580.126.20). The Aug 28 030908 leg is the row.
+- Our own FAST or DETERMINISTIC arms, on any vendor.
+
+## How to add a row
+
+Run the opponent through the existing arm in `bench/speed/` or
+`tools/nvidia_public_compare.py --external-mode fast`, on a rented box, 5
+rounds minimum, with the versions printed in the log. Commit the log under
+`bench/results/e1g/<stamp>/` (top-level files only) and add the row here
+with the stamp, GPU, driver and versions. Then delete the opponent from the
+round's command line; the round measures us alone.
