@@ -1,0 +1,7 @@
+1069 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bd9c0000000, nodemask=2)
+== core/gemm_identity_check.mojo [IDENTICAL] ==
+check_gram_chunk_count_is_pinned OK [IDENTICAL]: k partitions into 128 chunks, and the workspace-sizing predicate independently implies the same 128 (pinned constant is 128; under FAST this number is the machine's own and under IDENTICAL it is the constant)
+check_gram_arm_is_pinned OK [IDENTICAL]: nvidia/amd rows answer False and bit-identical answers True, the arm compiles against column bit-identical, and 32x32 / 128-square both take the split-K kernel
+check_gemm_tn_over_capacity_takes_v1 OK [IDENTICAL]: 256x256x512 ran on v1's OP_TN arm and every cell equals gemm_oracle
+check_pinned_gemm_is_batch_invariant OK [IDENTICAL]: all 256 overlapping cells bit-identical at n=4, n=64 and n=256 (m=64, k=4096) -- cell (5,2) alone moves from block 0 to block 1 to block 5 across those launches, so the comparison spans blocks and not just thread indices. Reference cell (0,0) = 6.5419345 / 0x40d15787
+check_pinned_gemv_matches_oracle OK [IDENTICAL]: 37 elements over k=91 within 1.962866996940704e-06 of an ascending Float64 fold, no poison survived

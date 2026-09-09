@@ -1,0 +1,7 @@
+1105 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b8300000000, nodemask=2)
+== glm/ols_main.mojo [FAST] ==
+check_ols_exact OK: all 8 coefficients recovered within 5.0% from a noiseless planted model (worst relative 0.010513424873350732; vendor fp32 product on this column: TF32 (10-bit mantissa tensor-core product), FAST arm -- RECORDED at the TF32/fp19 tolerance)
+check_ols_scale_invariant OK: y x5 scaled every coefficient by exactly 5, which is the reach evidence for xty_kernel
+check_ols_beats_truth_on_noise OK: fitted residual 85.00162757906224 against the true model's 85.21995181198805
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: gemm_nt_gram: n == 1 is not a Gram shape this entry serves. gemm_nt's gemv route takes two mut buffers and cannot be handed one buffer twice; a 1 x 1 Gram is a dot product and belongs somewhere else.
