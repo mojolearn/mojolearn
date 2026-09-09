@@ -24,8 +24,43 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from gemm.checks.gemm_identical_tuned import (
-    tuned_gemm_banner, tuned_gemm_into, tuned_gemm_workspace_max_floats,
+    choose_tuned_gemm_plan, tuned_gemm_banner, tuned_gemm_into,
+    tuned_gemm_plan_name, tuned_gemm_with_plan,
+    tuned_gemm_workspace_max_floats,
 )
+from std.os import getenv
+
+
+def _env_int(name: String, dflt: Int) -> Int:
+    var s = String(getenv(name))
+    if s.byte_length() == 0:
+        return dflt
+    try:
+        return Int(s)
+    except:
+        return dflt
+
+
+def _shape_selected(name: String) -> Bool:
+    var spec = String(getenv("MOJOLEARN_SPEED_SHAPES"))
+    if spec.byte_length() == 0:
+        return True
+    return (String(",") + spec + ",").find(String(",") + name + ",") >= 0
+
+
+def _tuned(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int, n: Int, k: Int, op: Int, forced: Int,
+) raises:
+    """MOJOLEARN_TUNED_PLAN=<id> forces one tuned plan; unset = the dispatcher."""
+    if forced >= 0:
+        tuned_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, forced)
+    else:
+        tuned_gemm_into(ctx, c, a, b, ws, m, n, k, op)
 
 comptime POISON = Float32(-1.0e37)
 
@@ -84,7 +119,11 @@ def main() raises:
     print("== tuned vs pinned, BITS ==")
     print("   " + tuned_gemm_banner())
     var same = 0; var moved = 0; var refused = 0
+    var forced = _env_int("MOJOLEARN_TUNED_PLAN", -1)
+    var rounds = _env_int("MOJOLEARN_SPEED_ROUNDS", 3)
     for i in range(GEMM_SHAPE_COUNT):
+        if not _shape_selected(gemm_shape_name(i)):
+            continue
         var k = gemm_shape_k(i)
         var op = _oop(gemm_shape_op(i))
         var m = gemm_shape_m(i); var n = gemm_shape_n(i)
@@ -107,7 +146,14 @@ def main() raises:
         identical_gemm_into(ctx, dc, da, db, dw, m, n, k, op); ctx.synchronize()
         var dp = _digest(ctx, dc, mn)
         _poison(ctx, dc, mn)
-        tuned_gemm_into(ctx, dc, da, db, dw, m, n, k, op); ctx.synchronize()
+        var plan = forced if forced >= 0 else choose_tuned_gemm_plan(m, n, k)
+        try:
+            _tuned(ctx, dc, da, db, dw, m, n, k, op, forced); ctx.synchronize()
+        except e:
+            print("   REFUSED " + gemm_shape_name(i) + " [" + tuned_gemm_plan_name(plan) + "]: " + String(e))
+            refused += 1
+            _ = da^; _ = db^; _ = dc^; _ = dw^; _ = ctx^
+            continue
         var dt = _digest(ctx, dc, mn)
         # Three timed pairs, ALTERNATING CALL BY CALL in one binary, after the
         # warm-ups above. Same discipline as gemm_unpinned_price.mojo: two
@@ -115,16 +161,16 @@ def main() raises:
         # level rather than being averaged over rounds.
         var ns_p = 0
         var ns_t = 0
-        for _ in range(3):
+        for _ in range(rounds):
             var t0 = perf_counter_ns()
             identical_gemm_into(ctx, dc, da, db, dw, m, n, k, op); ctx.synchronize()
             ns_p += perf_counter_ns() - t0
             var t1 = perf_counter_ns()
-            tuned_gemm_into(ctx, dc, da, db, dw, m, n, k, op); ctx.synchronize()
+            _tuned(ctx, dc, da, db, dw, m, n, k, op, forced); ctx.synchronize()
             ns_t += perf_counter_ns() - t1
-        var ms_p = Float64(ns_p) / 3.0e6
-        var ms_t = Float64(ns_t) / 3.0e6
-        var nm = gemm_shape_name(i)
+        var ms_p = Float64(ns_p) / (Float64(rounds) * 1.0e6)
+        var ms_t = Float64(ns_t) / (Float64(rounds) * 1.0e6)
+        var nm = gemm_shape_name(i) + " [" + tuned_gemm_plan_name(plan) + "]"
         if dp[1] != 0 or dt[1] != 0:
             print("   REFUSED " + nm + ": poison left pinned=" + String(dp[1]) + " tuned=" + String(dt[1]))
             refused += 1

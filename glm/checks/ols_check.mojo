@@ -475,9 +475,9 @@ def _solve_shaped_algo(
 # CORRECTED 2026-09-01. The last clause used to read "and the one shape
 # whose only other arm is a closed vendor library RAISES by name". No shape
 # refuses for that reason any more: `n_cols > n_rows` and `n_cols == 1` are
-# solved (DEVIATIONS 550, 551). The refusal that survives under IDENTICAL is
-# `check_ols_refuses_over_capacity`'s, which is about the pinned Gram
-# kernel's capacity and not about anybody's library.
+# solved (DEVIATIONS 550, 551). The last refusal, the pinned Gram kernel's
+# 128-feature capacity, closed 2026-09-09: past it step 1 runs on profile
+# v1's OP_TN arm (`check_ols_over_capacity_fits`).
 
 from std.memory import bitcast
 
@@ -614,16 +614,18 @@ def _fit_at_width(ctx: DeviceContext, n: Int, d: Int) raises -> String:
     return String("")
 
 
-def check_ols_refuses_over_capacity() raises:
-    """A feature count past the pinned Gram kernel's capacity RAISES under
-    IDENTICAL and RUNS under FAST.
+def check_ols_over_capacity_fits() raises:
+    """A feature count past the pinned Gram kernel's capacity FITS in both
+    modes, and under IDENTICAL the fit is run-to-run bit-stable.
 
-    This is not a copy of `check_gemm_tn_refuses_over_capacity`: that one
-    calls `gemm_tn` directly, and what is asserted here is that the refusal
-    SURVIVES THE WHOLE ESTIMATOR -- that it is not swallowed by a `try` in
-    `lstsq_eig`, not turned into a warning by `ols_fit`, and not preceded by
-    some other guard that fires first and hides it. A refusal a caller never
-    sees is a fall-through with extra steps.
+    Until 2026-09-09 this shape RAISED under IDENTICAL and this check
+    asserted the refusal. `core/gemm.mojo::gemm_tn` now routes
+    `n_cols > GRAM_MAX_COLS` to profile v1's OP_TN arm
+    (`core/gemm_identity_check.mojo::check_gemm_tn_over_capacity_takes_v1`
+    pins those bits to the host oracle), so what is asserted here is that
+    the route SURVIVES THE WHOLE ESTIMATOR: no `try` in `lstsq_eig`
+    swallows it, `ols_fit` reaches step 1 at this width and comes back with
+    coefficients, and two fits agree bit for bit.
 
     `n_cols = GRAM_MAX_COLS + 2` with `n_rows` comfortably larger, so the
     `ols.cuh:112-113` guard (`n_cols > n_rows`) does NOT fire and the shape
@@ -633,60 +635,68 @@ def check_ols_refuses_over_capacity() raises:
     var n = 512
     if d >= n:
         raise Error(
-            "check_ols_refuses_over_capacity: the fixture is n_cols >="
+            "check_ols_over_capacity_fits: the fixture is n_cols >="
             " n_rows, so ols.cuh:113 sends it to lstsq_min_norm, whose Gram"
             " is n_rows x n_rows and never reaches the capacity this check"
             " is about. The check would be measuring the wrong route."
         )
     with DeviceContext() as ctx:
         var err = _fit_at_width(ctx, n, d)
+        if err != "":
+            raise Error(
+                "check_ols_over_capacity_fits: a "
+                + String(n)
+                + " x "
+                + String(d)
+                + " design raised under "
+                + _mode_name()
+                + ": "
+                + err
+            )
+        var w1 = _solve_shaped(ctx, n, d)
+        var w2 = _solve_shaped(ctx, n, d)
+        var moved = 0
+        var worst = 0.0
+        for j in range(d):
+            if bitcast[DType.uint64](w1[j]) != bitcast[DType.uint64](w2[j]):
+                moved += 1
+            var e = abs(w1[j] - _true_w(j))
+            if e > worst:
+                worst = e
         comptime if IDENTICAL:
-            if err == "":
+            if moved != 0:
                 raise Error(
-                    "check_ols_refuses_over_capacity: a "
+                    "check_ols_over_capacity_fits [IDENTICAL]: two fits of"
+                    " the same "
                     + String(n)
                     + " x "
                     + String(d)
-                    + " design COMPLETED under IDENTICAL. It cannot have"
-                    " used the pinned Gram kernel (n_cols > "
-                    + String(GRAM_MAX_COLS)
-                    + "), so step 1 ran on linalg.matmul and this fit is a"
-                    " model the mode promises is vendor-independent and is"
-                    " not."
+                    + " design differ in "
+                    + String(moved)
+                    + " coefficients."
                 )
-            if err.find("IDENTITY_PATHS row 27") < 0:
-                raise Error(
-                    "check_ols_refuses_over_capacity: it refused, but the"
-                    " message does not cite the ledger row, so a user"
-                    " cannot trace it. Got: "
-                    + err
-                )
-            print(
-                "check_ols_refuses_over_capacity OK [IDENTICAL]: "
+        if worst > 1.0e-2:
+            raise Error(
+                "check_ols_over_capacity_fits: the "
                 + String(n)
                 + " x "
                 + String(d)
-                + " raised by name through the whole estimator rather than"
-                " falling through to the vendor matmul"
+                + " fit misses the planted coefficients by "
+                + String(worst)
             )
-        else:
-            if err != "":
-                raise Error(
-                    "check_ols_refuses_over_capacity: the FAST build must"
-                    " still fit "
-                    + String(n)
-                    + " x "
-                    + String(d)
-                    + " through the transpose+matmul arm, but it raised: "
-                    + err
-                )
-            print(
-                "check_ols_refuses_over_capacity OK [FAST]: "
-                + String(n)
-                + " x "
-                + String(d)
-                + " still fits on the transpose+matmul arm"
-            )
+        print(
+            "check_ols_over_capacity_fits OK ["
+            + _mode_name()
+            + "]: "
+            + String(n)
+            + " x "
+            + String(d)
+            + " fits through the whole estimator (worst |w - w*| = "
+            + String(worst)
+            + ", run-to-run coefficients moved: "
+            + String(moved)
+            + ")"
+        )
 
 
 # ===========================================================================
@@ -2281,7 +2291,7 @@ def main() raises:
     check_ols_sample_weight_restores_its_operands()
     check_ols_sample_weight_host_rescale_matches_device()
     check_ols_arms_are_pinned()
-    check_ols_refuses_over_capacity()
+    check_ols_over_capacity_fits()
     check_ols_is_launch_invariant()
     check_ols_host_surface_takes_the_guard()
     check_ols_rank_guard_is_absolute()

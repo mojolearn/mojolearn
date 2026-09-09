@@ -24,9 +24,10 @@ on, and each is written so that it FAILS when its pin is removed:
    AMD build under IDENTICAL enters this kernel instead of `linalg.matmul`.
    This is the one property that CANNOT be proved by running on Apple, so it
    is proved at the table instead, against the vendor rows themselves.
-3. `check_gemm_tn_refuses_over_capacity` -- the shape the split-K kernel
-   cannot serve RAISES under IDENTICAL instead of falling through to the
-   vendor library, and runs normally under FAST.
+3. `check_gemm_tn_over_capacity_takes_v1` -- the shape the split-K kernel
+   cannot serve runs on profile v1's pinned OP_TN arm under IDENTICAL (bits
+   equal to `gemm_oracle`) instead of falling through to the vendor
+   library, and runs normally under FAST.
 4. `check_pinned_gemm_is_batch_invariant` -- the headline. The bits of a
    given output cell do not depend on how many other cells were in the
    launch. Under FAST this is a REPORT (the vendor matmul is free to fail
@@ -71,6 +72,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from gemm.checks.gemm_oracle import OP_TN, gemm_oracle
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -325,9 +327,11 @@ def check_gram_arm_is_pinned() raises:
 # ===========================================================================
 
 
-def _gemm_tn_over_capacity(ctx: DeviceContext) raises -> String:
+def _gemm_tn_over_capacity(
+    ctx: DeviceContext, mut out: List[Float32]
+) raises -> String:
     """Run `gemm_tn` at a shape past the split-K kernel's capacity. Returns
-    the error text, or the empty string if it completed."""
+    the error text, or the empty string with the product in `out`."""
     var m = 256  # > GRAM_MAX_COLS (128): outside the staging tile
     var k = 512
     var x = ctx.enqueue_create_buffer[DType.float32](k * m)
@@ -335,16 +339,24 @@ def _gemm_tn_over_capacity(ctx: DeviceContext) raises -> String:
     var xt = ctx.enqueue_create_buffer[DType.float32](k * m)
     var xt2 = ctx.enqueue_create_buffer[DType.float32](k * m)
     var hx = ctx.enqueue_create_host_buffer[DType.float32](k * m)
+    var hz = ctx.enqueue_create_host_buffer[DType.float32](m * m)
     ctx.synchronize()
     for i in range(k * m):
         hx.unsafe_ptr().unsafe_store(i, _val_f32(i, 77))
+    for i in range(m * m):
+        hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
     ctx.synchronize()
     try:
         gemm_tn(ctx, z, x, xt, xt2, m, m, k)
         ctx.synchronize()
     except e:
         return String(e)
+    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    ctx.synchronize()
+    for i in range(m * m):
+        out.append(hz.unsafe_ptr().unsafe_load(i))
     # Keep the buffers alive past the synchronize: a DeviceBuffer is freed
     # at its LAST USE, and `.unsafe_ptr()` inside the call is not a use of
     # the buffer afterwards.
@@ -352,61 +364,83 @@ def _gemm_tn_over_capacity(ctx: DeviceContext) raises -> String:
     _ = z
     _ = xt
     _ = xt2
+    _ = hx
+    _ = hz
     return String("")
 
 
-def check_gemm_tn_refuses_over_capacity() raises:
-    """Over-capacity Gram: RAISES under IDENTICAL, RUNS under FAST.
+def check_gemm_tn_over_capacity_takes_v1() raises:
+    """Over-capacity Gram: under IDENTICAL it RUNS on profile v1's OP_TN arm
+    and every cell equals `gemm_oracle`, bit for bit; under FAST it still
+    runs on the transpose+matmul arm.
 
-    The refusal is the point. Under IDENTICAL the alternative arm is
-    `linalg.matmul` behind two transposes, and running it would return a
-    model that is not identical under a mode whose entire promise is that
-    it is -- IDENTITY_PATHS' opening rule calls that worse than no toggle,
-    because it converts a checkable property into a belief. Under FAST the
-    same shape must still work: a pin that breaks the shipped arm is a
-    regression, not a guarantee.
+    Until 2026-09-09 this shape was REFUSED under IDENTICAL (the only other
+    arm was `linalg.matmul`). v1 supports OP_TN with a pinned partition and
+    fold, so the refusal was avoidable: `core/gemm.mojo::gemm_tn` now routes
+    `m > GRAM_MAX_COLS` there, and this check pins the routed bits to the
+    contract's host oracle so the route cannot quietly become the vendor
+    library again.
     """
     if GRAM_MAX_COLS >= 256:
         raise Error(
-            "check_gemm_tn_refuses_over_capacity: the split-K kernel now"
+            "check_gemm_tn_over_capacity_takes_v1: the split-K kernel now"
             " serves m = 256, so this fixture is inside capacity and the"
             " check proves nothing. Pick a shape past the new bound."
         )
     with DeviceContext() as ctx:
-        var err = _gemm_tn_over_capacity(ctx)
+        var got = List[Float32]()
+        var err = _gemm_tn_over_capacity(ctx, got)
         comptime if IDENTICAL:
-            if err == "":
+            if err != "":
                 raise Error(
-                    "check_gemm_tn_refuses_over_capacity: 256x256x512"
-                    " COMPLETED under IDENTICAL. It cannot have run on the"
-                    " split-K kernel (m > "
-                    + String(GRAM_MAX_COLS)
-                    + "), so it ran on the vendor matmul and returned a"
-                    " model this mode promises is vendor-independent and"
-                    " is not."
-                )
-            if err.find("IDENTITY_PATHS row 27") < 0:
-                raise Error(
-                    "check_gemm_tn_refuses_over_capacity: it refused, but"
-                    " the message does not cite the ledger row. A refusal"
-                    " a user cannot trace to its reason is a crash. Got: "
+                    "check_gemm_tn_over_capacity_takes_v1: 256x256x512"
+                    " RAISED under IDENTICAL, but gemm_tn routes shapes past"
+                    " the split-K capacity to profile v1 since 2026-09-09."
+                    " Got: "
                     + err
                 )
+            var m = 256
+            var k = 512
+            var ha = List[Float32]()
+            for i in range(k * m):
+                ha.append(_val_f32(i, 77))
+            var hb = List[Float32]()
+            for i in range(k * m):
+                hb.append(_val_f32(i, 77))
+            var want = gemm_oracle(ha, hb, OP_TN, m, m, k)
+            var bad = 0
+            var first = -1
+            for c in range(m * m):
+                if bitcast[DType.uint32](got[c]) != bitcast[DType.uint32](want[c]):
+                    bad += 1
+                    if first < 0:
+                        first = c
+            if bad != 0:
+                raise Error(
+                    "check_gemm_tn_over_capacity_takes_v1: 256x256x512 ran"
+                    " under IDENTICAL but "
+                    + String(bad)
+                    + " of "
+                    + String(m * m)
+                    + " cells differ from gemm_oracle (first at "
+                    + String(first)
+                    + "), so the route is not profile v1."
+                )
             print(
-                "check_gemm_tn_refuses_over_capacity OK [IDENTICAL]:"
-                " 256x256x512 raised by name rather than falling through"
-                " to linalg.matmul"
+                "check_gemm_tn_over_capacity_takes_v1 OK [IDENTICAL]:"
+                " 256x256x512 ran on v1's OP_TN arm and every cell equals"
+                " gemm_oracle"
             )
         else:
             if err != "":
                 raise Error(
-                    "check_gemm_tn_refuses_over_capacity: the FAST build"
+                    "check_gemm_tn_over_capacity_takes_v1: the FAST build"
                     " must still serve 256x256x512 through the"
                     " transpose+matmul arm, but it raised: "
                     + err
                 )
             print(
-                "check_gemm_tn_refuses_over_capacity OK [FAST]:"
+                "check_gemm_tn_over_capacity_takes_v1 OK [FAST]:"
                 " 256x256x512 still runs on the transpose+matmul arm"
             )
 
@@ -696,6 +730,6 @@ def main() raises:
     print("== core/gemm_identity_check.mojo [" + _mode_name() + "] ==")
     check_gram_chunk_count_is_pinned()
     check_gram_arm_is_pinned()
-    check_gemm_tn_refuses_over_capacity()
+    check_gemm_tn_over_capacity_takes_v1()
     check_pinned_gemm_is_batch_invariant()
     check_pinned_gemv_matches_oracle()

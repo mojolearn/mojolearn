@@ -294,6 +294,7 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 
 from gemm.checks.gemm_oracle import CONTRACT_MAX_LEAVES
@@ -328,9 +329,45 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_name,
     lib_block_size_for,
+    lib_hardware_ftz_fma_for,
     lib_smem_pages_for,
 )
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_mul_add,
+)
+
+
+#: The per-step seam as ONE hardware instruction where the kernel matrix
+#: says the column has it (`lib_hardware_ftz_fma_for`). Software seam
+#: everywhere else and in every non-IDENTICAL build.
+comptime TUNED_HW_FTZ_FMA = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and lib_hardware_ftz_fma_for[TARGET_COLUMN]()
+)
+
+
+@always_inline
+def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """Contract sections 4 and 5c for one `p`: `ftz(fma(a, b, acc))`, with
+    `a` and `b` already flushed as loaded (5a, 5b) and `acc` already flushed
+    by the previous step or seeded `+0.0`.
+
+    On the NVIDIA column this is PTX `fma.rn.ftz.f32`: one rounding to
+    nearest-even, subnormal inputs and result flushed to sign-preserving
+    zero. Because every input is already flushed, the hardware flush of the
+    inputs is a no-op and the flush of the result is 5c exactly, so the
+    value is the software seam's value at every input. The gates compare
+    the bits against the host oracle on the box rather than trusting this
+    paragraph.
+    """
+    comptime if TUNED_HW_FTZ_FMA:
+        return llvm_intrinsic[
+            "llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False
+        ](a, b, acc)
+    return ftz(identical_mul_add(a, b, acc))
 
 
 # ===========================================================================
@@ -444,7 +481,8 @@ def tuned_gemm_banner() -> String:
     """
     var head = String("GEMM TUNED ARM (EXPERIMENTAL, UNGATED, column=")
     head += column_name(TARGET_COLUMN) + ", tpb=" + String(TUNED_TPB)
-    head += ", veclen=" + String(TUNED_VECLEN) + ")"
+    head += ", veclen=" + String(TUNED_VECLEN)
+    head += ", hw_ftz_fma=" + String(TUNED_HW_FTZ_FMA) + ")"
     if not TUNED_ARM:
         head += " -- DISABLED in this binary"
     else:
@@ -550,6 +588,63 @@ def _fold_drain_tile[
             else:
                 comptime for e in range(NE):
                     acc[e] = stack[d * NC + e]
+                have = True
+    return acc
+
+
+def _fold_push_local[
+    NC: Int, FS: Int
+](
+    stack: MutPointer[Float32, MutUntrackedOrigin],
+    mut occ: Int,
+    value: SIMD[DType.float32, NC],
+) -> Bool:
+    """`_fold_push_tile`, with the stack in THREAD-LOCAL MEMORY instead of a
+    SIMD register: `stack[d * NC + e]` is slot `d` of cell `e`.
+
+    Same merge expression, same `occ` arithmetic, same carry-by-silence.
+    The push fires once per LEAF (every `L >= 128` steps of `p`), so the
+    local-memory traffic is a rounding error, and what it buys is that the
+    register tile no longer pays `FS * NC` registers for a stack it touches
+    once per leaf (DEVIATION 1253's bound). The loop over `d` is a runtime
+    loop with an early return, which is what makes the stack a memory
+    object rather than a register file.
+    """
+    var val = value
+    for d in range(FS):
+        if ((occ >> d) & 1) == 1:
+            comptime if SAB_FOLD_STRIDE:
+                comptime for e in range(NC):
+                    val[e] = ftz(
+                        ftz(val[e]) + ftz(stack.unsafe_load((FS - 1 - d) * NC + e))
+                    )
+            else:
+                comptime for e in range(NC):
+                    val[e] = ftz(ftz(stack.unsafe_load(d * NC + e)) + ftz(val[e]))
+            occ = occ - (1 << d)
+        else:
+            comptime for e in range(NC):
+                stack.unsafe_store(d * NC + e, val[e])
+            occ = occ + (1 << d)
+            return True
+    return False
+
+
+def _fold_drain_local[
+    NC: Int, FS: Int
+](stack: MutPointer[Float32, MutUntrackedOrigin], occ: Int) -> SIMD[DType.float32, NC]:
+    """`_fold_drain_tile` over the thread-local stack: lowest level first,
+    no addition at `P == 1`."""
+    var have = False
+    var acc = SIMD[DType.float32, NC](0.0)
+    for d in range(FS):
+        if ((occ >> d) & 1) == 1:
+            if have:
+                comptime for e in range(NC):
+                    acc[e] = ftz(ftz(stack.unsafe_load(d * NC + e)) + ftz(acc[e]))
+            else:
+                comptime for e in range(NC):
+                    acc[e] = stack.unsafe_load(d * NC + e)
                 have = True
     return acc
 
@@ -697,7 +792,12 @@ comptime TUNED_PLAN_R4C2_K16_S8 = 3
 comptime TUNED_PLAN_R2C2_K16_S16 = 4
 comptime TUNED_PLAN_R2C2_K16_S1 = 5
 comptime TUNED_PLAN_R4C4_K16_S8 = 6
-comptime TUNED_GEMM_PLAN_COUNT = 7
+comptime TUNED_PLAN_R8C8_K16_S8 = 7
+comptime TUNED_PLAN_R8C8_K16_S16 = 8
+comptime TUNED_PLAN_R4C4_K16_S16 = 9
+comptime TUNED_PLAN_R8C4_K16_S8 = 10
+comptime TUNED_PLAN_R4C8_K16_S8 = 11
+comptime TUNED_GEMM_PLAN_COUNT = 12
 
 
 def tuned_gemm_plan_name(plan: Int) -> String:
@@ -737,7 +837,27 @@ def tuned_gemm_plan_name(plan: Int) -> String:
     elif plan == TUNED_PLAN_R4C4_K16_S8:
         rpt = TUNED_RPT
         cpt = TUNED_CPT
-        tail = String("P<=255, sweep only, NEVER dispatched")
+        tail = String("P<=255")
+    elif plan == TUNED_PLAN_R8C8_K16_S8:
+        rpt = TUNED_RPT * 2
+        cpt = TUNED_CPT * 2
+        tail = String("P<=255")
+    elif plan == TUNED_PLAN_R8C8_K16_S16:
+        rpt = TUNED_RPT * 2
+        cpt = TUNED_CPT * 2
+        tail = String("P<=1024, the profile cap")
+    elif plan == TUNED_PLAN_R4C4_K16_S16:
+        rpt = TUNED_RPT
+        cpt = TUNED_CPT
+        tail = String("P<=1024, the profile cap")
+    elif plan == TUNED_PLAN_R8C4_K16_S8:
+        rpt = TUNED_RPT * 2
+        cpt = TUNED_CPT
+        tail = String("P<=255")
+    elif plan == TUNED_PLAN_R4C8_K16_S8:
+        rpt = TUNED_RPT
+        cpt = TUNED_CPT * 2
+        tail = String("P<=255")
     else:
         return String("TUNED PLAN?")
     # BUILT FROM THE RESOLVED CONSTANTS, not from a literal. A name that
@@ -765,6 +885,16 @@ def tuned_plan_fold_slots(plan: Int) -> Int:
         return 8
     if plan == TUNED_PLAN_R4C4_K16_S8:
         return 8
+    if plan == TUNED_PLAN_R8C8_K16_S8:
+        return 8
+    if plan == TUNED_PLAN_R8C4_K16_S8:
+        return 8
+    if plan == TUNED_PLAN_R4C8_K16_S8:
+        return 8
+    if plan == TUNED_PLAN_R8C8_K16_S16:
+        return 16
+    if plan == TUNED_PLAN_R4C4_K16_S16:
+        return 16
     if plan == TUNED_PLAN_R2C2_K16_S16:
         return 16
     return 0
@@ -937,7 +1067,11 @@ def tuned_gemm_tiled_kernel[
     var acccol = tid - accrow * TC
 
     var acc = SIMD[DType.float32, NCELL](0.0)
-    var fstk = SIMD[DType.float32, FS * NCELL](0.0)
+    # FS == 1: the single leaf partial parks in registers (no tree at all).
+    # FS > 1: the stack is thread-local memory, `FS * NCELL` floats, touched
+    # once per leaf; see `_fold_push_local`.
+    var fstk = SIMD[DType.float32, NCELL](0.0)
+    var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
     var occ = 0
     var serial = SIMD[DType.float32, NCELL](0.0)
 
@@ -1046,10 +1180,8 @@ def tuned_gemm_tiled_kernel[
                             # 4 (one fused rounding) and 5c (the accumulator
                             # flushed after EVERY step). 5c is per cell per
                             # step and is NOT hoisted, because it cannot be.
-                            acc[u2 * CPT + v3] = ftz(
-                                identical_mul_add(
-                                    afl, bfl[v3], acc[u2 * CPT + v3]
-                                )
+                            acc[u2 * CPT + v3] = _tuned_step(
+                                afl, bfl[v3], acc[u2 * CPT + v3]
                             )
         else:
             # THE RAGGED PATH, and the EMPTY one: `chunk` may be 0. Scalar
@@ -1066,10 +1198,8 @@ def tuned_gemm_tiled_kernel[
                         as_.unsafe_load(abase + u3 * TR * SSTRIDE + cc)
                     )
                     comptime for v5 in range(NCOL):
-                        acc[u3 * CPT + v5] = ftz(
-                            identical_mul_add(
-                                afl2, bfl2[v5], acc[u3 * CPT + v5]
-                            )
+                        acc[u3 * CPT + v5] = _tuned_step(
+                            afl2, bfl2[v5], acc[u3 * CPT + v5]
                         )
 
         comptime if PAGES == 1:
@@ -1109,7 +1239,7 @@ def tuned_gemm_tiled_kernel[
                         fstk[fe] = part[fe]
                     occ = 1
                 else:
-                    _ = _fold_push_tile[NCELL, FS](fstk, occ, part)
+                    _ = _fold_push_local[NCELL, FS](fl, occ, part)
             acc = SIMD[DType.float32, NCELL](0.0)
 
         w = w + 1
@@ -1122,8 +1252,8 @@ def tuned_gemm_tiled_kernel[
             while padded < p_count:
                 padded = padded * 2
             for _pad in range(p_count, padded):
-                _ = _fold_push_tile[NCELL, FS](
-                    fstk, occ, SIMD[DType.float32, NCELL](0.0)
+                _ = _fold_push_local[NCELL, FS](
+                    fl, occ, SIMD[DType.float32, NCELL](0.0)
                 )
 
     var outv = SIMD[DType.float32, NCELL](0.0)
@@ -1131,7 +1261,7 @@ def tuned_gemm_tiled_kernel[
         comptime for oe in range(NCELL):
             outv[oe] = fstk[oe]
     else:
-        outv = _fold_drain_tile[NCELL, FS](fstk, occ)
+        outv = _fold_drain_local[NCELL, FS](fl, occ)
     comptime if SAB_FOLD_SERIAL:
         outv = serial
 
@@ -1376,6 +1506,31 @@ def tuned_gemm_with_plan(
         return
     if plan == TUNED_PLAN_R4C4_K16_S8:
         _launch_tuned[TUNED_RPT, TUNED_CPT, TUNED_TC, 16, 8](
+            ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
+        )
+        return
+    if plan == TUNED_PLAN_R8C8_K16_S8:
+        _launch_tuned[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16, 8](
+            ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
+        )
+        return
+    if plan == TUNED_PLAN_R8C8_K16_S16:
+        _launch_tuned[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16, 16](
+            ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
+        )
+        return
+    if plan == TUNED_PLAN_R4C4_K16_S16:
+        _launch_tuned[TUNED_RPT, TUNED_CPT, TUNED_TC, 16, 16](
+            ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
+        )
+        return
+    if plan == TUNED_PLAN_R8C4_K16_S8:
+        _launch_tuned[TUNED_RPT * 2, TUNED_CPT, TUNED_TC, 16, 8](
+            ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
+        )
+        return
+    if plan == TUNED_PLAN_R4C8_K16_S8:
+        _launch_tuned[TUNED_RPT, TUNED_CPT * 2, TUNED_TC, 16, 8](
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
         )
         return
