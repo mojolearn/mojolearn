@@ -814,11 +814,12 @@ def quantize_search_for[column: Int]() -> Int:
 
 
 def _knn_identical_round_column(column: Int) -> Bool:
-    """The columns whose IDENTICAL k-NN defaults were flipped 2026-09-09: small-k selector, transposed index layout with the register tile, and index-axis tiling. Apple keeps the pre-flip kernels until the orchestrator measures it locally; adding `column == COLUMN_APPLE` here is that flip."""
+    """The columns whose IDENTICAL k-NN defaults were flipped 2026-09-09: small-k selector, transposed index layout with the register tile, and index-axis tiling. NVIDIA and AMD flipped on the H100 evidence; Apple flipped the same afternoon on the M4 four-arm price (100k x 32, k 10, 9 rounds, PRICE_MS medians baseline -> both: 20.5 -> 15.1 ms at 32 queries, 26.9 -> 14.9 at 128, 182.2 -> 66.6 at 1000; all four arms byte-equal to the NVIDIA baseline across 143,628 cells). On Apple the transpose-only arm was slightly faster still at 128 and 1000 queries (12.1, 60.2 ms) and slower at 32 (16.3 ms); the both column is the shipped one."""
     return (
         column == COLUMN_NVIDIA
         or column == COLUMN_AMD
         or column == COLUMN_AMD_RDNA
+        or column == COLUMN_APPLE
     )
 
 
