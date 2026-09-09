@@ -1,0 +1,25 @@
+started=2026-09-09T17:49:23Z rounds=5 plans=0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
+card_capped exit=0 secs=6
+build probe exit=0 secs=21
+build speed exit=0 secs=21
+build gemm_identity exit=0 secs=21
+run probe exit=0 secs=7
+run probe.plan0 exit=0 secs=13
+run probe.plan1 exit=0 secs=7
+run probe.plan2 exit=0 secs=7
+run probe.plan3 exit=0 secs=7
+run probe.plan4 exit=0 secs=8
+run probe.plan5 exit=0 secs=8
+run probe.plan6 exit=0 secs=10
+run probe.plan7 exit=0 secs=10
+run probe.plan8 exit=0 secs=6
+run probe.plan9 exit=0 secs=7
+run probe.plan10 exit=0 secs=8
+run probe.plan11 exit=0 secs=7
+run probe.plan12 exit=0 secs=6
+run probe.plan13 exit=0 secs=8
+run probe.plan14 exit=0 secs=6
+run speed_v1 exit=0 secs=7
+run speed_core exit=0 secs=6
+run gemm_identity exit=0 secs=1
+finished=2026-09-09T17:52:51Z
