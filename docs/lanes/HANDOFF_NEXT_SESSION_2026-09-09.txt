@@ -1,0 +1,121 @@
+HANDOFF TO THE NEXT SESSION, mojolearn identical fan-out, written 2026-09-09 18:10 EDT
+Orchestrator session: https://claude.ai/code/session_01U2tufdZoytSRokRVQoppgy
+Repo: /Users/andrewhendel/CascadeProjects/mojolearn (main, pushed to github.com/mojolearn/mojolearn)
+Companion (fuller, markdown): docs/lanes/HANDOFF_orchestrator_2026-09-09.md
+Opponent numbers: bench/OPPONENT_REFERENCE.md (never re-run an opponent where a row exists)
+
+=== ANDREW'S STANDING ORDERS (this fan-out) ===
+1. The only number that matters: OUR IDENTICAL arm vs THE OPPONENT'S FAST arm, NVIDIA column.
+   Never test, time, qualify or optimize our own FAST/DETERMINISTIC arms. Existing three-tier
+   tree bindings stay exactly as they are.
+2. Opponents are measured ONCE per (GPU model, driver, library version, dataset, params) and
+   stored in bench/OPPONENT_REFERENCE.md; rounds run OUR identical arm alone and read the row.
+3. NO NEW LANES until Andrew says so. Resume unfinished lanes only (SendMessage to the agent id
+   resumes it with its transcript; that is not a new lane).
+4. Subagents write code and may rent NVIDIA boxes (tools/gemm_remote_leg.sh, L40S to iterate,
+   H100 for finals, one-hour lease baked in). ONLY the orchestrator runs anything on the Mac:
+   one thing at a time, nice 19, via a nohup script in the scratchpad + a background wait loop.
+5. Keys: ~/.mojolearn_runpod_key and ~/.mojolearn_do_token are read by file path only
+   (MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key), never printed or exported.
+6. Never touch RunPod pods named samba-* or samba-gate-* (foreign program). Any other pod with no
+   live lane is an orphan: terminate it. List pods: curl rest.runpod.io/v1/pods with the key.
+7. Git: explicit paths only (no git add -A), never rewrite history, fix forward, report commits
+   as "%h parent %p". Nothing over 5 MB in a commit (hooks fence 50 MiB anyway).
+8. Never measure tree perf below 1M rows. Never say "we are faster" in prose; ratios only.
+
+=== STATE OF MAIN (pushed) ===
+18033a3f  orchestrator handoff after the DBSCAN + UMAP merges
+4494b73a  MERGE lane/umap-optimizer   (device IDENTICAL UMAP optimizer)
+5d5398ce  MERGE lane/dbscan-compiler-crash (real fix, -O1 workaround removed)
+9bcbe5b9  opponent reference: trees rows
+fd0c4052  MERGE lane/trees-identical
+3d798a1f  Apple IDENTICAL kNN column flipped (small-k selector + transposed index + index tiling)
+71d2ba71  round-1 merges (GEMM tuned plans, kNN NVIDIA/AMD flip, attention backward binding,
+          training glue) + gate fixes
+Every merge above had its lane's RUN OWED run on the M4 and green before the push:
+  trees:  4 identical builds; identity_break 81/81 vs shipped Apple JSON AND vs the H100 fold
+          JSON; rf_perf_candidates; check-fit-pointwise; check-logloss-train; check-ordered-boosting
+  dbscan: check-dbscan 17/17 at default opt level (fold-pin 1.0000151 / 1.000015 / 1.0);
+          check-unsupervised-identity both modes
+  umap:   stage identity byte-equal to the L40S logs (186 + 690 cells); host arm == 2026-09-05
+          card; 20k launch-width fingerprint 12938647291752780014 on Apple in both widths == L40S;
+          FAST checks unchanged; estimators binding rebuilt IDENTICAL
+Uncommitted on main: nothing (bench/results/runpod_leases/ is an untracked guard dir; leave it).
+
+=== LANES STILL OPEN (resumed 18:05 EDT after a 14:20 rate-limit kill; their pods had expired) ===
+GEMM split-K + H100 table   agent a68e7f0e68dc3bc9f   branch lane/gemm-splitk
+   worktree .claude/worktrees/agent-a68e7f0e68dc3bc9f, clean at 540fcb14 (64x64 tuned plan,
+   KS=32). Legs 1-4 on H100 are committed on the branch with gates green and the card byte-equal;
+   leg 5 (verdict on the KS=32 probes + the 64x64 plan) was lost with the pod. Told to: decide if
+   leg 5 is still needed (one more H100 if so), write docs/lanes/HANDOFF_gemm_splitk.md with the
+   H100 opponent rows in a marked section, commit, terminate pods, report.
+fused attention (bits unchanged)   agent a94c0adce7c14179f   branch lane/fused-attention
+   worktree .claude/worktrees/agent-a94c0adce7c14179f at 16430a44 with ONE uncommitted change
+   (bindings/_mojolearn_transformer.mojo). Fused three-pass recompute + eager fallback + fused
+   check + memcpy marshaling + MOJOLEARN_TRANSFORMER_TIMING are committed; gates never ran to
+   completion. Told to: commit or revert the binding diff, rent one L40S, run the fused check,
+   check-transformer + backward with the card cmps, the surface test, and time our fused
+   forward / fwd+bwd against the SDPA rows already in the reference (L40S 33.6 / 106.9 ms);
+   flip the fused default for IDENTICAL only if bits are equal; write
+   docs/lanes/HANDOFF_fused_attention.md; commit; terminate the pod; report.
+
+=== MERGE PROCEDURE WHEN A LANE REPORTS (what I did four times today) ===
+1. git log lane/<branch> (commits as %h parent %p); git merge --no-ff --no-edit lane/<branch>.
+   checks/kernel_matrix.mojo is the file most likely to conflict (docstrings); keep main's text.
+2. Read the lane's docs/lanes/HANDOFF_<lane>.md "RUN OWED on the Apple M4" section. Write a
+   scratchpad script with one step() per command, nice 19, capture rc BEFORE any $(date)
+   substitution (my first trees.sh reported rc=0 for a failed step because of that), nohup it,
+   then a background `while ! grep -q DONE status; do sleep 20; done` wait (timeout 600000).
+   tools/identity_break.py needs PYTHONPATH=python. Card diffs: transformer cards are cmp'd
+   byte-for-byte; GEMM card diffs with '#' lines stripped.
+3. Green: git push origin main. Add the lane's opponent rows to bench/OPPONENT_REFERENCE.md
+   (the lanes put them in a marked section of their handoff, not in the file). Update
+   docs/lanes/HANDOFF_orchestrator_2026-09-09.md (lane table + gap table) and this file.
+4. Red: fix forward on main in the same session, or revert the one line and record it.
+5. Check the pod list for orphans.
+
+=== RESULTS SO FAR (ours IDENTICAL vs their FAST) ===
+GEMM tuned plans (L40S, Llama-8B t512 shapes): 2.1-2.7x of cuBLAS FP32, bits unchanged.
+v1 GEMM SPLITK plan gram.32x32x1M: was 366x behind on L40S; the split-K lane is on it. The
+   estimator (OLS/PCA/kNN) core Gram path is already at parity (0.368 vs cuBLAS 0.378 ms).
+kNN vs cuML H100: wins at <=128 queries; 3-6.5x behind at 1000-4000 queries. Apple, NVIDIA,
+   AMD all on the flipped kernels now. NOBODY owns the selector work (UMAP lane task 2 produced
+   no code: the L40S image lacked nsys; HANDOFF_umap.md has the fallback and candidate changes).
+UMAP: 100k 62.7 s -> 1.67 s on L40S (cuML H100 row 0.321 s = 5.2x cross-GPU); 1M 50.9 s vs cuML
+   L40S 8.0 s = 6.4x same-GPU, self-kNN is 66% of it, then host graph 7.2 s, spectral init 6.3 s.
+Trees H100 HIGGS 1M same process: symmetric Logloss 775 ms vs CatBoost GPU 900 (0.86x); RMSE 806
+   vs 699; L40S 426 vs 781 and 318 vs 915. RF 5762 vs cuML 3314 (1.7x, structural). The paper's
+   4.9-31x symmetric gap does NOT reproduce at 1M in this tree. 2M/5M rungs, ET rows and the
+   H100 A/B for the three-barrier fold + DEV 2030 fused walker + RF defines are UNRUN; those
+   are all bit-equal on both boxes; flags NOT flipped (only L40S transcribed timings:
+   baseline 411/585, fold 336/570, fused 322/557 ms at 1M/2M). tools/trees_leg.sh +
+   tools/trees_identical_ab.sh are the harness.
+Attention: unfused was 20x behind torch SDPA (L40S); the fused lane is the fix, pending.
+Training lane (round 1): code landed, NO measured number yet.
+DBSCAN: crash fixed (one `while k < len(cols)` over a borrowed List with a runtime step;
+   dbscan/checks/compiler_repro_dead_arg_elim.mojo; draft report
+   docs/lanes/MODULAR_ISSUE_dead_arg_elim.md, unfiled, Andrew's call).
+
+=== FINDINGS NOBODY OWNS ===
+- L40S: after the round-1 kNN flip, tools/check_unsupervised_identity.sh FAST pass fails at
+  neighbors/knn_main.mojo ("1 of 512 returned neighbors are not in the true k-nearest set");
+  IDENTICAL pass green; M4 green in both modes. Not a product arm, but a red gate on NVIDIA.
+- Missing opponent rows: LightGBM CUDA extra_trees (valid build; the Sep 9 rf-boosting row at
+  470 s/fit is not an ET row), trees at 2M/5M under the same-process protocol, cuML DBSCAN/PCA
+  at 1M, torch byte-LM step time on H100, cuBLAS H100 for the tuned plans (the GEMM lane may
+  deliver this).
+- UMAP cuML quality gate via the estimators binding needs cuML (not runnable on the Mac).
+
+=== NEXT PRIORITIES AFTER THE TWO LANES LAND (Andrew must say go before any new lane) ===
+1. kNN selector for many queries (the shared substrate under kNN, UMAP, DBSCAN).
+2. Mamba-3 SISO block speed (72-85x vs torch reference scan on the Sep 7 grid).
+3. Trees: H100 A/B of the fold / DEV 2030 / RF defines, 2M/5M rungs, ET opponent row.
+4. UMAP host graph + spectral init at 1M.
+5. Round-1 leftovers: estimator-level GEMM swap timing (GEMM_IDENT_SWAP_537 moves OLS/PCA bits,
+   Andrew's call); AMD column for the kNN rows and the tuned GEMM plans; training-lane runs.
+
+=== SCRATCHPAD (this session only; will vanish) ===
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/7dd5155c-af6a-421e-a6d7-e0d5ab1633f2/scratchpad/runowed/
+   run.sh (round-1 26 steps), trees.sh, dbscan.sh, umap.sh, *_status.txt, per-step logs.
+Memory: ~/.claude/projects/-Users-andrewhendel-CascadeProjects/memory/mojolearn-identical-fanout-sep9.md
+   and identical-vs-their-fast-only.md carry the same state.
