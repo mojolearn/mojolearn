@@ -40,6 +40,25 @@ dropped) unless another stamp is named.
 | cuML RandomForest | 26.8.0 | n_estimators 100, max_depth 16, max_features sqrt, n_bins 128, bootstrap | 3231.5 | 4543.0 | 7284.7 |
 | LightGBM CUDA extra_trees | 4.7.0 | INVALID: 181 s / 227 s single samples in `030911`; build refusal in `030908` | invalid | invalid | invalid |
 
+Trees, HIGGS 1M, 2026-09-09 trees lane (`bench/results/trees_identical/h100_2026-09-09/speed/`,
+runpod/pytorch:2.4.0-py3.11-cuda12.4.1 container, driver 580.126.09,
+train = first 1M rows, test = last 500,000, same process as our identical
+arm, 7 rounds for the symmetric cells, 5 for RF, ms median with min..max).
+The CatBoost row here (900) and the Aug 28 row above (846.1) are the same
+library on the same GPU model in different containers; quote whichever
+matches the leg you are comparing against and name it.
+
+| opponent | version | config | 1M | log |
+|---|---|---|---|---|
+| CatBoost GPU symmetric, Logloss | 1.2.10 | SymmetricTree, iters 100, depth 6, lr 0.1, l2 1, border_count 254, bootstrap No, Plain, seed 7 | 900 (864..939) | baseline.gbdt-symmetric.higgs.r1000000.full.log |
+| CatBoost GPU symmetric, RMSE on the 0/1 label | 1.2.10 | same, loss RMSE (higgsreg) | 699 (680..759) | baseline.gbdt-symmetric.higgsreg.r1000000.full.log |
+| cuML RandomForestClassifier | 26.08.00 | 100 trees, depth 16, sqrt features, 128 bins, bootstrap, seed 7, n_streams default; logloss 0.538814 | 3314 (3257..3950) | baseline.rf.higgs.r1000000.full.log |
+| LightGBM CUDA rf boosting | 4.7.0, USE_CUDA=ON | 100 trees, depth 16, 32768 leaves, bagging 0.632/1, feature_fraction sqrt, max_bin 255; logloss 0.638510 (3 rounds) | 469654 (468691..471303) | same |
+
+Our identical arm in the same process on that H100: symmetric Logloss 775
+ms (697..1161), RMSE 806, RF 5762 (see `docs/lanes/HANDOFF_trees.md`;
+450-600 ms of each round is host-side outside the fit).
+
 Extra trees therefore has NO valid NVIDIA opponent row. That measurement
 is owed (a LightGBM build with USE_CUDA, or cuML RF with `split_criterion`
 random thresholds if cuML admits it).
@@ -122,6 +141,18 @@ Sequence models, torch 2.4.1+cu124, `e1g/2026-08-25_160520-nvidia-speed-gemmseq`
 
 ## NVIDIA L40S, driver 580.126.09, CUDA 12.4, torch 2.4.1+cu124, cuBLAS 120402, cupy 14.2.0
 
+Trees, HIGGS 1M, 2026-09-09 trees lane, CatBoost GPU symmetric 1.2.10, same
+config as the H100 trees rows above, console capture
+`bench/results/trees_identical/l40s_2026-09-09/speed/profile_cells_console.txt`
+(the pod's log files expired before they were fetched).
+
+| opponent | lane | 1M |
+|---|---|---|
+| CatBoost GPU symmetric | Logloss | 781 (771..788) |
+| CatBoost GPU symmetric | RMSE on the 0/1 label | 915 (849..941) |
+
+Our identical arm in the same process on that L40S: 426 ms Logloss, 318 ms RMSE.
+
 GEMM, 2026-09-09, worktree branch lane/gemm-identical,
 `bench/results/e1g/2026-09-09_123601-nvidia-l40s-identical-gemm-merged/opponents_l40s2.log`
 (5 rounds plus warm-up). The earlier `2026-09-09_092558` leg agrees within
@@ -172,7 +203,10 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
 
 ## Rows that do not exist yet (owed, in priority order)
 
-1. LightGBM CUDA extra_trees, valid build, HIGGS 1M/2M/5M.
+1. LightGBM CUDA extra_trees, valid build, HIGGS 1M/2M/5M (the Sep 9 trees
+   lane built USE_CUDA=ON but its ET rungs never ran; its rf-boosting row
+   at 470 s per fit is not an ET row).
+1b. Trees at 2M and 5M for the Sep 9 same-process protocol (only 1M exists).
 2. cuBLAS on H100 for the 2026-09-09 tuned plans (all 21 shapes).
 3. cuML DBSCAN and PCA at 1M rows or more (the fixtures above are small).
 4. cuML UMAP at 1M rows (20k and 100k exist above).
