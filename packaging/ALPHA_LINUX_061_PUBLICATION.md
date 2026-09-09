@@ -1,3 +1,5 @@
+> Start at `docs/RELEASE_CHECKLIST.md`. This file is background for when a step there refuses.
+
 # Fresh combined Linux alpha publication (authored as 0.6.1)
 
 Source changes are authored, not executed or publication-ready evidence.

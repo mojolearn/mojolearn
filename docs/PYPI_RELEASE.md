@@ -1,3 +1,5 @@
+> Start at `docs/RELEASE_CHECKLIST.md`. This file is background for when a step there refuses.
+
 # Release runbook
 
 ## Explicit alpha API exposure

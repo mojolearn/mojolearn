@@ -3,9 +3,11 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## Unreleased
+## 0.7.0 (published 2026-09-09)
 
-### 0.7.0 release candidate
+Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) from commit fe6067ba;
+macOS arm64 wheel from tag v0.7.0. Installed per-architecture qualification
+was not run for the Linux wheel.
 
 - The identical path no longer calls the host C library. The seven host
   calls for float64 log and log2, float32 log and exp, and ceil (random-forest

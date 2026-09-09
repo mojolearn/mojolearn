@@ -1,3 +1,5 @@
+> Start at `docs/RELEASE_CHECKLIST.md`. This file is background for when a step there refuses.
+
 # Root-only RunPod release build profile 7
 
 The `0_6_1` in this file's name is historical (DEVIATION 2290): the build it

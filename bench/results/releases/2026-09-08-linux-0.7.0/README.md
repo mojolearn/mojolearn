@@ -51,4 +51,15 @@ name which end of the wire went quiet.
 The directory is named for its outcome so the eventual successful
 `hip-gfx942/` proof lands beside it without being confused for it.
 
-**No admissible 0.7.0 build proof exists in this directory yet.**
+## Shipped
+
+`hip-gfx942/` is the gfx942 proof at fe6067ba (the two CUDA proofs are
+`bench/results/e1g/2026-09-09_073914-nvidia-mamba` for sm_89 and
+`bench/results/e1g/2026-09-09_073744-nvidia-mamba` for sm_90a). Packed,
+audited and published as `mojolearn-0.7.0-py3-none-manylinux_2_35_x86_64.whl`,
+sha256 57e9a0ec34a7071adc27e87be0eb90dd6f4c6bd101669675db35e1b6d6cde232, GitHub
+release `alpha-api-0.7.0-20260909`, on 2026-09-09. `hip-gfx942.340de7a1-superseded-by-2300/`
+and `qualification/` are the earlier round at 340de7a1, whose wheel afb5dd8a was
+never published: its install-and-test found the Mamba-3 deterministic defect
+fixed at fe6067ba. The fe6067ba wheel was published without installed
+qualification.

@@ -1,3 +1,5 @@
+> Start at `docs/RELEASE_CHECKLIST.md`. This file is background for when a step there refuses.
+
 # 0.6.1 combined Linux execution plan
 
 The 0.6.1 number in this file's name was never published: the profile it
