@@ -550,11 +550,15 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
             # The selection writes the first column tile's answer straight
             # into the caller's output at the outer query offset and every
             # later tile's into the partial scratch, which is then merged.
-            var sel_dist = out_dist.unsafe_ptr().unsafe_offset(q * k)
-            var sel_idx = out_idx.unsafe_ptr().unsafe_offset(q * k)
+            var sel_dist = out_dist.unsafe_ptr().unsafe_offset(
+                q * k
+            ).unsafe_origin_cast[MutAnyOrigin]()
+            var sel_idx = out_idx.unsafe_ptr().unsafe_offset(
+                q * k
+            ).unsafe_origin_cast[MutAnyOrigin]()
             if not first:
-                sel_dist = part_dist.unsafe_ptr()
-                sel_idx = part_idx.unsafe_ptr()
+                sel_dist = part_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                sel_idx = part_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
             if not metric_uses_norms(mtr):
                 # THEIR `else` AT `:224`: the op did the whole cell, there is
@@ -776,8 +780,9 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                         # keys in the row; every column tile has them.
                         if cols >= k and k <= SMALLK_MAX_K and cols <= 2147483647:
                             smallk_select_launch(
-                                ctx, dist_tile.unsafe_ptr(), sel_dist, sel_idx,
-                                rows, cols, k, True,
+                                ctx,
+                                dist_tile.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                                sel_dist, sel_idx, rows, cols, k, True,
                             )
                             selected_smallk = True
                     if not selected_smallk:
@@ -814,10 +819,14 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     if not first:
                         partial_topk_merge_launch(
                             ctx,
-                            out_dist.unsafe_ptr().unsafe_offset(q * k),
-                            out_idx.unsafe_ptr().unsafe_offset(q * k),
-                            part_dist.unsafe_ptr(),
-                            part_idx.unsafe_ptr(),
+                            out_dist.unsafe_ptr().unsafe_offset(
+                                q * k
+                            ).unsafe_origin_cast[MutAnyOrigin](),
+                            out_idx.unsafe_ptr().unsafe_offset(
+                                q * k
+                            ).unsafe_origin_cast[MutAnyOrigin](),
+                            part_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            part_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
                             rows, k, c, True,
                         )
                 else:
