@@ -96,7 +96,9 @@ def probe(path):
 
 def short(plan):
     plan = re.sub(r"\(.*\)$", "", plan).strip()
-    plan = plan.replace(" KS=16 fold=16 local tpb=256", "")
+    plan = re.sub(r" fold=\d+ local", "", plan)
+    plan = re.sub(r" leaves on grid\.y -> workspace -> .*?(?= tpb=)", "", plan)
+    plan = plan.replace(" tpb=256", "")
     return re.sub(r" hwftz=\w+", "", plan)
 
 
