@@ -252,6 +252,86 @@ def device_absmax(
     return Float64(m)
 
 
+comptime NONFINITE_NONE: Int32 = 2147483647
+
+
+def nonfinite_partial_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    buf: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """One partial per block: the SMALLEST flat index at which `|bits| >=
+    0x7F800000` (NaN or infinity, BY BITS, contract section 8), or
+    `NONFINITE_NONE`. The host takes the minimum, so the index reported is
+    the first one, exactly as the host loop it replaces reported it."""
+    var n = Int(n_in)
+    var red = stack_allocation[
+        ABSMAX_TPB,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * ABSMAX_TPB
+    var i = Int(block_idx.x) * ABSMAX_TPB + tid
+    var best = NONFINITE_NONE
+    while i < n:
+        var au = bitcast[DType.uint32](buf.unsafe_load(i)) & UInt32(0x7FFFFFFF)
+        if au >= UInt32(0x7F800000):
+            best = Int32(i)
+            break
+        i += stride
+    red.unsafe_store(tid, best)
+    barrier()
+    var active = ABSMAX_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red.unsafe_load(tid + active)
+            if o < red.unsafe_load(tid):
+                red.unsafe_store(tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), red.unsafe_load(0))
+
+
+def device_first_nonfinite(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+) raises -> Int:
+    """The first flat index of a NaN or infinity in `buf[0:n]`, or -1.
+    ONE read of the buffer on the device, where the host loop it replaces
+    downloaded the buffer and walked it (65 ms for one block input at the
+    Samba shape, measured 2026-09-09)."""
+    if n <= 0:
+        return -1
+    var blocks = (n + ABSMAX_TPB - 1) // ABSMAX_TPB
+    if blocks > ABSMAX_BLOCKS:
+        blocks = ABSMAX_BLOCKS
+    var part = ctx.enqueue_create_buffer[DType.int32](blocks)
+    ctx.synchronize()
+    ctx.enqueue_function[nonfinite_partial_kernel](
+        part.unsafe_ptr(),
+        buf.unsafe_ptr(),
+        Int32(n),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(ABSMAX_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    var host = ctx.enqueue_create_host_buffer[DType.int32](blocks)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    ctx.synchronize()
+    var best = NONFINITE_NONE
+    for i in range(blocks):
+        var v = host.unsafe_ptr().unsafe_load(i)
+        if v < best:
+            best = v
+    _ = host^
+    _ = part^
+    if best == NONFINITE_NONE:
+        return -1
+    return Int(best)
+
+
 def regime_product_ok(hd: Int, a_max: Float64, b_max: Float64) -> Bool:
     """`hd * a_max * b_max < 2^100`, both finite."""
     var inf = Float64(bitcast[DType.float32](UInt32(0x7F800000)))

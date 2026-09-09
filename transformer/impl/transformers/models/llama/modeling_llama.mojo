@@ -271,7 +271,7 @@ transcendentals and division below are OURS.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
@@ -302,6 +302,7 @@ from mamba.impl.transformers.models.mamba.modeling_mamba import (
 
 from transformer.impl.transformers.models.llama.fused_attention import (
     FUSED_RAN,
+    device_first_nonfinite,
     fused_forward_launch,
     fused_supported_head_dim,
 )
@@ -693,8 +694,8 @@ def _upload(
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     ctx.synchronize()
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
+    if n > 0:
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
     ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
@@ -717,9 +718,9 @@ def _download(
         var view = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    if n > 0:
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
     _ = host^
     return out^
 
@@ -977,15 +978,9 @@ struct LlamaDeviceWeights(Movable):
         # for anyone who needs that, and it is what
         # `transformer_check.mojo`'s refusal audit calls directly, so the
         # audit's coverage of every name is untouched.
-        _refuse_nonfinite_named("input_layernorm.weight", norm1_w)
-        _refuse_nonfinite_named("post_attention_layernorm.weight", norm2_w)
-        _refuse_nonfinite_named("q_proj.weight", w_q)
-        _refuse_nonfinite_named("k_proj.weight", w_k)
-        _refuse_nonfinite_named("v_proj.weight", w_v)
-        _refuse_nonfinite_named("o_proj.weight", w_o)
-        _refuse_nonfinite_named("gate_proj.weight", w_gate)
-        _refuse_nonfinite_named("up_proj.weight", w_up)
-        _refuse_nonfinite_named("down_proj.weight", w_down)
+        # Uploaded first, refused on the device (2026-09-09: the host walk
+        # of 17 M weights was 38 ms per call at the Samba shape). Same
+        # names, same order, same message at the same flat index.
         self.norm1_w = _upload(ctx, norm1_w)
         self.norm2_w = _upload(ctx, norm2_w)
         self.w_q = _upload(ctx, w_q)
@@ -995,6 +990,15 @@ struct LlamaDeviceWeights(Movable):
         self.w_gate = _upload(ctx, w_gate)
         self.w_up = _upload(ctx, w_up)
         self.w_down = _upload(ctx, w_down)
+        _refuse_nonfinite_device(ctx, "input_layernorm.weight", self.norm1_w, dm)
+        _refuse_nonfinite_device(ctx, "post_attention_layernorm.weight", self.norm2_w, dm)
+        _refuse_nonfinite_device(ctx, "q_proj.weight", self.w_q, qw * dm)
+        _refuse_nonfinite_device(ctx, "k_proj.weight", self.w_k, kw * dm)
+        _refuse_nonfinite_device(ctx, "v_proj.weight", self.w_v, kw * dm)
+        _refuse_nonfinite_device(ctx, "o_proj.weight", self.w_o, dm * qw)
+        _refuse_nonfinite_device(ctx, "gate_proj.weight", self.w_gate, it * dm)
+        _refuse_nonfinite_device(ctx, "up_proj.weight", self.w_up, it * dm)
+        _refuse_nonfinite_device(ctx, "down_proj.weight", self.w_down, dm * it)
 
 
 struct LlamaKVCache(Movable):
@@ -2424,6 +2428,46 @@ def _refuse_nonfinite_named(name: String, values: List[Float32]) raises:
             )
 
 
+def _refuse_nonfinite_device(
+    ctx: DeviceContext,
+    name: String,
+    mut buf: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """`_refuse_nonfinite_named` over a DEVICE buffer: the scan runs on
+    the device (`device_first_nonfinite`) and only the offending element is
+    brought back to classify it, so the message is character for character
+    the host loop's message at the same flat index."""
+    var idx = device_first_nonfinite(ctx, buf, n)
+    if idx < 0:
+        return
+    var one = buf.create_sub_buffer[DType.float32](idx, 1)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=one)
+    ctx.synchronize()
+    var v = host.unsafe_ptr().unsafe_load(0)
+    _ = host^
+    var au = bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF)
+    if au > UInt32(0x7F800000):
+        raise Error(
+            String("llama: NaN in ")
+            + name
+            + " at flat index "
+            + String(idx)
+            + " REFUSED (row 39: NaN payloads are vendor-shaped;"
+            + " no stage may record one)"
+        )
+    raise Error(
+        String("llama: infinity in ")
+        + name
+        + " at flat index "
+        + String(idx)
+        + " REFUSED (row 39: an infinity in an input is a computed"
+        + " NaN one seam later)"
+    )
+
+
 def llama_refuse_bad_call(
     ctx: DeviceContext,
     mut w: LlamaDeviceWeights,
@@ -2453,23 +2497,21 @@ def llama_refuse_bad_call(
     var dims = w.dims.copy()
     var dm = dims.d_model
     var hd = dims.head_dim
-    _refuse_nonfinite_named("hidden_states", _download(ctx, x, b * l * dm))
-    _refuse_nonfinite_named(
-        "rotary_emb.inv_freq", _download(ctx, rope.inv_freq, dims.half())
-    )
+    # ON THE DEVICE (2026-09-09): the download-and-walk of the block input
+    # was 65 ms per call at the Samba shape, a fifth of the forward.
+    _refuse_nonfinite_device(ctx, "hidden_states", x, b * l * dm)
+    _refuse_nonfinite_device(ctx, "rotary_emb.inv_freq", rope.inv_freq, dims.half())
     if kv.s > 0:
         # The linear cache is packed at stride `s`; the ring is always at
         # stride `cap`, so the whole ring is read (unused slots are zeros).
         var used = kv.s
         if kv.window > 0:
             used = kv.cap
-        _refuse_nonfinite_named(
-            "past_key_values.key_cache",
-            _download(ctx, kv.k, b * dims.n_kv * used * hd),
+        _refuse_nonfinite_device(
+            ctx, "past_key_values.key_cache", kv.k, b * dims.n_kv * used * hd
         )
-        _refuse_nonfinite_named(
-            "past_key_values.value_cache",
-            _download(ctx, kv.v, b * dims.n_kv * used * hd),
+        _refuse_nonfinite_device(
+            ctx, "past_key_values.value_cache", kv.v, b * dims.n_kv * used * hd
         )
 
 

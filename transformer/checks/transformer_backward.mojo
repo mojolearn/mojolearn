@@ -4,7 +4,7 @@
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -26,6 +26,7 @@ from checks.numerics import (
 )
 from transformer.impl.transformers.models.llama.fused_attention import (
     FUSED_RAN,
+    device_first_nonfinite,
     fused_backward_launch,
 )
 from transformer.impl.transformers.models.llama.modeling_llama import (
@@ -96,8 +97,8 @@ def _upload(
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     ctx.synchronize()
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
+    if n > 0:
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
     ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
@@ -2644,23 +2645,24 @@ def llama_decoder_layer_backward(
     # **A GRADIENT IS EXACTLY WHERE NaNs APPEAR IN PRACTICE**, which makes
     # this refusal more likely to fire than the forward's and makes the
     # named error worth more.
-    for i in range(len(d_out)):
-        var au = bitcast[DType.uint32](d_out[i]) & UInt32(0x7FFFFFFF)
+    # Uploaded first and scanned ON THE DEVICE (2026-09-09), the same
+    # message at the same flat index as the host walk it replaces.
+    var d_in = _upload(ctx, d_out)
+    var bad = device_first_nonfinite(ctx, d_in, len(d_out))
+    if bad >= 0:
+        var au = bitcast[DType.uint32](d_out[bad]) & UInt32(0x7FFFFFFF)
         if au > UInt32(0x7F800000):
             raise Error(
                 String("llama backward: NaN in d_residual2 at flat index ")
-                + String(i)
+                + String(bad)
                 + " REFUSED (row 39: NaN payloads are vendor-shaped; no"
                 + " stage may record one)"
             )
-        if au == UInt32(0x7F800000):
-            raise Error(
-                String(
-                    "llama backward: infinity in d_residual2 at flat index "
-                )
-                + String(i)
-                + " REFUSED (row 39)"
-            )
+        raise Error(
+            String("llama backward: infinity in d_residual2 at flat index ")
+            + String(bad)
+            + " REFUSED (row 39)"
+        )
 
     var scale = llama_attention_scale(hd)
 
@@ -2669,7 +2671,6 @@ def llama_decoder_layer_backward(
     # arguments, so both branches take the incoming gradient unchanged. NO
     # ROUNDING: a copy, not a seam.
     # =====================================================================
-    var d_in = _upload(ctx, d_out)
     ctx.enqueue_function[bwd_copy_kernel](
         bst.in_d_residual2.unsafe_ptr(),
         d_in.unsafe_ptr(),
