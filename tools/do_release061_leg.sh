@@ -65,9 +65,9 @@ SSH_KEY_FILE="$HOME/.ssh/id_ed25519"
 # then told the driver "hip gfx942" would be qualifying a lie.
 case "${MOJOLEARN_LEG_GPU:-mi325x}" in
   mi325x) NAME=mojolearn-rel061-amd; REGION=tor1; SIZE=gpu-mi325x1-256gb; IMAGE=188571990
-          LEG_VENDOR=hip;  LEG_ARCH=gfx942; GPU_PROBE='rocm-smi --showproductname 2>/dev/null | grep -i "card series\|name" | head -2' ;;
+          LEG_VENDOR=hip;  LEG_ARCH=gfx942; LEG_GUARD=tools/amd_serial_guard.py; GPU_PROBE='rocm-smi --showproductname 2>/dev/null | grep -i "card series\|name" | head -2' ;;
   h100)   NAME=mojolearn-rel061-nv;  REGION=nyc2; SIZE=gpu-h100x1-80gb;   IMAGE=236925144
-          LEG_VENDOR=cuda; LEG_ARCH=sm_90a; GPU_PROBE='nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -2' ;;
+          LEG_VENDOR=cuda; LEG_ARCH=sm_90a; LEG_GUARD=tools/nvidia_serial_guard.py; GPU_PROBE='nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -2' ;;
   *) echo "MOJOLEARN_LEG_GPU must be mi325x or h100" >&2; exit 2 ;;
 esac
 TAG=rel061
@@ -369,7 +369,7 @@ if [ -n \"\$need\" ]; then
 fi
 export PATH=/root/.pixi/bin:\$PATH
 command -v pixi >/dev/null || timeout -k 10 120 sh -c 'curl -fsSL --max-time 30 https://pixi.sh/install.sh | sh' > /root/pixi_bootstrap.log 2>&1
-cd /root/mojolearn && $REMOTE_PY tools/amd_serial_guard.py --seconds $PREP_SECONDS --rss-gib 12 -- \
+cd /root/mojolearn && $REMOTE_PY $LEG_GUARD --seconds $PREP_SECONDS --rss-gib 12 -- \
   pixi install --locked --environment default > /root/pixi_install.log 2>&1; echo PIXI_INSTALL_EXIT=\$?
 for t in taskset objdump patchelf pixi; do command -v \$t >/dev/null || echo MISSING_\$t; done
 test -x .pixi/envs/default/bin/mojo && test -x .pixi/envs/default/bin/python && echo PIXI_ENV_OK || echo PIXI_ENV_MISSING" \
