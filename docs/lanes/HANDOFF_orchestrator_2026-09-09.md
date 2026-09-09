@@ -1,7 +1,8 @@
 # Orchestrator handoff, 2026-09-09 (identical fan-out, rounds 1 and 2)
 
-Read this first, then the lane handoffs it names. Andrew's order at the end
-of the day: every lane winds down, NO new lanes until he says so.
+Read this first, then the lane handoffs it names. Andrew's order (13:50
+EDT): the round-1 TREES lane winds down after its in-flight H100 A/B; the
+four round-2 lanes CONTINUE their full briefs; no further lanes until he says so.
 
 ## Policy in force (Andrew, Sep 9)
 
@@ -48,7 +49,7 @@ of the day: every lane winds down, NO new lanes until he says so.
   (143,628 cells). Transpose-only was slightly faster than both at 128 and
   1000 (12.1, 60.2) and slower at 32 (16.3).
 
-## Lanes still open at handoff time (all told to wind down)
+## Lanes open at handoff time (trees winding down, the other four continuing)
 
 | lane | branch | worktree (under .claude/worktrees/) | handoff file it must leave |
 |---|---|---|---|
