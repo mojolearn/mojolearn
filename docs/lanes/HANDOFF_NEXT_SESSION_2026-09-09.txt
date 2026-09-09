@@ -1,4 +1,4 @@
-HANDOFF TO THE NEXT SESSION, mojolearn identical fan-out, written 2026-09-09 18:10 EDT
+HANDOFF TO THE NEXT SESSION, mojolearn identical fan-out, written 2026-09-09 18:10 EDT, updated 18:25 EDT (all lanes landed)
 Orchestrator session: https://claude.ai/code/session_01U2tufdZoytSRokRVQoppgy
 Repo: /Users/andrewhendel/CascadeProjects/mojolearn (main, pushed to github.com/mojolearn/mojolearn)
 Companion (fuller, markdown): docs/lanes/HANDOFF_orchestrator_2026-09-09.md
@@ -52,16 +52,23 @@ Uncommitted on main: nothing (bench/results/runpod_leases/ is an untracked guard
    32 KB column). Lesson: a plan list that only ran on 48 KB boxes is unverified on Apple.
    Handoff: docs/lanes/HANDOFF_gemm_splitk.md (its profile_dot command was wrong: run check-cd).
 
-=== LANES STILL OPEN (resumed 18:05 EDT after a 14:20 rate-limit kill; their pods had expired) ===
-fused attention (bits unchanged)   agent a94c0adce7c14179f   branch lane/fused-attention
-   worktree .claude/worktrees/agent-a94c0adce7c14179f at 16430a44 with ONE uncommitted change
-   (bindings/_mojolearn_transformer.mojo). Fused three-pass recompute + eager fallback + fused
-   check + memcpy marshaling + MOJOLEARN_TRANSFORMER_TIMING are committed; gates never ran to
-   completion. Told to: commit or revert the binding diff, rent one L40S, run the fused check,
-   check-transformer + backward with the card cmps, the surface test, and time our fused
-   forward / fwd+bwd against the SDPA rows already in the reference (L40S 33.6 / 106.9 ms);
-   flip the fused default for IDENTICAL only if bits are equal; write
-   docs/lanes/HANDOFF_fused_attention.md; commit; terminate the pod; report.
+=== FUSED ATTENTION LANE: LANDED 18:20 EDT (merge ddaabe49, Apple fix 25b0399d, pushed) ===
+   Fused three-pass recompute is the IDENTICAL default (MOJOLEARN_TRANSFORMER_ATTN_PATH=eager is
+   the A/B arm). L40S Samba shape: forward 249.2 ms vs torch SDPA 33.6 (7.4x, 5x target NOT
+   met); fwd+bwd 525.8 vs 106.9 (4.9x, met); was 514.8 / 1111.9. Fused core is 177 of the 249
+   ms (shared-memory bound). Reference rows added for seq 1024 and 16384 (ours refuses 16384 by
+   the 8192 position ceiling). THE APPLE RUN OWED CAUGHT A SECOND 32 KB BUG: head dim 128 claims
+   35,600 shared bytes; fused_supported_head_dim now reads lib_smem_page_fits_for and hd 128 takes
+   the eager path on Apple (same bits by construction); the fused check expects the column's
+   answer. Next: register-blocked fused kernels (design in docs/lanes/HANDOFF_fused_attention.md).
+
+=== NO LANES OPEN. All five agent worktrees under .claude/worktrees/ are merged; branches
+    lane/* stay for history. Any further work needs Andrew's go (no new lanes).
+
+=== LESSON OF THE DAY (both round-2 GPU lanes) ===
+   A kernel whose shared page was only ever created on 48 KB boxes is UNVERIFIED on Apple
+   (32 KB). Every plan/head-dim table must ask checks/kernel_matrix.mojo::lib_smem_page_fits_for
+   before a pipeline exists; the Apple RUN OWED is where this shows, so never skip it.
 
 === MERGE PROCEDURE WHEN A LANE REPORTS (what I did four times today) ===
 1. git log lane/<branch> (commits as %h parent %p); git merge --no-ff --no-edit lane/<branch>.
@@ -80,8 +87,8 @@ fused attention (bits unchanged)   agent a94c0adce7c14179f   branch lane/fused-a
 
 === RESULTS SO FAR (ours IDENTICAL vs their FAST) ===
 GEMM tuned plans (L40S, Llama-8B t512 shapes): 2.1-2.7x of cuBLAS FP32, bits unchanged.
-v1 GEMM SPLITK plan gram.32x32x1M: was 366x behind on L40S; the split-K lane is on it. The
-   estimator (OLS/PCA/kNN) core Gram path is already at parity (0.368 vs cuBLAS 0.378 ms).
+v1 GEMM split plans landed: gram.32x32x1M 1.8x of cuBLAS FP32 on H100 (was 210x), gram.128sq
+   6.0x, decode rows 1.7-2.8x, t512 rows 4.4-4.9x. Estimator core Gram path at parity already.
 kNN vs cuML H100: wins at <=128 queries; 3-6.5x behind at 1000-4000 queries. Apple, NVIDIA,
    AMD all on the flipped kernels now. NOBODY owns the selector work (UMAP lane task 2 produced
    no code: the L40S image lacked nsys; HANDOFF_umap.md has the fallback and candidate changes).
@@ -94,7 +101,7 @@ Trees H100 HIGGS 1M same process: symmetric Logloss 775 ms vs CatBoost GPU 900 (
    are all bit-equal on both boxes; flags NOT flipped (only L40S transcribed timings:
    baseline 411/585, fold 336/570, fused 322/557 ms at 1M/2M). tools/trees_leg.sh +
    tools/trees_identical_ab.sh are the harness.
-Attention: unfused was 20x behind torch SDPA (L40S); the fused lane is the fix, pending.
+Attention: fused landed; fwd 7.4x, fwd+bwd 4.9x behind torch SDPA on L40S (see the lane block).
 Training lane (round 1): code landed, NO measured number yet.
 DBSCAN: crash fixed (one `while k < len(cols)` over a borrowed List with a runtime step;
    dbscan/checks/compiler_repro_dead_arg_elim.mojo; draft report

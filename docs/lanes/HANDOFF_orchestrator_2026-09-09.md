@@ -48,14 +48,14 @@ four round-2 lanes CONTINUE their full briefs; no further lanes until he says so
   (143,628 cells). Transpose-only was slightly faster than both at 128 and
   1000 (12.1, 60.2) and slower at 32 (16.3).
 
-## Lanes (trees, DBSCAN, UMAP and GEMM split-K LANDED; fused attention merged, Apple checks in flight)
+## Lanes: ALL FIVE LANDED (trees, DBSCAN, UMAP, GEMM split-K, fused attention)
 
 | lane | branch | worktree (under .claude/worktrees/) | handoff file it must leave |
 |---|---|---|---|
 | trees (round 1) | lane/trees-identical | MERGED fd0c4052; RUN OWED green on the M4 (4 identical builds, identity_break 81/81 vs the shipped Apple JSON and vs the H100 fold JSON, rf_perf_candidates, fit-pointwise, logloss-train, ordered-boosting); rows on the reference table at 9bcbe5b9 | docs/lanes/HANDOFF_trees.md |
 | UMAP optimizer + kNN selector | lane/umap-optimizer | MERGED 4494b73a; RUN OWED green on the M4 (device-optimizer stage identity byte-equal to the L40S logs, 186 + 690 cells; host arm equals the 2026-09-05 card; 20k launch-width fingerprint 12938647291752780014 on Apple in both widths = the L40S value; FAST checks unchanged; estimators binding rebuilt IDENTICAL). Still owed: the cuML quality gate via the estimators binding (needs cuML, not runnable on the Mac), H100 final numbers, AMD column. Task 2 (selector) produced no code | docs/lanes/HANDOFF_umap.md |
 | GEMM split-K + H100 table | lane/gemm-splitk | MERGED 294351db + Apple fix 5363419c. The M4 RUN OWED found a REAL Apple failure the five H100 legs could not see: plan 17 (128x128 tuned probe at KS=32) needs 36,864 bytes of threadgroup memory, over Metal's 32 KB; fixed with the kernel-matrix row `lib_smem_page_fits_for` and `TUNED_128_KS`; after the fix device check 7/7, backward 10/10, check-cd, probe 20 match 0 MOVED, HOST_CAP card byte-equal, batch invariance, gemm identity, ols_main, v1 speed arm all green on the M4 | docs/lanes/HANDOFF_gemm_splitk.md |
-| fused attention (bits unchanged) | lane/fused-attention | agent-a94c0adce7c14179f | docs/lanes/HANDOFF_fused_attention.md |
+| fused attention (bits unchanged) | lane/fused-attention | MERGED ddaabe49 + Apple fix 25b0399d. L40S: forward 249.2 ms vs SDPA 33.6 (7.4x, 5x target NOT met), fwd+bwd 525.8 vs 106.9 (4.9x, met); was 514.8 / 1111.9. Fused path is the IDENTICAL default; MOJOLEARN_TRANSFORMER_ATTN_PATH=eager is the A/B arm. The M4 RUN OWED found hd 128 needs 35,600 shared bytes (Metal 32 KB): fused_supported_head_dim now reads lib_smem_page_fits_for and hd 128 takes the eager path on Apple. After the fix: both cards byte-equal, fused check 12/12, surface 116/116 | docs/lanes/HANDOFF_fused_attention.md |
 | DBSCAN compiler crash | lane/dbscan-compiler-crash | MERGED 5d5398ce; M4 check-dbscan 17/17 at the default level, unsupervised gate green both modes. The crash was one strided `while k < len(cols)` loop over a borrowed List with a runtime step in `dbscan/checks/dbscan_check.mojo`; reduced repro at `dbscan/checks/compiler_repro_dead_arg_elim.mojo`; draft upstream report `docs/lanes/MODULAR_ISSUE_dead_arg_elim.md` awaits Andrew | docs/lanes/HANDOFF_dbscan_crash.md |
 
 Merge procedure for each: `git merge --no-ff lane/<x>` onto main, run its
@@ -69,7 +69,7 @@ samba-*).
 |---|---|---|---|---|---|
 | UMAP (device optimizer landed) | 100k x 32, k 15, 200 epochs, L40S | 1.67 s (was 62.7 s) | cuML 0.321 s (H100 row) | 5.2x cross-GPU; 1M: 50.9 s vs cuML L40S 8.0 s = 6.4x, self-kNN is 66% of it | next: kNN selector (below), then host graph 7.2 s and spectral init 6.3 s at 1M |
 | Attention forward, unfused | L40S, d 1024, seq 4096, batch 4, window 2048 | 685.7 ms | torch SDPA 33.6 | 20x | fused-attention lane |
-| Attention fwd+bwd | same | 1672 ms | 106.9 | 16x | fused-attention lane |
+| Attention fwd+bwd (fused landed) | same, L40S | 525.8 ms | 106.9 | 4.9x | next: register-blocked fused kernels (core 177 of 249 ms forward, design in HANDOFF_fused_attention.md), device-resident weights |
 | v1 GEMM split plans (landed) | H100, leg 5 | gram.32x32x1M 0.435 ms (was 50.3); gram.128sq 0.577 (was 8.65); decode t1/t8 rows 1.7-2.8x | cuBLAS fp32 | gram 1M 1.8x, gram.128sq 6.0x, decode 1.7-2.8x, t512 rows unchanged 4.4-4.9x | remaining: gram.128sq and the t512 rows; no L40S/AMD row for the new plans |
 | kNN, many queries | 400k, 4000 q, k 10, H100 | 66.5 ms | cuML 10.2 | 6.5x | NOBODY (umap lane task 2 produced no code; the L40S image lacked nsys; HANDOFF_umap.md names the fallback timers and the candidate changes) |
 | Mamba-2/3 blocks | Sep 7 grid, H100 | | torch reference scan | 72-85x | NOBODY this round |
