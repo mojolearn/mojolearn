@@ -300,7 +300,7 @@ flip have no L40S row. To get one: the leg command below with
     tools/with_identical_mode.sh pixi run check-gemm-identity
     tools/with_identical_mode.sh pixi run check-batch-invariance
     tools/with_identical_mode.sh pixi run mojo run -I . gemm/checks/gemm_backward_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . solver/checks/profile_dot.mojo
+    tools/with_identical_mode.sh pixi run check-cd   # profile_dot.mojo is a library module (no main); cd_check.mojo drives it
     tools/with_identical_mode.sh pixi run mojo run -I . glm/ols_main.mojo
     MOJOLEARN_SPEED_GEMM_ARMS=v1 MOJOLEARN_SPEED_ROUNDS=5 tools/with_identical_mode.sh pixi run mojo run -I . bench/speed/gemm_speed_main.mojo
 

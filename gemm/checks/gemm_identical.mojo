@@ -140,6 +140,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
+    lib_smem_page_fits_for,
     lib_smem_pages_for,
 )
 
@@ -443,7 +444,8 @@ comptime PLAN_SPLIT_8X64 = 14
 comptime PLAN_SPLIT_64_4X4 = 15
 #: The task-4 probes: the two wide tuned plans at KS = 32 (RAFT's Kblk).
 #: Two pages of a 64x64 pair is 37 KB (fits NVIDIA and AMD, one page on
-#: Apple); a 128x128 pair is 37 KB a page, so one page everywhere.
+#: Apple); a 128x128 pair is 37 KB a page, one page on NVIDIA and AMD and
+#: none under 32 KB, where the probe resolves to KS = 16 (`TUNED_128_KS`).
 #: `choose_gemm_plan` does not pick them; the forced-plan sweep times them.
 comptime PLAN_TUNED_64_4X4_K32 = 16
 comptime PLAN_TUNED_128_8X8_K32 = 17
@@ -496,7 +498,7 @@ def gemm_plan_name(plan: Int) -> String:
     if plan == PLAN_TUNED_64_4X4_K32:
         return _tuned_plan_name(TUNED_RPT, TUNED_CPT, TUNED_KBLK)
     if plan == PLAN_TUNED_128_8X8_K32:
-        return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, TUNED_KBLK)
+        return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, TUNED_128_KS)
     if plan == PLAN_SPLIT_64_4X4:
         return _split_plan_name(TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_KBLK)
     if plan == PLAN_SPLIT_32_2X2:
@@ -1282,16 +1284,28 @@ comptime TUNED_BN_NARROW = (TUNED_CPT // 2) * TUNED_TC
 #: H100 (`bench/results/e1g/2026-09-09_140650-nvidia-h100-identical-splitk3`,
 #: forced plan 16 against plan 9): 4% to 7% faster at every row the
 #: dispatcher sends to this tile, bits equal by the launch-invariance gate.
-#: The 128x128 pair is 37 KB a PAGE, one page everywhere, and at KS = 32 it
-#: LOST 17% (plan 17 against plan 10), so that plan stays at 16. Read
-#: through the matrix so Apple (32 KB) keeps its two pages at 16 and no
-#: vendor is named here.
+#: The 128x128 pair is 37 KB a PAGE (36,864 bytes): one page on NVIDIA and
+#: AMD, and NOT EVEN ONE under a 32 KB column (Metal refuses the pipeline;
+#: found by the Apple RUN OWED 2026-09-09), so the KS = 32 probe of that
+#: tile resolves to 16 wherever one page does not fit (`TUNED_128_KS`,
+#: through `lib_smem_page_fits_for`); at KS = 32 it LOST 17% on the H100
+#: (plan 17 against plan 10), so the shipped 128x128 plan stays at 16
+#: everywhere. Read through the matrix so Apple (32 KB) keeps its two
+#: 64x64 pages at 16 and no vendor is named here.
 comptime TUNED_64_PAGE_BYTES_K32 = (
     (TUNED_BM_WIDE + TUNED_BN_WIDE) * (TUNED_KBLK + TUNED_VECLEN) * 4
 )
 comptime TUNED_64_KS = (
     TUNED_KBLK
     if lib_smem_pages_for[TARGET_COLUMN, TUNED_64_PAGE_BYTES_K32]() == 2
+    else 16
+)
+comptime TUNED_128_PAGE_BYTES_K32 = (
+    (2 * TUNED_BM_WIDE + 2 * TUNED_BN_WIDE) * (TUNED_KBLK + TUNED_VECLEN) * 4
+)
+comptime TUNED_128_KS = (
+    TUNED_KBLK
+    if lib_smem_page_fits_for[TARGET_COLUMN, TUNED_128_PAGE_BYTES_K32]()
     else 16
 )
 
@@ -2503,7 +2517,7 @@ def identical_gemm_with_plan(
         )
         return
     if plan == PLAN_TUNED_128_8X8_K32:
-        _launch_tuned[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, TUNED_KBLK, TUNED_FOLD_SLOTS](
+        _launch_tuned[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, TUNED_128_KS, TUNED_FOLD_SLOTS](
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
         )
         return
