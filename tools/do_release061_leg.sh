@@ -58,7 +58,19 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API=https://api.digitalocean.com/v2
 SSH_KEY_FP="df:f7:6b:0c:56:da:48:a5:6f:6d:ae:44:af:de:f3:0b"
 SSH_KEY_FILE="$HOME/.ssh/id_ed25519"
-NAME=mojolearn-rel061-amd; TAG=rel061; REGION=tor1; SIZE=gpu-mi325x1-256gb; IMAGE=188571990
+# DEVIATION 2294: the CUDA columns need the same guarded rental, so the box is
+# a knob. Defaults are the MI325X this leg was written for; MOJOLEARN_LEG_GPU=h100
+# switches to DigitalOcean's H100 for the Hopper column. The vendor and
+# architecture strings travel with it, because a leg that rented an H100 and
+# then told the driver "hip gfx942" would be qualifying a lie.
+case "${MOJOLEARN_LEG_GPU:-mi325x}" in
+  mi325x) NAME=mojolearn-rel061-amd; REGION=tor1; SIZE=gpu-mi325x1-256gb; IMAGE=188571990
+          LEG_VENDOR=hip;  LEG_ARCH=gfx942; GPU_PROBE='rocm-smi --showproductname 2>/dev/null | grep -i "card series\|name" | head -2' ;;
+  h100)   NAME=mojolearn-rel061-nv;  REGION=nyc2; SIZE=gpu-h100x1-80gb;   IMAGE=236925144
+          LEG_VENDOR=cuda; LEG_ARCH=sm_90a; GPU_PROBE='nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -2' ;;
+  *) echo "MOJOLEARN_LEG_GPU must be mi325x or h100" >&2; exit 2 ;;
+esac
+TAG=rel061
 REMOTE_PY=/usr/bin/python3                 # the image's stdlib 3.12 (tools/do_byte_lm_setup.sh)
 REMOTE_OUT=/root/rel061-build; REMOTE_LOG=/root/rel061-build.log
 OUT="$REPO/bench/results/releases/2026-09-08-linux-0.7.0/hip-gfx942"
@@ -66,7 +78,7 @@ OUT="$REPO/bench/results/releases/2026-09-08-linux-0.7.0/hip-gfx942"
 # one lives; the packer reads that path and would find a directory of the
 # wrong shape. Its own destination, stamped, so two qualification runs of the
 # same wheel do not overwrite each other either.
-[ "$LEG_MODE" = qualify ] && OUT="$REPO/bench/results/releases/2026-09-08-linux-0.7.0/qualification/hip-gfx942-$(date -u +%Y%m%dT%H%M%SZ)"
+[ "$LEG_MODE" = qualify ] && OUT="$REPO/bench/results/releases/2026-09-08-linux-0.7.0/qualification/$LEG_VENDOR-$LEG_ARCH-$(date -u +%Y%m%dT%H%M%SZ)"
 STATE="$OUT/leg.txt"
 TMPD="$(mktemp -d "${TMPDIR:-/tmp}/rel061.XXXXXX")"
 
@@ -156,10 +168,10 @@ if [ "$LEG_MODE" = qualify ]; then
   WOULD_RUN="  upload   $QUAL_WHEEL
            + $(ls "$QUAL_PROOFS"/*.json 2>/dev/null | wc -l | tr -d ' ') build proofs -> /root/proofs/
   qualify  bash tools/linux_surface_qualification.sh qualify-release-linux3 \\
-             /root/$(basename "$QUAL_WHEEL") <sha256> hip \$REMOTE_OUT /root/proofs gfx942"
+             /root/$(basename "$QUAL_WHEEL") <sha256> $LEG_VENDOR \$REMOTE_OUT /root/proofs $LEG_ARCH"
 else
   WOULD_RUN="  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=<=2400
-           bash tools/release061_remote_build.sh hip gfx942 \$REMOTE_OUT > \$REMOTE_LOG"
+           bash tools/release061_remote_build.sh $LEG_VENDOR $LEG_ARCH \$REMOTE_OUT > \$REMOTE_LOG"
 fi
   cat <<EOF
 DRY RUN -- nothing rented. With --rent this leg would:
@@ -290,7 +302,7 @@ $SSH "umask 077; printf '%s\n' '#!/bin/sh' 'sleep $DEADMAN_SECONDS' \
 nohup /tmp/mojolearn-selfkill.sh >/tmp/selfkill.log 2>&1 & echo \$! > /tmp/selfkill.pid; sleep 1
 kill -0 \$(cat /tmp/selfkill.pid) 2>/dev/null && echo ON_DROPLET_DEADMAN_ARMED || echo ON_DROPLET_DEADMAN_FAILED" \
   2>&1 | tail -1 | tee -a "$STATE" | sed 's/^/[amd] /'
-$SSH 'rocm-smi --showproductname 2>/dev/null | grep -i "card series\|name" | head -2' | tee "$OUT/device.txt" | sed 's/^/[amd gpu] /'
+$SSH "$GPU_PROBE" | tee "$OUT/device.txt" | sed 's/^/[gpu] /'
 
 log "shipping $ARCHIVE_BYTES bytes"
 scp -q $SSH_OPTS "$TMPD/src.tgz" "root@$IP:/root/src.tgz" || { log "scp failed"; exit 6; }
@@ -376,14 +388,14 @@ if [ "$LEG_MODE" = qualify ]; then
   # refuses an architecture override and records the device it actually found,
   # so it cannot be talked into agreeing with us.
   $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/.pixi/bin:\$PATH; \
-    MOJOLEARN_EXPECT_VENDOR=hip \
+    MOJOLEARN_EXPECT_VENDOR=$LEG_VENDOR \
     timeout -k 20 $((WORK_SECONDS + 40)) bash tools/linux_surface_qualification.sh qualify-release-linux3 \
-      /root/$QUAL_BASE $QUAL_SHA hip $REMOTE_OUT /root/proofs gfx942 > $REMOTE_LOG 2>&1; \
+      /root/$QUAL_BASE $QUAL_SHA $LEG_VENDOR $REMOTE_OUT /root/proofs $LEG_ARCH > $REMOTE_LOG 2>&1; \
     echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the qualification"; exit 9; }
 else
 $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/.pixi/bin:\$PATH; \
   MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=$WORK_SECONDS \
-  timeout -k 20 $((WORK_SECONDS + 40)) bash tools/release061_remote_build.sh hip gfx942 $REMOTE_OUT > $REMOTE_LOG 2>&1; \
+  timeout -k 20 $((WORK_SECONDS + 40)) bash tools/release061_remote_build.sh $LEG_VENDOR $LEG_ARCH $REMOTE_OUT > $REMOTE_LOG 2>&1; \
   echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the build"; exit 9; }
 fi
 BUILD_EXIT=""
@@ -406,24 +418,28 @@ if [ "$LEG_MODE" = qualify ]; then
   # device it names is the one we rented. check_linux_release_qualification.py
   # is what admits; it runs on the Mac, over all three architectures at once,
   # and this leg supplies exactly one of its three columns.
-  python3 - "$OUT/release-build" "$QUAL_SHA" <<'PYQ' 2>&1 | tee -a "$STATE"
+  python3 - "$OUT/release-build" "$QUAL_SHA" "$LEG_ARCH" <<'PYQ' 2>&1 | tee -a "$STATE"
 import json, pathlib, sys
-out, sha = pathlib.Path(sys.argv[1]), sys.argv[2]
+out, sha, want_arch = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 try:
     q = json.loads((out / 'qualification.json').read_text())
     audit = json.loads((out / 'wheel-audit.json').read_text())
     assert audit.get('sha256') == sha, 'audit is about a different wheel'
     arch = audit.get('runtime_architecture')
-    assert arch == 'gfx942', 'runtime architecture is %r, not gfx942' % arch
-    rows = q.get('jobs') or q.get('rows') or []
-    bad = [r for r in rows if str(r.get('status', '')).upper() not in ('PASSED', 'OK', 'GREEN')]
+    assert arch == want_arch, 'runtime architecture is %r, not %r' % (arch, want_arch)
+    # The driver emits mojolearn.linux.installed-surfaces.v1: a single status
+    # plus installed_records, one per job. It has no 'jobs' or 'rows' key, and
+    # reading for one printed RED over a PASSED run.
+    records = q.get('installed_records') or {}
+    status = str(q.get('status', '')).upper()
     print('qualify_arch=%s' % arch)
-    print('qualify_jobs=%d' % len(rows))
-    print('qualify_failed=%d' % len(bad))
-    print('qualify_admission=%s' % ('GREEN' if rows and not bad else 'RED'))
-    if bad:
-        for r in bad[:5]:
-            print('  FAILED %s %s' % (r.get('name', '?'), r.get('status', '?')))
+    print('qualify_vendor=%s' % q.get('vendor'))
+    print('qualify_jobs=%d' % len(records))
+    print('qualify_wheel_sha256=%s' % q.get('wheel_sha256'))
+    assert q.get('wheel_sha256') == sha, 'qualification is about a different wheel'
+    print('qualify_admission=%s' % ('GREEN' if status == 'PASSED' and records else 'RED'))
+    if status != 'PASSED':
+        print('  driver status=%s reason=%s' % (status, q.get('reason')))
 except Exception as exc:
     print('qualify_admission=RED')
     print('qualify_error=%s' % exc)
