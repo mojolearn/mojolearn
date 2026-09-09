@@ -48,6 +48,31 @@ esac
 api() { printf 'header = "Authorization: Bearer %s"\n' "$TOK" | curl -s --config - "$@"; }
 log() { echo "[$(date +%T) $VENDOR] $*"; }
 
+# WHICH SIDE OF THE WIRE DIED (DEVIATION 2292, ported from
+# tools/do_release061_leg.sh). This leg has NO dry run: it creates a GPU
+# droplet on invocation. On 2026-09-08 three legs launched from this desk
+# lost the Mac's uplink about ninety seconds after their boxes came up, and
+# every one of them then logged HTTP 000 for hours against boxes it could
+# not reach. Neutral hosts, none of them a vendor API, say whether the
+# silence is here or there. Three spaced rounds before the bill starts; a
+# flapping link fails one of them and no droplet is created.
+uplink_down() {
+  local h
+  for h in https://pypi.org/ https://github.com/ https://www.google.com/; do
+    curl -s -o /dev/null --max-time 8 "$h" 2>/dev/null && return 1
+  done
+  return 0
+}
+uplink_stable() {
+  local r=1
+  while [ "$r" -le 3 ]; do
+    if uplink_down; then log "uplink probe $r/3: NO neutral host answered"; return 1; fi
+    [ "$r" -lt 3 ] && sleep 7
+    r=$((r + 1))
+  done
+  return 0
+}
+
 DROPLET_ID=""
 DEADMAN_PID=""
 DESTROY_CONFIRMED=0
@@ -187,6 +212,13 @@ except Exception:
   fi
 fi
 
+if ! uplink_stable; then
+  log "REFUSING to create $NAME: this machine could not reach ANY neutral host."
+  log "  Nothing was created, so nothing is billing. Fix this desk's network,"
+  log "  then re-run. (DEVIATION 2292)"
+  exit 2
+fi
+log "uplink up on all three probes"
 log "creating $NAME ($SIZE, $REGION)"
 CREATE_BODY="$(api -X POST -H "Content-Type: application/json" \
   -d "{\"name\":\"$NAME\",\"region\":\"$REGION\",\"size\":\"$SIZE\",\"image\":$IMAGE,\"ssh_keys\":[\"$SSH_KEY_FP\"],\"tags\":[\"e2\"]$VOLUME_ARG}" \
