@@ -2596,8 +2596,14 @@ def eager_attention_forward(
     plant_bits: List[UInt32],
     mut trace: IdentityTrace,
     prefix: String,
+    materialize: Bool,
 ) raises -> Int:
     """The attention interface, eager or fused, ONE set of bits.
+
+    `materialize`: run the eager stage kernels even with the trace off, so
+    that `scores`, `masked`, `aexp` and `weights` hold this call's stages
+    for a caller that reads them back (the gates' device dumps). The
+    fused output is still what lands in `ctxv`.
 
     With the trace ON the eager kernels run and record S11-S18 as they
     always have; then, when the call is fused-eligible, the fused kernels
@@ -2609,7 +2615,7 @@ def eager_attention_forward(
     bits are the ones in `stages.ctxv`; -1 when the fused path was not
     attempted)."""
     var choice = attention_path_choice(plant_at)
-    var need_eager = trace.enabled or choice == ATTN_PATH_EAGER
+    var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
     var status = -1
     if need_eager:
         attention_eager_core(
@@ -2975,6 +2981,7 @@ def llama_attention_forward(
     plant_bits: List[UInt32],
     mut trace: IdentityTrace,
     prefix: String,
+    materialize: Bool,
 ) raises:
     """`LlamaAttention.forward(hidden_states, position_embeddings,
     attention_mask, past_key_values)` (:243-281), eager path, inference
@@ -3216,6 +3223,7 @@ def llama_attention_forward(
         plant_bits,
         trace,
         prefix,
+        materialize,
     )
 
     # ---- o_proj (:280). `nn.Linear(n_heads*head_dim, d_model,
@@ -3352,8 +3360,14 @@ def llama_decoder_layer_forward_planted(
     plant_bits: List[UInt32],
     mut trace: IdentityTrace,
     prefix: String,
+    materialize: Bool = True,
 ) raises:
     """`LlamaDecoderLayer.forward(hidden_states, ...)` (:295-324).
+
+    `materialize` (default True): keep the eager attention stages
+    materialized whatever path computes `attn.ctx`, because every caller
+    of THIS entry point is a gate that reads them back. The plain entry
+    point below passes False and lets the fused path skip them.
 
         residual = hidden_states                                      :305
         hidden_states = self.input_layernorm(hidden_states)           :306
@@ -3524,6 +3538,7 @@ def llama_decoder_layer_forward_planted(
         plant_bits,
         trace,
         prefix,
+        materialize,
     )
 
     # ---- residual + hidden_states (:317). S22. The mamba lane's S16
@@ -3617,4 +3632,5 @@ def llama_decoder_layer_forward(
         List[UInt32](),
         trace,
         prefix,
+        materialize=False,
     )

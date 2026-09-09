@@ -2546,6 +2546,7 @@ def llama_decoder_layer_backward(
     pos0: Int,
     mut trace: IdentityTrace,
     prefix: String,
+    materialize: Bool = False,
 ) raises:
     """The gradient of ONE `LlamaDecoderLayer.forward` call, stage by stage,
     recorded onto `trace` in the plan's card order.
@@ -2831,7 +2832,7 @@ def llama_decoder_layer_backward(
     # trace off only one path runs (see `eager_attention_forward`).
     # =====================================================================
     var choice = attention_path_choice(PLANT_AT_NONE)
-    var need_eager = trace.enabled or choice == ATTN_PATH_EAGER
+    var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
     if need_eager:
         bwd_attention_eager_stages(
             ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,

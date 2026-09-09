@@ -39,7 +39,7 @@ from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import numeric_mode_name
-from transformer.checks.transformer_fixture import fixture_tensor
+from transformer.checks.transformer_fixture import bits32_hex, fixture_tensor
 from transformer.checks.transformer_backward import (
     LlamaBackwardStages,
     bwd_attention_eager_stages,
@@ -107,7 +107,7 @@ def cases() -> List[FusedCase]:
     # and the keys from 40 on carry `+v`, so the eager tail launders rows
     # t < 40 to `+0.0`. The fused chain must report the corner.
     out.append(FusedCase("underflow_hd64_l48", 1, 48, 2, 1, 64, 0, 0, -1.2e-37, -0.8e-37, 40, 1.0, 1.0, FUSED_CORNER, EXPECT_ANY))
-    out.append(FusedCase("regime_q1e20", 1, 32, 2, 1, 64, 0, 0, -1.0, 1.0, -1, 1e20, 1.0, FUSED_REFUSED_REGIME, FUSED_REFUSED_REGIME))
+    out.append(FusedCase("regime_q1e30", 1, 32, 2, 1, 64, 0, 0, -1.0, 1.0, -1, 1e30, 1.0, FUSED_REFUSED_REGIME, FUSED_REFUSED_REGIME))
     out.append(FusedCase("regime_dctx1e30", 1, 32, 2, 1, 64, 0, 0, -1.0, 1.0, -1, 1.0, 1e30, FUSED_RAN, FUSED_REFUSED_REGIME))
     return out^
 
@@ -123,7 +123,7 @@ def status_name(st: Int) -> String:
 
 
 def hexbits(v: Float32) -> String:
-    return hex(bitcast[DType.uint32](v))
+    return bits32_hex(v)
 
 
 def compare(name: String, what: String, a: List[Float32], b: List[Float32]) raises -> Int:
@@ -231,7 +231,7 @@ def run_case(ctx: DeviceContext, c: FusedCase) raises -> Int:
     var off2 = IdentityTrace.disabled()
     var wst = eager_attention_forward(
         ctx, stages, b, l, s, pos0, key_lo, window, dims, PLANT_AT_NONE,
-        empty_i, empty_b, off2, String(""),
+        empty_i, empty_b, off2, String(""), False,
     )
     print("    wrapper status: " + status_name(wst))
     moved += compare(c.name, "fwd ctx (wrapper)", e_ctx, _download(ctx, stages.ctxv, qn))
