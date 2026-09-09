@@ -48,11 +48,11 @@ four round-2 lanes CONTINUE their full briefs; no further lanes until he says so
   (143,628 cells). Transpose-only was slightly faster than both at 128 and
   1000 (12.1, 60.2) and slower at 32 (16.3).
 
-## Lanes open at handoff time (trees winding down, the other four continuing)
+## Lanes open at handoff time (trees LANDED at fd0c4052, the other four continuing)
 
 | lane | branch | worktree (under .claude/worktrees/) | handoff file it must leave |
 |---|---|---|---|
-| trees (round 1) | lane/trees-identical | agent-abadb3e27843a787c | docs/lanes/HANDOFF_trees.md |
+| trees (round 1) | lane/trees-identical | MERGED fd0c4052; RUN OWED green on the M4 (4 identical builds, identity_break 81/81 vs the shipped Apple JSON and vs the H100 fold JSON, rf_perf_candidates, fit-pointwise, logloss-train, ordered-boosting); rows on the reference table at 9bcbe5b9 | docs/lanes/HANDOFF_trees.md |
 | UMAP optimizer + kNN selector | lane/umap-optimizer | agent-a4b445131c31d9311 | docs/lanes/HANDOFF_umap.md |
 | GEMM split-K + H100 table | lane/gemm-splitk | agent-a68e7f0e68dc3bc9f | docs/lanes/HANDOFF_gemm_splitk.md |
 | fused attention (bits unchanged) | lane/fused-attention | agent-a94c0adce7c14179f | docs/lanes/HANDOFF_fused_attention.md |
@@ -74,7 +74,8 @@ samba-*).
 | kNN, many queries | 400k, 4000 q, k 10, H100 | 66.5 ms | cuML 10.2 | 6.5x | umap lane task 2 |
 | Mamba-2/3 blocks | Sep 7 grid, H100 | | torch reference scan | 72-85x | NOBODY this round |
 | Transformer end to end | Sep 7 grid, H100 | | torch eager | 22-41x | partly the two lanes above |
-| Symmetric GBDT vs CatBoost | HIGGS 1M-5M, H100 | | CatBoost GPU 846-2459 ms | paper said 4.9-31x; not measured in this tree yet | trees lane |
+| Symmetric GBDT vs CatBoost | HIGGS 1M, H100, same process | 775 ms Logloss, 806 RMSE | CatBoost GPU 900 / 699 | 0.86x / 1.15x (L40S: 426 vs 781, 318 vs 915); 2M/5M UNRUN | trees lane landed; fold + DEV 2030 fused walker bit-equal on both boxes but untimed on H100, flags NOT flipped |
+| RF vs cuML RF | HIGGS 1M, H100 | 5762 ms | cuML 3314 | 1.7x (structural per the audit) | nobody |
 | Dense GEMM (TUNED plans) | Llama-8B t512, L40S | 1.26-35.6 ms | cuBLAS fp32 0.54-16.9 | 2.1-2.7x | done for now |
 | kNN, few queries; RF/ET; OLS/PCA Gram | | | | at or near parity | none needed |
 
@@ -88,8 +89,11 @@ TF32/flash paths several x is permanent.
 1. Mamba-3 SISO block speed (72-85x vs torch reference scan; the byte-LM
    training step is already 2x faster than eager torch, so the gap is in
    the prefill/scan kernels).
-2. Symmetric-tree leaf estimation and partition launches (per the trees
-   lane's profile once it lands).
+2. Symmetric-tree 2M/5M rungs and the H100 A/B for the fold, DEV 2030 and
+   the RF candidate defines (all bit-equal, only L40S transcriptions for
+   timing: baseline 411/585, fold 336/570, fused 322/557 ms at 1M/2M).
+   Profile (H100 1M): sym.hist 67.7, sym.split 45.5, est.* 66 ms of 251.
+   tools/trees_leg.sh + tools/trees_identical_ab.sh are the harness.
 3. Missing opponent rows: LightGBM CUDA extra_trees (valid build), cuML
    DBSCAN/PCA at 1M rows, torch byte-LM step time on H100.
 4. Round-1 leftovers: estimator-level GEMM swap timing; AMD column for the
