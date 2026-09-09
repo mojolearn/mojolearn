@@ -65,7 +65,11 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.kernel_matrix import TARGET_COLUMN, lib_hardware_ftz_fma_for
+from checks.kernel_matrix import (
+    TARGET_COLUMN,
+    lib_hardware_ftz_fma_for,
+    lib_smem_page_fits_for,
+)
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -106,10 +110,46 @@ comptime FUSED_HW_FTZ_FMA = (
 )
 
 
+def _fused_page_bytes(hd: Int) -> Int:
+    """The largest shared page any of the four fused kernels claims per
+    block at `hd`, in bytes: the kernels' `stack_allocation` sizes spelled
+    once, host-side, so the column's shared limit can be asked BEFORE a
+    pipeline is created. Forward: `ks BK*(HD+1) + es TQ*(BK+1) + mp, mv
+    TQ*HD each + rs TQ`; zdot and dq: `ks, vs BKb*(HD+1) each + ys, dys
+    TQ*(BKb+1) each`; dkdv: the same with `TT == BKb` and `BJ == TQ`. At
+    `hd == 128` that is 35,600 (forward) and 33,552 (backward) bytes, over
+    a 32 KB column; at 64 it is 19,744."""
+    var tq = FUSED_THREADS // hd
+    var bk_f = hd if hd <= 64 else 64
+    var fwd = bk_f * (hd + 1) + tq * (bk_f + 1) + 2 * tq * hd + tq
+    var half = hd // 2
+    var bk_b = half if half <= 32 else 32
+    var bwd = 2 * bk_b * (hd + 1) + 2 * tq * (bk_b + 1)
+    var m = fwd
+    if bwd > m:
+        m = bwd
+    return m * 4
+
+
+comptime FUSED_FITS_16 = lib_smem_page_fits_for[TARGET_COLUMN, _fused_page_bytes(16)]()
+comptime FUSED_FITS_24 = lib_smem_page_fits_for[TARGET_COLUMN, _fused_page_bytes(24)]()
+comptime FUSED_FITS_64 = lib_smem_page_fits_for[TARGET_COLUMN, _fused_page_bytes(64)]()
+comptime FUSED_FITS_128 = lib_smem_page_fits_for[TARGET_COLUMN, _fused_page_bytes(128)]()
+
+
 def fused_supported_head_dim(hd: Int) -> Bool:
-    """The head dims this file instantiates kernels for. All are at or
-    below `CONTRACT_K_LEAF_MIN` (128), so the score is the one-leaf chain."""
-    return hd == 16 or hd == 24 or hd == 64 or hd == 128
+    """The head dims this file instantiates kernels for, AND whose shared
+    page fits the column (`lib_smem_page_fits_for`, kernel matrix). All are
+    at or below `CONTRACT_K_LEAF_MIN` (128), so the score is the one-leaf
+    chain. A head dim that does not fit takes the eager path, which is the
+    same bits by construction; found by the Apple RUN OWED 2026-09-09
+    (`hd128_win20_l70`: Metal refused the 35,600-byte forward page)."""
+    return (
+        (hd == 16 and FUSED_FITS_16)
+        or (hd == 24 and FUSED_FITS_24)
+        or (hd == 64 and FUSED_FITS_64)
+        or (hd == 128 and FUSED_FITS_128)
+    )
 
 
 def fused_rows_per_block(hd: Int) -> Int:

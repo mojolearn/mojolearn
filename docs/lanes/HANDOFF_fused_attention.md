@@ -155,7 +155,14 @@ The reference row is unchanged and is the one quoted.
 3. **The backward's non-attention GEMMs (96 ms)** were not looked at.
 4. **The Apple column of everything** (RUN OWED below). The AMD column.
 5. `head_dim` outside {16, 24, 64, 128} takes the eager path; the leaf tree
-   for `head_dim > 128` is not spelled in the fused kernels.
+   for `head_dim > 128` is not spelled in the fused kernels. ORCHESTRATOR,
+   Apple RUN OWED 2026-09-09: `head_dim` 128 ALSO takes the eager path on
+   any column whose shared limit is under 35,600 bytes (Apple, 32 KB): Metal
+   refused the pipeline in `check-transformer-fused` at `hd128_win20_l70`.
+   `fused_supported_head_dim` now reads `lib_smem_page_fits_for`; the check
+   expects the column's answer. Fusing hd 128 on Apple needs a smaller key
+   tile (`BK` 32 for the forward) and is part of the register-blocked
+   rewrite in item 1.
 
 ## RUN OWED on the Apple M4 (the orchestrator runs these, one at a time)
 

@@ -771,7 +771,7 @@ def lib_smem_pages_for[column: Int, page_bytes: Int]() -> Int:
 
 
 def lib_smem_page_fits_for[column: Int, page_bytes: Int]() -> Bool:
-    """SCHEDULING row (2026-09-09, orchestrator, Apple RUN OWED of the split-K lane): whether ONE shared page of `page_bytes` fits under the column's shared limit at all. `lib_smem_pages_for` answers "one page or two"; it cannot say "not even one". The 128x128 tuned pair at K step 32 is 36,864 bytes a page, which no NVIDIA leg noticed (48 KB) and which Metal refuses at pipeline creation (32 KB: "Threadgroup memory size (36864) exceeds the maximum threadgroup memory allowed (32768)", gemm_device_check and gemm_backward_check on the M4). A plan whose page does not fit resolves its K step down through this row instead of naming a vendor."""
+    """SCHEDULING row (2026-09-09, orchestrator, Apple RUN OWED of the split-K lane): whether ONE shared page of `page_bytes` fits under the column's shared limit at all. `lib_smem_pages_for` answers "one page or two"; it cannot say "not even one". The 128x128 tuned pair at K step 32 is 36,864 bytes a page, which no NVIDIA leg noticed (48 KB) and which Metal refuses at pipeline creation (32 KB: "Threadgroup memory size (36864) exceeds the maximum threadgroup memory allowed (32768)", gemm_device_check and gemm_backward_check on the M4). A plan whose page does not fit resolves its K step down through this row instead of naming a vendor. The fused attention kernels ask the same question per head dim (`fused_attention.mojo::fused_supported_head_dim`): head dim 128 claims 35,600 bytes and takes the eager path on a 32 KB column."""
     return page_bytes <= column_shared_limit(column)
 
 

@@ -50,6 +50,7 @@ from transformer.impl.transformers.models.llama.fused_attention import (
     FUSED_REFUSED_REGIME,
     fused_backward_launch,
     fused_forward_launch,
+    fused_supported_head_dim,
 )
 from transformer.impl.transformers.models.llama.modeling_llama import (
     LlamaDeviceStages,
@@ -102,7 +103,11 @@ def cases() -> List[FusedCase]:
     out.append(FusedCase("split_win50_pos100_l37", 1, 37, 2, 1, 64, 50, 100, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
     out.append(FusedCase("hd16_win7_l40", 2, 40, 2, 1, 16, 7, 0, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
     out.append(FusedCase("hd24_l33", 1, 33, 2, 1, 24, 0, 0, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
-    out.append(FusedCase("hd128_win20_l70", 1, 70, 2, 2, 128, 20, 0, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
+    # hd 128 claims 35,600 shared bytes per block; on a column whose shared
+    # limit is below that (kernel matrix `lib_smem_page_fits_for`) the launch
+    # must REFUSE by name and the wrapper takes the eager path, same bits.
+    var hd128 = FUSED_RAN if fused_supported_head_dim(128) else FUSED_REFUSED_REGIME
+    out.append(FusedCase("hd128_win20_l70", 1, 70, 2, 2, 128, 20, 0, -1.0, 1.0, -1, 1.0, 1.0, hd128, hd128))
     # Every visible product `w * v` flushes to `-0.0` (|v| ~ 1e-37, w >= 1/48),
     # and the keys from 40 on carry `+v`, so the eager tail launders rows
     # t < 40 to `+0.0`. The fused chain must report the corner.
