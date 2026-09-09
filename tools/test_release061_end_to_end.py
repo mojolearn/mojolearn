@@ -88,6 +88,13 @@ def byte_fixture(out, vendor, binding_sha):
         gradients_hex=(struct.pack('<f', 1.0) * 34944).hex(), checkpoint_sha256=hashes))
 
 
+# DEVIATION 2293: which three architectures the fixture wheel carries. The
+# Hopper slot has two legal spellings and only sm_90a is buildable on an H100,
+# so the gate has to be exercised with both. Default is the canonical triple;
+# test_hopper_spelled_sm_90a_admits swaps it.
+ARCHES = None
+
+
 def fixture(root):
     wrapper = root / 'python/mojolearn/__init__.py'
     wrapper.parent.mkdir(parents=True)
@@ -111,7 +118,7 @@ def fixture(root):
     proof_root = qualification_root / 'build-proofs'
     proof_root.mkdir(parents=True)
     proof_sets = {}
-    for key in sorted(gate.RELEASE_ARCHES):
+    for key in sorted(ARCHES or gate.RELEASE_ARCHES):
         extensions = {}
         for mode in gate.surface.MODES:
             prefix = 'mojolearn/' + key + '/' + ('' if mode == 'fast' else mode + '/')
@@ -147,7 +154,7 @@ def fixture(root):
     with zipfile.ZipFile(wheel, 'w') as archive:
         for name, data in files.items():
             archive.writestr(name, data)
-    for key in sorted(gate.RELEASE_ARCHES):
+    for key in sorted(ARCHES or gate.RELEASE_ARCHES):
         vendor, arch = key.split('/')
         out = qualification_root / key
         out.mkdir(parents=True)
@@ -259,6 +266,47 @@ class EndToEndRelease061(unittest.TestCase):
             with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}), \
                     self.assertRaises((ValueError, OSError, KeyError)):
                 gate.check_release061(wheel, qualification, root)
+
+
+class HopperSpelling(unittest.TestCase):
+    """DEVIATION 2293. sm_90 has never been built; the compiler emits sm_90a on
+    an H100 and every read-back gate refuses a set named otherwise. The whole
+    admission path therefore has to accept a wheel whose Hopper slot is spelled
+    sm_90a, and has to keep refusing one that fills that slot twice."""
+
+    def _run(self, arches):
+        global ARCHES
+        ARCHES = frozenset(arches)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                wheel, qualification = fixture(root)
+                with patch.object(gate.compare_ordered_python, 'compare',
+                                  return_value={'status': 'PASSED'}):
+                    return gate.check_release061(wheel, qualification, root)
+        finally:
+            ARCHES = None
+
+    def test_hopper_spelled_sm_90a_admits(self):
+        result = self._run({'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})
+        self.assertEqual(result['status'], 'PASSED')
+        self.assertEqual(set(result['runtime_coverage']),
+                         {'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})
+        self.assertEqual(result['jobs_per_runtime_architecture'], 25)
+
+    def test_hopper_spelled_sm_90_still_admits(self):
+        result = self._run({'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'})
+        self.assertEqual(result['status'], 'PASSED')
+        self.assertEqual(set(result['runtime_coverage']),
+                         {'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'})
+
+    def test_hopper_slot_filled_twice_refused(self):
+        with self.assertRaises((ValueError, OSError, KeyError)):
+            self._run({'cuda/sm_89', 'cuda/sm_90', 'cuda/sm_90a', 'hip/gfx942'})
+
+    def test_missing_hopper_refused(self):
+        with self.assertRaises((ValueError, OSError, KeyError)):
+            self._run({'cuda/sm_89', 'cuda/sm_86', 'hip/gfx942'})
 
 
 if __name__ == '__main__':

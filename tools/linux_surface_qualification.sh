@@ -130,7 +130,7 @@ printf '1\n' > "$DEST/exit_code"
 # 15 extension names in all three modes. A CUDA-only/HIP-only wheel is
 # admitted for that vendor and labelled explicitly; no universal claim.
 if [[ "$ACTION" = qualify-release-linux3 ]]; then
-    ARCH=${6:?actual runtime architecture sm_89, sm_90 or gfx942}
+    ARCH=${6:?actual runtime architecture sm_89, sm_90, sm_90a or gfx942}
     "$PY" - "$ROOT" "$WHEEL" "$EXPECTED" "$PROVENANCE" "$VENDOR/$ARCH" "$DEST" <<'PYMULTI'
 import json, pathlib, shutil, sys
 root, wheel, expected, proof_root, key, out = sys.argv[1:]

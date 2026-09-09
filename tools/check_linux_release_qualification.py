@@ -27,7 +27,13 @@ EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
                        r'(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so')
 MODE_READBACK = surface.BINDINGS - {'_mojolearn_estimators', '_mojolearn_rf',
                                  '_mojolearn_trees', '_mojolearn_solver', '_mojolearn_tsa'}
-RELEASE_ARCHES = {'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'}
+# The three SLOTS a release wheel must fill. DEVIATION 2293: this stays the
+# canonical triple, because it is what says WHICH slots exist. Which spelling
+# the Hopper slot actually carries is a property of the built wheel, read off
+# the wheel, never assumed from here -- widening this constant instead made a
+# test fixture build four architectures and fill Hopper twice.
+RELEASE_ARCHES = frozenset(surface.RELEASE_ARCHES)
+RELEASE_ARCHES_ACCEPTED = RELEASE_ARCHES | {'cuda/sm_90a'}
 # DEVIATION 2290. No version literal on this path: the version is whatever the
 # source root's python/mojolearn/_version.py says (surface.release_version) and
 # the profile is surface.RELEASE_PROFILE, with `release-0.6.1` as its alias.
@@ -202,11 +208,13 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
 def release_audit(wheel, source_root, proof_root, runtime_key):
     """File-only three-architecture preflight, also recomputed at final admission."""
     wheel, source_root, proof_root = map(Path, (wheel, source_root, proof_root))
-    require(runtime_key in RELEASE_ARCHES, 'Unknown runtime architecture')
+    require(runtime_key in RELEASE_ARCHES_ACCEPTED, 'Unknown runtime architecture')
     extensions, sets = inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True)
     version = surface.release_version(source_root)  # DEVIATION 2290: the source root's, never a literal
-    require({'/'.join(k.split('/')[:2]) for k in sets} == RELEASE_ARCHES,
-            version + ' requires exactly sm_89, sm_90 and gfx942')
+    carried = {'/'.join(k.split('/')[:2]) for k in sets}
+    require(surface.arch_set_ok(carried),
+            version + ' requires exactly sm_89, sm_90 (or sm_90a) and gfx942')
+    require(runtime_key in carried, 'Qualified architecture is not one this wheel carries')
     inventory = native_inventory(source_root)
     source_sha = inventory_digest(inventory)
     with zipfile.ZipFile(wheel) as archive:
@@ -218,7 +226,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
         require(payload.get('extensions') == {'mojolearn/' + n: h for n, h in extensions.items()}
                 and payload.get('source_inventory') == inventory,
                 'Final payload or source differs from assembly inventory')
-        require(set(payload.get('sets', {})) == RELEASE_ARCHES, 'Missing assembly set proofs')
+        require(set(payload.get('sets', {})) == carried, 'Missing assembly set proofs')
         require(payload.get('optional_native', {}).get('_mojolearn_byte_lm') == dict(included=True,
                     supported_modes=['identical'], unsupported_modes=['fast', 'deterministic']),
                 'Release byte-LM must be included in IDENTICAL only')
@@ -228,7 +236,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
                       for n in archive.namelist() if select(n)}
             require(payload.get(field) == actual, 'Final wheel differs from ' + field)
     proof_hashes = {}
-    for key in sorted(RELEASE_ARCHES):
+    for key in sorted(carried):
         proof_path = proof_root / (key.replace('/', '-') + '.json')
         proof = json.loads(proof_path.read_text())
         require(proof.get('schema') == 'mojolearn.linux.build-provenance.v1'
@@ -253,8 +261,16 @@ def check_release061(wheel, qualification_root, source_root):
     wheel, qualification_root, source_root = map(Path, (wheel, qualification_root, source_root))
     proof_root = qualification_root / 'build-proofs'
     inventory = native_inventory(source_root)
+    # DEVIATION 2293: the architectures are the ones the WHEEL carries, with
+    # the Hopper slot spelled however it was built. arch_set_ok still requires
+    # exactly the three slots, filled once each.
+    carried = {'/'.join(k.split('/')[:2])
+               for k in inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True)[1]}
+    require(surface.arch_set_ok(carried),
+            surface.release_version(source_root)
+            + ' requires exactly sm_89, sm_90 (or sm_90a) and gfx942')
     directories = {}
-    for key in sorted(RELEASE_ARCHES):
+    for key in sorted(carried):
         vendor, arch = key.split('/')
         directory = qualification_root / vendor / arch
         expected = release_audit(wheel, source_root, proof_root, key)
@@ -270,7 +286,8 @@ def check_release061(wheel, qualification_root, source_root):
         check_corpora(directory, source_root)
         directories[key] = directory
     comparisons = {}
-    for cuda in ('cuda/sm_89', 'cuda/sm_90'):
+    # DEVIATION 2293: whichever Hopper spelling this wheel actually carries.
+    for cuda in sorted(k for k in directories if k.startswith('cuda/')):
         umap = surface.compare(directories['hip/gfx942'], directories[cuda])
         ordered = compare_ordered_python.compare(directories['hip/gfx942'], directories[cuda])
         require(umap.get('status') == ordered.get('status') == 'PASSED', 'Architecture identity comparison failed')
@@ -280,7 +297,7 @@ def check_release061(wheel, qualification_root, source_root):
                 source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=25,
                 runtime_coverage={key: digest_file(path / 'qualification.json') for key, path in directories.items()},
                 comparisons=comparisons,
-                scope='Exact final wheel; 25 installed jobs on each of sm_89, sm_90, gfx942; byte-LM one-step/checkpoint functionality only; bounded UMAP/Ordered identity only')
+                scope='Exact final wheel; 25 installed jobs on each of sm_89, sm_90 (or sm_90a), gfx942; byte-LM one-step/checkpoint functionality only; bounded UMAP/Ordered identity only')
 
 
 def check_corpora(directory, source_root):

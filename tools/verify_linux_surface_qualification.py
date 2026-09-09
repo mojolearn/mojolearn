@@ -37,6 +37,47 @@ BYTE_FILES = {'byte-lm-identical.json', 'byte-lm-before.json', 'byte-lm-after.js
 # qualification checker and the alpha artifact verifier.
 RELEASE_PROFILE = 'release-linux3'
 RELEASE_PROFILES = frozenset({RELEASE_PROFILE, 'release-0.6.1'})
+
+# DEVIATION 2293: THE HOPPER SLOT HAS TWO LEGAL SPELLINGS AND ONLY ONE OF THEM
+# IS BUILDABLE. Asked for sm_90 through --target-accelerator on an H100, the
+# compiler emits binaries carrying sm_90a, and every gate that reads an
+# architecture back off the binaries then refuses the set for being named
+# something it was not verified to carry. That refusal is right and is not
+# relaxed anywhere; what was wrong is that six separate gates spelled the slot
+# `sm_90` and nothing else, and `sm_90` has never once been built. 0.6.0's
+# Linux wheel shipped gfx942 only and NVIDIA was a source build, so the
+# literal was never exercised.
+#
+# sm_90a is not a fallback. python/mojolearn/_backend.py already PREFERS it:
+# a device reporting sm_90 takes a carried sm_90a as "architecture-specific
+# build for this exact device", ahead of any family rule, because the `a`
+# restricts which devices the code runs on and Hopper is what it restricts to.
+#
+# ONE definition, read by the packer, the admission checker and the alpha
+# verifier, because a contract clause spelled separately in six places is six
+# chances to disagree.
+RELEASE_HOPPER = ('sm_90', 'sm_90a')
+RELEASE_ARCHES = frozenset({'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'})
+
+
+def normalise_arch(key):
+    """Collapse the Hopper slot's two spellings onto one, for set comparison.
+
+    'cuda/sm_90a' -> 'cuda/sm_90'; everything else is returned unchanged, so a
+    wrong architecture is still a wrong architecture.
+    """
+    return 'cuda/sm_90' if key == 'cuda/sm_90a' else key
+
+
+def arch_set_ok(keys):
+    """True when `keys` is exactly the release triple, Hopper spelled either way.
+
+    Refuses a set that fills the Hopper slot twice, which normalising alone
+    would silently accept.
+    """
+    keys = list(keys)
+    hopper = [k for k in keys if k in ('cuda/sm_90', 'cuda/sm_90a')]
+    return len(hopper) <= 1 and {normalise_arch(k) for k in keys} == RELEASE_ARCHES
 VERSION_PATTERN = re.compile(r'''^__version__\s*=\s*(['"])([^'"]+)\1\s*$''', re.MULTILINE)
 
 

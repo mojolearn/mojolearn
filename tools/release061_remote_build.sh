@@ -10,9 +10,10 @@ cd "$ROOT"
 [[ $(uname -s) == Linux && $# == 3 ]] || { echo 'Remote Linux: vendor arch NEW_OUT required' >&2; exit 2; }
 vendor=$1 arch=$2 OUT=$3
 case "$vendor:$arch" in
-    cuda:sm_89|cuda:sm_90) guard=tools/nvidia_serial_guard.py; column=nvidia ;;
+    # DEVIATION 2293: sm_90a is the Hopper slot's buildable spelling.
+    cuda:sm_89|cuda:sm_90|cuda:sm_90a) guard=tools/nvidia_serial_guard.py; column=nvidia ;;
     hip:gfx942) guard=tools/amd_serial_guard.py; column=amd ;;
-    *) echo 'Only cuda:sm_89, cuda:sm_90 or hip:gfx942' >&2; exit 2 ;;
+    *) echo 'Only cuda:sm_89, cuda:sm_90, cuda:sm_90a or hip:gfx942' >&2; exit 2 ;;
 esac
 PY=${MOJOLEARN_PYTHON:?existing absolute stdlib Python executable required}
 commit=${MOJOLEARN_COMMIT:?full frozen source commit required}
