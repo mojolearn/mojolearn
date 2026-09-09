@@ -17,6 +17,10 @@
 # <leg out>/remote/identical/:
 #
 #   status.txt              one line per build and run: exit code, seconds
+#   capped.card             the device card under MOJOLEARN_GEMM_CARD_HOST_CAP=1,
+#                           the one that is diffable against the known-good
+#                           bench/results/e1/2026-08-28_131651-runpod-nvidia/
+#                           lanes/gemm.identical.card (comments stripped)
 #   probe.log               gemm_tuned_probe: dispatcher vs untuned plan,
 #                           bits and time, every shape (must end 0 MOVED)
 #   probe.plan<N>.log       the same probe with MOJOLEARN_GEMM_PLAN=N forced
@@ -37,9 +41,10 @@ mkdir -p "$OUT"
 cd "$ROOT" || exit 9
 ST="$OUT/status.txt"
 ROUNDS="${MOJOLEARN_SPEED_ROUNDS:-5}"
-PLANS="${MOJOLEARN_GEMM_PROBE_PLANS:-0 1 2 3 4 5 6 7 8 9 10}"
+PLANS="${MOJOLEARN_GEMM_PROBE_PLANS:-0 1 2 3 4 5 6 7 8 9 10 11 12 13 14}"
 PATH="$HOME/.pixi/bin:$PATH"
 export PATH
+KNOWN_CARD=bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
 
 smi() {
     nvidia-smi --query-gpu=name,driver_version,clocks.sm,clocks.max.sm,temperature.gpu \
@@ -61,6 +66,17 @@ run() {   # <log name> <binary> [VAR=value ...]
 
 echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ) rounds=$ROUNDS plans=$PLANS" > "$ST"
 smi "$OUT/gpu_before.txt"
+
+# THE COMPARISON CARD: the HOST cap, because the known-good NVIDIA card was
+# made under it and the uncapped device arm picks its shapes by a budget
+# that includes the plan's workspace (a plan change would move a row's
+# element count with no bit moving). The archive the leg ships carries no
+# bench/results, so the comparison happens at home, comments stripped:
+#   grep -v '^#' <leg>/remote/identical/capped.card | cmp - <(grep -v '^#' $KNOWN_CARD)
+_t0=$(date +%s)
+MOJOLEARN_GEMM_CARD_HOST_CAP=1 sh tools/gemm_card.sh device "$OUT/capped.card" \
+    > "$OUT/card_capped.log" 2>&1
+echo "card_capped exit=$? secs=$(( $(date +%s) - _t0 ))" >> "$ST"
 
 bld probe gemm/checks/gemm_tuned_probe.mojo
 bld speed bench/speed/gemm_speed_main.mojo
