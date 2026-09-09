@@ -4,7 +4,9 @@
 
 Shape from the environment: MOJOLEARN_UMAP_ROWS (20000), MOJOLEARN_UMAP_FEATURES
 (32), MOJOLEARN_UMAP_NEIGHBORS (15), MOJOLEARN_UMAP_EPOCHS (200),
-MOJOLEARN_UMAP_ROUNDS (1). The data is the dyadic mixer of
+MOJOLEARN_UMAP_ROUNDS (1); MOJOLEARN_UMAP_DUMP (empty) names a file that
+receives the final round's embedding as little-endian Float32, row-major
+(rows x 2), for `tools/umap_quality_vs_cuml.py`. The data is the dyadic mixer of
 `bench/knn_smallk_dispatch_fixture._coordinate` (salt 0), which
 `tools/umap_cuml_reference.py` reproduces so cuML fits the same bytes. The
 phases are the four calls `umap/sparse_estimator.mojo::sparse_fit_transform`
@@ -18,7 +20,7 @@ from std.os import getenv
 from std.time import perf_counter_ns
 
 from bench.knn_smallk_dispatch_fixture import _coordinate
-from checks.kernel_matrix import TARGET_COLUMN, column_name
+from checks.kernel_matrix import TARGET_COLUMN, column_name, umap_device_optimizer_for
 from checks.numerics import numeric_mode_name
 from neighbors.estimator import knn_search
 from umap.curve import fit_umap_curve
@@ -26,6 +28,7 @@ from umap.graph import canonicalize_self_neighbors
 from umap.params import UMAPParams
 from umap.sparse_estimator import sparse_spectral_initialize
 from umap.sparse_graph import sparse_fuzzy_simplicial_graph
+from umap.optimizer_identical_device import UMAP_IDENTICAL_OPT_TPB
 from umap.sparse_optimizer import optimize_sparse_layout
 
 
@@ -46,12 +49,15 @@ def main() raises:
     var k = _env_int("MOJOLEARN_UMAP_NEIGHBORS", 15)
     var epochs = _env_int("MOJOLEARN_UMAP_EPOCHS", 200)
     var rounds = _env_int("MOJOLEARN_UMAP_ROUNDS", 1)
+    var dump = String(getenv("MOJOLEARN_UMAP_DUMP"))
     var params = UMAPParams(n_neighbors=k, n_components=2, n_epochs=epochs)
     params.validate(n)
     print(
         "UMAP_PHASE_HEADER", "mode", numeric_mode_name(), "column",
         column_name(TARGET_COLUMN), "rows", n, "features", d, "neighbors", k,
         "epochs", epochs, "rounds", rounds, "fixture", "dyadic-v1",
+        "device_optimizer", Int(umap_device_optimizer_for[TARGET_COLUMN, True]()),
+        "opt_tpb", UMAP_IDENTICAL_OPT_TPB,
     )
     var x = List[Float32]()
     for row in range(n):
@@ -116,4 +122,15 @@ def main() raises:
                 "total_ms", total_ms, "edges", len(graph.values),
                 "embedding_fnv1a64", h,
             )
+            if r == rounds - 1 and dump != "":
+                var bytes = List[UInt8]()
+                for i in range(len(embedding)):
+                    var v = bitcast[DType.uint32](embedding[i])
+                    bytes.append(UInt8(v & UInt32(255)))
+                    bytes.append(UInt8((v >> 8) & UInt32(255)))
+                    bytes.append(UInt8((v >> 16) & UInt32(255)))
+                    bytes.append(UInt8((v >> 24) & UInt32(255)))
+                with open(dump, "w") as fh:
+                    fh.write_bytes(Span(bytes))
+                print("UMAP_PHASE_DUMP", dump, len(embedding))
     print("UMAP PHASE PRICE PASS")

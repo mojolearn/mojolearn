@@ -814,11 +814,12 @@ def quantize_search_for[column: Int]() -> Int:
 
 
 def _knn_identical_round_column(column: Int) -> Bool:
-    """The columns whose IDENTICAL k-NN defaults were flipped 2026-09-09: small-k selector, transposed index layout with the register tile, and index-axis tiling. Apple keeps the pre-flip kernels until the orchestrator measures it locally; adding `column == COLUMN_APPLE` here is that flip."""
+    """The columns whose IDENTICAL k-NN defaults were flipped 2026-09-09: small-k selector, transposed index layout with the register tile, and index-axis tiling. Apple flipped the same day on the M4 (100k x 32, k 10, 9 rounds, baseline -> both: 20.5 -> 15.1 ms at 32 queries, 26.9 -> 14.9 at 128, 182.2 -> 66.6 at 1000; all four arms byte-equal to the NVIDIA baseline, 143,628 cells)."""
     return (
         column == COLUMN_NVIDIA
         or column == COLUMN_AMD
         or column == COLUMN_AMD_RDNA
+        or column == COLUMN_APPLE
     )
 
 
@@ -851,6 +852,15 @@ def knn_distance_register_tile_for[column: Int, identical: Bool]() -> Bool:
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SCALAR_TILE"]():
         return False
     return knn_transposed_index_for[column, identical]()
+
+
+def umap_device_optimizer_for[column: Int, identical: Bool]() -> Bool:
+    """ROUTING row (2026-09-09, lane/umap-optimizer): whether the IDENTICAL UMAP layout optimizer runs on the device (`umap/optimizer_identical_device.mojo`: one thread per vertex, one epoch snapshot, each vertex's update a fixed-order fold over its CSR row, negatives from Philox keyed by (seed, epoch, edge, slot), no atomics, no launch-geometry dependence) instead of the serial host loop (`umap/optimizer.mojo::optimize_layout_identical`, `umap/sparse_optimizer.mojo::optimize_sparse_layout_identical`). The two produce DIFFERENT bits (Jacobi versus Gauss-Seidel order); the device path is the IDENTICAL contract on every column and is gated against itself across launch widths and GPUs, not against the host loop. `-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1` restores the host loop on every column (the pre-2026-09-09 cards). FAST and DETERMINISTIC never enter this row."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER"]():
+        return False
+    return True
 
 
 comptime KNN_IDENTICAL_INDEX_TILE = 65536
