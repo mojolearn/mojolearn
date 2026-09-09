@@ -359,8 +359,8 @@ $SSH "set -u; export DEBIAN_FRONTEND=noninteractive
 need=''; command -v patchelf >/dev/null || need=\"\$need patchelf\"
 { command -v objdump && command -v strings; } >/dev/null || need=\"\$need binutils\"
 # DEVIATION 2294: the INSTALLED qualification builds a venv and pip-installs
-# the wheel into it. This image's python has no ensurepip, so `python3 -m venv`
-# failed with "ensurepip is not available" and the driver never ran a single
+# the wheel into it. This image's python has no ensurepip, so python3 -m venv
+# failed with 'ensurepip is not available' and the driver never ran a single
 # job. A build never needs this, which is why nothing had noticed.
 $REMOTE_PY -c 'import ensurepip' 2>/dev/null || need=\"\$need python3-venv python3-pip\"
 if [ -n \"\$need\" ]; then
