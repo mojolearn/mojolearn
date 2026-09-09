@@ -3266,18 +3266,6 @@ def llama_decoder_layer_forward_planted(
             + String(stages.s_max)
             + "; a stage recorded past the cache is uninitialized memory"
         )
-    if kv.window != stages.window:
-        raise Error(
-            String("llama_decoder_layer_forward: the cache has window=")
-            + String(kv.window)
-            + " but the stages were sized for window="
-            + String(stages.window)
-        )
-    if llama_key_span(kv.s, l, kv.window) > stages.s_cap:
-        raise Error(
-            "llama_decoder_layer_forward: this call's key span exceeds the"
-            " stages' attention buffers"
-        )
     if w.dims.d_model != dims.d_model:
         raise Error(
             "llama_decoder_layer_forward: the weights' d_model is not the"
@@ -3301,6 +3289,18 @@ def llama_decoder_layer_forward_planted(
             + String(kv.s + l)
             + " past its capacity "
             + String(kv.s_max)
+        )
+    if kv.window != stages.window:
+        raise Error(
+            String("llama_decoder_layer_forward: the cache has window=")
+            + String(kv.window)
+            + " but the stages were sized for window="
+            + String(stages.window)
+        )
+    if llama_key_span(kv.s, l, kv.window) > stages.s_cap:
+        raise Error(
+            "llama_decoder_layer_forward: this call's key span exceeds the"
+            " stages' attention buffers"
         )
     if pos0 + l > rope.p_max:
         raise Error(
