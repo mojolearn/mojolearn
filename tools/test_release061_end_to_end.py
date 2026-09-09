@@ -73,7 +73,13 @@ def byte_fixture(out, vendor, binding_sha):
         for key in ('parameters', 'm', 'v'):
             value = float(step + (1 if key == 'parameters' else 0))
             payload[key] = dict(dtype='<f4', shape=[34944], hex=(struct.pack('<f', value) * 34944).hex())
-        payload['flags'] = dict(dtype='<i4', shape=[20], hex=struct.pack('<20i', *([step] * 20)).hex())
+        # DEVIATION 2296: the fixture used to flip the flags 0 -> 1 with the
+        # step, which is what the old check demanded and what no real run has
+        # ever produced. config kind=2 is AdamW; `flags` is SGD's
+        # buffer-initialized marker and stays zero. The first installed
+        # qualification on real gfx942 silicon returned zeros, and the
+        # gradient oracle requires the step to leave them untouched.
+        payload['flags'] = dict(dtype='<i4', shape=[20], hex=bytes(80).hex())
         states.append(payload)
     hashes = {}
     for name, payload in zip(('byte-lm-before.json', 'byte-lm-after.json', 'byte-lm-restored.json'), states):

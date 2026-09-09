@@ -168,8 +168,25 @@ def check_byte_lm(out, installed):
         require(before[key]['hex'] != after[key]['hex'], 'Missing AdamW state update: ' + key)
     for key in ('m', 'v'):
         require(bytes.fromhex(before[key]['hex']) == bytes(34944 * 4), 'Initial moments not zero')
-    require(bytes.fromhex(before['flags']['hex']) == bytes(80)
-            and bytes.fromhex(after['flags']['hex']) == struct.pack('<20i', *([1] * 20)), 'Wrong optimizer initialization')
+    # DEVIATION 2296: THE FLAGS DO NOT FLIP, AND THEY ARE NOT SUPPOSED TO.
+    # This line used to require 20 zeros before and 20 ONES after, and it had
+    # never been executed -- the first installed qualification ever run, on
+    # gfx942, refused a correct wheel because of it.
+    #
+    # `flags` is `buf_initialized`, which training/checks/optimizer_fixture.mojo
+    # documents as "SGD's per-tensor 'has the momentum buffer been created'
+    # flag". The installed step runs kind=2 with momentum=0.0, which is AdamW:
+    # no SGD momentum buffer is ever created, so the flag correctly stays 0 for
+    # every tensor. tools/byte_lm_gradient_oracle.py, the reference checked
+    # against PyTorch, says the same thing from the other side -- it makes
+    # `flags_same` (initial_flags == post_flags) a PASS condition.
+    #
+    # So the rule is the oracle's rule. The flags start zeroed and the step
+    # leaves them exactly as it found them; a kernel that scribbled on them
+    # still fails here, which is what this line is actually for.
+    require(bytes.fromhex(before['flags']['hex']) == bytes(80), 'Initial optimizer flags not zero')
+    require(before['flags']['hex'] == after['flags']['hex'],
+            'Optimizer step changed the buffer-initialized flags')
     mutable = {'parameters', 'm', 'v', 'flags', 'completed_steps', 'next_batch_index'}
     require({k:v for k,v in before.items() if k not in mutable} ==
             {k:v for k,v in after.items() if k not in mutable}, 'Step altered fixed checkpoint metadata')
