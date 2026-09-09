@@ -44,6 +44,24 @@ view. Which one is the fair opponent depends on what our arm did:
 
 This file never decides which comparison to quote. It measures both and
 labels them, and the label is what makes the table readable.
+
+THE ARMS, SINCE 2026-09-09 (the identical GEMM lane's reference table)
+======================================================================
+    cublas-fp32 / cublas-tf32       torch.matmul with the cuBLAS backend
+                                    preferred (`preferred_blas_library`),
+                                    allow_tf32 False / True
+    torch-fp32 / torch-tf32         torch.matmul with torch's DEFAULT backend
+                                    choice for the shape (cuBLAS or cuBLASLt,
+                                    whichever torch picks), allow_tf32
+                                    False / True
+    cublas-sgemm-fp32 / -tf32       cublasSgemm called DIRECTLY through cupy's
+                                    cuBLAS binding, math mode DEFAULT / TF32
+                                    TENSOR OP. The library itself, no
+                                    framework dispatch in front of it. Refused
+                                    by name when cupy is absent.
+
+`--shapes a,b,c` restricts the rows. Every arm prints its versions on its
+FSPEED-NOTE line: torch, CUDA runtime, cuBLAS (from the handle), driver.
 """
 
 import argparse
@@ -98,6 +116,139 @@ def build(torch, dev, sh):
     return a, b, (lambda: torch.matmul(a, b))
 
 
+def _cupy_sgemm_arm(torch, shapes, args, tf32, versions):
+    """cublasSgemm through cupy's binding, row-major handled by the
+    column-major identity C_rm = A_rm . B_rm  <=>  C_cm = B_cm . A_cm.
+
+    Each shape's product is checked against torch fp32 (rtol 1e-3, TF32
+    off) ONCE before it is timed, so a wrong transpose flag cannot produce a
+    fast, wrong number.
+    """
+    armname = "cublas-sgemm-tf32" if tf32 else "cublas-sgemm-fp32"
+    try:
+        import cupy
+        from cupy.cuda import cublas
+        import numpy as np
+    except Exception as exc:
+        print("FSPEED-REFUSED lane=gemm arm=%s reason=cupy import failed: %s"
+              % (armname, str(exc)[:120]))
+        return
+    handle = cupy.cuda.device.get_cublas_handle()
+    try:
+        cublas_ver = cublas.getVersion(handle)
+    except Exception:
+        cublas_ver = "?"
+    # 0 = CUBLAS_DEFAULT_MATH, 3 = CUBLAS_TF32_TENSOR_OP_MATH
+    cublas.setMathMode(handle, 3 if tf32 else 0)
+    got_mode = cublas.getMathMode(handle)
+    if got_mode != (3 if tf32 else 0):
+        print("FSPEED-REFUSED lane=gemm arm=%s reason=math mode asked for %d "
+              "and reads back %d" % (armname, 3 if tf32 else 0, got_mode))
+        return
+    print("FSPEED-HEADER family=gemm lane=gemm arm=%s mode=FAST device=%s "
+          "rounds=%d size=shipped" % (armname, versions["device"], args.rounds))
+    print("FSPEED-NOTE lane=gemm arm=%s library=cuBLAS(direct cublasSgemm via "
+          "cupy %s) cublas_version=%s math_mode=%s cuda_runtime=%s driver=%s"
+          % (armname, cupy.__version__, cublas_ver,
+             "TF32_TENSOR_OP" if tf32 else "DEFAULT", versions["cuda"],
+             versions["driver"]))
+    alpha = np.array([1.0], dtype=np.float32)
+    beta = np.array([0.0], dtype=np.float32)
+    torch.backends.cuda.matmul.allow_tf32 = False
+    for sh in shapes:
+        if not _selected(args, sh):
+            continue
+        m, n, k, op = sh["m"], sh["n"], sh["k"], sh["op"]
+        macs = float(m) * float(n) * float(k)
+        if args.max_macs and macs > args.max_macs:
+            print("FSPEED-NOTE lane=gemm arm=%s shape=%s SKIPPED above --max-macs"
+                  % (armname, sh["name"]))
+            continue
+        try:
+            a_t, b_t, tcall = build(torch, "cuda", sh)
+            ref = tcall()
+            torch.cuda.synchronize()
+            a = cupy.asarray(a_t)
+            b = cupy.asarray(b_t)
+            c = cupy.empty((m, n), dtype=cupy.float32)
+            N, T = 0, 1
+            if op == OP_NT:      # A[m,k] B[n,k]: C_cm = B_cm^T . A_cm
+                call = lambda: cublas.sgemm(handle, T, N, n, m, k, alpha.ctypes.data,
+                                            b.data.ptr, k, a.data.ptr, k,
+                                            beta.ctypes.data, c.data.ptr, n)
+            elif op == OP_TN:    # A[k,m] B[k,n]: C_cm = B_cm . A_cm^T
+                call = lambda: cublas.sgemm(handle, N, T, n, m, k, alpha.ctypes.data,
+                                            b.data.ptr, n, a.data.ptr, m,
+                                            beta.ctypes.data, c.data.ptr, n)
+            else:                # A[m,k] B[k,n]: C_cm = B_cm . A_cm
+                call = lambda: cublas.sgemm(handle, N, N, n, m, k, alpha.ctypes.data,
+                                            b.data.ptr, n, a.data.ptr, k,
+                                            beta.ctypes.data, c.data.ptr, n)
+            call()
+            cupy.cuda.runtime.deviceSynchronize()
+            got = torch.as_tensor(c, device="cuda")
+            err = (got - ref).abs().max().item()
+            scale = ref.abs().max().item() + 1e-30
+            tol = 2e-2 if tf32 else 1e-3
+            if err > tol * scale:
+                print("FSPEED-REFUSED lane=gemm arm=%s reason=%s cublasSgemm "
+                      "disagrees with torch fp32: max abs err %.3g vs scale %.3g"
+                      % (armname, sh["name"], err, scale))
+                continue
+            for _ in range(args.warmup):
+                call()
+            cupy.cuda.runtime.deviceSynchronize()
+            t0 = time.perf_counter()
+            call()
+            cupy.cuda.runtime.deviceSynchronize()
+            print("FSPEED-WARMUP lane=gemm arm=%s shape=%s ms=%.6f"
+                  % (armname, sh["name"], (time.perf_counter() - t0) * 1000.0))
+            for r in range(1, args.rounds + 1):
+                t0 = time.perf_counter()
+                call()
+                cupy.cuda.runtime.deviceSynchronize()
+                ms = (time.perf_counter() - t0) * 1000.0
+                print("FSPEED lane=gemm arm=%s shape=%s round=%d ms=%.6f hash=-"
+                      % (armname, sh["name"], r, ms))
+        except Exception as exc:
+            print("FSPEED-REFUSED lane=gemm arm=%s reason=%s raised: %s"
+                  % (armname, sh["name"], str(exc)[:120]))
+        finally:
+            try:
+                del a, b, c, a_t, b_t, ref
+            except Exception:
+                pass
+            torch.cuda.empty_cache()
+            cupy.get_default_memory_pool().free_all_blocks()
+    cublas.setMathMode(handle, 0)
+
+
+def _selected(args, sh):
+    if not args.shapes:
+        return True
+    return sh["name"] in [x.strip() for x in args.shapes.split(",") if x.strip()]
+
+
+def _versions(torch):
+    v = {"torch": torch.__version__, "cuda": str(torch.version.cuda),
+         "device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "?",
+         "driver": "?", "cublas": "?"}
+    try:
+        import subprocess
+        v["driver"] = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+            text=True).strip().splitlines()[0]
+    except Exception:
+        pass
+    try:
+        import cupy
+        from cupy.cuda import cublas
+        v["cublas"] = str(cublas.getVersion(cupy.cuda.device.get_cublas_handle()))
+    except Exception:
+        pass
+    return v
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rounds", type=int, default=10)
@@ -108,6 +259,10 @@ def main():
                     help="hash the result each round. Costs a device-to-host "
                          "copy OUTSIDE the timed region and is off by default "
                          "because at these sizes the copy dominates the run.")
+    ap.add_argument("--shapes", default="",
+                    help="comma-separated row names to run; empty means all")
+    ap.add_argument("--arms", default="cublas,torch,sgemm",
+                    help="comma-separated arm families: cublas, torch, sgemm")
     args = ap.parse_args()
 
     try:
@@ -130,16 +285,39 @@ def main():
     # (CDNA3's XF32), and an arm named tf32 that did not run tf32 is worse
     # than no arm. So off CUDA only one arm runs and it is named for what it
     # is: the backend's default.
-    if dev == "cuda" and getattr(torch.version, "hip", None) is None:
-        arms = [("cublas-fp32", False), ("cublas-tf32", True)]
+    fams = [x.strip() for x in args.arms.split(",") if x.strip()]
+    versions = _versions(torch)
+    on_cuda = dev == "cuda" and getattr(torch.version, "hip", None) is None
+    if on_cuda:
+        arms = []
+        if "cublas" in fams:
+            arms += [("cublas-fp32", False, "cublas"), ("cublas-tf32", True, "cublas")]
+        if "torch" in fams:
+            arms += [("torch-fp32", False, "default"), ("torch-tf32", True, "default")]
     else:
-        arms = [("%s-default" % libname.split("/")[0].lower(), None)]
+        arms = [("%s-default" % libname.split("/")[0].lower(), None, "default")]
 
-    for armname, tf32 in arms:
+    for armname, tf32, blas in arms:
+        if blas == "cublas":
+            # Pin torch to cuBLAS (not cuBLASLt) so the arm name says which
+            # library ran. Refuse by name where torch has no such switch.
+            try:
+                torch.backends.cuda.preferred_blas_library("cublas")
+            except Exception as exc:
+                print("FSPEED-REFUSED lane=gemm arm=%s reason=preferred_blas_library "
+                      "unavailable: %s" % (armname, str(exc)[:100]))
+                continue
+        else:
+            try:
+                torch.backends.cuda.preferred_blas_library("default")
+            except Exception:
+                pass
         print("FSPEED-HEADER family=gemm lane=gemm arm=%s mode=FAST device=%s "
               "rounds=%d size=shipped" % (armname, devname, args.rounds))
         print("FSPEED-NOTE lane=gemm arm=%s library=%s build=%s torch=%s "
-              "allow_tf32=%s" % (armname, libname, build_s, torch.__version__, tf32))
+              "allow_tf32=%s blas=%s cublas_version=%s driver=%s"
+              % (armname, libname, build_s, torch.__version__, tf32, blas,
+                 versions["cublas"], versions["driver"]))
         if tf32 is not None:
             torch.backends.cuda.matmul.allow_tf32 = tf32
             torch.backends.cudnn.allow_tf32 = tf32
@@ -154,6 +332,8 @@ def main():
                 continue
 
         for sh in shapes:
+            if not _selected(args, sh):
+                continue
             macs = float(sh["m"]) * float(sh["n"]) * float(sh["k"])
             if args.max_macs and macs > args.max_macs:
                 print("FSPEED-NOTE lane=gemm arm=%s shape=%s SKIPPED %.3g MACs "
@@ -203,6 +383,9 @@ def main():
                 del a, b
                 if dev == "cuda":
                     torch.cuda.empty_cache()
+    if on_cuda and "sgemm" in fams:
+        _cupy_sgemm_arm(torch, shapes, args, False, versions)
+        _cupy_sgemm_arm(torch, shapes, args, True, versions)
     return 0
 
 

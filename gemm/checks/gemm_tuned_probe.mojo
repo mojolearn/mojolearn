@@ -1,14 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Does the TUNED kernel produce the PINNED kernel's exact bits?
+"""Does the dispatcher's plan produce the pre-tuned plan's exact bits, and
+how much faster is it?
 
-A faster GEMM that moves one bit is worthless here, so this is the only
-question worth asking first. Compares FNV-1a64 over the raw output bits of
-`identical_gemm_into` and `tuned_gemm_into` at the llama8b shapes, with both
-outputs POISONED first and the poison counted, so a kernel that never wrote
-cannot agree by accident.
+Compares FNV-1a64 over the raw output bits of `identical_gemm_with_plan`
+on `choose_gemm_plan_untuned`'s plan against `identical_gemm_into` (the
+dispatcher, `choose_gemm_plan`) at every row of `bench/gemm_shapes.mojo`,
+both outputs POISONED first and the poison counted, then times the pair
+call by call. `MOJOLEARN_GEMM_PLAN=<id>` forces one plan on the second arm;
+`MOJOLEARN_SPEED_SHAPES` and `MOJOLEARN_SPEED_ROUNDS` as in the speed lane.
 """
 from std.memory import bitcast
+from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -20,12 +23,11 @@ from bench.gemm_shapes import OP_NN as TBL_NN
 from bench.gemm_shapes import OP_NT as TBL_NT
 from bench.gemm_shapes import OP_TN as TBL_TN
 from gemm.checks.gemm_identical import (
-    identical_gemm_into, identical_gemm_workspace_max_floats,
+    GEMM_PLAN_COUNT, choose_gemm_plan, choose_gemm_plan_untuned,
+    gemm_plan_name, identical_gemm_into, identical_gemm_with_plan,
+    identical_gemm_workspace_floats, identical_gemm_workspace_max_floats,
 )
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
-from gemm.checks.gemm_identical_tuned import (
-    tuned_gemm_banner, tuned_gemm_into, tuned_gemm_workspace_max_floats,
-)
 
 comptime POISON = Float32(-1.0e37)
 
@@ -80,11 +82,45 @@ def _digest(ctx: DeviceContext, mut d: DeviceBuffer[DType.float32], n: Int) rais
     return (acc, left)
 
 
+def _env_int(name: String, dflt: Int) -> Int:
+    var s = String(getenv(name))
+    if s.byte_length() == 0:
+        return dflt
+    try:
+        return Int(s)
+    except:
+        return dflt
+
+
+def _shape_selected(name: String) -> Bool:
+    var spec = String(getenv("MOJOLEARN_SPEED_SHAPES"))
+    if spec.byte_length() == 0:
+        return True
+    return (String(",") + spec + ",").find(String(",") + name + ",") >= 0
+
+
+def _second(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int, n: Int, k: Int, op: Int, forced: Int,
+) raises:
+    if forced >= 0:
+        identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, forced)
+    else:
+        identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
+
+
 def main() raises:
-    print("== tuned vs pinned, BITS ==")
-    print("   " + tuned_gemm_banner())
+    print("== dispatcher vs the untuned plan, BITS and TIME ==")
     var same = 0; var moved = 0; var refused = 0
+    var forced = _env_int("MOJOLEARN_GEMM_PLAN", -1)
+    var rounds = _env_int("MOJOLEARN_SPEED_ROUNDS", 3)
     for i in range(GEMM_SHAPE_COUNT):
+        if not _shape_selected(gemm_shape_name(i)):
+            continue
         var k = gemm_shape_k(i)
         var op = _oop(gemm_shape_op(i))
         var m = gemm_shape_m(i); var n = gemm_shape_n(i)
@@ -93,9 +129,13 @@ def main() raises:
         var mn = m * n
         var na = k * m if op == OP_TN else m * k
         var nb = n * k if op == OP_NT else k * n
-        var w1 = identical_gemm_workspace_max_floats(m, n, k)
-        var w2 = tuned_gemm_workspace_max_floats(m, n, k)
+        var old_plan = choose_gemm_plan_untuned(m, n, k)
+        var new_plan = forced if forced >= 0 else choose_gemm_plan(m, n, k)
+        var w1 = identical_gemm_workspace_floats(m, n, k, old_plan)
+        var w2 = identical_gemm_workspace_floats(m, n, k, new_plan)
+        var w3 = identical_gemm_workspace_max_floats(m, n, k)
         var nw = w1 if w1 > w2 else w2
+        if w3 > nw: nw = w3
         var ctx = DeviceContext()
         var da = ctx.enqueue_create_buffer[DType.float32](na if na > 0 else 1)
         var db = ctx.enqueue_create_buffer[DType.float32](nb if nb > 0 else 1)
@@ -104,49 +144,46 @@ def main() raises:
         ctx.synchronize()
         _fill(ctx, da, na, 11 + i); _fill(ctx, db, nb, 22 + i)
         _poison(ctx, dc, mn)
-        identical_gemm_into(ctx, dc, da, db, dw, m, n, k, op); ctx.synchronize()
+        identical_gemm_with_plan(ctx, dc, da, db, dw, m, n, k, op, old_plan); ctx.synchronize()
         var dp = _digest(ctx, dc, mn)
         _poison(ctx, dc, mn)
-        tuned_gemm_into(ctx, dc, da, db, dw, m, n, k, op); ctx.synchronize()
+        try:
+            _second(ctx, dc, da, db, dw, m, n, k, op, forced); ctx.synchronize()
+        except e:
+            print("   REFUSED " + gemm_shape_name(i) + " [" + gemm_plan_name(new_plan) + "]: " + String(e))
+            refused += 1
+            _ = da^; _ = db^; _ = dc^; _ = dw^; _ = ctx^
+            continue
         var dt = _digest(ctx, dc, mn)
-        # Three timed pairs, ALTERNATING CALL BY CALL in one binary, after the
-        # warm-ups above. Same discipline as gemm_unpinned_price.mojo: two
-        # functions in one process, so the governor drift cancels at the arm
-        # level rather than being averaged over rounds.
         var ns_p = 0
         var ns_t = 0
-        for _ in range(3):
+        for _ in range(rounds):
             var t0 = perf_counter_ns()
-            identical_gemm_into(ctx, dc, da, db, dw, m, n, k, op); ctx.synchronize()
+            identical_gemm_with_plan(ctx, dc, da, db, dw, m, n, k, op, old_plan); ctx.synchronize()
             ns_p += perf_counter_ns() - t0
             var t1 = perf_counter_ns()
-            tuned_gemm_into(ctx, dc, da, db, dw, m, n, k, op); ctx.synchronize()
+            _second(ctx, dc, da, db, dw, m, n, k, op, forced); ctx.synchronize()
             ns_t += perf_counter_ns() - t1
-        var ms_p = Float64(ns_p) / 3.0e6
-        var ms_t = Float64(ns_t) / 3.0e6
-        var nm = gemm_shape_name(i)
+        var ms_p = Float64(ns_p) / (Float64(rounds) * 1.0e6)
+        var ms_t = Float64(ns_t) / (Float64(rounds) * 1.0e6)
+        var nm = gemm_shape_name(i) + " [" + gemm_plan_name(old_plan) + " -> " + gemm_plan_name(new_plan) + "]"
         if dp[1] != 0 or dt[1] != 0:
-            print("   REFUSED " + nm + ": poison left pinned=" + String(dp[1]) + " tuned=" + String(dt[1]))
+            print("   REFUSED " + nm + ": poison left untuned=" + String(dp[1]) + " dispatch=" + String(dt[1]))
             refused += 1
         elif dp[0] == dt[0]:
             print("   OK  " + nm + "  m=" + String(m) + " n=" + String(n) + " k=" + String(k)
-                  + "  BITS MATCH  pinned=" + String(ms_p) + "ms tuned=" + String(ms_t)
+                  + "  BITS MATCH  untuned=" + String(ms_p) + "ms dispatch=" + String(ms_t)
                   + "ms  speedup=" + String(ms_p / ms_t) + "x")
             same += 1
         else:
             print("   MOVED   " + nm + "  m=" + String(m) + " n=" + String(n) + " k=" + String(k)
-                  + "  pinned=" + hex(dp[0]) + " tuned=" + hex(dt[0]))
+                  + "  untuned=" + hex(dp[0]) + " dispatch=" + hex(dt[0]))
             moved += 1
         _ = da^; _ = db^; _ = dc^; _ = dw^
-
-        # DEVIATION 1946: the context dies LAST, after every value built on it.
-        # Mojo frees at LAST USE, so without this the buffer releases above run
-        # against a context that is already gone. On sm_89 the next GPU call in
-        # the process then never returns (GPU idle, host threads in futex wait);
-        # Apple and AMD do not show it, which is how it stayed latent here.
+        # The context dies LAST, after every value built on it (DEVIATION 1946).
         _ = ctx^
     print()
     print("   " + String(same) + " match, " + String(moved) + " MOVED, " + String(refused) + " refused.")
     if moved != 0:
-        raise Error("tuned_probe: the tuned kernel MOVED BITS on " + String(moved)
-                    + " shapes. A faster kernel that changes the answer is not this profile.")
+        raise Error("gemm_tuned_probe: the dispatcher MOVED BITS on " + String(moved)
+                    + " shapes. A faster plan that changes the answer is not this profile.")

@@ -62,6 +62,21 @@ NN rows of the table cannot be run through the user-facing surface at all.
 That is reported as `FSPEED-REFUSED` per row rather than quietly skipped, and
 rather than smuggled in through `identical_gemm`, which is a different arm
 with a different contract and would put a pinned number in a FAST column.
+
+THE IDENTICAL ARMS (built with -D MOJOLEARN_NUMERIC_IDENTICAL=1)
+================================================================
+Under IDENTICAL this driver times two arms of ours, both strict FP32, whose
+fair opponent is `cublas-fp32`:
+
+    ours-v1-identical     identical_gemm_into, profile
+                          mojolearn.identical.gemm.fp32.v1, every row
+    ours-core-identical   core/gemm.mojo's shipped identical route (the
+                          serial pinned kernels, split-K Gram); with
+                          -D MOJOLEARN_537_GEMM_IDENT_SWAP=1 the NT rows go
+                          to v1 and the arm is named ours-core-swap537-identical
+
+MOJOLEARN_SPEED_GEMM_ARMS picks a subset (`v1,core`), MOJOLEARN_SPEED_SHAPES a
+comma-separated subset of row names. Neither touches the FAST build.
 """
 
 from std.memory import bitcast
@@ -81,7 +96,14 @@ from bench.gemm_shapes import (
 from bench.gemm_shapes import OP_NN as TBL_OP_NN
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
 from bench.gemm_shapes import OP_TN as TBL_OP_TN
-from core.gemm import gemm_nt, gemm_tn
+from core.gemm import GEMM_IDENT_SWAP_537, gemm_nt, gemm_tn
+from gemm.checks.gemm_identical import (
+    choose_gemm_plan,
+    gemm_plan_name,
+    identical_gemm_into,
+    identical_gemm_workspace_max_floats,
+)
+from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
@@ -242,17 +264,74 @@ def _env_int(name: String, dflt: Int) -> Int:
         return dflt
 
 
-def main() raises:
-    var rounds = _env_int("MOJOLEARN_SPEED_ROUNDS", 10)
-    var smoke = String(getenv("MOJOLEARN_SPEED_SIZE")) == "smoke"
-    # The cap exists so one enormous row cannot eat a rented hour. It is
-    # ANNOUNCED per skipped row, never silent: a table that dropped its
-    # largest shapes without saying so reads as full coverage of the table.
-    var max_macs = Float64(_env_int("MOJOLEARN_SPEED_MAX_GMACS", 0)) * 1.0e9
+comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-    var ctx = DeviceContext()
+#: Which of our entries a row is timed through.
+#:   ARM_CORE  `core/gemm.mojo::gemm_nt` / `gemm_tn`, the shipped surface.
+#:             FAST: MAX's matmul. IDENTICAL: the serial pinned kernels,
+#:             or v1 when built with -D MOJOLEARN_537_GEMM_IDENT_SWAP=1.
+#:   ARM_V1    `gemm/checks/gemm_identical.mojo::identical_gemm_into`,
+#:             profile mojolearn.identical.gemm.fp32.v1, every orientation.
+#:             Only offered under IDENTICAL: under FAST it would be the
+#:             pinned kernel timed in a FAST column.
+comptime ARM_CORE = 0
+comptime ARM_V1 = 1
+
+
+def _arm_name(arm: Int) -> String:
+    if arm == ARM_V1:
+        return String("ours-v1-identical")
+    comptime if IDENTICAL_BUILD:
+        comptime if GEMM_IDENT_SWAP_537:
+            return String("ours-core-swap537-identical")
+        return String("ours-core-identical")
+    return String("ours")
+
+
+def _shape_selected(name: String) -> Bool:
+    """MOJOLEARN_SPEED_SHAPES: comma-separated row names; unset means all."""
+    var spec = String(getenv("MOJOLEARN_SPEED_SHAPES"))
+    if spec.byte_length() == 0:
+        return True
+    return (String(",") + spec + ",").find(String(",") + name + ",") >= 0
+
+
+def _oracle_op(op: Int) -> Int:
+    if op == TBL_OP_NT:
+        return OP_NT
+    if op == TBL_OP_TN:
+        return OP_TN
+    return OP_NN
+
+
+def _launch(
+    ctx: DeviceContext,
+    arm: Int,
+    op: Int,
+    mut dc: DeviceBuffer[DType.float32],
+    mut da: DeviceBuffer[DType.float32],
+    mut db: DeviceBuffer[DType.float32],
+    mut dx2: DeviceBuffer[DType.float32],
+    mut dw: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    if arm == ARM_V1:
+        identical_gemm_into(ctx, dc, da, db, dw, m, n, k, _oracle_op(op))
+        return
+    if op == TBL_OP_NT:
+        gemm_nt(ctx, dc, da, db, m, n, k)
+    else:
+        gemm_tn(ctx, dc, da, db, dx2, m, n, k)
+
+
+def _run_arm(ctx: DeviceContext, arm: Int, rounds: Int, smoke: Bool, max_macs: Float64) raises:
+    var armname = _arm_name(arm)
     print(
-        "FSPEED-HEADER family=gemm lane=gemm arm=ours mode="
+        "FSPEED-HEADER family=gemm lane=gemm arm="
+        + armname
+        + " mode="
         + _mode_name()
         + " device="
         + String(ctx.name())
@@ -261,12 +340,30 @@ def main() raises:
         + " size="
         + (String("smoke") if smoke else String("shipped"))
     )
-    print(
-        "FSPEED-NOTE lane=gemm arm=ours under FAST core/gemm.mojo calls MAX"
-        " linalg.matmul, so this arm is Modular's tuned kernel reached"
-        " through our surface. Its fair opponent is cublas-tf32, not"
-        " cublas-fp32. See this file's docstring."
-    )
+    if arm == ARM_V1:
+        print(
+            "FSPEED-NOTE lane=gemm arm="
+            + armname
+            + " gemm/checks/gemm_identical.mojo::identical_gemm_into,"
+            " profile mojolearn.identical.gemm.fp32.v1, strict FP32 by"
+            " contract. Its fair opponent is cublas-fp32."
+        )
+    else:
+        comptime if IDENTICAL_BUILD:
+            print(
+                "FSPEED-NOTE lane=gemm arm="
+                + armname
+                + " core/gemm.mojo under IDENTICAL: pinned_gemm_nt_kernel /"
+                " gram split-K (or v1 when MOJOLEARN_537_GEMM_IDENT_SWAP is"
+                " defined). Strict FP32; fair opponent cublas-fp32."
+            )
+        else:
+            print(
+                "FSPEED-NOTE lane=gemm arm=ours under FAST core/gemm.mojo calls MAX"
+                " linalg.matmul, so this arm is Modular's tuned kernel reached"
+                " through our surface. Its fair opponent is cublas-tf32, not"
+                " cublas-fp32. See this file's docstring."
+            )
 
     for i in range(GEMM_SHAPE_COUNT):
         var name = gemm_shape_name(i)
@@ -274,23 +371,31 @@ def main() raises:
         var m = gemm_shape_m(i)
         var n = gemm_shape_n(i)
         var k = gemm_shape_k(i)
+        if not _shape_selected(name):
+            continue
         if smoke and (Float64(m) * Float64(n) * Float64(k) > 1.0e8):
             print(
-                "FSPEED-NOTE lane=gemm arm=ours shape="
+                "FSPEED-NOTE lane=gemm arm="
+                + armname
+                + " shape="
                 + name
                 + " SKIPPED under size=smoke"
             )
             continue
         if max_macs > 0.0 and Float64(m) * Float64(n) * Float64(k) > max_macs:
             print(
-                "FSPEED-NOTE lane=gemm arm=ours shape="
+                "FSPEED-NOTE lane=gemm arm="
+                + armname
+                + " shape="
                 + name
                 + " SKIPPED above MOJOLEARN_SPEED_MAX_GMACS"
             )
             continue
-        if op == TBL_OP_NN:
+        if arm == ARM_CORE and op == TBL_OP_NN:
             print(
-                "FSPEED-REFUSED lane=gemm arm=ours reason="
+                "FSPEED-REFUSED lane=gemm arm="
+                + armname
+                + " reason="
                 + name
                 + " is an NN row and core/gemm.mojo exports no NN entry;"
                 " routing it through identical_gemm would put a pinned"
@@ -312,30 +417,47 @@ def main() raises:
         #       a TN row with m != n would have no entry here and would be
         #       refused, which is checked below rather than assumed.
         #
-        # The cuBLAS arm builds two independent operands for a TN row. The
-        # FLOP count is identical either way, so the comparison stands, and
-        # this note is here so nobody reads the two files side by side and
-        # concludes one of them has the wrong fixture.
-        if op == TBL_OP_TN and m != n:
+        # The v1 arm and the cuBLAS arm build two independent operands for a
+        # TN row. The FLOP count is identical either way, so the comparison
+        # stands, and this note is here so nobody reads the two files side
+        # by side and concludes one of them has the wrong fixture.
+        if arm == ARM_CORE and op == TBL_OP_TN and m != n:
             print(
-                "FSPEED-REFUSED lane=gemm arm=ours reason="
+                "FSPEED-REFUSED lane=gemm arm="
+                + armname
+                + " reason="
                 + name
                 + " is a TN row with m != n and core/gemm.mojo's TN entry is"
                 " the Gram case x^T . x, which cannot express it"
             )
             continue
-        var na = m * k if op == TBL_OP_NT else k * m
-        var nb = n * k if op == TBL_OP_NT else k * m
-        var nscratch = 1 if op == TBL_OP_NT else k * m
+        var na = m * k if op != TBL_OP_TN else k * m
+        var nb = n * k if op == TBL_OP_NT else k * n
+        if arm == ARM_CORE and op == TBL_OP_TN:
+            nb = k * m
+        var nscratch = 1 if op != TBL_OP_TN else k * m
+        var nws = 1
+        if arm == ARM_V1:
+            nws = identical_gemm_workspace_max_floats(m, n, k)
         var mn = m * n
         var da = ctx.enqueue_create_buffer[DType.float32](na)
         var db = ctx.enqueue_create_buffer[DType.float32](nb)
         var dx2 = ctx.enqueue_create_buffer[DType.float32](nscratch)
+        var dw = ctx.enqueue_create_buffer[DType.float32](nws)
         var dc = ctx.enqueue_create_buffer[DType.float32](mn)
         ctx.synchronize()
         _fill(ctx, da, na, 11 + i)
-        if op == TBL_OP_NT:
+        if op != TBL_OP_TN or arm == ARM_V1:
             _fill(ctx, db, nb, 977 + i)
+        if arm == ARM_V1:
+            print(
+                "FSPEED-NOTE lane=gemm arm="
+                + armname
+                + " shape="
+                + name
+                + " plan="
+                + gemm_plan_name(choose_gemm_plan(m, n, k))
+            )
 
         # THE WARM-UP IS TIMED AND PRINTED AND NEVER AVERAGED IN. On a cold
         # context the first call pays for kernel selection; a reader who
@@ -360,14 +482,13 @@ def main() raises:
         _poison(ctx, dc, mn)
         var t0 = perf_counter_ns()
         try:
-            if op == TBL_OP_NT:
-                gemm_nt(ctx, dc, da, db, m, n, k)
-            else:
-                gemm_tn(ctx, dc, da, db, dx2, m, n, k)
+            _launch(ctx, arm, op, dc, da, db, dx2, dw, m, n, k)
             ctx.synchronize()
         except e:
             print(
-                "FSPEED-REFUSED lane=gemm arm=ours reason="
+                "FSPEED-REFUSED lane=gemm arm="
+                + armname
+                + " reason="
                 + name
                 + " (m="
                 + String(m)
@@ -375,18 +496,21 @@ def main() raises:
                 + String(n)
                 + " k="
                 + String(k)
-                + ") raised out of the vendor kernel: "
+                + ") raised out of the kernel: "
                 + String(e)
             )
             _ = da
             _ = db
             _ = dx2
+            _ = dw
             _ = dc
             continue
         var t1 = perf_counter_ns()
         var warm = _digest(ctx, dc, mn, name + " warmup")
         print(
-            "FSPEED-WARMUP lane=gemm arm=ours shape="
+            "FSPEED-WARMUP lane=gemm arm="
+            + armname
+            + " shape="
             + name
             + " ms="
             + String(Float64(t1 - t0) / 1.0e6)
@@ -397,10 +521,7 @@ def main() raises:
         for r in range(1, rounds + 1):
             _poison(ctx, dc, mn)
             var s0 = perf_counter_ns()
-            if op == TBL_OP_NT:
-                gemm_nt(ctx, dc, da, db, m, n, k)
-            else:
-                gemm_tn(ctx, dc, da, db, dx2, m, n, k)
+            _launch(ctx, arm, op, dc, da, db, dx2, dw, m, n, k)
             ctx.synchronize()
             var s1 = perf_counter_ns()
             var d = _digest(ctx, dc, mn, name + " round " + String(r))
@@ -409,14 +530,18 @@ def main() raises:
             elif d != first and not moved:
                 moved = True
                 print(
-                    "FSPEED-NOTE lane=gemm arm=ours hash moved across rounds:"
+                    "FSPEED-NOTE lane=gemm arm="
+                    + armname
+                    + " hash moved across rounds:"
                     + " "
                     + _hex16(first)
                     + " "
                     + _hex16(d)
                 )
             print(
-                "FSPEED lane=gemm arm=ours shape="
+                "FSPEED lane=gemm arm="
+                + armname
+                + " shape="
                 + name
                 + " round="
                 + String(r)
@@ -432,4 +557,29 @@ def main() raises:
         _ = da
         _ = db
         _ = dx2
+        _ = dw
         _ = dc
+
+
+def main() raises:
+    var rounds = _env_int("MOJOLEARN_SPEED_ROUNDS", 10)
+    var smoke = String(getenv("MOJOLEARN_SPEED_SIZE")) == "smoke"
+    # The cap exists so one enormous row cannot eat a rented hour. It is
+    # ANNOUNCED per skipped row, never silent: a table that dropped its
+    # largest shapes without saying so reads as full coverage of the table.
+    var max_macs = Float64(_env_int("MOJOLEARN_SPEED_MAX_GMACS", 0)) * 1.0e9
+
+    var ctx = DeviceContext()
+    # FAST: the one shipped arm, unchanged. IDENTICAL: MOJOLEARN_SPEED_GEMM_ARMS
+    # names which of `v1` and `core` run (default both, v1 first).
+    comptime if IDENTICAL_BUILD:
+        var arms = String(getenv("MOJOLEARN_SPEED_GEMM_ARMS"))
+        if arms.byte_length() == 0:
+            arms = String("v1,core")
+        var spec = String(",") + arms + ","
+        if spec.find(String(",v1,")) >= 0:
+            _run_arm(ctx, ARM_V1, rounds, smoke, max_macs)
+        if spec.find(String(",core,")) >= 0:
+            _run_arm(ctx, ARM_CORE, rounds, smoke, max_macs)
+    else:
+        _run_arm(ctx, ARM_CORE, rounds, smoke, max_macs)

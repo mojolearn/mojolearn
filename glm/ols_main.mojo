@@ -43,7 +43,7 @@ from glm.checks.ols_check import (
     check_ols_is_launch_invariant,
     check_ols_normal_equation_residual_is_zero,
     check_ols_rank_guard_is_absolute,
-    check_ols_refuses_over_capacity,
+    check_ols_over_capacity_fits,
     check_ols_sample_weight_host_rescale_matches_device,
     check_ols_sample_weight_restores_its_operands,
     check_ols_scale_invariant,
@@ -66,7 +66,7 @@ def main() raises:
     check_ols_sample_weight_restores_its_operands()
     check_ols_sample_weight_host_rescale_matches_device()
     check_ols_arms_are_pinned()
-    check_ols_refuses_over_capacity()
+    check_ols_over_capacity_fits()
     check_ols_is_launch_invariant()
     check_ols_host_surface_takes_the_guard()
     check_ols_rank_guard_is_absolute()

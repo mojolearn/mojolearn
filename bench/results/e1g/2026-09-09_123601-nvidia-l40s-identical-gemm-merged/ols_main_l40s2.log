@@ -1,0 +1,19 @@
+1087 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x198d00000000, nodemask=2)
+== glm/ols_main.mojo [IDENTICAL] ==
+check_ols_exact OK: all 8 coefficients recovered within 1.0% from a noiseless planted model (worst relative 3.814697266957273e-06; vendor fp32 product on this column: TF32 (10-bit mantissa tensor-core product))
+check_ols_scale_invariant OK: y x5 scaled every coefficient by exactly 5, which is the reach evidence for xty_kernel
+check_ols_beats_truth_on_noise OK: fitted residual 85.0002889571526 against the true model's 85.21995181198805
+check_ols_dispatch_routes_special_shapes OK: 6x16 -> min-norm, 64x1 -> eig, 256x4 untouched, explicit algo 0 refused by name
+check_ols_wide_is_the_minimum_norm_solution OK [IDENTICAL]: 6 x 16, residual 3.018681760114106e-07 <= 0.0001; ||w_fit|| 1.0578851078388276 < ||w*|| 1.3852573255838199; float64 oracle within 2.0474848622109576e-07; both negative controls rejected
+check_ols_single_column_matches_the_closed_form OK [IDENTICAL]: 3.2484779357910156 vs 3.248477637502271 (|delta| 2.982887448155225e-07); the wrong closed form 0.30032332635564307 is distinguishable
+check_ols_normal_equation_residual_is_zero OK [IDENTICAL]: ||A^T (A w - b)||_inf 7.79028011805659e-05 <= 0.5092932597037362; the perturbed vector gives 2.3376952948422898
+check_ols_duplicating_a_row_equals_doubling_its_weight OK [IDENTICAL]: worst |delta| 9.5367431640625e-07 <= 0.013758460091489663; the unweighted control is 1.7144076824188232 away, so the weights demonstrably reached the fit
+check_ols_sample_weight_restores_its_operands OK [IDENTICAL]: A within 5.960464477539063e-08, b within 1.4901161193847656e-08, w within 0.0; the scaling itself moves A by 1.9497298002243042
+check_ols_sample_weight_host_rescale_matches_device OK [IDENTICAL]: all 5 coefficients byte-identical between ols_fit_weighted_host and the host rescale; a different weight vector moves 5 of them
+check_ols_arms_are_pinned OK [IDENTICAL]: step 1 compiles against column bit-identical and the pinned Gram kernel serves 8, 16 and 128 features
+check_ols_over_capacity_fits OK [IDENTICAL]: 512 x 130 fits through the whole estimator (worst |w - w*| = 0.00033879280090354236, run-to-run coefficients moved: 0)
+check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
+check_ols_host_surface_takes_the_guard OK [IDENTICAL]: the Python-facing entry interpolates a 6 x 16 design (residual 3.018681760114106e-07), i.e. it takes the min-norm route and not lstsq_eig; the 16 x 6 control does not (0.5533459012942743)
+check_ols_rank_guard_is_absolute OK [IDENTICAL]: the SAME design has rank 8 at scale 1 and rank 0 at scale 2^-24. DivideByNonZero's threshold is absolute (OLS_NONZERO_THRESH), the quantity it tests scales with the square of the data, and what the comparison outputs is a RANK.
+check_ols_card_hashes_raw_bytes OK [IDENTICAL]: 0x3f00004b and 0x3f00004c both print 0.5000045 -- decimal text cannot separate them, FNV-1a64 over raw bytes gives 0xeba04fe033207f3f vs 0xcbbb21b684141e94
+check_ols_card_is_emitted OK [IDENTICAL]: 11 stages, and two fits of one fixture agree on every one of them

@@ -770,6 +770,20 @@ def lib_smem_pages_for[column: Int, page_bytes: Int]() -> Int:
     return 2 if 2 * page_bytes <= limit else 1
 
 
+def lib_hardware_ftz_fma_for[column: Int]() -> Bool:
+    """SCHEDULING row: whether the identical GEMM's per-step seam
+    `ftz(fma(a, b, acc))` (contract 4 + 5c, with `acc` already flushed) may be
+    spelled as the hardware's single flush-to-zero FMA.
+
+    NVIDIA only: PTX `fma.rn.ftz.f32` rounds once to nearest-even and flushes
+    subnormal inputs and results to sign-preserving zero, which is exactly
+    the software seam's value at every input, so the bits cannot move and the
+    device gates prove it on the box. Apple and AMD keep the software seam
+    until their column has the same proof.
+    """
+    return column == COLUMN_NVIDIA
+
+
 def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's selector is the ported RAFT WARPSORT (`select_warpsort.mojo`, `warpsort_topk_block_kernel`) instead of the ported RAFT radix (`select_radix.mojo`) for `2 < k <= 256`."""
     comptime if identical:

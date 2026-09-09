@@ -1,0 +1,7 @@
+tuned_probe exit=0 secs=8
+speed_v1 exit=0 secs=8
+opponents exit=0 secs=65
+speed_core exit=0 secs=8
+device_check exit=0 secs=3
+card exit=0 secs=2
+RUN1_DONE

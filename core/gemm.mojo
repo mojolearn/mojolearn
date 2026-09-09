@@ -23,8 +23,12 @@ from checks.numerics import (
 )
 from std.sys.compile import is_defined
 
-from gemm.checks.gemm_identical import identical_gemm
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.checks.gemm_identical import (
+    identical_gemm,
+    identical_gemm_into,
+    identical_gemm_workspace_max_floats,
+)
+from gemm.checks.gemm_oracle import OP_NT, OP_TN
 
 
 
@@ -208,34 +212,62 @@ def gemm_tn(
     n: Int,
     k: Int,
 ) raises:
-    """`z[m x n] = x[k x m]^T ."""
+    """`z[m x n] = x[k x m]^T .
+
+    IDENTICAL: the split-K Gram kernel where it applies (`m == n <= 128`,
+    the shipped OLS/PCA shapes, bits unchanged), and past its capacity the
+    v1 profile's OP_TN arm (`identical_gemm_into`, one operand handed in
+    twice) instead of the refusal that stood here until 2026-09-09. Both
+    arms are pinned; they are different profiles, so a shape that crosses
+    128 features changes profile, not vendor-dependence.
+    """
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         if not gram_splitk_applies(m, n, k):
-            raise Error(
-                "gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape "
-                + String(m)
-                + " x "
-                + String(n)
-                + " x "
-                + String(k)
-                + ". The split-K kernel (core/gram_splitk.mojo) is the only"
-                + " arm with a pinned summation order, and this shape is"
-                + " outside its capacity (needs m == n <= "
-                + String(GRAM_MAX_COLS)
-                + " and m*n <= "
-                + String(GRAM_TPB * GRAM_MAX_CELLS_PER_THREAD)
-                + " register cells). The other arm is linalg.matmul, whose"
-                + " k-split is a per-vendor summation order, so running it"
-                + " would return a NON-identical model under a mode that"
-                + " promises one. IDENTITY_PATHS row 27. To close this"
-                + " refusal, widen the split-K kernel's staging tile; to"
-                + " work around it today, reduce the feature count or run"
-                + " NUMERIC_FAST and drop the cross-vendor claim."
-            )
+            if m != n:
+                raise Error(
+                    "gemm_tn: NUMERIC_IDENTICAL refuses "
+                    + String(m)
+                    + " x "
+                    + String(n)
+                    + " x "
+                    + String(k)
+                    + ": this entry is the Gram case x^T . x with one"
+                    + " operand and one width, so m must equal n."
+                    + " IDENTITY_PATHS row 27."
+                )
+            gemm_tn_identical_v1(ctx, z, x, xt2, m, k)
+            return
     if gram_splitk_applies(m, n, k):
         gemm_tn_splitk_into(ctx, z, x, xt, m, k)
         return
     gemm_tn_via_transpose(ctx, z, x, xt, xt2, m, n, k)
+
+
+def gemm_tn_identical_v1(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """`z[m x m] = x[k x m]^T . x[k x m]` on profile
+    mojolearn.identical.gemm.fp32.v1 (OP_TN). `scratch` is `gemm_tn`'s
+    `xt2` alias buffer (at least `k * m` floats) and serves as v1's
+    workspace when it covers the plan; every plan v1 picks past the
+    split-K capacity is a fused tile plan needing no workspace at all, so
+    the allocate-and-wait branch below is the guard, not the path.
+    """
+    var x2 = x
+    var need = identical_gemm_workspace_max_floats(m, m, k)
+    if need <= k * m:
+        identical_gemm_into(ctx, z, x, x2, scratch, m, m, k, OP_TN)
+        return
+    var ws = ctx.enqueue_create_buffer[DType.float32](need)
+    ctx.synchronize()
+    identical_gemm_into(ctx, z, x, x2, ws, m, m, k, OP_TN)
+    ctx.synchronize()
+    _ = ws^
 
 
 def gemm_tn_via_transpose(
