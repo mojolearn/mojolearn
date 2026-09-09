@@ -310,6 +310,18 @@
 #                                  SUBSTRING match; keep it narrow.
 #   MOJOLEARN_GEMM_LEG_PAYLOAD     gemm, phase8, speed, or mamba;
 #                                  --payload wins.
+#   MOJOLEARN_GEMM_LEG_EXTRA       gemm payload only: a local POSIX sh file
+#                                  shipped to /root/gemm_leg_extra.sh and run
+#                                  on the box AFTER the device check and the
+#                                  card, from /root/mojolearn with pixi on
+#                                  PATH; its stdout/stderr land in
+#                                  remote/extra.log and anything it writes
+#                                  under /root/gemm_leg_out comes home with
+#                                  the fetch. This is how a lane runs its
+#                                  timing drivers on the same box and lease
+#                                  as the identity gates, without a second
+#                                  rental and without holding a pod open by
+#                                  hand (the GEMM lane, 2026-09-09).
 #   MOJOLEARN_GEMM_LEG_APPLE_DIR   phase8 only: the Apple bootstrap directory
 #                                  this box's column will be judged against.
 #                                  The default is the newest one under
@@ -612,6 +624,7 @@ GPU_ID=""
 IMAGE=""
 SSH_TARGET=""
 LOCAL_CARD="${MOJOLEARN_GEMM_LEG_LOCAL_CARD:-}"
+LEG_EXTRA="${MOJOLEARN_GEMM_LEG_EXTRA:-}"
 SWEEP=0
 READY_TIMEOUT="${MOJOLEARN_GEMM_LEG_READY_TIMEOUT:-600}"
 CARD_FULL="${MOJOLEARN_GEMM_CARD_FULL:-}"
@@ -3167,6 +3180,13 @@ if [ "@SWEEP@" = "1" ]; then
     echo "column_invariance_exit=$?" >> "$OUT/leg.txt"
 fi
 
+# MOJOLEARN_GEMM_LEG_EXTRA: the lane's own work, after the gates, same box,
+# same lease. Bounded by the leg's poll deadline, not by this file.
+if [ -f /root/gemm_leg_extra.sh ]; then
+    sh /root/gemm_leg_extra.sh > "$OUT/extra.log" 2>&1
+    echo "extra_exit=$?" >> "$OUT/leg.txt"
+fi
+
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
 # THE COMPLETION SENTINEL, WRITTEN LAST (DEVIATION 863). The driving host no
 # longer holds an ssh session open for the whole run; it starts this body
@@ -4366,6 +4386,15 @@ RELEASE_SOURCE
             leg_ssh "test -f /root/mojolearn/mamba/corpus/$_c/x.f32" || leg_die "corpus case $_c did not land"
         done
         leg_say "shipped wheel, $(ls "$QUAL_PROOFS"/*.json | wc -l | tr -d ' ') proofs and the corpora"
+    fi
+    if [ -n "$LEG_EXTRA" ] && [ "$PAYLOAD" = "gemm" ]; then
+        [ -f "$LEG_EXTRA" ] || leg_die "MOJOLEARN_GEMM_LEG_EXTRA=$LEG_EXTRA does not exist."
+        sh -n "$LEG_EXTRA" || leg_die "MOJOLEARN_GEMM_LEG_EXTRA=$LEG_EXTRA is not valid sh."
+        cp "$LEG_EXTRA" "$OUT/extra_body.sh"
+        leg_ssh 'umask 022; cat > /root/gemm_leg_extra.sh' < "$LEG_EXTRA"
+        leg_say "shipped the extra body: $LEG_EXTRA"
+    else
+        leg_ssh 'rm -f /root/gemm_leg_extra.sh' > /dev/null 2>&1 || true
     fi
     leg_ssh 'umask 022; cat > /root/gemm_leg.sh' < "$OUT/remote_body.sh"
     leg_run_payload
