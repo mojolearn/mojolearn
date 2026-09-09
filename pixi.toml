@@ -1167,6 +1167,10 @@ check-batch-invariance = "mojo run -I . batch_invariance_main.mojo"
 # work above leans on.
 check-transformer = "mojo run -I . transformer/checks/transformer_check.mojo"
 check-transformer-backward = "mojo run -I . transformer/checks/transformer_backward_check.mojo"
+# The fused attention path (transformer/impl/.../fused_attention.mojo) against
+# the eager stage kernels, bit for bit, at shapes the fixture gate does not
+# reach, plus its two refusals (the regime bound and the -0.0 corner).
+check-transformer-fused = "mojo run -I . transformer/checks/transformer_fused_check.mojo"
 # Independent CPU float64 references for Transformer backward, cross-entropy,
 # SGD/AdamW, and embedding gradients. Run in the skgpu environment because
 # PyTorch is intentionally not a core dependency. The generated NPZ is an

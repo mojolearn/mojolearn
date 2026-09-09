@@ -272,6 +272,7 @@ transcendentals and division below are OURS.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
+from std.os import getenv
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -298,7 +299,14 @@ from mamba.impl.transformers.models.mamba.modeling_mamba import (
     residual_add_kernel,
 )
 
+from transformer.impl.transformers.models.llama.fused_attention import (
+    FUSED_RAN,
+    fused_forward_launch,
+    fused_supported_head_dim,
+)
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_cos,
     identical_div,
@@ -1118,6 +1126,11 @@ struct LlamaDeviceStages(Movable):
     var qbh: DeviceBuffer[DType.float32]  # [L, head_dim]     (no tag)
     var kbh: DeviceBuffer[DType.float32]  # [s_max, head_dim] (no tag)
     var sbh: DeviceBuffer[DType.float32]  # [L, s_max]        (no tag)
+    var attn_materialized: Bool
+    """Whether `scores`, `masked`, `aexp` and `weights` hold the LAST call's
+    attention stages. The eager path sets it; the fused path (which never
+    writes them) clears it, and a backward that needs them recomputes
+    them first (`ensure_attention_materialized`)."""
 
     def __init__(
         out self,
@@ -1127,10 +1140,17 @@ struct LlamaDeviceStages(Movable):
         s_max: Int,
         dims: LlamaDims,
         window: Int = 0,
+        lean: Bool = False,
     ) raises:
         """`window` must equal the cache's. The attention buffers are
         allocated at `s_cap`: `s_max` for full causal, and the widest key
-        span a windowed call of `l` tokens can read otherwise."""
+        span a windowed call of `l` tokens can read otherwise.
+
+        `lean`: the four `[B, n_heads, L, S]` attention stages and `sbh`
+        are allocated at ONE element, for a caller that runs the fused
+        attention path with the trace off. The eager path grows them on
+        demand (`ensure_attention_stage_capacity`), so a lean struct is
+        never wrong, only late."""
         dims.validate()
         if b <= 0 or l <= 0:
             raise Error("llama: stages need B > 0 and L > 0")
@@ -1168,14 +1188,19 @@ struct LlamaDeviceStages(Movable):
         self.q_rope = _zeros(ctx, m * qw)
         self.k_rope = _zeros(ctx, m * kw)
         var sc = self.s_cap
+        var cells = b * nh * l * sc
+        var sbh_n = l * sc
+        if lean:
+            cells = 1
+            sbh_n = 1
         self.k_cache = _zeros(ctx, b * nkv * sc * hd)
         self.v_cache = _zeros(ctx, b * nkv * sc * hd)
-        self.scores = _zeros(ctx, b * nh * l * sc)
-        self.masked = _zeros(ctx, b * nh * l * sc)
+        self.scores = _zeros(ctx, cells)
+        self.masked = _zeros(ctx, cells)
         self.amax = _zeros(ctx, b * nh * l)
-        self.aexp = _zeros(ctx, b * nh * l * sc)
+        self.aexp = _zeros(ctx, cells)
         self.denom = _zeros(ctx, b * nh * l)
-        self.weights = _zeros(ctx, b * nh * l * sc)
+        self.weights = _zeros(ctx, cells)
         self.ctxv = _zeros(ctx, m * qw)
         self.o_proj = _zeros(ctx, m * dm)
         self.residual1 = _zeros(ctx, m * dm)
@@ -1189,7 +1214,23 @@ struct LlamaDeviceStages(Movable):
         self.residual2 = _zeros(ctx, m * dm)
         self.qbh = _zeros(ctx, l * hd)
         self.kbh = _zeros(ctx, sc * hd)
-        self.sbh = _zeros(ctx, l * sc)
+        self.sbh = _zeros(ctx, sbh_n)
+        self.attn_materialized = False
+
+
+def ensure_attention_stage_capacity(
+    ctx: DeviceContext, mut stages: LlamaDeviceStages, l: Int, s: Int
+) raises:
+    """Grow a lean struct's attention stages to this call's `[B, n_heads,
+    L, S]` before the eager path writes them. A no-op on a full struct."""
+    var cells = stages.b * stages.dims.n_heads * l * s
+    if len(stages.scores) < cells:
+        stages.scores = _zeros(ctx, cells)
+        stages.masked = _zeros(ctx, cells)
+        stages.aexp = _zeros(ctx, cells)
+        stages.weights = _zeros(ctx, cells)
+    if len(stages.sbh) < l * s:
+        stages.sbh = _zeros(ctx, l * s)
 
 
 # ===========================================================================
@@ -2511,7 +2552,118 @@ def llama_attention_scale(head_dim: Int) -> Float32:
     return ftz(identical_rsqrt(Float32(head_dim)))
 
 
+comptime ATTN_PATH_AUTO = 0
+"""Fused when the build, the call and the data allow it; eager otherwise."""
+comptime ATTN_PATH_EAGER = 1
+"""The eager stage kernels, always."""
+comptime ATTN_PATH_FUSED = 2
+"""The fused kernels, with the eager fallback on a regime or corner refusal."""
+
+
+def attention_path_choice(plant_at: Int) -> Int:
+    """Which attention path THIS call takes, before the data is looked at.
+
+    `MOJOLEARN_TRANSFORMER_ATTN_PATH=eager` forces the eager kernels (the
+    A/B arm for timing; also what a FAST or DETERMINISTIC build, a
+    sabotage build and a planted call get unconditionally). `fused` asks
+    for the fused kernels; the default is `auto`, which is `fused`."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return ATTN_PATH_EAGER
+    comptime if BLOCK_ANY_SABOTAGE:
+        return ATTN_PATH_EAGER
+    if plant_at != PLANT_AT_NONE:
+        return ATTN_PATH_EAGER
+    var want = String(getenv("MOJOLEARN_TRANSFORMER_ATTN_PATH"))
+    if want == "eager":
+        return ATTN_PATH_EAGER
+    if want == "fused":
+        return ATTN_PATH_FUSED
+    return ATTN_PATH_AUTO
+
+
 def eager_attention_forward(
+    ctx: DeviceContext,
+    mut stages: LlamaDeviceStages,
+    b: Int,
+    l: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    dims: LlamaDims,
+    plant_at: Int,
+    plant_idx: List[Int],
+    plant_bits: List[UInt32],
+    mut trace: IdentityTrace,
+    prefix: String,
+) raises -> Int:
+    """The attention interface, eager or fused, ONE set of bits.
+
+    With the trace ON the eager kernels run and record S11-S18 as they
+    always have; then, when the call is fused-eligible, the fused kernels
+    run too and `attn.ctx` is recorded FROM THE FUSED OUTPUT, so the card
+    gates the fused path at every fixture it is eligible for (and every
+    downstream stage with it). With the trace OFF only one path runs: the
+    fused kernels, or the eager ones when the choice, the regime or the
+    corner says so. Returns the fused status (`FUSED_RAN` when the fused
+    bits are the ones in `stages.ctxv`; -1 when the fused path was not
+    attempted)."""
+    var choice = attention_path_choice(plant_at)
+    var need_eager = trace.enabled or choice == ATTN_PATH_EAGER
+    var status = -1
+    if need_eager:
+        attention_eager_core(
+            ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
+            plant_idx, plant_bits, trace, prefix,
+        )
+    if choice != ATTN_PATH_EAGER:
+        status = fused_forward_launch(
+            ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
+            stages.k_cache, stages.v_cache, b, l, dims.n_heads, dims.n_kv,
+            dims.head_dim, s, pos0, key_lo, window,
+            llama_attention_scale(dims.head_dim),
+        )
+        if status != FUSED_RAN and not need_eager:
+            attention_eager_core(
+                ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
+                plant_idx, plant_bits, trace, prefix,
+            )
+        elif status == FUSED_RAN and not need_eager:
+            stages.attn_materialized = False
+    trace.record_device[DType.float32](
+        ctx,
+        prefix + ".attn.ctx",
+        stages.ctxv,
+        b * l * dims.n_heads * dims.head_dim,
+    )
+    return status
+
+
+def ensure_attention_materialized(
+    ctx: DeviceContext,
+    mut stages: LlamaDeviceStages,
+    b: Int,
+    l: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+) raises:
+    """Recompute the eager attention stages of the LAST forward call when
+    the fused path skipped them (a backward that takes the eager path
+    reads `weights`). The inputs (`q_rope`, the packed caches) are still
+    in `stages`; the output `ctxv` is rewritten with the same bits."""
+    if stages.attn_materialized:
+        return
+    var off = IdentityTrace.disabled()
+    var dims = stages.dims.copy()
+    attention_eager_core(
+        ctx, stages, b, l, s, pos0, key_lo, window, dims,
+        PLANT_AT_NONE, List[Int](), List[UInt32](), off, String(""),
+    )
+
+
+def attention_eager_core(
     ctx: DeviceContext,
     mut stages: LlamaDeviceStages,
     b: Int,
@@ -2529,7 +2681,9 @@ def eager_attention_forward(
 ) raises:
     """`eager_attention_forward(module, query, key, value, attention_mask,
     scaling, dropout)` (:191-213), inference only, `dropout = 0.0` and
-    REFUSED as a config (contract section 2).
+    REFUSED as a config (contract section 2). THE EAGER STAGE KERNELS,
+    S11 through S19; records S11-S18 (`attn.ctx` is recorded by the
+    caller, after the path decision).
 
     Their order, and this function's:
 
@@ -2556,6 +2710,8 @@ def eager_attention_forward(
     var n_rep = dims.n_rep()
     var cells = b * nh * l * s
     var scale = llama_attention_scale(hd)
+    ensure_attention_stage_capacity(ctx, stages, l, s)
+    stages.attn_materialized = True
 
     # ---- S11 (:204's matmul). `gemm.fp32.v1` OP_NT with `k = head_dim`,
     #      ONE CALL PER (batch, head). Contract DEVIATION 808.
@@ -2803,9 +2959,6 @@ def eager_attention_forward(
             block_dim=(LLAMA_TPB, 1, 1),
         )
         ctx.synchronize()
-    trace.record_device[DType.float32](
-        ctx, prefix + ".attn.ctx", stages.ctxv, b * l * nh * hd
-    )
 
 
 def llama_attention_forward(
@@ -3046,8 +3199,9 @@ def llama_attention_forward(
     ctx.synchronize()
     kv.s = s_old + l
 
-    # ---- the attention interface (:264-277). Eager, pinned.
-    eager_attention_forward(
+    # ---- the attention interface (:264-277). Eager or fused, ONE set of
+    #      bits (`eager_attention_forward`'s docstring).
+    _ = eager_attention_forward(
         ctx,
         stages,
         b,

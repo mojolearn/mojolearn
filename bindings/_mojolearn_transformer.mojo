@@ -143,8 +143,14 @@ from transformer.checks.transformer_fixture import RMS_EPS, ROPE_THETA
 
 # `_upload`/`_download` by their underscore names is DEVIATION 1112's
 # settled pattern (`transformer_check.mojo` imports the same pair).
+from transformer.impl.transformers.models.llama.fused_attention import (
+    fused_supported_head_dim,
+)
 from transformer.impl.transformers.models.llama.modeling_llama import (
+    ATTN_PATH_EAGER,
     BLOCK_ANY_SABOTAGE,
+    PLANT_AT_NONE,
+    attention_path_choice,
     LlamaDeviceStages,
     LlamaDeviceWeights,
     LlamaDims,
@@ -205,6 +211,18 @@ def transformer_vendor_binding() raises -> PythonObject:
 # ===========================================================================
 # The block: profile mojolearn.identical.transformer.fp32.v1
 # ===========================================================================
+
+
+def transformer_lean_stages(hd: Int) -> Bool:
+    """Whether this call may skip the `[B, n_heads, L, S]` attention stage
+    allocations: the fused attention path will be attempted (IDENTICAL
+    build, supported head_dim, not forced eager) and the trace is off here
+    always. The eager fallback grows the buffers on demand."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return False
+    if not fused_supported_head_dim(hd):
+        return False
+    return attention_path_choice(PLANT_AT_NONE) != ATTN_PATH_EAGER
 
 
 def _transformer_run(
@@ -289,7 +307,9 @@ def _transformer_run(
     # cache capacity: pos0 + l <= kv.s_max <= p_max holds for every legal
     # call, so the table always covers the absolute positions used.
     var rope = LlamaRopeTable(ctx, dims, ROPE_THETA, smax)
-    var stages = LlamaDeviceStages(ctx, b, l, smax, dims, window)
+    var stages = LlamaDeviceStages(
+        ctx, b, l, smax, dims, window, lean=transformer_lean_stages(hd)
+    )
     var dx = _upload(ctx, _read_f32(a[0], b * l * dm))
 
     var trace = IdentityTrace.disabled()
@@ -511,13 +531,14 @@ def _transformer_backward_run(
     )
     var kv = LlamaKVCache(ctx, b, dims, l, window)
     var rope = LlamaRopeTable(ctx, dims, ROPE_THETA, l)
-    var stages = LlamaDeviceStages(ctx, b, l, l, dims, window)
+    var lean = transformer_lean_stages(hd)
+    var stages = LlamaDeviceStages(ctx, b, l, l, dims, window, lean=lean)
     var dx = _upload(ctx, _read_f32(a[0], m * dm))
     var off = IdentityTrace.disabled()
     llama_decoder_layer_forward(
         ctx, stages, kv, rope, w, dx, b, l, 0, off, String("pyf")
     )
-    var bst = LlamaBackwardStages(ctx, b, l, l, dims)
+    var bst = LlamaBackwardStages(ctx, b, l, l, dims, lean=lean)
     var d_out = _read_f32(a[10], m * dm)
     var offb = IdentityTrace.disabled()
     llama_decoder_layer_backward(

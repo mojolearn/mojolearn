@@ -23,10 +23,18 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sigmoid,
 )
+from transformer.impl.transformers.models.llama.fused_attention import (
+    FUSED_RAN,
+    fused_backward_launch,
+)
 from transformer.impl.transformers.models.llama.modeling_llama import (
+    ATTN_PATH_EAGER,
     LlamaDeviceStages,
     LlamaDeviceWeights,
     LlamaDims,
+    PLANT_AT_NONE,
+    attention_path_choice,
+    ensure_attention_materialized,
     llama_attention_scale,
     llama_key_lo,
     llama_key_span,
@@ -1774,7 +1782,12 @@ struct LlamaBackwardStages(Movable):
         l: Int,
         s_max: Int,
         dims: LlamaDims,
+        lean: Bool = False,
     ) raises:
+        """`lean`: the four `[B, n_heads, L, S]` attention gradients and
+        `head_c` are allocated at ONE element, for a caller that runs the
+        fused attention backward with the trace off; the eager path grows
+        them on demand (`ensure_backward_attention_capacity`)."""
         dims.validate()
         if b <= 0 or l <= 0:
             raise Error("llama backward: stages need B > 0 and L > 0")
@@ -1818,11 +1831,16 @@ struct LlamaBackwardStages(Movable):
         self.d_o_proj_out = _zeros(ctx, m * dm)
         self.d_attn_ctx = _zeros(ctx, m * qw)
         self.dw_o = _zeros(ctx, dm * qw)
-        self.d_attn_weights = _zeros(ctx, b * nh * l * s_max)
+        var cells = b * nh * l * s_max
+        var head_c_n = l * s_max
+        if lean:
+            cells = 1
+            head_c_n = 1
+        self.d_attn_weights = _zeros(ctx, cells)
         self.attn_zdot = _zeros(ctx, b * nh * l)
-        self.d_attn_masked = _zeros(ctx, b * nh * l * s_max)
-        self.d_attn_scores = _zeros(ctx, b * nh * l * s_max)
-        self.d_qk_cell = _zeros(ctx, b * nh * l * s_max)
+        self.d_attn_masked = _zeros(ctx, cells)
+        self.d_attn_scores = _zeros(ctx, cells)
+        self.d_qk_cell = _zeros(ctx, cells)
         self.d_q_rope = _zeros(ctx, m * qw)
         self.d_k_cache = _zeros(ctx, b * nkv * s_max * hd)
         self.d_v_cache = _zeros(ctx, b * nkv * s_max * hd)
@@ -1849,7 +1867,22 @@ struct LlamaBackwardStages(Movable):
         self.tmp2 = _zeros(ctx, m * wide)
         self.head_a = _zeros(ctx, l * hd)
         self.head_b = _zeros(ctx, s_max * hd)
-        self.head_c = _zeros(ctx, l * s_max)
+        self.head_c = _zeros(ctx, head_c_n)
+
+
+def ensure_backward_attention_capacity(
+    ctx: DeviceContext, mut bst: LlamaBackwardStages, l: Int, s: Int
+) raises:
+    """Grow a lean struct's attention gradients to this call's `[B,
+    n_heads, L, S]` before the eager path writes them."""
+    var cells = bst.b * bst.dims.n_heads * l * s
+    if len(bst.d_attn_weights) < cells:
+        bst.d_attn_weights = _zeros(ctx, cells)
+        bst.d_attn_masked = _zeros(ctx, cells)
+        bst.d_attn_scores = _zeros(ctx, cells)
+        bst.d_qk_cell = _zeros(ctx, cells)
+    if len(bst.head_c) < l * s:
+        bst.head_c = _zeros(ctx, l * s)
 
 
 def backward_stage_tag(i: Int) raises -> String:
@@ -2309,6 +2342,109 @@ def bwd_attention_grads(
         ctx.synchronize()
 
 
+
+
+def bwd_attention_eager_stages(
+    ctx: DeviceContext,
+    mut bst: LlamaBackwardStages,
+    mut fwd: LlamaDeviceStages,
+    b: Int,
+    l: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    dims: LlamaDims,
+    scale: Float32,
+    mut trace: IdentityTrace,
+    prefix: String,
+) raises:
+    """Stages 17-24 as the eager kernels: the routed attention-weight
+    gradient, the closed-form softmax backward, the mask and scale
+    backwards, and the three pinned chains. Records 17-21; the driver
+    records 22-24 after the path decision. Needs the forward's `weights`,
+    so a fused forward is materialized first."""
+    var nh = dims.n_heads
+    var cells = b * nh * l * s
+    ensure_attention_materialized(ctx, fwd, b, l, s, pos0, key_lo, window)
+    ensure_backward_attention_capacity(ctx, bst, l, s)
+
+    # =====================================================================
+    # STAGE 17. The attention-weight gradient, the ONE attention seam that
+    # ROUTES. DEVIATION 1405.
+    # =====================================================================
+    bwd_attention_weight_grad(ctx, bst, fwd, b, l, s, dims)
+    _rec(ctx, trace, prefix, 17, bst.d_attn_weights, cells)
+    # =====================================================================
+    # STAGE 18-19. The softmax backward, ONE closed form. DEVIATION 1406.
+    # =====================================================================
+    ctx.enqueue_function[bwd_softmax_zdot_kernel](
+        bst.attn_zdot.unsafe_ptr(),
+        bst.d_attn_weights.unsafe_ptr(),
+        fwd.weights.unsafe_ptr(),
+        Int32(b),
+        Int32(nh),
+        Int32(l),
+        Int32(s),
+        grid_dim=(_grid(b * nh * l), 1, 1),
+        block_dim=(BWD_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
+    ctx.enqueue_function[bwd_softmax_ds_kernel](
+        bst.d_attn_masked.unsafe_ptr(),
+        bst.d_attn_weights.unsafe_ptr(),
+        fwd.weights.unsafe_ptr(),
+        bst.attn_zdot.unsafe_ptr(),
+        Int32(cells),
+        Int32(s),
+        grid_dim=(_grid(cells), 1, 1),
+        block_dim=(BWD_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    _rec(ctx, trace, prefix, 19, bst.d_attn_masked, cells)
+
+    # =====================================================================
+    # STAGE 20. S13's backward, an EXACT IDENTITY. DEVIATION 1414.
+    # =====================================================================
+    ctx.enqueue_function[bwd_mask_grad_kernel](
+        bst.d_attn_scores.unsafe_ptr(),
+        bst.d_attn_masked.unsafe_ptr(),
+        Int32(b),
+        Int32(nh),
+        Int32(l),
+        Int32(s),
+        Int32(pos0),
+        Int32(key_lo),
+        Int32(window),
+        grid_dim=(_grid(cells), 1, 1),
+        block_dim=(BWD_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    _rec(ctx, trace, prefix, 20, bst.d_attn_scores, cells)
+
+    # =====================================================================
+    # STAGE 21. S12's backward. DEVIATION 1415.
+    # =====================================================================
+    ctx.enqueue_function[bwd_scale_kernel](
+        bst.d_qk_cell.unsafe_ptr(),
+        bst.d_attn_scores.unsafe_ptr(),
+        Int32(cells),
+        scale,
+        grid_dim=(_grid(cells), 1, 1),
+        block_dim=(BWD_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    _rec(ctx, trace, prefix, 21, bst.d_qk_cell, cells)
+
+    # =====================================================================
+    # STAGE 22-24. The three PINNED attention chains. DEVIATIONS 1402, 1403,
+    # 1404, 1424, and the lane's largest finding is argued at
+    # `bwd_dq_kernel`.
+    # =====================================================================
+    bwd_attention_grads(ctx, bst, fwd, b, l, s, dims, scale)
+
+
 # ===========================================================================
 # THE RMSNORM BACKWARD LAUNCHER
 # ===========================================================================
@@ -2688,80 +2824,30 @@ def llama_decoder_layer_backward(
     _rec(ctx, trace, prefix, 16, bst.dw_o, dm * qw)
 
     # =====================================================================
-    # STAGE 17. The attention-weight gradient, the ONE attention seam that
-    # ROUTES. DEVIATION 1405.
+    # STAGES 17-24, EAGER OR FUSED, ONE SET OF BITS. With the trace on the
+    # eager kernels run and record 17-21 as they always have, then the
+    # fused kernels rewrite `attn_zdot`, `d_q_rope`, `d_k_cache` and
+    # `d_v_cache`, and 22-24 are recorded FROM THE FUSED OUTPUT. With the
+    # trace off only one path runs (see `eager_attention_forward`).
     # =====================================================================
-    bwd_attention_weight_grad(ctx, bst, fwd, b, l, s, dims)
-    _rec(ctx, trace, prefix, 17, bst.d_attn_weights, cells)
-
-    # =====================================================================
-    # STAGE 18-19. The softmax backward, ONE closed form. DEVIATION 1406.
-    # =====================================================================
-    ctx.enqueue_function[bwd_softmax_zdot_kernel](
-        bst.attn_zdot.unsafe_ptr(),
-        bst.d_attn_weights.unsafe_ptr(),
-        fwd.weights.unsafe_ptr(),
-        Int32(b),
-        Int32(nh),
-        Int32(l),
-        Int32(s),
-        grid_dim=(_grid(b * nh * l), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    ctx.synchronize()
-    _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
-    ctx.enqueue_function[bwd_softmax_ds_kernel](
-        bst.d_attn_masked.unsafe_ptr(),
-        bst.d_attn_weights.unsafe_ptr(),
-        fwd.weights.unsafe_ptr(),
-        bst.attn_zdot.unsafe_ptr(),
-        Int32(cells),
-        Int32(s),
-        grid_dim=(_grid(cells), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    ctx.synchronize()
-    _rec(ctx, trace, prefix, 19, bst.d_attn_masked, cells)
-
-    # =====================================================================
-    # STAGE 20. S13's backward, an EXACT IDENTITY. DEVIATION 1414.
-    # =====================================================================
-    ctx.enqueue_function[bwd_mask_grad_kernel](
-        bst.d_attn_scores.unsafe_ptr(),
-        bst.d_attn_masked.unsafe_ptr(),
-        Int32(b),
-        Int32(nh),
-        Int32(l),
-        Int32(s),
-        Int32(pos0),
-        Int32(key_lo),
-        Int32(window),
-        grid_dim=(_grid(cells), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    ctx.synchronize()
-    _rec(ctx, trace, prefix, 20, bst.d_attn_scores, cells)
-
-    # =====================================================================
-    # STAGE 21. S12's backward. DEVIATION 1415.
-    # =====================================================================
-    ctx.enqueue_function[bwd_scale_kernel](
-        bst.d_qk_cell.unsafe_ptr(),
-        bst.d_attn_scores.unsafe_ptr(),
-        Int32(cells),
-        scale,
-        grid_dim=(_grid(cells), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    ctx.synchronize()
-    _rec(ctx, trace, prefix, 21, bst.d_qk_cell, cells)
-
-    # =====================================================================
-    # STAGE 22-24. The three PINNED attention chains. DEVIATIONS 1402, 1403,
-    # 1404, 1424, and the lane's largest finding is argued at
-    # `bwd_dq_kernel`.
-    # =====================================================================
-    bwd_attention_grads(ctx, bst, fwd, b, l, s, dims, scale)
+    var choice = attention_path_choice(PLANT_AT_NONE)
+    var need_eager = trace.enabled or choice == ATTN_PATH_EAGER
+    if need_eager:
+        bwd_attention_eager_stages(
+            ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
+            trace, prefix,
+        )
+    if choice != ATTN_PATH_EAGER:
+        var status = fused_backward_launch(
+            ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
+            fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
+            fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
+        )
+        if status != FUSED_RAN and not need_eager:
+            bwd_attention_eager_stages(
+                ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
+                trace, prefix,
+            )
     _rec(ctx, trace, prefix, 22, bst.d_q_rope, m * qw)
     _rec(ctx, trace, prefix, 23, bst.d_k_cache, b * nkv * s * hd)
     _rec(ctx, trace, prefix, 24, bst.d_v_cache, b * nkv * s * hd)
