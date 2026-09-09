@@ -153,7 +153,7 @@ cmd_ship() {
     load_state
     sha="$1"
     git archive --format=tar "$sha" -- . ':!bench/results' ':!mamba/corpus' ':!bench/oracle*' \
-        ':!archive' ':!docs' ':!paper' ':!training/corpus' \
+        ':!archive' ':!docs' ':!paper' \
         | gzip -6 > "${TMPDIR:-/tmp}/samba-leg-$$.tgz"
     ls -l "${TMPDIR:-/tmp}/samba-leg-$$.tgz"
     pod_ssh 'mkdir -p /root/mojolearn && cat > /root/mojolearn/src.tgz' < "${TMPDIR:-/tmp}/samba-leg-$$.tgz"
