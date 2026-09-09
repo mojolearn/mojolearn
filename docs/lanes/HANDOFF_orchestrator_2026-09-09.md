@@ -25,9 +25,9 @@ four round-2 lanes CONTINUE their full briefs; no further lanes until he says so
 - `71d2ba71` PUSHED: round-1 lanes merged (`lane/gemm-identical`,
   `lane/knn-identical`, `lane/samba-attention`, `lane/samba-training`),
   the opponent reference table, one training-test expectation fix, and the
-  gate fixes (dbscan_main at -O1 in `tools/check_unsupervised_identity.sh`
-  and `tools/e1_unsupervised.sh`; `tools/knn_layout_dispatch_price.sh` runs
-  without timeout(1) on macOS).
+  gate fixes (`tools/knn_layout_dispatch_price.sh` runs without timeout(1)
+  on macOS; the dbscan_main -O1 workaround was REMOVED again at 5d5398ce
+  once the DBSCAN lane fixed the real crash).
 - All 26 RUN OWED steps of the four merged lanes are GREEN on the Apple M4
   at 71d2ba71: GEMM device check, GEMM card byte-equal to the shipped
   NVIDIA card, tuned probe 20 match / 0 moved, batch invariance, backward,
@@ -48,15 +48,15 @@ four round-2 lanes CONTINUE their full briefs; no further lanes until he says so
   (143,628 cells). Transpose-only was slightly faster than both at 128 and
   1000 (12.1, 60.2) and slower at 32 (16.3).
 
-## Lanes open at handoff time (trees LANDED at fd0c4052, the other four continuing)
+## Lanes (trees, DBSCAN and UMAP LANDED; GEMM split-K and fused attention continuing)
 
 | lane | branch | worktree (under .claude/worktrees/) | handoff file it must leave |
 |---|---|---|---|
 | trees (round 1) | lane/trees-identical | MERGED fd0c4052; RUN OWED green on the M4 (4 identical builds, identity_break 81/81 vs the shipped Apple JSON and vs the H100 fold JSON, rf_perf_candidates, fit-pointwise, logloss-train, ordered-boosting); rows on the reference table at 9bcbe5b9 | docs/lanes/HANDOFF_trees.md |
-| UMAP optimizer + kNN selector | lane/umap-optimizer | agent-a4b445131c31d9311 | docs/lanes/HANDOFF_umap.md |
+| UMAP optimizer + kNN selector | lane/umap-optimizer | MERGED 4494b73a; RUN OWED green on the M4 (device-optimizer stage identity byte-equal to the L40S logs, 186 + 690 cells; host arm equals the 2026-09-05 card; 20k launch-width fingerprint 12938647291752780014 on Apple in both widths = the L40S value; FAST checks unchanged; estimators binding rebuilt IDENTICAL). Still owed: the cuML quality gate via the estimators binding (needs cuML, not runnable on the Mac), H100 final numbers, AMD column. Task 2 (selector) produced no code | docs/lanes/HANDOFF_umap.md |
 | GEMM split-K + H100 table | lane/gemm-splitk | agent-a68e7f0e68dc3bc9f | docs/lanes/HANDOFF_gemm_splitk.md |
 | fused attention (bits unchanged) | lane/fused-attention | agent-a94c0adce7c14179f | docs/lanes/HANDOFF_fused_attention.md |
-| DBSCAN compiler crash | lane/dbscan-compiler-crash | agent-aa81defd01a6607a1 | docs/lanes/HANDOFF_dbscan_crash.md |
+| DBSCAN compiler crash | lane/dbscan-compiler-crash | MERGED 5d5398ce; M4 check-dbscan 17/17 at the default level, unsupervised gate green both modes. The crash was one strided `while k < len(cols)` loop over a borrowed List with a runtime step in `dbscan/checks/dbscan_check.mojo`; reduced repro at `dbscan/checks/compiler_repro_dead_arg_elim.mojo`; draft upstream report `docs/lanes/MODULAR_ISSUE_dead_arg_elim.md` awaits Andrew | docs/lanes/HANDOFF_dbscan_crash.md |
 
 Merge procedure for each: `git merge --no-ff lane/<x>` onto main, run its
 RUN OWED list on the M4 one step at a time (nice 19), fix forward, push.
@@ -67,11 +67,11 @@ samba-*).
 
 | area | shape | ours | theirs | ratio | owner |
 |---|---|---|---|---|---|
-| UMAP optimizer (serial host SGD) | 100k x 32, k 15, 200 epochs, H100 | 62.7 s | cuML 0.321 s | 195x | umap lane |
+| UMAP (device optimizer landed) | 100k x 32, k 15, 200 epochs, L40S | 1.67 s (was 62.7 s) | cuML 0.321 s (H100 row) | 5.2x cross-GPU; 1M: 50.9 s vs cuML L40S 8.0 s = 6.4x, self-kNN is 66% of it | next: kNN selector (below), then host graph 7.2 s and spectral init 6.3 s at 1M |
 | Attention forward, unfused | L40S, d 1024, seq 4096, batch 4, window 2048 | 685.7 ms | torch SDPA 33.6 | 20x | fused-attention lane |
 | Attention fwd+bwd | same | 1672 ms | 106.9 | 16x | fused-attention lane |
 | v1 GEMM SPLITK plan | gram.32x32x1M, L40S | 138 ms | cuBLAS fp32 0.378 | 366x | gemm-splitk lane (estimators use the core path, at 0.368 ms = parity) |
-| kNN, many queries | 400k, 4000 q, k 10, H100 | 66.5 ms | cuML 10.2 | 6.5x | umap lane task 2 |
+| kNN, many queries | 400k, 4000 q, k 10, H100 | 66.5 ms | cuML 10.2 | 6.5x | NOBODY (umap lane task 2 produced no code; the L40S image lacked nsys; HANDOFF_umap.md names the fallback timers and the candidate changes) |
 | Mamba-2/3 blocks | Sep 7 grid, H100 | | torch reference scan | 72-85x | NOBODY this round |
 | Transformer end to end | Sep 7 grid, H100 | | torch eager | 22-41x | partly the two lanes above |
 | Symmetric GBDT vs CatBoost | HIGGS 1M, H100, same process | 775 ms Logloss, 806 RMSE | CatBoost GPU 900 / 699 | 0.86x / 1.15x (L40S: 426 vs 781, 318 vs 915); 2M/5M UNRUN | trees lane landed; fold + DEV 2030 fused walker bit-equal on both boxes but untimed on H100, flags NOT flipped |
@@ -96,6 +96,11 @@ TF32/flash paths several x is permanent.
    tools/trees_leg.sh + tools/trees_identical_ab.sh are the harness.
 3. Missing opponent rows: LightGBM CUDA extra_trees (valid build), cuML
    DBSCAN/PCA at 1M rows, torch byte-LM step time on H100.
+3b. FINDING (DBSCAN lane, L40S, Sep 9): after the round-1 kNN flip the
+   unsupervised gate's FAST pass fails at `neighbors/knn_main.mojo` ("1 of
+   512 returned neighbors are not in the true k-nearest set") on NVIDIA;
+   the IDENTICAL pass is green there and both passes are green on the M4.
+   Not a product arm, but a red gate on the box; nobody owns it.
 4. Round-1 leftovers: estimator-level GEMM swap timing; AMD column for the
    kNN rows and the tuned GEMM plans; the training lane's 64-step runs and
    checkpoint sha (it has NO measured number yet).
