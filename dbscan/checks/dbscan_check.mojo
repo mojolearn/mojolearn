@@ -1528,54 +1528,34 @@ def check_dbscan_manhattan_refused_on_the_ball_cover() raises:
 # ---------------------------------------------------------------------------
 # THE WEIGHTED CORE-POINT TEST (DEVIATION 28)
 #
-# THESE FOUR GATES HAVE NEVER RUN. Read this before quoting any of them.
-#
-# Building them used to take the whole dbscan lane down with an LLVM pass
-# assertion, `DeadArgumentElimination surveyUse failed`. Bisected 2026-09-01:
-# with all seven new gates disabled the lane builds, the three manhattan
-# gates build, the weighted family does not. Commenting out a CALL was not
-# enough -- the entry point's IMPORT is what pulls the function into
+# Building these four gates used to take the whole dbscan lane down with a
+# compiler assertion, `DeadArgumentElimination surveyUse failed`, at -O2
+# and above. From 2026-09-01 to 2026-09-09 the lane built at `-O1` as a
+# workaround (commit c0922140). Commenting out a CALL was not enough to
+# bisect it -- the entry point's IMPORT is what pulls the function into
 # codegen, so `dbscan_main.mojo` had to comment out both.
 #
-# CURED 2026-09-01 BY THE BUILD'S OPTIMIZATION LEVEL, AND BY NOTHING IN
-# THIS FILE. `pixi run check-dbscan` passes `-O1`. Measured on an Apple M4,
-# one variable at a time: -O3 asserts, -O2 asserts, -O1 builds, -O0 builds,
-# and `DeadArgumentElimination` is an -O2-and-above pass. All seven gates
-# then run and pass, the four weighted ones for the first time ever.
+# FOUND AND FIXED 2026-09-09, on an NVIDIA L40S with the pinned Mojo 1.0.0
+# (ed45d567). The trigger was ONE LOOP in `_host_weighted_degree_strided`
+# below: `while k < len(cols): ...; k += width`, a `while` whose condition
+# re-reads `len()` of a borrowed `List` argument AND whose step is a
+# runtime `Int` argument. Either half alone builds; together they assert.
+# The reduced repro is `compiler_repro_dead_arg_elim.mojo` beside this
+# file, and the cure is `var n = len(cols)` before the loop, which is the
+# same arithmetic in the same order. Bisecting the gates one entry point at
+# a time on that box showed why the 2026-09-01 record saw "two independent
+# triggers": the fold gate and the degree-oracle gate are the two callers
+# of that function, and the two fit gates alone build clean at -O3.
 #
-# FOUR SOURCE REWRITES WERE TRIED FIRST AND ALL FOUR FAILED. They are kept
-# where they are still improvements and are labelled at their sites as
-# attempts rather than cures, because a reader who finds an unexplained
-# restructuring assumes it is load bearing:
+# THE FOUR 2026-09-01 REWRITES BELOW WERE NEVER THE CURE, and their site
+# comments say so. 1 (a comptime metric at the dispatcher) was reverted;
+# 2 (the `_fit_unweighted` / `_fit_weighted` split), 3 (the pad loop's
+# load into a local) and 4 (`rows[i].copy()`) are kept as tidy-ups only.
 #
-#   1  called `vertex_deg_dispatch` with a compile-time constant metric,
-#      replaced by the comptime instantiation. REVERTED -- it took the
-#      dispatcher out from under the gate for no benefit.
-#   2  `_fit_weighted` carried a `weights` list read only under a
-#      `has_weights` Bool that every call site passed as a literal. Split
-#      into `_fit_unweighted` and `_fit_weighted`. KEPT, as a simplification.
-#   3  `_host_pinned_fold` padded with a ternary whose live arm was a
-#      reference into its argument. Now a load into a local. KEPT.
-#   4  `rows[i]`, an element reference into a `List[List[Int]]`, handed
-#      straight into a `def`. Bound to a local copy first. KEPT.
-#
-# THE BISECT IS THE REUSABLE PART. An import and its call must BOTH be
-# commented to disable a gate, since the import is what pulls it into
-# codegen. Enabling them one at a time found TWO INDEPENDENT TRIGGERS, not
-# one: the fold gate alone asserts, and the three fit gates alone assert.
-# A single-candidate build that still crashed would therefore have retired
-# a good fix, which is why nothing was retired on one build.
-#
-# NOT A WEAKENED GATE, and this is measured. With the weighted four disabled
-# so that -O3 can build at all, the -O1 and -O3 binaries print BYTE-IDENTICAL
-# output across all 13 remaining gates, the float-heavy ones included.
-#
-# THE CURE IS UNVERIFIED. Nobody has compiled this file since the
-# restructuring, so every claim below is a claim about code that has not
-# been executed. A green from these four gates counts only after the run in
-# `dbscan/README.md`'s gate list has actually happened, and until then
-# `sample_weight` stays IMPLEMENTED AND UNGATED. Do not quote a
-# sample_weight result from this lane.
+# MEASURED, NOT ARGUED: with the fix in, `dbscan_main` at -O3 and at -O1
+# print byte-identical output (17 gates, 3248 bytes) in BOTH the FAST and
+# the IDENTICAL build on the L40S; the Apple M4 run is owed
+# (`docs/lanes/HANDOFF_dbscan_crash.md`).
 # ---------------------------------------------------------------------------
 
 
@@ -1589,17 +1569,14 @@ def _host_pinned_fold(partials: List[Float32], width: Int) -> Float32:
     so this file can fold the same partials two ways and show that the width
     is load bearing.
 
-    CANDIDATE 3 (attempted 2026-09-01, NOT the cure; kept as a tidy-up --
-    the cure was building at -O1). The pad loop
-    used to read `red.append(partials[t] if t < len(partials) else
-    Float32(0.0))`. A ternary whose live arm is a REFERENCE into `partials`
-    and whose dead arm is a temporary makes the compiler merge two origins
-    into one value before handing it to `append`, and a reference threaded
-    into a call it does not reach into is one of the shapes
-    `DeadArgumentElimination surveyUse failed` fires on. The statement form
-    below loads first and appends a plain value. It is the same padding, slot
-    for slot: `width` entries, `partials[t]` where one exists and 0.0 past
-    the end.
+    CANDIDATE 3 (attempted 2026-09-01, NOT the cure; kept as a tidy-up).
+    The pad loop used to read `red.append(partials[t] if t < len(partials)
+    else Float32(0.0))`, and the theory was that a ternary whose live arm is
+    a reference into `partials` surveyed badly. It did not; this function
+    alone builds clean at -O3 (measured 2026-09-09), and the trigger was the
+    strided `while` loop in `_host_weighted_degree_strided`. The statement
+    form below is the same padding, slot for slot: `width` entries,
+    `partials[t]` where one exists and 0.0 past the end.
     """
     var red = List[Float32]()
     for t in range(width):
@@ -1626,12 +1603,25 @@ def _host_weighted_degree_strided(
     row's neighbour list. Thread `t` takes `cols[t], cols[t + width], ...`
     ascending, exactly as the `while j < n_cols: ... j += WVD_TPB` loop does,
     and the partials go into the halving tree.
+
+    THE LOOP BOUND IS HOISTED, AND THAT LINE IS THE WHOLE CURE for the
+    `DeadArgumentElimination surveyUse failed` assertion that kept this
+    file at -O1 from 2026-09-01 to 2026-09-09. Reduced on an NVIDIA L40S
+    with Mojo 1.0.0 (ed45d567) to `compiler_repro_dead_arg_elim.mojo`
+    beside this file: a `def` whose `while` condition re-reads `len()` of a
+    borrowed `List` argument AND whose induction step is a RUNTIME `Int`
+    argument asserts at -O2 and above; either half alone builds. Reading
+    the length once before the loop is the same arithmetic in the same
+    order (`cols` is a read-only argument, so its length cannot change
+    inside the loop) and the -O3 build's output is byte-identical to the
+    -O1 build's.
     """
     var partials = List[Float32]()
+    var n = len(cols)
     for t in range(width):
         var acc = Float32(0.0)
         var k = t
-        while k < len(cols):
+        while k < n:
             acc = ftz(acc + ftz(w[cols[k]]))
             k += width
         partials.append(acc)
@@ -1757,9 +1747,11 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
     # branch and `metric` a dead argument of the specialized clone, which is
     # the shape `DeadArgumentElimination surveyUse failed` fires on. It was
     # a good hypothesis. It was WRONG: replacing this with the comptime
-    # instantiation still asserted at -O3, and the real cure is the -O1
-    # build level. The dispatcher is deliberately back, because routing
-    # around it would leave `vertex_deg_dispatch` untested here for no gain.
+    # instantiation still asserted at -O3. The real trigger (found
+    # 2026-09-09) is the strided `while` loop in
+    # `_host_weighted_degree_strided`, which this gate calls. The
+    # dispatcher is deliberately back, because routing around it would
+    # leave `vertex_deg_dispatch` untested here for no gain.
     vertex_deg_dispatch(ctx, adj, vd, x, 0, m, n, d, 0.9, DBSCAN_METRIC_L2)
     ctx.synchronize()
     var hadj = ctx.enqueue_create_host_buffer[DType.uint8](m * n)
@@ -1898,11 +1890,12 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
         for j in range(n):
             mask.append(hadj.unsafe_ptr().unsafe_load(i * n + j) != UInt8(0))
         var want_dense = _host_weighted_degree_dense(mask, w, n, WVD_TPB)
-        # CANDIDATE 4 (2026-09-01): `rows[i]` is an element reference into a
-        # `List[List[Int]]` handed straight into a `def`. Bound to a local
-        # copy first -- the reference is the shape the DeadArgumentElimination
-        # assertion is suspected to survey badly, and the degree gate is the
-        # one that crashes ALONE.
+        # CANDIDATE 4 (2026-09-01, NOT the cure): `rows[i]` is an element
+        # reference into a `List[List[Int]]` handed straight into a `def`.
+        # Bound to a local copy first on the theory that the reference was
+        # what DeadArgumentElimination surveyed badly. It was not; the
+        # trigger was the callee's own strided `while` loop (see
+        # `_host_weighted_degree_strided`). Kept as a tidy-up.
         var row_csr = rows[i].copy()
         var want_csr = _host_weighted_degree_strided(row_csr, w, WVD_TPB)
         if want_dense != want_csr:
@@ -2127,11 +2120,11 @@ def _fit_unweighted(
 
     CANDIDATE 2 (attempted toolchain workaround, 2026-09-01, AND IT WAS NOT
     THE CURE -- kept because the split is a real simplification, not because
-    it fixed anything). The assertion is cleared by BUILDING AT -O1, which
-    `pixi run check-dbscan` now does; measured on an Apple M4, -O3 and -O2
-    assert and -O1 and -O0 build, DeadArgumentElimination being an
-    -O2-and-above pass. This candidate, and three others, still asserted at
-    -O3. The reasoning below was a good hypothesis and it was wrong. This and
+    it fixed anything). The trigger was found on 2026-09-09 in
+    `_host_weighted_degree_strided`'s strided `while` loop, which neither of
+    these two functions calls; the two fit gates that use them build clean
+    at -O3 on their own. The reasoning below was a good hypothesis and it
+    was wrong. This and
     `_fit_weighted` used to be ONE function carrying `weights:
     List[Float32]` beside a `has_weights: Bool`, read only inside
     `if has_weights:`, and every call site passed a LITERAL `True` or
