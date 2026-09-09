@@ -1,0 +1,53 @@
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 3
+1494 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a1680000000, nodemask=2)
+ours: tier identical vendor cuda
+ours forward            median 685.7 ms  rounds ['685.7', '685.1', '687.1']
+ours forward+backward   median 1672.1 ms  rounds ['1656.3', '1672.1', '1735.1']
+torch-eager-fp32-sdpa forward            median 33.6 ms  rounds ['32.9', '33.6', '34.0']
+/usr/local/lib/python3.11/dist-packages/torch/autograd/graph.py:769: UserWarning: Attempting to run cuBLAS, but there was no current CUDA context! Attempting to set the primary context... (Triggered internally at ../aten/src/ATen/cuda/CublasHandlePool.cpp:135.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+torch-eager-fp32-sdpa forward+backward   median 106.9 ms  rounds ['107.5', '106.9', '106.5']
+/usr/local/lib/python3.11/dist-packages/torch/_inductor/compile_fx.py:150: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+torch-eager-fp32-sdpa-compiled forward            median 34.7 ms  rounds ['33.2', '35.5', '34.7']
+torch-eager-fp32-sdpa-compiled forward+backward   median 93.6 ms  rounds ['82.2', '93.6', '97.0']
+Traceback (most recent call last):
+  File "/root/mojolearn/transformer/bench_window_timing.py", line 232, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/mojolearn/transformer/bench_window_timing.py", line 220, in main
+    t_c = theirs(args, w, x, dy, log, compiled=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/transformer/bench_window_timing.py", line 175, in theirs
+    y = block(xt).float().cpu().numpy()
+        ^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/_dynamo/eval_frame.py", line 433, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/transformer/bench_window_timing.py", line 108, in block
+    def block(x):
+  File "/usr/local/lib/python3.11/dist-packages/torch/_dynamo/eval_frame.py", line 600, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/_functorch/aot_autograd.py", line 987, in forward
+    return compiled_fn(full_args)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 217, in runtime_wrapper
+    all_outs = call_func_at_runtime_with_args(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/_functorch/_aot_autograd/utils.py", line 120, in call_func_at_runtime_with_args
+    out = normalize_as_list(f(args))
+                            ^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 451, in wrapper
+    return compiled_fn(runtime_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/_inductor/codecache.py", line 1131, in __call__
+    return self.current_callable(inputs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/_inductor/compile_fx.py", line 944, in run
+    return model(new_inputs)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/torchinductor_root/ws/cwslxugdjvowom57oqfjoxvgjnf2ubdgjjs36mll3xiegjr25ifu.py", line 474, in call
+    buf9 = empty_strided_cuda((4, 16, 4096, 4096), (268435456, 16777216, 4096, 1), torch.float32)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 4.00 GiB. GPU 0 has a total capacity of 44.39 GiB of which 2.54 GiB is free. Including non-PyTorch memory, this process has 41.85 GiB memory in use. Of the allocated memory 534.27 MiB is allocated by PyTorch, and 4.07 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

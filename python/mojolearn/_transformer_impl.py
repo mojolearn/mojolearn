@@ -73,6 +73,13 @@ remain OWED there and this class claims nothing wider) -- and
 against the tier the package resolved, `_gp_impl.py`'s pattern, so a
 wrong-arm measurement cannot be correctly labelled by accident.
 
+SLIDING WINDOW AND BACKWARD (2026-09-09). `TransformerBlock(window=W)`
+runs sliding-window causal attention with the KV cache as a RING of
+W slots (`TransformerState` says how the buffers are laid out);
+`window=0` is the full causal block above, bit for bit.
+`TransformerBlock.backward(x, grad_output)` is the zero-state prefill
+VJP under the IDENTICAL tier, from the lane's own backward chains.
+
 RUN LEDGER. THIS PATH RAN 2026-09-02, the day the binding first
 compiled (rc 0 on the first attempt, 15 AIR blobs, transformer 7 and
 gemm 8). `python/mojolearn/tests/test_transformer_surface.py` printed
@@ -245,30 +252,49 @@ class TransformerState:
     and written back whole by `forward` and `step` (`cached_tokens`
     reassigned); serialize them however you like, the bytes round-trip
     exactly. `keys()` / `values()` hand back the packed used region in
-    its natural shape."""
+    its natural shape.
+
+    WITH A SLIDING WINDOW (`TransformerBlock(window=W)`, W > 0) the two
+    buffers are a RING of W slots per (batch, kv head), always at stride
+    W: `B * KV * W * HD` floats, slot = absolute position % W, and
+    `cached_tokens` keeps counting positions past W. `keys()` /
+    `values()` then return the `min(cached_tokens, W)` most recent
+    positions in ascending position order as a COPY."""
 
     def __init__(self, batch_size, n_kv_heads, head_dim, max_tokens,
-                 k_cache, v_cache, cached_tokens=0):
+                 k_cache, v_cache, cached_tokens=0, window=0):
         self.batch_size = int(batch_size)
         self.n_kv_heads = int(n_kv_heads)
         self.head_dim = int(head_dim)
         self.max_tokens = int(max_tokens)
+        self.window = int(window)
         self.k_cache = k_cache
         self.v_cache = v_cache
         self.cached_tokens = int(cached_tokens)
 
+    @property
+    def capacity(self):
+        """Slots per (batch, kv head) in each buffer: `max_tokens` for the
+        linear cache, `window` for the ring."""
+        return self.window if self.window > 0 else self.max_tokens
+
     def _packed(self, buf):
-        n = (self.batch_size * self.n_kv_heads * self.cached_tokens
-             * self.head_dim)
-        return buf[:n].reshape(
-            self.batch_size, self.n_kv_heads, self.cached_tokens,
-            self.head_dim,
-        )
+        b, kv, hd = self.batch_size, self.n_kv_heads, self.head_dim
+        if self.window > 0:
+            w = self.window
+            ring = buf[: b * kv * w * hd].reshape(b, kv, w, hd)
+            s = self.cached_tokens
+            held = min(s, w)
+            positions = np.arange(s - held, s)
+            return ring[:, :, positions % w, :].copy()
+        n = b * kv * self.cached_tokens * hd
+        return buf[:n].reshape(b, kv, self.cached_tokens, hd)
 
     def keys(self):
         """The key cache's packed used region, as a
         `(B, n_kv_heads, cached_tokens, head_dim)` VIEW into `k_cache`
-        (valid until the next call updates the state)."""
+        (valid until the next call updates the state); under a window,
+        the held positions in order, as a copy."""
         return self._packed(self.k_cache)
 
     def values(self):
@@ -348,14 +374,22 @@ class TransformerBlock(NumericModeMixin):
                                     profile refuses a nonzero value
                                     rather than specifying where it
                                     would round; no bias key exists
+        window            honored  `window=0` (default) is full causal
+                                    attention, today's bits exactly;
+                                    `window=W > 0` is sliding-window
+                                    causal attention (query at position
+                                    p sees keys [max(0, p-W+1), p]) with
+                                    the KV cache a RING of W slots; the
+                                    same one spelling serves prefill,
+                                    split prefill and decode bit for bit
         rope_scaling,     refused  contract section 11's list, by
-          sliding window,           absence
-          masks beyond
-          causal
-        backward/training refused  the backward profile exists in the
-                                    lane (`transformer_backward_check
-                                    .mojo`) with NO recorded run and is
-                                    deliberately NOT on this surface
+          masks beyond              absence
+          causal/window
+        backward          honored  `backward(x, grad_output)`: the
+                                    zero-state prefill VJP for x and the
+                                    nine weights, IDENTICAL tier only
+                                    (the lane's `transformer_backward
+                                    .mojo` chains, window included)
         dtype             refused  float32 ONLY; bf16/fp16/float64 by
                                     name
 
@@ -377,9 +411,17 @@ class TransformerBlock(NumericModeMixin):
         "gate_proj.weight", "up_proj.weight", "down_proj.weight",
     )
 
-    def __init__(self, weights, *, n_heads, n_kv_heads=None, head_dim=None):
+    def __init__(self, weights, *, n_heads, n_kv_heads=None, head_dim=None,
+                 window=0):
         what = "TransformerBlock"
         arrs = _take(weights, what, self._W_NAMES)
+        win = int(window)
+        if win < 0:
+            raise ValueError(
+                f"mojolearn {what}: window must be 0 (full causal) or a "
+                f"positive sliding-window width, got {window!r}"
+            )
+        self.window = win
         norm1_w = _f32_strict(arrs[0], what, "input_layernorm.weight")
         if norm1_w.ndim != 1 or norm1_w.shape[0] < 1:
             raise ValueError(
@@ -457,7 +499,8 @@ class TransformerBlock(NumericModeMixin):
         pack stride and every growth refusal are functions of it,
         DEVIATION 795(ii)). `max_tokens` above 8192 is refused BY NAME
         in Mojo at the first call (DEVIATION 812's absolute-position
-        ceiling), not here."""
+        ceiling), not here. Under a sliding window the buffers are a
+        ring of `window` slots and `max_tokens` bounds positions only."""
         b = int(batch_size)
         if b < 1:
             raise ValueError(
@@ -470,12 +513,13 @@ class TransformerBlock(NumericModeMixin):
                 f"mojolearn TransformerBlock: max_tokens must be "
                 f"positive, got {max_tokens!r}"
             )
-        n = b * self.n_kv_heads * smax * self.head_dim
+        cap = self.window if self.window > 0 else smax
+        n = b * self.n_kv_heads * cap * self.head_dim
         return TransformerState(
             b, self.n_kv_heads, self.head_dim, smax,
             np.zeros((n,), dtype=np.float32),
             np.zeros((n,), dtype=np.float32),
-            0,
+            0, self.window,
         )
 
     def _call(self, x, state, step):
@@ -493,8 +537,15 @@ class TransformerBlock(NumericModeMixin):
                 f"batch_size {state.batch_size} but x has B = {b} "
                 "(allocate_state(B, max_tokens) makes a matching one)"
             )
+        if int(getattr(state, "window", 0)) != self.window:
+            raise ValueError(
+                f"mojolearn {what}: the state was allocated for window "
+                f"{getattr(state, 'window', 0)} but this block has window "
+                f"{self.window} (allocate_state on THIS block makes a "
+                "matching one)"
+            )
         smax = int(state.max_tokens)
-        n = b * self.n_kv_heads * smax * self.head_dim
+        n = b * self.n_kv_heads * state.capacity * self.head_dim
         kc = _state_buf(state.k_cache, what, "k_cache", (n,))
         vc = _state_buf(state.v_cache, what, "v_cache", (n,))
         s0 = int(state.cached_tokens)
@@ -522,18 +573,18 @@ class TransformerBlock(NumericModeMixin):
         )
         if step:
             # B, d_model, n_heads, n_kv_heads, head_dim, intermediate,
-            # max_tokens, cached_tokens.
+            # max_tokens, cached_tokens, window.
             new_len = ext.transformer_decode_step(
                 addrs,
                 [b, self.d_model, self.n_heads, self.n_kv_heads,
-                 self.head_dim, self.intermediate, smax, s0],
+                 self.head_dim, self.intermediate, smax, s0, self.window],
             )
         else:
-            # B, L, then the same six.
+            # B, L, then the same seven.
             new_len = ext.transformer_forward(
                 addrs,
                 [b, l, self.d_model, self.n_heads, self.n_kv_heads,
-                 self.head_dim, self.intermediate, smax, s0],
+                 self.head_dim, self.intermediate, smax, s0, self.window],
             )
         state.cached_tokens = int(new_len)
         return y
@@ -590,5 +641,46 @@ class TransformerBlock(NumericModeMixin):
                 "max_tokens) makes the fresh one)"
             )
         return self._call(x, state, step=True)
+
+    def backward(self, x, grad_output):
+        """The zero-state prefill VJP: `x` `(B, L, d_model)` float32 and
+        `grad_output` of the same shape (d loss / d block output) in; a
+        dict of float32 gradients out, keyed `"x"` plus the nine weight
+        names, each in its weight's shape. The forward is recomputed
+        from a zero cache at positions `[0, L)` under this block's
+        `window`, then the lane's backward (`transformer/checks/
+        transformer_backward.mojo`) runs on the saved stages: the
+        activation gradients are its pinned serial chains, every weight
+        gradient is a sum over this call's `B*L` tokens. IDENTICAL tier
+        only; no incoming-cache or carried-state cotangent."""
+        what = "TransformerBlock.backward"
+        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
+        if mode != "identical":
+            raise NotImplementedError(
+                f"mojolearn {what}: only the IDENTICAL zero-state prefill "
+                f"backward is implemented; got numeric_mode={mode!r}"
+            )
+        x = _batch_tokens(x, what, self.d_model, False)
+        b, l = int(x.shape[0]), int(x.shape[1])
+        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
+                         what, "grad_output", x.shape)
+        ext = self._extension()
+        native = getattr(ext, "transformer_backward", None)
+        if native is None:
+            raise RuntimeError(
+                f"mojolearn {what}: the loaded transformer extension lacks "
+                "transformer_backward; rebuild bindings/build_transformer.sh"
+                " in IDENTICAL mode"
+            )
+        w = self._w
+        grads = [np.empty_like(x)] + [np.empty_like(a) for a in w]
+        # ORDER MATCHES bindings/_mojolearn_transformer.mojo::
+        # transformer_backward_binding: x, the nine weights, grad_output,
+        # grad_x, the nine weight gradients.
+        addrs = ([_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr_ro(dy)]
+                 + [_addr(g) for g in grads])
+        native(addrs, [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+                       self.head_dim, self.intermediate, self.window])
+        return dict(zip(("x",) + self._W_NAMES, grads))
 
     __call__ = forward

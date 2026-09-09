@@ -636,6 +636,35 @@ def _gemm_op_nn() -> Int:
 
 
 # ===========================================================================
+# THE KEY SPAN OF ONE CALL. `window == 0` is the full causal profile: every
+# call reads absolute keys `[0, pos0 + l)`. `window > 0` is sliding-window
+# causal attention: the query at absolute position `p` sees keys
+# `[max(0, p - window + 1), p]`, so one call of `l` tokens starting at `pos0`
+# reads absolute keys `[llama_key_lo, pos0 + l)`. Every softmax fold below
+# walks that span ASCENDING from `+0.0`; the masked head and tail of the
+# span contribute exactly `+0.0` (contract 7.1), so the bits of a query row
+# are a pure function of (query position, its visible key range) and do not
+# depend on `pos0`, on `l`, or on how the sequence was chunked.
+# ===========================================================================
+
+
+def llama_key_lo(pos0: Int, window: Int) -> Int:
+    """First absolute key position a call starting at `pos0` reads."""
+    if window <= 0:
+        return 0
+    var lo = pos0 - window + 1
+    if lo < 0:
+        lo = 0
+    return lo
+
+
+def llama_key_span(pos0: Int, l: Int, window: Int) -> Int:
+    """Number of key positions a call of `l` tokens at `pos0` reads: the
+    packed stride of every `[B, *, L, S]` attention buffer this call."""
+    return pos0 + l - llama_key_lo(pos0, window)
+
+
+# ===========================================================================
 # DEVICE I/O PLUMBING. Not seams, not arithmetic -- these three are
 # `modeling_mamba.mojo`'s `mamba_upload`, `mamba_download` and `mamba_zeros`
 # transcribed under lane-neutral names, because a llama file calling
@@ -985,16 +1014,33 @@ struct LlamaKVCache(Movable):
     var head_dim: Int
     var s_max: Int
     var s: Int
+    var window: Int
+    var cap: Int
     var k: DeviceBuffer[DType.float32]
     var v: DeviceBuffer[DType.float32]
 
     def __init__(
-        out self, ctx: DeviceContext, b: Int, dims: LlamaDims, s_max: Int
+        out self,
+        ctx: DeviceContext,
+        b: Int,
+        dims: LlamaDims,
+        s_max: Int,
+        window: Int = 0,
     ) raises:
+        """`window == 0`: the linear cache above, packed at stride `s`.
+        `window > 0`: a RING of `window` slots per (batch, kv head), slot
+        `= position % window`, always at stride `window`; `s` still counts
+        absolute positions and `s_max` still bounds them (the rotary table
+        and DEVIATION 812's ceiling are per position, not per slot). A
+        call gathers the keys it reads out of the ring into the packed
+        work span (`kv_window_gather_kernel`) before writing its own
+        tokens back (`kv_ring_write_kernel`)."""
         if b <= 0:
             raise Error("llama: KV cache needs B > 0")
         if s_max <= 0:
             raise Error("llama: KV cache needs s_max > 0")
+        if window < 0:
+            raise Error("llama: KV cache window must be >= 0 (0 = full causal)")
         if s_max > MAX_ABS_POSITION:
             raise Error(
                 String("llama: s_max ")
@@ -1010,8 +1056,12 @@ struct LlamaKVCache(Movable):
         self.head_dim = dims.head_dim
         self.s_max = s_max
         self.s = 0
-        self.k = _zeros(ctx, b * dims.n_kv * s_max * dims.head_dim)
-        self.v = _zeros(ctx, b * dims.n_kv * s_max * dims.head_dim)
+        self.window = window
+        self.cap = s_max
+        if window > 0:
+            self.cap = window
+        self.k = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
+        self.v = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
 
 
 struct LlamaDeviceStages(Movable):
@@ -1036,6 +1086,8 @@ struct LlamaDeviceStages(Movable):
     var b: Int
     var l: Int
     var s_max: Int
+    var window: Int
+    var s_cap: Int
     var dims: LlamaDims
     var norm1_sumsq: DeviceBuffer[DType.float32]  # [M]
     var norm1_out: DeviceBuffer[DType.float32]  # [M, d_model]
@@ -1074,7 +1126,11 @@ struct LlamaDeviceStages(Movable):
         l: Int,
         s_max: Int,
         dims: LlamaDims,
+        window: Int = 0,
     ) raises:
+        """`window` must equal the cache's. The attention buffers are
+        allocated at `s_cap`: `s_max` for full causal, and the widest key
+        span a windowed call of `l` tokens can read otherwise."""
         dims.validate()
         if b <= 0 or l <= 0:
             raise Error("llama: stages need B > 0 and L > 0")
@@ -1086,9 +1142,15 @@ struct LlamaDeviceStages(Movable):
                 + String(l)
                 + "; the cache must hold at least one call's tokens"
             )
+        if window < 0:
+            raise Error("llama: stages window must be >= 0 (0 = full causal)")
         self.b = b
         self.l = l
         self.s_max = s_max
+        self.window = window
+        self.s_cap = s_max
+        if window > 0 and window - 1 + l < s_max:
+            self.s_cap = window - 1 + l
         self.dims = dims.copy()
         var m = b * l
         var dm = dims.d_model
@@ -1105,14 +1167,15 @@ struct LlamaDeviceStages(Movable):
         self.v_proj = _zeros(ctx, m * kw)
         self.q_rope = _zeros(ctx, m * qw)
         self.k_rope = _zeros(ctx, m * kw)
-        self.k_cache = _zeros(ctx, b * nkv * s_max * hd)
-        self.v_cache = _zeros(ctx, b * nkv * s_max * hd)
-        self.scores = _zeros(ctx, b * nh * l * s_max)
-        self.masked = _zeros(ctx, b * nh * l * s_max)
+        var sc = self.s_cap
+        self.k_cache = _zeros(ctx, b * nkv * sc * hd)
+        self.v_cache = _zeros(ctx, b * nkv * sc * hd)
+        self.scores = _zeros(ctx, b * nh * l * sc)
+        self.masked = _zeros(ctx, b * nh * l * sc)
         self.amax = _zeros(ctx, b * nh * l)
-        self.aexp = _zeros(ctx, b * nh * l * s_max)
+        self.aexp = _zeros(ctx, b * nh * l * sc)
         self.denom = _zeros(ctx, b * nh * l)
-        self.weights = _zeros(ctx, b * nh * l * s_max)
+        self.weights = _zeros(ctx, b * nh * l * sc)
         self.ctxv = _zeros(ctx, m * qw)
         self.o_proj = _zeros(ctx, m * dm)
         self.residual1 = _zeros(ctx, m * dm)
@@ -1125,8 +1188,8 @@ struct LlamaDeviceStages(Movable):
         self.down_proj = _zeros(ctx, m * dm)
         self.residual2 = _zeros(ctx, m * dm)
         self.qbh = _zeros(ctx, l * hd)
-        self.kbh = _zeros(ctx, s_max * hd)
-        self.sbh = _zeros(ctx, l * s_max)
+        self.kbh = _zeros(ctx, sc * hd)
+        self.sbh = _zeros(ctx, l * sc)
 
 
 # ===========================================================================
@@ -1601,6 +1664,95 @@ def kv_append_kernel(
     new_cache.unsafe_store(i, v)
 
 
+def kv_window_gather_kernel(
+    work: MutPointer[Float32, MutAnyOrigin],
+    ring: MutPointer[Float32, MutAnyOrigin],
+    fresh: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    cap_in: Int32,
+    key_lo_in: Int32,
+    pos0_in: Int32,
+    s_in: Int32,
+):
+    """The windowed twin of `kv_append_kernel`: one thread per cell of the
+    packed work span `[B, n_kv, S, head_dim]`, where work index `j` is
+    absolute position `key_lo + j`. Positions before `pos0` come out of
+    the ring at slot `position % cap`; positions from `pos0` on come out of
+    this call's token-major `fresh`. A COPY, not a seam. It runs BEFORE
+    `kv_ring_write_kernel`, because this call's tokens may evict positions
+    this call still attends to."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var cap = Int(cap_in)
+    var key_lo = Int(key_lo_in)
+    var pos0 = Int(pos0_in)
+    var s = Int(s_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * nkv * s * hd:
+        return
+    var d = i % hd
+    var rest = i // hd
+    var j = rest % s
+    var rest2 = rest // s
+    var kvh = rest2 % nkv
+    var bb = rest2 // nkv
+    var pos = key_lo + j
+    var v: Float32
+    if pos < pos0:
+        v = ring.unsafe_load(((bb * nkv + kvh) * cap + pos % cap) * hd + d)
+    else:
+        var t = pos - pos0
+        v = fresh.unsafe_load((bb * l + t) * nkv * hd + kvh * hd + d)
+    work.unsafe_store(i, v)
+
+
+def kv_ring_write_kernel(
+    ring: MutPointer[Float32, MutAnyOrigin],
+    fresh: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    cap_in: Int32,
+    pos0_in: Int32,
+):
+    """Write this call's `l` tokens into the ring at slot `position % cap`.
+    One thread per RING cell: it finds the LAST of this call's positions
+    that maps to its slot (the highest position wins, as an in-order
+    append would) and copies that token, or leaves the slot alone when no
+    token of this call lands there. No thread reads a cell another thread
+    writes, so the result does not depend on the launch."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var cap = Int(cap_in)
+    var pos0 = Int(pos0_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * nkv * cap * hd:
+        return
+    var d = i % hd
+    var rest = i // hd
+    var slot = rest % cap
+    var rest2 = rest // cap
+    var kvh = rest2 % nkv
+    var bb = rest2 // nkv
+    var p_last = pos0 + l - 1
+    var delta = (p_last % cap - slot + cap) % cap
+    var pos = p_last - delta
+    if pos < pos0:
+        return
+    var t = pos - pos0
+    ring.unsafe_store(
+        i, fresh.unsafe_load((bb * l + t) * nkv * hd + kvh * hd + d)
+    )
+
+
 # ===========================================================================
 # `eager_attention_forward` (:191-213), the pinned path. Contract section 6
 # excludes FlashAttention, SDPA, paged attention and chunked prefill, and
@@ -1787,6 +1939,8 @@ def attn_mask_kernel(
     l_in: Int32,
     s_in: Int32,
     pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
 ):
     """S13: `attn_weights + attention_mask` (:206), ONE ADD of
     `finfo(float32).min` where masked and of `+0.0` where not
@@ -1805,21 +1959,31 @@ def attn_mask_kernel(
     `s + (-FLT_MAX)` is `-FLT_MAX` exactly for `|s| < 2^103` and overflows
     to `-inf` below roughly `-1e31`. `S13_MASK_NEG_INF` is the other value.
 
-    THE MASK IS CAUSAL AND NOTHING ELSE (contract section 11): key at
-    absolute position `j` is visible to query token `t` iff
-    `j <= pos0 + t`. No sliding window, no prefix mask, no attention sink.
+    THE MASK IS CAUSAL, OPTIONALLY SLIDING-WINDOW, AND NOTHING ELSE: key
+    at absolute position `p_k = key_lo + j` is visible to the query at
+    absolute position `p_q = pos0 + t` iff `p_k <= p_q` and, when
+    `window > 0`, `p_k > p_q - window`. `window == 0` with `key_lo == 0`
+    is the full causal mask of contract section 11 exactly. No prefix
+    mask, no attention sink.
     """
     var b = Int(b_in)
     var nh = Int(nh_in)
     var l = Int(l_in)
     var s = Int(s_in)
     var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= b * nh * l * s:
         return
     var j = i % s
     var rest = i // s
     var t = rest % l
+    var p_k = key_lo + j
+    var p_q = pos0 + t
+    var visible = p_k <= p_q
+    if window > 0 and p_k <= p_q - window:
+        visible = False
 
     var fill: Float32
     comptime if SAB_S13_MASK_NEG_INF:
@@ -1828,7 +1992,7 @@ def attn_mask_kernel(
         fill = bitcast[DType.float32](UInt32(MASK_FILL_BITS))
 
     var sv = ftz(scores.unsafe_load(i))
-    if j <= pos0 + t:
+    if visible:
         comptime if SAB_S13_MASK_SELECT:
             # SABOTAGE: the unmasked cell passes through unchanged, so a
             # planted `-0.0` score survives instead of being laundered.
@@ -2252,13 +2416,18 @@ def llama_refuse_bad_call(
         "rotary_emb.inv_freq", _download(ctx, rope.inv_freq, dims.half())
     )
     if kv.s > 0:
+        # The linear cache is packed at stride `s`; the ring is always at
+        # stride `cap`, so the whole ring is read (unused slots are zeros).
+        var used = kv.s
+        if kv.window > 0:
+            used = kv.cap
         _refuse_nonfinite_named(
             "past_key_values.key_cache",
-            _download(ctx, kv.k, b * dims.n_kv * kv.s * hd),
+            _download(ctx, kv.k, b * dims.n_kv * used * hd),
         )
         _refuse_nonfinite_named(
             "past_key_values.value_cache",
-            _download(ctx, kv.v, b * dims.n_kv * kv.s * hd),
+            _download(ctx, kv.v, b * dims.n_kv * used * hd),
         )
 
 
@@ -2349,6 +2518,8 @@ def eager_attention_forward(
     l: Int,
     s: Int,
     pos0: Int,
+    key_lo: Int,
+    window: Int,
     dims: LlamaDims,
     plant_at: Int,
     plant_idx: List[Int],
@@ -2478,6 +2649,8 @@ def eager_attention_forward(
         Int32(l),
         Int32(s),
         Int32(pos0),
+        Int32(key_lo),
+        Int32(window),
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
@@ -2689,7 +2862,9 @@ def llama_attention_forward(
     var hd = dims.head_dim
     var m = b * l
     var s_old = kv.s
-    var s = s_old + l
+    var window = kv.window
+    var key_lo = llama_key_lo(s_old, window)
+    var s = llama_key_span(s_old, l, window)
 
     # ---- q_proj, k_proj, v_proj (:252-254). `nn.Linear(d_model, *,
     #      bias=attention_bias)` with `attention_bias` False, so weight
@@ -2766,30 +2941,67 @@ def llama_attention_forward(
 
     # ---- past_key_values.update (:261-262). Copies. DEVIATION 1022: the
     #      repack is OUT OF PLACE, at the NEW stride S.
-    ctx.enqueue_function[kv_append_kernel](
-        stages.k_cache.unsafe_ptr(),
-        kv.k.unsafe_ptr(),
-        stages.k_rope.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(nkv),
-        Int32(hd),
-        Int32(s_old),
-        grid_dim=(_grid(b * nkv * s * hd), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
-    ctx.enqueue_function[kv_append_kernel](
-        stages.v_cache.unsafe_ptr(),
-        kv.v.unsafe_ptr(),
-        stages.v_proj.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(nkv),
-        Int32(hd),
-        Int32(s_old),
-        grid_dim=(_grid(b * nkv * s * hd), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
+    #
+    #      `window > 0`: `stages.k_cache`/`v_cache` hold the packed KEY
+    #      SPAN this call reads (absolute `[key_lo, pos0 + l)`), gathered
+    #      from the ring plus this call's tokens; the ring itself is then
+    #      updated in place. The recorded `kv.k_cache` stage is that span.
+    if window == 0:
+        ctx.enqueue_function[kv_append_kernel](
+            stages.k_cache.unsafe_ptr(),
+            kv.k.unsafe_ptr(),
+            stages.k_rope.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        ctx.enqueue_function[kv_append_kernel](
+            stages.v_cache.unsafe_ptr(),
+            kv.v.unsafe_ptr(),
+            stages.v_proj.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[kv_window_gather_kernel](
+            stages.k_cache.unsafe_ptr(),
+            kv.k.unsafe_ptr(),
+            stages.k_rope.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(key_lo),
+            Int32(s_old),
+            Int32(s),
+            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        ctx.enqueue_function[kv_window_gather_kernel](
+            stages.v_cache.unsafe_ptr(),
+            kv.v.unsafe_ptr(),
+            stages.v_proj.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(key_lo),
+            Int32(s_old),
+            Int32(s),
+            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".kv.k_cache", stages.k_cache, b * nkv * s * hd
@@ -2802,10 +3014,37 @@ def llama_attention_forward(
     # computed. DEVIATION 1022 is why the two buffers are distinct; the rest
     # of THIS call reads `stages.k_cache` and `stages.v_cache`, which hold
     # the same bits.
-    ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
-    ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
+    if window == 0:
+        ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
+        ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
+    else:
+        # The ring takes this call's tokens AFTER the gather above read it.
+        ctx.enqueue_function[kv_ring_write_kernel](
+            kv.k.unsafe_ptr(),
+            stages.k_rope.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        ctx.enqueue_function[kv_ring_write_kernel](
+            kv.v.unsafe_ptr(),
+            stages.v_proj.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     ctx.synchronize()
-    kv.s = s
+    kv.s = s_old + l
 
     # ---- the attention interface (:264-277). Eager, pinned.
     eager_attention_forward(
@@ -2815,6 +3054,8 @@ def llama_attention_forward(
         l,
         s,
         pos0,
+        key_lo,
+        window,
         dims,
         plant_at,
         plant_idx,
@@ -3048,6 +3289,18 @@ def llama_decoder_layer_forward_planted(
             + String(kv.s + l)
             + " past its capacity "
             + String(kv.s_max)
+        )
+    if kv.window != stages.window:
+        raise Error(
+            String("llama_decoder_layer_forward: the cache has window=")
+            + String(kv.window)
+            + " but the stages were sized for window="
+            + String(stages.window)
+        )
+    if llama_key_span(kv.s, l, kv.window) > stages.s_cap:
+        raise Error(
+            "llama_decoder_layer_forward: this call's key span exceeds the"
+            " stages' attention buffers"
         )
     if pos0 + l > rope.p_max:
         raise Error(

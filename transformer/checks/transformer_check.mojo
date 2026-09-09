@@ -276,6 +276,7 @@ from transformer.checks.transformer_fixture import (
     fixture_score_plant,
     fixture_splitmix64,
     fixture_weights,
+    fixture_window,
     fixture_x,
     mask_fill,
     mode_name,
@@ -302,6 +303,8 @@ from transformer.impl.transformers.models.llama.modeling_llama import (
     _upload,
     llama_block_sabotage_name,
     llama_decoder_layer_forward_planted,
+    llama_key_lo,
+    llama_key_span,
     llama_refuse_bad_inputs,
 )
 
@@ -636,6 +639,47 @@ def token_view(
     return out^
 
 
+def token_window_view(
+    values: List[Float32],
+    i: Int,
+    b: Int,
+    l: Int,
+    s: Int,
+    qi: Int,
+    key_from: Int,
+    keep: Int,
+    dims: TransformerDims,
+) raises -> List[Float32]:
+    """`token_view` with the key axis cut at `[key_from, key_from + keep)`
+    instead of `[0, keep)`. Under a sliding window a query row's visible
+    keys are `[max(0, p - window + 1), p]`, and two calls that agree on
+    the query disagree on where that range sits in their own packed key
+    span, so the window clauses cut both sides by ABSOLUTE key position
+    and compare the visible cells. `key_from == 0` is `token_view`."""
+    var dk = stage_decode_kind(i)
+    if dk != DK_ATTN_ROW and dk != DK_KV:
+        return token_view(values, i, b, l, s, qi, keep, dims)
+    var nh = dims.n_heads
+    var nkv = dims.n_kv_heads
+    var hd = dims.head_dim
+    var out = List[Float32]()
+    if dk == DK_ATTN_ROW:
+        for bb in range(b):
+            for h in range(nh):
+                var base = ((bb * nh + h) * l + qi) * s + key_from
+                for j in range(keep):
+                    out.append(values[base + j])
+        return out^
+    for bb in range(b):
+        for kv in range(nkv):
+            for j in range(keep):
+                for d in range(hd):
+                    out.append(
+                        values[((bb * nkv + kv) * s + key_from + j) * hd + d]
+                    )
+    return out^
+
+
 # ===========================================================================
 # THE DEVICE SIDE
 #
@@ -833,6 +877,7 @@ def run_device_case(
     var b = c.b
     var l = c.l
     var cap = c.cache_cap
+    var window = fixture_window(String(c.name))
     var dw = LlamaDeviceWeights(
         ctx,
         ldims,
@@ -847,9 +892,9 @@ def run_device_case(
         w.w_up,
         w.w_down,
     )
-    var kv = LlamaKVCache(ctx, b, ldims, cap)
+    var kv = LlamaKVCache(ctx, b, ldims, cap, window)
     var rope = LlamaRopeTable(ctx, ldims, ROPE_THETA, dims.rope_positions)
-    var stages = LlamaDeviceStages(ctx, b, l, cap, ldims)
+    var stages = LlamaDeviceStages(ctx, b, l, cap, ldims, window)
     var dx = _upload(ctx, x)
     if c.plant == PLANT_CACHE_HOT_TAIL:
         var planted = plant_device_cache_tail(ctx, kv, c, dims)
@@ -892,7 +937,9 @@ def run_host_case(
     either of those two sentences is ever false, clause (a) fails at
     `kv.k_cache` with a length mismatch or at `attn.ctx` with a value
     mismatch, and that is the failure the case exists to produce."""
-    var cache = TransformerKVCache(c.b, dims, c.cache_cap)
+    var cache = TransformerKVCache(
+        c.b, dims, c.cache_cap, fixture_window(String(c.name))
+    )
     if c.plant == PLANT_CACHE_HOT_TAIL:
         cache.plant_slots(c.l, fixture_cache_tail(c))
     var rope = build_rope_table(dims)
@@ -1362,8 +1409,15 @@ def clause_a_cases() raises -> List[Int]:
       case 13  adv_cache_hot_tail   the fold walks [0, used), not [0, cap)
       case 14  adv_masked_zero_row  S14_MAX_PLAIN_COMPARE's witness
 
+      case 15  win4_b1_l16_nrep2    sliding window 4 over 16 tokens
+      case 16  win3_b2_l8_nrep1     window 3, B == 2, n_rep == 1
+      case 17  win5_b1_l12_hd24     window 5 at the inexact scale
+      case 18  win20_b1_l16_nrep2   a window wider than the sequence
+
     Case 8 (`long_l257`) joins on `MOJOLEARN_TRANSFORMER_CHECK_LONG`."""
-    var out: List[Int] = [0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14]
+    var out: List[Int] = [
+        0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18
+    ]
     if env_on("MOJOLEARN_TRANSFORMER_CHECK_LONG"):
         out.append(8)
     return out^
@@ -1439,6 +1493,8 @@ def clause_a_case(
         + String(c.l)
         + " cap="
         + String(c.cache_cap)
+        + " win="
+        + String(fixture_window(String(c.name)))
         + " dm="
         + String(c.d_model)
         + " nh="
@@ -2006,13 +2062,16 @@ def clause_d(ctx: DeviceContext, k: Int) raises -> DecodeVerdict:
     var l = c.l
     var dm = c.d_model
     var cap = l
+    var window = fixture_window(String(c.name))
 
     print(
         "clause (d): decode == prefill at the block, "
         + String(c.name)
         + ", "
         + String(l)
-        + " tokens, per token, per stage"
+        + " tokens, window "
+        + String(window)
+        + ", per token, per stage"
     )
 
     # ---- the prefill: one call, L tokens ---------------------------------
@@ -2032,7 +2091,7 @@ def clause_d(ctx: DeviceContext, k: Int) raises -> DecodeVerdict:
         ctx, ldims, RMS_EPS, w.norm1_w, w.norm2_w, w.w_q, w.w_k, w.w_v,
         w.w_o, w.w_gate, w.w_up, w.w_down,
     )
-    var kv = LlamaKVCache(ctx, 1, ldims, cap)
+    var kv = LlamaKVCache(ctx, 1, ldims, cap, window)
     var rope = LlamaRopeTable(ctx, ldims, ROPE_THETA, dims.rope_positions)
     var steps = List[List[List[Float32]]]()
     for t in range(l):
@@ -2040,13 +2099,19 @@ def clause_d(ctx: DeviceContext, k: Int) raises -> DecodeVerdict:
         for j in range(dm):
             xt.append(x[t * dm + j])
         var dxt = _upload(ctx, xt)
-        var st = LlamaDeviceStages(ctx, 1, 1, cap, ldims)
+        var st = LlamaDeviceStages(ctx, 1, 1, cap, ldims, window)
         var off = IdentityTrace.disabled()
         llama_decoder_layer_forward_planted(
             ctx, st, kv, rope, dw, dxt, 1, 1, t, PLANT_AT_NONE,
             List[Int](), List[UInt32](), off, "dec" + String(t),
         )
-        steps.append(device_dump(ctx, st, rope, dxt, 1, 1, t + 1, dims))
+        # A decode step's key span is `[key_lo(t), t]`: `t + 1` keys in
+        # full causal, at most `window` under a window.
+        steps.append(
+            device_dump(
+                ctx, st, rope, dxt, 1, 1, llama_key_span(t, 1, window), dims
+            )
+        )
         _ = st^
         _ = dxt^
 
@@ -2089,9 +2154,17 @@ def clause_d(ctx: DeviceContext, k: Int) raises -> DecodeVerdict:
             var dk = stage_decode_kind(i)
             if dk == DK_GLOBAL and t != 0:
                 continue  # DEVIATION 1111
-            var keep = t + 1
-            var a = token_view(pre[i], i, 1, l, l, t, keep, dims)
-            var b = token_view(steps[t][i], i, 1, 1, t + 1, 0, keep, dims)
+            # The visible keys of query t: `[lo, t]`. In the prefill they
+            # sit at columns `[lo, t]` of a row of `l`; in the decode step
+            # at columns `[0, keep)` of a row of `keep`. Full causal has
+            # `lo == 0`, which is the comparison this clause always made.
+            var lo = llama_key_lo(t, window)
+            var keep = t + 1 - lo
+            var span = llama_key_span(t, 1, window)
+            var a = token_window_view(pre[i], i, 1, l, l, t, lo, keep, dims)
+            var b = token_window_view(
+                steps[t][i], i, 1, 1, span, 0, 0, keep, dims
+            )
             cells += len(a)
             var d = compare_stage(
                 stage_tag(i) + " token " + String(t), a, b, False
@@ -2128,6 +2201,161 @@ def clause_d(ctx: DeviceContext, k: Int) raises -> DecodeVerdict:
     _ = dw^
     _ = kv^
     _ = rope^
+    return DecodeVerdict(bad, cells, first_token, first_stage, control)
+
+
+def clause_d_split(ctx: DeviceContext, k: Int) raises -> DecodeVerdict:
+    """Contract 7.2's other half under a window: a prefill split at the
+    case's `split` (head, then tail with the cache carried) must give the
+    tail's tokens the same bits as the whole prefill, on every stage, over
+    the keys each query can see. Under a window the second call gathers
+    its keys out of the RING, some of which the first call's own tokens
+    evicted, so this is the fixture that reaches `kv_window_gather_kernel`
+    at `l > 1` and `pos0 > 0`, which clause (d)'s one-token steps do not.
+
+    Same negative control as clause (d): tail token qi against whole token
+    `split + qi + 1` MUST differ on the token-major stages."""
+    var c = fixture_case(k)
+    if c.b != 1 or c.plant != PLANT_NONE or c.split <= 0 or c.split >= c.l:
+        raise Error(
+            String("transformer_check: clause (d) split needs B=1, no plant")
+            + " and 0 < split < l; "
+            + String(c.name)
+            + " does not qualify"
+        )
+    var dims = fixture_dims(c)
+    var ldims = llama_dims_of(dims)
+    var w = fixture_weights(c)
+    var x = fixture_x(c)
+    var l = c.l
+    var dm = c.d_model
+    var cut = c.split
+    var l2 = l - cut
+    var cap = l
+    var window = fixture_window(String(c.name))
+    print(
+        "clause (d) split: whole prefill vs "
+        + String(cut)
+        + " + "
+        + String(l2)
+        + " with the cache carried, "
+        + String(c.name)
+        + ", window "
+        + String(window)
+    )
+    var pre_c = FixtureCase(
+        c.name, 1, l, l, c.d_model, c.n_heads, c.n_kv_heads, c.head_dim,
+        c.intermediate, cap, c.plant,
+    )
+    var empty = ScorePlant.none()
+    var off_p = IdentityTrace.disabled()
+    var pre = run_device_case(ctx, pre_c, dims, w, x, empty, off_p, "spre")
+
+    var dw = LlamaDeviceWeights(
+        ctx, ldims, RMS_EPS, w.norm1_w, w.norm2_w, w.w_q, w.w_k, w.w_v,
+        w.w_o, w.w_gate, w.w_up, w.w_down,
+    )
+    var kv = LlamaKVCache(ctx, 1, ldims, cap, window)
+    var rope = LlamaRopeTable(ctx, ldims, ROPE_THETA, dims.rope_positions)
+    var x1 = List[Float32]()
+    for i in range(cut * dm):
+        x1.append(x[i])
+    var x2 = List[Float32]()
+    for i in range(cut * dm, l * dm):
+        x2.append(x[i])
+    var st1 = LlamaDeviceStages(ctx, 1, cut, cap, ldims, window)
+    var dx1 = _upload(ctx, x1)
+    var off1 = IdentityTrace.disabled()
+    llama_decoder_layer_forward_planted(
+        ctx, st1, kv, rope, dw, dx1, 1, cut, 0, PLANT_AT_NONE,
+        List[Int](), List[UInt32](), off1, "shead",
+    )
+    _ = st1^
+    _ = dx1^
+    var st2 = LlamaDeviceStages(ctx, 1, l2, cap, ldims, window)
+    var dx2 = _upload(ctx, x2)
+    var off2 = IdentityTrace.disabled()
+    llama_decoder_layer_forward_planted(
+        ctx, st2, kv, rope, dw, dx2, 1, l2, cut, PLANT_AT_NONE,
+        List[Int](), List[UInt32](), off2, "stail",
+    )
+    var lo2 = llama_key_lo(cut, window)
+    var s2 = llama_key_span(cut, l2, window)
+    var tail = device_dump(ctx, st2, rope, dx2, 1, l2, s2, dims)
+    _ = st2^
+    _ = dx2^
+    _ = dw^
+    _ = kv^
+    _ = rope^
+
+    var control = 0
+    for qi in range(l2 - 1):
+        for i in range(TRANSFORMER_STAGE_COUNT):
+            if stage_decode_kind(i) != DK_TOKEN:
+                continue
+            var a = token_view(pre[i], i, 1, l, l, cut + qi + 1, l, dims)
+            var b = token_view(tail[i], i, 1, l2, s2, qi, l, dims)
+            if len(a) != len(b):
+                continue
+            var d = compare_stage("control", a, b, False)
+            if d.n_diff > 0:
+                control += 1
+    if l2 > 1 and control == 0:
+        raise Error(
+            "transformer_check: CLAUSE (d) SPLIT IS VACUOUS: misaligned"
+            " tokens agree on every token-major stage"
+            " ([[reached-but-inert]])."
+        )
+
+    var cells = 0
+    var bad = 0
+    var first_token = -1
+    var first_stage = String("")
+    for qi in range(l2):
+        var q = cut + qi
+        var lo = llama_key_lo(q, window)
+        var keep = q + 1 - lo
+        for i in range(TRANSFORMER_STAGE_COUNT):
+            var dk = stage_decode_kind(i)
+            if dk == DK_GLOBAL and qi != 0:
+                continue
+            var a = token_window_view(pre[i], i, 1, l, l, q, lo, keep, dims)
+            var b = token_window_view(
+                tail[i], i, 1, l2, s2, qi, lo - lo2, keep, dims
+            )
+            cells += len(a)
+            var d = compare_stage(
+                stage_tag(i) + " token " + String(q), a, b, False
+            )
+            if d.n_diff > 0:
+                bad += 1
+                if first_token < 0:
+                    first_token = q
+                    first_stage = (
+                        stage_tag(i)
+                        + " on "
+                        + String(d.n_diff)
+                        + " of "
+                        + String(d.n_cells)
+                        + " cells"
+                    )
+    if bad == 0:
+        print(
+            "clause (d) split: PASS, "
+            + String(l2)
+            + " tail tokens bit-identical to the whole prefill on all "
+            + String(cells)
+            + " compared cells"
+        )
+    else:
+        print(
+            "clause (d) split: "
+            + String(bad)
+            + " stage-tokens DIFFER, first at token "
+            + String(first_token)
+            + ", "
+            + first_stage
+        )
     return DecodeVerdict(bad, cells, first_token, first_stage, control)
 
 
@@ -3060,6 +3288,41 @@ def main() raises:
                     + " a tail that is exactly +0.0 -- so a failure here is a"
                     + " finding about the profile and not about the gate."
                 )
+            # The window clauses: decode through the ring, and a split
+            # prefill that gathers evicted-or-not keys out of it.
+            var wcases: List[String] = [
+                String("win4_b1_l16_nrep2"),
+                String("win5_b1_l12_hd24"),
+                String("win20_b1_l16_nrep2"),
+            ]
+            for wi in range(len(wcases)):
+                var wk = fixture_case_by_name(wcases[wi])
+                var wv = clause_d(ctx, wk)
+                if wv.bad != 0:
+                    raise Error(
+                        String("transformer_check: CLAUSE (d) FAILED under a")
+                        + " window on "
+                        + wcases[wi]
+                        + ": "
+                        + String(wv.bad)
+                        + " stage-tokens differ, first at token "
+                        + String(wv.first_token)
+                        + ", "
+                        + wv.first_stage
+                    )
+                var sv = clause_d_split(ctx, wk)
+                if sv.bad != 0:
+                    raise Error(
+                        String("transformer_check: CLAUSE (d) SPLIT FAILED")
+                        + " under a window on "
+                        + wcases[wi]
+                        + ": "
+                        + String(sv.bad)
+                        + " stage-tokens differ, first at token "
+                        + String(sv.first_token)
+                        + ", "
+                        + sv.first_stage
+                    )
         else:
             print(
                 "clause (d): SKIPPED (set"

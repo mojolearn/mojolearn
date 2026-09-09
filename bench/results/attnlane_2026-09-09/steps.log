@@ -1,0 +1,24 @@
+== pixi install 16:37:33
+pixi_install_exit=0
+== build identical binding 16:37:36
+build_identical_exit=0
+== surface test, identical 16:37:57
+surface_identical_exit=1
+== check-transformer identical (clause a on 17 cases, clause d + window clauses) 16:37:59
+check_transformer_exit=0
+8ce661b469681b18fb5cf4d566ad78ff  /root/out/transformer.identical.card
+== check-transformer-backward identical (clause a on 17 cases) 16:38:18
+check_transformer_backward_exit=0
+7eee8da90ecb4dba1d154991e2e67e30  /root/out/transformer-backward.identical.card
+== build fast and deterministic bindings (compile only) 16:38:41
+build_fast_exit=0
+build_deterministic_exit=0
+== parent build (identical) for the window-0 byte comparison 16:39:18
+build_parent_identical_exit=0
+dump_parent_exit=1
+dump_lane_exit=1
+compare_window0_exit=1
+FileNotFoundError: [Errno 2] No such file or directory: '/root/out/dump_parent.npz'
+== timing vs torch, Samba shape 16:39:35
+timing_exit=1
+== all done 16:39:59

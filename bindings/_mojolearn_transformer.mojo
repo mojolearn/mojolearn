@@ -95,9 +95,11 @@ DEVIATION 795 -- THE TRANSFORMER SURFACE'S OWN DEPARTURES, IN ONE BLOCK.
   (v) BLAST RADIUS. This file, `python/mojolearn/_transformer_impl.py`,
   `python/mojolearn/transformer.py` and
   `python/mojolearn/tests/test_transformer_surface.py`. The lane's
-  kernels, oracle, gates and contract are untouched; the BACKWARD
-  profile (`transformer_backward_check.mojo`, present, NO recorded run)
-  is deliberately NOT on this surface.
+  kernels, oracle, gates and contract are untouched. Since 2026-09-09
+  the BACKWARD (`transformer/checks/transformer_backward.mojo`) is on
+  this surface too, as `transformer_backward`, IDENTICAL tier only, and
+  `window` (sliding-window causal attention with a ring KV cache) is
+  the tenth forward scalar.
 
 THE THREE-TIER SEMANTICS ARE THE BUILD'S, NOT THIS FILE'S. The numeric
 mode (fast / deterministic / identical) is a compile-time define
@@ -110,8 +112,9 @@ correctly labelled by accident.
 THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 
-RUN LEDGER. NOTHING IN THIS FILE HAS EVER BEEN COMPILED. It is
-UNVERIFIED, RUN OWED, per tier. Build:
+RUN LEDGER. First compiled 2026-09-02 on the Apple M4 (all three
+tiers); the window and backward entry points first compiled and ran
+on an NVIDIA L40S 2026-09-09 (identical tier), Apple RUN OWED. Build:
 `bash bindings/build_transformer.sh` (per tier via
 MOJOLEARN_NUMERIC_MODE); gate:
 `cd python && python3 -m mojolearn.tests.test_transformer_surface`.
@@ -125,8 +128,10 @@ from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
+from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
+from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
 
 # The two FROZEN arithmetic constants, from their bit authority
 # (`transformer_fixture.mojo` cross-checks both against their hex bits in
@@ -148,6 +153,11 @@ from transformer.impl.transformers.models.llama.modeling_llama import (
     _download,
     _upload,
     llama_decoder_layer_forward,
+)
+from transformer.checks.transformer_backward import (
+    BWD_ANY_SABOTAGE,
+    LlamaBackwardStages,
+    llama_decoder_layer_backward,
 )
 
 
@@ -208,6 +218,7 @@ def _transformer_run(
     it: Int,
     smax: Int,
     s0: Int,
+    window: Int,
 ) raises -> Int:
     """The GIL-free half of the two entry points: everything after the
     `PythonObject`s have been read. Builds the device weights, uploads
@@ -237,7 +248,14 @@ def _transformer_run(
             + "; the two sides of this boundary disagree about the state"
         )
 
-    var cache_n = b * nkv * smax * hd
+    if window < 0:
+        raise Error("transformer: window must be >= 0 (0 = full causal)")
+    # The caller's cache buffers: `smax` slots for the linear cache, a ring
+    # of `window` slots per (batch, kv head) under a sliding window.
+    var cap = smax
+    if window > 0:
+        cap = window
+    var cache_n = b * nkv * cap * hd
 
     var ctx = DeviceContext()
     # Host weights THROUGH the lane's own struct (its length table is the
@@ -263,7 +281,7 @@ def _transformer_run(
     # absolute-position ceiling, DEVIATION 812) BY NAME before the
     # uploads below. Zeros in with s0 == 0 IS a fresh sequence; anything
     # else is a carried one, packed at stride s0 (DEVIATION 795(ii)).
-    var kv = LlamaKVCache(ctx, b, dims, smax)
+    var kv = LlamaKVCache(ctx, b, dims, smax, window)
     kv.k = _upload(ctx, _read_f32(a[10], cache_n))
     kv.v = _upload(ctx, _read_f32(a[11], cache_n))
     kv.s = s0
@@ -271,7 +289,7 @@ def _transformer_run(
     # cache capacity: pos0 + l <= kv.s_max <= p_max holds for every legal
     # call, so the table always covers the absolute positions used.
     var rope = LlamaRopeTable(ctx, dims, ROPE_THETA, smax)
-    var stages = LlamaDeviceStages(ctx, b, l, smax, dims)
+    var stages = LlamaDeviceStages(ctx, b, l, smax, dims, window)
     var dx = _upload(ctx, _read_f32(a[0], b * l * dm))
 
     var trace = IdentityTrace.disabled()
@@ -371,17 +389,22 @@ def transformer_forward_binding(
                            812's ceiling), are refused by name in Mojo
         8  cached_tokens  the carried cache's used length; 0 for a
                            fresh sequence
+        9  window         0 for full causal attention; W > 0 for sliding-
+                           window causal attention (query p sees keys
+                           [max(0, p-W+1), p]) with k_cache/v_cache a
+                           RING of B * n_kv * W * head_dim floats, slot
+                           = position % W
 
     Profile constants (rms eps 1e-6, rope theta 10000.0, eager attention,
     the causal mask value, no biases, silu -- contract section 3) are NOT
     parameters: changing one is a v2 profile, not a knob. There is no
     bias address and no dropout: the profile REFUSES both by absence."""
     var a = _transformer_addrs(addrs, String("transformer_forward"))
-    if len(params) != 9:
+    if len(params) != 10:
         raise Error(
-            "transformer_forward: params must contain 9 values (B, L,"
+            "transformer_forward: params must contain 10 values (B, L,"
             " d_model, n_heads, n_kv_heads, head_dim, intermediate,"
-            " max_tokens, cached_tokens), got "
+            " max_tokens, cached_tokens, window), got "
             + String(len(params))
         )
     var b = Int(py=params[0])
@@ -393,9 +416,12 @@ def transformer_forward_binding(
     var it = Int(py=params[6])
     var smax = Int(py=params[7])
     var s0 = Int(py=params[8])
+    var window = Int(py=params[9])
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _transformer_run(a, b, l, dm, nh, nkv, hd, it, smax, s0)
+        out_len = _transformer_run(
+            a, b, l, dm, nh, nkv, hd, it, smax, s0, window
+        )
     return PythonObject(out_len)
 
 
@@ -413,13 +439,13 @@ def transformer_decode_step_binding(
     `addrs`: the same THIRTEEN as `transformer_forward` with L = 1
     shapes (x and y_out are B * d_model). `params`: 0 B, 1 d_model,
     2 n_heads, 3 n_kv_heads, 4 head_dim, 5 intermediate, 6 max_tokens,
-    7 cached_tokens. Returns the post-call cached_tokens."""
+    7 cached_tokens, 8 window. Returns the post-call cached_tokens."""
     var a = _transformer_addrs(addrs, String("transformer_decode_step"))
-    if len(params) != 8:
+    if len(params) != 9:
         raise Error(
-            "transformer_decode_step: params must contain 8 values (B,"
+            "transformer_decode_step: params must contain 9 values (B,"
             " d_model, n_heads, n_kv_heads, head_dim, intermediate,"
-            " max_tokens, cached_tokens), got "
+            " max_tokens, cached_tokens, window), got "
             + String(len(params))
         )
     var b = Int(py=params[0])
@@ -430,10 +456,139 @@ def transformer_decode_step_binding(
     var it = Int(py=params[5])
     var smax = Int(py=params[6])
     var s0 = Int(py=params[7])
+    var window = Int(py=params[8])
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _transformer_run(a, b, 1, dm, nh, nkv, hd, it, smax, s0)
+        out_len = _transformer_run(
+            a, b, 1, dm, nh, nkv, hd, it, smax, s0, window
+        )
     return PythonObject(out_len)
+
+
+# ===========================================================================
+# The block backward: a zero-state prefill's VJP, IDENTICAL tier only.
+# ===========================================================================
+
+
+def _transformer_backward_run(
+    a: List[Int],
+    b: Int,
+    l: Int,
+    dm: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    it: Int,
+    window: Int,
+) raises:
+    """Forward from a zero cache at positions [0, L), then
+    `llama_decoder_layer_backward` on the saved stages; the ten gradients
+    are written into the caller's buffers. The forward is recomputed here
+    rather than taken from a previous call because the lane's backward
+    reads the forward's DEVICE stages (`LlamaDeviceStages`) and those are
+    not part of the Python-visible state."""
+    var dims = LlamaDims(dm, nh, nkv, hd, it)
+    dims.validate()
+    if window < 0:
+        raise Error("transformer backward: window must be >= 0")
+    var qw = dims.q_width()
+    var kw = dims.kv_width()
+    var m = b * l
+    var ctx = DeviceContext()
+    var w = LlamaDeviceWeights(
+        ctx,
+        dims,
+        RMS_EPS,
+        _read_f32(a[1], dm),
+        _read_f32(a[2], dm),
+        _read_f32(a[3], qw * dm),
+        _read_f32(a[4], kw * dm),
+        _read_f32(a[5], kw * dm),
+        _read_f32(a[6], dm * qw),
+        _read_f32(a[7], it * dm),
+        _read_f32(a[8], it * dm),
+        _read_f32(a[9], dm * it),
+    )
+    var kv = LlamaKVCache(ctx, b, dims, l, window)
+    var rope = LlamaRopeTable(ctx, dims, ROPE_THETA, l)
+    var stages = LlamaDeviceStages(ctx, b, l, l, dims, window)
+    var dx = _upload(ctx, _read_f32(a[0], m * dm))
+    var off = IdentityTrace.disabled()
+    llama_decoder_layer_forward(
+        ctx, stages, kv, rope, w, dx, b, l, 0, off, String("pyf")
+    )
+    var bst = LlamaBackwardStages(ctx, b, l, l, dims)
+    var d_out = _read_f32(a[10], m * dm)
+    var offb = IdentityTrace.disabled()
+    llama_decoder_layer_backward(
+        ctx, bst, stages, w, rope.cos, rope.sin, dx, d_out, b, l, 0,
+        offb, String("pyb"),
+    )
+    _write_f32(a[11], _download(ctx, bst.d_x, m * dm))
+    _write_f32(a[12], _download(ctx, bst.dw_norm1, dm))
+    _write_f32(a[13], _download(ctx, bst.dw_norm2, dm))
+    _write_f32(a[14], _download(ctx, bst.dw_q, qw * dm))
+    _write_f32(a[15], _download(ctx, bst.dw_k, kw * dm))
+    _write_f32(a[16], _download(ctx, bst.dw_v, kw * dm))
+    _write_f32(a[17], _download(ctx, bst.dw_o, dm * qw))
+    _write_f32(a[18], _download(ctx, bst.dw_gate, it * dm))
+    _write_f32(a[19], _download(ctx, bst.dw_up, it * dm))
+    _write_f32(a[20], _download(ctx, bst.dw_down, dm * it))
+    _ = bst^
+    _ = stages^
+    _ = w^
+    _ = kv^
+    _ = rope^
+    _ = dx^
+    _ = ctx^
+
+
+def transformer_backward_binding(
+    addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The zero-state prefill VJP of one block call, IDENTICAL tier only.
+
+    `addrs` is TWENTY-ONE addresses: 0 x (B*L*d_model), 1-9 the nine
+    weights in `transformer_forward`'s order, 10 grad_output (B*L*d_model),
+    11 grad_x (B*L*d_model, WRITTEN), 12-20 the nine weight gradients in
+    the same order and shapes as the weights (WRITTEN). `params`: 0 B,
+    1 L, 2 d_model, 3 n_heads, 4 n_kv_heads, 5 head_dim, 6 intermediate,
+    7 window. The activation gradients are the lane's pinned chains; every
+    weight gradient is a sum over this call's B*L tokens."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error(
+            "transformer backward: only the IDENTICAL zero-state prefill"
+            " backward is implemented"
+        )
+    if len(addrs) != 21 or len(params) != 8:
+        raise Error(
+            "transformer backward: expected 21 addresses and 8 scalars (B,"
+            " L, d_model, n_heads, n_kv_heads, head_dim, intermediate,"
+            " window)"
+        )
+    var a = List[Int]()
+    for i in range(21):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error(
+                "transformer backward: null buffer address at slot "
+                + String(i)
+            )
+        a.append(address)
+    var b = Int(py=params[0])
+    var l = Int(py=params[1])
+    var dm = Int(py=params[2])
+    var nh = Int(py=params[3])
+    var nkv = Int(py=params[4])
+    var hd = Int(py=params[5])
+    var it = Int(py=params[6])
+    var window = Int(py=params[7])
+    if b <= 0 or l <= 0 or dm <= 0:
+        raise Error("transformer backward: B, L and d_model must be positive")
+    with GILReleased(Python()):
+        _transformer_backward_run(a, b, l, dm, nh, nkv, hd, it, window)
+    return PythonObject(0)
 
 
 @export
@@ -442,7 +597,12 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
     # be run by a gate and to FAIL; a Python surface that quietly served
     # one would be a wrong answer wearing a green label. Refuse to exist
     # instead.
-    comptime if BLOCK_ANY_SABOTAGE:
+    comptime if (
+        BLOCK_ANY_SABOTAGE
+        or BWD_ANY_SABOTAGE
+        or GEMM_ANY_BWD_SABOTAGE
+        or GEMM_ANY_SABOTAGE
+    ):
         abort(
             String(
                 "_mojolearn_transformer: refusing to initialize -- a"
@@ -450,8 +610,8 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
                 " defines are for the lane gates (transformer/checks/),"
                 " never for a shipped binding; rebuild with"
                 " bash bindings/build_transformer.sh and no"
-                " MOJOLEARN_TRANSFORMER_SABOTAGE_* or"
-                " MOJOLEARN_BATCHINV_SABOTAGE_* define."
+                " MOJOLEARN_TRANSFORMER_SABOTAGE_*,"
+                " MOJOLEARN_BATCHINV_SABOTAGE_* or GEMM sabotage define."
             )
         )
     try:
@@ -464,6 +624,7 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         m.def_function[transformer_decode_step_binding](
             "transformer_decode_step"
         )
+        m.def_function[transformer_backward_binding]("transformer_backward")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_transformer: ", e))

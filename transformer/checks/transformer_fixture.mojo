@@ -233,7 +233,7 @@ def plant_every_kth(mut values: List[Float32], k: Int, phase: Int, bits: UInt32)
 
 
 
-comptime FIXTURE_CASE_COUNT = 15
+comptime FIXTURE_CASE_COUNT = 19
 
 comptime PLANT_NONE = 0
 comptime PLANT_X_SIGNED_ZEROS = 1
@@ -327,6 +327,26 @@ def fixture_case(k: Int) raises -> FixtureCase:
             "adv_masked_zero_row", 1, 4, 4, 32, 2, 1, 16, 64, 4,
             PLANT_MASKED_ZERO_ROW,
         )
+    # Sliding-window cases (window in `fixture_window`, keyed by name):
+    # every query sees at most `window` keys, the KV cache is a ring of
+    # `window` slots, and a split prefill or a decode step must gather
+    # evicted-or-not keys out of the ring bit for bit.
+    if k == 15:
+        return FixtureCase(
+            "win4_b1_l16_nrep2", 1, 16, 5, 32, 2, 1, 16, 64, 16, PLANT_NONE
+        )
+    if k == 16:
+        return FixtureCase(
+            "win3_b2_l8_nrep1", 2, 8, 3, 32, 2, 2, 16, 64, 8, PLANT_NONE
+        )
+    if k == 17:
+        return FixtureCase(
+            "win5_b1_l12_hd24", 1, 12, 7, 48, 2, 1, 24, 64, 12, PLANT_NONE
+        )
+    if k == 18:
+        return FixtureCase(
+            "win20_b1_l16_nrep2", 1, 16, 6, 32, 2, 1, 16, 64, 16, PLANT_NONE
+        )
     raise Error(
         String("transformer_fixture: no case ")
         + String(k)
@@ -334,6 +354,22 @@ def fixture_case(k: Int) raises -> FixtureCase:
         + String(FIXTURE_CASE_COUNT)
         + ")"
     )
+
+
+def fixture_window(name: String) -> Int:
+    """The case's sliding-window width, 0 for full causal. Keyed by NAME
+    rather than carried as a `FixtureCase` field, because
+    `checks/batch_invariance_check.mojo` constructs `FixtureCase`
+    positionally and is not this lane's to edit."""
+    if name == "win4_b1_l16_nrep2":
+        return 4
+    if name == "win3_b2_l8_nrep1":
+        return 3
+    if name == "win5_b1_l12_hd24":
+        return 5
+    if name == "win20_b1_l16_nrep2":
+        return 20
+    return 0
 
 
 def fixture_case_by_name(name: String) raises -> Int:
