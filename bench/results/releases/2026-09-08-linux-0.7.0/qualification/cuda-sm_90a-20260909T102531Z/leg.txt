@@ -1,0 +1,28 @@
+vendor=amd
+arch=hip/gfx942
+image=236925144
+size=gpu-h100x1-80gb
+region=nyc2
+commit=d0228a0701886b5946e5ec64ad7efd4302a9ec6e
+archive_sha256=5fe8dd98fcd0ae5bd020964dbac560dae2ab44d5ad3642b8710752b739c72fdb
+archive_bytes=8601344
+deadman_seconds=3600
+fetch_reserve=900
+started=2026-09-09T10:25:48Z
+droplet=599004142
+created=2026-09-09T10:25:49Z
+ip=162.243.65.216
+ON_DROPLET_DEADMAN_ARMED
+qualify_corpus_cases=base_b2_l4_d8 mamba2/m2_base_b2_l4_d32 mamba3/m3_base_b2_l4_d32
+qualify_wheel=mojolearn-0.7.0-py3-none-manylinux_2_35_x86_64.whl
+qualify_wheel_sha256=afb5dd8a06ba62ff222168fad7440e6558fb7e1fd43018ac7c648321e4fb9d75
+work_seconds=2400
+build_exit=1
+qualify_arch=sm_90a
+qualify_vendor=None
+qualify_jobs=0
+qualify_wheel_sha256=None
+qualify_admission=RED
+qualify_error=qualification is about a different wheel
+destroyed=2026-09-09T10:29:25Z verified_http_404
+finished=2026-09-09T10:29:25Z rc=0

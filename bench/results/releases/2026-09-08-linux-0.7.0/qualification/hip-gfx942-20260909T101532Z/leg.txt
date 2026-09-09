@@ -1,0 +1,26 @@
+vendor=amd
+arch=hip/gfx942
+image=188571990
+size=gpu-mi325x1-256gb
+region=tor1
+commit=3eaa43c32aec0896b2658d3b3191e0a1e5c71f44
+archive_sha256=a509a8ad979293e5f4dfecaade6e39b67f574200da48746429c7db39fc739a4e
+archive_bytes=8600949
+deadman_seconds=3600
+fetch_reserve=900
+started=2026-09-09T10:15:48Z
+droplet=599002348
+created=2026-09-09T10:15:50Z
+ip=138.197.161.182
+ON_DROPLET_DEADMAN_ARMED
+qualify_corpus_cases=base_b2_l4_d8 mamba2/m2_base_b2_l4_d32 mamba3/m3_base_b2_l4_d32
+qualify_wheel=mojolearn-0.7.0-py3-none-manylinux_2_35_x86_64.whl
+qualify_wheel_sha256=afb5dd8a06ba62ff222168fad7440e6558fb7e1fd43018ac7c648321e4fb9d75
+work_seconds=2400
+build_exit=0
+qualify_arch=gfx942
+qualify_jobs=0
+qualify_failed=0
+qualify_admission=RED
+destroyed=2026-09-09T10:18:27Z verified_http_404
+finished=2026-09-09T10:18:27Z rc=0

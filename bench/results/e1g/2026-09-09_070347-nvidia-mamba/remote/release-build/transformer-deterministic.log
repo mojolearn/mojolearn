@@ -1,0 +1,76 @@
+789 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50fe80000000, nodemask=1)
+{"package": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/__init__.py", "version": "0.7.0", "vendor": "cuda", "mode": "deterministic"}
+{"package": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/__init__.py", "version": "0.7.0", "vendor": "cuda", "mode": "deterministic", "wheel_sha256": "afb5dd8a06ba62ff222168fad7440e6558fb7e1fd43018ac7c648321e4fb9d75", "installed_bindings": {"_mojolearn": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn.so", "sha256": "7ec0ba52a0c5282be1bb7177940d1242f9e0c14ec0710f1370e48935f5363a5b", "mode_code": 2}, "_mojolearn_arima": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_arima.so", "sha256": "151348f7cb88e0afedccc196132f83d5739aedfb6e9d4e3b370252e4018ca75b", "mode_code": 2}, "_mojolearn_estimators": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_estimators.so", "sha256": "88087a6382b678ead0d213b3dafc07911172b92fcd1650f467c3f4b49c034a6a", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_gbdt": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_gbdt.so", "sha256": "ea24c67fba3dc4b32a1472a280f708b20396b781afa3203480f6b5d16bc3a3c8", "mode_code": 2}, "_mojolearn_gp": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_gp.so", "sha256": "2289293ebce0c1cc688b5a90c01186fe29633deaff48c59a66fe924f67811eb4", "mode_code": 2}, "_mojolearn_linalg": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_linalg.so", "sha256": "9553f7acd3fc40dbafcede718705e46614c1ce556ff175b556ba1adeef2ac173", "mode_code": 2}, "_mojolearn_mamba": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_mamba.so", "sha256": "cb3bf67126ce9579a74cc10ba918856d2c15eb957990ff4e5ca9c6d38f4de60f", "mode_code": 2}, "_mojolearn_metrics": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_metrics.so", "sha256": "00f85a3299fde27d8b627e490eddc2e2e3e8eabbd69668ba5992db4027ed69a4", "mode_code": 2}, "_mojolearn_rf": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_rf.so", "sha256": "2540167c15ec5ebc6ee2c53c89d9bcd2cd5e725872b4fda3e3e30f2221d09819", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_solver": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_solver.so", "sha256": "56e46eab4b3dc18cce96ae14b8932a605d06e11cf3f85830b3d64ad7daf2d586", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_svm": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_svm.so", "sha256": "9fc1d947c2f460072fdf012a25492087fee6290499ef88b63e77360adf5e7f1b", "mode_code": 2}, "_mojolearn_training": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_training.so", "sha256": "613fe2f633620571d49741b2c671481a686569c83687de1e7a2aa53e4972595b", "mode_code": 2}, "_mojolearn_transformer": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_transformer.so", "sha256": "34310e8204bdb0b9b8c913a52fbebf53790c15de46ed2fb8b3f78e3899b58208", "mode_code": 2}, "_mojolearn_trees": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_trees.so", "sha256": "bbfb3f811b10d6e8136ee3bb67c24db5a4c6b542de608e068119e2d1c085b891", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_tsa": {"path": "/root/gemm_leg_out/release-build/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/deterministic/_mojolearn_tsa.so", "sha256": "575d0e97e6222c0a7645308c36de85c4eb6c4f016e0e1ec9f1eefeff491e0c20", "mode_readback": "unavailable; build provenance and functional gate required"}}, "device_architecture": "sm_89", "selected_architecture": "sm_89", "architecture_probe": "compute capability from the CUDA driver", "architecture_override_absent": true}
+
+  REFUSALS (Python side, no device)
+    pass a float64 x is refused BY NAME (no silent downcast)
+    pass the refusal message names bfloat16 (a reduced-precision profile ships under its own version, contract section 11)
+    pass a 2-D x is refused for forward (only step squeezes)
+    pass an x whose d_model is not the weights' is refused
+    pass a multi-token step is refused
+    pass step without a state is refused
+    pass a float64 weight is refused by its own name
+    pass q_proj/o_proj are square at every legal config, so their transpose is shape-indistinguishable (NAMED LIMIT: no exact-shape check can see it; the trap is asserted on the non-square k_proj below)
+    pass a transposed projection cannot cross as a plausible buffer (exact-shape refusal; the OP_NT trap's Python face)
+    pass a missing weight name is refused (no silent zero weight)
+    pass d_model = 32 with n_heads = 3 is refused (d_model == n_heads*head_dim; LlamaDims.validate carries the same rule)
+    pass a wrong-shape state buffer is refused by name
+    pass a state allocated for another batch size is refused
+
+  REFERENCE (contract float64, config A: n_kv 1, n_rep 2, it 64)
+    pass y has x's shape
+    pass y is finite
+    pass block output matches the contract's float64 reference at the adopted anchor tolerance (rtol 1e-5, atol 1e-6; header says how to recalibrate honestly if accuracy alone fails it)
+
+  REFERENCE (contract float64, config B: n_kv 2, n_rep 1, it 300)
+    pass y has x's shape
+    pass block output matches the reference with n_rep 1 and the k = 300 down_proj (the GEMM's P = 3 ragged fold inside the composition, contract section 3)
+
+  STATE (cached_tokens and the packed cache)
+    pass cached_tokens after an L=4 prefill is 4
+    pass [REPORT, not asserted] a carried-state prefill == the stateless prefill (the discarded cache is not an input): same
+    pass keys() hands back the packed used region's shape
+    pass values() hands back the packed used region's shape
+    pass the key cache is nonzero after a prefill (the state really came back)
+
+  DECODE (bitwise reported; deterministic tier)
+    pass [REPORT, not asserted] step token 0 == prefill token 0: same
+    pass [REPORT, not asserted] step token 1 == prefill token 1: same
+    pass [REPORT, not asserted] step token 2 == prefill token 2: same
+    pass [REPORT, not asserted] step token 3 == prefill token 3: same
+    pass cached_tokens after 4 steps is 4
+    pass [REPORT, not asserted] the packed key cache after 4 steps == the prefill's: same
+    pass [REPORT, not asserted] the packed value cache after 4 steps == the prefill's: same
+
+  RESUMPTION (bitwise reported; deterministic tier)
+    pass cached_tokens after L-1 tokens is L-1
+    pass [REPORT, not asserted] the L-1 prefill's rows == the whole prefill's first L-1 rows (prefix property): same
+    pass cached_tokens after the step is L
+    pass [REPORT, not asserted] one decode step after L-1 == prefill token L-1 (contract 7.2: one spelling serves both paths): same
+    pass [REPORT, not asserted] split == whole: the packed key cache: same
+    pass [REPORT, not asserted] split == whole: the packed value cache: same
+
+  DETERMINISM (repeat call bitwise ASSERTED)
+    pass the same fresh prefill through the binding twice is byte-identical
+
+  MOJO REFUSALS (reached from Python, refused by name)
+    pass a step past max_tokens is refused IN MOJO by name (the cache would grow past its capacity)
+    pass max_tokens past 8192 is refused IN MOJO by name (DEVIATION 812's absolute-position ceiling)
+    pass cached_tokens outside [0, max_tokens] is refused BY NAME at the binding boundary (DEVIATION 795(iv): the two sides disagree about the state)
+    pass a NaN in x is refused IN MOJO under the upstream name (llama_refuse_bad_call; payloads are vendor-shaped)
+    pass an odd head_dim is refused IN MOJO by name (RoPE pairs halves; LlamaDims.validate)
+
+  CORPUS DEBT (transformer/corpus)
+    pass transformer/corpus found walking up from this file
+    pass [OWED, recorded debt -- no comparison ran] corpus tolerance arm: transformer/corpus holds a generator and no case data (the lane's phase 7 row: gen_corpus.py has never been executed). The float64 reference above is this file's own transcription, not an independent artifact. This row FAILS once case data appears, until the ref64 arm is wired
+
+  44 checks, 0 failed
+
+test_transformer_surface: the deterministic arms passed. The contract
+reference (both configs), the shapes, the cache bookkeeping
+and every refusal hold.
+THE CROSS-PATH BITWISE ARMS WERE REPORTED (repeat-run asserted): fast promises
+speed only (the lane's clause (d) fails under FAST by
+construction) and deterministic promises repeat-run bits
+only. Re-run under MOJOLEARN_NUMERIC_MODE=identical for the
+fully asserted form.

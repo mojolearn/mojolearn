@@ -1,0 +1,2 @@
+mojolearn @ file:///root/mojolearn-0.7.0-py3-none-manylinux_2_35_x86_64.whl
+numpy==2.2.6

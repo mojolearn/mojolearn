@@ -1,0 +1,1 @@
+/usr/bin/python3 tools/nvidia_serial_guard.py --seconds 60 --rss-gib 12 -- /usr/bin/python3 /root/gemm_leg_out/release-build/preflight.py /root/mojolearn /root/gemm_leg_out/release-build cuda sm_89 fe6067ba34d223c7e7adbcd005bf1fa976c29d0e 

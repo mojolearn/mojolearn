@@ -1,0 +1,2 @@
+mojolearn @ file:///root/mojolearn-0.7.0-py3-none-manylinux_2_35_x86_64.whl#sha256=afb5dd8a06ba62ff222168fad7440e6558fb7e1fd43018ac7c648321e4fb9d75
+numpy==2.4.6

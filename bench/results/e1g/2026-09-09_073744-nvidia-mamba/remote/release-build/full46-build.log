@@ -1,0 +1,82 @@
+pid 856's current affinity list: 0,1
+pid 856's new affinity list: 0,1
+pid 869's current affinity list: 0,1
+pid 869's new affinity list: 0,1
+[11:41:44 build_sets] repo /root/mojolearn, dest /root/gemm_leg_out/release-build/build, tiers: fast deterministic identical, jobs: 1
+[11:41:44 build_sets] pixi env: default
+[12:11:35 build_sets] builds finished in 1791s (rc=0)
+[12:11:42 build_sets] vendor read-back per binary:
+    fast _mojolearn cuda
+    fast _mojolearn_gbdt cuda
+    fast _mojolearn_estimators cuda
+    fast _mojolearn_rf cuda
+    fast _mojolearn_trees cuda
+    fast _mojolearn_svm cuda
+    fast _mojolearn_solver cuda
+    fast _mojolearn_metrics cuda
+    fast _mojolearn_tsa cuda
+    fast _mojolearn_linalg cuda
+    fast _mojolearn_arima cuda
+    fast _mojolearn_training cuda
+    fast _mojolearn_gp cuda
+    fast _mojolearn_mamba cuda
+    fast _mojolearn_transformer cuda
+    deterministic _mojolearn cuda
+    deterministic _mojolearn_gbdt cuda
+    deterministic _mojolearn_estimators cuda
+    deterministic _mojolearn_rf cuda
+    deterministic _mojolearn_trees cuda
+    deterministic _mojolearn_svm cuda
+    deterministic _mojolearn_solver cuda
+    deterministic _mojolearn_metrics cuda
+    deterministic _mojolearn_tsa cuda
+    deterministic _mojolearn_linalg cuda
+    deterministic _mojolearn_arima cuda
+    deterministic _mojolearn_training cuda
+    deterministic _mojolearn_gp cuda
+    deterministic _mojolearn_mamba cuda
+    deterministic _mojolearn_transformer cuda
+    identical _mojolearn cuda
+    identical _mojolearn_gbdt cuda
+    identical _mojolearn_estimators cuda
+    identical _mojolearn_rf cuda
+    identical _mojolearn_trees cuda
+    identical _mojolearn_svm cuda
+    identical _mojolearn_solver cuda
+    identical _mojolearn_metrics cuda
+    identical _mojolearn_tsa cuda
+    identical _mojolearn_linalg cuda
+    identical _mojolearn_arima cuda
+    identical _mojolearn_training cuda
+    identical _mojolearn_gp cuda
+    identical _mojolearn_mamba cuda
+    identical _mojolearn_transformer cuda
+    identical _mojolearn_byte_lm cuda
+[12:11:43 build_sets] GPU architectures embedded, per binary:
+         46 sm_90a
+[12:11:43 build_sets] architecture set: sm_90a 
+[12:11:43 build_sets] architecture: sm_90a (requested: sm_90a)
+[12:11:43 build_sets] vendor: cuda
+[12:12:21 build_sets] CPU ISA baseline: clean at x86-64-v3 (46 binaries)
+[12:12:21 build_sets] patchelf: /root/gemm_leg_out/tools-venv/bin/patchelf
+[12:12:21 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/default/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 97.0 MB, runtime libraries 3.2 MB, uncompressed set 100.2 MB
+vendor=cuda
+arch=sm_90a
+gpu_archs_requested=sm_90a
+build_rc=0 stage_rc=0
+build_seconds=1842
+set_fast_count=15
+set_fast_bytes=31715631
+set_deterministic_count=15
+set_deterministic_bytes=31404455
+set_identical_count=16
+set_identical_bytes=33924976
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=22832041
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

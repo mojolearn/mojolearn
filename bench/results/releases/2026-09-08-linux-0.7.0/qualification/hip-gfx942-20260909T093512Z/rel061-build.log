@@ -1,0 +1,12 @@
+pid 3899's current affinity list: 0-19
+pid 3899's new affinity list: 0,1
+Traceback (most recent call last):
+  File "<stdin>", line 5, in <module>
+  File "/root/mojolearn/tools/check_linux_release_qualification.py", line 212, in release_audit
+    extensions, sets = inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/check_linux_release_qualification.py", line 116, in inspect_wheel
+    require(declared == set(paths), 'RECORD does not cover the complete wheel')
+  File "/root/mojolearn/tools/verify_linux_surface_qualification.py", line 180, in require
+    raise ValueError(message)
+ValueError: RECORD does not cover the complete wheel

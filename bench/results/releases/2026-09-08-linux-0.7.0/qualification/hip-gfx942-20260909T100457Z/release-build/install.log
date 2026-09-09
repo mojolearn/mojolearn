@@ -1,0 +1,7 @@
+Processing /root/mojolearn-0.7.0-py3-none-manylinux_2_35_x86_64.whl
+Collecting numpy>=1.24 (from mojolearn==0.7.0)
+  Downloading numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Downloading numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 187.4 MB/s eta 0:00:00
+Installing collected packages: numpy, mojolearn
+Successfully installed mojolearn-0.7.0 numpy-2.5.3
