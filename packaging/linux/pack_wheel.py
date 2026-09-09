@@ -108,6 +108,24 @@ LINUX_VENDORS = ("cuda", "hip")
 # authored under; the profile itself is RELEASE_PROFILE (`release-linux3`) and
 # ships whatever version python/mojolearn/_version.py says. DEVIATION 2290.
 RELEASE_061_SETS = {("cuda", "sm_89"), ("cuda", "sm_90"), ("hip", "gfx942")}
+# DEVIATION 2293: the Hopper slot accepts sm_90 OR sm_90a, because the
+# compiler decides which one it emits and it does not emit sm_90 on an H100.
+# Asked for sm_90 with --target-accelerator, `mojo` produced 46 binaries all
+# carrying sm_90a, and build_sets.sh refused the set rather than ship it under
+# a name it was not verified to carry -- correctly, and that refusal is the
+# only reason this was noticed rather than shipped.
+#
+# sm_90a is not a downgrade and not a workaround. `_backend.py` already treats
+# it as the PREFERRED layout for this case: a device reporting sm_90 takes a
+# carried sm_90a as "architecture-specific build for this exact device",
+# ahead of any family fallback, because the `a` restricts WHICH DEVICES the
+# code runs on and a Hopper device is the one it restricts to. Every sm_90
+# device is Hopper, so no device loses the set by this name.
+#
+# What is NOT relaxed: exactly three sets, one per architecture slot, each
+# still verified by reading the architecture back out of the binaries on the
+# box. A set whose read-back disagrees with its directory is still refused.
+RELEASE_HOPPER_ALTS = {("cuda", "sm_90"), ("cuda", "sm_90a")}
 # DEVIATION 2290. ONE reader for the release version and ONE spelling of the
 # profile name, owned by tools/verify_linux_surface_qualification.py and shared
 # with the qualification checker and the alpha artifact verifier. This packer
@@ -127,8 +145,15 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
     (DEVIATION 2290); a literal never decides it.
     """
     keys = [(v, a) for v, a, _, _, _ in sets]
-    if version != read_version(source_root) or len(keys) != 3 or set(keys) != RELEASE_061_SETS:
-        raise SystemExit(RELEASE_PROFILE + ' requires exactly CUDA sm_89/sm_90 and HIP gfx942')
+    keyset = set(keys)
+    # DEVIATION 2293: normalise the Hopper slot before comparing, so sm_90 and
+    # sm_90a are the same slot and neither can appear twice.
+    hopper = keyset & RELEASE_HOPPER_ALTS
+    normalised = (keyset - RELEASE_HOPPER_ALTS) | ({("cuda", "sm_90")} if hopper else set())
+    if (version != read_version(source_root) or len(keys) != 3
+            or len(hopper) > 1 or normalised != RELEASE_061_SETS):
+        raise SystemExit(RELEASE_PROFILE + ' requires exactly CUDA sm_89, CUDA sm_90'
+                         ' or sm_90a, and HIP gfx942')
     if len(proof_paths) != 3:
         raise SystemExit(RELEASE_PROFILE + ' requires three complete architecture build proofs')
     payload = {f'mojolearn/{rel}': sha(path).hex()
