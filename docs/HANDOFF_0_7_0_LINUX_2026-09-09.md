@@ -25,7 +25,15 @@ It lives in this session's scratchpad, which is NOT durable:
         qualification/                  the staged admission root
         proofs/                         cuda-sm_89.json cuda-sm_90a.json hip-gfx942.json
 
-**COPY THAT OUT BEFORE IT IS REAPED.** Rebuilding it costs three rentals.
+**ALREADY COPIED OUT**, because the scratchpad is not durable:
+
+    ~/mojolearn-evidence-local/2026-09-09-070-release-artifacts/
+      wheel/        the wheel + dir-entry-strip.json, sha verified after the copy
+      proofs/       the three build proofs
+      qualification/ the staged admission root incl. the sm_90a smoke marker
+      SIZES-0.7.0-linux.json
+
+Rebuilding it would cost three rentals, so publish from that copy.
 
 Frozen build commit: `340de7a1`. The three proofs and the wheel all name it.
 Later commits changed only files outside the native inventory, so the
