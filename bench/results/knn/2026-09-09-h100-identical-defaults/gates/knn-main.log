@@ -1,0 +1,99 @@
+2319 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x507100000000, nodemask=1)
+check_hardware_matrix OK: apple column = the old constants bit-for-bit (10 cores, 3072 threads/core, 32 KB wall, occupancy 12); nvidia resolves 108/2048/48KB wall/164K partition -> 8 blocks; amd resolves 110/2048/64K partition -> 3 blocks (LDS term binding); readers (TARGET_GPU_CORES, max_active_blocks_per_core, gram chunk count = 128, gram dispatch, fused_l2_knn_grid) all agree with the table; build column nvidia; identity floor frozen at profile 1 (32 KB / 32 lanes / block 512): all 6 vendor columns meet it, the portable baseline is REFUSED, apple/nvidia/amd smem modes unchanged by the budget rewrite
+check_knn OK: 64 queries x k=8 over 4096 index points, every returned neighbor is in the exact true set
+check_knn_reach_by_sabotage OK: index_norm moved 512/512 neighbors; query_norm offset moved 0 sets, which is the predicted shape
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+check_vendor_topk_matches_ported OK: nn.topk.top_k and the ported RAFT radix select agree on all 512 neighbours
+check_fused_l2_knn OK: k = 1, 8, 32, 64 over 53 queries x 4093 index x 20 features, every slot matches the host Float64 oracle in order, and is_sqrt is exactly one square root away
+check_fused_edge_shapes OK: k = 1, 32, 33, 64 over 17 queries x 1013 index x 13 features -- a partial tile on Mblk, Nblk and Kblk at once, and both WarpSelect instantiations
+check_fused_reach_by_sabotage OK: index_norm ramp moved 424/424 neighbours and 424 distances; query_norm offset moved 0, which is the predicted shape
+check_fused_queue_reach_by_sabotage OK: a co-located point planted at index column 3971 for query 0 came back at rank 0 at exactly 0.0, shifted that row's tail by exactly one, and moved no other row
+check_fused_k_ceiling OK: k = 64 accepted, k = 65 refused with their ASSERT message
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+Warning: Unsorted top-k is not supported on GPU. Falling back to sorted top-k.
+check_dispatch_takes_fused OK: with KNN_METHOD_FUSED, k=8 wrote out_idx and left out_idx32 at its sentinel and k=65 did the opposite, so the `k <= 64` branch at knn_brute_force.cuh:443 is wired both ways; with the argument omitted, the AUTO default took TILED on BOTH shapes, which is DEVIATION 509's pin (the arm may not depend on the query count when the two arms break ties differently, and the FUSED arm 502 used to pin to refuses outright on a 64-lane column)
+      launch config RECORDED on this column: (2000, 200000) -> (7, 125); the M4 transcription is (1, 120)
+      launch config RECORDED on this column: (2000, 20000) -> (7, 125); the M4 transcription is (1, 120)
+      launch config RECORDED on this column: (1920, 200000) -> (8, 120); the M4 transcription is (1, 120)
+      launch config RECORDED on this column: (1904, 200000) -> (8, 119); the M4 transcription is (2, 119)
+      launch config RECORDED on this column: (53, 4093) -> (16, 4); the M4 transcription is (16, 4)
+      launch config RECORDED on this column: (100, 4093) -> (16, 7); the M4 transcription is (16, 7)
+      launch config RECORDED on this column: (640, 4093) -> (16, 40); the M4 transcription is (3, 40)
+check_launch_config_values OK: the M4 transcriptions are RECORDED beside this column's grids (above); the 49152-byte threadgroup wall raises one byte past
+check_fused_griddimx_merge OK: computed grid (16, 4) matches the oracle per slot at k=10; poisoning the last producer moved 150 slots; forced grid_x=5 with a partial last x-tile is exact; grid_x=1 ignores the sabotage entirely
+check_fused_griddimx_one_capped_y RECORDED: this column computes (4, 125) at 2000 x 1013, not the M4's capped-y regime (1, 120); the regime is exercised where it exists
+check_plan_query_tile: OK (bench shape untouched, cap fires, floor holds, query clamp holds, clamp beats floor)
+check_knn_search_matches_host: OK (320 neighbours exact, worst distance error 1.3195489588224696e-06, query_tile=64)
+check_knn_search_arms_agree: OK (TILED, FUSED and AUTO all exact and identically ordered)
+check_getuniquelabels: OK (negative label, gap, repeats -> sorted set of 4; monotonic ranks as computed by hand)
+check_knn_classify_matches_host_transcription: OK (64 labels and 192 proba cells bit-identical to the host fold; labels {-1,0,1}, -1 predicted 25x, +1 14x)
+check_knn_classify_ties_go_to_lowest_class: OK (23 of 64 rows tied 2-2 at k=4; every one returned -1 and [0.5, 0.5])
+check_knn_classify_reach_by_sabotage: OK (row 2 moved 0 -> -1 on one flipped label; k=0 refused by name)
+check_knn_classify_multi_output_layout: OK (2 outputs x 64 rows equal the single-output answers; wrong class count refused)
+check_knn_classify_run_twice_identical: OK (labels and proba bit-identical across two predicts)
+check_knn_regress_matches_host_transcription: OK (64 predictions bit-identical to the host fold at k=5 and k=50)
+check_knn_regress_reach_by_sabotage: OK (row 0 moved by 200.00000113248825 on +1000 to its nearest target; 0 other rows hold that index, the rest did not move; k=0 refused)
+check_knn_regress_multi_output_layout: OK (2 outputs x 64 rows; column 0 equals the single-output answer, column 1 is its exact negation)
+check_knn_regress_run_twice_identical: OK (k=50, 64 predictions bit-identical across two predicts)

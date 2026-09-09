@@ -1,0 +1,4 @@
+LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 1
+SMALLK_PRICE experimental 1 mode IDENTICAL fixture dyadic-v1 index 100000 queries 128 features 32 k 10 index_salt 0 query_salt 593 requested_tile 256 warmups 2 timed_calls 1 scope native-public-upload-search-download-synchronize
+PRICE_MS dyadic-v1 100000 128 32 10 0.959488 used_tile 128
+KNN SMALL-K PUBLIC PRICE PASS queries 128 selected_pairs 1280
