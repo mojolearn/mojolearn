@@ -3,6 +3,7 @@
 """Transformer backward kernels and host-side launch composition used by the independent gradient checks."""
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.time import perf_counter_ns
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -29,6 +30,8 @@ from transformer.impl.transformers.models.llama.fused_attention import (
 )
 from transformer.impl.transformers.models.llama.modeling_llama import (
     ATTN_PATH_EAGER,
+    timing_on,
+    timing_tick,
     LlamaDeviceStages,
     LlamaDeviceWeights,
     LlamaDims,
@@ -2831,6 +2834,9 @@ def llama_decoder_layer_backward(
     # `d_v_cache`, and 22-24 are recorded FROM THE FUSED OUTPUT. With the
     # trace off only one path runs (see `eager_attention_forward`).
     # =====================================================================
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
+    timing_tick(ctx, ton, tk, "bwd.before_attention")
     var choice = attention_path_choice(PLANT_AT_NONE)
     var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
     if need_eager:
@@ -2852,6 +2858,7 @@ def llama_decoder_layer_backward(
     _rec(ctx, trace, prefix, 22, bst.d_q_rope, m * qw)
     _rec(ctx, trace, prefix, 23, bst.d_k_cache, b * nkv * s * hd)
     _rec(ctx, trace, prefix, 24, bst.d_v_cache, b * nkv * s * hd)
+    timing_tick(ctx, ton, tk, "bwd.attention")
 
     # =====================================================================
     # STAGE 25-26. The KV append's backward: a SLICE, no arithmetic.
@@ -3000,3 +3007,4 @@ def llama_decoder_layer_backward(
     )
     ctx.synchronize()
     _rec(ctx, trace, prefix, 36, bst.d_x, m * dm)
+    timing_tick(ctx, ton, tk, "bwd.after_attention")

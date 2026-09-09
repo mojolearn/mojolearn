@@ -125,7 +125,10 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
+from std.memory import memcpy
+from std.os import getenv
+from std.time import perf_counter_ns
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -176,19 +179,72 @@ def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
     """The first `n` float32 of a borrowed NumPy buffer, as a host list.
     A COPY, deliberately: the device helpers below take host lists, and
-    the borrow ends when this returns, so no pointer is retained."""
+    the borrow ends when this returns, so no pointer is retained. ONE
+    `memcpy` (2026-09-09): the element loop it replaces was 16.7 M
+    appends per activation at the Samba shape."""
     var p = _f32_ptr(addr)
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(p.unsafe_load(i))
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    if n > 0:
+        memcpy(out.unsafe_ptr(), p, n)
     return out^
 
 
 def _write_f32(addr: Int, values: List[Float32]) raises:
-    """A host list into a borrowed NumPy buffer, element for element."""
+    """A host list into a borrowed NumPy buffer, one `memcpy`."""
     var p = _f32_ptr(addr)
-    for i in range(len(values)):
-        p.unsafe_store(i, values[i])
+    if len(values) > 0:
+        memcpy(p, values.unsafe_ptr(), len(values))
+
+
+def _upload_addr(
+    ctx: DeviceContext, addr: Int, n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """A borrowed NumPy buffer straight onto the device through ONE pinned
+    staging buffer: `memcpy` into it, one `enqueue_copy` out of it. The
+    same bits `_upload(ctx, _read_f32(addr, n))` produced, without the
+    list."""
+    var p = _f32_ptr(addr)
+    var n_buf = n
+    if n_buf < 1:
+        n_buf = 1
+    var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
+    ctx.synchronize()
+    if n > 0:
+        memcpy(host.unsafe_ptr(), p, n)
+    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    ctx.synchronize()
+    _ = host^
+    return dev^
+
+
+def _download_addr(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, addr: Int
+) raises:
+    """The first `n` elements of a device buffer into a borrowed NumPy
+    buffer: one `enqueue_copy` into a pinned staging buffer, one `memcpy`
+    out of it."""
+    var p = _f32_ptr(addr)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.synchronize()
+    if n == len(buf):
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+    else:
+        var view = buf.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+    ctx.synchronize()
+    memcpy(p, host.unsafe_ptr(), n)
+    _ = host^
+
+
+def _btick(on: Bool, mut t: Int, name: String):
+    if not on:
+        return
+    var now = Int(perf_counter_ns())
+    print(
+        "timing " + name + " " + String(Float64(now - t) / 1000000.0) + " ms"
+    )
+    t = now
 
 
 def transformer_numeric_mode_binding() raises -> PythonObject:
@@ -276,6 +332,8 @@ def _transformer_run(
     var cache_n = b * nkv * cap * hd
 
     var ctx = DeviceContext()
+    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var tk = Int(perf_counter_ns())
     # Host weights THROUGH the lane's own struct (its length table is the
     # upstream shape authority, and its constructor is where the weights
     # are refused non-finite ONCE, DEVIATION 1875); values arrive as
@@ -299,9 +357,10 @@ def _transformer_run(
     # absolute-position ceiling, DEVIATION 812) BY NAME before the
     # uploads below. Zeros in with s0 == 0 IS a fresh sequence; anything
     # else is a carried one, packed at stride s0 (DEVIATION 795(ii)).
+    _btick(ton, tk, "surface.weights_up")
     var kv = LlamaKVCache(ctx, b, dims, smax, window)
-    kv.k = _upload(ctx, _read_f32(a[10], cache_n))
-    kv.v = _upload(ctx, _read_f32(a[11], cache_n))
+    kv.k = _upload_addr(ctx, a[10], cache_n)
+    kv.v = _upload_addr(ctx, a[11], cache_n)
     kv.s = s0
     # Per call, from the FROZEN theta (DEVIATION 795(iii)). p_max is the
     # cache capacity: pos0 + l <= kv.s_max <= p_max holds for every legal
@@ -310,7 +369,8 @@ def _transformer_run(
     var stages = LlamaDeviceStages(
         ctx, b, l, smax, dims, window, lean=transformer_lean_stages(hd)
     )
-    var dx = _upload(ctx, _read_f32(a[0], b * l * dm))
+    var dx = _upload_addr(ctx, a[0], b * l * dm)
+    _btick(ton, tk, "surface.cache_stages_x_up")
 
     var trace = IdentityTrace.disabled()
     # pos0 = s0: DEVIATION 1028 (cache slot j IS absolute position j)
@@ -325,9 +385,11 @@ def _transformer_run(
     # `residual2 + mlp(...)`, stage `residual2.out`), and the cache goes
     # back to its owner whole -- the full capacity buffer, so the bytes
     # round-trip exactly whatever the used stride is.
-    _write_f32(a[12], _download(ctx, stages.residual2, b * l * dm))
-    _write_f32(a[10], _download(ctx, kv.k, cache_n))
-    _write_f32(a[11], _download(ctx, kv.v, cache_n))
+    _btick(ton, tk, "surface.forward")
+    _download_addr(ctx, stages.residual2, b * l * dm, a[12])
+    _download_addr(ctx, kv.k, cache_n, a[10])
+    _download_addr(ctx, kv.v, cache_n, a[11])
+    _btick(ton, tk, "surface.outputs_down")
     var out_len = kv.s
     _ = w^
     _ = kv^
@@ -515,6 +577,8 @@ def _transformer_backward_run(
     var kw = dims.kv_width()
     var m = b * l
     var ctx = DeviceContext()
+    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var tk = Int(perf_counter_ns())
     var w = LlamaDeviceWeights(
         ctx,
         dims,
@@ -533,11 +597,13 @@ def _transformer_backward_run(
     var rope = LlamaRopeTable(ctx, dims, ROPE_THETA, l)
     var lean = transformer_lean_stages(hd)
     var stages = LlamaDeviceStages(ctx, b, l, l, dims, window, lean=lean)
-    var dx = _upload(ctx, _read_f32(a[0], m * dm))
+    var dx = _upload_addr(ctx, a[0], m * dm)
+    _btick(ton, tk, "surface.inputs_up")
     var off = IdentityTrace.disabled()
     llama_decoder_layer_forward(
         ctx, stages, kv, rope, w, dx, b, l, 0, off, String("pyf")
     )
+    _btick(ton, tk, "surface.forward")
     var bst = LlamaBackwardStages(ctx, b, l, l, dims, lean=lean)
     var d_out = _read_f32(a[10], m * dm)
     var offb = IdentityTrace.disabled()
@@ -545,16 +611,18 @@ def _transformer_backward_run(
         ctx, bst, stages, w, rope.cos, rope.sin, dx, d_out, b, l, 0,
         offb, String("pyb"),
     )
-    _write_f32(a[11], _download(ctx, bst.d_x, m * dm))
-    _write_f32(a[12], _download(ctx, bst.dw_norm1, dm))
-    _write_f32(a[13], _download(ctx, bst.dw_norm2, dm))
-    _write_f32(a[14], _download(ctx, bst.dw_q, qw * dm))
-    _write_f32(a[15], _download(ctx, bst.dw_k, kw * dm))
-    _write_f32(a[16], _download(ctx, bst.dw_v, kw * dm))
-    _write_f32(a[17], _download(ctx, bst.dw_o, dm * qw))
-    _write_f32(a[18], _download(ctx, bst.dw_gate, it * dm))
-    _write_f32(a[19], _download(ctx, bst.dw_up, it * dm))
-    _write_f32(a[20], _download(ctx, bst.dw_down, dm * it))
+    _btick(ton, tk, "surface.backward")
+    _download_addr(ctx, bst.d_x, m * dm, a[11])
+    _download_addr(ctx, bst.dw_norm1, dm, a[12])
+    _download_addr(ctx, bst.dw_norm2, dm, a[13])
+    _download_addr(ctx, bst.dw_q, qw * dm, a[14])
+    _download_addr(ctx, bst.dw_k, kw * dm, a[15])
+    _download_addr(ctx, bst.dw_v, kw * dm, a[16])
+    _download_addr(ctx, bst.dw_o, dm * qw, a[17])
+    _download_addr(ctx, bst.dw_gate, it * dm, a[18])
+    _download_addr(ctx, bst.dw_up, it * dm, a[19])
+    _download_addr(ctx, bst.dw_down, dm * it, a[20])
+    _btick(ton, tk, "surface.outputs_down")
     _ = bst^
     _ = stages^
     _ = w^

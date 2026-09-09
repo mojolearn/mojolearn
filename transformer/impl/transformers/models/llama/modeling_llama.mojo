@@ -273,6 +273,7 @@ transcendentals and division below are OURS.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.os import getenv
+from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -2552,6 +2553,27 @@ def llama_attention_scale(head_dim: Int) -> Float32:
     return ftz(identical_rsqrt(Float32(head_dim)))
 
 
+def timing_on() -> Bool:
+    """`MOJOLEARN_TRANSFORMER_TIMING=1`: print a host-timed, synchronized
+    phase breakdown of every block call. A traced or timed run is not a
+    measurement of anything else; this exists to say where the time goes."""
+    return String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+
+
+def timing_tick(
+    ctx: DeviceContext, on: Bool, mut t: Int, name: String
+) raises:
+    """Synchronize, print the milliseconds since `t`, advance `t`."""
+    if not on:
+        return
+    ctx.synchronize()
+    var now = Int(perf_counter_ns())
+    print(
+        "timing " + name + " " + String(Float64(now - t) / 1000000.0) + " ms"
+    )
+    t = now
+
+
 comptime ATTN_PATH_AUTO = 0
 """Fused when the build, the call and the data allow it; eager otherwise."""
 comptime ATTN_PATH_EAGER = 1
@@ -3025,6 +3047,8 @@ def llama_attention_forward(
     var window = kv.window
     var key_lo = llama_key_lo(s_old, window)
     var s = llama_key_span(s_old, l, window)
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
 
     # ---- q_proj, k_proj, v_proj (:252-254). `nn.Linear(d_model, *,
     #      bias=attention_bias)` with `attention_bias` False, so weight
@@ -3050,6 +3074,7 @@ def llama_attention_forward(
     trace.record_device[DType.float32](
         ctx, prefix + ".v_proj.out", stages.v_proj, m * kw
     )
+    timing_tick(ctx, ton, tk, "attn.qkv_proj")
 
     # ---- the rotary table (:113-127). COMPUTED once per configuration,
     #      RECORDED every call. DEVIATION 1024: contract section 9 says
@@ -3205,6 +3230,7 @@ def llama_attention_forward(
         )
     ctx.synchronize()
     kv.s = s_old + l
+    timing_tick(ctx, ton, tk, "attn.rope_and_cache")
 
     # ---- the attention interface (:264-277). Eager or fused, ONE set of
     #      bits (`eager_attention_forward`'s docstring).
@@ -3225,6 +3251,7 @@ def llama_attention_forward(
         prefix,
         materialize,
     )
+    timing_tick(ctx, ton, tk, "attn.core")
 
     # ---- o_proj (:280). `nn.Linear(n_heads*head_dim, d_model,
     #      bias=attention_bias)`, no bias.
@@ -3235,6 +3262,7 @@ def llama_attention_forward(
     trace.record_device[DType.float32](
         ctx, prefix + ".o_proj.out", stages.o_proj, m * dm
     )
+    timing_tick(ctx, ton, tk, "attn.o_proj")
 
 
 # ===========================================================================
@@ -3401,6 +3429,8 @@ def llama_decoder_layer_forward_planted(
     dims.validate()
     var dm = dims.d_model
     var m = b * l
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
 
     if b <= 0 or l <= 0:
         raise Error(
@@ -3524,6 +3554,7 @@ def llama_decoder_layer_forward_planted(
     )
 
     # ---- self.self_attn(...) (:308-316).
+    timing_tick(ctx, ton, tk, "block.norm1")
     llama_attention_forward(
         ctx,
         stages,
@@ -3540,6 +3571,7 @@ def llama_decoder_layer_forward_planted(
         prefix,
         materialize,
     )
+    timing_tick(ctx, ton, tk, "block.attention_total")
 
     # ---- residual + hidden_states (:317). S22. The mamba lane's S16
     #      kernel, IMPORTED (contract section 0).
@@ -3593,6 +3625,7 @@ def llama_decoder_layer_forward_planted(
     trace.record_device[DType.float32](
         ctx, prefix + ".residual2.out", stages.residual2, m * dm
     )
+    timing_tick(ctx, ton, tk, "block.mlp_and_residuals")
 
 
 def llama_decoder_layer_forward(
