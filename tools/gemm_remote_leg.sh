@@ -4350,6 +4350,16 @@ RELEASE_SOURCE
         [ -n "$_cases" ] || leg_die "could not read CORPUS_CASES"
         # shellcheck disable=SC2086
         ( cd "$PWD" && tar czf "$TMPD/corpus.tgz" $(for _c in $_cases; do echo "mamba/corpus/$_c"; done) ) || leg_die "corpus tar failed"
+        # transformer/corpus TOO (92 KB). The bounded mamba archive carries
+        # transformer/corpus/gen_corpus.py but not the corpus itself, and the
+        # installed transformer surface asserts the corpus landed -- it failed
+        # in all three modes on the first sm_89 column for exactly that reason,
+        # while both DigitalOcean columns passed because their whole-tree
+        # archive happened to include it.
+        ( cd "$PWD" && tar czf "$TMPD/tcorpus.tgz" transformer/corpus ) || leg_die "transformer corpus tar failed"
+        leg_ssh 'cat > /root/tcorpus.tgz' < "$TMPD/tcorpus.tgz" || leg_die "transformer corpus upload failed"
+        leg_ssh 'tar -xzf /root/tcorpus.tgz -C /root/mojolearn' || leg_die "transformer corpus unpack failed"
+        leg_ssh 'test -d /root/mojolearn/transformer/corpus' || leg_die "transformer corpus did not land"
         leg_ssh 'cat > /root/corpus.tgz' < "$TMPD/corpus.tgz" || leg_die "corpus upload failed"
         leg_ssh 'tar -xzf /root/corpus.tgz -C /root/mojolearn' || leg_die "corpus unpack failed"
         for _c in $_cases; do
