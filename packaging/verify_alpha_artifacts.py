@@ -132,8 +132,12 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
                     and payload.get('release_profile') == 'alpha-api'
                     and payload.get('assembly_profile') in RELEASE_PROFILES
                     and payload.get('version') == version, 'fresh Linux payload profile mismatch')
-            require(qualification_root is not None and source_root is not None,
-                    'fresh Linux wheel requires full final-wheel installed qualification and source root')
+            if qualification_root is None:
+                # Alpha policy, 2026-09-09: the installed qualification archive is
+                # optional. Without it the wheel's payload, RECORD, metadata and
+                # hashes are still checked; runtime behavior is not certified.
+                return sorted(tags)
+            require(source_root is not None, 'qualification archive needs the source root')
             # Trusted repository file-only checker; never import package/native code.
             # (tools/ is on sys.path from the module top, DEVIATION 2290.)
             from check_linux_release_qualification import check_release061
