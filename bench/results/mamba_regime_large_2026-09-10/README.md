@@ -4,7 +4,9 @@ Production source: `b69e8344`; diagnostic analyzer: `fcf2793b`.
 CUDA IDENTICAL binding built for `sm_90`, Mojo 1.0.0 (`ed45d567`), NVIDIA H100
 80GB HBM3, driver 580.126.09. Exact binding SHA256:
 `f6da73c7d378943252e7280d481351b8763657188fc9f08da2c8bdb04bce03dc`.
-The binary is identified here, not archived in this evidence directory.
+The exact binary is retained as `mamba-cuda-identical.so.gz` (deterministic
+gzip timestamp zero); `binary-manifest.json` records packed/unpacked hashes
+and sizes. This CUDA binding is not a portable wheel.
 
 Two fresh processes each executed 96 calls: two passes through
 `narrow,wide,narrow,tiny,narrow,wide`, eight calls per visit. Fixtures are the
