@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Borrowed Float32 arrays; GPU arithmetic; no context or pointer retained."""
+# DEVIATION 2486: shared byte-preserving host copies.
+from bindings.hostptr import f32_ptr, read_f32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -13,15 +15,12 @@ from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax
 def ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("preprocessing: null Float32 pointer")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f32_ptr(addr)
 
 
 def load(addr: Int, n: Int) raises -> List[Float32]:
-    var p = ptr(addr)
-    var result = List[Float32]()
-    for i in range(n):
-        result.append(p.unsafe_load(i))
-    return result^
+    _ = ptr(addr)  # Preserve this surface's null-pointer refusal.
+    return read_f32(addr, max(0, n))
 
 
 def fit_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -37,8 +36,7 @@ def fit_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObje
     var output = ptr(Int(py=out_addr))
     with GILReleased(Python()):
         var result = minmax_fit_host(x,n,d,lower,upper)
-        for i in range(5*d):
-            output.unsafe_store(i,result[i])
+        copy_f32(result.unsafe_ptr(), output, 5*d)
     return PythonObject(5*d)
 
 
@@ -62,8 +60,7 @@ def transform_binding(
     var output = ptr(Int(py=out_addr))
     with GILReleased(Python()):
         var result = minmax_transform_host(x,scale,offset,n,d,inverse,clip,lower,upper)
-        for i in range(n*d):
-            output.unsafe_store(i,result[i])
+        copy_f32(result.unsafe_ptr(), output, n*d)
     return PythonObject(n*d)
 
 
@@ -80,8 +77,7 @@ def standard_fit_binding(x_addr: PythonObject, out_addr: PythonObject, params: P
     var output = ptr(Int(py=out_addr))
     with GILReleased(Python()):
         var result = standard_fit_host(x,n,d,with_mean,with_std)
-        for i in range(3*d):
-            output.unsafe_store(i,result[i])
+        copy_f32(result.unsafe_ptr(), output, 3*d)
     return PythonObject(3*d)
 
 
@@ -104,8 +100,7 @@ def standard_transform_binding(
     var output = ptr(Int(py=out_addr))
     with GILReleased(Python()):
         var result = standard_transform_host(x,mean,scale,n,d,inverse,with_mean,with_std)
-        for i in range(n*d):
-            output.unsafe_store(i,result[i])
+        copy_f32(result.unsafe_ptr(), output, n*d)
     return PythonObject(n*d)
 
 
