@@ -1,0 +1,4 @@
+6253 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x786540000000, nodemask=2)
+api cuda initial_streams 1
+after_create 2
+PASS: newly created stream is selectable; kernel ownership check still required

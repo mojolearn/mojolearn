@@ -1,0 +1,19 @@
+2799 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53afc0000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=smoke
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=smoke
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu-stream1 mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=smoke
+2799 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1999c0000000, nodemask=2)
+FSPEED-WARMUP lane=rf arm=ours shape=synthclf-29492x32 ms=788.736
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu shape=synthclf-29492x32 ms=6406.144
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu-stream1 shape=synthclf-29492x32 ms=181.644
+FSPEED lane=rf arm=ours shape=synthclf-29492x32 round=1 ms=120.081 hash=77792013f1c29b95
+FSPEED lane=rf arm=cuml-rf-gpu shape=synthclf-29492x32 round=1 ms=270.314 hash=4de3db279175422d
+FSPEED lane=rf arm=cuml-rf-gpu-stream1 shape=synthclf-29492x32 round=1 ms=191.724 hash=4de3db279175422d
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.238865
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.986471
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.238865
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.986471
+FSPEED-ACC lane=rf arm=cuml-rf-gpu-stream1 metric=logloss value=0.238865
+FSPEED-ACC lane=rf arm=cuml-rf-gpu-stream1 metric=auc value=0.986471
+BASELINE_RESULT /root/trees_out/rf_smoke.json complete= True repeatable= True

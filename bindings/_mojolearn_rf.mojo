@@ -31,6 +31,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from checks.numerics import GLOBAL_NUMERIC_MODE
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -606,6 +607,11 @@ def rf_predict_reg_binding(
     return PythonObject(wrote)
 
 
+def rf_numeric_mode_binding() raises -> PythonObject:
+    """Read the numeric policy compiled into this RF binding."""
+    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+
+
 def rf_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
@@ -622,6 +628,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_rf")
         m.def_function[rf_vendor_binding]("rf_vendor")
+        m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
         m.def_function[rf_classifier_fit_binding]("rf_classifier_fit")
         m.def_function[rf_regressor_fit_binding]("rf_regressor_fit")
         m.def_function[rf_predict_proba_binding]("rf_predict_proba")

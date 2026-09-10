@@ -1,0 +1,14 @@
+3544 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38bd80000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=smoke
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=smoke
+3617 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73ae00000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=synthclf-29492x32 ms=727.693
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=synthclf-29492x32 ms=255.399
+FSPEED lane=gbdt-symmetric arm=ours shape=synthclf-29492x32 round=1 ms=133.973 hash=94cb51c9c574e411
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=synthclf-29492x32 round=1 ms=221.859 hash=ad137d32fb947044
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.179864
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.995278
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.176431
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.994848
+BASELINE_RESULT /root/trees_out/gbdt_smoke.json complete= True repeatable= True

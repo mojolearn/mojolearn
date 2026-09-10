@@ -11,16 +11,13 @@ process that interleaves it with the NVIDIA-native opponents.
 
 THE QUESTION THIS FILE ANSWERS
 -------------------------------
-How fast is mojolearn's FAST path -- the DEFAULT build, NOT
-`-D MOJOLEARN_NUMERIC_IDENTICAL=1` -- against what an NVIDIA user would
-actually run, on an NVIDIA GPU. That is a pure speed question about the
-explicitly non-deterministic, non-bitwise-identical arm. It is not the
-identity question, no line here gates a hash, and `MOJOLEARN_NUMERIC_MODE`
-is reported on every header only so that a run of the wrong arm is
-impossible to mislabel.
-
-**We expect to lose the GPU columns, possibly by a lot. Recording how much
-is the entire point.**
+Measure the explicitly selected numeric mode against competitors on the
+same accelerator. NVIDIA comparisons use IDENTICAL; FAST decision-tree
+performance runs on MacBook remain supported. Before timing, require the
+estimator's resolved mode and its own native compiled-mode/vendor readbacks
+to agree with the requested mode and vendor. A namespace or environment
+label alone is not compiled-mode evidence. Quality is reported alongside
+full public fit time; cross-library model identity is not asserted.
 
 HOW WE ARE INVOKED, AND WHY THROUGH PYTHON
 --------------------------------------------
@@ -43,20 +40,16 @@ WHAT LIVES WHERE
 Everything shared -- the datasets, the hyper-parameter tables, the output
 contract, the metrics, the runner -- lives in `tools/speed_gbdt_arm.py`,
 which imports NOTHING from mojolearn. This file adds the `ours` arm and the
-lane wiring. The direction is deliberate: on a box whose first-ever CUDA
-build of `ensemble/` has just failed, the opponents still run from that file
+lane wiring. The direction is deliberate: on a box whose CUDA
+build of `ensemble/` has failed, the opponents still run from that file
 alone and the lease is not wasted.
 
 ONE LANE PER PROCESS
 ---------------------
-`--lane` takes exactly one lane. No line of `ensemble/` or `extratrees/` has
-ever been compiled for CUDA; `TARGET_COLUMN` has been `COLUMN_APPLE` for
-every build ever made in this repository, the NVIDIA rows of the kernel
-matrix are arithmetic rather than measurement, and the float atomic flush
-branch is unreachable on Apple and is the path NVIDIA takes. **Treat the
-first run as a BUILD, not a benchmark. If it produces numbers on the first
-attempt, be suspicious rather than pleased.** A lane that takes the process
-down with it must not take the other five.
+`--lane` takes exactly one lane. CUDA forest measurements already exist in
+`bench/results/trees_identical/`; a new build still needs its own mode/vendor
+witness and successful fit. Separate lane processes contain build or runtime
+failures without losing the other comparisons.
 
 INTERLEAVED BY DEFAULT, SEPARABLE ON PURPOSE
 ---------------------------------------------
@@ -219,10 +212,10 @@ def our_rf_arm(lane, cfg, data):
     under a GPU label. There is no CPU arm here because the library has no
     CPU path at all -- `kernel_matrix.mojo` says "There is no CPU column."
 
-    `n_streams` is left at the class default, which is cuML's, for the same
-    reason the cuML arm leaves it: a value above 1 makes the fit
-    non-reproducible, and this whole slice measures the non-deterministic
-    FAST path. Pinning it would benchmark a configuration nobody runs."""
+    `n_streams` is left at each library's public default. Explicit one-stream
+    comparisons must configure both arms. Mojolearn currently pipelines trees
+    on one queue; cuML uses its CUDA stream pool, so these controls do not imply
+    identical scheduling semantics."""
     import mojolearn
 
     common = dict(
@@ -295,9 +288,8 @@ def our_iforest_arm(lane, cfg, data):
         plus a one-row scoring pass, and is comparable to sklearn's `fit`;
       * the ACCURACY column comes from a DIFFERENT forest than the one that
         was timed, because `score_samples` built its own;
-      * a `hash=` that changes between rounds is expected here twice over --
-        once for the FAST path's non-determinism and once because the forest
-        was rebuilt.
+      * repeated-build hashes must be interpreted under the selected mode;
+        rebuilding alone does not imply that IDENTICAL hashes may change.
 
     None of that is corrected here. It is a property of the surface under
     test and correcting it in the harness would measure a library that does
@@ -373,12 +365,39 @@ OUR_BUILDERS = {
 }
 
 
+def verify_our_arm(arm):
+    """Resolve and verify this arm before any fit timer starts."""
+    requested = os.environ.get("MOJOLEARN_NUMERIC_MODE", "").strip().lower()
+    codes = {0: "fast", 1: "identical", 2: "deterministic"}
+    if requested not in codes.values():
+        raise RuntimeError("set MOJOLEARN_NUMERIC_MODE explicitly before benchmarking")
+    model = arm.make()
+    resolved = model.numeric_mode_used()
+    vendor = model.vendor_used()
+    binding = model._bind()
+    prefix = model._BINDING.removeprefix("_mojolearn_")
+    getter = getattr(binding, prefix + "_numeric_mode", None)
+    if getter is None:
+        raise RuntimeError("native compiled-mode readback missing for " + model._BINDING)
+    compiled = codes.get(int(getter()), "unknown")
+    expected_vendor = os.environ.get("MOJOLEARN_SPEED_EXPECTED_VENDOR", "").strip().lower()
+    if expected_vendor not in ("cuda", "metal", "hip"):
+        raise RuntimeError("set MOJOLEARN_SPEED_EXPECTED_VENDOR to cuda, metal, or hip")
+    if resolved != requested or compiled != requested or vendor != expected_vendor:
+        raise RuntimeError("mode/vendor mismatch: requested=%s/%s resolved=%s compiled=%s/%s"
+                           % (requested, expected_vendor, resolved, compiled, vendor))
+    print("BENCH_BINDING arm=%s requested=%s resolved=%s compiled=%s vendor=%s path=%s"
+          % (arm.name, requested, resolved, compiled, vendor, binding.__file__), flush=True)
+    return dict(requested=requested, resolved=resolved, compiled=compiled,
+                vendor=vendor, path=binding.__file__)
+
+
 def build_ours(lane, cfg, data):
-    """Our arm, or a refusal. An import error here is the EXPECTED failure on
-    the first CUDA build, and it must print a refusal rather than a
-    traceback: the opponents in the same process still have a lane to run."""
+    """Our verified arm, or an explicit import/mode/vendor refusal."""
     try:
-        return [OUR_BUILDERS[lane](lane, cfg, data)]
+        arm = OUR_BUILDERS[lane](lane, cfg, data)
+        verify_our_arm(arm)
+        return [arm]
     except Exception as exc:                       # noqa: BLE001
         spec.emit_refused(lane, "ours", "%s: %s"
                           % (exc.__class__.__name__,
@@ -393,7 +412,7 @@ def build_ours(lane, cfg, data):
 def build_parser():
     p = argparse.ArgumentParser(
         prog="forest_speed_arm",
-        description="mojolearn's FAST path against the NVIDIA-native "
+        description="mojolearn's explicitly selected mode against native "
                     "opponents, one lane per process",
     )
     p.add_argument("--lane", required=True, choices=spec.LANE_NAMES)

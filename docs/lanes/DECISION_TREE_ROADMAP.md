@@ -111,7 +111,7 @@ parallel performance priority. All three numeric modes stay supported.
 | ET shared counts | Apple default for 5–32 classes; exact shared integer class counts | Strong local multiclass gains; binary/regression and other vendors keep old default |
 | Symmetric row-index splits | Existing optional FAST experiment | Workload-dependent regression prevents global default change |
 | NVIDIA stable partition | Existing single-pass large-leaf candidate | Large-leaf NVIDIA branch unqualified |
-| CUDA streams | Capability probe and buffer-ownership design | No production concurrent-tree scheduler |
+| CUDA streams | H100 probe confirms created streams expose selectable context views | No production concurrent-tree scheduler; buffer ownership and timing still need validation |
 
 Evidence and bounded feature coverage:
 [growth controls](NON_SYMMETRIC_GPU_PARITY.md),
@@ -259,3 +259,12 @@ before shipping the core GPU growth controls.
 | Code reuse / GPU-only training | Shared RF/ET log helper landed with six mode/objective checks. ET CPU public dispatch retired; native public fits delegate GPU, explicit host references remain for checks. [Reuse audit](TREE_CODE_REUSE_AUDIT.md). Host RF/ET inference remains a separate GPU migration. |
 | Numeric per-tree sampling | Implemented all three modes/policies with unchanged default fingerprints. [Contract](GBDT_FEATURE_FRACTION.md). Exploratory M4 timing establishes no speed gain; prioritize buffer reuse and dedicated GPU evidence. |
 | Other features above | Planned; prioritize measured speed and bounded feature work as described above |
+
+## September 10 NVIDIA baseline update
+
+The [H100 IDENTICAL baseline](../../bench/results/nvidia_identical_trees_2026-09-10/README.md)
+records RF/cuML, symmetric GBDT/CatBoost and standalone ET. Five measured fits
+per MojoLearn learner retained model/prediction hashes. Competitor timing
+spreads were too large for accepted parity claims; no performance defaults
+changed. The CUDA stream capability probe passed. NVIDIA remains IDENTICAL
+versus competitors for every learner; FAST is a MacBook decision-tree target.

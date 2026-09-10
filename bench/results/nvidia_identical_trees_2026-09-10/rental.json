@@ -1,0 +1,10 @@
+{
+  "pod_id": "3r2toker2hjtep",
+  "rate_usd_per_hour": 3.49,
+  "watchdog_minutes": 60,
+  "created_utc": "2026-09-10T12:11:24Z",
+  "terminated_verified_utc": "2026-09-10T12:28:05Z",
+  "delete_http": 204,
+  "get_http": 404,
+  "protected_pod_untouched": true
+}

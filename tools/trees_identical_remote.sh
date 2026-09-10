@@ -75,6 +75,13 @@ track_pip() {
 }
 
 track_lgbm() {
+    # RF/cuML and symmetric GBDT/CatBoost sessions do not need this compiler
+    # workload. Skip explicitly so setup cannot contend with their timings.
+    if [ "${MOJOLEARN_TREES_SKIP_LIGHTGBM_CUDA:-0}" = "1" ]; then
+        echo "lightgbm_cuda_build=SKIPPED requested focused competitor session" >> "$OUT/setup.txt"
+        : > "$OUT/track_lgbm.done"
+        return 0
+    fi
     # wait for the base pip install (lightgbm's build wants numpy/scikit-build)
     while [ ! -f "$OUT/track_pip_base.done" ]; do sleep 15; done
     rm -rf /root/.cache/pip/wheels 2>/dev/null || true
