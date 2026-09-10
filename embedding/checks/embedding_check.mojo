@@ -67,37 +67,12 @@ account (6.3 case 3: an integer atomic's COUNT is order free and its SLOT is
 not), so a witness that silently goes inert is the worst one to lose.
 `f_multiblock` is `T = 600`.
 
-**(3) DEVIATION 1506, AND IT IS THE SERIOUS ONE. THE DEVICE ENTRY POINTS
-PERFORM NO REFUSAL AT ALL.** Contract 9.1 says a NaN or an infinity "is
-refused by name, `refuse_nonfinite`... before any recorded stage", and
-contract section 8 says an out-of-range id "is REFUSED BY NAME... Not
-clamped, not wrapped, not silently dropped". Both are TRUE of
-`emb_forward_oracle` and `emb_backward_oracle`, which call
-`emb_refuse_shape`, `emb_refuse_ids` and `refuse_nonfinite` on entry. **Both
-are FALSE of `identical_embedding_forward_into` and
-`identical_embedding_backward_into`, which check IDs but omit nonfinite input refusal.** That file's own
-docstring says so and calls it a design -- "THE HOST REFUSALS RUN BEFORE
-THIS, NOT INSIDE IT" -- and the design has no enforcement anywhere: there is
-no wrapper in the profile that does both, so a caller who forgets gets
-
-  * a NaN folded into `emb.dw` and hashed onto a card, which is exactly the
-    vendor-shaped payload IDENTITY_PATHS row 39 forbids; and, worse,
-  * an OUT-OF-BOUNDS DEVICE READ for a negative id. `emb_gather_kernel`
-    computes `weight.unsafe_load(v * width + j)` with no bounds branch on
-    the normative path, so `v == -1` reads BEFORE the buffer. That is a
-    memory-safety bug and not a numerics one.
-
-This file MEASURES the first half -- it plants a NaN in `W`, reads it back
-OFF THE DEVICE by bits to prove reach, calls the device forward with the
-trace DISABLED so no payload can enter a card, and reports whether anything
-raised. **It deliberately does NOT run the out-of-range half**, because
-running an out-of-bounds read to demonstrate that it is out of bounds is not
-a test, it is the bug. Clause (f) raises on the gap by default and names the
-one-line fix; `MOJOLEARN_EMB_DEVICE_REFUSAL_GAP_ACK=1` downgrades the raise
-to a printed line and the line prints EITHER WAY, so the gap cannot be
-suppressed, only acknowledged. **Clause (f) is the LAST clause this file
-runs**, precisely so that a raise there still leaves every other clause
-measured.
+**(3) DEVIATION 1506: NONFINITE INPUT REFUSAL REMAINS OPEN.** Production
+entry points validate ID bounds. They still omit the host oracle's NaN/inf
+refusal for W and dY. Clause (f) plants a NaN, measures device reach and
+reports whether the forward refuses it. It raises for this existing gap
+unless MOJOLEARN_EMB_DEVICE_REFUSAL_GAP_ACK=1 is supplied; it runs last so
+this independent audit does not mask the other clause results.
 
 TWO MORE, SMALLER
 ------------------
@@ -2288,23 +2263,11 @@ def clause_f(ctx: DeviceContext) raises:
     name" and the clause would pass for ever WHILE GATING NOTHING. So the
     clause first runs a CLEAN call and requires that nothing raises.
 
-    **AND THEN DEVIATION 1506, WHICH IS WHY THIS CLAUSE RUNS LAST.** Every
-    assertion above is about the HOST ORACLE. The DEVICE entry points check
-    NOTHING -- read `identical_embedding_forward_into`, which says so in its
-    own docstring -- so the profile has no entry point that satisfies
-    contract 9.1. This function MEASURES the gap on the safe half (a NaN in
-    `W`, planted, read BACK OFF THE DEVICE by bits so reach is measured, run
-    with the trace DISABLED so no vendor-shaped payload can enter a card)
-    and then raises unless the operator has acknowledged it.
-
-    **IT DELIBERATELY DOES NOT RUN THE OUT-OF-RANGE HALF.** With a negative
-    id, `emb_gather_kernel` computes `weight.unsafe_load(v * width + j)`
-    with no bounds branch on the normative path, so `v == -1` reads BEFORE
-    the buffer. Running an out-of-bounds read to demonstrate that it is out
-    of bounds is not a test, it is the bug, and it would be a bug this gate
-    committed on purpose on somebody's machine. The host half proves the id
-    is refused where a refusal exists; the device half is reported from the
-    SOURCE and left unrun."""
+    The production ID check is present. The remaining device audit plants
+    a NaN in W and measures its reach and propagation; missing nonfinite
+    refusal is independent of the integer run-construction plan. This audit
+    raises unless the existing gap is explicitly acknowledged. Device ID
+    refusal is not exercised by this particular clause."""
     print("clause (f): the row-39 audit, contract section 9.1")
 
     # ---- THE CONTROL ----------------------------------------------------
@@ -3142,8 +3105,7 @@ def main() raises:
             " and **EMB_SORT_KEY_ID_ONLY_UNSTABLE**, two of contract 11.1's"
             " eighteen arms that have no switch anywhere (DEVIATION 1505);"
             " **EMB_NO_FLUSH_ACC on any FTZ column**, where it is inert by"
-            " construction; **EMB_GATHER_CLAMP_OOR**, whose clean half is an"
-            " out-of-bounds read; **an INDEPENDENT reference** -- there is"
+            " construction; **an INDEPENDENT reference** -- there is"
             " no embedding table in cuML, cuVS or RAFT and no PyTorch"
             " checkout, so every clause here is our device against our"
             " oracle and both are ours; **FAST mode**; **the fifteen"
