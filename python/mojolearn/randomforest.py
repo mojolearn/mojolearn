@@ -79,7 +79,8 @@ from ._labels import (
     flat_view, flatten_labels, is_bool, sorted_classes,
 )
 from ._mode import NumericModeMixin
-from ._forest_protocol import ForestProtocol, forest_estimator
+from ._forest_protocol import (ForestProtocol, forest_estimator,
+                               _forest_fit_function, _forest_fit_arrays)
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
@@ -479,14 +480,8 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
             self._cfg["criterion"],
         )
         del Xf  # the borrow ends with the call
-        offsets, colid, quesval, left_child, leaves, meta = out
-        # The binding returns Python lists (`_forest_out`); packing them
-        # is the same O(nodes) conversion `np.asarray(list)` was.
-        self._offsets = Array.from_list([int(v) for v in offsets], "<i4")
-        self._colid = Array.from_list([int(v) for v in colid], "<i4")
-        self._quesval = Array.from_list([float(v) for v in quesval], "<f4")
-        self._left_child = Array.from_list([int(v) for v in left_child], "<i4")
-        self._leaves = Array.from_list([float(v) for v in leaves], "<f4")
+        (self._offsets, self._colid, self._quesval, self._left_child,
+         self._leaves, meta) = _forest_fit_arrays(out)
         self.n_features_in_ = int(n_features)
         self._n_trees = int(meta[0])
         self._num_outputs = int(meta[1])
@@ -648,9 +643,10 @@ class RandomForestClassifier(_RandomForestBase):
         y32 = Array.from_list(codes, "<i4")
         weights = _class_weight_rows(self.class_weight, self.classes_, codes)
         binding = self._bind("_mojolearn_rf")
-        fit_fn = binding.rf_classifier_fit
+        fit_fn = _forest_fit_function(binding, "rf_classifier_fit")
         if weights is not None:
-            weighted_fit = getattr(binding, "rf_classifier_fit_weighted", None)
+            weighted_fit = (_forest_fit_function(binding, "rf_classifier_fit_weighted")
+                            if hasattr(binding, "rf_classifier_fit_weighted") else None)
             if weighted_fit is None:
                 raise RuntimeError("rebuild the RF binding for class_weight support")
             def fit_fn(x_addr, y_addr, params, criterion):
@@ -777,7 +773,7 @@ class RandomForestRegressor(_RandomForestBase):
                     " (objectives.cuh:279-281, :306-308), which would fit"
                     " a stump silently"
                 )
-        return self._fit_arrays(X, y32, 0, self._bind("_mojolearn_rf").rf_regressor_fit)
+        return self._fit_arrays(X, y32, 0, _forest_fit_function(self._bind("_mojolearn_rf"), "rf_regressor_fit"))
 
     def predict(self, X):
         """The forest mean per row, a float32 `Array` of `(n_samples,)`."""

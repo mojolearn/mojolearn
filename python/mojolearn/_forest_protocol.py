@@ -156,6 +156,9 @@ class ForestProtocol:
         return function
 
     def _resident_prediction_function(self, native):
+        # DEVIATION 2483: this export is predict_into[REUSE_IO=True], so X and
+        # output already cross as borrowed pointers without List staging.
+        # Keep device-buffer reuse; plain into would allocate on every call.
         return native.forest_predict_resident_reuse_gpu
 
     def _predict_forest(self, sequential_name, X, out):
@@ -257,3 +260,84 @@ class ForestProtocol:
         return metrics.r2_score(as_f32_c(y, ndim=1, name="y")[0],
                                 as_f32_c(prediction, ndim=1, name="prediction")[0],
                                 numeric_mode=mode)
+
+
+def _export_fit_result(native, descriptor, *, compare_legacy=False):
+    """WP2a: copy one owned native fit into Arrays, always releasing its handle.
+
+    Descriptor: [handle, trees, nodes, outputs, small integer metadata]. Export
+    receives exact capacities as well as addresses. The optional diagnostic
+    reads the SAME fitted handle through the retained List exporter before
+    release; it is a correctness gate, never a second fit or production path.
+    Native same-fit/save gates cover all three modes on Metal (DEVIATION 2482).
+    """
+    import numbers
+    from ._buffer import empty
+
+    if not isinstance(descriptor, (list, tuple)) or not descriptor:
+        raise ValueError('native forest export returned an invalid descriptor')
+    handle = descriptor[0]
+    if isinstance(handle, bool) or not isinstance(handle, numbers.Integral) or handle < 1:
+        raise ValueError('native forest export returned an invalid handle')
+    try:
+        if len(descriptor) != 5:
+            raise ValueError('native forest export descriptor requires five fields')
+        _, trees, nodes, outputs, meta = descriptor
+        counts = (trees, nodes, outputs)
+        if any(isinstance(v, bool) or not isinstance(v, numbers.Integral) for v in counts):
+            raise ValueError('native forest export counts must be integers')
+        if not (1 <= trees < 2147483647 and nodes >= trees and outputs >= 1
+                and nodes <= 2147483647 // outputs):
+            raise ValueError('native forest export exceeds supported counts')
+        if not isinstance(meta, (list, tuple)) or len(meta) < 2 or list(meta[:2]) != [trees, outputs]:
+            raise ValueError('native forest export metadata disagrees with counts')
+        if any(isinstance(v, bool) or not isinstance(v, numbers.Integral) for v in meta):
+            raise ValueError('native forest export metadata must contain integers')
+        dtypes = ('<i4', '<i4', '<f4', '<i4', '<f4')
+        sizes = (trees + 1, nodes, nodes, nodes, nodes * outputs)
+        arrays = tuple(empty((size,), dtype) for size, dtype in zip(sizes, dtypes))
+        native.forest_export(handle, *(_addr(a) for a in arrays), list(counts))
+        if compare_legacy:
+            old = native.forest_export_legacy(handle)
+            if len(old) != 6 or list(old[5]) != list(meta):
+                raise RuntimeError('forest export legacy metadata mismatch')
+            for name, actual, values, dtype in zip(_FOREST_ARRAYS, arrays, old[:5], dtypes):
+                expected = Array.from_list(values, dtype)
+                if actual.tobytes() != expected.tobytes():
+                    raise RuntimeError('forest export byte mismatch: ' + name)
+        return (*arrays, list(meta))
+    finally:
+        native.forest_export_release(handle)
+
+
+def _forest_fit_function(native, name):
+    """WP2a caller-buffer default; legacy/verify are diagnostic comparison arms."""
+    import os
+    selection = os.environ.get('MOJOLEARN_FOREST_EXPORT', 'into')
+    if selection == 'legacy':
+        return getattr(native, name)
+    if selection not in ('into', 'verify'):
+        raise ValueError('MOJOLEARN_FOREST_EXPORT must be legacy, into or verify')
+    entry = getattr(native, name + '_export', None)
+    if not callable(entry):
+        raise RuntimeError('rebuild the forest binding for caller-buffer model export')
+    def fit(*args):
+        return _export_fit_result(native, entry(*args), compare_legacy=selection == 'verify')
+    return fit
+
+
+def _forest_fit_arrays(result):
+    """One RF/ET model conversion; native exported arrays are retained directly."""
+    *fields, meta = result
+    if len(fields) != 5:
+        raise ValueError('forest fit must return five model fields and metadata')
+    dtypes = ('<i4', '<i4', '<f4', '<i4', '<f4')
+    arrays = []
+    for field, dtype in zip(fields, dtypes):
+        if isinstance(field, Array):
+            if field.dtype != dtype or field.ndim != 1:
+                raise ValueError('forest fit exported an unexpected model dtype or shape')
+            arrays.append(field)
+        else:
+            arrays.append(Array.from_list(field, dtype))
+    return (*arrays, meta)

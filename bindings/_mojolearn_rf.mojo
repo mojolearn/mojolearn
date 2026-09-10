@@ -5,8 +5,10 @@
 Kept in its OWN extension for the same reason `_mojolearn_trees` is: an
 independently changing binding stops being a merge point, and the ensemble
 lane changes independently of the extratrees lane. Arrays cross as borrowed
-NumPy addresses; all device buffers and contexts live for one call and no
-pointer is retained.
+host-buffer addresses; training device buffers and contexts live for one call.
+No input pointer is retained. The default fit moves the native tree list into
+an export handle; Python allocates Arrays, exports their bytes and releases
+the handle in finally. Retained List-returning entries are diagnostics.
 
 THE MODEL CROSSES AS FLAT ARRAYS, exactly the `_mojolearn_trees` protocol
 (deviation 146's layout argument): per-node `colid` / `quesval` /
@@ -26,6 +28,7 @@ sampler's first Python caller.
 """
 
 from std.memory import memcpy
+from hostptr import copy_f32
 
 from std.os import abort
 from std.python import Python, PythonObject
@@ -206,26 +209,20 @@ def _rf_params_from(params: PythonObject, criterion: Int) raises -> RF_params:
     )
 
 
-def _forest_out(
-    forest: RandomForestMetaData[DT, DT]
-) raises -> PythonObject:
-    """The fitted forest as `[offsets, colid, quesval, left_child, leaves,
-    meta]`, all Python lists; `meta` is `[n_trees, num_outputs]`.
-    `vector_leaf` is indexed BY NODE (`decisiontree.cuh:387`), sized
-    nodes * num_outputs with internal-node slots dead, and crosses as-is so
-    the predict side can index it the way the traversal does."""
+def _forest_out_trees(trees: List[TreeMetaDataNode[DT]]) raises -> PythonObject:
+    """Retained same-fit diagnostic; RF label dtype does not affect tree storage."""
     var offsets = Python.list()
     var colid = Python.list()
     var quesval = Python.list()
     var left_child = Python.list()
     var leaves = Python.list()
     var num_outputs = 1
-    if len(forest.trees) > 0:
-        num_outputs = Int(forest.trees[0].num_outputs)
+    if len(trees) > 0:
+        num_outputs = Int(trees[0].num_outputs)
     var total = 0
     offsets.append(PythonObject(0))
-    for t in range(len(forest.trees)):
-        ref tree = forest.trees[t]
+    for t in range(len(trees)):
+        ref tree = trees[t]
         var n = len(tree.sparsetree)
         total += n
         offsets.append(PythonObject(total))
@@ -237,7 +234,7 @@ def _forest_out(
         for i in range(len(tree.vector_leaf)):
             leaves.append(PythonObject(Float64(tree.vector_leaf[i])))
     var meta = Python.list()
-    meta.append(PythonObject(len(forest.trees)))
+    meta.append(PythonObject(len(trees)))
     meta.append(PythonObject(num_outputs))
     var out = Python.list()
     out.append(offsets)
@@ -249,47 +246,88 @@ def _forest_out(
     return out
 
 
-def _forest_out_i32(
-    forest: RandomForestMetaData[DT, CLT]
-) raises -> PythonObject:
-    """`_forest_out` for the classifier's label type. Two copies because the
-    two metadata types do not unify; the bodies must stay identical."""
-    var offsets = Python.list()
-    var colid = Python.list()
-    var quesval = Python.list()
-    var left_child = Python.list()
-    var leaves = Python.list()
-    var num_outputs = 1
-    if len(forest.trees) > 0:
-        num_outputs = Int(forest.trees[0].num_outputs)
+
+def _forest_out(forest: RandomForestMetaData[DT, DT]) raises -> PythonObject:
+    return _forest_out_trees(forest.trees)
+
+
+def _forest_out_i32(forest: RandomForestMetaData[DT, CLT]) raises -> PythonObject:
+    return _forest_out_trees(forest.trees)
+
+
+# DEVIATION 2482: both RF label types own the same typed tree list. Moving it
+# into the export registry retains existing native storage without flattening.
+from std.ffi import _Global
+from forest_export_binding import (
+    ForestExportRegistry, validate_forest_export_destinations,
+    copy_forest_export_leaves,
+)
+comptime RFExportTrees = List[TreeMetaDataNode[DT]]
+comptime RF_EXPORTS = _Global[StorageType=ForestExportRegistry[RFExportTrees],
+    name=("MojoRFFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
+          "MojoRFFitExportDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
+          "MojoRFFitExportFast"), init_fn=ForestExportRegistry[RFExportTrees].__init__]
+
+
+def _retain_rf_export(var trees: RFExportTrees) raises -> PythonObject:
+    if not len(trees):
+        raise Error("cannot export an empty fitted RF")
+    var nodes = 0
+    var outputs = Int(trees[0].num_outputs)
+    for tree in trees:
+        nodes += len(tree.sparsetree)
+        if Int(tree.num_outputs) != outputs or len(tree.vector_leaf) != len(tree.sparsetree) * outputs:
+            raise Error("fitted RF leaf storage differs from export dimensions")
+    var count = len(trees)
+    var meta: List[Int64] = [Int64(count), Int64(outputs)]
+    return RF_EXPORTS.get_or_create_ptr()[].insert(trees^, count, nodes, outputs, meta^)
+
+
+def rf_forest_export_binding(handle: PythonObject, offsets: PythonObject,
+    columns: PythonObject, thresholds: PythonObject, left: PythonObject,
+    leaves: PythonObject, counts: PythonObject) raises -> PythonObject:
+    if len(counts) != 3:
+        raise Error("forest_export requires trees, nodes, outputs capacities")
+    var id = Int(py=handle)
+    var registry = RF_EXPORTS.get_or_create_ptr()
+    registry[].validate(id, Int(py=counts[0]), Int(py=counts[1]), Int(py=counts[2]))
+    validate_forest_export_destinations(Int(py=offsets), Int(py=columns),
+        Int(py=thresholds), Int(py=left), Int(py=leaves))
+    var op = _i32_ptr(Int(py=offsets))
+    var cp = _i32_ptr(Int(py=columns))
+    var tp = _f32_ptr(Int(py=thresholds))
+    var lp = _i32_ptr(Int(py=left))
     var total = 0
-    offsets.append(PythonObject(0))
-    for t in range(len(forest.trees)):
-        ref tree = forest.trees[t]
-        var n = len(tree.sparsetree)
-        total += n
-        offsets.append(PythonObject(total))
-        for i in range(n):
+    op[0] = 0
+    ref trees = registry[].entries[id].model
+    for t in range(len(trees)):
+        ref tree = trees[t]
+        for i in range(len(tree.sparsetree)):
             ref node = tree.sparsetree[i]
-            colid.append(PythonObject(Int(node.ColumnId())))
-            quesval.append(PythonObject(Float64(node.QueryValue())))
-            left_child.append(PythonObject(Int(node.LeftChildId())))
-        for i in range(len(tree.vector_leaf)):
-            leaves.append(PythonObject(Float64(tree.vector_leaf[i])))
-    var meta = Python.list()
-    meta.append(PythonObject(len(forest.trees)))
-    meta.append(PythonObject(num_outputs))
-    var out = Python.list()
-    out.append(offsets)
-    out.append(colid)
-    out.append(quesval)
-    out.append(left_child)
-    out.append(leaves)
-    out.append(meta)
-    return out
+            cp[total + i] = Int32(node.ColumnId())
+            tp[total + i] = node.QueryValue()
+            lp[total + i] = Int32(node.LeftChildId())
+        copy_forest_export_leaves(tree.vector_leaf, Int(py=leaves),
+                                  total * registry[].entries[id].outputs)
+        total += len(tree.sparsetree)
+        op[t + 1] = Int32(total)
+    return PythonObject(None)
 
 
-def _rf_classifier_fit(
+def rf_forest_export_legacy_binding(handle: PythonObject) raises -> PythonObject:
+    var registry = RF_EXPORTS.get_or_create_ptr()
+    var id = Int(py=handle)
+    if id not in registry[].entries:
+        raise Error("unknown or released fitted forest export handle")
+    return _forest_out_trees(registry[].entries[id].model)
+
+
+def rf_forest_export_release_binding(handle: PythonObject) raises -> PythonObject:
+    RF_EXPORTS.get_or_create_ptr()[].release(Int(py=handle))
+    return PythonObject(None)
+
+
+def _rf_classifier_fit[EXPORT: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
@@ -345,7 +383,7 @@ def _rf_classifier_fit(
         ctx.synchronize()
         # DEVIATION 2481: bulk typed copies preserve every input bit while
         # avoiding scalar stores into pinned memory.
-        memcpy(dest=hx.unsafe_ptr(), src=xp, count=n_rows * n_cols)
+        copy_f32(xp, hx.unsafe_ptr(), n_rows * n_cols)
         memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
         var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
@@ -391,27 +429,32 @@ def _rf_classifier_fit(
         # the caller's frame keeps it alive past every release.
         _ = ctx^
     _ = weights^
-    return _forest_out_i32(forest)
+    comptime if EXPORT:
+        var export_trees = forest.trees^
+        forest.trees = RFExportTrees()
+        return _retain_rf_export(export_trees^)
+    else:
+        return _forest_out_i32(forest)
 
 
-def rf_classifier_fit_binding(
+def rf_classifier_fit_binding[EXPORT: Bool = False](
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
-    return _rf_classifier_fit(x_addr, y_addr, params, criterion)
+    return _rf_classifier_fit[EXPORT](x_addr, y_addr, params, criterion)
 
 
-def rf_classifier_fit_weighted_binding(
+def rf_classifier_fit_weighted_binding[EXPORT: Bool = False](
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
 ) raises -> PythonObject:
     var address = Int(py=weights_addr)
     if address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
-    return _rf_classifier_fit(x_addr, y_addr, params, criterion, address)
+    return _rf_classifier_fit[EXPORT](x_addr, y_addr, params, criterion, address)
 
 
-def rf_regressor_fit_binding(
+def rf_regressor_fit_binding[EXPORT: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
@@ -447,8 +490,8 @@ def rf_regressor_fit_binding(
         ctx.synchronize()
         # DEVIATION 2481: bulk typed copies preserve every input bit while
         # avoiding scalar stores into pinned memory.
-        memcpy(dest=hx.unsafe_ptr(), src=xp, count=n_rows * n_cols)
-        memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
+        copy_f32(xp, hx.unsafe_ptr(), n_rows * n_cols)
+        copy_f32(yp, hy.unsafe_ptr(), n_rows)
         var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
         var dy = ctx.enqueue_create_buffer[RLT](n_rows)
@@ -485,7 +528,12 @@ def rf_regressor_fit_binding(
         # DEVIATION 1946, as in `rf_classifier_fit_binding`: the context
         # outlives every buffer created on it.
         _ = ctx^
-    return _forest_out(forest)
+    comptime if EXPORT:
+        var export_trees = forest.trees^
+        forest.trees = RFExportTrees()
+        return _retain_rf_export(export_trees^)
+    else:
+        return _forest_out(forest)
 
 
 def _rebuild_trees(
@@ -786,14 +834,20 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_rf")
         m.def_function[rf_vendor_binding]("rf_vendor")
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
-        m.def_function[rf_classifier_fit_binding]("rf_classifier_fit")
-        m.def_function[rf_classifier_fit_weighted_binding]("rf_classifier_fit_weighted")
-        m.def_function[rf_regressor_fit_binding]("rf_regressor_fit")
+        m.def_function[rf_classifier_fit_binding[False]]("rf_classifier_fit")
+        m.def_function[rf_classifier_fit_binding[True]]("rf_classifier_fit_export")
+        m.def_function[rf_classifier_fit_weighted_binding[False]]("rf_classifier_fit_weighted")
+        m.def_function[rf_classifier_fit_weighted_binding[True]]("rf_classifier_fit_weighted_export")
+        m.def_function[rf_regressor_fit_binding[False]]("rf_regressor_fit")
+        m.def_function[rf_regressor_fit_binding[True]]("rf_regressor_fit_export")
         m.def_function[rf_predict_proba_binding]("rf_predict_proba")
         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
         m.def_function[rf_predict_proba_gpu_parallel_binding]("rf_predict_proba_gpu_parallel")
         m.def_function[rf_predict_reg_gpu_parallel_binding]("rf_predict_reg_gpu_parallel")
         m.def_function[forest_resident_layout_binding]("forest_resident_layout")
+        m.def_function[rf_forest_export_binding]("forest_export")
+        m.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
+        m.def_function[rf_forest_export_release_binding]("forest_export_release")
         m.def_function[forest_prepare_gpu_binding[True]]("forest_prepare_gpu")
         m.def_function[forest_predict_resident_gpu_binding[True]]("forest_predict_resident_gpu")
         m.def_function[forest_release_gpu_binding[True]]("forest_release_gpu")

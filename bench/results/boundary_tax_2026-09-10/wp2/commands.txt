@@ -1,0 +1,12 @@
+# Serialized under nice -n 19 tools/with_build_lock.sh.
+pixi run mojo build -I . -I bindings checks/forest_export_protocol.mojo -o /tmp/wp2-export-host
+/tmp/wp2-export-host
+# For each mode fast, deterministic, identical:
+MOJOLEARN_NUMERIC_MODE=<mode> bash bindings/build_trees.sh
+MOJOLEARN_NUMERIC_MODE=<mode> bash bindings/build_rf.sh
+PYTHONPATH=python /tmp/mojolearn-release-080/tests-env/bin/python checks/forest_export_public.py --mode <mode> --vendor metal
+# Large timing, one fit then one warmup/five alternating pairs:
+PYTHONPATH=python /tmp/mojolearn-release-080/tests-env/bin/python tools/bench_forest_export.py --data /Users/andrewhendel/datasets/gbm-bench/higgs/HIGGS.f32.npy --mode fast
+# Native FAST DSO snapshots retained outside git:
+# /tmp/mojolearn-boundary-candidate/fast/_mojolearn_trees.so
+# /tmp/mojolearn-boundary-candidate/fast/_mojolearn_rf.so

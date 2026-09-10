@@ -62,8 +62,15 @@ optimization gate. NVIDIA/AMD attribution remains owed. No competitor ratio is i
   Float64 direct-to-pinned fusion is a follow-on, with a benchmark prepared
   against the actual transpose implementation; a flat-cast proxy is not
   enough evidence. Binding integration and large vendor timing are separate.
-- WP2: typed native fit handle/export in progress. Device-resident handoff
-  is a follow-on after the host export protocol qualifies.
+- WP2: caller-buffer export is now the default, with typed native ownership
+  and finally-release cleanup shared by RF/ET. All three Metal modes pass
+  same-fit five-array and saved-NPZ byte equality for four estimators plus
+  weighted RF classification (15 cases). HIGGS 1M × 28, 100 trees, 1,823,474
+  nodes: five interleaved export-only pairs gave minimum 2394.039 ms for
+  List export/Array packing and 3.663 ms for caller-buffer export/allocation,
+  with 1.424% baseline endpoint drift and matching model hashes. This is not
+  a whole-fit speedup claim. Evidence is `bench/results/boundary_tax_2026-09-10/wp2/`;
+  CUDA/HIP gates and device-resident fit handoff remain follow-ons.
 - WP3: the borrowed-pointer, reusable-I/O path remains the default. The six-cell
   Metal matrix passes FAST/DETERMINISTIC/IDENTICAL with separate-array and
   packed-sibling layouts. Complete RF/ET outputs match the retained List path

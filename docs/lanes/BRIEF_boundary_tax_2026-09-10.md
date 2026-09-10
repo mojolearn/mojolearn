@@ -3,6 +3,11 @@
 Written 2026-09-10 against main 36d48b07. Self-contained. Numbers here are
 Apple M4 unless a column is named; every other vendor is OWED.
 
+Implementation status and measured attribution now live in
+[BOUNDARY_TAX_PROGRESS_2026-09-10.md](BOUNDARY_TAX_PROGRESS_2026-09-10.md).
+The historical motivation below is retained; it is not a current speed claim.
+WP6/WP7 belong to a separate lane.
+
 ## The claim this lane tests
 
 Every estimator pays a fixed cost per call that has nothing to do with its
@@ -163,24 +168,80 @@ trees first, rf second, in separate commits.
 Gate: the five arrays byte-identical to the list path on the same fit (dump
 both, `cmp`). Model file hashes from `save()` unchanged. Timing per WP0.
 
+Implementation status (current candidate): shared typed ownership registry in
+`bindings/forest_export_binding.mojo`, ET/RF `*_fit_export` entrypoints and one
+Python allocate/export/finally-release protocol are wired. The registry owns
+ET's FitResult or RF's native tree list; it does not flatten or re-upload a
+second model. `forest_export_legacy(handle)` reads the same fit for diagnostics.
+`MOJOLEARN_FOREST_EXPORT=into` is the measured default; `legacy` selects the comparison arm
+and `verify` additionally requires five-array byte equality against that
+same-handle diagnostic before releasing it. Invalid selection names are refused.
+The default was promoted after native gates and valid large-forest export timing.
+
+Eleven focused Python export checks passed, including archive-byte equality,
+allocation/export/diagnostic failure cleanup, negative-control corruption and
+retaining the exported Array owners without repacking. The native host-only
+registry/count/copy check compiled and passed locally. Both bindings built in
+all three tiers; all fifteen Metal same-fit checks passed (four estimators plus
+weighted RF classification in each tier), including exact saved NPZ bytes.
+Evidence: `bench/results/boundary_tax_2026-09-10/wp2/`.
+
+The interleaved FAST Metal export-only comparison used one fitted HIGGS forest:
+1M rows, 28 features, 100 depth-16 trees, 1,823,474 nodes. After warmup, five
+pairs gave minimum **2394.039 ms** for the List export plus Array packing and
+**3.663 ms** for caller-buffer export plus Array allocation. Every output's
+five-array SHA256 agreed. Baseline endpoint drift was 1.424%, within the 20%
+limit. This measures export only, not a whole-fit speedup. Caller-buffer export is now the default on this evidence; whole-fit timing
+and CUDA/HIP qualification remain RUN OWED.
+
+Reproduction after serialized builds:
+
+    pixi run mojo build -I . -I bindings checks/forest_export_protocol.mojo -o /tmp/wp2-export-host
+    /tmp/wp2-export-host
+    PYTHONPATH=python python checks/forest_export_public.py --mode fast --vendor metal
+
+Run the public gate again with `--mode deterministic` and `--mode identical`
+using each rebuilt tier; CUDA/HIP use the matching `--vendor` and rebuilt
+bindings. Small fixtures certify bytes and lifecycle only. The large-data
+export timing is `tools/bench_forest_export.py --data <HIGGS.f32.npy> --mode fast`.
+ET timer keys distinguish `boundary_export_handle` and `boundary_export_into`
+from the retained List arm's `boundary_python_objects` and Python packing.
+
 ### WP3. Predict X path. DEVIATION 2483.
 
-Move P. `bindings/forest_inference_binding.mojo::forest_predict_resident_gpu_binding`
-(:63-83) copies X into a `List` and drains the result with a scalar loop on
-EVERY predict. Twenty lines below it,
-`forest_predict_resident_into_gpu_binding` (:96-115) is the pointer-through
-version, marked "experimental borrowed-pointer A/B entry", and
-`core/forest_inference_model.mojo::_predict_into_buffers` (:238-241) is its
-clean device side. Promote it: make `_forest_protocol._predict_forest` call
-the `_into_` entry, keep the old entry one release for the A/B, then delete.
-Also `ResidentForest.predict`'s `result.append` drain (`:163-164`).
+**Already implemented and selected on current main.** Both RF and ET export
+`forest_predict_resident_reuse_gpu` as
+`forest_predict_resident_into_gpu_binding[..., True]`. The public
+`_forest_protocol._resident_prediction_function` selects that export, which
+passes X/output pointers through `_predict_into_buffers` and retains the device
+I/O allocation for equal-size calls. No input List or scalar output drain runs
+on this default. Switching to the plain `_into_` export would discard that
+allocation reuse. Its old “experimental” docstring was stale and is corrected.
 
-The sequential engines (`et_predict_binding` :342-365, `rf_predict_proba_binding`
-via `_rebuild_trees`) rebuild the forest node by node per call. They are the
-legacy engine; leave them, note them.
+The List-based `forest_predict_resident_gpu` and uncached `_into_` exports remain
+A/B reference arms. `ResidentForest.predict`'s List drain belongs to that
+retained reference, not the selected path. Sequential prediction still rebuilds
+the forest per call and is outside WP3; no engine default changes here.
 
-Gate: predictions byte-identical old entry vs new on the same X and model,
-all three tiers. Timing: predict at 2M rows, interleaved, min of 5.
+The September 10 `bench/results/forest_io_reuse_2026-09-10/` evidence records
+prior CUDA IDENTICAL results. No new performance result is attributed to this
+boundary audit. Added Python checks sabotage both comparison arms and verify
+borrowed input/output addresses for four estimators in all three numeric modes.
+The native resident-layout check now compares the List arm directly with both
+pointer arms for RF and ET over ragged forests, threshold-edge inputs and output
+widths 1, 2, 3, 5, 8 and 9.
+
+Gate status for this audit: 26 focused Python tests passed. Native all-tier
+matrix RUN OWED, serialized with other builds/GPU work:
+
+    nice -n 19 bash tools/check_forest_resident_layouts.sh /tmp/wp3-resident-gates
+
+That script explicitly runs FAST, DETERMINISTIC and IDENTICAL for separate and
+packed layouts. These small fixtures certify correctness, not speed. Fresh
+large-data timing remains RUN OWED: 2M prediction rows, at least five
+interleaved List/into/reuse pairs, recorded entrypoints, minimum timings and
+baseline first-to-last drift, void above 20 percent. WP0 attribution still
+applies before claiming any share of the boundary bill.
 
 ### WP4. Per-tree host loops in the ensemble RF. DEVIATION 2484.
 

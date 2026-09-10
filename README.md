@@ -26,6 +26,10 @@ use `numpy.asarray(result)` for a zero-copy view. See the
 [qualification roadmap](docs/lanes/NUMPY_FREE_RESIDUAL_2026-09-10.md).
 The published version below retains its existing API.
 
+Random forest and ExtraTrees fit now export model bytes directly into owned
+Array buffers, avoiding per-node Python objects; see the
+[forest ownership contract](python/mojolearn/NUMPY_FREE_CONTRACT.md#forest-fit-ownership-deviation-2482).
+
 ## Training performance priority
 
 Optimize GPU training for **large real datasets**. Training-speed claims and

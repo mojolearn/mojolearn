@@ -5,13 +5,13 @@
 Kept in its OWN extension for the same reason `_mojolearn_estimators` and
 `_mojolearn_gbdt` are: an independently changing binding stops being a merge
 point, and the extratrees lane changes independently of both. Arrays cross as
-borrowed NumPy addresses; all device buffers and contexts live for one call
-and no pointer is retained.
+borrowed host-buffer addresses. Training contexts live for one call; no input
+pointer is retained. The default fit returns an owned native export handle and
+counts. Python allocates the five model Arrays, exports their bytes and releases
+the handle in a finally block. The model then lives in those Python-owned Arrays.
 
-THE MODEL CROSSES AS FLAT ARRAYS, NOT AS A HANDLE. The gbdt boundary is
-handle-free through its model TEXT; this lane has no text format, so the
-forest crosses as the arrays `TreeMetaDataNode` already is (deviation 146's
-layout argument): per-node `colid` / `quesval` / `left_child_id`, the flat
+THE MODEL LAYOUT REMAINS FLAT ARRAYS: per-node `colid` / `quesval` /
+`left_child_id`, the flat
 `vector_leaf`, and a `tree_offsets` prefix so tree `t` is the node range
 `[offsets[t], offsets[t+1])`. `et_predict` rebuilds the forest from those
 arrays and calls the IMPLEMENTED `forest_vote` -- the traversal is
@@ -21,11 +21,9 @@ traversal never reads either (`flatnode.mojo` says so of `best_metric_val`
 explicitly), and a field the boundary carries but nothing reads is the
 present-but-dead state rule 3 forbids.
 
-FIT RETURNS PYTHON LISTS, one element at a time under the GIL. On a
-100-tree forest of covtype-sized trees that is a few million appends and it
-is the dominant cost of the CALL (not of the fit). Named rather than hidden;
-the fix, if it is ever needed, is a two-call sizes-then-fill protocol or a
-bytes serialization, both of which change this surface.
+DEVIATION 2482: caller-buffer export is the default after all-tier same-fit
+array/archive gates and a large-data export-only A/B on Metal. Retained List
+entrypoints are comparison arms; they do not run on the default fit path.
 """
 
 from std.os import abort
@@ -64,6 +62,82 @@ from extratrees.impl.decisiontree.flatnode import (
 from extratrees.impl.randomforest.randomforest import Forest, forest_vote
 
 
+# DEVIATION 2482: fit/export ownership is separate from inference residency.
+from std.ffi import _Global
+from forest_export_binding import (
+    ForestExportRegistry, validate_forest_export_destinations,
+    copy_forest_export_leaves,
+)
+comptime ET_EXPORTS = _Global[StorageType=ForestExportRegistry[FitResult],
+    name=("MojoETFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
+          "MojoETFitExportDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
+          "MojoETFitExportFast"), init_fn=ForestExportRegistry[FitResult].__init__]
+
+
+def _retain_et_export(var result: FitResult) raises -> PythonObject:
+    var trees = len(result.forest.trees)
+    var nodes = 0
+    for tree in result.forest.trees:
+        nodes += tree.num_nodes()
+        if len(tree.vector_leaf) != tree.num_nodes() * Int(result.forest.num_outputs):
+            raise Error("fitted ET leaf storage differs from export dimensions")
+    var meta: List[Int64] = [Int64(result.forest.n_trees), Int64(result.forest.num_outputs),
+        Int64(1 if result.depth_cap_bound else 0), Int64(result.plan.params.max_depth),
+        Int64(result.plan.max_features_count), Int64(result.plan.n_sampled_rows)]
+    var outputs = Int(result.forest.num_outputs)
+    if trees != Int(result.forest.n_trees):
+        raise Error("fitted ET tree metadata differs from export dimensions")
+    return ET_EXPORTS.get_or_create_ptr()[].insert(result^, trees, nodes, outputs, meta^)
+
+
+def et_forest_export_binding(handle: PythonObject, offsets: PythonObject,
+    columns: PythonObject, thresholds: PythonObject, left: PythonObject,
+    leaves: PythonObject, counts: PythonObject) raises -> PythonObject:
+    if len(counts) != 3:
+        raise Error("forest_export requires trees, nodes, outputs capacities")
+    var id = Int(py=handle)
+    var registry = ET_EXPORTS.get_or_create_ptr()
+    registry[].validate(id, Int(py=counts[0]), Int(py=counts[1]), Int(py=counts[2]))
+    validate_forest_export_destinations(Int(py=offsets), Int(py=columns),
+        Int(py=thresholds), Int(py=left), Int(py=leaves))
+    var op = _i32_ptr(Int(py=offsets))
+    var cp = _i32_ptr(Int(py=columns))
+    var tp = _f32_ptr(Int(py=thresholds))
+    var lp = _i32_ptr(Int(py=left))
+    var total = 0
+    op[0] = 0
+    ref model = registry[].entries[id].model
+    var times = StageTimes()
+    var stamp = times.start()
+    for t in range(len(model.forest.trees)):
+        ref tree = model.forest.trees[t]
+        for i in range(tree.num_nodes()):
+            ref node = tree.sparsetree[i]
+            cp[total + i] = node.colid
+            tp[total + i] = node.quesval
+            lp[total + i] = node.left_child_id
+        copy_forest_export_leaves(tree.vector_leaf, Int(py=leaves),
+                                  total * registry[].entries[id].outputs)
+        total += tree.num_nodes()
+        op[t + 1] = Int32(total)
+    times.stop_host("boundary_export_into", stamp)
+    times.report()
+    return PythonObject(None)
+
+
+def et_forest_export_legacy_binding(handle: PythonObject) raises -> PythonObject:
+    var registry = ET_EXPORTS.get_or_create_ptr()
+    var id = Int(py=handle)
+    if id not in registry[].entries:
+        raise Error("unknown or released fitted forest export handle")
+    return _forest_out(registry[].entries[id].model)
+
+
+def et_forest_export_release_binding(handle: PythonObject) raises -> PythonObject:
+    ET_EXPORTS.get_or_create_ptr()[].release(Int(py=handle))
+    return PythonObject(None)
+
+
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("mojolearn: null float32 buffer address")
@@ -77,7 +151,7 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
 
 
 def _copy_f32(addr: PythonObject, n: Int) raises -> List[Float32]:
-    """Borrowed NumPy memory into an owned List, read while the GIL-holding
+    """Borrowed host memory into an owned List, read while the GIL-holding
     caller keeps the array alive (the `_arrays.py` contract)."""
     var p = _f32_ptr(Int(py=addr))
     var out = List[Float32](capacity=n)
@@ -217,14 +291,14 @@ def _forest_out(result: FitResult) raises -> PythonObject:
     return out
 
 
-def et_classifier_fit_binding(
+def et_classifier_fit_binding[EXPORT: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
     """Fit `ExtraTreesClassifier`. `x` is COLUMN-major float32
     (n_rows * n_features), `y` is float32 class CODES in [0, n_classes).
-    See `N_FIT_PARAMS` for `params`; returns `_forest_out`'s lists."""
+    See `N_FIT_PARAMS`; EXPORT selects an owned handle instead of diagnostic lists."""
     if len(params) != N_FIT_PARAMS:
         raise Error(
             "et_classifier_fit: params must hold "
@@ -267,14 +341,21 @@ def et_classifier_fit_binding(
         )
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
-    var output = _forest_out(result)
-    times.stop_host("boundary_python_objects", stamp)
+    var output: PythonObject
+    comptime if EXPORT:
+        output = _retain_et_export(result^)
+    else:
+        output = _forest_out(result)
+    comptime if EXPORT:
+        times.stop_host("boundary_export_handle", stamp)
+    else:
+        times.stop_host("boundary_python_objects", stamp)
     times.stop_host("fit_total", total_start)
     times.report()
     return output
 
 
-def et_regressor_fit_binding(
+def et_regressor_fit_binding[EXPORT: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
@@ -323,8 +404,15 @@ def et_regressor_fit_binding(
         )
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
-    var output = _forest_out(result)
-    times.stop_host("boundary_python_objects", stamp)
+    var output: PythonObject
+    comptime if EXPORT:
+        output = _retain_et_export(result^)
+    else:
+        output = _forest_out(result)
+    comptime if EXPORT:
+        times.stop_host("boundary_export_handle", stamp)
+    else:
+        times.stop_host("boundary_python_objects", stamp)
     times.stop_host("fit_total", total_start)
     times.report()
     return output
@@ -343,7 +431,7 @@ def et_predict_binding(
     """The forest's averaged vote per row, through the IMPLEMENTED traversal.
 
     Model arrays are int32/float32 as `_forest_out` laid them out (the
-    wrapper converts the lists once and keeps NumPy arrays). `x` here is
+    wrapper exports and keeps host Arrays). `x` here is
     ROW-major (the traversal reads `row[offset + colid]`). `out` is
     n_rows * num_outputs float32 and receives `forest_vote`'s average --
     per-class probabilities for the classifier (argmax is the wrapper's,
@@ -502,11 +590,16 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         m.def_function[trees_vendor_binding]("trees_vendor")
         m.def_function[trees_numeric_mode_binding]("trees_numeric_mode")
         m.def_function[trees_shared_counts_mask_binding]("trees_shared_counts_mask")
-        m.def_function[et_classifier_fit_binding]("et_classifier_fit")
-        m.def_function[et_regressor_fit_binding]("et_regressor_fit")
+        m.def_function[et_classifier_fit_binding[False]]("et_classifier_fit")
+        m.def_function[et_classifier_fit_binding[True]]("et_classifier_fit_export")
+        m.def_function[et_regressor_fit_binding[False]]("et_regressor_fit")
+        m.def_function[et_regressor_fit_binding[True]]("et_regressor_fit_export")
         m.def_function[et_predict_binding]("et_predict")
         m.def_function[et_predict_gpu_parallel_binding]("et_predict_gpu_parallel")
         m.def_function[forest_resident_layout_binding]("forest_resident_layout")
+        m.def_function[et_forest_export_binding]("forest_export")
+        m.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
+        m.def_function[et_forest_export_release_binding]("forest_export_release")
         m.def_function[forest_prepare_gpu_binding[False]]("forest_prepare_gpu")
         m.def_function[forest_predict_resident_gpu_binding[False]]("forest_predict_resident_gpu")
         m.def_function[forest_release_gpu_binding[False]]("forest_release_gpu")

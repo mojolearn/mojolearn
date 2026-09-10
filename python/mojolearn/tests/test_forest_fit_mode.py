@@ -34,6 +34,8 @@ def fit_stub(self, *args, **kwargs):
 
 @pytest.mark.parametrize('cls', CLASSES)
 def test_capture_default_refit_reset_pickle(cls, monkeypatch, boundary):
+    # Sentinel entrypoints isolate mode capture; export routing has its own gate.
+    monkeypatch.setenv("MOJOLEARN_FOREST_EXPORT", "legacy")
     default, calls = boundary
     monkeypatch.setattr(cls, '_fit_arrays', fit_stub)
     model = cls()

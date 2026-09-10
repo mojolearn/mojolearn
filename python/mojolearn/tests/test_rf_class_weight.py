@@ -33,6 +33,8 @@ def test_invalid_option(value):
 
 
 def test_fit_dispatch(monkeypatch):
+    # This unit test isolates weighted entry selection, not export ownership.
+    monkeypatch.setenv("MOJOLEARN_FOREST_EXPORT", "legacy")
     import ctypes
     from types import SimpleNamespace
     seen = []

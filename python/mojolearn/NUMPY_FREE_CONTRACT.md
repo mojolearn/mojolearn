@@ -14,6 +14,17 @@ not CPU implementations of learners. See
 for qualification still owed; removal of a dependency does not certify new
 cross-vendor training results.
 
+## Forest fit ownership (DEVIATION 2482)
+
+RF and ExtraTrees fit export directly into caller-allocated `Array` buffers.
+A temporary typed native handle owns the fitted model until export finishes;
+the shared Python wrapper releases it even when allocation, export or validation
+fails. The estimator retains the exported arrays without per-node Python objects
+or a second packing pass. `MOJOLEARN_FOREST_EXPORT=legacy` and `verify` retain
+same-fit diagnostic comparisons; the default is `into`. Metal same-fit model and
+archive bytes are gated in all three modes. CUDA/HIP qualification remains owed;
+the measured large-forest gain is export-only, not a whole-fit speed claim.
+
 ## `_buffer.py` (replaces `_arrays.py`; DEVIATION 2300)
 
 ```python

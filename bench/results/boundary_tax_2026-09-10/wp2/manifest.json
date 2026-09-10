@@ -1,0 +1,22 @@
+{
+  "sources_sha256": {
+    "bindings/forest_export_binding.mojo": "98e71f1337f910a889d5cb992946eb5a197dc3447a98410c93dd1e663bd54943",
+    "bindings/_mojolearn_trees.mojo": "204613ae144dea8221ef76a0a4d20778157c422fb1d461bc059f8c8564963e9f",
+    "bindings/_mojolearn_rf.mojo": "8bbfb15d7c5e0ae44989a66dea6ebc0edaf4c0b72d8caf6f886477f335a9db49",
+    "python/mojolearn/_forest_protocol.py": "a87f59961ed3610d8cf4520aa57e2d2ba6e9015ca349e0a2d3b44d474f8b0f22",
+    "python/mojolearn/extratrees.py": "90a05b5f1474ff78922737298386635b886fb6270360be5f432ac118c437cec0",
+    "python/mojolearn/randomforest.py": "64fe12f8c688955a76dbaa71c1afad0f84e9497227a1d3b812eb507568e4af85",
+    "checks/forest_export_public.py": "9ec86d614b82c23708538ac4a42d86abba8a8acc5c5efd28c97d3fde650b97cf",
+    "checks/forest_export_protocol.mojo": "9793dead20ef3c561ea9a2211caaa45750dce83a26fa39d9869e1e07a38c92c9",
+    "tools/bench_forest_export.py": "b36b7e3e07075943557902618110b678d363de5d9f8b1b958750c1994fb7d941"
+  },
+  "native_sha256": {
+    "/tmp/mojolearn-boundary-candidate/fast/_mojolearn_rf.so": "1faaab126e252c426d32f058753de6a9227192a5b74a1cd8fe4ca66eb42cdc80",
+    "/tmp/mojolearn-boundary-candidate/fast/_mojolearn_trees.so": "2f35726547f23f5dd57a864ed9db81559e989d7c8e38abd81982f291dee19334"
+  },
+  "gpu_vendor": "metal",
+  "native_gate_cases": 15,
+  "other_vendors": "RUN OWED",
+  "default": "into promoted after all-tier Metal exact-byte gates and large-data export A/B",
+  "source_note": "Native source hashes captured after builds, before documentation-only module-header edits. Python default was promoted afterward; explicit into/verify native paths had passed."
+}

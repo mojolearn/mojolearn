@@ -1,0 +1,67 @@
+{
+  "scope": "same-native-fit export and Array allocation only; no training speed claim",
+  "rows": 1000000,
+  "features": 28,
+  "trees": 100,
+  "nodes": 1823474,
+  "mode": "fast",
+  "vendor": "metal",
+  "training_ms": 11424.015833006706,
+  "samples": [
+    {
+      "pair": 0,
+      "arm": "into",
+      "ms": 3.748332994291559
+    },
+    {
+      "pair": 0,
+      "arm": "legacy",
+      "ms": 2428.6279160005506
+    },
+    {
+      "pair": 1,
+      "arm": "legacy",
+      "ms": 2458.785666996846
+    },
+    {
+      "pair": 1,
+      "arm": "into",
+      "ms": 3.9670410042162985
+    },
+    {
+      "pair": 2,
+      "arm": "into",
+      "ms": 3.6627920053433627
+    },
+    {
+      "pair": 2,
+      "arm": "legacy",
+      "ms": 2417.347874987172
+    },
+    {
+      "pair": 3,
+      "arm": "legacy",
+      "ms": 2407.812334015034
+    },
+    {
+      "pair": 3,
+      "arm": "into",
+      "ms": 3.7370419886428863
+    },
+    {
+      "pair": 4,
+      "arm": "into",
+      "ms": 3.816209005890414
+    },
+    {
+      "pair": 4,
+      "arm": "legacy",
+      "ms": 2394.038750004256
+    }
+  ],
+  "model_sha256": "8f137119898d48cfb8d981d7c8a09019b2fade484714044e9449092474ad103e",
+  "baseline_min_ms": 2394.038750004256,
+  "candidate_min_ms": 3.6627920053433627,
+  "baseline_endpoint_spread": 0.014242266494760422,
+  "window_valid": true
+}

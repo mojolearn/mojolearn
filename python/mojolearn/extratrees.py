@@ -92,7 +92,8 @@ from ._labels import (
     flatten_labels, is_bool, sorted_classes,
 )
 from ._mode import NumericModeMixin
-from ._forest_protocol import ForestProtocol, forest_estimator
+from ._forest_protocol import (ForestProtocol, forest_estimator,
+                               _forest_fit_function, _forest_fit_arrays)
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-extratrees-1"
@@ -256,14 +257,8 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         out = fit_fn(addr_ro(Xf, name="X"), addr_ro(ya, name="y"), params)
         binding_end = perf_counter() if boundary_times else 0
         del Xf, ya  # the borrow ends with the call
-        offsets, colid, quesval, left_child, leaves, meta = out
-        # The binding returns Python lists; packing them is the same
-        # O(nodes) conversion `np.asarray(list)` was.
-        self._offsets = Array.from_list([int(v) for v in offsets], "<i4")
-        self._colid = Array.from_list([int(v) for v in colid], "<i4")
-        self._quesval = Array.from_list([float(v) for v in quesval], "<f4")
-        self._left_child = Array.from_list([int(v) for v in left_child], "<i4")
-        self._leaves = Array.from_list([float(v) for v in leaves], "<f4")
+        (self._offsets, self._colid, self._quesval, self._left_child,
+         self._leaves, meta) = _forest_fit_arrays(out)
         if boundary_times:
             print("BOUNDARY_PYTHON", {"binding_ms": (binding_end - binding_start) * 1000,
                   "array_pack_ms": (perf_counter() - binding_end) * 1000}, flush=True)
@@ -450,7 +445,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
             X,
             Array.from_list([float(c) for c in codes], "<f4"),
             self.n_classes_,
-            self._bind("_mojolearn_trees").et_classifier_fit,
+            _forest_fit_function(self._bind("_mojolearn_trees"), "et_classifier_fit"),
         )
 
     def predict_proba(self, X):
@@ -542,7 +537,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
             X,
             ya,
             0,
-            self._bind("_mojolearn_trees").et_regressor_fit,
+            _forest_fit_function(self._bind("_mojolearn_trees"), "et_regressor_fit"),
         )
 
     def predict(self, X):

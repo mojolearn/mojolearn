@@ -184,7 +184,7 @@ kw = dict(n_estimators=5, max_depth=8, random_state=7)
 c1 = rfm.RandomForestClassifier(**kw).fit(X, yc)
 if (c1.predict(X) == yc).mean() < 0.9:
     raise SystemExit("smoke: classifier failed a separable fixture")
-p = c1.predict_proba(X)
+p = np.asarray(c1.predict_proba(X))
 if p.shape != (512, 2) or not np.allclose(p.sum(axis=1), 1.0, atol=1e-5):
     raise SystemExit("smoke: predict_proba rows do not sum to 1")
 c2 = rfm.RandomForestClassifier(**kw).fit(X, yc)
