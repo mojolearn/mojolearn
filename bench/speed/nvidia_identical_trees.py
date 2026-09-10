@@ -46,6 +46,11 @@ def main():
     parser.add_argument('--rows', type=int, required=True)
     parser.add_argument('--size', choices=['smoke', 'shipped'], default='shipped')
     parser.add_argument('--rounds', type=int, default=5)
+    parser.add_argument('--symmetric-profile',
+                        choices=['matched-no-noise', 'native-defaults'],
+                        default='matched-no-noise',
+                        help='matched-no-noise sets CatBoost random_strength=0, matching ours; '
+                             'native-defaults retains the historical mismatch')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if args.rounds < 1 or args.rows < 1:
@@ -74,7 +79,12 @@ def main():
         single.name = 'cuml-rf-gpu-stream1'
         arms += [default, single]
     elif args.lane == 'gbdt-symmetric':
-        arms += spec.catboost_arms(args.lane, config, data, ['gpu'])
+        competitors = spec.catboost_arms(args.lane, config, data, ['gpu'])
+        if args.symmetric_profile == 'matched-no-noise':
+            for arm in competitors:
+                original_make = arm.make
+                arm.make = lambda make=original_make: make().set_params(random_strength=0.0)
+        arms += competitors
 
     model_hashes = []
     original_score = ours.score
@@ -89,13 +99,27 @@ def main():
         return original_score(model, current_data)
 
     ours.score = score
+    fitted_parameters = {}
+    # Resolved CatBoost defaults are available only after fit. Capture outside
+    # timers; constructor get_params alone hides leaf-estimation work.
+    for arm in arms:
+        if arm.library == "catboost":
+            base_score = arm.score
+
+            def score_catboost(model, current_data, name=arm.name, base=base_score):
+                fitted_parameters[name] = model.get_all_params()
+                return base(model, current_data)
+
+            arm.score = score_catboost
     parameters = {}
     for arm in arms:
         estimator = arm.make()
         parameters[arm.name] = (estimator.get_params() if hasattr(estimator, 'get_params')
                                 else config.copy())
     metadata = dict(lane=args.lane, dataset=data.tag, config=config,
+                    dataset_scale=spec.dataset_scale(data),
                     numeric_mode='identical', vendor='cuda', rounds=args.rounds,
+                    symmetric_profile=args.symmetric_profile if args.lane == 'gbdt-symmetric' else None,
                     binding=witness,
                     binding_sha256=hashlib.sha256(Path(witness['path']).read_bytes()).hexdigest(),
                     benchmark_source_sha256={str(path): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -109,7 +133,7 @@ def main():
                     arm_parameters=parameters)
     capture = Tee()
     with contextlib.redirect_stdout(capture):
-        spec.run(args.lane, arms, data, args.rounds, args.size)
+        spec.run(args.lane, arms, data, args.rounds, args.size, rotate_order=True)
     log = capture.getvalue()
     samples = {}
     predictions = {}
@@ -135,6 +159,9 @@ def main():
     quality_valid = (all(np.isfinite(row['value']) for row in quality)
                      and all(any(row['arm'] == arm.name for row in quality) for arm in arms))
     metadata.update(summary=summary, complete=complete, quality=quality,
+                    fitted_parameters=fitted_parameters,
+                    arm_order_policy="rotate first arm each measured round",
+                    arm_orders=re.findall(r'^FSPEED-ORDER .*$', log, re.MULTILINE),
                     quality_valid=quality_valid,
                     repeated_model_and_prediction_equal=repeatable if args.rounds >= 2 else None,
                     model_hashes=model_hashes, prediction_hashes=predictions,

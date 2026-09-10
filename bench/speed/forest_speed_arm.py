@@ -156,8 +156,8 @@ def prepare_our_inputs(data):
 def our_gbdt_arm(lane, cfg, data):
     """`mojolearn.GradientBoosting`, the CatBoost GPU tree learner port.
 
-    Every knob is the lane's, so the only difference between this arm and
-    the CatBoost arm beside it is the device and the implementation:
+    These explicit controls are shared with the CatBoost arm. Other defaults
+    and searcher dispatch can differ; this is not algorithm equivalence:
 
         n_estimators <- iterations       max_depth   <- depth
         learning_rate                    l2_leaf_reg <- reg lambda

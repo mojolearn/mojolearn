@@ -221,6 +221,13 @@ The symbol is the diff surface. Keep it greppable in their tree.
 
 ## 7. Measurement rules that survive from before
 
+- Andrew, 2026-09-10: **Optimize for large datasets.** Training-speed claims,
+  kernel selection and performance-driven defaults need representative large-data
+  measurements. Small fixtures are for correctness, smoke checks and diagnosis;
+  they are not the optimization target. Include rows, features, classes, tree
+  depth and memory pressure when judging scale. Benchmark reminders should warn
+  about small workloads without blocking useful small checks.
+
 - Only arms interleaved inside ONE process compare. This box drifts 2-3x
   across time windows.
 - A digest cannot tell a working change from a no-op. Sabotage the path and

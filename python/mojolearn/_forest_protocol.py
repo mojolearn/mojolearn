@@ -76,6 +76,39 @@ class ForestProtocol:
         self.__dict__.clear()
         self.__dict__.update(replacement.__dict__)
 
+    @staticmethod
+    def _validated_mode(mode):
+        if mode is None:
+            return None
+        if not isinstance(mode, str) or mode.strip().lower() not in (
+                "fast", "deterministic", "identical"):
+            raise ValueError("numeric_mode must be fast, deterministic, identical or None")
+        return mode.strip().lower()
+
+    def _capture_fit_mode(self):
+        from . import _backend
+        requested = self._validated_mode(getattr(self, "numeric_mode", None))
+        self._fit_numeric_mode = self._validated_mode(
+            _backend.default_mode() if requested is None else requested)
+
+    def _effective_mode(self):
+        from . import _backend
+        requested = self._validated_mode(getattr(self, "numeric_mode", None))
+        captured = getattr(self, "_fit_numeric_mode", None)
+        if captured is not None:
+            if requested is not None and requested != captured:
+                raise ValueError(
+                    f"This forest was fitted with numeric_mode={captured!r}; "
+                    "refit or use set_params before changing numeric_mode")
+            return captured
+        # Legacy inference archives have no captured mode. Honor any stored
+        # numeric_mode attribute, otherwise preserve their process default.
+        return requested if requested is not None else _backend.default_mode()
+
+    def _bind(self, name=None):
+        from . import _backend
+        return _backend.binding(name or self._BINDING, self._effective_mode())
+
     def __sklearn_is_fitted__(self):
         return hasattr(self, "_offsets")
 
@@ -103,7 +136,7 @@ class ForestProtocol:
         prediction = np.asarray(self.predict(X))
         if prediction.shape != target.shape:
             raise ValueError("score target and prediction lengths differ")
-        mode = getattr(self, "numeric_mode", None)
+        mode = self._effective_mode()
         if self._estimator_type == "classifier":
             equal = np.asarray(target == prediction, dtype=np.int32)
             return metrics.accuracy_score(np.ones(equal.shape, dtype=np.int32),

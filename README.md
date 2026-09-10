@@ -15,6 +15,18 @@ default**. The claim is proven by stage-level identity cards and separating
 sabotage tests, never inferred from a final-output hash, and it holds only for
 the configurations recorded in [the support matrix](SUPPORT_MATRIX.md).
 
+## Training performance priority
+
+Optimize GPU training for **large real datasets**. Training-speed claims and
+performance-driven default changes require measurements on representative large
+workloads, such as HIGGS with 1 million rows, with held-out quality and memory
+pressure recorded. Size is not a universal row cutoff: feature count, classes,
+bins, tree depth and device memory also determine the workload. Small synthetic
+fixtures remain useful for correctness, smoke tests and isolated diagnostics;
+they do not establish a large-data speed gain or justify a speed default.
+See the [tree roadmap](docs/lanes/DECISION_TREE_ROADMAP.md) and
+[GPU measurement plan](docs/lanes/TREE_GPU_MEASUREMENT_NEXT.md).
+
 ## What bitwise identity means, and why it is not the default
 
 Floating-point addition is not associative, so the order in which a GPU sums
