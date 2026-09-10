@@ -1,0 +1,159 @@
+1097 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79abc0000000, nodemask=2)
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:109:
+/root/continuation/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:109:
+/root/continuation/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:78:
+/root/continuation/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:28:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:966:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sv[ix] = v
+        ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:975:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sk[ix] = k
+        ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:982:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sv[j * 8 + pp], sk[j * 32 + nn], acc))
+                                    ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:982:55: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sv[j * 8 + pp], sk[j * 32 + nn], acc))
+                                                    ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1025:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sv[tid] = value
+        ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1029:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var vsv = sv[j * 2 + p % 2]
+                  ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1196:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sq[row * 32 + col] = qword
+        ~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1202:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sk[col * 33 + kj] = kword
+            ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1206:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                acc = ftz(identical_mul_add(sq[row * 32 + kk], sk[kk * 33 + col], acc))
+                                            ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1206:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                acc = ftz(identical_mul_add(sq[row * 32 + kk], sk[kk * 33 + col], acc))
+                                                               ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1310:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sm[row * 64 + jj] = coefficient
+        ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1319:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sv[ix] = value
+        ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1324:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sm[row * 64 + j], sv[j * 32 + pp], acc))
+                                    ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1324:57: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sm[row * 64 + j], sv[j * 32 + pp], acc))
+                                                      ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1432:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sq[row * 32 + pp] = qword
+        ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1435:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sh[pp * 33 + hp] = ftz(pass_states.unsafe_load(((((bb * nc + c) * nh + hh) * M3_HEADDIM) + pbase + hp) * M3_D_STATE + k0 + pp))
+            ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1438:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var qword2 = sq[row * 32 + kk]
+                         ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:120:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1439:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var hword = sh[kk * 33 + pp]
+                        ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:109:
+/root/continuation/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:109:
+/root/continuation/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:153:
+Imported from /root/continuation/mamba/impl/mamba_ssm/modules/mamba3.mojo:78:
+/root/continuation/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:51:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/continuation/mamba/checks/mamba3_check.mojo:109:
+/root/continuation/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/continuation/mamba/checks/mamba3_check.mojo:1293:28: warning: assignment to 'bytes' was never used; assign to '_' instead?
+    var bytes = List[UInt8]()
+                           ^
+/root/continuation/mamba/checks/mamba3_check.mojo:1547:30: warning: assignment to 'expect_first' was never used; assign to '_' instead?
+    var expect_first = String("")
+                             ^
