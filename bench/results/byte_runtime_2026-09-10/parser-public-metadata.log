@@ -1,0 +1,4 @@
+PASS GEMM parser accepts original and corrected labels for all 3 historical forced-plan rows
+PASS installed public runtime-shape metadata: mojolearn.byte-lm.b1-l7-d32-h4-kv2-hd8-ff64-v256-blocks2.fp32.v2 metal
+Host-only planning example: mojolearn.byte-lm.b1-l256-d512-h8-kv4-hd64-ff1024-v256-blocks2.fp32.v2 parameters= 4982784
+No training/evaluation or DeviceContext requested

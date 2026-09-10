@@ -1,0 +1,2 @@
+✨ Pixi task (check-byte-lm-config in default): mojo run -j 2 -I . training/checks/byte_lm_config_check.mojo
+PASS byte LM host-only runtime config: default registry/profile, GQA counts, copies, bounds

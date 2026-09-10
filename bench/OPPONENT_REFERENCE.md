@@ -605,3 +605,23 @@ Mamba performance claim for either large shape; it is not evidence of a
 source-caused4x regression. Baseline library SHA256 equality and GPU
 before/after/process snapshots accompany `mamba-repeat/`. No cause is
 established, and no additional opponent run would resolve this own-side issue.
+
+
+### 2026-09-10 GEMM throughput interpretation and probe-label correction
+
+No new opponent or device measurements in the runtime byte-LM pass. Reusing
+`staging_performance_2026-09-10/gemm-stage/summary.json`, useful throughput
+`2*m*n*k/(ms*1e9)` for the two staged run medians is QKV 11.274–11.280,
+MLP-up 9.733–9.743, MLP-down 11.225–11.227 TFLOP/s. Source, raw timings and
+H100 80GB HBM3 provenance are the existing staging rows above; cached cuBLAS
+prices are unchanged. These are IDENTICAL-arm throughput values, not ratios
+against our FAST arm. Against the published H100 SXM FP32 non-tensor reference
+of 67 TFLOP/s, they are 14.5–16.8% (nominal reference, not measured sustained peak).
+[NVIDIA H100 specifications](https://www.nvidia.com/en-us/data-center/h100/).
+
+The older `performance_residual_2026-09-10/gemm-residual/64tile-price.log`
+used generic `untuned`/`dispatch` labels while actually comparing current 128×128
+against a forced 64×64 candidate. Its 0.747–0.841 ratio documents the rejected
+candidate, not a current dispatch regression. Original logs remain immutable;
+new probe output names baseline/candidate and their selectors explicitly.
+See `docs/lanes/HANDOFF_speed_gemm_2026-09-10.md` for the corrected next steps.

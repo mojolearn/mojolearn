@@ -33,6 +33,9 @@ mojo = ">=1.0.0,<2"
 max = ">=26.5.0,<27"
 
 [tasks]
+# Host-only runtime byte-model shape/registry checks; no GPU import or context.
+check-byte-lm-config = "mojo run -j 2 -I . training/checks/byte_lm_config_check.mojo"
+
 # The whole correctness suite, end to end, on the GPU. This is the one command
 # that answers "does it still work". It builds and runs; there is no separate
 # build step to keep in sync.

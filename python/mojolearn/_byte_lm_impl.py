@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Authored, unqualified public wrapper for the fixed two-block byte LM.
+"""Public wrapper for a runtime-shaped two-block byte LM.
 
 This module contains no forward/backward/update arithmetic. All numerical
 work belongs to _mojolearn_byte_lm. No learning, performance, mathematical
@@ -18,6 +18,7 @@ import numpy as np
 
 from . import _backend
 from ._arrays import _addr, _addr_ro
+from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
 
 PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 _BLOCK_NAMES = ('norm1_w', 'w_q', 'w_k', 'w_v', 'w_o', 'norm2_w', 'w_gate', 'w_up', 'w_down')
@@ -112,13 +113,14 @@ def _array(value, shape, name, dtype=np.float32):
     return np.array(value, dtype=dtype, order='C', copy=True)
 
 
-def _parameters(value):
+def _parameters(value, shape=None):
+    shape = require_shape(shape)
     if isinstance(value, dict):
         if set(value) != set(PARAMETER_NAMES):
             raise ValueError('Byte-LM named parameters must contain the exact 20-tensor registry')
-        arrays = [_array(value[name], shape, name) for name, shape in zip(PARAMETER_NAMES, PARAMETER_SHAPES)]
+        arrays = [_array(value[name], shape, name) for name, shape in zip(PARAMETER_NAMES, shape.parameter_shapes)]
         return np.concatenate([array.reshape(-1) for array in arrays])
-    return _array(value, (_N,), 'parameters')
+    return _array(value, (shape.n_total,), 'parameters')
 
 
 def _step(value):
@@ -138,7 +140,8 @@ def _mode():
         raise RuntimeError('SmallByteLanguageModelTrainer requires process-selected IDENTICAL mode')
 
 
-def _load():
+def _load(shape=None):
+    shape = require_shape(shape)
     _mode()
     binding = _backend.binding(_EXTENSION, 'identical')
     if (int(binding.byte_lm_numeric_mode()) != 1
@@ -147,28 +150,40 @@ def _load():
         raise RuntimeError('Byte-LM requires the exact native profile, IDENTICAL mode and CUDA/HIP/Metal vendor')
     if not callable(getattr(binding, 'byte_lm_run', None)):
         raise ImportError('Byte-LM binding is missing byte_lm_run; rebuild bindings/build_byte_lm.sh')
+    if shape.profile != PROFILE:
+        if not callable(getattr(binding, 'byte_lm_run_configured', None)) or not callable(getattr(binding, 'byte_lm_config_profile', None)):
+            raise ImportError('Byte-LM binding lacks runtime shapes; rebuild bindings/build_byte_lm.sh')
+        if str(binding.byte_lm_config_profile(list(shape.native_shape))) != shape.profile:
+            raise RuntimeError('Byte-LM native runtime shape/profile mismatch')
     return binding
 
 
 def _snapshot(state):
+    shape = state_shape(state)
+    state = dict(state)
+    if 'model_shape' in state:
+        state['model_shape'] = shape.to_dict()
     return dict(state, parameters=state['parameters'].copy(), m=state['m'].copy(),
                 v=state['v'].copy(), flags=state['flags'].copy(), config=dict(state['config']),
                 data_schedule=_schedule(state['data_schedule']),
                 parameter_names=list(PARAMETER_NAMES),
-                parameter_shapes=[list(shape) for shape in PARAMETER_SHAPES],
-                parameter_offsets=list(_OFFSETS))
+                parameter_shapes=[list(shape) for shape in shape.parameter_shapes],
+                parameter_offsets=list(shape.offsets))
 
 
 def _validate_state(value):
     keys = {'schema', 'profile', 'numeric_mode', 'parameter_names', 'parameter_shapes',
             'parameter_offsets', 'parameters', 'm', 'v', 'flags', 'completed_steps',
             'next_batch_index', 'config', 'data_schedule'}
+    if isinstance(value, dict) and 'model_shape' in value:
+        keys.add('model_shape')
     if not isinstance(value, dict) or set(value) != keys:
         raise ValueError('Byte-LM state has missing or unknown fields')
-    if (value['schema'] != _SCHEMA or value['profile'] != PROFILE or value['numeric_mode'] != 'identical'
+    shape = state_shape(value)
+    if (value['schema'] != _SCHEMA or value['profile'] != shape.profile or value['numeric_mode'] != 'identical'
             or value['parameter_names'] != list(PARAMETER_NAMES)
-            or value['parameter_shapes'] != [list(shape) for shape in PARAMETER_SHAPES]
-            or value['parameter_offsets'] != list(_OFFSETS)):
+            or value['parameter_shapes'] != [list(shape) for shape in shape.parameter_shapes]
+            or value['parameter_offsets'] != list(shape.offsets)):
         raise ValueError('Byte-LM state profile/registry/mode mismatch')
     cfg = value['config']
     if not isinstance(cfg, dict) or set(cfg) != set(_configuration(1, (.9, .999), 1e-8, .01)):
@@ -180,17 +195,20 @@ def _validate_state(value):
     completed = _step(value['completed_steps'])
     if _step(value['next_batch_index']) != completed:
         raise ValueError('Byte-LM schedule cursor must match completed_steps')
-    parameters = _array(value['parameters'], (_N,), 'parameters')
-    m = _array(value['m'], (_N,), 'm')
-    v = _array(value['v'], (_N,), 'v')
+    parameters = _array(value['parameters'], (shape.n_total,), 'parameters')
+    m = _array(value['m'], (shape.n_total,), 'm')
+    v = _array(value['v'], (shape.n_total,), 'v')
     flags = _array(value['flags'], (20,), 'flags', np.int32)
     if np.any(v < 0) or np.any((flags != 0) & (flags != 1)):
         raise ValueError('Byte-LM requires nonnegative second moments and binary flags')
+    value = dict(value)
+    if 'model_shape' in value:
+        value['model_shape'] = shape.to_dict()
     return dict(value, parameters=parameters, m=m, v=v, flags=flags,
                 completed_steps=completed, next_batch_index=completed, config=config,
                 data_schedule=_schedule(value['data_schedule']),
                 parameter_names=list(PARAMETER_NAMES),
-                parameter_shapes=[list(shape) for shape in PARAMETER_SHAPES], parameter_offsets=list(_OFFSETS))
+                parameter_shapes=[list(shape) for shape in shape.parameter_shapes], parameter_offsets=list(shape.offsets))
 
 
 def _sha(path):
@@ -204,7 +222,8 @@ def _sha(path):
 def _binding_metadata(binding):
     root = Path(__file__).resolve().parents[2]
     names = ('python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
-             'bindings/_mojolearn_byte_lm.mojo', 'training/byte_lm.mojo')
+             'bindings/_mojolearn_byte_lm.mojo', 'training/byte_lm.mojo',
+             'training/byte_lm_config.mojo', 'python/mojolearn/_byte_lm_config.py')
     inventory = {name: _sha(root / name) for name in names if (root / name).is_file()}
     # Installed wheels may lack native sources; the Python source and exact
     # loaded binding are still identified. Do not claim a full source audit.
@@ -218,16 +237,16 @@ def _binding_metadata(binding):
 
 
 class SmallByteLanguageModelTrainer:
-    """Authored, unqualified FP32 two-block byte-language-model trainer.
+    """FP32 two-block byte-language-model trainer with runtime dimensions.
 
-    Fixed B2/L32/DM32/H4/KV2/FF64/V256, no biases/dropout/final norm, untied
-    embedding/head. Supply a copied flat FP32[34944] parameter array or the
-    exact 20 named row-major tensors exposed by parameter_registry(). There
+    Defaults B2/L32/DM32/H4/KV2/FF64/V256; pass ByteLanguageModelConfig
+    as shape to change runtime dimensions. Two blocks, 256 byte symbols,
+    no biases/dropout/final norm, untied embedding/head. Supply a flat FP32
+    array or the 20 named tensors exposed by parameter_registry(shape). There
     is no hidden initialization, tokenizer, padding, truncation or RNG.
 
-    train_step/evaluate require actual int32[2,33] IDs in [0,256). The first
-    32 positions predict the next 32; loss is mean cross-entropy over 64
-    targets. All arithmetic runs in the native CUDA/HIP/Metal IDENTICAL
+    train_step/evaluate require actual int32[B,L+1] IDs in [0,256).
+    The first L positions predict the next L; loss averages B*L targets. All arithmetic runs in the native CUDA/HIP/Metal IDENTICAL
     profile. The process must already select IDENTICAL mode.
 
     data_schedule is a bounded caller-supplied JSON descriptor. Retain corpus
@@ -238,32 +257,37 @@ class SmallByteLanguageModelTrainer:
     Complete state is copied and updates commit only after success. Evaluation
     requires byte-unchanged parameters, moments, flags and counter. Public
     checkpoints use an explicitly separate bounded JSON/hex schema; they are
-    not training/checkpoint.mojo's native binary v1 files. Learning, numerical
+    not training/checkpoint.mojo's native binary v1 files. The JSON codec
+    retains its 2 MiB bound; larger models can export state_dict arrays. Learning, numerical
     correctness and cross-vendor identity remain unqualified in this slice.
     """
 
     def __init__(self, parameters, *, data_schedule, lr=1e-3, betas=(.9, .999),
-                 eps=1e-8, weight_decay=.01):
-        flat = _parameters(parameters)
+                 eps=1e-8, weight_decay=.01, shape=None):
+        shape = require_shape(shape)
+        flat = _parameters(parameters, shape)
         config = _configuration(lr, betas, eps, weight_decay)
         descriptor = _schedule(data_schedule)
         _mode()
         self._lock = threading.RLock()
         self._runtime = None
         self._runtime_binding = None
-        self._state = dict(schema=_SCHEMA, profile=PROFILE, numeric_mode='identical',
+        self._state = dict(schema=_SCHEMA, profile=shape.profile, numeric_mode='identical',
                            parameter_names=list(PARAMETER_NAMES),
-                           parameter_shapes=[list(shape) for shape in PARAMETER_SHAPES],
-                           parameter_offsets=list(_OFFSETS), parameters=flat,
-                           m=np.zeros(_N, np.float32), v=np.zeros(_N, np.float32),
+                           parameter_shapes=[list(shape) for shape in shape.parameter_shapes],
+                           parameter_offsets=list(shape.offsets), parameters=flat,
+                           m=np.zeros(shape.n_total, np.float32), v=np.zeros(shape.n_total, np.float32),
                            flags=np.zeros(20, np.int32), completed_steps=0, next_batch_index=0,
                            config=config, data_schedule=descriptor)
+        if shape.profile != PROFILE:
+            self._state['model_shape'] = shape.to_dict()
 
     @staticmethod
-    def parameter_registry():
-        return [{'name': name, 'shape': shape, 'offset': _OFFSETS[index],
-                 'size': _OFFSETS[index + 1] - _OFFSETS[index]}
-                for index, (name, shape) in enumerate(zip(PARAMETER_NAMES, PARAMETER_SHAPES))]
+    def parameter_registry(shape=None):
+        shape = require_shape(shape)
+        return [{'name': name, 'shape': tensor_shape, 'offset': shape.offsets[index],
+                 'size': shape.offsets[index + 1] - shape.offsets[index]}
+                for index, (name, tensor_shape) in enumerate(zip(PARAMETER_NAMES, shape.parameter_shapes))]
 
     @property
     def step_(self):
@@ -280,6 +304,7 @@ class SmallByteLanguageModelTrainer:
             return _snapshot(self._state)
 
     def load_state_dict(self, state):
+        """Replace full state and its validated model shape atomically."""
         with self._lock:
             replacement = _validate_state(state)
             _mode()
@@ -287,7 +312,7 @@ class SmallByteLanguageModelTrainer:
         return self
 
     def _binding(self):
-        binding = _load()
+        binding = _load(state_shape(self._state))
         if binding is not self._runtime_binding:
             self._runtime = _binding_metadata(binding)
             self._runtime_binding = binding
@@ -302,12 +327,13 @@ class SmallByteLanguageModelTrainer:
         with self._lock:
             self._binding()
             return dict(json.loads(_canonical(self._runtime)), schema='small-byte-lm.run-metadata.v1',
-                        qualification='authored/unqualified', profile=PROFILE,
+                        qualification='authored/unqualified', profile=self._state['profile'],
                         config=dict(self._state['config']), data_schedule=_schedule(self._state['data_schedule']),
                         completed_steps=self.step_, next_batch_index=self.step_)
 
     def _run(self, ids, train):
-        tokens = _array(ids, (2, 33), 'ids', np.int32)
+        shape = state_shape(self._state)
+        tokens = _array(ids, (shape.batch, shape.length + 1), 'ids', np.int32)
         if np.any(tokens < 0) or np.any(tokens >= 256):
             raise ValueError('Byte-LM IDs must be in [0, 256)')
         working = _validate_state(self._state)
@@ -316,19 +342,22 @@ class SmallByteLanguageModelTrainer:
         binding = self._binding()
         inputs = [working['parameters'], working['m'], working['v'], working['flags'], tokens]
         before = tuple(array.tobytes() for array in inputs)
-        out_p = np.full(_N, np.nan, np.float32)
-        out_m = np.full(_N, np.nan, np.float32)
-        out_v = np.full(_N, np.nan, np.float32)
+        out_p = np.full(shape.n_total, np.nan, np.float32)
+        out_m = np.full(shape.n_total, np.nan, np.float32)
+        out_v = np.full(shape.n_total, np.nan, np.float32)
         out_flags = np.full(20, -1, np.int32)
         out_loss = np.full(1, np.nan, np.float32)
-        out_grad = np.full(_N, np.nan, np.float32) if train else None
+        out_grad = np.full(shape.n_total, np.nan, np.float32) if train else None
         cfg = working['config']
         addresses = [*(_addr_ro(value) for value in inputs), _addr(out_p), _addr(out_m),
                      _addr(out_v), _addr(out_grad) if train else 0, _addr(out_flags), _addr(out_loss)]
         parameters = [int(train), working['completed_steps'], cfg['kind'], cfg['lr'],
                       cfg['beta1'], cfg['beta2'], cfg['eps'], cfg['weight_decay'],
                       cfg['momentum'], cfg['dampening'], int(cfg['nesterov']), cfg['max_norm']]
-        completed = binding.byte_lm_run(addresses, parameters)
+        if shape.profile == PROFILE:
+            completed = binding.byte_lm_run(addresses, parameters)
+        else:
+            completed = binding.byte_lm_run_configured(addresses, parameters, list(shape.native_shape))
         expected = working['completed_steps'] + int(train)
         if isinstance(completed, (bool, np.bool_)) or not isinstance(completed, (int, np.integer)) or completed != expected:
             raise RuntimeError('Byte-LM returned an invalid completed-step counter')
@@ -344,11 +373,11 @@ class SmallByteLanguageModelTrainer:
                    for key in ('parameters', 'm', 'v', 'flags')):
                 raise RuntimeError('Byte-LM evaluation changed full training state')
             return float(out_loss[0])
-        gradients = _array(out_grad, (_N,), 'pre-update gradients')
+        gradients = _array(out_grad, (shape.n_total,), 'pre-update gradients')
         result = dict(loss=float(out_loss[0]), step=expected, completed_steps=expected,
                       next_batch_index=expected, flat_gradients=gradients,
-                      gradients={name: gradients[_OFFSETS[index]:_OFFSETS[index + 1]].reshape(shape).copy()
-                                 for index, (name, shape) in enumerate(zip(PARAMETER_NAMES, PARAMETER_SHAPES))})
+                      gradients={name: gradients[shape.offsets[index]:shape.offsets[index + 1]].reshape(tensor_shape).copy()
+                                 for index, (name, tensor_shape) in enumerate(zip(PARAMETER_NAMES, shape.parameter_shapes))})
         self._state = candidate
         return result
 
@@ -364,7 +393,11 @@ class SmallByteLanguageModelTrainer:
 
     def save_checkpoint(self, path):
         """Atomically write at most 2 MiB of canonical no-pickle JSON/hex."""
-        payload = self.state_dict()
+        with self._lock:
+            # Refuse guaranteed-oversize saves before copying/hex-encoding state.
+            if state_shape(self._state).n_total * 24 + 20 * 8 > _CHECKPOINT_LIMIT:
+                raise ValueError('Byte-LM checkpoint exceeds 2 MiB; export state_dict arrays')
+            payload = self.state_dict()
         for key in ('parameters', 'm', 'v', 'flags'):
             value = payload[key]
             dtype = '<i4' if key == 'flags' else '<f4'
@@ -422,9 +455,10 @@ class SmallByteLanguageModelTrainer:
             raise ValueError('Byte-LM checkpoint integrity mismatch')
         if not isinstance(payload, dict):
             raise ValueError('Byte-LM checkpoint payload must be an object')
+        shape = state_shape(payload)
         for key in ('parameters', 'm', 'v', 'flags'):
             value = payload.get(key)
-            cells, dtype = (20, '<i4') if key == 'flags' else (_N, '<f4')
+            cells, dtype = (20, '<i4') if key == 'flags' else (shape.n_total, '<f4')
             if (not isinstance(value, dict) or set(value) != {'dtype', 'shape', 'hex'}
                     or value['dtype'] != dtype or value['shape'] != [cells]
                     or not isinstance(value['hex'], str) or len(value['hex']) != cells * 8):
@@ -439,7 +473,7 @@ class SmallByteLanguageModelTrainer:
         state = _validate_state(payload)
         cfg = state['config']
         result = cls(state['parameters'], data_schedule=state['data_schedule'], lr=cfg['lr'],
-                     betas=(cfg['beta1'], cfg['beta2']), eps=cfg['eps'], weight_decay=cfg['weight_decay'])
+                     betas=(cfg['beta1'], cfg['beta2']), eps=cfg['eps'], weight_decay=cfg['weight_decay'], shape=shape)
         return result.load_state_dict(state)
 
 

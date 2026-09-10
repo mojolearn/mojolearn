@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Does the dispatcher's plan produce the pre-tuned plan's exact bits, and
-how much faster is it?
+"""Compare two explicitly selected plans for output digests and throughput.
 
 Compares FNV-1a64 over the raw output bits of `identical_gemm_with_plan`
 on `choose_gemm_plan_untuned`'s plan against `identical_gemm_into` (the
@@ -116,7 +115,7 @@ def _second(
 
 
 def main() raises:
-    print("== dispatcher vs the untuned plan, BITS and TIME ==")
+    print("== selected baseline vs candidate, BITS and FP32 TFLOP/s ==")
     var same = 0; var moved = 0; var refused = 0
     var forced = _env_int("MOJOLEARN_GEMM_PLAN", -1)
     var baseline = _env_int("MOJOLEARN_GEMM_BASELINE_PLAN", -1)
@@ -127,6 +126,8 @@ def main() raises:
         raise Error("gemm_tuned_probe: invalid baseline plan")
     if rounds < 1:
         raise Error("gemm_tuned_probe: rounds must be positive")
+    print("baseline_selector=" + String(baseline) + " candidate_selector=" + String(forced)
+          + " (-2 baseline=current dispatch; -1 baseline=pre-tuned, candidate=current dispatch; >=0 explicit plan)")
     for i in range(GEMM_SHAPE_COUNT):
         if not _shape_selected(gemm_shape_name(i)):
             continue
@@ -181,16 +182,17 @@ def main() raises:
         var ms_t = Float64(ns_t) / (Float64(rounds) * 1.0e6)
         var nm = gemm_shape_name(i) + " [" + gemm_plan_name(old_plan) + " -> " + gemm_plan_name(new_plan) + "]"
         if dp[1] != 0 or dt[1] != 0:
-            print("   REFUSED " + nm + ": poison left untuned=" + String(dp[1]) + " dispatch=" + String(dt[1]))
+            print("   REFUSED " + nm + ": poison left baseline=" + String(dp[1]) + " candidate=" + String(dt[1]))
             refused += 1
         elif dp[0] == dt[0]:
             print("   OK  " + nm + "  m=" + String(m) + " n=" + String(n) + " k=" + String(k)
-                  + "  BITS MATCH  untuned=" + String(ms_p) + "ms dispatch=" + String(ms_t)
-                  + "ms  speedup=" + String(ms_p / ms_t) + "x")
+                  + "  BITS MATCH  baseline=" + String(ms_p) + "ms candidate=" + String(ms_t)
+                  + "ms  baseline_tflops=" + String(Float64(2) * Float64(m) * Float64(n) * Float64(k) / (ms_p * 1.0e9))
+                  + " candidate_tflops=" + String(Float64(2) * Float64(m) * Float64(n) * Float64(k) / (ms_t * 1.0e9)))
             same += 1
         else:
             print("   MOVED   " + nm + "  m=" + String(m) + " n=" + String(n) + " k=" + String(k)
-                  + "  untuned=" + hex(dp[0]) + " dispatch=" + hex(dt[0]))
+                  + "  baseline=" + hex(dp[0]) + " candidate=" + hex(dt[0]))
             moved += 1
         _ = da^; _ = db^; _ = dc^; _ = dw^
         # The context dies LAST, after every value built on it (DEVIATION 1946).
@@ -200,5 +202,5 @@ def main() raises:
     if refused != 0 or same + moved == 0:
         raise Error("gemm_tuned_probe: refused or empty comparison")
     if moved != 0:
-        raise Error("gemm_tuned_probe: the dispatcher MOVED BITS on " + String(moved)
+        raise Error("gemm_tuned_probe: the candidate MOVED BITS on " + String(moved)
                     + " shapes. A faster plan that changes the answer is not this profile.")

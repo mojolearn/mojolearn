@@ -7,7 +7,7 @@ row of bench/OPPONENT_REFERENCE.md, from one leg's logs.
 
 Reads speed_v1.log and speed_core.log (FSPEED lines, medians of the timed
 rounds, the v1 plan from its FSPEED-NOTE line) and, with --plans, every
-probe.plan<N>.log (the forced-plan sweep: the `dispatch=` time of each
+probe.plan<N>.log (the forced-plan sweep: the `candidate=` time (legacy logs: `dispatch=`) of each
 shape under each plan, `REFUSED` where the plan does not admit the shape).
 The opponent column is transcribed here from bench/OPPONENT_REFERENCE.md
 and must be kept equal to it; nothing here runs an opponent.
@@ -47,7 +47,7 @@ REFERENCE = {
 
 FSPEED = re.compile(r"^FSPEED lane=gemm arm=(\S+) shape=(\S+) round=\d+ ms=([\d.]+)")
 NOTE = re.compile(r"^FSPEED-NOTE lane=gemm arm=(\S+) shape=(\S+) (.*)$")
-PROBE = re.compile(r"^\s+OK\s+(\S+) \[.*-> (.*?)\]\s+m=\d+ n=\d+ k=\d+\s+BITS MATCH\s+untuned=([\d.]+)ms dispatch=([\d.]+)ms")
+PROBE = re.compile(r"^\s+OK\s+(\S+) \[.*-> (.*?)\]\s+m=\d+ n=\d+ k=\d+\s+BITS MATCH\s+(?:baseline|untuned)=([\d.]+)ms (?:candidate|dispatch)=([\d.]+)ms")
 REFUSED = re.compile(r"^\s+REFUSED (\S+) ")
 
 

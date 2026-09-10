@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Two-block FP32 byte LM orchestration. AUTHORED, UNCOMPILED, UNQUALIFIED.
+"""Two-block FP32 byte LM orchestration with runtime shapes.
+
+Runtime shapes are compile/host checked; numerical qualification is separate.
 
 Runtime shapes; default B2/L32/DM32/H4/KV2/FF64, 34,944 parameters.
 The byte alphabet (256 symbols), two blocks and 20-tensor registry are fixed.
@@ -150,7 +152,7 @@ def byte_validate_tokens(ids: List[Int32], config: ByteConfig = ByteConfig()) ra
 
 def _require_profile() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("byte LM: initial profile requires IDENTICAL")
+        raise Error("byte LM: training requires IDENTICAL")
     comptime if (GEMM_SABOTAGE or GEMM_BWD_SABOTAGE or ANY_EMB_SABOTAGE
                  or ANY_LOSS_SABOTAGE or OPT_SABOTAGE or BWD_ANY_SABOTAGE
                  or BLOCK_ANY_SABOTAGE):

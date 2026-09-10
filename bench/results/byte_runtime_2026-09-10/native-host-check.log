@@ -1,0 +1,3 @@
+PASS native host-only profile agreement: 4 profiles, 5 invalid shapes, both ABIs reject null spans
+vendor=metal numeric_mode=1
+No DeviceContext or model operation requested; numerical qualification remains owed.
