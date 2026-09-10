@@ -17,7 +17,9 @@ compiler call graph. Reproduce with `python3 tools/audit_portable_primitive_call
 | erfc | 0 | 10 | All mentions occur in `checks/portable_gelu_check.mojo` comments, docstrings or diagnostic strings. The complement polynomial inside erf is exercised; there is no standalone erfc call to route. |
 | expm1 | 0 | 2 | Both mentions are one proposed expression in the Jones-transform design docstring. |
 | log10, asin, acos, atan, atan2 | 0 each | 0 each | No matching Mojo consumer found. Missing standalone functions alone do not establish a product defect. |
-| sinh, cosh, hypot, tgamma | 0 each | 0 each | Same scope: no matching Mojo consumer found. |
+| cbrt, sinh, cosh, hypot, tgamma | 0 each | 0 each | Same scope: no matching Mojo consumer found. |
+| atanh(Float64) | 2 | 19 total atanh textual occurrences across precisions | Both Float64 calls are ARIMA reference/oracle code. The additional Float32 production call is behind an explicit non-IDENTICAL branch; IDENTICAL Jones uses identical_log. No standalone portable atanh64 added. |
+| log2(Float32) | 1 | Counted by explicit argument type, not generic name | A real tree histogram-offset call remains; see the scope note below. No standalone portable log2f added. |
 | lgamma | 4 | 16 total textual occurrences | Two executable sites are KDE FAST helpers and two are the independent KDE oracle. IDENTICAL KDE has an existing portable norm construction. |
 
 Concrete reference locations:
@@ -48,3 +50,19 @@ subnormal/special-value semantics. The primitive's x**0/1**p precedence is
 explicit even for signaling NaNs: glibc may return a quiet NaN where ours
 returns1. The gate checks our declared policy exactly and reports that libm
 policy difference separately from finite numerical accuracy.
+
+Explicit precision-specific findings requested in the continuation:
+
+- `atanh(Float64)`: `arima/checks/fit_check.mojo:919` consumes the Float64
+  local `v`, and `arima/checks/fit_oracle.mojo:99` consumes a List[Float64]
+  element. `arima/impl/timeSeries/jones_transform.mojo:120` is Float32 and
+  occurs only in the non-IDENTICAL else branch; it is not an atanh64 gap.
+- `cbrt`: zero textual occurrences and zero executable calls in this scan.
+- `log2(Float32)`: `gbdt/methods/kernel/split_properties_helpers.mojo:119`
+  explicitly evaluates ceil(log2(Float32(self.fold_count))). It is called
+  through data_partition_offset by pointwise_scores and pointwise_kernels.
+  Its source docstring explicitly preserves the upstream float expression.
+  This is an existing tree seam, left unchanged and untested under the user's
+  no-tree scope; it must not be mislabeled as a comment or closed by adding
+  the separate binary64 UMAP wrapper. Other generic log2-name hits do not
+  imply Float32 arguments. The JSON scanner now includes atanh and cbrt.

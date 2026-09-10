@@ -60,3 +60,16 @@ the serial host optimizer. Spectral initialization reaches the Float32
 UMAP route. This work does not add portable sqrt64, trig64, inverse trig64,
 or generic FP32 reduction primitives and makes no closure claim for those
 independent gaps. No tree code or shared existing primitive arithmetic changed.
+
+## Captured validation
+
+Apple and Linux/H100 both pass all gates. The portable pow64 output hash is
+13353115118729037508 on both hosts over262,378 pairs; measured worst1037ULP
+and normal relative error1.2169443322931572e-13. The UMAP captures agree on
+186 small-fixture cells,690 broader-fixture cells,116 new host-stage cells
+and21 public-transform cells. The existing Apple186/690 fixtures also remain
+bit-identical to their pre-change captures. No physical AMD qualification or
+new opponent/performance claim is made. Raw logs, the initial glibc policy
+admission failure, corrected policy gate, manifests and full-word comparison
+are retained in
+[`umap_portable_host_math_2026-09-10`](../bench/results/umap_portable_host_math_2026-09-10/README.md).

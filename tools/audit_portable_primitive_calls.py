@@ -8,7 +8,7 @@ parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent
 parser.add_argument("--output", type=Path, required=True)
 args = parser.parse_args()
 root = args.root.resolve()
-names=['erfc','expm1','log10','log2','asin','acos','atan','atan2','sinh','cosh','hypot','lgamma','tgamma','log1p','erf','tanh','sqrt','pow']
+names=['erfc','expm1','log10','log2','asin','acos','atan','atan2','atanh','cbrt','sinh','cosh','hypot','lgamma','tgamma','log1p','erf','tanh','sqrt','pow']
 records={name:{'calls':[],'imports':[],'mentions':0} for name in names}
 def blank(m):return '\n'*m.group(0).count('\n')
 files=subprocess.check_output(['rg','--files','-g','*.mojo'],cwd=root,text=True).splitlines()

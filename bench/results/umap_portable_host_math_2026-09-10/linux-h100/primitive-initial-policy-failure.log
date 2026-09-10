@@ -1,0 +1,10 @@
+1837 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50c980000000, nodemask=1)
+/root/identitygates/checks/portable_pow64_check.mojo:57:19: warning: assignment to 'bad' was never used; assign to '_' instead?
+        var bad = False
+                  ^
+pow64 admission mismatch x_bits= 9218868437227405313 p_bits= 0 got_bits= 4607182418800017408 libm_bits= 9221120237041090561
+portable_pow64 samples= 262378 worst_ulp= 1037 worst_normal_relative= 1.2169443322931572e-13 failed= 1
+portable_pow64 input_hash= 11634649235927139599 output_hash= 13353115118729037508
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: portable_pow64 accuracy admission failed
+mojo: error: execution exited with a non-zero result: 1

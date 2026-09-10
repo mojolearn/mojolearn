@@ -1,0 +1,6 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/checks/portable_pow64_check.mojo:57:19: warning: assignment to 'bad' was never used; assign to '_' instead?
+        var bad = False
+                  ^
+portable_pow64 samples= 262378 worst_ulp= 1037 worst_normal_relative= 1.2169443322931572e-13 failed= 0
+portable_pow64 input_hash= 11634649235927139599 output_hash= 13353115118729037508
+portable_pow64 special cases and approximation admission PASS
