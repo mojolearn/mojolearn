@@ -747,8 +747,8 @@ def main(out=sys.stdout):
     # storage -- so the kernel updates the snapshot in place exactly as it
     # would have updated the allocated buffer.
     st_rt = blk_w.allocate_state(BATCH, W_L)
-    st_rt.k_cache = snap_k
-    st_rt.v_cache = snap_v
+    st_rt.k_cache = snap_k.copy()
+    st_rt.v_cache = snap_v.copy()
     st_rt.cached_tokens = snap_n
     y_rt = blk_w.forward(xw[:, cut:, :], st_rt)
     rep.bits_equal(arm, y_rt, y_tail,

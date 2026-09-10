@@ -10,7 +10,7 @@ export MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=2
 export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2
 PY=/opt/venv/bin/python
 [ -x "$PY" ] || PY=python3
-"$PY" -m pip install -q numpy scipy scikit-learn pytest > "$OUT/dependencies.log" 2>&1
+"$PY" -m pip install -q numpy scipy scikit-learn pytest einops > "$OUT/dependencies.log" 2>&1
 # The invoking extra body provides a reviewed patch between baseline/candidate.
 cp /root/wp67.patch "$OUT/source.patch"
 # Candidate source arrives through the immutable source archive. Save changed

@@ -45,11 +45,11 @@ class Mamba1BackwardSurface(unittest.TestCase):
 
     def reference(self):
         torch = self.torch
-        x = torch.tensor(self.x, dtype=torch.float64, requires_grad=True)
+        x = torch.tensor(np.ascontiguousarray(self.x), dtype=torch.float64, requires_grad=True)
         params = {name: torch.tensor(value, dtype=torch.float64, requires_grad=True)
                   for name, value in self.weights.items()}
         stages = self.oracle.GEN.block_forward(params, x, torch.float64)
-        loss = (stages["block.out"] * torch.tensor(self.dy, dtype=torch.float64)).sum()
+        loss = (stages["block.out"] * torch.tensor(np.ascontiguousarray(self.dy), dtype=torch.float64)).sum()
         values = torch.autograd.grad(loss, [x] + list(params.values()))
         return dict(zip(["x"] + list(params),
                         [v.detach().numpy() for v in values]))
