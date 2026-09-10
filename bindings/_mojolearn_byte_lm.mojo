@@ -9,6 +9,8 @@ No borrowed pointer survives a call. Optional owned sessions retain device state
 Outputs are published only after successful computation, validation and
 synchronization; the stateless ABI also tears down its context before return.
 """
+# DEVIATION 2486: shared byte-preserving host copies.
+from bindings.hostptr import f32_ptr, read_f32, copy_f32
 from std.memory import bitcast
 from std.os import abort
 from std.python import Python, PythonObject
@@ -123,18 +125,12 @@ def _validate_addresses(addresses: List[Int], action: Int, shape: ByteConfig) ra
                 raise Error("byte LM: output overlaps another live span")
 
 
-def _read_f32(address: Int, n: Int) -> List[Float32]:
-    var ptr = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(ptr.unsafe_load(i))
-    return out^
+def _read_f32(address: Int, n: Int) raises -> List[Float32]:
+    return read_f32(address, n)
 
 
-def _write_f32(address: Int, values: List[Float32]):
-    var ptr = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
-    for i in range(len(values)):
-        ptr.unsafe_store(i, values[i])
+def _write_f32(address: Int, values: List[Float32]) raises:
+    copy_f32(values.unsafe_ptr(), f32_ptr(address), len(values))
 
 
 def _require_same_bits(before: List[Float32], after: List[Float32]) raises:
@@ -243,13 +239,18 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                         raise Error("byte LM: resident flags mismatch")
             if action == 1:
                 var capture = byte_train_step(ctx, session.trainer.value(), ids)
-                out_p = capture.after_params.copy()
-                out_m = capture.after_m.copy()
-                out_v = capture.after_v.copy()
-                out_g = capture.gradients.copy()
-                out_flags = capture.after_flags.copy()
                 loss = capture.loss
                 result_step = capture.completed_steps
+                out_p = capture.after_params^
+                capture.after_params = List[Float32]()
+                out_m = capture.after_m^
+                capture.after_m = List[Float32]()
+                out_v = capture.after_v^
+                capture.after_v = List[Float32]()
+                out_g = capture.gradients^
+                capture.gradients = List[Float32]()
+                out_flags = capture.after_flags^
+                capture.after_flags = List[Bool]()
             else:
                 loss = byte_eval_loss(ctx, session.trainer.value(), ids)
                 # Read actual post-evaluation state rather than simply echoing the
