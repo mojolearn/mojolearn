@@ -59,7 +59,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.estimator import (
     ExtraTreesConfig,
-    fit_extra_trees_regressor,
+    fit_extra_trees_regressor_reference,
     fit_extra_trees_regressor_device,
 )
 
@@ -328,7 +328,7 @@ def main() raises:
     )
 
     # ---- 4. the ESTIMATOR's device arm (deviation 188, closed) -----------
-    # `fit_extra_trees_regressor_device` against `fit_extra_trees_regressor`,
+    # `fit_extra_trees_regressor_device` against `fit_extra_trees_regressor_reference`,
     # through the sklearn surface rather than the raw trainers. The two arms
     # share `regressor_plan`, so what is asserted here is the part that CAN
     # drift: the device arm's own quantization and its trainer.
@@ -350,7 +350,7 @@ def main() raises:
     var y_est = List[Float32]()
     for r in range(hashed.n_rows):
         y_est.append(hashed.y[r])
-    var host_fit = fit_extra_trees_regressor(
+    var host_fit = fit_extra_trees_regressor_reference(
         x_est, y_est, Int32(hashed.n_rows), Int32(hashed.n_cols), config
     )
     var dev_fit = fit_extra_trees_regressor_device(
@@ -439,7 +439,7 @@ def main() raises:
     var dboot = fit_extra_trees_regressor_device(
         ctx, x_est, y_est, Int32(hashed.n_rows), Int32(hashed.n_cols), boot_cfg
     )
-    var hboot = fit_extra_trees_regressor(
+    var hboot = fit_extra_trees_regressor_reference(
         x_est, y_est, Int32(hashed.n_rows), Int32(hashed.n_cols), boot_cfg
     )
     var dplain = fit_extra_trees_regressor_device(

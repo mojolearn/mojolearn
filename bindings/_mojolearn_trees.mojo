@@ -34,15 +34,15 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import shared_class_counts_mask
 
 from max.gpu.host import DeviceContext
 
 from extratrees.estimator import (
     ExtraTreesConfig,
     FitResult,
-    fit_extra_trees_classifier,
     fit_extra_trees_classifier_device,
-    fit_extra_trees_regressor,
     fit_extra_trees_regressor_device,
 )
 from extratrees.impl.decisiontree.decisiontree import (
@@ -110,7 +110,7 @@ wrong answer rather than a failure:
                           slot was a 0/1 `max_samples_set` flag while
                           bootstrap was refused)
     19  max_leaf_nodes   (-1 = sklearn's None)
-    20  device           (0 host, 1 GPU)
+    20  device           (must be 1: GPU; CPU training retired)
     21  criterion        (the `decisiontree.mojo` CRITERION_* code:
                           0 GINI, 1 ENTROPY for the classifier; 2 MSE for
                           the regressor -- DEVIATION 459)
@@ -228,7 +228,8 @@ def et_classifier_fit_binding(
     var n_rows = Int(py=params[0])
     var n_features = Int(py=params[1])
     var n_classes = Int(py=params[2])
-    var device = Int(py=params[20]) != 0
+    if Float64(py=params[20]) != Float64(1):
+        raise Error("Extra Trees training is GPU-only; device (slot 20) must be 1")
     var config = _config_from(params, ExtraTreesConfig())
     if config.criterion != CRITERION_GINI and config.criterion != CRITERION_ENTROPY:
         raise Error(
@@ -240,22 +241,11 @@ def et_classifier_fit_binding(
 
     var result: FitResult
     with GILReleased(Python()):
-        if device:
-            var ctx = DeviceContext()
-            result = fit_extra_trees_classifier_device(
-                ctx,
-                x,
-                y,
-                Int32(n_rows),
-                Int32(n_features),
-                Int32(n_classes),
-                config,
-            )
-        else:
-            result = fit_extra_trees_classifier(
-                x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
-                config,
-            )
+        var ctx = DeviceContext()
+        result = fit_extra_trees_classifier_device(
+            ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
+            config,
+        )
     return _forest_out(result)
 
 
@@ -276,7 +266,8 @@ def et_regressor_fit_binding(
         raise Error("et_regressor_fit: n_classes (slot 2) must be 0")
     var n_rows = Int(py=params[0])
     var n_features = Int(py=params[1])
-    var device = Int(py=params[20]) != 0
+    if Float64(py=params[20]) != Float64(1):
+        raise Error("Extra Trees training is GPU-only; device (slot 20) must be 1")
     var config = _config_from(params, ExtraTreesConfig().for_regression())
     if config.criterion != CRITERION_MSE:
         raise Error(
@@ -288,15 +279,10 @@ def et_regressor_fit_binding(
 
     var result: FitResult
     with GILReleased(Python()):
-        if device:
-            var ctx = DeviceContext()
-            result = fit_extra_trees_regressor_device(
-                ctx, x, y, Int32(n_rows), Int32(n_features), config
-            )
-        else:
-            result = fit_extra_trees_regressor(
-                x, y, Int32(n_rows), Int32(n_features), config
-            )
+        var ctx = DeviceContext()
+        result = fit_extra_trees_regressor_device(
+            ctx, x, y, Int32(n_rows), Int32(n_features), config
+        )
     return _forest_out(result)
 
 
@@ -396,11 +382,23 @@ def trees_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def trees_numeric_mode_binding() raises -> PythonObject:
+    """Compiled numeric tier, independent of the package directory label."""
+    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+
+
+def trees_shared_counts_mask_binding() raises -> PythonObject:
+    """Compiled score policy: bits0..3 correspond to widths4/8/16/32."""
+    return PythonObject(shared_class_counts_mask())
+
+
 @export
 def PyInit__mojolearn_trees() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_trees")
         m.def_function[trees_vendor_binding]("trees_vendor")
+        m.def_function[trees_numeric_mode_binding]("trees_numeric_mode")
+        m.def_function[trees_shared_counts_mask_binding]("trees_shared_counts_mask")
         m.def_function[et_classifier_fit_binding]("et_classifier_fit")
         m.def_function[et_regressor_fit_binding]("et_regressor_fit")
         m.def_function[et_predict_binding]("et_predict")

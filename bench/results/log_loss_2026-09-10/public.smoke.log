@@ -1,0 +1,4 @@
+PASS log_loss fast
+PASS log_loss deterministic
+PASS log_loss identical
+PASS 30 public GPU log-loss smoke checks

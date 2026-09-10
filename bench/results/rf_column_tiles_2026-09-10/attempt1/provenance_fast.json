@@ -1,0 +1,18 @@
+{
+  "git_head": "5ff3fc37c1f6a2a5e48ed9b5275352bc6237edcd",
+  "binary_sha256": {
+    "reference": "a5a4dd42bfda1c4986b0e9011d4bc567584228dec84a37bf5c8b40ba50b06e6c",
+    "columns2": "690601f7e23e9f008ace3bc556a818939890e2b81bd7f604ecb4a281640565f3",
+    "columns4": "7d1b5d9dca8de1b1b3432b4857317551a6a1398e24bc1f1df4d5e788a2290220"
+  },
+  "command": {
+    "mode": "fast",
+    "rows": 262145,
+    "cols": 28,
+    "build_only": false,
+    "skip_build": false,
+    "output_dir": "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bench/results/rf_column_tiles_2026-09-10/attempt1",
+    "binary_dir": "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/build/rf-column-tiles-sep10",
+    "prewarm": true
+  }
+}

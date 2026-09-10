@@ -2946,11 +2946,11 @@ def _enqueue_classification_score[MAX_ACC: Int](
     n_cells: Int,
     n_blocks_dimx: Int,
 ) raises:
-    """Launch the same integer scoring DAG with a class-sized private array.
+    """Launch class-sized integer scoring with the selected count storage.
 
-    Global accumulators remain packed at the runtime class count. Only the
-    unused zero tail of each thread's private arrays changes; row assignment,
-    random draws, integer reductions and score finalization are unchanged.
+    Global accumulators stay packed at the runtime class count. The kernel
+    chooses private arrays or sharded shared counts; both retain exactly the
+    same integers, row assignment, random draws and score finalization.
     """
     comptime TPB = DEVICE_TPB
     ctx.enqueue_function[

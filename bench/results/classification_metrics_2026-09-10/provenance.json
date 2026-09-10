@@ -1,0 +1,22 @@
+{
+  "artifacts": {
+    "python/mojolearn/_mojolearn_metrics.so": "bec0e4bf0975709e51911eb99cbc4856f66545ae33721a2dc326e9710415547a",
+    "python/mojolearn/_mojolearn_rf.so": "6d1130a9492eb41b76685f32ead57d0f602e64dfebdfcf6ecf5ba852cc2a76b9",
+    "python/mojolearn/_mojolearn_trees.so": "d181209a603ad363c0ee452f4b0957978a27e4d3f723639951c4a40fafb3d537",
+    "python/mojolearn/deterministic/_mojolearn_metrics.so": "6b7a8fe1f096a59a6acc9b756419920a63030d1113838c57fe2f839467b1994e",
+    "python/mojolearn/deterministic/_mojolearn_rf.so": "87cc308692a8247608628675818cea32286738f038f09809aed2385817e2c7b6",
+    "python/mojolearn/deterministic/_mojolearn_trees.so": "b214b9cfc98ee9d85cbe94219a33baefc5496b6178f89d74ea20828b61a4baa4",
+    "python/mojolearn/identical/_mojolearn_metrics.so": "721c5e4313ecc65c2717fef48345a3aa91228a2798dac671d9abc760c993e9ce",
+    "python/mojolearn/identical/_mojolearn_rf.so": "a79c51ffcdb19ef5ae6dd65da3a784235204c111637191b28bc67ab42f43fc5a",
+    "python/mojolearn/identical/_mojolearn_trees.so": "2808315d0b67c4e262e6c1d582043097a6a0608012f847778162d541603ae475"
+  },
+  "sources": {
+    "metrics/impl/metrics/classification.mojo": "1615681c66aa390a4d9152b8d4b40cf67fcbf97998ecec256021dc0f1c4e9296",
+    "metrics/checks/classification_metrics_check.mojo": "59387e8991b74c4680b042fae23cfa1e57d45963de92bbc7254319dddd3a3553",
+    "metrics/estimator.mojo": "5f2985a38c5844c46a81e8ceeb4e641020f0202e33803cc5812e21b585ec9bd3",
+    "bindings/_mojolearn_metrics.mojo": "9c38ff76b23bfcc50bcba903f8ab9d3060ef1b70f832a2920ea42361734f4608",
+    "python/mojolearn/_metrics_impl.py": "2ed8da17a0ef5b6cc67c5f8d83200f31ce2e5d1ba86259365f4eb822e5afdc63",
+    "checks/classification_metrics_binding.py": "a65ddfc6a37d95ac836de0f557085c42e1d8900c55953a96b15f878119ecf9fa",
+    "checks/classification_forest_scoring.py": "ee877e1256710cd7fec42ca13a2dd4ddccfd3b2efb02a99969e9bc4109477ed0"
+  }
+}

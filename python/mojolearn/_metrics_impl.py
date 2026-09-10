@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Scoring functions backed by the ported cuML `cpp/src/metrics/` kernels.
+"""GPU scoring functions, including cuML ports and native regression errors.
 
 **metrics IS NOT AN ESTIMATOR.** It is a set of scoring functions, so this
 module is shaped like `sklearn.metrics` -- plain functions, no class, no
@@ -8,9 +8,10 @@ module is shaped like `sklearn.metrics` -- plain functions, no class, no
 same house rule the estimator classes follow. A parameter the kernel does
 not carry is refused BY NAME with a reason, never accepted and ignored.
 
-WHERE THE NAMES AND THE DEFAULTS COME FROM. The function names and argument
-names are scikit-learn's, because that is what a caller types. **The
-DEFAULTS and the SEMANTICS are cuML's**, from the pinned `v26.08.00`
+WHERE THE NAMES AND THE DEFAULTS COME FROM. Function and argument names
+follow scikit-learn. New regression-error
+functions document their bounded Float32 contract below. For the original
+ports, **the defaults and semantics are cuML's**, from the pinned `v26.08.00`
 checkout, and where the two libraries differ the difference is written on
 the function. Three of those differences matter:
 
@@ -20,7 +21,8 @@ the function. Three of those differences matter:
   * `kl_divergence` does NOT normalize `P` and `Q`, exactly as cuML's
     `cuml.metrics.kl_divergence` does not.
 
-WHAT THIS LANE IS CERTIFIED TO BE. The metrics kernels are bit-identical
+HISTORICAL QUALIFICATION (excludes new regression-error and A2 classification kernels).
+The original metrics kernels are bit-identical
 across Apple M4, NVIDIA H100 and AMD MI325X, measured at leg 11
 (`archive/evidence/E3_RESULTS.md` round 11, commit 144aa5b, `tools/e3_round_judge.sh`
 section 7, 34 card stages, both boxes) under `MOJOLEARN_NUMERIC_MODE=
@@ -55,11 +57,7 @@ reachable from Python. They are gated where they live, in
 `silhouette_check.mojo`.
 """
 
-import importlib.machinery
-import importlib.util
 import math
-import os
-import sys
 
 import numpy as np
 
@@ -68,6 +66,13 @@ from ._arrays import _addr, _addr_ro, as_f32_c
 
 __all__ = [
     "accuracy_score",
+    "confusion_matrix",
+    "precision_score",
+    "recall_score",
+    "f1_score",
+    "log_loss",
+    "roc_auc_score",
+    "precision_recall_curve",
     "adjusted_rand_score",
     "completeness_score",
     "entropy",
@@ -75,6 +80,9 @@ __all__ = [
     "homogeneity_score",
     "kl_divergence",
     "mutual_info_score",
+    "mean_squared_error",
+    "mean_absolute_error",
+    "root_mean_squared_error",
     "r2_score",
     "rand_score",
     "silhouette_samples",
@@ -87,50 +95,27 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Loading the binding, mode-aware.
 # ---------------------------------------------------------------------------
-# `_backend.select()` installs the identical binaries under the canonical
-# module names for the FIVE extensions it knows about, and `_mojolearn_metrics`
-# is not one of them -- `_backend._MODULES` is a convergence point this lane
-# does not own. So a plain `from . import _mojolearn_metrics` under
-# MOJOLEARN_NUMERIC_MODE=identical would load the FAST binary under the
-# identical name, which is a MISLABELLED MEASUREMENT and exactly the failure
-# `_backend.py` exists to prevent. This loader mirrors that module's rule
-# without editing it: identical mode loads `identical/_mojolearn_metrics.so`
-# explicitly and RAISES BY NAME if it is not built. It never falls back.
-#
-# THE OPERATOR SHOULD DELETE THIS AND ADD `_mojolearn_metrics` TO
-# `_backend._MODULES` AND `_backend._build_script` INSTEAD; this is a
-# stand-in, not a second mechanism, and two mechanisms for one decision is
-# how they drift.
-_BINDING = None
-
-
-def _get_binding():
-    global _BINDING
-    if _BINDING is not None:
-        return _BINDING
-    mode = _backend.requested_mode()
-    pkg_name = __name__.rsplit(".", 1)[0]
-    full = f"{pkg_name}._mojolearn_metrics"
-    if mode == "fast":
-        from . import _mojolearn_metrics as mod
-    else:
-        # The directory comes from `_backend.tier_dir`, which folds in the
-        # vendor axis (python/mojolearn/<vendor>/<tier>/ on the Linux wheel).
-        path = os.path.join(_backend.tier_dir(mode), "_mojolearn_metrics.so")
-        if not os.path.exists(path):
-            raise ImportError(
-                f"mojolearn: MOJOLEARN_NUMERIC_MODE={mode} but "
-                f"{path} is not built; build it with\n    "
-                f"MOJOLEARN_NUMERIC_MODE={mode} bash "
-                "bindings/build_metrics.sh"
+# All metric calls share the estimator loader. Resolve the current default at
+# call time; an explicit mode selects its own compiled artifact without changing
+# the process default. The backend checks vendor provenance and never falls back.
+def _get_binding(numeric_mode=None):
+    if numeric_mode is not None and (
+        not isinstance(numeric_mode, str)
+        or numeric_mode.strip().lower() not in ("fast", "deterministic", "identical")
+    ):
+        raise ValueError("numeric_mode must be 'fast', 'deterministic' or 'identical'")
+    expected = (numeric_mode or _backend.default_mode()).strip().lower()
+    mod = _backend.binding("_mojolearn_metrics", expected)
+    read_mode = getattr(mod, "metrics_numeric_mode", None)
+    if read_mode is None:
+        read_mode = getattr(mod, "umap_numeric_mode", None)
+    if read_mode is not None:
+        actual = {0: "fast", 1: "identical", 2: "deterministic"}.get(read_mode())
+        if actual != expected:
+            raise RuntimeError(
+                f"mojolearn metrics: requested {expected}, binary reports {actual}; rebuild it"
             )
-        loader = importlib.machinery.ExtensionFileLoader(full, path)
-        spec = importlib.util.spec_from_loader(full, loader, origin=path)
-        mod = importlib.util.module_from_spec(spec)
-        loader.exec_module(mod)
-        sys.modules[full] = mod
-    _BINDING = mod
-    return _BINDING
+    return mod
 
 
 # ---------------------------------------------------------------------------
@@ -243,8 +228,12 @@ def _prepare_cluster_labels(labels_true, labels_pred):
 # ===========================================================================
 
 
-def accuracy_score(y_true, y_pred, *, normalize=True, sample_weight=None):
+def accuracy_score(
+    y_true, y_pred, *, normalize=True, sample_weight=None, numeric_mode=None
+):
     """The fraction of positions where two label arrays agree.
+
+    numeric_mode selects a compiled tier; None uses the current library default.
 
     Backed by `ML::Metrics::accuracy_score_py` (cuML `accuracy_score.cu`):
     one fused subtract-and-count with an INTEGER atomic, so the count is
@@ -285,7 +274,7 @@ def accuracy_score(y_true, y_pred, *, normalize=True, sample_weight=None):
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::accuracy_score_binding.
     # n
     return float(
-        _get_binding().accuracy_score(
+        _get_binding(numeric_mode).accuracy_score(
             _addr_ro(yt), _addr_ro(yp), [int(yt.shape[0])]
         )
     )
@@ -514,8 +503,11 @@ def r2_score(
     sample_weight=None,
     multioutput="uniform_average",
     force_finite=True,
+    numeric_mode=None,
 ):
     """The coefficient of determination, float32.
+
+    numeric_mode selects a compiled tier; None uses the current library default.
 
     Backed by `ML::Metrics::r2_score_py`, the float overload (DEVIATIONS
     653 and 657). The three sums (`y_bar`, `sse`, `ssto`) are folded by a
@@ -570,7 +562,80 @@ def r2_score(
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::r2_score_binding.
     # n
     return float(
-        _get_binding().r2_score(_addr_ro(y), _addr_ro(yh), [int(y.shape[0])])
+        _get_binding(numeric_mode).r2_score(_addr_ro(y), _addr_ro(yh), [int(y.shape[0])])
+    )
+
+
+def _as_regression_f32_1d(x, name):
+    a = np.asarray(x)
+    if a.dtype != np.dtype("float32"):
+        raise TypeError(
+            f"mojolearn regression metrics: {name} must have dtype float32, "
+            f"got {a.dtype}; cast explicitly before scoring"
+        )
+    return _as_f32_1d(a, name)
+
+
+def _regression_error(name, y_true, y_pred, sample_weight, multioutput, numeric_mode):
+    if sample_weight is not None:
+        raise NotImplementedError(f"mojolearn {name}: sample_weight is not supported yet")
+    if not isinstance(multioutput, str) or multioutput != "uniform_average":
+        raise NotImplementedError(
+            f"mojolearn {name}: multioutput={multioutput!r} is not supported; "
+            "only single-output uniform_average is implemented"
+        )
+    yt, yp = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_regression_f32_1d)
+    return float(getattr(_get_binding(numeric_mode), name)(
+        _addr_ro(yt), _addr_ro(yp), [int(yt.size)]
+    ))
+
+
+def mean_squared_error(
+    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
+):
+    """Mean squared residual, computed and reduced on the GPU in Float32.
+
+    Inputs must be finite, nonempty Float32 arrays of equal length, shaped
+    (n,) or (n, 1). Other dtypes require an explicit cast. Weights and multiple
+    outputs are not supported yet. The result is a Python float containing
+    the Float32 scalar. Residuals, squares and the sum can overflow to +inf;
+    this implementation does not use a wider or scaled accumulator.
+
+    numeric_mode selects the compiled tier per call; None uses the current
+    library default. IDENTICAL pins the reduction schedule and flushes
+    subnormal arithmetic. New error metrics have local Metal qualification;
+    cross-vendor qualification remains pending.
+    """
+    return _regression_error(
+        "mean_squared_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
+    )
+
+
+def mean_absolute_error(
+    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
+):
+    """Mean absolute residual on the GPU in Float32.
+
+    Uses the input, mode and overflow contract of mean_squared_error, with
+    absolute residuals instead of squares. Weights/multiple outputs are
+    unsupported; numeric_mode=None resolves the current library default.
+    """
+    return _regression_error(
+        "mean_absolute_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
+    )
+
+
+def root_mean_squared_error(
+    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
+):
+    """GPU Float32 square root of mean_squared_error's GPU result.
+
+    Uses mean_squared_error's input, mode and overflow contract. The square
+    root also runs on the GPU. Squaring can overflow even when the exact
+    RMSE would fit in Float32; no scaled sum-of-squares algorithm is claimed.
+    """
+    return _regression_error(
+        "root_mean_squared_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
     )
 
 
@@ -808,6 +873,321 @@ def trustworthiness(
     )
 
 
+# ---------------------------------------------------------------------------
+# Unweighted single-label classification. Labels are encoded on the host;
+# confusion counts, ratios and averaging are computed by the GPU binding.
+# ---------------------------------------------------------------------------
+def _classification_labels(values, name, *, allow_empty=False):
+    array = np.asarray(values, dtype=object)
+    if array.ndim != 1:
+        raise ValueError(f"{name} must be one-dimensional single-label data")
+    if not allow_empty and array.size == 0:
+        raise ValueError(f"{name} must contain at least one label")
+    labels = array.tolist()
+    if all(isinstance(v, (str, np.str_)) for v in labels):
+        return [str(v) for v in labels], "string"
+    if all(isinstance(v, (int, np.integer, bool, np.bool_)) for v in labels):
+        return [int(v) for v in labels], "integer"
+    raise TypeError(f"{name} must contain only strings or only integers; "
+                    "floating labels, missing labels and mixed types are unsupported")
+
+
+def _classification_pair(y_true, y_pred, sample_weight):
+    if sample_weight is not None:
+        raise NotImplementedError("classification metrics do not yet support sample_weight")
+    true, kind = _classification_labels(y_true, "y_true")
+    pred, pred_kind = _classification_labels(y_pred, "y_pred")
+    if len(true) != len(pred):
+        raise ValueError("y_true and y_pred lengths differ")
+    if kind != pred_kind:
+        raise TypeError("y_true and y_pred must use the same label type")
+    if len(true) > np.iinfo(np.int32).max:
+        raise ValueError("classification counts require at most INT32_MAX rows")
+    return true, pred, kind, sorted(set(true) | set(pred))
+
+
+
+def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
+             numeric_mode=None):
+    """GPU log loss for strict Float32 probabilities and single-label targets.
+
+    A vector or one-column matrix contains binary positive-class probabilities;
+    columns expand to [1-p, p]. Otherwise columns follow explicit unique labels
+    in caller order, or sorted observed target labels when labels is omitted.
+    At least two labels are required; explicit labels permit one observed class.
+    Probabilities must lie in [0,1], with row sums within sqrt(Float32 epsilon)
+    of one. Validation does not renormalize. The GPU clips selected probabilities
+    to [Float32 epsilon, 1-epsilon] and returns a Float32 mean (normalize=True)
+    or sum. Sample weights and empty inputs are not supported.
+    """
+    if sample_weight is not None:
+        raise NotImplementedError("log_loss does not yet support sample_weight")
+    if not isinstance(normalize, (bool, np.bool_)):
+        raise ValueError("normalize must be a bool")
+    true, kind = _classification_labels(y_true, "y_true")
+    selected = _selected_labels(labels, kind, sorted(set(true)))
+    if len(selected) < 2:
+        raise ValueError("log_loss requires at least two labels; pass labels for one observed class")
+    mapping = {label: i for i, label in enumerate(selected)}
+    if any(label not in mapping for label in true):
+        raise ValueError("y_true contains a label missing from labels")
+    probabilities = np.asarray(y_pred)
+    if probabilities.dtype != np.dtype("float32"):
+        raise TypeError("log_loss probabilities must have dtype float32")
+    if probabilities.ndim not in (1, 2):
+        raise ValueError("log_loss probabilities must have shape (n,), (n,1) or (n,k)")
+    if probabilities.shape[0] != len(true):
+        raise ValueError("y_true and probability row counts differ")
+    if not np.all(np.isfinite(probabilities)):
+        raise ValueError("log_loss probabilities must be finite")
+    if np.any(probabilities < 0) or np.any(probabilities > 1):
+        raise ValueError("log_loss probabilities must lie in [0,1]")
+    binary = probabilities.ndim == 1 or probabilities.shape[1] == 1
+    if binary:
+        if len(selected) != 2:
+            raise ValueError("one-column probabilities require exactly two labels")
+        positive = probabilities.reshape(-1)
+        probabilities = np.column_stack((np.float32(1) - positive, positive))
+    elif probabilities.shape[1] < 2 or probabilities.shape[1] != len(selected):
+        raise ValueError("probability columns must match the label count (at least two)")
+    if len(true) > np.iinfo(np.int32).max or probabilities.size > np.iinfo(np.int32).max:
+        raise ValueError("log_loss exceeds the native Int32 indexing bound")
+    # Host Float64 sums are validation only, not the metric's reduction.
+    tolerance = float(np.sqrt(np.finfo(np.float32).eps))
+    if np.any(np.abs(np.sum(probabilities, axis=1, dtype=np.float64) - 1) > tolerance):
+        raise ValueError("log_loss probability rows must sum to one within sqrt(float32 eps)")
+    encoded = np.asarray([mapping[label] for label in true], dtype=np.int32)
+    probabilities = np.ascontiguousarray(probabilities)
+    result = np.empty(1, dtype=np.float32)
+    _get_binding(numeric_mode).log_loss(
+        _addr_ro(encoded), _addr_ro(probabilities), _addr(result),
+        [len(true), len(selected), int(normalize)])
+    return float(result[0])
+
+
+
+def _binary_ranking_inputs(y_true, y_score, sample_weight):
+    if sample_weight is not None:
+        raise NotImplementedError("binary ranking metrics do not yet support sample_weight")
+    true, kind = _classification_labels(y_true, "y_true")
+    classes = sorted(set(true))
+    if len(classes) > 2:
+        raise ValueError("binary ranking metrics support at most two observed classes")
+    scores = np.asarray(y_score)
+    if scores.dtype != np.dtype("float32"):
+        raise TypeError("binary ranking scores must have dtype float32")
+    if scores.ndim != 1 or len(scores) != len(true):
+        raise ValueError("binary ranking scores must be one-dimensional with the same length as y_true")
+    if not np.all(np.isfinite(scores)):
+        raise ValueError("binary ranking scores must be finite")
+    if len(true) > np.iinfo(np.int32).max:
+        raise ValueError("binary ranking metrics exceed the native Int32 indexing bound")
+    return true, kind, classes, np.ascontiguousarray(scores)
+
+
+def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
+                  max_fpr=None, multi_class="raise", labels=None, numeric_mode=None):
+    """GPU binary ROC AUC from finite one-dimensional Float32 scores.
+
+    Both observed classes are required. Targets are strings or integers and
+    the larger sorted class is positive. Scores may be probabilities or
+    arbitrary finite decision scores. Ties are grouped before integration.
+    The result is a Python float representing the GPU Float32 scalar.
+    Only full binary AUC is implemented: weights, explicit labels, nondefault
+    averaging/multiclass options and partial AUC are refused.
+    """
+    if average != "macro" or multi_class != "raise" or labels is not None:
+        raise NotImplementedError("roc_auc_score currently supports binary defaults "
+                                  "average='macro', multi_class='raise', labels=None only")
+    if max_fpr is not None and (isinstance(max_fpr, (bool, np.bool_)) or
+            not isinstance(max_fpr, (int, float, np.integer, np.floating)) or max_fpr != 1):
+        raise NotImplementedError("roc_auc_score supports only full AUC (max_fpr=None or 1)")
+    true, _, classes, scores = _binary_ranking_inputs(y_true, y_score, sample_weight)
+    if len(classes) != 2:
+        raise ValueError("roc_auc_score requires both positive and negative classes")
+    encoded = np.asarray([int(v == classes[1]) for v in true], dtype=np.int32)
+    result = np.empty(1, dtype=np.float32)
+    _get_binding(numeric_mode).roc_auc_score(
+        _addr_ro(encoded), _addr_ro(scores), _addr(result), [len(true)])
+    return float(result[0])
+
+
+def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=None,
+                           drop_intermediate=False, numeric_mode=None):
+    """GPU binary PR curve with ascending distinct Float32 score thresholds.
+
+    Precision/recall have one more element than thresholds and end at (1,0).
+    Targets are strings or integers. Without pos_label, only observed subsets
+    [0], [1], [-1], [0,1], or [-1,1] are accepted and 1 is positive.
+    Other binary labels require an explicit same-type pos_label. A missing
+    positive class is allowed: threshold recalls are one, with terminal zero,
+    and a warning is emitted. Weights and drop_intermediate=True are refused.
+    All three output arrays are Float32. Scores must be finite, not necessarily
+    probabilities; no CPU sorting or metric reduction is used.
+    """
+    if not isinstance(drop_intermediate, (bool, np.bool_)):
+        raise ValueError("drop_intermediate must be a bool")
+    if drop_intermediate:
+        raise NotImplementedError("precision_recall_curve does not yet support drop_intermediate=True")
+    true, kind, classes, scores = _binary_ranking_inputs(y_true, y_score, sample_weight)
+    if pos_label is None:
+        if kind != "integer" or classes not in ([0], [1], [-1], [0, 1], [-1, 1]):
+            raise ValueError("pos_label must be specified for labels outside {0,1} or {-1,1}")
+        positive = 1
+    else:
+        values, positive_kind = _classification_labels([pos_label], "pos_label")
+        if kind != positive_kind:
+            raise ValueError("pos_label must use the same type as y_true")
+        positive = values[0]
+    encoded = np.asarray([int(v == positive) for v in true], dtype=np.int32)
+    n = len(true)
+    precision = np.empty(n + 1, dtype=np.float32)
+    recall = np.empty(n + 1, dtype=np.float32)
+    thresholds = np.empty(n, dtype=np.float32)
+    size = int(_get_binding(numeric_mode).precision_recall_curve(
+        _addr_ro(encoded), _addr_ro(scores), _addr(precision), _addr(recall),
+        _addr(thresholds), [n]))
+    if not 1 <= size <= n:
+        raise RuntimeError("precision_recall_curve returned an invalid threshold count")
+    if positive not in classes:
+        import warnings
+        warnings.warn("No positive class found in y_true; recall is set to one "
+                      "for all thresholds.", UserWarning, stacklevel=2)
+    return precision[:size + 1].copy(), recall[:size + 1].copy(), thresholds[:size].copy()
+
+
+def _selected_labels(labels, kind, observed):
+    if labels is None:
+        return observed.copy()
+    selected, selected_kind = _classification_labels(labels, "labels")
+    if selected_kind != kind:
+        raise TypeError("labels must use the same type as the targets")
+    if len(set(selected)) != len(selected):
+        raise ValueError("labels must be unique")
+    return selected
+
+
+def _encode_classification(true, pred, labels):
+    mapping = {label: i for i, label in enumerate(labels)}
+    return (np.asarray([mapping.get(v, -1) for v in true], dtype=np.int32),
+            np.asarray([mapping.get(v, -1) for v in pred], dtype=np.int32))
+
+
+def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
+                     normalize=None, numeric_mode=None):
+    """GPU confusion counts for unweighted strings/integer single labels.
+
+    Rows are true labels; columns are predictions. The default order is the
+    sorted observed union. Explicit unique labels preserve caller order and
+    exclude rows whose true or predicted label is outside that set.
+    Counts are Int64 (at most INT32_MAX input rows); normalized results are
+    Float32. Normalization accepts None, 'true', 'pred', or 'all'; zero-mass
+    rows/columns return zeros. At most 4096 output labels are supported.
+    Empty inputs and float labels are refused.
+    """
+    if normalize is not None and (not isinstance(normalize, str) or
+                                  normalize not in ("true", "pred", "all")):
+        raise ValueError("normalize must be None, 'true', 'pred' or 'all'")
+    true, pred, kind, observed = _classification_pair(y_true, y_pred, sample_weight)
+    selected = _selected_labels(labels, kind, observed)
+    if not set(selected).intersection(true):
+        raise ValueError("At least one label specified must be in y_true")
+    if len(selected) > 4096:
+        raise ValueError("confusion_matrix supports at most 4096 output labels")
+    yt, yp = _encode_classification(true, pred, selected)
+    norm = {None: 0, "true": 1, "pred": 2, "all": 3}[normalize]
+    result = np.empty((len(selected), len(selected)),
+                      dtype=np.int64 if norm == 0 else np.float32)
+    _get_binding(numeric_mode).confusion_matrix(
+        _addr_ro(yt), _addr_ro(yp), _addr(result), [len(true), len(selected), norm])
+    return result
+
+
+def _precision_recall_fscore(y_true, y_pred, *, labels, pos_label, average,
+                            sample_weight, zero_division, numeric_mode, metric):
+    averages = {None: 0, "binary": 1, "micro": 2, "macro": 3, "weighted": 4}
+    if average is not None and (not isinstance(average, str) or average not in averages):
+        raise ValueError("average must be 'binary', 'micro', 'macro', 'weighted' or None")
+    warn = isinstance(zero_division, str) and zero_division == "warn"
+    if not warn and (isinstance(zero_division, (bool, np.bool_)) or
+                     not isinstance(zero_division, (int, float, np.integer, np.floating)) or
+                     zero_division not in (0, 1)):
+        raise ValueError("zero_division must be 'warn', 0 or 1")
+    true, pred, kind, observed = _classification_pair(y_true, y_pred, sample_weight)
+    positive = 0
+    if average == "binary":
+        if len(observed) > 2:
+            raise ValueError("average='binary' requires at most two observed classes")
+        positive_labels, positive_kind = _classification_labels([pos_label], "pos_label")
+        if positive_kind != kind:
+            raise ValueError("pos_label must use the same type as the targets")
+        positive_label = positive_labels[0]
+        if positive_label not in observed and len(observed) == 2:
+            raise ValueError("pos_label is not a valid observed label")
+        selected = observed.copy()
+        if positive_label not in selected:
+            selected.append(positive_label)
+        positive = selected.index(positive_label)
+    else:
+        selected = _selected_labels(labels, kind, observed)
+    selected_count = len(selected)
+    # Keep classes outside the requested output set for false-positive and
+    # false-negative accounting. Truncating confusion first would be wrong.
+    selected_set = set(selected)
+    all_labels = selected + [v for v in observed if v not in selected_set]
+    if len(all_labels) > 715827882:
+        raise ValueError("classification metrics exceed the native class-index bound")
+    yt, yp = _encode_classification(true, pred, all_labels)
+    width = selected_count if average is None else 1
+    output = np.empty(3 * width + 3, dtype=np.float32)
+    _get_binding(numeric_mode).precision_recall_fscore(
+        _addr_ro(yt), _addr_ro(yp), _addr(output),
+        [len(true), len(all_labels), averages[average], positive,
+         0 if warn else int(zero_division), selected_count])
+    if warn and output[3 * width + metric] != 0:
+        import warnings
+        try:
+            from sklearn.exceptions import UndefinedMetricWarning
+        except ImportError:
+            UndefinedMetricWarning = RuntimeWarning
+        name = ("Precision", "Recall", "F-score")[metric]
+        warnings.warn(f"{name} is ill-defined and being set to 0.0 due to zero "
+                      "denominator; use zero_division to control this behavior.",
+                      UndefinedMetricWarning, stacklevel=3)
+    values = output[metric * width:(metric + 1) * width]
+    return values.copy() if average is None else float(values[0])
+
+
+def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
+                    sample_weight=None, zero_division="warn", numeric_mode=None):
+    """GPU precision; unweighted strings/integers, Float32 ratios/averages.
+
+    Supported average values are binary, micro, macro, weighted and None.
+    Explicit labels preserve order and retain errors against excluded labels;
+    binary averaging uses pos_label and ignores labels. zero_division accepts
+    'warn' (zero with a warning), 0 or 1. Empty/multilabel inputs are refused.
+    """
+    return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
+        average=average, sample_weight=sample_weight, zero_division=zero_division,
+        numeric_mode=numeric_mode, metric=0)
+
+
+def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
+                 sample_weight=None, zero_division="warn", numeric_mode=None):
+    """GPU recall with the label/average/zero-division contract of precision_score."""
+    return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
+        average=average, sample_weight=sample_weight, zero_division=zero_division,
+        numeric_mode=numeric_mode, metric=1)
+
+
+def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
+             sample_weight=None, zero_division="warn", numeric_mode=None):
+    """GPU F1 with the label/average/zero-division contract of precision_score."""
+    return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
+        average=average, sample_weight=sample_weight, zero_division=zero_division,
+        numeric_mode=numeric_mode, metric=2)
+
+
 # ===========================================================================
 # NAMED ABSENCES. Everything a caller might reasonably reach for in
 # `sklearn.metrics` or `cuml.metrics` that this module does NOT have, with
@@ -816,22 +1196,9 @@ def trustworthiness(
 # ===========================================================================
 
 _NOT_PORTED = {
-    "mean_absolute_error": (
-        "RAFT's regression_metrics (scores.cuh) is NOT PORTED "
-        "(metrics/NOT_IMPLEMENTED.tsv); it was not in this lane's brief"
-    ),
-    "mean_squared_error": (
-        "RAFT's regression_metrics (scores.cuh) is NOT PORTED "
-        "(metrics/NOT_IMPLEMENTED.tsv); it was not in this lane's brief"
-    ),
-    "root_mean_squared_error": (
-        "RAFT's regression_metrics (scores.cuh) is NOT PORTED "
-        "(metrics/NOT_IMPLEMENTED.tsv)"
-    ),
     "median_absolute_error": (
-        "RAFT's regression_metrics (scores.cuh) is NOT PORTED, and the "
-        "median arm would additionally need a radix sort this repository "
-        "does not have on device (metrics/NOT_IMPLEMENTED.tsv)"
+        "a GPU selection/ordering path with a validated median contract "
+        "is not implemented for regression targets yet"
     ),
     "pairwise_distances": (
         "cuML's pairwise_distance.cu is a front-end over cuVS distances; "
@@ -839,32 +1206,10 @@ _NOT_PORTED = {
         "(neighbors/checks/pinned_distance_tile.mojo), and it is not a "
         "metric of a model (metrics/NOT_IMPLEMENTED.tsv)"
     ),
-    "confusion_matrix": (
-        "the CONTINGENCY matrix is ported and is what the label metrics "
-        "consume (metrics/impl/stats/detail/contingency_matrix.mojo), but "
-        "it has no entry of its own; cuML's confusion_matrix.py is pure "
-        "cupy on the host and is not a kernel this lane ported"
-    ),
-    "normalized_mutual_info_score": (
-        "no C++ entry in cuML's cpp/src/metrics/ and no RAFT header; it "
-        "would be a host formula over the ported mutual_info_score and "
-        "entropy, which belongs to whoever wants to gate it"
-    ),
-    "adjusted_mutual_info_score": (
-        "same as normalized_mutual_info_score, plus an expected-MI term "
-        "that nothing here computes"
-    ),
-    "fowlkes_mallows_score": "no C++ entry in cuML's cpp/src/metrics/",
-    "roc_auc_score": (
-        "cuML has one in Python (_ranking.py) computed with cupy on the "
-        "host; there is no kernel in cpp/src/metrics/ for this lane to port"
-    ),
-    "log_loss": (
-        "cuML has one in Python (_classification.py) computed with cupy; no "
-        "kernel in cpp/src/metrics/"
-    ),
-    "precision_recall_curve": "cuML's is Python/cupy; no kernel to port",
-    "hinge_loss": "cuML's is Python/cupy; no kernel to port",
+    "normalized_mutual_info_score": "normalization conventions and public validation are not implemented",
+    "adjusted_mutual_info_score": "expected mutual information and its public contract are not implemented",
+    "fowlkes_mallows_score": "public score and normalization checks are not implemented",
+    "hinge_loss": "GPU margin reduction and its public label contract are not implemented",
 }
 
 
@@ -872,7 +1217,6 @@ def __getattr__(name):
     if name in _NOT_PORTED:
         raise AttributeError(
             f"mojolearn.metrics.{name} does not exist: {_NOT_PORTED[name]}. "
-            "Binding it anyway would put an ungated host formula behind a "
-            "GPU metric's name."
+            "See docs/lanes/GPU_PIPELINE_PLAN.md for implementation scope."
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

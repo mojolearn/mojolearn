@@ -27,16 +27,9 @@ TWO DEVIATIONS FROM sklearn'S CONTRACT, STATED RATHER THAN HIDDEN:
   from the global RNG; this library's whole claim is bit-reproducibility, so
   an entry point that is nondeterministic by default would be the wrong
   default. Pass an int to choose a different seed.
-* `device` is a constructor parameter sklearn does not have: "gpu" (default)
-  runs the split search on the GPU, "cpu" runs the host transcription. The
-  two produce the SAME forest for classification under `criterion='gini'`
-  (bit-identical, the lane's device_forest_check) and structure-identical
-  trees for regression whose leaf values differ by at most one fixed-point
-  quantization step (deviation 135). Under `criterion='entropy'` the split
-  key is a Float32 built with `log` (DEVIATION 459): bit-identical across
-  the two arms under NUMERIC_IDENTICAL (one portable `log`); under the
-  default FAST build each arm uses its own backend's `log` and the two
-  forests can differ where a last-bit difference re-decides a near-tie.
+* `device="gpu"` is retained for constructor compatibility. CPU training is
+  retired from the public API; host reference trainers exist only for checks.
+  GPU regression uses fixed-point quantized labels (deviation 135).
 
 BOOTSTRAP (DEVIATION 460): `bootstrap=True` draws each tree's rows with
 replacement through cuML's own sampler (the fnv1a32 `(seed, tree)` chain
@@ -80,6 +73,7 @@ import numpy as np
 
 from . import _mojolearn_trees, _serialize
 from ._mode import NumericModeMixin
+from ._forest_protocol import ForestProtocol, forest_estimator
 from ._arrays import _addr, _addr_ro, as_f32_c, as_f32_colmajor
 
 #: The npz model-file format tag `save` writes and `load` requires.
@@ -118,8 +112,8 @@ def _refuse_forest_knobs(n_jobs, verbose):
     if n_jobs is not None:
         raise NotImplementedError(
             "n_jobs is not ported: there is no CPU thread pool here -- the"
-            " fit runs one host thread driving the GPU (device='gpu') or the"
-            " host transcription (device='cpu'). Refused by name rather than"
+            " fit runs one host thread driving the GPU (device='gpu')."
+            " Refused by name rather than"
             " accepted and ignored."
         )
     if verbose:
@@ -170,6 +164,13 @@ def _n_samples_bootstrap(n_rows, max_samples):
     return max(int(f * n_rows), 1)
 
 
+def _validate_device(device):
+    if not isinstance(device, str) or device != "gpu":
+        raise ValueError(
+            f"Extra Trees training is GPU-only; device must be 'gpu', got {device!r}"
+        )
+
+
 def _fit_params(n_rows, n_features, n_classes, cfg, device, criterion):
     """The 22-slot params list, in _mojolearn_trees.mojo's exact order:
     n_rows, n_features, n_classes, n_estimators, max_depth,
@@ -178,6 +179,7 @@ def _fit_params(n_rows, n_features, n_classes, cfg, device, criterion):
     bootstrap, oob_score, random_state, warm_start, ccp_alpha,
     has_class_weight, has_monotonic_cst, max_samples (resolved count),
     max_leaf_nodes, device, criterion."""
+    _validate_device(device)
     spec, fraction = _max_features_slots(cfg["max_features"])
     return [
         int(n_rows),
@@ -200,18 +202,15 @@ def _fit_params(n_rows, n_features, n_classes, cfg, device, criterion):
         0 if cfg["monotonic_cst"] is None else 1,
         _n_samples_bootstrap(n_rows, cfg["max_samples"]),
         -1 if cfg["max_leaf_nodes"] is None else int(cfg["max_leaf_nodes"]),
-        1 if device == "gpu" else 0,
+        1,  # GPU-only ABI; constructor validation rejects other devices.
         int(criterion),
     ]
 
 
-class _ExtraTreesBase(NumericModeMixin):
+class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
     _BINDING = "_mojolearn_trees"
     def __init__(self, device):
-        if device not in ("gpu", "cpu"):
-            raise ValueError(
-                f"device must be 'gpu' or 'cpu', got {device!r}"
-            )
+        _validate_device(device)
         self.device = device
 
     def _fit_arrays(self, X, y, n_classes, fit_fn):
@@ -349,6 +348,7 @@ class _ExtraTreesBase(NumericModeMixin):
         return obj
 
 
+@forest_estimator("classifier")
 class ExtraTreesClassifier(_ExtraTreesBase):
     """sklearn's `ExtraTreesClassifier`, honoured or refused by name.
 
@@ -412,6 +412,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         )
 
     def fit(self, X, y):
+        self._refresh_config()
         ya = np.asarray(y)
         self.classes_, codes = np.unique(ya, return_inverse=True)
         self.n_classes_ = int(len(self.classes_))
@@ -429,6 +430,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         return self.classes_[np.argmax(self._vote(X), axis=1)]
 
 
+@forest_estimator("regressor")
 class ExtraTreesRegressor(_ExtraTreesBase):
     """sklearn's `ExtraTreesRegressor`, honoured or refused by name.
 
@@ -496,6 +498,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
             self._cfg["max_features"] = None
 
     def fit(self, X, y):
+        self._refresh_config()
         return self._fit_arrays(
             X,
             np.ascontiguousarray(y, dtype=np.float32),

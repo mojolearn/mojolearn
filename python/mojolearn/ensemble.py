@@ -327,6 +327,25 @@ class GradientBoosting(NumericModeMixin):
         `use_pointwise_searcher=True` (that is the doc-parallel OBLIVIOUS
         searcher). Their `Region` policy is not ported and is refused by
         name. DEVIATION 259.
+    feature_fraction : float, default 1.0
+        Per-tree numeric feature subsampling in (0, 1]. A deterministic
+        subset of nonconstant features is chosen for each tree and shared
+        by its split searches. The default preserves existing model bits
+        and ABI layout. Values below one refuse categorical/one-hot/CTR paths.
+    min_child_hessian : float or None, default None
+        Minimum weighted Hessian sum in each candidate child, before split
+        selection. Requires Depthwise/Lossguide, NewtonL2/NewtonCosine and
+        RMSE/Logloss/CrossEntropy. Includes training and bootstrap weights;
+        equality is allowed. None preserves existing growth.
+    min_split_gain : float or None, default None
+        Optional strict lower bound on a split's improvement in the selected
+        score function, for Depthwise and Lossguide only. None preserves
+        CatBoost's existing growth behavior, including Lossguide's ability
+        to split without positive gain. Zero requires positive improvement;
+        equality is rejected. Units depend on score_function, feature weights
+        and score noise; this is not numerically interchangeable with XGBoost
+        gamma or LightGBM min_gain_to_split. Enabled values must be finite
+        and nonnegative.
     max_leaves : int, optional
         CatBoost's `max_leaves`, the Lossguide leaf budget. Their default
         is 31 (`oblivious_tree_options.cpp:24`) and their cap is 65536
@@ -537,6 +556,9 @@ class GradientBoosting(NumericModeMixin):
         grow_policy="SymmetricTree",
         max_leaves=None,
         min_data_in_leaf=1,
+        min_split_gain=None,
+        min_child_hessian=None,
+        feature_fraction=1.0,
     ):
         if loss not in LOSSES:
             raise ValueError(
@@ -581,6 +603,37 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: grow_policy must be one of {GROW_POLICIES}, "
                 f"got {grow_policy!r}"
             )
+        valid_fraction_type = (
+            not isinstance(feature_fraction, (bool, np.bool_))
+            and isinstance(feature_fraction, (int, float, np.integer, np.floating))
+        )
+        try:
+            parsed_fraction = float(feature_fraction) if valid_fraction_type else float("nan")
+        except (ValueError, TypeError, OverflowError):
+            parsed_fraction = float("nan")
+        if not np.isfinite(parsed_fraction) or not 0.0 < parsed_fraction <= 1.0:
+            raise ValueError("mojolearn: feature_fraction must be finite and in (0, 1]")
+        feature_fraction = parsed_fraction
+        if feature_fraction < 1.0 and any(
+            values is not None and np.asarray(values).size > 0
+            for values in (cat_features, one_hot_features)
+        ):
+            raise NotImplementedError(
+                "mojolearn: feature_fraction < 1 requires numeric features; "
+                "categorical, one-hot and CTR features are unsupported"
+            )
+        if min_split_gain is not None:
+            valid_type = (not isinstance(min_split_gain, (bool, np.bool_))
+                          and isinstance(min_split_gain, (int, float, np.integer, np.floating)))
+            try:
+                parsed_gain = float(min_split_gain) if valid_type else float("nan")
+            except (ValueError, TypeError, OverflowError):
+                parsed_gain = float("nan")
+            if not np.isfinite(parsed_gain) or parsed_gain < 0:
+                raise ValueError("mojolearn: min_split_gain must be finite and nonnegative or None")
+            if grow_policy == "SymmetricTree":
+                raise ValueError("mojolearn: min_split_gain is only supported for Depthwise and Lossguide")
+            min_split_gain = parsed_gain
         non_symmetric = grow_policy != "SymmetricTree"
         if non_symmetric and loss not in _NON_SYMMETRIC_LOSSES:
             # their `TGpuTrainerFactory::Has` failing: no
@@ -666,6 +719,22 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: score_function must be one of "
                 f"{SCORE_FUNCTIONS}, got {score_function!r}"
             )
+        if min_child_hessian is not None:
+            valid_type = (not isinstance(min_child_hessian, (bool, np.bool_))
+                          and isinstance(min_child_hessian, (int, float, np.integer, np.floating)))
+            try:
+                parsed_hessian = float(min_child_hessian) if valid_type else float("nan")
+            except (ValueError, TypeError, OverflowError):
+                parsed_hessian = float("nan")
+            if not np.isfinite(parsed_hessian) or not 0 <= parsed_hessian <= float(np.finfo(np.float32).max):
+                raise ValueError("mojolearn: min_child_hessian must be finite nonnegative and <= Float32.MAX_FINITE or None")
+            if grow_policy == "SymmetricTree":
+                raise ValueError("mojolearn: min_child_hessian requires Depthwise or Lossguide")
+            if score_function not in ("NewtonL2", "NewtonCosine"):
+                raise ValueError("mojolearn: min_child_hessian requires NewtonL2 or NewtonCosine")
+            if loss not in ("RMSE", "Logloss", "CrossEntropy"):
+                raise ValueError("mojolearn: min_child_hessian supports RMSE, Logloss and CrossEntropy only")
+            min_child_hessian = parsed_hessian
         if nan_mode not in NAN_MODES:
             raise ValueError(
                 f"mojolearn: nan_mode must be one of {NAN_MODES}, got "
@@ -781,6 +850,9 @@ class GradientBoosting(NumericModeMixin):
         self.grow_policy = grow_policy
         self.max_leaves = None if max_leaves is None else int(max_leaves)
         self.min_data_in_leaf = int(min_data_in_leaf)
+        self.min_split_gain = None if min_split_gain is None else float(min_split_gain)
+        self.min_child_hessian = min_child_hessian
+        self.feature_fraction = feature_fraction
 
         self.model_ = None
         self.loss_curve_ = None
@@ -802,9 +874,9 @@ class GradientBoosting(NumericModeMixin):
     #
     # SLOTS 0..34 ARE FIXED AND SLOT 34 IS A COUNT: everything after it is
     # the class-weight tail, and the binding checks the length against it
-    # rather than trusting it. A new option goes BEFORE the count and bumps
-    # the binding's three length numbers with it (slots 31-33 landed that
-    # way 2026-08-23, DEVIATION 259).
+    # rather than trusting it. Optional ordered tails AFTER the counted
+    # weights are min_split_gain, min_child_hessian, then feature_fraction.
+    # Trailing defaults are omitted, preserving all existing caller layouts.
     def _params(self, n_rows, n_features, n_flags, n_weights=0,
                 n_eval_rows=0):
         def f(v):
@@ -816,6 +888,17 @@ class GradientBoosting(NumericModeMixin):
             -1 if method is None else _LEAF_ESTIMATION_NAMES[method]
         )
         iters = self.leaf_estimation_iterations
+        tail = []
+        fraction = getattr(self, "feature_fraction", 1.0)
+        if fraction != 1.0:
+            tail = [(-1.0 if self.min_split_gain is None else float(self.min_split_gain)),
+                    (-1.0 if self.min_child_hessian is None else float(self.min_child_hessian)),
+                    float(fraction)]
+        elif self.min_child_hessian is not None:
+            tail = [(-1.0 if self.min_split_gain is None else float(self.min_split_gain)),
+                    float(self.min_child_hessian)]
+        elif self.min_split_gain is not None:
+            tail = [float(self.min_split_gain)]
         return [
             n_rows,                                     # 0
             n_features,                                 # 1
@@ -865,6 +948,8 @@ class GradientBoosting(NumericModeMixin):
             # would not, and a class weight is the caller's number, not ours
             # to round.
             *cw,
+            # Optional ABI tail preserves the old layout for default fits.
+            *tail,
         ]
 
     def _flags(self, n_features):
@@ -1642,3 +1727,7 @@ class OrderedRMSE(GradientBoosting):
         self.loss_curve_ = None
         self.test_loss_curve_ = None
         return self
+
+
+# Separate sklearn prediction contracts; legacy GradientBoosting stays unchanged.
+from ._gbdt_adapters import GradientBoostingClassifier, GradientBoostingRegressor

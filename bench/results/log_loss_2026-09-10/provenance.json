@@ -1,0 +1,14 @@
+{
+  "python": "3.13.15",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "sha256": {
+    "python/mojolearn/_mojolearn_metrics.so": "a8a39a62c79b68da6ee9f7db84b704a8be8b61c931938310590a54519d6055f6",
+    "python/mojolearn/deterministic/_mojolearn_metrics.so": "677823400c07f36566feee8bb0d85d9a4664109b501d1b131b5abf54a4b2c042",
+    "python/mojolearn/identical/_mojolearn_metrics.so": "29f87a0bd5e87a03f47c9ac217f6b7581f040041ccb864dc7d38cfc36d6ef287",
+    "metrics/impl/metrics/log_loss.mojo": "fdea02bcb4263fe21c45055fc26769094ccca13a7eee834990bf220ff4e99c67",
+    "metrics/estimator.mojo": "0fec422ff47e2fb531ffcc34e3821aa61203ae03c99eaa2198cea8b93223456c",
+    "bindings/_mojolearn_metrics.mojo": "a8d95c8b49b97d8904613cd424a06eb8f4a9a93546c0ea9d9e835d460120a5f1",
+    "python/mojolearn/_metrics_impl.py": "aba98664b21988c4c18c8e3c80a20b3afa267693c4be1f507efd2f563443e1dc",
+    "checks/log_loss_smoke.py": "b388b19da98eff13ed51ba7d81311bc54f25574621c80289ec16a781fee9a927"
+  }
+}

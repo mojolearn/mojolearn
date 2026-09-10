@@ -1,0 +1,139 @@
+[fixture] 7 nodes x 15 sampled columns = 105 cells; 2048 rows, 3 classes with counts 1018 695 335
+          seed 51807969571 chosen from 8 candidates because 3 cell(s) make sklearn's == max -> min guard fire
+          fixed-point scale 262144.0 from a magnitude sum of 3356.5974029302597 ; largest quantized label 655360 against the 2^30 slot
+          workload_info flattens the batch into 15 blocks, 2 of the nodes are LARGE (> 1 block)
+[device] accelerator present; Apple -- every arm below runs the SAME binary, the sabotage is an argument
+
+[arm P] the range kernel's output -- this check's INPUT -- against node_feature_min_max, on float BIT PATTERNS
+  arm P OK: 105 cells; the score kernels are fed the DEVICE's ranges, not the host's
+
+========================================================
+[objective] classification -- n_acc = 3
+========================================================
+
+[arm A] classification -- per (node, feature) cell against node_feature_score_host: status, threshold BITS, n_left, n_total, every accumulator, the exact rational
+  arm A OK: 105 of 105 cells identical to the host transcription, with the threshold compared on float BIT PATTERNS
+
+[arm B] classification -- the path each cell took, as reported by the accumulate kernel (out_n_blocks), not inferred
+  node 0 (idx 100 ) rows 1 -> 1 block(s), SINGLE-BLOCK -- 0 cells accumulated by exactly 1 block(s), 15 skipped with ZERO blocks
+  node 1 (idx 101 ) rows 3 -> 1 block(s), SINGLE-BLOCK -- 8 cells accumulated by exactly 1 block(s), 7 skipped with ZERO blocks
+  node 2 (idx 102 ) rows 127 -> 1 block(s), SINGLE-BLOCK -- 9 cells accumulated by exactly 1 block(s), 6 skipped with ZERO blocks
+  node 3 (idx 103 ) rows 128 -> 1 block(s), SINGLE-BLOCK -- 9 cells accumulated by exactly 1 block(s), 6 skipped with ZERO blocks
+  node 4 (idx 104 ) rows 129 -> 2 block(s), MULTI-BLOCK -- 9 cells accumulated by exactly 2 block(s), 6 skipped with ZERO blocks
+  node 5 (idx 105 ) rows 1000 -> 8 block(s), MULTI-BLOCK -- 9 cells accumulated by exactly 8 block(s), 6 skipped with ZERO blocks
+  node 6 (idx 106 ) rows 0 -> 1 block(s), SINGLE-BLOCK -- 0 cells accumulated by exactly 1 block(s), 15 skipped with ZERO blocks
+  arm B OK: 5 nodes took the single-block path, 2 the multi-block path, and 61 cells were SKIPPED (0 blocks) rather than scored to zero
+
+[arm C] classification -- the four legal statuses, counted from the device
+  SCORED 44  CONSTANT 50  MISSING_REFUSED 11  REJECTED_MIN_SAMPLES_LEAF 0  UNVISITED 0
+  arm C OK: SCORED, CONSTANT and MISSING_REFUSED all occurred, no cell was left UNVISITED, and REJECTED_MIN_SAMPLES_LEAF occurred ZERO times -- which is not a gap but a PROOF: at min_samples_leaf = 1 the guarded threshold lies in [min, max), so the min rows go left and the max rows go right and neither child can be empty. Arm C2 runs the value where it CAN fire.
+
+[arm C2] classification -- the shipping kernel at min_samples_leaf = 2 , where the rejection branch is reachable
+  arm C2 OK: 105 cells identical to the host at min_samples_leaf = 2 and 9 of them took the REJECTED_MIN_SAMPLES_LEAF branch
+
+[arm D] classification -- sabotage, one per MECHANISM, selected by a kernel argument so every arm runs the binary that ships
+  - the constant test's comparison DIRECTION (`max <= min + 1e-7` -> `max < min + 1e-7`, _splitter.pyx:616-617)
+      predicted: moves ONLY the cells whose spread is EXACTLY FEATURE_THRESHOLD in float32 -- the near_const_equal column, in every node with rows
+      RED as required: 23 of 105 cells wrong
+  - sklearn's `threshold == max -> min` guard (_splitter.pyx:653-654)
+      predicted: moves ONLY the cells where the RAW draw landed exactly on max; a threshold equal to max sends every row left
+      RED as required: 3 of 105 cells wrong
+  - the left/right assignment (`value <= threshold` goes left, builder_kernels_impl.cuh:65-66, inverted to `>`)
+      predicted: moves nearly every scored cell; no exact set is predicted because predicting it would mean re-implementing the sabotaged kernel on the host and then checking that
+      RED as required: 44 of 105 cells wrong
+  - the BOUNDARY of that assignment (`<=` -> `<`, so a row EQUAL to the threshold goes right)
+      predicted: moves ONLY the cells where some row sits exactly ON the drawn threshold -- which is what the ulp-span columns are for
+      RED as required: 13 of 105 cells wrong
+  - the row_ids indirection (`row_ids[i]` -> `i`, for the feature value AND the label)
+      predicted: moves nearly every scored cell: row_ids is a shuffle, so slot i and row row_ids[i] are different rows
+      RED as required: 44 of 105 cells wrong
+  - the cross-block atomicAdd merge (publish only from offset_blockid == 0)
+      predicted: moves EXACTLY the scored cells of the two MULTI-BLOCK nodes: block 0 sees at most TPB rows, so n_total alone gives it away
+      RED as required: 18 of 105 cells wrong
+  - the node TOTALS covering every row (accumulate totals over left-going rows only, so cuML's `total - left` recovery of the right child, objectives.cuh:72-73, gives zero)
+      predicted: moves EXACTLY the cells where some accumulator differs between left and total
+      RED as required: 44 of 105 cells wrong
+
+[arm D'] classification -- the narrow sabotages moved EXACTLY the cells predicted, computed rather than guessed
+  - constant test direction moved EXACTLY the 23 cells predicted, and no others
+  - the == max -> min guard moved EXACTLY the 3 cells predicted, and no others
+  - the <= / < boundary moved EXACTLY the 13 cells predicted, and no others
+  - the cross-block merge moved EXACTLY the 18 cells predicted, and no others
+  - the node totals moved EXACTLY the 44 cells predicted, and no others
+
+========================================================
+[objective] regression -- n_acc = 1
+========================================================
+
+[arm A] regression -- per (node, feature) cell against node_feature_score_host: status, threshold BITS, n_left, n_total, every accumulator, the exact rational
+  arm A OK: 105 of 105 cells identical to the host transcription, with the threshold compared on float BIT PATTERNS
+
+[arm B] regression -- the path each cell took, as reported by the accumulate kernel (out_n_blocks), not inferred
+  node 0 (idx 100 ) rows 1 -> 1 block(s), SINGLE-BLOCK -- 0 cells accumulated by exactly 1 block(s), 15 skipped with ZERO blocks
+  node 1 (idx 101 ) rows 3 -> 1 block(s), SINGLE-BLOCK -- 8 cells accumulated by exactly 1 block(s), 7 skipped with ZERO blocks
+  node 2 (idx 102 ) rows 127 -> 1 block(s), SINGLE-BLOCK -- 9 cells accumulated by exactly 1 block(s), 6 skipped with ZERO blocks
+  node 3 (idx 103 ) rows 128 -> 1 block(s), SINGLE-BLOCK -- 9 cells accumulated by exactly 1 block(s), 6 skipped with ZERO blocks
+  node 4 (idx 104 ) rows 129 -> 2 block(s), MULTI-BLOCK -- 9 cells accumulated by exactly 2 block(s), 6 skipped with ZERO blocks
+  node 5 (idx 105 ) rows 1000 -> 8 block(s), MULTI-BLOCK -- 9 cells accumulated by exactly 8 block(s), 6 skipped with ZERO blocks
+  node 6 (idx 106 ) rows 0 -> 1 block(s), SINGLE-BLOCK -- 0 cells accumulated by exactly 1 block(s), 15 skipped with ZERO blocks
+  arm B OK: 5 nodes took the single-block path, 2 the multi-block path, and 61 cells were SKIPPED (0 blocks) rather than scored to zero
+
+[arm C] regression -- the four legal statuses, counted from the device
+  SCORED 44  CONSTANT 50  MISSING_REFUSED 11  REJECTED_MIN_SAMPLES_LEAF 0  UNVISITED 0
+  arm C OK: SCORED, CONSTANT and MISSING_REFUSED all occurred, no cell was left UNVISITED, and REJECTED_MIN_SAMPLES_LEAF occurred ZERO times -- which is not a gap but a PROOF: at min_samples_leaf = 1 the guarded threshold lies in [min, max), so the min rows go left and the max rows go right and neither child can be empty. Arm C2 runs the value where it CAN fire.
+
+[arm C2] regression -- the shipping kernel at min_samples_leaf = 2 , where the rejection branch is reachable
+  arm C2 OK: 105 cells identical to the host at min_samples_leaf = 2 and 9 of them took the REJECTED_MIN_SAMPLES_LEAF branch
+
+[arm D] regression -- sabotage, one per MECHANISM, selected by a kernel argument so every arm runs the binary that ships
+  - the constant test's comparison DIRECTION (`max <= min + 1e-7` -> `max < min + 1e-7`, _splitter.pyx:616-617)
+      predicted: moves ONLY the cells whose spread is EXACTLY FEATURE_THRESHOLD in float32 -- the near_const_equal column, in every node with rows
+      RED as required: 23 of 105 cells wrong
+  - sklearn's `threshold == max -> min` guard (_splitter.pyx:653-654)
+      predicted: moves ONLY the cells where the RAW draw landed exactly on max; a threshold equal to max sends every row left
+      RED as required: 3 of 105 cells wrong
+  - the left/right assignment (`value <= threshold` goes left, builder_kernels_impl.cuh:65-66, inverted to `>`)
+      predicted: moves nearly every scored cell; no exact set is predicted because predicting it would mean re-implementing the sabotaged kernel on the host and then checking that
+      RED as required: 44 of 105 cells wrong
+  - the BOUNDARY of that assignment (`<=` -> `<`, so a row EQUAL to the threshold goes right)
+      predicted: moves ONLY the cells where some row sits exactly ON the drawn threshold -- which is what the ulp-span columns are for
+      RED as required: 13 of 105 cells wrong
+  - the row_ids indirection (`row_ids[i]` -> `i`, for the feature value AND the label)
+      predicted: moves nearly every scored cell: row_ids is a shuffle, so slot i and row row_ids[i] are different rows
+      RED as required: 44 of 105 cells wrong
+  - the cross-block atomicAdd merge (publish only from offset_blockid == 0)
+      predicted: moves EXACTLY the scored cells of the two MULTI-BLOCK nodes: block 0 sees at most TPB rows, so n_total alone gives it away
+      RED as required: 18 of 105 cells wrong
+  - the node TOTALS covering every row (accumulate totals over left-going rows only, so cuML's `total - left` recovery of the right child, objectives.cuh:72-73, gives zero)
+      predicted: moves EXACTLY the cells where some accumulator differs between left and total
+      RED as required: 44 of 105 cells wrong
+  - the fixed-point SCALE (device accumulates 2 * labels_q, i.e. a scale that did not reach the device intact)
+      predicted: moves EXACTLY the visited cells whose label sum is nonzero on one side or the other
+      RED as required: 44 of 105 cells wrong
+  - the fixed-point ACCUMULATOR itself (sum the labels in Float32 and truncate once, which is what DEVIATION 135 ruled out)
+      predicted: moves the cells whose nodes hold enough rows for a 24-bit mantissa to lose a low bit; no exact set is predicted because that set is a statement about float32 rounding of a particular thread partition, not about the mechanism
+      RED as required: 17 of 105 cells wrong
+
+[arm D'] regression -- the narrow sabotages moved EXACTLY the cells predicted, computed rather than guessed
+  - constant test direction moved EXACTLY the 23 cells predicted, and no others
+  - the == max -> min guard moved EXACTLY the 3 cells predicted, and no others
+  - the <= / < boundary moved EXACTLY the 13 cells predicted, and no others
+  - the cross-block merge moved EXACTLY the 18 cells predicted, and no others
+  - the node totals moved EXACTLY the 44 cells predicted, and no others
+  - the fixed-point scale moved EXACTLY the 44 cells predicted, and no others
+
+[arm F] the two draws: host against device, both explicit fma -- DEVIATION 173's open item, CLOSED, and guarded here
+  host draw vs RAFT's uniform_float: 0 of 44 scored cells differ (must be 0 -- draw_threshold is uniform_float plus sklearn's == max guard and nothing else)
+  host draw vs device draw: 0 of 44 scored cells disagree, worst 0 ulp
+  arm F OK: host and device agree on every scored cell, which is DEVIATION 173's open item closed rather than merely small
+
+[arm E] the Int64 Gini numerator's row bound, measured by wrapping it rather than asserted from the algebra
+  at nL = nR = 2^25 (a node of 2^26 rows, which is exactly objectives.mojo's MAX_ROWS_EXACT when this arm was written):
+      the true numerator is 75557863725914323419136
+      Int64 holds up to     9223372036854775807
+      the Int64 form reads  0 -- WRAPPED
+  arm E OK: the exact rational needs 77 bits at that node size, so SCORE_MAX_ROWS_EXACT = 2097152 is the bound the published Int64 pair honours -- TIGHTER than the Int128 cross-multiply bound. objectives.mojo's MAX_ROWS_EXACT said 2^26 when this arm was written -- that bound applied to an Int64 field -- and has since been narrowed to 2^21 carrying this very measurement.
+  score_row_bound_ok: 2^21 exact, above it INEXACT -- and since DEVIATION 218 inexact means SHIFTED, not refused
+  classification_key_shift: 0 at 2^21, 2 at 2^22, 8 at 2^24; the 2^26 worst case fits Int64 shifted; order preserved past one granule and tied within half of one -- all in Int128
+
+score_kernel_check: PASS -- 210 cells identical to the host transcription across two objectives, every status and both block paths named by the device, and every mechanism sabotaged

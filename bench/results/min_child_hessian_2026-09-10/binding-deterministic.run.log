@@ -1,0 +1,20 @@
+deterministic Depthwise threshold None leaves 4
+deterministic Depthwise threshold 0.0 leaves 4
+deterministic Depthwise threshold -0.0 leaves 4
+deterministic Depthwise threshold 32.0 leaves 4
+deterministic Depthwise threshold 32.000000001 leaves 2
+deterministic Depthwise threshold 64.000000001 leaves 1
+deterministic Depthwise updated curvature leaves [2, 1]
+deterministic Lossguide threshold None leaves 4
+deterministic Lossguide threshold 0.0 leaves 4
+deterministic Lossguide threshold -0.0 leaves 4
+deterministic Lossguide threshold 32.0 leaves 4
+deterministic Lossguide threshold 32.000000001 leaves 2
+deterministic Lossguide threshold 64.000000001 leaves 1
+deterministic Lossguide updated curvature leaves [2, 1]
+deterministic existing loss family smoke RMSE PASS
+deterministic existing loss family smoke Logloss PASS
+deterministic existing loss family smoke MAE PASS
+deterministic existing loss family smoke MultiClass PASS
+deterministic existing loss family smoke MultiClassOneVsAll PASS
+MIN CHILD HESSIAN PUBLIC GREEN deterministic

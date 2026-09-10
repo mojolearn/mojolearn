@@ -1,0 +1,5 @@
+Command: PYTHONPATH=python /tmp/mojolearn-b1-sklearn/bin/python -m pytest -q python/mojolearn/tests/test_gbdt_feature_fraction.py python/mojolearn/tests/test_min_child_hessian.py python/mojolearn/tests/test_min_split_gain.py
+Captured result from host-only invocation (no GPU binding called):
+........................................................................ [ 73%]
+..........................                                               [100%]
+98 passed in 1.33s

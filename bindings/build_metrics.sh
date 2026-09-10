@@ -271,7 +271,7 @@ fi
 # Kept small -- 96 rows -- because this runs on every build and the GPU is
 # shared. The spectral fit is the expensive one (a thick-restart Lanczos with
 # max_iterations = 10n).
-MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
+MOJOLEARN_SMOKE_SO="$out" "${MOJOLEARN_PYTHON:-python3}" - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()
 pkg = os.path.join(tmp, "mojolearn")
@@ -299,6 +299,35 @@ M.accuracy_score(lt, lp)                       # group A, integer atomics
 M.adjusted_rand_score(lt, lp)                  # group A, ARI's own matrix
 M.mutual_info_score(lt, lp)                    # group A, contingency + host
 M.r2_score(y, yhat)                            # group B, the pinned sum tree
+# A1 public GPU error reductions: distinct hand-computed values catch aliases.
+a = np.array([1., -2., 3., -4.], dtype=np.float32)
+b = np.zeros(4, dtype=np.float32)
+assert M.mean_squared_error(a, b) == 7.5
+assert M.mean_absolute_error(a, b) == 2.5
+assert abs(M.root_mean_squared_error(a, b) - np.sqrt(7.5)) < 1e-6
+# A2 counts plus each derived score and the normalized-matrix kernel.
+ct = np.array([0, 0, 1, 1, 1], dtype=np.int32)
+cp = np.array([0, 0, 0, 1, 1], dtype=np.int32)
+np.testing.assert_array_equal(M.confusion_matrix(ct, cp), [[2, 0], [1, 2]])
+np.testing.assert_allclose(M.confusion_matrix(ct, cp, normalize="true"),
+                           [[1.0, 0.0], [1 / 3, 2 / 3]], rtol=1e-6)
+for score, expected in ((M.precision_score, 1.0), (M.recall_score, 2 / 3),
+                        (M.f1_score, 0.8)):
+    assert abs(score(ct, cp) - expected) < 1e-6
+# Selected labels retain false negatives/positives against omitted classes.
+assert abs(M.recall_score(ct, cp, labels=[1], average="macro") - 2 / 3) < 1e-6
+# Selected-probability log and the GPU final mean/sum reduction.
+prob = np.array([0.25, 0.75], dtype=np.float32)
+assert abs(M.log_loss([0, 1], prob) + np.log(0.75)) < 1e-6
+assert abs(M.log_loss([0, 1], prob, normalize=False) + 2 * np.log(0.75)) < 1e-6
+# Shared binary score sort, tied counts, integration and curve endpoints.
+rank_scores = np.array([0.1, 0.4, 0.35, 0.8], dtype=np.float32)
+assert abs(M.roc_auc_score([0, 0, 1, 1], rank_scores) - 0.75) < 1e-6
+rp, rr, rt = M.precision_recall_curve([0, 0, 1, 1], rank_scores)
+np.testing.assert_allclose(rp, [0.5, 2 / 3, 0.5, 1, 1], rtol=1e-6)
+np.testing.assert_array_equal(rr, [1, 1, 0.5, 0.5, 0])
+np.testing.assert_array_equal(rt, rank_scores[[0, 2, 1, 3]])
+
 M.kl_divergence(np.abs(y) + 1e-3, np.abs(yhat) + 1e-3)   # group B
 M.silhouette_score(X, lt)                      # group C, the batched path
 M.silhouette_samples(X, lt)                    # group C, per-sample

@@ -1,0 +1,10 @@
+{
+  "source_base": "85d80ee7479f06e67f42277ca58f56fc917fdaff",
+  "python": "3.13.15 | packaged by conda-forge | (main, Aug 10 2026, 13:01:04) [Clang 19.1.7 ]",
+  "numpy": "2.5.2",
+  "sklearn": "1.8.0",
+  "os": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "device": "Apple M4",
+  "scope": "Local M4 source-checkout public artifacts; no CUDA/HIP, wheel or performance qualification."
+}

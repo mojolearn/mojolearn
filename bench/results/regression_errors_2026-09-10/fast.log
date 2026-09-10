@@ -1,0 +1,8 @@
+numeric_mode FAST
+metric False False n 4 bits 1089470464
+metric True False n 4 bits 1075838976
+metric False True n 4 bits 1076839791
+metric False False n 4099 bits 1166732638
+metric True False n 4099 bits 1099580363
+metric False True n 4099 bits 1116035595
+PASS regression errors: numeric, repeat, shapes, tails, overflow and validation

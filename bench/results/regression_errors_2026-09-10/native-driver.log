@@ -1,0 +1,3 @@
+PASS fast build/regression-errors-a1/fast
+PASS deterministic build/regression-errors-a1/deterministic
+PASS identical build/regression-errors-a1/identical

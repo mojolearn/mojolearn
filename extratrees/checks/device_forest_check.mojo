@@ -83,9 +83,9 @@ from std.sys import has_accelerator
 from extratrees.estimator import (
     ExtraTreesConfig,
     MAX_FEATURES_ALL,
-    fit_extra_trees_classifier,
+    fit_extra_trees_classifier_reference,
     fit_extra_trees_classifier_device,
-    fit_extra_trees_regressor,
+    fit_extra_trees_regressor_reference,
     fit_extra_trees_regressor_device,
 )
 from extratrees.checks.fixtures import (
@@ -220,7 +220,7 @@ def host_refused(
     config: ExtraTreesConfig,
 ) -> Bool:
     try:
-        _ = fit_extra_trees_classifier(
+        _ = fit_extra_trees_classifier_reference(
             x, labels, n_rows, n_cols, n_classes, config
         )
         return False
@@ -798,7 +798,7 @@ def main() raises:
     )
     # ... and the same forest the HOST estimator arm produces, which is the
     # user-visible form of the identity claim.
-    var hfit = fit_extra_trees_classifier(
+    var hfit = fit_extra_trees_classifier_reference(
         xc,
         labels,
         Int32(hashed.n_rows),
@@ -937,7 +937,7 @@ def main() raises:
         "the device regressor must fit through the estimator (deviation 188"
         " closed)",
     )
-    var rfit = fit_extra_trees_regressor(
+    var rfit = fit_extra_trees_regressor_reference(
         xc, ry, Int32(hashed.n_rows), Int32(hashed.n_cols), rcfg
     )
     assert_equal(
@@ -1147,7 +1147,7 @@ def main() raises:
     var de4 = fit_extra_trees_classifier_device(
         ctx, x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, ce4
     )
-    var he4 = fit_extra_trees_classifier(
+    var he4 = fit_extra_trees_classifier_reference(
         x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, ce4
     )
     var db4 = fit_extra_trees_classifier_device(
@@ -1156,13 +1156,13 @@ def main() raises:
     var db4b = fit_extra_trees_classifier_device(
         ctx, x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cb4
     )
-    var hb4 = fit_extra_trees_classifier(
+    var hb4 = fit_extra_trees_classifier_reference(
         x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cb4
     )
     var dbh = fit_extra_trees_classifier_device(
         ctx, x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cbh
     )
-    var hbh = fit_extra_trees_classifier(
+    var hbh = fit_extra_trees_classifier_reference(
         x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cbh
     )
     assert_true(
@@ -1248,7 +1248,7 @@ def main() raises:
     var dbf = fit_extra_trees_classifier_device(
         ctx, x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cbf
     )
-    var hbf = fit_extra_trees_classifier(
+    var hbf = fit_extra_trees_classifier_reference(
         x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cbf
     )
     assert_true(

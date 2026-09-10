@@ -1,0 +1,10 @@
+numeric_mode FAST
+ridx False rows 262145 cols 28 depth 8 trees 12 borders 64 loss RMSE
+device Apple M4
+fingerprint 0 11953832263878639766
+fingerprint 1 11953832263878639766
+fit_ms 150.742
+fingerprint 2 11953832263878639766
+fit_ms 142.285
+fingerprint 3 11953832263878639766
+fit_ms 151.134

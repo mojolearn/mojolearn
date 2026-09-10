@@ -1,0 +1,2 @@
+numeric_mode FAST
+PASS prepared comparisons 72 owned snapshot and invalid bootstrap

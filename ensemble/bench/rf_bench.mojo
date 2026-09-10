@@ -36,6 +36,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
 from ensemble.randomforest import ROWS_SORTED_SAMPLE
 from std.os import getenv
 from std.sys import argv
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -62,7 +63,7 @@ comptime ClsObj = ClassificationObjectiveFunction[DT, LT, ClassificationBin]
 comptime RegObj = RegressionObjectiveFunction[DT, RLT, RegressionBin]
 
 comptime REPEATS = 5
-comptime N_CLASSES = 4
+comptime N_CLASSES = 2 if is_defined["MOJOLEARN_RF_BENCH_BINARY"]() else 4
 comptime N_TREES = 20
 comptime MAX_DEPTH = 12
 comptime MAX_N_BINS = 128
@@ -187,7 +188,7 @@ struct Canary(Movable):
                 hx.unsafe_ptr().unsafe_store(c * CANARY_ROWS + r, v)
                 if c < 3 and (h % UInt64(10000)) >= UInt64(5000):
                     acc += 1
-            hy.unsafe_ptr().unsafe_store(r, Int32(Int(acc)))
+            hy.unsafe_ptr().unsafe_store(r, Int32(Int(acc) % N_CLASSES))
 
         self.dx = ctx.enqueue_create_buffer[DT](CANARY_ROWS * CANARY_COLS)
         log_launch("xfer_canary_x")
@@ -295,7 +296,7 @@ def run_arm[
             # were building trees of very different sizes while doing it.
             if c < 3 and (h % UInt64(10000)) >= UInt64(5000):
                 acc += 1
-        var cls = Int(acc)
+        var cls = Int(acc) % N_CLASSES
         labels.append(Int32(cls))
         y_sum += cls
         hy.unsafe_ptr().unsafe_store(r, Int32(cls))
@@ -358,7 +359,7 @@ def run_arm[
                     )
                     if c < 3 and (h % UInt64(10000)) >= UInt64(5000):
                         hits += 1
-                test_y.append(Int32(Int(hits)))
+                test_y.append(Int32(Int(hits) % N_CLASSES))
             var preds = List[Scalar[LT]]()
             for _ in range(n_rows):
                 preds.append(0)
@@ -583,6 +584,7 @@ def main() raises:
             raise Error("tuning task must be clf or reg")
         print("CONFIG", GLOBAL_NUMERIC_MODE, "sorted", ROWS_SORTED_SAMPLE,
               "items", HIST_ITEMS_PER_THREAD, "copies", HIST_SMEM_COPIES_DEFAULT)
+        print("HIST_COLUMNS", 4 if is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]() else (2 if is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]() else 0), "classes", N_CLASSES)
         var canary = Canary(ctx)
         # A fresh-process GPU clock ramp can outlive one small fit. Keep
         # every warmup visible; the gate excludes only these explicit tags.

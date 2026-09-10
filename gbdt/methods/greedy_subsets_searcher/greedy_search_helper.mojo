@@ -3062,6 +3062,49 @@ struct TTreeWorkspace(Movable):
         )
         self.scale_dev = ctx.enqueue_create_buffer[DType.float32](1)
         self.h_scale = ctx.enqueue_create_host_buffer[DType.float32](1)
+        self.dblocks = List[DeviceBlock]()
+        self.refresh_layout_metadata(ctx, layout, blocks)
+
+    def refresh_sampled_layout(
+        mut self, ctx: DeviceContext, layout: CompressedIndexLayout,
+    ) raises -> Bool:
+        """Reuse arenas only for exactly compatible sampled block shapes.
+
+        Feature IDs and packed offsets may change; every derived metadata
+        plane is rewritten below. Different histogram capacities or policy
+        shapes retain the established constructor/rebuild path.
+        """
+        if len(layout.features) != self.n_features_key or layout.hist_cells != self.hist_cells_per_leaf_key:
+            return False
+        var blocks = blocks_for(layout,self.n_rows_key)
+        if len(blocks) != len(self.dblocks):
+            return False
+        for b in range(len(blocks)):
+            ref current = self.dblocks[b]
+            ref desired = blocks[b]
+            var total = 0
+            var widest = 0
+            for i in range(len(desired.folds)):
+                total += Int(desired.folds[i])
+                widest = max(widest,Int(desired.folds[i]))
+            if current.policy != desired.policy or current.n_features != desired.count() or current.total_folds != total or current.max_folds != widest:
+                return False
+        self.refresh_layout_metadata(ctx,layout,blocks)
+        return True
+
+    def refresh_layout_metadata(
+        mut self, ctx: DeviceContext, layout: CompressedIndexLayout,
+        blocks: List[PolicyBlock],
+    ) raises:
+        """Shared constructor/sampled-tree descriptor and constant fills.
+
+        Large row/histogram arenas and the device-attribute query remain
+        fit-owned when refresh_sampled_layout verifies compatible capacity.
+        """
+        var n_rows = self.n_rows_key
+        var n_features = self.n_features_key
+        var max_leaves = self.max_leaves_key
+        var hist_cells_per_leaf = self.hist_cells_per_leaf_key
         self.dblocks = upload_blocks(ctx, blocks)
 
         # ---- constant fills: staged locally, settled by the one drain ----

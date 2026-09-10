@@ -1,0 +1,74 @@
+{
+  "deterministic/Depthwise/0.25": {
+    "model": "4463f2489b10408809e5a1b4a5cb2d1bc2d9430283515d6363d0b07a191c0881",
+    "prediction": "034a626379fa743a314bbde4a7f8e2412286cc77a3ed9cab54034db59d8d5d63"
+  },
+  "deterministic/Depthwise/0.5": {
+    "model": "04b2c504b1ca3cab71bedd515bd6fcce06239a6f1fa6b5a042a1d6ff5c23747d",
+    "prediction": "70a5ae8b91f83ccb9961a6b911b9ec48687f0452cd34085224720611d0d79813"
+  },
+  "deterministic/Lossguide/0.25": {
+    "model": "9de0282883aca65eeb8bc5aedf9316c8ea875d1ba239aa786b20a65780e0d973",
+    "prediction": "034a626379fa743a314bbde4a7f8e2412286cc77a3ed9cab54034db59d8d5d63"
+  },
+  "deterministic/Lossguide/0.5": {
+    "model": "2d4fc6a6e3c4aba0f2d5c7f2529b451d46899cf785af8452901cc0301649a83c",
+    "prediction": "70a5ae8b91f83ccb9961a6b911b9ec48687f0452cd34085224720611d0d79813"
+  },
+  "deterministic/SymmetricTree/0.25": {
+    "model": "79ee858b32c3b80ed5c0d575bfd15e8a31ced902cb642f82be865f08a0e3929c",
+    "prediction": "031a5f0d084ea8b52d736f1c7e856f79677854f584a71f7640333a9384c6cb27"
+  },
+  "deterministic/SymmetricTree/0.5": {
+    "model": "8c8575f4c2d70fb2a389403653a3b6e18f4bf7911901241cea241fa608f6629f",
+    "prediction": "886589bd2bef0f2d3ef0882e6863f19785bc43312d0ae183ae649f8b5417b722"
+  },
+  "fast/Depthwise/0.25": {
+    "model": "4463f2489b10408809e5a1b4a5cb2d1bc2d9430283515d6363d0b07a191c0881",
+    "prediction": "034a626379fa743a314bbde4a7f8e2412286cc77a3ed9cab54034db59d8d5d63"
+  },
+  "fast/Depthwise/0.5": {
+    "model": "04b2c504b1ca3cab71bedd515bd6fcce06239a6f1fa6b5a042a1d6ff5c23747d",
+    "prediction": "70a5ae8b91f83ccb9961a6b911b9ec48687f0452cd34085224720611d0d79813"
+  },
+  "fast/Lossguide/0.25": {
+    "model": "9de0282883aca65eeb8bc5aedf9316c8ea875d1ba239aa786b20a65780e0d973",
+    "prediction": "034a626379fa743a314bbde4a7f8e2412286cc77a3ed9cab54034db59d8d5d63"
+  },
+  "fast/Lossguide/0.5": {
+    "model": "2d4fc6a6e3c4aba0f2d5c7f2529b451d46899cf785af8452901cc0301649a83c",
+    "prediction": "70a5ae8b91f83ccb9961a6b911b9ec48687f0452cd34085224720611d0d79813"
+  },
+  "fast/SymmetricTree/0.25": {
+    "model": "79ee858b32c3b80ed5c0d575bfd15e8a31ced902cb642f82be865f08a0e3929c",
+    "prediction": "031a5f0d084ea8b52d736f1c7e856f79677854f584a71f7640333a9384c6cb27"
+  },
+  "fast/SymmetricTree/0.5": {
+    "model": "8c8575f4c2d70fb2a389403653a3b6e18f4bf7911901241cea241fa608f6629f",
+    "prediction": "886589bd2bef0f2d3ef0882e6863f19785bc43312d0ae183ae649f8b5417b722"
+  },
+  "identical/Depthwise/0.25": {
+    "model": "6d1e103fadd9e391597b6f2b72db02e38cff041af1b8d4daa309d36ad54b75e9",
+    "prediction": "5342f4d4eca44e89d31ab1e7e47e3b531cd1c107a5c978d0f357ea9f6c8689ed"
+  },
+  "identical/Depthwise/0.5": {
+    "model": "46a7e01b65486cd4421186f66e1313bb49df546dad85aa805b3898ad7e882a3b",
+    "prediction": "f8c5cf8bed30ba4d1a6c36429dedad80773fe75e9f07ee11bcce51a2f4940281"
+  },
+  "identical/Lossguide/0.25": {
+    "model": "97f8ace5ffb64b5d791a69efa50dda46c9a4e98966526981eec5ea8cbc7a8e71",
+    "prediction": "5342f4d4eca44e89d31ab1e7e47e3b531cd1c107a5c978d0f357ea9f6c8689ed"
+  },
+  "identical/Lossguide/0.5": {
+    "model": "3176a9538dec0cda453f8509d13d915365a72d9411e43b03a21e6627f060897c",
+    "prediction": "f8c5cf8bed30ba4d1a6c36429dedad80773fe75e9f07ee11bcce51a2f4940281"
+  },
+  "identical/SymmetricTree/0.25": {
+    "model": "368c30369dcc6c8ade2c576fcd84c75e2c13d796267403cd35a19c27026c0c2d",
+    "prediction": "467ecf304224a10f9b3e8bd0361f29bd710c1998f3f6220d01b4b597e9c80788"
+  },
+  "identical/SymmetricTree/0.5": {
+    "model": "102e91ef61983c8c84022db0e95d1b887cde2ae7d0950c8d7ae8f1944e6312f7",
+    "prediction": "bfa566562a83921323abcaec2c4aace4f28cfe88b2da7c3babfc9e0bb4ac91d6"
+  }
+}

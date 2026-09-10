@@ -1,0 +1,146 @@
+[
+  {
+    "case": {
+      "rows": 65537,
+      "cols": 8,
+      "depth": 6,
+      "trees": 12,
+      "borders": 15,
+      "loss": "Logloss"
+    },
+    "fingerprint": "10509418320199209404",
+    "medians_ms": {
+      "baseline": 149.72899999999998,
+      "candidate": 145.371
+    },
+    "speedup": 1.0299784688830644,
+    "baseline_drift_ratio": 1.0199739616710402,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        151.204,
+        149.515,
+        156.631,
+        149.943,
+        148.243,
+        148.145
+      ],
+      "candidate": [
+        145.206,
+        145.406,
+        152.916,
+        143.783,
+        145.336,
+        146.278
+      ]
+    }
+  },
+  {
+    "case": {
+      "rows": 262145,
+      "cols": 28,
+      "depth": 8,
+      "trees": 12,
+      "borders": 32,
+      "loss": "Logloss"
+    },
+    "fingerprint": "2511472745776583050",
+    "medians_ms": {
+      "baseline": 244.68900000000002,
+      "candidate": 236.4195
+    },
+    "speedup": 1.034978079219354,
+    "baseline_drift_ratio": 1.0129568844245909,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        254.305,
+        240.33,
+        246.264,
+        243.114,
+        247.375,
+        237.515
+      ],
+      "candidate": [
+        245.497,
+        233.209,
+        229.833,
+        242.618,
+        233.234,
+        239.605
+      ]
+    }
+  },
+  {
+    "case": {
+      "rows": 262145,
+      "cols": 28,
+      "depth": 8,
+      "trees": 12,
+      "borders": 64,
+      "loss": "RMSE"
+    },
+    "fingerprint": "11953832263878639766",
+    "medians_ms": {
+      "baseline": 149.088,
+      "candidate": 144.8485
+    },
+    "speedup": 1.0292685115827915,
+    "baseline_drift_ratio": 1.0224371583216896,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        150.742,
+        142.285,
+        151.134,
+        147.434,
+        144.107,
+        161.199
+      ],
+      "candidate": [
+        138.963,
+        148.64,
+        147.135,
+        150.966,
+        142.562,
+        138.204
+      ]
+    }
+  },
+  {
+    "case": {
+      "rows": 1000003,
+      "cols": 28,
+      "depth": 8,
+      "trees": 8,
+      "borders": 32,
+      "loss": "Logloss"
+    },
+    "fingerprint": "3888466874942419211",
+    "medians_ms": {
+      "baseline": 334.86249999999995,
+      "candidate": 360.03
+    },
+    "speedup": 0.9300961031025192,
+    "baseline_drift_ratio": 1.015968814906234,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        369.407,
+        330.173,
+        337.515,
+        398.79,
+        332.21,
+        331.923
+      ],
+      "candidate": [
+        364.533,
+        360.165,
+        364.054,
+        359.895,
+        356.24,
+        354.13
+      ]
+    }
+  }
+]

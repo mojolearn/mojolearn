@@ -40,6 +40,11 @@ arithmetic: nothing here computes, it only moves bytes and forwards.
 """
 
 from max.gpu.host import DeviceContext
+from std.math import isfinite
+from metrics.impl.metrics.regression_errors import regression_error
+from metrics.impl.metrics.log_loss import log_loss
+from metrics.impl.metrics.binary_ranking import binary_ranking
+from metrics.impl.metrics.classification import confusion_matrix, precision_recall_fscore, MAX_CONFUSION_CLASSES, MAX_PRF_CLASSES
 
 from metrics.checks.device_io import download_f32, upload_f32, upload_i32
 from metrics.impl.metrics.accuracy_score import accuracy_score_py
@@ -432,3 +437,118 @@ def trustworthiness_host(
     return trustworthiness_score(
         ctx, x, x_embedded, n, m, d, n_neighbors, batch_size
     )
+
+
+def regression_error_host[absolute: Bool = False, root: Bool = False](
+    y_true: List[Float32], y_pred: List[Float32], n: Int
+) raises -> Float32:
+    """Validate/upload only; residuals, reduction and epilogue run on GPU."""
+    _check_float_pair(y_true, y_pred, n)
+    for i in range(n):
+        if not isfinite(y_true[i]) or not isfinite(y_pred[i]):
+            raise Error("regression_error: inputs must be finite Float32")
+    var ctx = DeviceContext()
+    var y = upload_f32(ctx, y_true)
+    var prediction = upload_f32(ctx, y_pred)
+    var result = regression_error[absolute, root](ctx, y, prediction, n)
+    _ = y^
+    _ = prediction^
+    _ = ctx^
+    return result
+
+
+def _check_classification[matrix: Bool](y: List[Int32], p: List[Int32], n: Int, k: Int) raises:
+    _check_pair(y,p,n)
+    comptime cap = MAX_CONFUSION_CLASSES if matrix else MAX_PRF_CLASSES
+    if n > 2147483647 or k <= 0 or k > cap:
+        raise Error("classification metrics: count or class allocation bound exceeded")
+    comptime minimum = -1 if matrix else 0
+    for i in range(n):
+        if Int(y[i]) < minimum or Int(y[i]) >= k or Int(p[i]) < minimum or Int(p[i]) >= k:
+            raise Error("classification metrics: encoded label out of range")
+
+
+def confusion_matrix_host[dtype: DType](
+    y: List[Int32], p: List[Int32], n: Int, k: Int, normalization: Int,
+) raises -> List[Scalar[dtype]]:
+    _check_classification[True](y,p,n,k)
+    var ctx = DeviceContext()
+    var dy = upload_i32(ctx,y)
+    var dp = upload_i32(ctx,p)
+    var result = confusion_matrix[dtype](ctx,dy,dp,n,k,normalization)
+    var host = List[Scalar[dtype]]()
+    with result.map_to_host() as h:
+        for i in range(k*k):
+            host.append(h[i])
+    _ = result^
+    _ = dy^
+    _ = dp^
+    _ = ctx^
+    return host^
+
+
+def precision_recall_fscore_host(
+    y: List[Int32], p: List[Int32], n: Int, k: Int, average: Int,
+    positive: Int, zero: Int, selected: Int,
+) raises -> List[Float32]:
+    _check_classification[False](y,p,n,k)
+    var ctx = DeviceContext()
+    var dy = upload_i32(ctx,y)
+    var dp = upload_i32(ctx,p)
+    var result = precision_recall_fscore(ctx,dy,dp,n,k,average,positive,zero,selected)
+    var width = selected if average == 0 else 1
+    var host = download_f32(ctx,result,3*width+3)
+    _ = result^
+    _ = dy^
+    _ = dp^
+    _ = ctx^
+    return host^
+
+
+def log_loss_host(y: List[Int32], probability: List[Float32], n: Int, k: Int, normalize: Int) raises -> Float32:
+    """Validate and upload; logarithms and the entire reduction execute on GPU."""
+    if n <= 0 or n > 2147483647 or k < 2 or k > 2147483647 // n:
+        raise Error("log_loss: invalid input dimensions")
+    if len(y) < n or len(probability) < n*k or normalize < 0 or normalize > 1:
+        raise Error("log_loss: invalid input length or normalization")
+    for i in range(n):
+        if Int(y[i]) < 0 or Int(y[i]) >= k:
+            raise Error("log_loss: encoded label out of range")
+    for i in range(n*k):
+        if not isfinite(probability[i]) or probability[i] < 0 or probability[i] > 1:
+            raise Error("log_loss: probabilities must be finite and within [0,1]")
+    var ctx = DeviceContext()
+    var dy = upload_i32(ctx,y)
+    var dp = upload_f32(ctx,probability)
+    var result = log_loss(ctx,dy,dp,n,k,normalize)
+    _ = dy^
+    _ = dp^
+    _ = ctx^
+    return result
+
+
+def binary_ranking_host[curve: Bool](y: List[Int32], scores: List[Float32], n: Int) raises -> Tuple[List[Float32], Int]:
+    if n <= 0 or n > 2147483647 or len(y) < n or len(scores) < n:
+        raise Error("binary ranking: invalid input length")
+    var has_zero = False
+    var has_one = False
+    for i in range(n):
+        if y[i] == 0:
+            has_zero = True
+        elif y[i] == 1:
+            has_one = True
+        else:
+            raise Error("binary ranking: labels must encode 0 or 1")
+        if not isfinite(scores[i]):
+            raise Error("binary ranking: scores must be finite")
+    comptime if not curve:
+        if not has_zero or not has_one:
+            raise Error("roc_auc_score: both classes required")
+    var ctx = DeviceContext()
+    var dy = upload_i32(ctx,y)
+    var ds = upload_f32(ctx,scores)
+    var result = binary_ranking[curve](ctx,dy,ds,n)
+    _ = dy^
+    _ = ds^
+    _ = ctx^
+    return result^

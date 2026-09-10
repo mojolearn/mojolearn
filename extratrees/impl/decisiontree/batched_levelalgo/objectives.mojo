@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees split scoring: Gini/entropy classification and MSE regression."""
 
-from std.math import fma, log
+from std.math import fma
 
-from checks.numerics import ftz, identical_log
+from checks.numerics import ftz
 
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
     classification_key_shift,
@@ -379,14 +379,8 @@ struct GiniObjectiveFunction[dtype: DType](Copyable, Movable):
 
 
 
-@always_inline
-def _log_seam[
-    dt: DType, //
-](x: Scalar[dt]) -> Scalar[dt] where dt.is_floating_point():
-    """`numerics.identical_log` for a generic-dtype seam -- the shape of RF's DEVIATION 406 `_log_seam`."""
-    comptime if dt == DType.float32:
-        return identical_log(x.cast[DType.float32]()).cast[dt]()
-    return log(x)
+# Shared body; retain the established local name at every objective call.
+from core.tree_math import tree_log as _log_seam
 
 
 @always_inline

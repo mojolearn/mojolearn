@@ -166,6 +166,12 @@ mojolearn.AgglomerativeClustering(n_clusters=2).fit(xs)   # _mojolearn_solver
 mojolearn.SVC().fit(xs, ys)                               # _mojolearn_svm
 mojolearn.kpss_test(series)                               # _mojolearn_tsa
 assert mojolearn.metrics.accuracy_score(ys, ys) == 1.0    # _mojolearn_metrics
+assert mojolearn.MinMaxScaler().fit_transform(xs).shape == xs.shape
+assert mojolearn.StandardScaler().fit_transform(xs).shape == xs.shape
+adapter = mojolearn.GradientBoostingClassifier(n_estimators=2, max_depth=2).fit(xs, ys)
+assert adapter.predict(xs).shape == ys.shape
+adapter_proba = adapter.predict_proba(xs)
+assert adapter_proba.shape == (len(xs), 2) and adapter_proba.dtype == np.float32
 mojolearn.ARIMA(order=(1, 0, 0)).fit(series)              # _mojolearn_arima
 
 # _mojolearn_gp, the THIRTEENTH extension (2026-09-01). A 16x2 slice of xs,

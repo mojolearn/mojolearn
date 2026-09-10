@@ -14,6 +14,7 @@ mojolearn/_mojolearn_trees.so
 mojolearn/_mojolearn_svm.so
 mojolearn/_mojolearn_solver.so
 mojolearn/_mojolearn_metrics.so
+mojolearn/_mojolearn_preprocessing.so
 mojolearn/_mojolearn_tsa.so
 mojolearn/_mojolearn_linalg.so
 # The 2026-09-01 bindings. BOTH WERE MISSING and the older one had already

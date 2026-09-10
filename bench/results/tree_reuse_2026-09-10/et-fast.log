@@ -1,0 +1,57 @@
+COMMAND: pixi run mojo run -I . extratrees/checks/objectives_check.mojo
+objectives_check -- extratrees split scoring, per cell
+
+[gini] scattered fixture, 512 rows, 64 candidates
+  n_left: 64 pass, 0 fail
+  n_left == closed-form rank: 64 pass, 0 fail
+  sq_left (exact int): 64 pass, 0 fail
+  sq_right (exact int): 64 pass, 0 fail
+  exact num: 64 pass, 0 fail
+  exact den: 64 pass, 0 fail
+  gini_left: 64 pass, 0 fail
+  gini_right: 64 pass, 0 fail
+  sklearn proxy (float): 64 pass, 0 fail
+  Criterion.proxy_impurity_improvement: 64 pass, 0 fail
+  exact value == float proxy: 64 pass, 0 fail
+  cuML GainPerSplit: 64 pass, 0 fail
+  exact order vs float order: 63 pass, 0 fail
+  impurity_improvement: 64 pass, 0 fail
+  fixture distinctness: 64 distinct (n_left, sq_left) of 64 candidates
+
+[mse] scattered fixture, 512 rows, 64 candidates
+  count_left: 64 pass, 0 fail
+  count_left == closed-form rank: 64 pass, 0 fail
+  sum_left (exact dyadic): 64 pass, 0 fail
+  sq_sum_left (exact dyadic): 64 pass, 0 fail
+  sklearn MSE proxy: 64 pass, 0 fail
+  children_impurity left: 64 pass, 0 fail
+  children_impurity right: 64 pass, 0 fail
+  cuML GainPerSplit: 64 pass, 0 fail
+  SetLeafVector (leaf mean): 64 pass, 0 fail
+  node_impurity: 64 pass, 0 fail
+  fixture distinctness: 64 distinct sum_left of 64 candidates
+
+[entropy] scattered fixture, 512 rows, 64 candidates
+    5 consecutive pairs ranked oppositely by gini and entropy
+  cuML entropy GainPerSplit (f32 vs f64 ref): 64 pass, 0 fail
+  GainPerSplit f64 vs f64 ref: 64 pass, 0 fail
+  gain >= 0 after the 217 clamp: 64 pass, 0 fail
+  float_gain_key order == float order: 63 pass, 0 fail
+  GainKeyExact pair (key, 1, valid): 64 pass, 0 fail
+  sklearn entropy impurities: 128 pass, 0 fail
+  sklearn entropy proxy: 64 pass, 0 fail
+  entropy order differs from gini somewhere: 1 pass, 0 fail
+  float_gain_key: -0.0 == +0.0, sign order: 6 pass, 0 fail
+
+[analytic] hand-computable fixtures
+  analytic: 27 pass, 0 fail
+
+[analytic] entropy -- exact bits, and Gini vs Entropy disagreeing
+  entropy analytic: 21 pass, 0 fail
+
+[rejection] min_samples_leaf and the empty child
+  rejection: 15 pass, 0 fail
+
+PASS -- every cell
+
+EXIT_CODE=0

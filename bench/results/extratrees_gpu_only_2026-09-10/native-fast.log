@@ -1,0 +1,82 @@
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/gpu_only_entrypoints.mojo:46:26: error: no matching function in initialization
+    var x = List[Float32](0, 1, 2, 3, 4, 5, 6, 7)
+            ~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+oss/modular/mojo/stdlib/std/collections/list.mojo:428:1: note: candidate not viable: unexpected argument
+def __init__(out self)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:435:1: note: candidate not viable: missing required argument: 'capacity'
+def __init__(out self, *, capacity: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:450:1: note: candidate not viable: missing required argument: 'length'
+def __init__(out self, *, length: Int, fill: T) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:463:1: note: candidate not viable: missing required argument: '__list_literal__'
+def __init__(out self, var *values: T, *, __list_literal__: NoneType)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:483:1: note: candidate not viable: unexpected argument
+def __init__[IterableType: Iterable](out self: List[IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element], ref iterable: IterableType) where conforms_to(IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:505:1: note: candidate not viable: missing required argument: 'unsafe_uninit_length'
+def __init__(out self, *, unsafe_uninit_length: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:519:1: note: candidate not viable: missing required argument: 'copy'
+def __init__(out self, *, copy: Self) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:160:1: note: candidate not viable: missing required argument: 'move'
+def __init__(out self, *, deinit move: Self)    # note - generated function
+^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/gpu_only_entrypoints.mojo:47:31: error: no matching function in initialization
+    var labels = List[Float32](0, 0, 0, 0, 1, 1, 1, 1)
+                 ~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+oss/modular/mojo/stdlib/std/collections/list.mojo:428:1: note: candidate not viable: unexpected argument
+def __init__(out self)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:435:1: note: candidate not viable: missing required argument: 'capacity'
+def __init__(out self, *, capacity: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:450:1: note: candidate not viable: missing required argument: 'length'
+def __init__(out self, *, length: Int, fill: T) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:463:1: note: candidate not viable: missing required argument: '__list_literal__'
+def __init__(out self, var *values: T, *, __list_literal__: NoneType)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:483:1: note: candidate not viable: unexpected argument
+def __init__[IterableType: Iterable](out self: List[IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element], ref iterable: IterableType) where conforms_to(IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:505:1: note: candidate not viable: missing required argument: 'unsafe_uninit_length'
+def __init__(out self, *, unsafe_uninit_length: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:519:1: note: candidate not viable: missing required argument: 'copy'
+def __init__(out self, *, copy: Self) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:160:1: note: candidate not viable: missing required argument: 'move'
+def __init__(out self, *, deinit move: Self)    # note - generated function
+^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/gpu_only_entrypoints.mojo:48:32: error: no matching function in initialization
+    var targets = List[Float32](0.125, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0)
+                  ~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+oss/modular/mojo/stdlib/std/collections/list.mojo:428:1: note: candidate not viable: unexpected argument
+def __init__(out self)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:435:1: note: candidate not viable: missing required argument: 'capacity'
+def __init__(out self, *, capacity: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:450:1: note: candidate not viable: missing required argument: 'length'
+def __init__(out self, *, length: Int, fill: T) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:463:1: note: candidate not viable: missing required argument: '__list_literal__'
+def __init__(out self, var *values: T, *, __list_literal__: NoneType)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:483:1: note: candidate not viable: unexpected argument
+def __init__[IterableType: Iterable](out self: List[IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element], ref iterable: IterableType) where conforms_to(IterableType.IteratorType[iterable_is_mut, origin_of(iterable), origin_of(iterable)].Element, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:505:1: note: candidate not viable: missing required argument: 'unsafe_uninit_length'
+def __init__(out self, *, unsafe_uninit_length: Int)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:519:1: note: candidate not viable: missing required argument: 'copy'
+def __init__(out self, *, copy: Self) where conforms_to(T, Copyable)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/collections/list.mojo:160:1: note: candidate not viable: missing required argument: 'move'
+def __init__(out self, *, deinit move: Self)    # note - generated function
+^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

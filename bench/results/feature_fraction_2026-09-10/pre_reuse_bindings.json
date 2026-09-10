@@ -1,0 +1,14 @@
+{
+  "fast": {
+    "path": "/tmp/mojolearn-feature-fraction-reference-20260910/fast/_mojolearn_gbdt.so",
+    "sha256": "1ba2cd43c13f9b2c33be65a42eb780c309d2da1e64e591fd295480d628a86b16"
+  },
+  "deterministic": {
+    "path": "/tmp/mojolearn-feature-fraction-reference-20260910/deterministic/_mojolearn_gbdt.so",
+    "sha256": "6cc1eba5e16692f30b91c9f46c6297ec2523a176160e9c9c6808f3337ccc0537"
+  },
+  "identical": {
+    "path": "/tmp/mojolearn-feature-fraction-reference-20260910/identical/_mojolearn_gbdt.so",
+    "sha256": "735c17c1530f93e2b2c7e028d5c1b8ac846b3041797f2086c875685cd6ccae97"
+  }
+}

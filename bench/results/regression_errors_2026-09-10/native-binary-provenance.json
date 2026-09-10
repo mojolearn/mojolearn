@@ -1,0 +1,51 @@
+{
+  "fast": {
+    "binary": "build/regression-errors-a1/fast",
+    "sha256": "c8d6bf2b4d868607b359f86043376b3c02ba64d18f3e2ecf01cd2bcfc6c49021",
+    "command": [
+      "pixi",
+      "run",
+      "mojo",
+      "build",
+      "-I",
+      ".",
+      "metrics/checks/regression_errors_check.mojo",
+      "-o",
+      "build/regression-errors-a1/fast"
+    ]
+  },
+  "deterministic": {
+    "binary": "build/regression-errors-a1/deterministic",
+    "sha256": "5ce76001317c09986bf23720194f2133718e1fd6b9e7954f2c794d64e7f5553f",
+    "command": [
+      "pixi",
+      "run",
+      "mojo",
+      "build",
+      "-I",
+      ".",
+      "-D",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC=1",
+      "metrics/checks/regression_errors_check.mojo",
+      "-o",
+      "build/regression-errors-a1/deterministic"
+    ]
+  },
+  "identical": {
+    "binary": "build/regression-errors-a1/identical",
+    "sha256": "08014f3dae0cb230a3673c7e170702c3185a08926ec28c8d69b6c71d91d660a8",
+    "command": [
+      "pixi",
+      "run",
+      "mojo",
+      "build",
+      "-I",
+      ".",
+      "-D",
+      "MOJOLEARN_NUMERIC_IDENTICAL=1",
+      "metrics/checks/regression_errors_check.mojo",
+      "-o",
+      "build/regression-errors-a1/identical"
+    ]
+  }
+}

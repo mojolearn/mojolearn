@@ -1,0 +1,49 @@
+COMMAND: pixi run mojo run -I . ensemble/checks/objectives_check.mojo
+Included from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/objectives_check.mojo:69:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/decisiontree/batched_levelalgo/objectives.mojo:345:29: warning: unreachable code after compile-time assertion failure
+        return Scalar[dtype](0)
+                            ^
+--- arm A: ClassificationBin::IncrementHistogram placement ---
+    uniform  + correct   : 0 wrong of 16
+    uniform  + TRANSPOSED (S1) : 0 wrong of 16
+    hashed   + correct   : 0 wrong of 16
+    hashed   + TRANSPOSED (S1) : 10 wrong of 16
+    S1 demonstration: the transposed kernel passes UNIFORM planting with 0 wrong -- a uniform gate would have shipped it
+    S1 caught by hashed planting: 10 wrong of 16
+--- arm B: RegressionBin fixed-point slots ---
+    correct AtomicAdd: 0 wrong of 8
+    SABOTAGE S5 (floor instead of truncate): 8 wrong of 8
+    SABOTAGE S2 (slots swapped): 8 wrong of 8
+--- arm C: WeightedRegressionBin, three slots ---
+    correct AtomicAdd: 0 wrong of 8
+    SABOTAGE S3 (slots rotated): 8 wrong of 8
+--- arm D: GiniGain against 49/810 and 1/567 ---
+    bin 1: 0.060493797063827515  want 0.06049382716049383
+    bin 2: 0.0017636552220210433  want 0.001763668430335097
+    bin 3: -max() sentinel, exact
+    S4 (one cell +1) moved Gini by 0.055267006158828735 against tolerance 2e-07
+--- arm E: MSEGain against 1/32 EXACTLY and 1/96 ---
+    bin 1: 0.03125  want exactly 0.03125
+    bin 2: 0.010416656732559204  want 0.010416666666666666
+    S4b (one count +1) moved MSE from 0.03125 to 0.008333325
+--- arm F: Entropy / Poisson / Gamma / InverseGaussian ---
+    entropy bin 1: 0.09109100699424744  anchor 0.0910910076037918
+    entropy bin 2: 0.0025652647018432617  anchor 0.0025652873671375698
+    poisson bin 1: 0.06540602445602417  anchor 0.0654060179705685
+    gamma   bin 1: 0.14384102821350098  anchor 0.1438410362258905
+    invgaus bin 1: 0.3333333730697632  anchor 1/3
+--- arm G: GainPerSplit gating and dispatch ---
+    min_samples_leaf gate: rejected, exact sentinel
+    default: arm reached for a regression criterion
+--- arm H: SetLeafVector ---
+    classification leaf: 3/8, 5/8 exact
+    empty classification leaf: zeroed
+    regression leaf: 0.5 exact, empty slot 0
+--- arm I: Gain on the device, per thread ---
+    thread 0 : gain 0.021604908630251884  nLeft 4  quesval 0.5
+    thread 1 : gain 0.060493797063827515  nLeft 10  quesval 1.5
+    thread 2 : gain 0.0017636552220210433  nLeft 14  quesval 2.5
+    thread 3: invalid Split, as nRight = 0 requires
+objectives_check: ALL OK
+
+EXIT_CODE=0

@@ -1,0 +1,40 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/classification_metrics_check.mojo:10:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/impl/metrics/classification.mojo:58:41: error: no matching method in call to 'unsafe_store'
+            result.unsafe_store(i, Int64(counts.unsafe_load(i)))
+            ~~~~~~~~~~~~~~~~~~~         ^
+oss/modular/mojo/stdlib/std/memory/pointer.mojo:1667:1: note: candidate not viable: value passed to 'val' cannot be converted from 'Int64' to 'SIMD[dtype, width]'
+def unsafe_store[I: Indexer, dtype: DType, //, width: SIMDLength = SIMDLength(1), *, alignment: Int = align_of[dtype](), volatile: Bool = False, non_temporal: Bool = False](self: Pointer[Scalar[dtype], address_space=self.address_space], offset: I, val: SIMD[dtype, width])    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/memory/pointer.mojo:1713:1: note: candidate not viable: value passed to 'val' cannot be converted from 'Int64' to 'SIMD[dtype, width]'
+def unsafe_store[dtype: DType, offset_type: DType, //, width: Int = Int(1), *, alignment: Int = align_of[dtype](), volatile: Bool = False, non_temporal: Bool = False](self: Pointer[Scalar[dtype], address_space=self.address_space], offset: Scalar[offset_type], val: SIMD[dtype, width])    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/memory/pointer.mojo:1759:1: note: candidate not viable: unexpected argument
+def unsafe_store[dtype: DType, //, width: SIMDLength = SIMDLength(1), *, alignment: Int = align_of[dtype](), volatile: Bool = False, non_temporal: Bool = False](self: Pointer[Scalar[dtype], address_space=self.address_space], val: SIMD[dtype, width])    # note - synthetic signature
+^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/classification_metrics_check.mojo:10:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/impl/metrics/classification.mojo:62:51: error: no matching method in call to 'unsafe_store'
+                result.unsafe_store(i, count_ratio(Int64(counts.unsafe_load(i)), Int64(counts.unsafe_load(k*k)), 0))
+                ~~~~~~~~~~~~~~~~~~~               ^
+oss/modular/mojo/stdlib/std/memory/pointer.mojo:1667:1: note: candidate not viable: value passed to 'val' cannot be converted from 'Float32' to 'SIMD[dtype, width]'
+def unsafe_store[I: Indexer, dtype: DType, //, width: SIMDLength = SIMDLength(1), *, alignment: Int = align_of[dtype](), volatile: Bool = False, non_temporal: Bool = False](self: Pointer[Scalar[dtype], address_space=self.address_space], offset: I, val: SIMD[dtype, width])    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/memory/pointer.mojo:1713:1: note: candidate not viable: value passed to 'val' cannot be converted from 'Float32' to 'SIMD[dtype, width]'
+def unsafe_store[dtype: DType, offset_type: DType, //, width: Int = Int(1), *, alignment: Int = align_of[dtype](), volatile: Bool = False, non_temporal: Bool = False](self: Pointer[Scalar[dtype], address_space=self.address_space], offset: Scalar[offset_type], val: SIMD[dtype, width])    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/memory/pointer.mojo:1759:1: note: candidate not viable: unexpected argument
+def unsafe_store[dtype: DType, //, width: SIMDLength = SIMDLength(1), *, alignment: Int = align_of[dtype](), volatile: Bool = False, non_temporal: Bool = False](self: Pointer[Scalar[dtype], address_space=self.address_space], val: SIMD[dtype, width])    # note - synthetic signature
+^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/classification_metrics_check.mojo:10:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/impl/metrics/classification.mojo:70:55: error: no matching method in call to 'unsafe_store'
+                result.unsafe_store(index, count_ratio(Int64(counts.unsafe_load(index)), denominator, 0))
+                ~~~~~~~~~~~~~~~~~~~                   ^
+oss/modular/mojo/stdlib/std/memory/pointer.mojo:1667:1: note: candidate not viable: value passed to 'val' cannot be converted from 'Float32' to 'SIMD[dtype, width]'
+def unsafe_store[I: Indexer, dtype: DType, //, width: SIMDLength = SIMDLength(1), *, alignment: Int = align_of[dtype](), volatile: Bool = False, non_temporal: Bool = False](self: Pointer[Scalar[dtype], address_space=self.address_space], offset: I, val: SIMD[dtype, width])    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/memory/pointer.mojo:1713:1: note: candidate not viable: value passed to 'val' cannot be converted from 'Float32' to 'SIMD[dtype, width]'
+def unsafe_store[dtype: DType, offset_type: DType, //, width: Int = Int(1), *, alignment: Int = align_of[dtype](), volatile: Bool = False, non_temporal: Bool = False](self: Pointer[Scalar[dtype], address_space=self.address_space], offset: Scalar[offset_type], val: SIMD[dtype, width])    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/memory/pointer.mojo:1759:1: note: candidate not viable: unexpected argument
+def unsafe_store[dtype: DType, //, width: SIMDLength = SIMDLength(1), *, alignment: Int = align_of[dtype](), volatile: Bool = False, non_temporal: Bool = False](self: Pointer[Scalar[dtype], address_space=self.address_space], val: SIMD[dtype, width])    # note - synthetic signature
+^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

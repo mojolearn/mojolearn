@@ -8,6 +8,7 @@ RandomSplitter, instead of cuML's quantile histogram (DEVIATION 137).
 """
 
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from extratrees.checks.pcg_rng import SplitKey, key_for, uniform_float
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
@@ -1112,6 +1113,30 @@ def phase_setup_b_kernel(
         idx += stride
 
 
+def shared_class_counts_for[MAX_ACC: Int, CLASSIFICATION: Bool]() -> Bool:
+    """Measured Apple multiclass route; explicit off wins over opt-in.
+
+    Widths8/16/32 cover5–32 classes in the normal builder dispatcher.
+    Binary classification keeps private counts by default. Other vendors
+    can opt in for validation without changing their shipped schedule.
+    """
+    if not CLASSIFICATION or is_defined["MOJOLEARN_ET_NO_SHARED_CLASS_COUNTS"]():
+        return False
+    return is_defined["MOJOLEARN_ET_SHARED_CLASS_COUNTS"]() or (
+        has_apple_gpu_accelerator() and MAX_ACC >= 8
+    )
+
+
+def shared_class_counts_mask() -> Int:
+    """Actual classification routes for widths4/8/16/32, bits0/1/2/3."""
+    return (
+        Int(shared_class_counts_for[4, True]())
+        + 2 * Int(shared_class_counts_for[8, True]())
+        + 4 * Int(shared_class_counts_for[16, True]())
+        + 8 * Int(shared_class_counts_for[32, True]())
+    )
+
+
 def node_feature_score_kernel[
     TPB: Int, MAX_ACC: Int, CLASSIFICATION: Bool
 ](
@@ -1185,11 +1210,33 @@ def node_feature_score_kernel[
         key, extent, sabotage != SCORE_SAB_NO_MAX_GUARD
     )
 
-    var priv_left = stack_allocation[MAX_ACC, Scalar[DType.int32]]()
-    var priv_total = stack_allocation[MAX_ACC, Scalar[DType.int32]]()
-    for k in range(MAX_ACC):
-        priv_left[unsafe_offset=k] = Int32(0)
-        priv_total[unsafe_offset=k] = Int32(0)
+    # Shared integer-count candidate, inspired by cuML computeSplitKernel's
+    # shared PDF + global merge (cpp/src/decisiontree/batched-levelalgo/
+    # kernels/builder_kernels_impl.cuh:261-300, commit
+    # 00094f7e4e4b5da3a968d193a4da6085fa38f11b). ET keeps its ONE exact random
+    # threshold, not RF quantile bins. Logical 32-thread shards bound atomic
+    # contention. Only integer accumulation placement changes, so every
+    # numeric mode retains the same counts, draws, ties and leaf arithmetic.
+    # Apple widths8/16/32 passed all-mode identity and full-fit timing gates.
+    # The private reference remains selectable with the force-off define.
+    comptime SHARED_COUNTS = shared_class_counts_for[MAX_ACC, CLASSIFICATION]()
+    comptime SHARDS = (TPB + 31) // 32
+    comptime SHARED_PLANE = SHARDS * MAX_ACC
+    var shared_counts = stack_allocation[
+        2 * SHARED_PLANE if SHARED_COUNTS else 1, Scalar[DType.int32],
+        address_space=AddressSpace.SHARED,
+    ]()
+    comptime if SHARED_COUNTS:
+        for s in range(Int(thread_idx.x), 2 * SHARED_PLANE, TPB):
+            shared_counts[unsafe_offset=s] = Int32(0)
+        barrier()
+
+    var priv_left = stack_allocation[MAX_ACC if not SHARED_COUNTS else 1, Scalar[DType.int32]]()
+    var priv_total = stack_allocation[MAX_ACC if not SHARED_COUNTS else 1, Scalar[DType.int32]]()
+    comptime if not SHARED_COUNTS:
+        for k in range(MAX_ACC):
+            priv_left[unsafe_offset=k] = Int32(0)
+            priv_total[unsafe_offset=k] = Int32(0)
 
     var col_offset = col * m
     var end = range_start + range_len
@@ -1223,10 +1270,19 @@ def node_feature_score_kernel[
 
         comptime if CLASSIFICATION:
             if lab >= 0 and lab < n_acc:
-                if counts_total:
-                    priv_total[unsafe_offset=lab] += Int32(1)
-                if goes_left:
-                    priv_left[unsafe_offset=lab] += Int32(1)
+                comptime if SHARED_COUNTS:
+                    var acc_slot = (Int(thread_idx.x) // 32) * MAX_ACC + lab
+                    if counts_total:
+                        _ = Atomic.fetch_add(
+                            shared_counts.unsafe_offset(SHARED_PLANE + acc_slot), Int32(1)
+                        )
+                    if goes_left:
+                        _ = Atomic.fetch_add(shared_counts.unsafe_offset(acc_slot), Int32(1))
+                else:
+                    if counts_total:
+                        priv_total[unsafe_offset=lab] += Int32(1)
+                    if goes_left:
+                        priv_left[unsafe_offset=lab] += Int32(1)
         else:
             var q = Int32(lab)
             if sabotage == SCORE_SAB_SCALE_X2:
@@ -1248,6 +1304,9 @@ def node_feature_score_kernel[
         comptime if SEARCH_SAB_RPT_TAIL_DROP:
             break
 
+    comptime if SHARED_COUNTS:
+        barrier()
+
     var blk_n_left = block_sum[block_size=TPB](n_left)
     barrier()
     var blk_n_seen = block_sum[block_size=TPB](n_seen)
@@ -1260,6 +1319,20 @@ def node_feature_score_kernel[
         _ = Atomic.fetch_add(out_n_left.unsafe_offset(slot), blk_n_left)
         _ = Atomic.fetch_add(out_n_total.unsafe_offset(slot), blk_n_seen)
         _ = Atomic.fetch_add(out_n_blocks.unsafe_offset(slot), Int32(1))
+
+    comptime if SHARED_COUNTS:
+        var c = Int(thread_idx.x)
+        while c < n_acc:
+            var left = Int32(0)
+            var total = Int32(0)
+            for shard in range(SHARDS):
+                left += shared_counts[unsafe_offset=shard * MAX_ACC + c]
+                total += shared_counts[unsafe_offset=SHARED_PLANE + shard * MAX_ACC + c]
+            if publishes:
+                _ = Atomic.fetch_add(out_acc_left.unsafe_offset(slot * n_acc + c), left)
+                _ = Atomic.fetch_add(out_acc_total.unsafe_offset(slot * n_acc + c), total)
+            c += TPB
+        return
 
     comptime if not CLASSIFICATION:
         if sabotage == SCORE_SAB_FLOAT_ACCUM:

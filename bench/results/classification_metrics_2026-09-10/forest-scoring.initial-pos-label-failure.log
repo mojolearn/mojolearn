@@ -1,0 +1,27 @@
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/checks/classification_forest_scoring.py", line 56, in <module>
+    main()
+    ~~~~^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/checks/classification_forest_scoring.py", line 42, in main
+    actual = scorer(model, x, evaluation_labels)
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/metrics/_scorer.py", line 317, in __call__
+    return self._score(partial(_cached_call, None), estimator, X, y_true, **_kwargs)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/metrics/_scorer.py", line 409, in _score
+    y_pred = method_caller(
+        estimator,
+    ...<2 lines>...
+        pos_label=pos_label,
+    )
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/metrics/_scorer.py", line 96, in _cached_call
+    result, _ = _get_response_values(
+                ~~~~~~~~~~~~~~~~~~~~^
+        estimator, *args, response_method=response_method, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/utils/_response.py", line 207, in _get_response_values
+    raise ValueError(
+    ...<2 lines>...
+    )
+ValueError: pos_label=1 is not a valid label: It should be one of ['negative' 'positive']

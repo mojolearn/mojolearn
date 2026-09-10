@@ -1,0 +1,4 @@
+numeric_mode IDENTICAL
+ridx False rows 65537 cols 8 depth 6 trees 4 borders 32 loss Logloss
+device Apple M4
+fingerprint 0 1573621997879082148

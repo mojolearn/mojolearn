@@ -1,0 +1,133 @@
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:88:4: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with ':'
+"""`params` for both fit entry points, in this exact order -- the wrapper
+   ^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:315:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            hx.unsafe_ptr().unsafe_store(i, xp[i])
+                                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:317:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            hy.unsafe_ptr().unsafe_store(i, yp[i])
+                                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:385:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            hx.unsafe_ptr().unsafe_store(i, xp[i])
+                                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:387:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            hy.unsafe_ptr().unsafe_store(i, yp[i])
+                                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:404:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var v = Float64(yp[i])
+                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:440:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var lo = Int(offsets_p[t])
+                     ~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:441:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var hi = Int(offsets_p[t + 1])
+                     ~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:449:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    colid_p[i], quesval_p[i], 0.0, Int64(left_p[i]), 0
+                    ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:449:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    colid_p[i], quesval_p[i], 0.0, Int64(left_p[i]), 0
+                                ~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:449:64: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    colid_p[i], quesval_p[i], 0.0, Int64(left_p[i]), 0
+                                                         ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:453:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vleaf.append(leaves_p[i * num_outputs + k])
+                             ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:538:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            rows.append(xp[i])
+                        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:544:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = probs[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:598:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            rows.append(xp[i])
+                        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:604:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = preds[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:60:
+Imported from ./ensemble/randomforest.mojo:39:
+Imported from ./ensemble/instruments.mojo:46:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:60:
+Imported from ./ensemble/randomforest.mojo:39:
+Imported from ./ensemble/instruments.mojo:46:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:60:
+Imported from ./ensemble/randomforest.mojo:39:
+Imported from ./ensemble/instruments.mojo:46:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:60:
+Imported from ./ensemble/randomforest.mojo:39:
+Imported from ./ensemble/instruments.mojo:46:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:60:
+Imported from ./ensemble/randomforest.mojo:39:
+Imported from ./ensemble/instruments.mojo:46:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:632:29: warning: unreachable code after function that never returns
+        return PythonObject(None)
+                            ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:44:
+./ensemble/decisiontree/batched_levelalgo/objectives.mojo:359:29: warning: unreachable code after compile-time assertion failure
+        return Scalar[dtype](0)
+                            ^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:523:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:584:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+ld: warning: passed two min versions (26.0, 11.0) for platform macOS. Using 11.0.
+ld: warning: object file (/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojo_archive-90afd51.a) was built for newer 'macOS' version (26.0) than being linked (11.0)
+Traceback (most recent call last):
+  File "<stdin>", line 10, in <module>
+  File "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/tmpevoknm_1/mojolearn/__init__.py", line 59, in <module>
+    from .cluster import KMeans
+  File "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/tmpevoknm_1/mojolearn/cluster.py", line 7, in <module>
+    from . import _mojolearn
+ImportError: dlopen(/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/tmpevoknm_1/mojolearn/_mojolearn.so, 0x0002): Library not loaded: @rpath/libKGENCompilerRTShared.dylib
+  Referenced from: <73C254A3-E62D-3D80-ACE5-60B2431EE164> /private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/tmpevoknm_1/mojolearn/_mojolearn.so
+  Reason: tried: '/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/tmpevoknm_1/mojolearn/.dylibs/libKGENCompilerRTShared.dylib' (no such file), '/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/tmpevoknm_1/mojolearn/.dylibs/libKGENCompilerRTShared.dylib' (no such file), '/opt/homebrew/lib/libKGENCompilerRTShared.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/lib/libKGENCompilerRTShared.dylib' (no such file), '/opt/homebrew/lib/libKGENCompilerRTShared.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/lib/libKGENCompilerRTShared.dylib' (no such file)
+
+FAILED: the RandomForest extension did not come out complete.
+THE FIRST THING TO SUSPECT IS THE COMPILER CACHE, not this source:
+$MODULAR_HOME/cache/.mojo_cache keys ignore the deployment target,
+so one build made with MACOSX_DEPLOYMENT_TARGET set poisons it with
+empty 134-byte metallibs. See bindings/build_gbdt.sh's header.

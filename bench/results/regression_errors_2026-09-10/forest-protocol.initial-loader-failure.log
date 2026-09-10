@@ -1,0 +1,33 @@
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/checks/forest_protocol_binding.py", line 9, in <module>
+    import sklearn
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/__init__.py", line 70, in <module>
+    from sklearn.base import clone  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/base.py", line 19, in <module>
+    from sklearn.utils._metadata_requests import _MetadataRequester, _routing_enabled
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/utils/__init__.py", line 9, in <module>
+    from sklearn.utils._chunking import gen_batches, gen_even_slices
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/utils/_chunking.py", line 11, in <module>
+    from sklearn.utils._param_validation import Interval, validate_params
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/utils/_param_validation.py", line 17, in <module>
+    from sklearn.utils.validation import _is_arraylike_not_scalar
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/utils/validation.py", line 24, in <module>
+    from sklearn.utils._array_api import (
+    ...<6 lines>...
+    )
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/sklearn/utils/_array_api.py", line 13, in <module>
+    import scipy.special as special
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/scipy/special/__init__.py", line 785, in <module>
+    from . import _ufuncs
+  File "scipy/special/_ufuncs.pyx", line 1, in init scipy.special._ufuncs
+  File "scipy/special/_ellip_harm_2.pyx", line 1, in init scipy.special._ellip_harm_2
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/scipy/linalg/__init__.py", line 201, in <module>
+    from ._misc import *
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/scipy/linalg/_misc.py", line 3, in <module>
+    from .blas import get_blas_funcs
+  File "/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/scipy/linalg/blas.py", line 247, in <module>
+    from scipy.linalg import _fblas
+ImportError: dlopen(/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/scipy/linalg/_fblas.cpython-313-darwin.so, 0x0002): Symbol not found: _caxpy$NEWLAPACK
+  Referenced from: <060CB330-9584-3E5E-B479-EA0B416ED8F9> /private/tmp/mojolearn-b1-sklearn/lib/python3.13/site-packages/scipy/linalg/_fblas.cpython-313-darwin.so
+  Expected in:     <1DF31AEA-3D8E-382D-9493-D74635AA1CD4> /System/Library/Frameworks/Accelerate.framework/Versions/A/Accelerate

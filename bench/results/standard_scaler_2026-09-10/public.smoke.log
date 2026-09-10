@@ -1,0 +1,10 @@
+PASS StandardScaler -> RF -> GPU R2 fast 1.0
+PASS StandardScaler fast
+Context leak detected, CoreAnalytics returned false
+PASS StandardScaler -> RF -> GPU R2 deterministic 1.0
+PASS StandardScaler deterministic
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+PASS StandardScaler -> RF -> GPU R2 identical 1.0
+PASS StandardScaler identical
+PASS 48 focused StandardScaler fit configurations

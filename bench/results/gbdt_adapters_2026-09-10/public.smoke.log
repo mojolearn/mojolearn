@@ -1,0 +1,22 @@
+PASS GradientBoostingClassifier fast SymmetricTree 1.0
+PASS GradientBoostingRegressor fast SymmetricTree 0.8360084295272827
+PASS GradientBoostingClassifier fast Depthwise 1.0
+PASS GradientBoostingRegressor fast Depthwise 0.8876543045043945
+PASS GradientBoostingClassifier fast Lossguide 1.0
+PASS GradientBoostingRegressor fast Lossguide 0.8876543045043945
+PASS GradientBoostingClassifier deterministic SymmetricTree 1.0
+PASS GradientBoostingRegressor deterministic SymmetricTree 0.8360084295272827
+Context leak detected, CoreAnalytics returned false
+PASS GradientBoostingClassifier deterministic Depthwise 1.0
+PASS GradientBoostingRegressor deterministic Depthwise 0.8876543045043945
+PASS GradientBoostingClassifier deterministic Lossguide 1.0
+PASS GradientBoostingRegressor deterministic Lossguide 0.8876543045043945
+PASS GradientBoostingClassifier identical SymmetricTree 1.0
+Context leak detected, CoreAnalytics returned false
+PASS GradientBoostingRegressor identical SymmetricTree 0.8360084295272827
+PASS GradientBoostingClassifier identical Depthwise 1.0
+PASS GradientBoostingRegressor identical Depthwise 0.8876543045043945
+PASS GradientBoostingClassifier identical Lossguide 1.0
+PASS GradientBoostingRegressor identical Lossguide 0.8876543045043945
+Context leak detected, CoreAnalytics returned false
+PASS focused GPU GBDT adapter smoke

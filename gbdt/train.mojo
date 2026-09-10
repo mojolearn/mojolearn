@@ -17,6 +17,7 @@ did not subsample, and `binarization_check` holds the border parity on
 the oracle fixture.
 """
 
+from gbdt.options.child_hessian import child_hessian_threshold, check_child_hessian_objective
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import IdentityTrace
@@ -67,6 +68,7 @@ from gbdt.gpu_util.kernel.radix_sort import DeviceFloatSorter
 from std.memory import memcpy
 from max.algorithm import sync_parallelize
 from gbdt.data.permutation import TRandom
+from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -518,6 +520,9 @@ def train(
     grow_policy: String = String("SymmetricTree"),
     max_leaves: Int = -1,
     min_data_in_leaf: Int = 1,
+    min_split_gain: Float64 = -1.0,
+    min_child_hessian: Float64 = -1.0,
+    feature_fraction: Float64 = 1.0,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -688,6 +693,19 @@ def train(
     """
     # ---- the grow policy, resolved and refused BY NAME where theirs is ----
     var policy = grow_policy_from_name(grow_policy)
+    check_feature_fraction(feature_fraction)
+    if feature_fraction < 1:
+        for flag in cat_features:
+            if flag:
+                raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
+        for flag in one_hot:
+            if flag:
+                raise Error("feature_fraction<1 supports numeric features only; one_hot input refused")
+    _ = child_hessian_threshold(min_child_hessian, policy, score_function)
+    if not isfinite(min_split_gain) or (min_split_gain < 0 and min_split_gain != -1):
+        raise Error("min_split_gain must be -1 (disabled) or finite and nonnegative")
+    if policy == GROW_SYMMETRIC and min_split_gain >= 0:
+        raise Error("min_split_gain requires Depthwise or Lossguide")
     if policy == GROW_SYMMETRIC and min_data_in_leaf != 1:
         raise Error(
             "min_data_in_leaf=" + String(min_data_in_leaf) + " does nothing"
@@ -1036,6 +1054,501 @@ def train(
     for k in range(len(dep_col_index)):
         dep_ordinal_of_column[dep_col_index[k]] = k
 
+    var grid = _quantize_training_columns(
+        ctx, columns, column_one_hot, column_ctr_grid,
+        dep_ordinal_of_column, dep_by_perm, ctr_grids, n_rows,
+        border_count, border_build_max_samples, random_seed, nan_mode,
+    )
+    var borders = grid[0].copy()
+    var fold_counts = grid[1].copy()
+    var column_nan_treatment = grid[2].copy()
+
+    # the fit's identity trace begins HERE so the border records and the
+    # tree records share one seq space (a second IdentityTrace() later
+    # would restart seq inside the same file). Disabled unless
+    # MOJOLEARN_IDENTITY_TRACE is set.
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            "mojolearn train(): borders + " + grow_policy_name(policy)
+            + " fit"
+        )
+        var border_counts = List[Int32]()
+        var border_values = List[Float32]()
+        for f in range(len(borders)):
+            border_counts.append(Int32(len(borders[f])))
+            for b in range(len(borders[f])):
+                border_values.append(borders[f][b])
+        trace.record_list_i32("borders.counts", border_counts)
+        trace.record_list_f32("borders.values", border_values)
+
+    # ONE COMPRESSED INDEX PER PERMUTATION. Theirs shares the
+    # permutation-INDEPENDENT columns between them and gives each
+    # permutation its own dataset for the dependent ones
+    # (`doc_parallel_dataset_builder.cpp:104-124`); this port packs every
+    # column into one buffer, so a permutation costs a whole index rather
+    # than the dependent slice of one. DEVIATION 89.
+    var cindexes = List[DeviceBuffer[DType.uint32]]()
+    var any_dep = False
+    for c in range(n_columns):
+        if dep_ordinal_of_column[c] >= 0:
+            any_dep = True
+    for p in range(perm_count):
+        if not any_dep:
+            # no permutation-dependent columns: read `columns` in place,
+            # skip the 200M-element flat pack and the per-feature drain
+            # (see _build_cindex_from_columns)
+            cindexes.append(
+                _build_cindex_from_columns(
+                    ctx, columns, n_rows, borders, fold_counts,
+                    column_nan_treatment,
+                )
+            )
+            continue
+        var flat = List[Float32]()
+        for c in range(n_columns):
+            var ord = dep_ordinal_of_column[c]
+            if ord >= 0:
+                for r in range(n_rows):
+                    flat.append(dep_by_perm[p][ord][r])
+            else:
+                for r in range(n_rows):
+                    flat.append(columns[c][r])
+        cindexes.append(
+            _build_cindex_from_floats(
+                ctx, flat, n_rows, borders, fold_counts,
+                column_nan_treatment,
+            )
+        )
+    var cindex = cindexes[est_perm].copy()
+
+    # `class_weights` and `sample_weight`: their
+    # `MakeClassificationWeights` applied at pool build. Both fold into
+    # one weight column below; the checks that belong to `class_weights`
+    # alone travel with it there, because the entry count now depends on
+    # the loss.
+    if len(class_weights) > 0 and loss == "RMSE":
+        raise Error(
+            "class weights take effect only with a classification loss,"
+            " their option check's words (catboost_options.cpp:617)"
+        )
+    var targets = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var ht = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+
+    # THEIR COMBINATION IS A PRODUCT (`private/libs/target/
+    # data_providers.cpp:168`):
+    #
+    #     rawWeights[i] * rawGroupWeights[i] * classWeights[targetClass[i]]
+    #
+    # `rawGroupWeights` is the querywise family's and is 1 here -- this
+    # port carries no `group_id`, so there is nothing to weight by. The
+    # other two multiply, and a caller may pass either, both, or neither.
+    var use_sample_weight = len(sample_weight) > 0
+    if use_sample_weight and len(sample_weight) != n_rows:
+        raise Error(
+            "sample_weight has " + String(len(sample_weight))
+            + " entries for " + String(n_rows) + " rows"
+        )
+
+    # `classWeights[(size_t)targetClassesArray[i]]` indexes by the TARGET
+    # CLASS, so how many entries it needs depends on the loss: two for the
+    # binarized classification targets, `numClasses` for MultiClass.
+    var n_class_slots = 2
+    if loss == "MultiClass" or loss == "MultiClassOneVsAll":
+        var mxc = -1
+        for r in range(n_rows):
+            var iv = Int(y[r])
+            if iv > mxc:
+                mxc = iv
+        n_class_slots = mxc + 1
+    var use_class_weights = len(class_weights) > 0
+    if use_class_weights and len(class_weights) != n_class_slots:
+        raise Error(
+            "class_weights takes " + String(n_class_slots)
+            + " entries for loss '" + loss + "', got "
+            + String(len(class_weights))
+        )
+
+    for r in range(n_rows):
+        ht.unsafe_ptr().unsafe_store(r, y[r])
+        var w = Float32(1.0)
+        if use_sample_weight:
+            if sample_weight[r] < Float32(0.0):
+                raise Error(
+                    "sample_weight at row " + String(r)
+                    + " is negative"
+                )
+            w = sample_weight[r]
+        if use_class_weights:
+            # their `targetClassesArray`: the dense class code for
+            # MultiClass, the binarized target otherwise
+            var cls: Int
+            if loss == "MultiClass" or loss == "MultiClassOneVsAll":
+                cls = Int(y[r])
+            else:
+                cls = 1 if y[r] > Float32(0.5) else 0
+            w = w * class_weights[cls]
+        hw.unsafe_ptr().unsafe_store(r, w)
+    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    ctx.synchronize()
+    # past the drain (step-33 race class)
+    _ = ht^
+    _ = hw^
+
+    var loss_desc = make_loss_description(
+        loss,
+        alpha=loss_alpha,
+        q=loss_q,
+        delta=loss_delta,
+        variance_power=loss_variance_power,
+        border=loss_border,
+    )
+    var objective = loss_desc.loss_function
+    check_child_hessian_objective(min_child_hessian, objective)
+
+    # ---- `AdjustBoostFromAverageDefaultValue` (`options_helper.cpp`),
+    # ported 2026-08-22. Their rule, verbatim: if the option is SET,
+    # keep it; else set TRUE on a single host with no baseline and no
+    # continuation for RMSE, MAE, Quantile, MAPE (and three multi losses
+    # this port does not have). Logloss is NOT on the list. This port has
+    # no baseline column and no continuation, so those guards are
+    # trivially met; MAE/Quantile/MAPE resolve FALSE here because their
+    # constant needs the unported CalcSampleQuantile -- a named gap, not
+    # their rule.
+    var bfa: Bool
+    if boost_from_average == 1:
+        if not (
+            objective == OBJECTIVE_RMSE
+            or objective == OBJECTIVE_LOGLOSS
+            or objective == OBJECTIVE_CROSSENTROPY
+        ):
+            # their CB_ENSURE names the allowed list; ours additionally
+            # names the unported-constant gap for the quantile family
+            raise Error(
+                "boost_from_average: ported for RMSE, Logloss and"
+                " CrossEntropy only. Their list also allows Quantile,"
+                " MultiQuantile, MAE, MAPE, MultiRMSE (catboost_options"
+                ".cpp:705-709); those need the unported CalcSampleQuantile"
+                " and are refused by name."
+            )
+        bfa = True
+    elif boost_from_average == 0:
+        bfa = False
+    elif boost_from_average == -1:
+        bfa = objective == OBJECTIVE_RMSE
+    else:
+        raise Error(
+            "boost_from_average must be -1 (their data-dependent"
+            " default), 0 or 1; got " + String(boost_from_average)
+        )
+
+    # THE CLASS COUNT COMES FROM THE LABEL COLUMN, as their
+    # `TClassificationTargetHelper` derives it, and it is derived rather
+    # than taken as a parameter because a count that disagrees with the
+    # data is a wrong model rather than an error.
+    #
+    # Their labels for MultiClass are DENSE CLASS CODES `0..k-1`, which is
+    # what `MultiLogitValAndFirstDerImpl` reads with
+    # `static_cast<ui16>(targetClasses[idx])` (`multilogit.cu:41`) and
+    # indexes prediction planes with. A non-integral or negative label is
+    # refused here rather than truncated silently on the device.
+    var num_classes = 0
+    if (
+        objective == OBJECTIVE_MULTICLASS
+        or objective == OBJECTIVE_MULTICLASS_OVA
+    ):
+        var mx = -1
+        for r in range(n_rows):
+            var v = y[r]
+            if v < Float32(0.0):
+                raise Error(
+                    "MultiClass label at row " + String(r)
+                    + " is negative; labels are dense class codes 0..k-1"
+                )
+            var iv = Int(v)
+            if Float32(iv) != v:
+                raise Error(
+                    "MultiClass label at row " + String(r)
+                    + " is not an integer; labels are dense class codes"
+                    " 0..k-1"
+                )
+            if iv > mx:
+                mx = iv
+        num_classes = mx + 1
+        if num_classes < 2:
+            raise Error(
+                "the multiclass family needs at least two classes; the"
+                " labels reach only " + String(num_classes)
+            )
+    var estimation = set_leaves_estimation_default(
+        loss_desc,
+        method_override=leaf_estimation_method,
+        iterations_override=leaf_estimation_iterations,
+    )
+
+    # `TCatBoostOptions::SetLeavesEstimationDefault`'s sibling for
+    # sampling (`catboost_options.cpp:779-800`), the two lines of it this
+    # port can reach. `bootstrap_type` empty means "take the
+    # `bootstrap_bayesian` shorthand", which is what every existing caller
+    # passes; a name selects one of their three GPU draws.
+    var boot_kind = -1
+    var boot_param = bagging_temperature
+    if bootstrap_type != String(""):
+        if bootstrap_type == "Bayesian":
+            boot_kind = BOOTSTRAP_KERNEL_BAYESIAN
+            boot_param = bagging_temperature
+            if subsample >= Float32(0.0):
+                # their own validator, verbatim in intent
+                # (`catboost_options.cpp:795`)
+                raise Error(
+                    "Error: default bootstrap type (bayesian) doesn't"
+                    " support 'subsample' option"
+                )
+        elif bootstrap_type == "Bernoulli":
+            boot_kind = BOOTSTRAP_KERNEL_BERNOULLI
+            boot_param = (
+                subsample if subsample >= Float32(0.0)
+                else DEFAULT_SUBSAMPLE
+            )
+        elif bootstrap_type == "Poisson":
+            boot_kind = BOOTSTRAP_KERNEL_POISSON
+            boot_param = (
+                subsample if subsample >= Float32(0.0)
+                else DEFAULT_SUBSAMPLE
+            )
+        elif bootstrap_type == "No":
+            boot_kind = -1
+        elif bootstrap_type == "MVS":
+            # `Y_ASSERT(config.GetBootstrapType() != EBootstrapType::MVS)`
+            # (`weak_objective_impl.h:30`): their own GPU oblivious
+            # searcher refuses MVS, so this port has nothing to port.
+            raise Error(
+                "MVS is not reachable from their GPU oblivious searcher"
+                " (weak_objective_impl.h:30 asserts it away)"
+            )
+        else:
+            raise Error(
+                "unknown bootstrap_type '" + bootstrap_type
+                + "': Bayesian, Bernoulli, Poisson, No"
+            )
+
+    # ---- the HELD-OUT set, quantized against THIS MODEL'S BORDERS ----
+    # That is the whole reason this lives in `train` and not in `fit`:
+    # `borders` is built here, from the learn rows, and a `cindex` built
+    # against any other borders would score every split against the wrong
+    # bins with nothing to assert on it.
+    var eval_rows = 0
+    if len(eval_y) > 0:
+        eval_rows = len(eval_y)
+        var want = eval_rows * n_features
+        if len(eval_x_colmajor) != want:
+            raise Error(
+                "eval_x_colmajor has " + String(len(eval_x_colmajor))
+                + " values for " + String(eval_rows) + " rows x "
+                + String(n_features) + " features"
+            )
+    elif len(eval_x_colmajor) > 0:
+        raise Error("eval_x_colmajor given without eval_y")
+
+    var od_kind = od_type_from_name(od_type)
+    if od_kind != OD_NONE and eval_rows == 0:
+        raise Error(
+            "od_type='" + od_type + "' needs an eval set: pass"
+            " eval_x_colmajor and eval_y. Stopping on the learn loss"
+            " would stop on a curve that falls by construction."
+        )
+
+    # `UpdateUseBestModel` (`options_helper.cpp:100-113`). Their
+    # `hasTestConstTarget` is the reason for the second half: a test set
+    # whose target never varies cannot rank iterations, so they leave the
+    # default off rather than shrink on a flat curve. `hasTestPairs` is
+    # theirs and not ours -- this port carries no pairwise loss.
+    var eval_const_target = True
+    for r in range(1, eval_rows):
+        if eval_y[r] != eval_y[0]:
+            eval_const_target = False
+            break
+    var want_best_model = use_best_model
+    if want_best_model == -1:
+        want_best_model = (
+            1 if (eval_rows > 0 and not eval_const_target) else 0
+        )
+    elif want_best_model == 1 and eval_rows == 0:
+        # THEY WARN AND CONTINUE (`options_helper.cpp:109-112`); this
+        # raises. DEVIATION 87. A warning on a returned model is invisible
+        # from Python -- the caller asked for the best-iteration model and
+        # would get the last-iteration one with no way to tell. Their
+        # binary prints to a console a human is watching; this is a
+        # library call.
+        raise Error(
+            "use_best_model=1 needs an eval set: pass eval_x_colmajor"
+            " and eval_y, or leave it unset."
+        )
+    elif want_best_model != 0 and want_best_model != 1:
+        raise Error(
+            "use_best_model must be -1 (unset), 0 or 1, got "
+            + String(use_best_model)
+        )
+    if best_model_min_trees < 1:
+        raise Error(
+            "best_model_min_trees must be at least 1, got "
+            + String(best_model_min_trees)
+        )
+
+    var t_rows = eval_rows if eval_rows > 0 else 1
+    var eval_expanded: List[Float32]
+    if eval_rows > 0 and ctr_column_count != 0:
+        eval_expanded = expand_raw_columns(
+            ctr_tables, len(fold_counts), eval_x_colmajor, eval_rows
+        )
+    elif eval_rows > 0:
+        eval_expanded = eval_x_colmajor.copy()
+    else:
+        eval_expanded = List[Float32]()
+        for _ in range(len(fold_counts)):
+            eval_expanded.append(Float32(0.0))
+
+    var test_cindex = _build_cindex_from_floats(
+        ctx, eval_expanded, t_rows, borders, fold_counts,
+        column_nan_treatment,
+    )
+    var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
+    var h_ty = ctx.enqueue_create_host_buffer[DType.float32](t_rows)
+    for r in range(t_rows):
+        h_ty.unsafe_ptr().unsafe_store(
+            r, eval_y[r] if eval_rows > 0 else Float32(0.0)
+        )
+    ctx.enqueue_copy(dst_buf=test_targets, src_ptr=h_ty.unsafe_ptr())
+    ctx.synchronize()
+    _ = h_ty^  # past the drain (step-33 race class)
+
+    var approx_dim = 1
+    if objective == OBJECTIVE_MULTICLASS:
+        approx_dim = num_classes - 1
+    elif objective == OBJECTIVE_MULTICLASS_OVA:
+        approx_dim = num_classes
+
+    var test_arm = make_test_arm(
+        ctx, eval_rows, test_cindex^, test_targets^,
+        approx_dim, 1 + approx_dim, max_depth,
+    )
+
+    var model = TAdditiveModel()
+    var fit_result = fit_with_test(
+        model, ctx, n_rows, fold_counts, max_depth, cindex, targets,
+        weights, use_class_weights or use_sample_weight,
+        # `trace` rides POSITIONALLY (delta from the granted spec's
+        # `trace=trace`: the later arguments here are positional, and a
+        # positional argument may not follow a keyword one)
+        n_estimators, trace, learning_rate,
+        l2_leaf_reg, True,
+        bootstrap_bayesian=bootstrap_bayesian,
+        bagging_temperature=bagging_temperature,
+        bootstrap_type=boot_kind,
+        bootstrap_param=boot_param,
+        random_seed=random_seed,
+        one_hot=column_one_hot,
+        score_function=score_function,
+        objective=objective,
+        num_classes=num_classes,
+        logloss_border=loss_desc.get_logloss_border(),
+        leaf_estimation_iterations=estimation.iterations,
+        leaf_estimation_method=estimation.method,
+        alpha=loss_desc.kernel_alpha(),
+        # THEIR SECOND ALPHA. `ComputeWeightedQuantile` reads the quantile
+        # level from the loss params map, default 0.5
+        # (`leaves_estimation_helper.h:72-74`), NOT from the float the
+        # target kernel receives. `get_alpha()` IS that accessor
+        # (`loss_description.cpp:95-102`). They coincide for MAE and
+        # Quantile and differ for MAPE, whose kernel alpha is 0.
+        estimator_alpha=loss_desc.get_alpha(),
+        test=Optional(test_arm^),
+        # their `permutationCount` datasets (`doc_parallel_boosting.h:
+        # 137-141`). `cindex` above is `cindexes[est_perm]`, the same
+        # handle, so the loop's estimation permutation and this one are the
+        # same buffer.
+        perm_cindexes=cindexes^,
+        est_permutation=est_perm,
+        od_type=od_kind,
+        od_pvalue=od_pvalue,
+        od_wait=od_wait,
+        random_strength=random_strength,
+        use_pointwise_searcher=use_pointwise_searcher,
+        boost_from_average=bfa,
+        grow_policy=policy,
+        max_leaves=max_leaves,
+        min_data_in_leaf=min_data_in_leaf,
+        min_split_gain=min_split_gain,
+        min_child_hessian=min_child_hessian,
+        feature_fraction=feature_fraction,
+    )
+    var losses = fit_result.learn_losses.copy()
+    var t_losses = fit_result.test_losses.copy()
+
+    # ---- `ShrinkToBestIteration` (`boosting_progress_tracker.h:113-125`)
+    #
+    # Called here rather than inside `fit_with_test` because theirs is
+    # called here: `train_template.h:127-137` shrinks the model the
+    # boosting returned, after the loop, and only when there IS a test
+    # set. The second tracker is separate from the detector's
+    # (`boosting_progress_tracker.cpp:160-164`): it is fed only iterations
+    # at or past `best_model_min_trees`, so its best iteration can differ
+    # from `fit_result.best_iteration`, and it is THAT one the shrink
+    # reads.
+    if want_best_model == 1 and len(t_losses) > 0:
+        var min_trees_best = -1
+        var min_trees_err = Float64(0.0)
+        for i in range(len(t_losses)):
+            if i + 1 < best_model_min_trees:
+                continue
+            # their strict `<` (`error_tracker.h:58-64`), so the FIRST of
+            # a tie wins and a plateau does not walk the cut rightwards
+            if min_trees_best < 0 or t_losses[i] < min_trees_err:
+                min_trees_err = t_losses[i]
+                min_trees_best = i
+        var best_iter = min_trees_best + 1
+        if 0 < best_iter and best_iter < model.size():
+            model.shrink(best_iter)
+
+    return TrainedModel(
+        model^,
+        fold_counts^,
+        column_one_hot^,
+        borders^,
+        column_nan_treatment^,
+        losses^,
+        t_losses^,
+        fit_result.best_iteration,
+        fit_result.stopped_early,
+        ctr_column_count,
+        ctr_tables^,
+        TTensorCtrRegistry(len(fold_counts)),
+    )
+
+
+def _quantize_training_columns(
+    ctx: DeviceContext,
+    columns: List[List[Float32]],
+    column_one_hot: List[Bool],
+    column_ctr_grid: List[Int],
+    dep_ordinal_of_column: List[Int],
+    dep_by_perm: List[List[List[Float32]]],
+    ctr_grids: List[TBinarizationOptions],
+    n_rows: Int,
+    border_count: Int,
+    border_build_max_samples: Int,
+    random_seed: UInt64,
+    nan_mode: String,
+) raises -> Tuple[List[List[Float32]], List[Int], List[Int]]:
+    """Shared grid builder for ordinary training and reusable numeric pools.
+
+    Keep sampling, sorting, NaN treatment and reduction order identical to
+    the ordinary training path. Prepared pools freeze this result explicitly.
+    """
+    var n_columns = len(columns)
     var borders = List[List[Float32]]()
     var fold_counts = List[Int]()
     # their ComputeBorders' device RadixSort, scratch hoisted once for
@@ -1347,466 +1860,7 @@ def train(
             fold_counts[f2] = nb
             borders[f2] = bs2^
 
-    # the fit's identity trace begins HERE so the border records and the
-    # tree records share one seq space (a second IdentityTrace() later
-    # would restart seq inside the same file). Disabled unless
-    # MOJOLEARN_IDENTITY_TRACE is set.
-    var trace = IdentityTrace()
-    if trace.enabled:
-        trace.header(
-            "mojolearn train(): borders + " + grow_policy_name(policy)
-            + " fit"
-        )
-        var border_counts = List[Int32]()
-        var border_values = List[Float32]()
-        for f in range(len(borders)):
-            border_counts.append(Int32(len(borders[f])))
-            for b in range(len(borders[f])):
-                border_values.append(borders[f][b])
-        trace.record_list_i32("borders.counts", border_counts)
-        trace.record_list_f32("borders.values", border_values)
-
-    # ONE COMPRESSED INDEX PER PERMUTATION. Theirs shares the
-    # permutation-INDEPENDENT columns between them and gives each
-    # permutation its own dataset for the dependent ones
-    # (`doc_parallel_dataset_builder.cpp:104-124`); this port packs every
-    # column into one buffer, so a permutation costs a whole index rather
-    # than the dependent slice of one. DEVIATION 89.
-    var cindexes = List[DeviceBuffer[DType.uint32]]()
-    var any_dep = False
-    for c in range(n_columns):
-        if dep_ordinal_of_column[c] >= 0:
-            any_dep = True
-    for p in range(perm_count):
-        if not any_dep:
-            # no permutation-dependent columns: read `columns` in place,
-            # skip the 200M-element flat pack and the per-feature drain
-            # (see _build_cindex_from_columns)
-            cindexes.append(
-                _build_cindex_from_columns(
-                    ctx, columns, n_rows, borders, fold_counts,
-                    column_nan_treatment,
-                )
-            )
-            continue
-        var flat = List[Float32]()
-        for c in range(n_columns):
-            var ord = dep_ordinal_of_column[c]
-            if ord >= 0:
-                for r in range(n_rows):
-                    flat.append(dep_by_perm[p][ord][r])
-            else:
-                for r in range(n_rows):
-                    flat.append(columns[c][r])
-        cindexes.append(
-            _build_cindex_from_floats(
-                ctx, flat, n_rows, borders, fold_counts,
-                column_nan_treatment,
-            )
-        )
-    var cindex = cindexes[est_perm].copy()
-
-    # `class_weights` and `sample_weight`: their
-    # `MakeClassificationWeights` applied at pool build. Both fold into
-    # one weight column below; the checks that belong to `class_weights`
-    # alone travel with it there, because the entry count now depends on
-    # the loss.
-    if len(class_weights) > 0 and loss == "RMSE":
-        raise Error(
-            "class weights take effect only with a classification loss,"
-            " their option check's words (catboost_options.cpp:617)"
-        )
-    var targets = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var ht = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-
-    # THEIR COMBINATION IS A PRODUCT (`private/libs/target/
-    # data_providers.cpp:168`):
-    #
-    #     rawWeights[i] * rawGroupWeights[i] * classWeights[targetClass[i]]
-    #
-    # `rawGroupWeights` is the querywise family's and is 1 here -- this
-    # port carries no `group_id`, so there is nothing to weight by. The
-    # other two multiply, and a caller may pass either, both, or neither.
-    var use_sample_weight = len(sample_weight) > 0
-    if use_sample_weight and len(sample_weight) != n_rows:
-        raise Error(
-            "sample_weight has " + String(len(sample_weight))
-            + " entries for " + String(n_rows) + " rows"
-        )
-
-    # `classWeights[(size_t)targetClassesArray[i]]` indexes by the TARGET
-    # CLASS, so how many entries it needs depends on the loss: two for the
-    # binarized classification targets, `numClasses` for MultiClass.
-    var n_class_slots = 2
-    if loss == "MultiClass" or loss == "MultiClassOneVsAll":
-        var mxc = -1
-        for r in range(n_rows):
-            var iv = Int(y[r])
-            if iv > mxc:
-                mxc = iv
-        n_class_slots = mxc + 1
-    var use_class_weights = len(class_weights) > 0
-    if use_class_weights and len(class_weights) != n_class_slots:
-        raise Error(
-            "class_weights takes " + String(n_class_slots)
-            + " entries for loss '" + loss + "', got "
-            + String(len(class_weights))
-        )
-
-    for r in range(n_rows):
-        ht.unsafe_ptr().unsafe_store(r, y[r])
-        var w = Float32(1.0)
-        if use_sample_weight:
-            if sample_weight[r] < Float32(0.0):
-                raise Error(
-                    "sample_weight at row " + String(r)
-                    + " is negative"
-                )
-            w = sample_weight[r]
-        if use_class_weights:
-            # their `targetClassesArray`: the dense class code for
-            # MultiClass, the binarized target otherwise
-            var cls: Int
-            if loss == "MultiClass" or loss == "MultiClassOneVsAll":
-                cls = Int(y[r])
-            else:
-                cls = 1 if y[r] > Float32(0.5) else 0
-            w = w * class_weights[cls]
-        hw.unsafe_ptr().unsafe_store(r, w)
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
-    ctx.synchronize()
-    # past the drain (step-33 race class)
-    _ = ht^
-    _ = hw^
-
-    var loss_desc = make_loss_description(
-        loss,
-        alpha=loss_alpha,
-        q=loss_q,
-        delta=loss_delta,
-        variance_power=loss_variance_power,
-        border=loss_border,
-    )
-    var objective = loss_desc.loss_function
-
-    # ---- `AdjustBoostFromAverageDefaultValue` (`options_helper.cpp`),
-    # ported 2026-08-22. Their rule, verbatim: if the option is SET,
-    # keep it; else set TRUE on a single host with no baseline and no
-    # continuation for RMSE, MAE, Quantile, MAPE (and three multi losses
-    # this port does not have). Logloss is NOT on the list. This port has
-    # no baseline column and no continuation, so those guards are
-    # trivially met; MAE/Quantile/MAPE resolve FALSE here because their
-    # constant needs the unported CalcSampleQuantile -- a named gap, not
-    # their rule.
-    var bfa: Bool
-    if boost_from_average == 1:
-        if not (
-            objective == OBJECTIVE_RMSE
-            or objective == OBJECTIVE_LOGLOSS
-            or objective == OBJECTIVE_CROSSENTROPY
-        ):
-            # their CB_ENSURE names the allowed list; ours additionally
-            # names the unported-constant gap for the quantile family
-            raise Error(
-                "boost_from_average: ported for RMSE, Logloss and"
-                " CrossEntropy only. Their list also allows Quantile,"
-                " MultiQuantile, MAE, MAPE, MultiRMSE (catboost_options"
-                ".cpp:705-709); those need the unported CalcSampleQuantile"
-                " and are refused by name."
-            )
-        bfa = True
-    elif boost_from_average == 0:
-        bfa = False
-    elif boost_from_average == -1:
-        bfa = objective == OBJECTIVE_RMSE
-    else:
-        raise Error(
-            "boost_from_average must be -1 (their data-dependent"
-            " default), 0 or 1; got " + String(boost_from_average)
-        )
-
-    # THE CLASS COUNT COMES FROM THE LABEL COLUMN, as their
-    # `TClassificationTargetHelper` derives it, and it is derived rather
-    # than taken as a parameter because a count that disagrees with the
-    # data is a wrong model rather than an error.
-    #
-    # Their labels for MultiClass are DENSE CLASS CODES `0..k-1`, which is
-    # what `MultiLogitValAndFirstDerImpl` reads with
-    # `static_cast<ui16>(targetClasses[idx])` (`multilogit.cu:41`) and
-    # indexes prediction planes with. A non-integral or negative label is
-    # refused here rather than truncated silently on the device.
-    var num_classes = 0
-    if (
-        objective == OBJECTIVE_MULTICLASS
-        or objective == OBJECTIVE_MULTICLASS_OVA
-    ):
-        var mx = -1
-        for r in range(n_rows):
-            var v = y[r]
-            if v < Float32(0.0):
-                raise Error(
-                    "MultiClass label at row " + String(r)
-                    + " is negative; labels are dense class codes 0..k-1"
-                )
-            var iv = Int(v)
-            if Float32(iv) != v:
-                raise Error(
-                    "MultiClass label at row " + String(r)
-                    + " is not an integer; labels are dense class codes"
-                    " 0..k-1"
-                )
-            if iv > mx:
-                mx = iv
-        num_classes = mx + 1
-        if num_classes < 2:
-            raise Error(
-                "the multiclass family needs at least two classes; the"
-                " labels reach only " + String(num_classes)
-            )
-    var estimation = set_leaves_estimation_default(
-        loss_desc,
-        method_override=leaf_estimation_method,
-        iterations_override=leaf_estimation_iterations,
-    )
-
-    # `TCatBoostOptions::SetLeavesEstimationDefault`'s sibling for
-    # sampling (`catboost_options.cpp:779-800`), the two lines of it this
-    # port can reach. `bootstrap_type` empty means "take the
-    # `bootstrap_bayesian` shorthand", which is what every existing caller
-    # passes; a name selects one of their three GPU draws.
-    var boot_kind = -1
-    var boot_param = bagging_temperature
-    if bootstrap_type != String(""):
-        if bootstrap_type == "Bayesian":
-            boot_kind = BOOTSTRAP_KERNEL_BAYESIAN
-            boot_param = bagging_temperature
-            if subsample >= Float32(0.0):
-                # their own validator, verbatim in intent
-                # (`catboost_options.cpp:795`)
-                raise Error(
-                    "Error: default bootstrap type (bayesian) doesn't"
-                    " support 'subsample' option"
-                )
-        elif bootstrap_type == "Bernoulli":
-            boot_kind = BOOTSTRAP_KERNEL_BERNOULLI
-            boot_param = (
-                subsample if subsample >= Float32(0.0)
-                else DEFAULT_SUBSAMPLE
-            )
-        elif bootstrap_type == "Poisson":
-            boot_kind = BOOTSTRAP_KERNEL_POISSON
-            boot_param = (
-                subsample if subsample >= Float32(0.0)
-                else DEFAULT_SUBSAMPLE
-            )
-        elif bootstrap_type == "No":
-            boot_kind = -1
-        elif bootstrap_type == "MVS":
-            # `Y_ASSERT(config.GetBootstrapType() != EBootstrapType::MVS)`
-            # (`weak_objective_impl.h:30`): their own GPU oblivious
-            # searcher refuses MVS, so this port has nothing to port.
-            raise Error(
-                "MVS is not reachable from their GPU oblivious searcher"
-                " (weak_objective_impl.h:30 asserts it away)"
-            )
-        else:
-            raise Error(
-                "unknown bootstrap_type '" + bootstrap_type
-                + "': Bayesian, Bernoulli, Poisson, No"
-            )
-
-    # ---- the HELD-OUT set, quantized against THIS MODEL'S BORDERS ----
-    # That is the whole reason this lives in `train` and not in `fit`:
-    # `borders` is built here, from the learn rows, and a `cindex` built
-    # against any other borders would score every split against the wrong
-    # bins with nothing to assert on it.
-    var eval_rows = 0
-    if len(eval_y) > 0:
-        eval_rows = len(eval_y)
-        var want = eval_rows * n_features
-        if len(eval_x_colmajor) != want:
-            raise Error(
-                "eval_x_colmajor has " + String(len(eval_x_colmajor))
-                + " values for " + String(eval_rows) + " rows x "
-                + String(n_features) + " features"
-            )
-    elif len(eval_x_colmajor) > 0:
-        raise Error("eval_x_colmajor given without eval_y")
-
-    var od_kind = od_type_from_name(od_type)
-    if od_kind != OD_NONE and eval_rows == 0:
-        raise Error(
-            "od_type='" + od_type + "' needs an eval set: pass"
-            " eval_x_colmajor and eval_y. Stopping on the learn loss"
-            " would stop on a curve that falls by construction."
-        )
-
-    # `UpdateUseBestModel` (`options_helper.cpp:100-113`). Their
-    # `hasTestConstTarget` is the reason for the second half: a test set
-    # whose target never varies cannot rank iterations, so they leave the
-    # default off rather than shrink on a flat curve. `hasTestPairs` is
-    # theirs and not ours -- this port carries no pairwise loss.
-    var eval_const_target = True
-    for r in range(1, eval_rows):
-        if eval_y[r] != eval_y[0]:
-            eval_const_target = False
-            break
-    var want_best_model = use_best_model
-    if want_best_model == -1:
-        want_best_model = (
-            1 if (eval_rows > 0 and not eval_const_target) else 0
-        )
-    elif want_best_model == 1 and eval_rows == 0:
-        # THEY WARN AND CONTINUE (`options_helper.cpp:109-112`); this
-        # raises. DEVIATION 87. A warning on a returned model is invisible
-        # from Python -- the caller asked for the best-iteration model and
-        # would get the last-iteration one with no way to tell. Their
-        # binary prints to a console a human is watching; this is a
-        # library call.
-        raise Error(
-            "use_best_model=1 needs an eval set: pass eval_x_colmajor"
-            " and eval_y, or leave it unset."
-        )
-    elif want_best_model != 0 and want_best_model != 1:
-        raise Error(
-            "use_best_model must be -1 (unset), 0 or 1, got "
-            + String(use_best_model)
-        )
-    if best_model_min_trees < 1:
-        raise Error(
-            "best_model_min_trees must be at least 1, got "
-            + String(best_model_min_trees)
-        )
-
-    var t_rows = eval_rows if eval_rows > 0 else 1
-    var eval_expanded: List[Float32]
-    if eval_rows > 0 and ctr_column_count != 0:
-        eval_expanded = expand_raw_columns(
-            ctr_tables, len(fold_counts), eval_x_colmajor, eval_rows
-        )
-    elif eval_rows > 0:
-        eval_expanded = eval_x_colmajor.copy()
-    else:
-        eval_expanded = List[Float32]()
-        for _ in range(len(fold_counts)):
-            eval_expanded.append(Float32(0.0))
-
-    var test_cindex = _build_cindex_from_floats(
-        ctx, eval_expanded, t_rows, borders, fold_counts,
-        column_nan_treatment,
-    )
-    var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
-    var h_ty = ctx.enqueue_create_host_buffer[DType.float32](t_rows)
-    for r in range(t_rows):
-        h_ty.unsafe_ptr().unsafe_store(
-            r, eval_y[r] if eval_rows > 0 else Float32(0.0)
-        )
-    ctx.enqueue_copy(dst_buf=test_targets, src_ptr=h_ty.unsafe_ptr())
-    ctx.synchronize()
-    _ = h_ty^  # past the drain (step-33 race class)
-
-    var approx_dim = 1
-    if objective == OBJECTIVE_MULTICLASS:
-        approx_dim = num_classes - 1
-    elif objective == OBJECTIVE_MULTICLASS_OVA:
-        approx_dim = num_classes
-
-    var test_arm = make_test_arm(
-        ctx, eval_rows, test_cindex^, test_targets^,
-        approx_dim, 1 + approx_dim, max_depth,
-    )
-
-    var model = TAdditiveModel()
-    var fit_result = fit_with_test(
-        model, ctx, n_rows, fold_counts, max_depth, cindex, targets,
-        weights, use_class_weights or use_sample_weight,
-        # `trace` rides POSITIONALLY (delta from the granted spec's
-        # `trace=trace`: the later arguments here are positional, and a
-        # positional argument may not follow a keyword one)
-        n_estimators, trace, learning_rate,
-        l2_leaf_reg, True,
-        bootstrap_bayesian=bootstrap_bayesian,
-        bagging_temperature=bagging_temperature,
-        bootstrap_type=boot_kind,
-        bootstrap_param=boot_param,
-        random_seed=random_seed,
-        one_hot=column_one_hot,
-        score_function=score_function,
-        objective=objective,
-        num_classes=num_classes,
-        logloss_border=loss_desc.get_logloss_border(),
-        leaf_estimation_iterations=estimation.iterations,
-        leaf_estimation_method=estimation.method,
-        alpha=loss_desc.kernel_alpha(),
-        # THEIR SECOND ALPHA. `ComputeWeightedQuantile` reads the quantile
-        # level from the loss params map, default 0.5
-        # (`leaves_estimation_helper.h:72-74`), NOT from the float the
-        # target kernel receives. `get_alpha()` IS that accessor
-        # (`loss_description.cpp:95-102`). They coincide for MAE and
-        # Quantile and differ for MAPE, whose kernel alpha is 0.
-        estimator_alpha=loss_desc.get_alpha(),
-        test=Optional(test_arm^),
-        # their `permutationCount` datasets (`doc_parallel_boosting.h:
-        # 137-141`). `cindex` above is `cindexes[est_perm]`, the same
-        # handle, so the loop's estimation permutation and this one are the
-        # same buffer.
-        perm_cindexes=cindexes^,
-        est_permutation=est_perm,
-        od_type=od_kind,
-        od_pvalue=od_pvalue,
-        od_wait=od_wait,
-        random_strength=random_strength,
-        use_pointwise_searcher=use_pointwise_searcher,
-        boost_from_average=bfa,
-        grow_policy=policy,
-        max_leaves=max_leaves,
-        min_data_in_leaf=min_data_in_leaf,
-    )
-    var losses = fit_result.learn_losses.copy()
-    var t_losses = fit_result.test_losses.copy()
-
-    # ---- `ShrinkToBestIteration` (`boosting_progress_tracker.h:113-125`)
-    #
-    # Called here rather than inside `fit_with_test` because theirs is
-    # called here: `train_template.h:127-137` shrinks the model the
-    # boosting returned, after the loop, and only when there IS a test
-    # set. The second tracker is separate from the detector's
-    # (`boosting_progress_tracker.cpp:160-164`): it is fed only iterations
-    # at or past `best_model_min_trees`, so its best iteration can differ
-    # from `fit_result.best_iteration`, and it is THAT one the shrink
-    # reads.
-    if want_best_model == 1 and len(t_losses) > 0:
-        var min_trees_best = -1
-        var min_trees_err = Float64(0.0)
-        for i in range(len(t_losses)):
-            if i + 1 < best_model_min_trees:
-                continue
-            # their strict `<` (`error_tracker.h:58-64`), so the FIRST of
-            # a tie wins and a plateau does not walk the cut rightwards
-            if min_trees_best < 0 or t_losses[i] < min_trees_err:
-                min_trees_err = t_losses[i]
-                min_trees_best = i
-        var best_iter = min_trees_best + 1
-        if 0 < best_iter and best_iter < model.size():
-            model.shrink(best_iter)
-
-    return TrainedModel(
-        model^,
-        fold_counts^,
-        column_one_hot^,
-        borders^,
-        column_nan_treatment^,
-        losses^,
-        t_losses^,
-        fit_result.best_iteration,
-        fit_result.stopped_early,
-        ctr_column_count,
-        ctr_tables^,
-        TTensorCtrRegistry(len(fold_counts)),
-    )
+    return (borders^, fold_counts^, column_nan_treatment^)
 
 
 def train_ordered_rmse(

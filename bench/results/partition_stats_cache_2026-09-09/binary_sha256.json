@@ -1,0 +1,11 @@
+{
+  "correctness/fast-cached": "3989e6d58c44813b658bab71c5c8d061396e4229bf68cb587aa84aab777e04bc",
+  "correctness/identical-reference": "e9188b4bfa0268558c0b7731f6f2b9d581b11d9a5424184c4a7455b287bf847a",
+  "correctness/deterministic-reference": "f425fb0e3a822e596fe9dca81cb784d3110dc2e38837bd07aa5e2fa67294a194",
+  "correctness/fast-reference": "a40af8e1a15c3a4bf9f56163d9c5a4943b5685581d2ca4ab6f6c200367ec37e6",
+  "correctness/identical-sabotage": "2f26434ffce83283604482a52f6e708ff7870bfa8ecb6ad6226a5442693f8a9a",
+  "correctness/deterministic-cached": "78750e84ac47ba9b8c42d2d9bb2c472e74ccf9c1de33ddc80c0c326dd37e994d",
+  "correctness/identical-cached": "031fbd7fbff9beb17c0cc44696f572c3321575aab732c49c9709012d0ba3f187",
+  "timing/cached": "3f2e524db659066b2a3e824f33b0c7d3bc28c7df892123e8d481f5cfa5144606",
+  "timing/reference": "f63142328912b0238133688c82e8439c5acbb1e5ca8fd073d84af650f1ec9e6f"
+}

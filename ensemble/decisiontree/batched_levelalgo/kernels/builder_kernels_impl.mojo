@@ -2394,6 +2394,91 @@ def build_histograms_kernel[
             k += Int(block_dim.x)
 
 
+
+def build_histograms_binned_columns_kernel[
+    O: ObjectiveLike,
+    TPB: Int,
+    TILE: Int,
+    SMEM_BIN_SLOTS: Int,
+    sampled_labels: Bool = False,
+    sabotage: Int = 0,
+](
+    argsp: MutPointer[HistogramArgs[O], MutAnyOrigin],
+    histograms: MutPointer[O.BinT, MutAnyOrigin],
+    max_n_bins: Int32,
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    col_start: Int32,
+    column_samples: MutPointer[Int32, MutAnyOrigin],
+    workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
+    columns_in_batch: Int32,
+):
+    """Experimental binned column tile; unchanged integer BinT operations.
+
+    Unlike cuML v26.08 builder_kernels_impl.cuh:285-352, each CTA handles
+    TILE sampled columns. The row and label gather is shared across them.
+    Global cells retain the original (node, column, class, bin) layout.
+    No quantile copy exists in this binned-only kernel; shared storage is
+    exactly TILE * max_n_bins * NumClasses bins, rounded up by the launcher.
+    """
+    comptime assert SMEM_BIN_SLOTS * size_of[O.BinT]() <= 16384
+    ref args = argsp[unsafe_offset=0]
+    var dataset = args.dataset.copy()
+    var objective = args.objective.copy()
+    ref workload = workload_info[unsafe_offset=Int(block_idx.x)]
+    var nid = Int(workload.nodeid)
+    ref item = work_items[unsafe_offset=nid]
+    var classes = Int(objective.NumClasses())
+    var feature_stride = Int(max_n_bins) * classes
+    var first = Int(block_idx.y) * TILE
+    var live = min(TILE, Int(columns_in_batch) - first)
+    var histogram = stack_allocation[
+        SMEM_BIN_SLOTS, O.BinT, address_space=AddressSpace.SHARED
+    ]()
+    var k = Int(thread_idx.x)
+    while k < live * feature_stride:
+        histogram[unsafe_offset=k] = O.BinT()
+        k += TPB
+    barrier()
+    var i = item.instances.begin + Int(thread_idx.x) + Int(workload.offset_blockid) * TPB
+    var end = item.instances.begin + item.instances.count
+    var stride = TPB * Int(workload.num_blocks)
+    while i < end:
+        var row = dataset.row_ids[unsafe_offset=i]
+        var label: Scalar[O.LabelT]
+        var stat_idx: Int32
+        comptime if sampled_labels:
+            label = dataset.labels[unsafe_offset=i]
+            stat_idx = Int32(i)
+        else:
+            label = dataset.labels[unsafe_offset=Int(row)]
+            stat_idx = row
+        comptime for lane in range(TILE):
+            if lane < live:
+                var col = column_samples[unsafe_offset=nid * Int(dataset.n_sampled_cols) + Int(col_start) + first + lane]
+                var n_bins = args.quantiles.n_bins_array[unsafe_offset=Int(col)]
+                var bin_index = dataset.bin_of(row, col)
+                comptime if sabotage == 3:
+                    bin_index = Int32(0)
+                objective.IncrementHistogram(
+                    histogram.unsafe_offset(lane * feature_stride), n_bins,
+                    bin_index, label, dataset, stat_idx,
+                )
+        i += stride
+    barrier()
+    comptime for lane in range(TILE):
+        if lane < live:
+            var col = column_samples[unsafe_offset=nid * Int(dataset.n_sampled_cols) + Int(col_start) + first + lane]
+            var live_bins = Int(args.quantiles.n_bins_array[unsafe_offset=Int(col)]) * classes
+            var destination = (nid * Int(columns_in_batch) + first + lane) * feature_stride
+            k = Int(thread_idx.x)
+            while k < live_bins:
+                O.BinT.AtomicAdd(
+                    histograms.unsafe_offset(destination + k),
+                    histogram[unsafe_offset=lane * feature_stride + k],
+                )
+                k += TPB
+
+
 def launch_build_histograms_kernel[
     O: ObjectiveLike,
     TPB: Int = TPB_DEFAULT,
@@ -2414,6 +2499,7 @@ def launch_build_histograms_kernel[
     histogram_grid_y: Int,
     smem_config: SharedMemoryConfig,
     argsp: MutPointer[HistogramArgs[O], MutUntrackedOrigin],
+    num_outputs: Int = 0,
 ) raises:
     """`launchBuildHistogramsKernel`, `:396-421`.
 
@@ -2467,6 +2553,30 @@ def launch_build_histograms_kernel[
         )
     else:
         if dataset.has_bins:
+            # Opt-in only. The fallback also covers callers without host
+            # dimensions and experimental replicated-histogram combinations.
+            comptime TILE = 4 if is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]() else 2
+            comptime ENABLED = is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]() or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
+            comptime if ENABLED and SMEM_COPIES == 1 and sabotage == 0:
+                var need = TILE * max_n_bins * num_outputs * size_of[O.BinT]()
+                comptime for BYTES in [2048, 4096, 8192, 16384]:
+                    comptime SLOTS = BYTES // size_of[O.BinT]()
+                    if num_outputs > 0 and need > 0 and need <= SLOTS * size_of[O.BinT]():
+                        comptime tiled = build_histograms_binned_columns_kernel[O, TPB, TILE, SLOTS, sampled_labels]
+                        log_launch("histogram_binned_columns" + String(TILE) + "_" + String(BYTES))
+                        ctx.enqueue_function[tiled](
+                            argsp.unsafe_origin_cast[MutAnyOrigin](),
+                            histograms.unsafe_origin_cast[MutAnyOrigin](),
+                            Int32(max_n_bins),
+                            work_items.unsafe_origin_cast[MutAnyOrigin](),
+                            Int32(col_start),
+                            column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                            workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                            Int32(histogram_grid_y),
+                            grid_dim=(histogram_grid_x, (histogram_grid_y + TILE - 1) // TILE),
+                            block_dim=TPB,
+                        )
+                        return
             # DEVIATION 314, shared arm. Uses the default 103a blob; the
             # tier question below is orthogonal and pending its own A/B.
             # DEVIATION 2012 rides only here -- the one arm the flag

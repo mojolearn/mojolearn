@@ -1,0 +1,24 @@
+{
+  "base_commit": "963a5fd18234dadb599511dd99991fc02be812c3",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "python": "3.13.15",
+  "mojo": "1.0.0 (ed45d567)",
+  "sha256": {
+    "preprocessing/standard.mojo": "eb7c0297e9abf3e9dd8325d0bcb39816ab86e2af67f2b3dd642cc3ee5dcfee5c",
+    "preprocessing/minmax.mojo": "b2d7dec3d40d069892c3705a744641e45d271d6306c707bdce0464eb69e07af0",
+    "preprocessing/estimator.mojo": "edc83b22432ae05032a260ad5fe320f6b5b2c9308c9ebdaa8d708131c4e6e772",
+    "bindings/_mojolearn_preprocessing.mojo": "412471d9ccd8665b07722a3dd002fa6e8aff7eb81d1c0d776dd786cfeaca60c6",
+    "bindings/build_preprocessing.sh": "90c0cd114ac9ea7f983d810f244314e5449af9de7247ed7abb8cbb0cc2687120",
+    "python/mojolearn/preprocessing.py": "0fb01d99fdad08b5df984dc76f49a6374b9bed87aa893356c5cc944fbad8e59d",
+    "python/mojolearn/__init__.py": "87fc73b55240fef6f434cfd0998cd7ed1ad2a9c776fb869de84f5ca7ba2d3d99",
+    "python/mojolearn/_backend.py": "d260fb5641c89dc43035a1fba6e103375ebe4dd8ea74764cb3c7f372cdccc747",
+    "checks/standard_scaler_smoke.py": "95cba600aa61a08703961255062c0acbe695b640e2a52a4c9d3817eda46f7c64",
+    "checks/standard_scaler_protocol_smoke.py": "052990105dad54d833a2e173d55a96c0939cf3223bcb53a35cca52e6122ca13b",
+    "checks/minmax_scaler_smoke.py": "dacb6a8c5f27901b710cf7e191687bdd364211a3ed0f8dfea3a9dfcc9053ae2a",
+    "checks/minmax_scaler_protocol_smoke.py": "692a55011dbedcd6107dc416707ed8edbe4ff52cd0c201d62f65b4b29fa4b0b6",
+    "tools/check_standard_scaler.sh": "0bdad1e254f15476d03a9039729b43679c1d2d4933c774ad5bd503faebe3cf0f",
+    "python/mojolearn/_mojolearn_preprocessing.so": "6ef6838479f0f5143a63eff88d4fc46771af613db0925d9acd2de5142cc9552a",
+    "python/mojolearn/deterministic/_mojolearn_preprocessing.so": "bce29072031de9e7f4ab9c068564f0ad238868a8f1c85709fe43fc713642af91",
+    "python/mojolearn/identical/_mojolearn_preprocessing.so": "f5e16b5486bce6d80418766651b4d343e20977fa9f2c93591282c88116e19427"
+  }
+}

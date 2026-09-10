@@ -64,6 +64,11 @@ from metrics.estimator import (
     kl_divergence_host,
     mutual_info_score_host,
     r2_score_host,
+    regression_error_host,
+    log_loss_host,
+    binary_ranking_host,
+    confusion_matrix_host,
+    precision_recall_fscore_host,
     rand_score_host,
     silhouette_host,
     trustworthiness_host,
@@ -339,6 +344,130 @@ def r2_score_binding(
     with GILReleased(Python()):
         out = r2_score_host(y, yh, n)
     return PythonObject(Float64(out))
+
+
+
+def regression_error_binding[absolute: Bool = False, root: Bool = False](
+    y_true_addr: PythonObject, y_pred_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    # params[0] = n; finite 1-D Float32, unweighted. Entire reduction is GPU.
+    _want(String("regression_error"), params, 1)
+    var n = Int(py=params[0])
+    var y = _load_f32(Int(py=y_true_addr), n)
+    var prediction = _load_f32(Int(py=y_pred_addr), n)
+    var result = Float32(0.0)
+    with GILReleased(Python()):
+        result = regression_error_host[absolute, root](y, prediction, n)
+    return PythonObject(Float64(result))
+
+
+
+
+def roc_auc_score_binding(true_addr: PythonObject, score_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    _want(String("roc_auc_score"),params,1)
+    var n = Int(py=params[0])
+    if n <= 0 or n > 2147483647:
+        raise Error("roc_auc_score: invalid n")
+    var y = _load_i32(Int(py=true_addr),n)
+    var scores = _load_f32(Int(py=score_addr),n)
+    var output = _f32_ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        var result = binary_ranking_host[False](y,scores,n)
+        output.unsafe_store(0,result[0][0])
+    return PythonObject(1)
+
+
+def precision_recall_curve_binding(true_addr: PythonObject, score_addr: PythonObject, precision_addr: PythonObject, recall_addr: PythonObject, threshold_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    _want(String("precision_recall_curve"),params,1)
+    var n = Int(py=params[0])
+    if n <= 0 or n > 2147483647:
+        raise Error("precision_recall_curve: invalid n")
+    var y = _load_i32(Int(py=true_addr),n)
+    var scores = _load_f32(Int(py=score_addr),n)
+    var precision = _f32_ptr(Int(py=precision_addr))
+    var recall = _f32_ptr(Int(py=recall_addr))
+    var thresholds = _f32_ptr(Int(py=threshold_addr))
+    var m = 0
+    with GILReleased(Python()):
+        var result = binary_ranking_host[True](y,scores,n)
+        m = result[1]
+        for i in range(m+1):
+            precision.unsafe_store(i,result[0][i])
+            recall.unsafe_store(i,result[0][n+1+i])
+        for i in range(m):
+            thresholds.unsafe_store(i,result[0][2*(n+1)+i])
+    return PythonObject(m)
+
+
+def log_loss_binding(
+    true_addr: PythonObject, probabilities_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    _want(String("log_loss"), params, 3)
+    var n = Int(py=params[0])
+    var k = Int(py=params[1])
+    var normalize = Int(py=params[2])
+    if n <= 0 or n > 2147483647 or k < 2 or k > 2147483647 // n:
+        raise Error("log_loss: invalid input dimensions")
+    var y = _load_i32(Int(py=true_addr), n)
+    var probability = _load_f32(Int(py=probabilities_addr), n*k)
+    var out = _f32_ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        out.unsafe_store(0, log_loss_host(y,probability,n,k,normalize))
+    return PythonObject(1)
+
+
+def confusion_matrix_binding(
+    true_addr: PythonObject, pred_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    # params=[n,n_classes,normalization]; norm0:Int64,1true/2pred/3all:Float32.
+    _want(String("confusion_matrix"),params,3)
+    var n = Int(py=params[0])
+    var k = Int(py=params[1])
+    var normalization = Int(py=params[2])
+    var address = Int(py=out_addr)
+    if address == 0:
+        raise Error("confusion_matrix: null output")
+    var y = _load_i32(Int(py=true_addr),n)
+    var p = _load_i32(Int(py=pred_addr),n)
+    if normalization == 0:
+        var output = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
+        with GILReleased(Python()):
+            var values = confusion_matrix_host[DType.int64](y,p,n,k,normalization)
+            for i in range(len(values)):
+                output.unsafe_store(i,values[i])
+    else:
+        var output = _f32_ptr(address)
+        with GILReleased(Python()):
+            var values = confusion_matrix_host[DType.float32](y,p,n,k,normalization)
+            for i in range(len(values)):
+                output.unsafe_store(i,values[i])
+    return PythonObject(k*k)
+
+
+def precision_recall_fscore_binding(
+    true_addr: PythonObject, pred_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    # params=[n,k,average,pos_idx,zero_division,n_selected]. The selected
+    # classes are first in the encoding; all remaining labels STILL count.
+    # avg0None/1binary/2micro/3macro/4weighted. Output3*w+3 Float32:
+    # precision,recall,F1 rows; three trailing undefined flags.
+    _want(String("precision_recall_fscore"),params,6)
+    var n = Int(py=params[0])
+    var k = Int(py=params[1])
+    var average = Int(py=params[2])
+    var positive = Int(py=params[3])
+    var zero = Int(py=params[4])
+    var selected = Int(py=params[5])
+    var y = _load_i32(Int(py=true_addr),n)
+    var p = _load_i32(Int(py=pred_addr),n)
+    var output = _f32_ptr(Int(py=out_addr))
+    var written = 0
+    with GILReleased(Python()):
+        var values = precision_recall_fscore_host(y,p,n,k,average,positive,zero,selected)
+        for i in range(len(values)):
+            output.unsafe_store(i,values[i])
+        written = len(values)
+    return PythonObject(written)
 
 
 def kl_divergence_binding(
@@ -728,6 +857,15 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         m.def_function[completeness_score_binding]("completeness_score")
         m.def_function[v_measure_score_binding]("v_measure_score")
         m.def_function[r2_score_binding]("r2_score")
+        m.def_function[roc_auc_score_binding]("roc_auc_score")
+        m.def_function[precision_recall_curve_binding]("precision_recall_curve")
+        m.def_function[log_loss_binding]("log_loss")
+        m.def_function[confusion_matrix_binding]("confusion_matrix")
+        m.def_function[precision_recall_fscore_binding]("precision_recall_fscore")
+        m.def_function[regression_error_binding[False, False]]("mean_squared_error")
+        m.def_function[regression_error_binding[True, False]]("mean_absolute_error")
+        m.def_function[regression_error_binding[False, True]]("root_mean_squared_error")
+        m.def_function[umap_numeric_mode_binding]("metrics_numeric_mode")
         m.def_function[kl_divergence_binding]("kl_divergence")
         m.def_function[silhouette_binding]("silhouette")
         m.def_function[trustworthiness_binding]("trustworthiness")

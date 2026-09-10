@@ -1,0 +1,4 @@
+PASS GPU serial CV fast [0.80246919 0.80246919]
+PASS GPU serial CV deterministic [0.80246919 0.80246919]
+PASS GPU serial CV identical [0.80246919 0.80246919]
+PASS fold isolation and pre-fit index validation

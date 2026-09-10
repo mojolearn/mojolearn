@@ -1,0 +1,20 @@
+{
+  "base_commit": "d10045187b8ff6a473592c632b83b11d2e4f6075",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "python": "3.13.15",
+  "mojo": "1.0.0 (ed45d567)",
+  "sha256": {
+    "preprocessing/minmax.mojo": "b2d7dec3d40d069892c3705a744641e45d271d6306c707bdce0464eb69e07af0",
+    "preprocessing/estimator.mojo": "ba4fab3b1565a39af9e9b920c95634d7235c0cbc8eb63ef0697af1b0a2e89a14",
+    "bindings/_mojolearn_preprocessing.mojo": "517e0636ebc472af5252c27dee5709efb594b35e3fb0d78e3fd50cf9dbd417cd",
+    "bindings/build_preprocessing.sh": "744e835175575649e62933b61d960db7403e9f7980df7d5f02bbdb70381c5079",
+    "python/mojolearn/preprocessing.py": "a5904b8540c63b16cf1f0c40a79aef75772795c756ebea07e193870b7798ed7f",
+    "python/mojolearn/_backend.py": "d260fb5641c89dc43035a1fba6e103375ebe4dd8ea74764cb3c7f372cdccc747",
+    "checks/minmax_scaler_smoke.py": "dacb6a8c5f27901b710cf7e191687bdd364211a3ed0f8dfea3a9dfcc9053ae2a",
+    "checks/minmax_scaler_protocol_smoke.py": "692a55011dbedcd6107dc416707ed8edbe4ff52cd0c201d62f65b4b29fa4b0b6",
+    "tools/check_minmax_scaler.sh": "ec6e32be0a3cb7585fc5cf842b24133fb38ebd9b9cc687eb76b676a4a76fe49f",
+    "python/mojolearn/_mojolearn_preprocessing.so": "9e9b3e8128d13a61efb7a7b533b67f46453af6a3e24e54400eef8295acf3e797",
+    "python/mojolearn/deterministic/_mojolearn_preprocessing.so": "2a2ccc5b3a62e3f0cc909b22f1e06cf3da823297327fbc832f18ace94c4d058a",
+    "python/mojolearn/identical/_mojolearn_preprocessing.so": "ec6b6732fdd74ffaeea7f00c11bf76de23e7a9810e4c7c8db11839ac44aeb0c4"
+  }
+}

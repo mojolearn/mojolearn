@@ -1,0 +1,29 @@
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/regression_errors_check.mojo:74:5: error: function instantiation failed
+def main() raises:
+    ^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/regression_errors_check.mojo:126:34: note: call expansion failed with parameter value(s): ("absolute": False, "root": False)
+        _ = regression_error_host(bad,huge,1)
+                                 ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/regression_errors_check.mojo:10:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/estimator.mojo:439:5: note: function instantiation failed
+def regression_error_host[absolute: Bool = False, root: Bool = False](
+    ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/regression_errors_check.mojo:10:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/estimator.mojo:450:50: note: call expansion failed with parameter value(s): ("absolute": False, "root": False, "block_size": 256)
+    var result = regression_error[absolute, root](ctx, y, prediction, n)
+                                                 ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/regression_errors_check.mojo:9:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/impl/metrics/regression_errors.mojo:65:5: note: function instantiation failed
+def regression_error[absolute: Bool = False, root: Bool = False, block_size: Int = 256](
+    ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/regression_errors_check.mojo:9:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/impl/metrics/regression_errors.mojo:81:68: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., ..., "_ptxas_info_verbose": False)
+    ctx.enqueue_function[error_chunks_kernel[absolute, block_size]](
+                                                                   ^
+max/mojo/max/gpu/host/_device_context_extras.mojo:282:9: note: function instantiation failed
+max/mojo/max/gpu/host/_device_context_extras.mojo:396:43: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ...)
+max/mojo/max/gpu/host/device_context.mojo:3194:9: note: function instantiation failed
+max/mojo/max/gpu/host/device_context.mojo:3216:10: note: call expansion failed with parameter value(s): (..., ..., ..., "num_args": 4)
+max/mojo/max/gpu/host/device_context.mojo:3118:9: note: function instantiation failed
+max/mojo/max/gpu/host/device_context.mojo:3157:17: note: constraint failed: argument #1 of type 'Pointer[SIMD[DType.float32, 1], mut=False, address_space=AddressSpace.GENERIC]' does not match the declared function argument type 'Pointer[SIMD[DType.float32, 1], mut=True, address_space=AddressSpace.GENERIC]'
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/.pixi/envs/default/bin/mojo: error: failed to run the pass manager

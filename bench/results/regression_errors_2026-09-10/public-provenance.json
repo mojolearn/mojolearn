@@ -1,0 +1,44 @@
+{
+  "base_commit": "0dafcb3a75dedffe3145cad38d546b7c2ae4f9a3",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "cpu": "Apple M4",
+  "macOS": "26.5.2",
+  "artifacts": {
+    "python/mojolearn/_mojolearn_metrics.so": {
+      "bytes": 2931656,
+      "sha256": "024e311eb476131bf2520be09867909debe8fff7a0e6dbf315836b36f9bcca46"
+    },
+    "python/mojolearn/_mojolearn_rf.so": {
+      "bytes": 1130800,
+      "sha256": "6d1130a9492eb41b76685f32ead57d0f602e64dfebdfcf6ecf5ba852cc2a76b9"
+    },
+    "python/mojolearn/_mojolearn_trees.so": {
+      "bytes": 1095808,
+      "sha256": "d181209a603ad363c0ee452f4b0957978a27e4d3f723639951c4a40fafb3d537"
+    },
+    "python/mojolearn/deterministic/_mojolearn_metrics.so": {
+      "bytes": 2948840,
+      "sha256": "9754d8d51f8f66d5e90b2b15195fc60a879804131c971f08b70c868fc54baa23"
+    },
+    "python/mojolearn/deterministic/_mojolearn_rf.so": {
+      "bytes": 1130800,
+      "sha256": "87cc308692a8247608628675818cea32286738f038f09809aed2385817e2c7b6"
+    },
+    "python/mojolearn/deterministic/_mojolearn_trees.so": {
+      "bytes": 1095808,
+      "sha256": "b214b9cfc98ee9d85cbe94219a33baefc5496b6178f89d74ea20828b61a4baa4"
+    },
+    "python/mojolearn/identical/_mojolearn_metrics.so": {
+      "bytes": 3236904,
+      "sha256": "6760f08d1c5a888e750ca8b36f222a14508f2dd7b45f04f71b0b26541edc8889"
+    },
+    "python/mojolearn/identical/_mojolearn_rf.so": {
+      "bytes": 1135936,
+      "sha256": "a79c51ffcdb19ef5ae6dd65da3a784235204c111637191b28bc67ab42f43fc5a"
+    },
+    "python/mojolearn/identical/_mojolearn_trees.so": {
+      "bytes": 1095712,
+      "sha256": "2808315d0b67c4e262e6c1d582043097a6a0608012f847778162d541603ae475"
+    }
+  }
+}
