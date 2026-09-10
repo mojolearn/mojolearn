@@ -933,6 +933,55 @@ def m3_state_increment_kernel(
         acc = ftz(identical_mul_add(vsv, ksv, acc))
     increments.unsafe_store(cell, acc)
 
+def m3_state_increment_shared_v_kernel(
+    increments: MutPointer[Float32, MutAnyOrigin],
+    kscale_work: MutPointer[Float32, MutAnyOrigin],
+    v_work: MutPointer[Float32, MutAnyOrigin],
+    decay: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    t_in: Int32,
+    nh_in: Int32,
+    nc_in: Int32,
+    q_in: Int32,
+):
+    comptime n_state = M3_D_STATE
+    comptime p_dim = M3_HEADDIM
+    comptime pn = p_dim * n_state
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var t_work = Int(t_in)
+    if cell >= Int(b_in) * nc * nh * pn:
+        return
+    var bb = cell // (nc * nh * pn)
+    var c = (cell // (nh * pn)) % nc
+    var hh = (cell // pn) % nh
+    var p = (cell // n_state) % p_dim
+    var n = cell % n_state
+    var c0 = c * qv
+    var dbase = ((bb * nh + hh) * nc + c) * (qv + 1)
+    # Two P owners share each independently rounded decayed V operand
+    # over all 128 N owners. The floating-point accumulation stays private.
+    var sv = stack_allocation[128, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    if tid < qv * 2:
+        var jj = tid // 2
+        var pp = (p // 2) * 2 + tid % 2
+        var value = Float32(0.0)
+        if c0 + jj < t_work:
+            value = ftz(pinned_mul(ftz(v_work.unsafe_load(((bb * t_work + c0 + jj) * nh + hh) * p_dim + pp)), decay.unsafe_load(dbase + jj)))
+        sv[tid] = value
+    barrier()
+    var acc = Float32(0.0)
+    for j in range(qv):
+        var vsv = sv[j * 2 + p % 2]
+        var ksv = Float32(0.0)
+        if c0 + j < t_work:
+            ksv = ftz(kscale_work.unsafe_load(((bb * t_work + c0 + j) * nh + hh) * n_state + n))
+        acc = ftz(identical_mul_add(vsv, ksv, acc))
+    increments.unsafe_store(cell, acc)
+
 
 def m3_state_scan_kernel(
     pass_states: MutPointer[Float32, MutAnyOrigin],
@@ -1741,13 +1790,22 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
         m3_phase_tick(ctx, phase_tick, String("m3_state_decay_kernel"))
-        ctx.enqueue_function[m3_state_increment_kernel](
-            pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
-            v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
-            Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
-            grid_dim=(_grid(b * nc * nh * p_dim * n_state), 1, 1),
-            block_dim=(MAMBA3_TPB, 1, 1),
-        )
+        comptime if is_defined["MOJOLEARN_MAMBA3_SHARED_INCREMENT_V"]() and lib_smem_page_fits_for[TARGET_COLUMN, 512]():
+            ctx.enqueue_function[m3_state_increment_shared_v_kernel](
+                pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
+                v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
+                Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+                grid_dim=((b * nc * nh * p_dim * n_state + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[m3_state_increment_kernel](
+                pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
+                v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
+                Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+                grid_dim=(_grid(b * nc * nh * p_dim * n_state), 1, 1),
+                block_dim=(MAMBA3_TPB, 1, 1),
+            )
         m3_phase_tick(ctx, phase_tick, String("m3_state_increment_kernel"))
         ctx.enqueue_function[m3_state_scan_kernel](
             pass_states.unsafe_ptr(), h_last.unsafe_ptr(), h_state.unsafe_ptr(),
