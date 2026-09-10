@@ -1265,6 +1265,68 @@ def m3_qk_s_kernel(
 # ===========================================================================
 
 
+# Eight working-token rows by 32 channels. Shared values are only the
+# independently rounded causal coefficient and copied V operands. Each output
+# still executes all Q FMA steps, including future and padded structural zeros.
+def m3_yintra_tiled_kernel(
+    yintra: MutPointer[Float32, MutAnyOrigin],
+    qk_s: MutPointer[Float32, MutAnyOrigin],
+    seg_l: MutPointer[Float32, MutAnyOrigin],
+    v_work: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, q0_in: Int32, nh_in: Int32,
+    nc_in: Int32, q_in: Int32,
+):
+    var sm = stack_allocation[512, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sv = stack_allocation[2048, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var l = Int(l_in)
+    var q0 = Int(q0_in)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var tw = q0 + l
+    var tiles_t = (tw + 7) // 8
+    var tile = Int(block_idx.x)
+    var pbase = (tile % 2) * 32
+    tile = tile // 2
+    var tbase = (tile % tiles_t) * 8
+    tile = tile // tiles_t
+    var hh = tile % nh
+    var bb = tile // nh
+    # Entirely buffered tiles produce no output; return is block-uniform.
+    if tbase + 8 <= q0:
+        return
+    var c = tbase // qv
+    var row = tid // 32
+    var pp = tid % 32
+    var t = tbase + row
+    var ii = t - c * qv
+    var sbase = (((bb * nc + c) * nh + hh) * qv + ii) * qv
+    var jj = pp
+    while jj < qv:
+        var coefficient = Float32(0.0)
+        if t >= q0 and t < tw and jj < ii:
+            coefficient = ftz(pinned_mul(ftz(qk_s.unsafe_load(sbase + jj)), ftz(seg_l.unsafe_load(sbase + jj))))
+        sm[row * 64 + jj] = coefficient
+        jj += 32
+    var ix = tid
+    while ix < qv * 32:
+        var j = ix // 32
+        var p = pbase + ix % 32
+        var value = Float32(0.0)
+        if c * qv + j < tw:
+            value = ftz(v_work.unsafe_load(((bb * tw + c * qv + j) * nh + hh) * M3_HEADDIM + p))
+        sv[ix] = value
+        ix += 256
+    barrier()
+    var acc = Float32(0.0)
+    for j in range(qv):
+        acc = ftz(identical_mul_add(sm[row * 64 + j], sv[j * 32 + pp], acc))
+    if t >= q0 and t < tw:
+        var cell = ((bb * l + t - q0) * nh + hh) * M3_HEADDIM + pbase + pp
+        yintra.unsafe_store(cell, ftz(acc))
+
+
 def m3_yintra_kernel(
     yintra: MutPointer[Float32, MutAnyOrigin],  # [M, H, P]
     qk_s: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, Q, Q]
@@ -1910,20 +1972,28 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
     m3_phase_tick(ctx, phase_tick, String("m3_qk_s_kernel"))
-    ctx.enqueue_function[m3_yintra_kernel](
-        yintra.unsafe_ptr(),
-        qk_s.unsafe_ptr(),
-        seg_l.unsafe_ptr(),
-        v_work.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(q0),
-        Int32(nh),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(_grid(b * l * nh * p_dim), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]() and column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+        ctx.enqueue_function[m3_yintra_tiled_kernel](
+            yintra.unsafe_ptr(), qk_s.unsafe_ptr(), seg_l.unsafe_ptr(), v_work.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(q0), Int32(nh), Int32(nc), Int32(qv),
+            grid_dim=(b * nh * ((q0 + l + 7) // 8) * 2, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[m3_yintra_kernel](
+            yintra.unsafe_ptr(),
+            qk_s.unsafe_ptr(),
+            seg_l.unsafe_ptr(),
+            v_work.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(q0),
+            Int32(nh),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(_grid(b * l * nh * p_dim), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
     m3_phase_tick(ctx, phase_tick, String("m3_yintra_kernel"))
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_YSTATE"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
         ctx.enqueue_function[m3_ystate_tiled_kernel](
