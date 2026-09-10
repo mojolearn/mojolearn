@@ -1056,6 +1056,58 @@ def m3_statepass_kernel(
 # ===========================================================================
 
 
+# Same shared operand tile as ystate; each strict-lower-triangle cell
+# owns its complete ascending N fold. Other cells remain structural +0.
+def m3_qk_s_tiled_kernel(
+    qk_s: MutPointer[Float32, MutAnyOrigin],
+    rotq_work: MutPointer[Float32, MutAnyOrigin],
+    kscale_work: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, t_in: Int32, nh_in: Int32, nc_in: Int32, q_in: Int32,
+):
+    var sq = stack_allocation[256, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sk = stack_allocation[1056, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var tw = Int(t_in)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var tile = Int(block_idx.x)
+    var jbase = (tile % (qv // 32)) * 32
+    tile = tile // (qv // 32)
+    var ibase = (tile % (qv // 8)) * 8
+    tile = tile // (qv // 8)
+    var hh = tile % nh
+    tile = tile // nh
+    var c = tile % nc
+    var bb = tile // nc
+    var row = tid // 32
+    var col = tid % 32
+    var i = ibase + row
+    var j = jbase + col
+    var real = min(qv, tw - c * qv)
+    if jbase >= ibase + 8 or ibase >= real:
+        qk_s.unsafe_store((((bb * nc + c) * nh + hh) * qv + i) * qv + j, Float32(0.0))
+        return
+    var acc = Float32(0.0)
+    for k0 in range(0, M3_D_STATE, 32):
+        var qword = Float32(0.0)
+        if i < real:
+            qword = ftz(rotq_work.unsafe_load(((bb * tw + c * qv + i) * nh + hh) * M3_D_STATE + k0 + col))
+        sq[row * 32 + col] = qword
+        for group in range(4):
+            var kj = row + group * 8
+            var kword = Float32(0.0)
+            if jbase + kj < real:
+                kword = ftz(kscale_work.unsafe_load(((bb * tw + c * qv + jbase + kj) * nh + hh) * M3_D_STATE + k0 + col))
+            sk[col * 33 + kj] = kword
+        barrier()
+        if j < i and i < real:
+            for kk in range(32):
+                acc = ftz(identical_mul_add(sq[row * 32 + kk], sk[kk * 33 + col], acc))
+        barrier()
+    qk_s.unsafe_store((((bb * nc + c) * nh + hh) * qv + i) * qv + j, ftz(acc))
+
+
 def m3_qk_s_kernel(
     qk_s: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, Q, Q]
     rotq_work: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, N]
@@ -1704,18 +1756,32 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
         m3_phase_tick(ctx, phase_tick, String("m3_state_scan_kernel"))
-    ctx.enqueue_function[m3_qk_s_kernel](
-        qk_s.unsafe_ptr(),
-        rotq_work.unsafe_ptr(),
-        kscale_work.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(nh),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(_grid(b * nc * nh * qv * qv), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_TILED_QKS"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
+        ctx.enqueue_function[m3_qk_s_tiled_kernel](
+            qk_s.unsafe_ptr(),
+            rotq_work.unsafe_ptr(),
+            kscale_work.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(b * nc * nh * (qv // 8) * (qv // 32), 1, 1),
+            block_dim=(256, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[m3_qk_s_kernel](
+            qk_s.unsafe_ptr(),
+            rotq_work.unsafe_ptr(),
+            kscale_work.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(_grid(b * nc * nh * qv * qv), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
     m3_phase_tick(ctx, phase_tick, String("m3_qk_s_kernel"))
     ctx.enqueue_function[m3_yintra_kernel](
         yintra.unsafe_ptr(),
