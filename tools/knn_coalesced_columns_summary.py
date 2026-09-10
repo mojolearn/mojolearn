@@ -54,6 +54,8 @@ def summarize(root):
     for arm in ARMS:
         gate = (root / f"{arm}-gate.log").read_text()
         require("COALESCED DISTANCE PASS" in gate, f"component gate missing: {arm}")
+        public_log = (root / f"{arm}-public-gate.log").read_text()
+        require("KNN LAYOUT PUBLIC DISPATCH PASS" in public_log, f"public gate incomplete: {arm}")
         cells = (root / f"{arm}-public.cells").read_bytes()
         require(bool(cells), f"public gate cells empty: {arm}")
     require((root / "baseline-public.cells").read_bytes() == (root / "coalesced-public.cells").read_bytes(),
