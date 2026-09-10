@@ -1972,7 +1972,15 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
     m3_phase_tick(ctx, phase_tick, String("m3_qk_s_kernel"))
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]() and column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+    # Keep tiny and unpriced columns on their existing launch. The group
+    # threshold supplies ample tile work; it is not an intermediate-size tune.
+    var use_yintra_tile = False
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+        comptime if is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]():
+            use_yintra_tile = True
+        elif TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_MAMBA3_LEGACY_YINTRA"]():
+            use_yintra_tile = b * nc * nh >= 128
+    if use_yintra_tile:
         ctx.enqueue_function[m3_yintra_tiled_kernel](
             yintra.unsafe_ptr(), qk_s.unsafe_ptr(), seg_l.unsafe_ptr(), v_work.unsafe_ptr(),
             Int32(b), Int32(l), Int32(q0), Int32(nh), Int32(nc), Int32(qv),
