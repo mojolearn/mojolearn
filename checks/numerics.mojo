@@ -523,6 +523,125 @@ def portable_log2_64(x_in: Float64) -> Float64:
     return out
 
 
+def identical_log2_64(x: Float64) -> Float64:
+    """Host log2 seam: only IDENTICAL selects the portable arithmetic."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_log2_64(x)
+    from std.math import log2
+
+    return log2(x)
+
+
+def portable_pow64(x: Float64, p: Float64) -> Float64:
+    """HOST-ONLY binary64 real power with pinned portable log/exp arithmetic.
+
+    This is an exp(p*log(abs(x))) approximation, NOT a correctly rounded or
+    tight-ULP pow implementation. Its finite accuracy is measured separately
+    against libm; cross-host identity requires matching independent captures.
+    NaNs are canonicalized except x**0 and 1**p, which return 1. Negative
+    finite bases require integer exponents; parity is determined from bits,
+    never a potentially overflowing integer conversion. Signed zero and
+    infinities follow real pow special cases. Subnormal inputs are retained;
+    subnormal outputs use a LOCAL scaled-exp reconstruction, leaving the
+    existing portable_exp64 flush contract unchanged for all other consumers.
+    """
+    from std.math import fma
+    from std.memory import bitcast
+
+    comptime SIGN = UInt64(0x8000000000000000)
+    comptime ABS = UInt64(0x7FFFFFFFFFFFFFFF)
+    comptime INF = UInt64(0x7FF0000000000000)
+    comptime ONE = UInt64(0x3FF0000000000000)
+    comptime NAN = UInt64(0x7FF8000000000000)
+    var xb = bitcast[DType.uint64](x)
+    var pb = bitcast[DType.uint64](p)
+    var axb = xb & ABS
+    var apb = pb & ABS
+    if apb == 0 or xb == ONE:
+        return Float64(1)
+    if axb > INF or apb > INF:
+        return bitcast[DType.float64](NAN)
+    if apb == INF:
+        if axb == ONE:
+            return Float64(1)
+        if (axb > ONE) == (p > Float64(0)):
+            return bitcast[DType.float64](INF)
+        return Float64(0)
+
+    # Finite exponent classification, including |p| >= 2**53 (all even).
+    var integral = False
+    var odd = False
+    var pe = Int((apb >> 52) & UInt64(0x7FF)) - 1023
+    if pe >= 0:
+        if pe > 52:
+            integral = True
+        else:
+            var fraction = 52 - pe
+            var significand = (apb & UInt64(0x000FFFFFFFFFFFFF)) | (UInt64(1) << 52)
+            integral = (significand & ((UInt64(1) << UInt64(fraction)) - UInt64(1))) == 0
+            odd = integral and ((significand >> UInt64(fraction)) & UInt64(1)) != 0
+    var sign = SIGN if (xb & SIGN) != 0 and odd else UInt64(0)
+    if axb == 0:
+        return bitcast[DType.float64](sign | (INF if p < Float64(0) else UInt64(0)))
+    if axb == INF:
+        return bitcast[DType.float64](sign | (INF if p > Float64(0) else UInt64(0)))
+    if (xb & SIGN) != 0 and not integral:
+        return bitcast[DType.float64](NAN)
+    if p == Float64(1):
+        return x
+    if p == Float64(-1):
+        return Float64(1) / x
+    if p == Float64(2):
+        return x * x
+
+    # Integer powers of binary powers are exact, including overflow and
+    # subnormal ties. This also avoids exp(log(2)*1024) rounding below inf.
+    var binary_power = (axb & UInt64(0x000FFFFFFFFFFFFF)) == 0
+    var xe = Int(axb >> 52) - 1023
+    if axb < (UInt64(1) << 52) and (axb & (axb - UInt64(1))) == 0:
+        binary_power = True
+        var shifted_bits = axb
+        xe = -1074
+        while shifted_bits > 1:
+            shifted_bits >>= 1
+            xe += 1
+    if integral and binary_power:
+        var exponent = p * Float64(xe)
+        if exponent > Float64(1023):
+            return bitcast[DType.float64](sign | INF)
+        if exponent < Float64(-1074):
+            return bitcast[DType.float64](sign)
+        var e = Int(exponent)
+        var result_bits = UInt64(e + 1023) << 52 if e >= -1022 else UInt64(1) << UInt64(e + 1074)
+        return bitcast[DType.float64](sign | result_bits)
+
+    var ax = bitcast[DType.float64](axb)
+    var power = p * portable_log64(ax)
+    var magnitude: Float64
+    if power < Float64(-708):
+        if power < Float64(-746):
+            magnitude = Float64(0)
+        else:
+            # exp(power + 512*ln(2)) * 2**-512. Both exp's argument
+            # and result are normal; only the final IEEE multiply may be
+            # subnormal. Split ln(2) preserves the existing exp reduction.
+            var shifted = fma(Float64(512), Float64(6.93145751953125e-1), power)
+            shifted = fma(Float64(512), Float64(1.42860682030941723212e-6), shifted)
+            magnitude = portable_exp64(shifted) * bitcast[DType.float64](UInt64(511) << 52)
+    else:
+        magnitude = portable_exp64(power)
+    return bitcast[DType.float64](bitcast[DType.uint64](magnitude) | sign)
+
+
+def identical_pow64(x: Float64, p: Float64) -> Float64:
+    """Host pow seam: IDENTICAL portable; other modes keep std.math.pow."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_pow64(x, p)
+    from std.math import pow
+
+    return pow(x, p)
+
+
 def identical_sqrt(x: Float32) -> Float32:
     """Row 10's sqrt seam call: IDENTICAL routes through `portable_sqrtf` (one arithmetic, correctly rounded, the same bits on the approximate- sqrt column too); FAST is the stdlib's device path verbatim."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:

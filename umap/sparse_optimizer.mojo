@@ -6,7 +6,9 @@ Serial update expressions are transcribed from optimizer.mojo; FAST calls
 its existing kernel. The only representation changes are CSR validation,
 row iteration, and positive-edge compaction. No n*n storage is created.
 """
-from std.math import isfinite, pow
+from checks.numerics import identical_pow64
+
+from std.math import isfinite
 from max.gpu.host import DeviceContext
 from checks.kernel_matrix import TARGET_COLUMN, umap_device_optimizer_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -126,7 +128,7 @@ def optimize_sparse_layout_identical(
                     )
                     dist_squared += delta * delta
                 if dist_squared > Float32(0.0):
-                    var dist_pow = Float32(pow(Float64(dist_squared), Float64(b)))
+                    var dist_pow = Float32(identical_pow64(Float64(dist_squared), Float64(b)))
                     var coeff = -Float32(2.0) * a * b * (
                         dist_pow / dist_squared
                     ) / (a * dist_pow + Float32(1.0))
@@ -154,7 +156,7 @@ def optimize_sparse_layout_identical(
                         )
                         neg_dist += delta * delta
                     if neg_dist > Float32(0.0):
-                        var neg_pow = Float32(pow(Float64(neg_dist), Float64(b)))
+                        var neg_pow = Float32(identical_pow64(Float64(neg_dist), Float64(b)))
                         var coeff = Float32(2.0) * repulsion_strength * b / (
                             (Float32(0.001) + neg_dist)
                             * (a * neg_pow + Float32(1.0))

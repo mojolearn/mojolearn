@@ -2,7 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Deterministic fit of UMAP's differentiable distance curve."""
 
-from std.math import exp, isfinite, log, pow
+from checks.numerics import identical_exp64, identical_log64, identical_pow64
+
+from std.math import isfinite
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
@@ -18,7 +20,7 @@ struct UMAPCurve(Copyable, Movable):
 def _target(x: Float64, min_dist: Float64, spread: Float64) -> Float64:
     if x < min_dist:
         return Float64(1.0)
-    return exp(-(x - min_dist) / spread)
+    return identical_exp64(-(x - min_dist) / spread)
 
 
 def _loss(a: Float64, b: Float64, min_dist: Float64, spread: Float64) -> Float64:
@@ -26,7 +28,7 @@ def _loss(a: Float64, b: Float64, min_dist: Float64, spread: Float64) -> Float64
     var i = 0
     while i < 300:
         var x = spread * Float64(3.0) * Float64(i) / Float64(299.0)
-        var p = Float64(0.0) if i == 0 else pow(x, Float64(2.0) * b)
+        var p = Float64(0.0) if i == 0 else identical_pow64(x, Float64(2.0) * b)
         var residual = Float64(1.0) / (Float64(1.0) + a * p) - (
             _target(x, min_dist, spread)
         )
@@ -67,12 +69,12 @@ def fit_umap_curve(
         var i = 1
         while i < 300:
             var x = spread * Float64(3.0) * Float64(i) / Float64(299.0)
-            var p = pow(x, Float64(2.0) * b)
+            var p = identical_pow64(x, Float64(2.0) * b)
             var denominator = Float64(1.0) + a * p
             var fitted = Float64(1.0) / denominator
             var residual = fitted - _target(x, min_dist, spread)
             var ja = -p / (denominator * denominator)
-            var jb = -a * p * Float64(2.0) * log(x) / (
+            var jb = -a * p * Float64(2.0) * identical_log64(x) / (
                 denominator * denominator
             )
             haa += ja * ja

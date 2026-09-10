@@ -7,7 +7,8 @@ construction and row merges are linear in stored entries. Arithmetic and
 accepted input semantics follow graph.mojo. Explicit zero entries from kNN
 candidates are retained; consumers must apply their existing weight policy.
 """
-from std.math import exp, log2
+from checks.numerics import identical_exp64, identical_log2_64
+
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.graph import _finite, _sigma_fast, _sigma_identical
 
@@ -77,7 +78,7 @@ def sparse_fuzzy_simplicial_graph(
     var sigmas = List[Float32]()
     rhos.resize(n_samples, Float32(0.0))
     sigmas.resize(n_samples, Float32(0.0))
-    var target = log2(Float64(n_neighbors))
+    var target = identical_log2_64(Float64(n_neighbors))
     for i in range(n_samples):
         if Int(knn_indices[i * n_neighbors]) != i:
             raise Error("UMAP expects self in k-NN slot zero")
@@ -115,7 +116,7 @@ def sparse_fuzzy_simplicial_graph(
             var delta = knn_distances[i * n_neighbors + j] - rhos[i]
             var value = Float32(1.0)
             if delta > Float32(0.0):
-                value = Float32(exp(-Float64(delta) / Float64(sigmas[i])))
+                value = Float32(identical_exp64(-Float64(delta) / Float64(sigmas[i])))
             var existing = -1
             for at in range(row_start, len(dcol)):
                 if Int(dcol[at]) == dst:
