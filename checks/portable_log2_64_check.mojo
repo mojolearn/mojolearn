@@ -32,10 +32,17 @@ def log(x: Float64) -> Float64:
 
 
 def _ulps(a: Float64, b: Float64) -> Int:
-    var ia = Int(_bits(a))
-    var ib = Int(_bits(b))
-    var d = ia - ib
-    return d if d >= 0 else -d
+    # Ordered unsigned keys handle opposite signs without signed overflow.
+    var aa = _bits(a)
+    var bb = _bits(b)
+    if (aa & UInt64(0x7FF0000000000000)) == UInt64(0x7FF0000000000000):
+        return 0x7FFFFFFFFFFFFFFF
+    var ka = ~aa if (aa >> 63) != 0 else aa | UInt64(0x8000000000000000)
+    var kb = ~bb if (bb >> 63) != 0 else bb | UInt64(0x8000000000000000)
+    var distance = ka - kb if ka >= kb else kb - ka
+    if distance > UInt64(0x7FFFFFFFFFFFFFFF):
+        return 0x7FFFFFFFFFFFFFFF
+    return Int(distance)
 
 
 def main() raises:
