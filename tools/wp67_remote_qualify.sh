@@ -47,6 +47,14 @@ PY
             case "$binding" in byte_lm|mamba|training|transformer) [ "$mode" = identical ] || continue ;; esac
             script=bindings/build_$binding.sh
             [ "$binding" != base ] || script=bindings/build.sh
+            if [ "$arm" = after ] && [ "$mode" = identical ] && [ -f "$OUT/preflight-identical.exit" ] && [ "$(cat "$OUT/preflight-identical.exit")" = 0 ]; then
+                python3 /root/wp67_verify_cache.py
+                name=_mojolearn_$binding
+                [ "$binding" != base ] || name=_mojolearn
+                cp "/root/wp67-compile/python/mojolearn/identical/$name.so" "python/mojolearn/identical/$name.so"
+                printf 'reused source-verified preflight build %s\n' "$binding" > "$DIR/build-$binding.log"
+                continue
+            fi
             if [ "$binding" = byte_lm ]; then
                 rm -f python/mojolearn/identical/_mojolearn_byte_lm.so
             fi
@@ -73,6 +81,9 @@ PY
         mode_define=-D\ MOJOLEARN_NUMERIC_IDENTICAL=1
         [ "$mode" != deterministic ] || mode_define=-D\ MOJOLEARN_NUMERIC_DETERMINISTIC=1
         [ "$mode" != fast ] || mode_define=""
+        pending=""
+        count=0
+        failed=0
         for check in kernel_methods/checks/km_check.mojo mixture/checks/gmm_check.mojo \
             kde/checks/kde_check.mojo resample/checks/resample_check.mojo \
             ivf/checks/ivf_check.mojo holtwinters/checks/hw_check.mojo \
@@ -80,10 +91,25 @@ PY
             hdbscan/checks/hdbscan_check.mojo tsa/checks/stationarity_check.mojo umap/checks/transform_check.mojo umap/checks/estimator_check.mojo; do
             label=$(basename "$check" .mojo)
             printf '%s %s check %s\n' "$arm" "$mode" "$label"
-            MOJOLEARN_IDENTITY_TRACE="$DIR/$label.trace" timeout -k 10 300 pixi run mojo \
-                -I . --target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA $mode_define \
-                "$check" > "$DIR/check-$label.log" 2>&1
+            (
+                if MOJOLEARN_IDENTITY_TRACE="$DIR/$label.trace" timeout -k 10 300 pixi run mojo \
+                    -I . --target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA $mode_define \
+                    "$check" > "$DIR/check-$label.log" 2>&1; then
+                    echo 0 > "$DIR/check-$label.exit"
+                else
+                    echo $? > "$DIR/check-$label.exit"
+                    exit 1
+                fi
+            ) &
+            pending="$pending $!"
+            count=$((count + 1))
+            if [ "$count" = 2 ]; then
+                for child in $pending; do wait "$child" || failed=1; done
+                pending=""; count=0
+            fi
         done
+        for child in $pending; do wait "$child" || failed=1; done
+        [ "$failed" = 0 ] || exit 1
         [ ! -f /tmp/mojolearn.km.card.a ] || cp /tmp/mojolearn.km.card.a "$DIR/km.card"
         [ ! -f /tmp/gmm.card.a ] || cp /tmp/gmm.card.a "$DIR/gmm.card"
         printf '%s %s native surfaces complete\n' "$arm" "$mode"
