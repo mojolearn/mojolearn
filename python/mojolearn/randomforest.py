@@ -594,6 +594,7 @@ class RandomForestClassifier(_RandomForestBase):
 
     def fit(self, X, y):
         self._refresh_config()
+        self._capture_fit_mode()
         ya = np.asarray(y).ravel()
         self.classes_, codes = np.unique(ya, return_inverse=True)
         self.n_classes_ = int(len(self.classes_))
@@ -706,6 +707,7 @@ class RandomForestRegressor(_RandomForestBase):
 
     def fit(self, X, y):
         self._refresh_config()
+        self._capture_fit_mode()
         y32 = np.ascontiguousarray(np.asarray(y).ravel(), dtype=np.float32)
         code = self._cfg["criterion"]
         if code == _REG_CRITERIA["poisson"]:

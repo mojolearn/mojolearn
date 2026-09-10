@@ -60,3 +60,13 @@ scoring, metadata routing and broader estimator conformance are not qualified.
 Measured on Apple M4: all 12 public estimator/mode search cases passed
 (60 GPU fits including refits), alongside 232 combined Python regression tests.
 [Evidence and limitations](../../bench/results/regression_errors_2026-09-10/RESULTS.md).
+
+RF/ET now capture the resolved numeric mode at each fit while preserving the
+raw `numeric_mode` constructor parameter in `get_params`. Prediction and GPU
+score keep that captured mode when the process default changes. Setting the
+raw parameter to `None` also retains the captured mode; an explicit conflicting
+mode raises at inference. Refit may choose a new mode, and `set_params` clears
+fitted state as before. Invalid direct mode assignments raise by name on use.
+Pickle retains the captured mode. Legacy NPZ archives have no fit-mode field:
+they honor an available `numeric_mode` attribute, otherwise retain their
+historical process-default behavior. This does not migrate archive schemas.
