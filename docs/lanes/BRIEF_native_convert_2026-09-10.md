@@ -60,7 +60,16 @@ return. Match that style, including the refusal wording.
 
 `_f32_ptr` DOES exist on `origin/main` and you should use it as-is.
 `_f64_ptr` DOES NOT. It is about six lines on the branch and your helpers
-need it, so port that one function across as part of this lane.
+need it, so port that one function across as part of this lane. Port it
+BYTE-FOR-BYTE, same name, same placement right after `_f32_ptr`. The
+numpy-free branch's Mojo commits will be replayed onto `main` later and
+they add the same function; an identical copy resolves as a no-op, a
+reworded one becomes a conflict for that lane to clean up.
+
+Symbol names are yours alone: `cast_f64_to_f32_binding` and
+`cast_colmajor_f64_to_f32_binding` exist on no branch today, checked
+2026-09-10 across every local and remote ref. No open worktree has
+uncommitted edits to either of your two files.
 
 DO NOT port the three DEVIATION 2303 helpers themselves. They are separate
 owed work and dragging them in widens this lane for no gain. You need
