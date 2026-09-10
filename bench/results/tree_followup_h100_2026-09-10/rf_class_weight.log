@@ -1,0 +1,9 @@
+1605 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7843c0000000, nodemask=2)
+1605 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x130540000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn/checks/rf_class_weight_smoke.py", line 58, in <module>
+    main()
+  File "/root/mojolearn/checks/rf_class_weight_smoke.py", line 47, in main
+    assert fingerprint(model) != fingerprint(plain), 'weighted path did not affect model'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: weighted path did not affect model
