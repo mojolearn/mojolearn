@@ -1059,10 +1059,11 @@ class Mamba3Block(_MambaBase):
         what = "Mamba3Block.step" if step else "Mamba3Block.forward"
         x = _batch_tokens(x, what, self.d_model, step)
         b, l = int(x.shape[0]), int(x.shape[1])
+        fresh_ext = None
         if state is None and not step:
-            ext = self._extension()
-            if hasattr(ext, "mamba3_forward_fresh"):
-                return self._call_fresh(x, ext)
+            fresh_ext = self._extension()
+            if hasattr(fresh_ext, "mamba3_forward_fresh"):
+                return self._call_fresh(x, fresh_ext)
         if state is None:
             state = self.allocate_state(b)
         nh, q = self.nheads, _M3_CHUNK_SIZE
@@ -1101,7 +1102,7 @@ class Mamba3Block(_MambaBase):
         # entries of self._w (alive on self), the ten state pieces, y and
         # the four reports.
         w = self._w
-        ext = self._extension()
+        ext = fresh_ext if fresh_ext is not None else self._extension()
         addrs = (
             # ORDER MATCHES bindings/_mojolearn_mamba.mojo::
             # mamba3_forward_binding: x, block norm.weight,
