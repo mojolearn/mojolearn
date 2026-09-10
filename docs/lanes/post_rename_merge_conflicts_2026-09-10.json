@@ -1,0 +1,125 @@
+{
+  "base": "690b178b27dcc1c543b04351b1b317fe98ab79c1",
+  "method": "git -c merge.renameLimit=50000 merge-tree --write-tree origin/main BRANCH; does not modify index or worktree",
+  "results": [
+    {
+      "source": "codex_certification-source",
+      "conflicts": [
+        "CONFLICT (content): Merge conflict in SUPPORT_MATRIX.md",
+        "CONFLICT (add/add): Merge conflict in bench/knn_layout_adversarial_check.mojo",
+        "CONFLICT (add/add): Merge conflict in gbdt/ORDERED_RMSE.md",
+        "CONFLICT (content): Merge conflict in mamba/checks/mamba3_backward_tail_dump.mojo",
+        "CONFLICT (content): Merge conflict in mamba/impl/ops/mamba3_siso.mojo",
+        "CONFLICT (content): Merge conflict in packaging/linux/build_sets.sh",
+        "CONFLICT (content): Merge conflict in python/mojolearn/__init__.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/ensemble.py",
+        "CONFLICT (add/add): Merge conflict in tools/continued_cert_checks.sh",
+        "CONFLICT (content): Merge conflict in tools/gemm_remote_leg.sh",
+        "CONFLICT (content): Merge conflict in tools/linux_surface_qualification.sh",
+        "CONFLICT (add/add): Merge conflict in tools/linux_wheel_candidate.sh",
+        "CONFLICT (add/add): Merge conflict in tools/ordered_rmse_surface_check.py",
+        "CONFLICT (add/add): Merge conflict in tools/test_verify_linux_surface_qualification.py",
+        "CONFLICT (add/add): Merge conflict in tools/verify_linux_surface_qualification.py"
+      ],
+      "fatal": []
+    },
+    {
+      "source": "grid_nvidia-identity-2026-09-07",
+      "conflicts": [
+        "CONFLICT (content): Merge conflict in bench/speed/forest_speed_arm.py",
+        "CONFLICT (content): Merge conflict in ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+        "CONFLICT (content): Merge conflict in tools/gemm_remote_leg.sh",
+        "CONFLICT (content): Merge conflict in tools/speed_gbdt_arm.py",
+        "CONFLICT (content): Merge conflict in tools/speed_gemm_arm.py"
+      ],
+      "fatal": []
+    },
+    {
+      "source": "numpy-free-onto-main-20260910",
+      "conflicts": [
+        "CONFLICT (content): Merge conflict in bindings/_mojolearn.mojo",
+        "CONFLICT (add/add): Merge conflict in docs/lanes/NUMPY_FREE_RESIDUAL_2026-09-10.md",
+        "CONFLICT (add/add): Merge conflict in python/mojolearn/NUMPY_FREE_CONTRACT.md",
+        "CONFLICT (content): Merge conflict in python/mojolearn/__init__.py",
+        "CONFLICT (add/add): Merge conflict in python/mojolearn/_buffer.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/_gp_impl.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/_metrics_impl.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/_svm_impl.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/ensemble.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/extratrees.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/linear_model.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/neighbors.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/randomforest.py"
+      ],
+      "fatal": []
+    },
+    {
+      "source": "origin_alpha-api-20260906",
+      "conflicts": [],
+      "fatal": [
+        "fatal: refusing to merge unrelated histories"
+      ]
+    },
+    {
+      "source": "origin_byte-lm-resume-20260906",
+      "conflicts": [
+        "CONFLICT (modify/delete): .github/PULL_REQUEST_TEMPLATE.md deleted in origin/byte-lm-resume-20260906 and modified in origin/main.  Version origin/main of .github/PULL_REQUEST_TEMPLATE.md left in tree.",
+        "CONFLICT (content): Merge conflict in .github/workflows/release-provenance.yml",
+        "CONFLICT (modify/delete): CITATION.cff deleted in origin/byte-lm-resume-20260906 and modified in origin/main.  Version origin/main of CITATION.cff left in tree.",
+        "CONFLICT (add/add): Merge conflict in FEATURE_COMPLETION_PLAN.md",
+        "CONFLICT (content): Merge conflict in README.md",
+        "CONFLICT (add/add): Merge conflict in REMAINING_WORK_PLAN.md",
+        "CONFLICT (content): Merge conflict in ROADMAP.md",
+        "CONFLICT (content): Merge conflict in SUPPORT_MATRIX.md",
+        "CONFLICT (add/add): Merge conflict in bench/knn_layout_adversarial_check.mojo",
+        "CONFLICT (modify/delete): bench/results/e1/amd_e2_run_w1.log deleted in origin/byte-lm-resume-20260906 and modified in origin/main.  Version origin/main of bench/results/e1/amd_e2_run_w1.log left in tree.",
+        "CONFLICT (add/add): Merge conflict in bench/results/releases/2026-09-06-alpha-api/README.md",
+        "CONFLICT (add/add): Merge conflict in bindings/_mojolearn_byte_lm.mojo",
+        "CONFLICT (content): Merge conflict in bindings/_mojolearn_mamba.mojo",
+        "CONFLICT (content): Merge conflict in bindings/_mojolearn_training.mojo",
+        "CONFLICT (add/add): Merge conflict in bindings/build_byte_lm.sh",
+        "CONFLICT (add/add): Merge conflict in docs/LM_TRAINING_CLAIM_PLAN.md",
+        "CONFLICT (add/add): Merge conflict in docs/REFUSAL_PORT_PLAN.md",
+        "CONFLICT (add/add): Merge conflict in docs/REFUSAL_SEQUENTIAL_EXECUTION.md",
+        "CONFLICT (content): Merge conflict in mamba/checks/mamba3_backward_tail_dump.mojo",
+        "CONFLICT (content): Merge conflict in mamba/checks/mamba_backward_device_tail_dump.mojo",
+        "CONFLICT (file location): mamba/impl/transformers/models/mamba/modeling_mamba_prefill_backward.mojo added in origin/byte-lm-resume-20260906 inside a directory that was renamed in origin/main, suggesting it should perhaps be moved to mamba/impl/modeling/modeling_mamba_prefill_backward.mojo.",
+        "CONFLICT (add/add): Merge conflict in mamba/impl/modeling/modeling_mamba_prefill_backward.mojo",
+        "CONFLICT (file location): mamba/impl/mamba_ssm/modules/mamba2_prefill_backward.mojo added in origin/byte-lm-resume-20260906 inside a directory that was renamed in origin/main, suggesting it should perhaps be moved to mamba/impl/modules/mamba2_prefill_backward.mojo.",
+        "CONFLICT (add/add): Merge conflict in mamba/impl/modules/mamba2_prefill_backward.mojo",
+        "CONFLICT (content): Merge conflict in mamba/impl/modules/mamba3.mojo",
+        "CONFLICT (file location): mamba/impl/mamba_ssm/modules/mamba3_prefill_backward.mojo added in origin/byte-lm-resume-20260906 inside a directory that was renamed in origin/main, suggesting it should perhaps be moved to mamba/impl/modules/mamba3_prefill_backward.mojo.",
+        "CONFLICT (add/add): Merge conflict in mamba/impl/modules/mamba3_prefill_backward.mojo",
+        "CONFLICT (content): Merge conflict in mamba/impl/ops/mamba3_siso.mojo",
+        "CONFLICT (content): Merge conflict in packaging/linux/build_sets.sh",
+        "CONFLICT (add/add): Merge conflict in packaging/verify_alpha_artifacts.py",
+        "CONFLICT (modify/delete): python/.gitignore deleted in origin/byte-lm-resume-20260906 and modified in origin/main.  Version origin/main of python/.gitignore left in tree.",
+        "CONFLICT (content): Merge conflict in python/mojolearn/__init__.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/_backend.py",
+        "CONFLICT (add/add): Merge conflict in python/mojolearn/_byte_lm_impl.py",
+        "CONFLICT (content): Merge conflict in python/mojolearn/ensemble.py",
+        "CONFLICT (add/add): Merge conflict in python/mojolearn/language_model.py",
+        "CONFLICT (add/add): Merge conflict in python/mojolearn/tests/test_byte_lm_surface.py",
+        "CONFLICT (add/add): Merge conflict in python/mojolearn/training.py",
+        "CONFLICT (add/add): Merge conflict in tools/amd_serial_guard.py",
+        "CONFLICT (add/add): Merge conflict in tools/byte_lm_gradient_oracle.py",
+        "CONFLICT (add/add): Merge conflict in tools/byte_lm_real_text_capture.py",
+        "CONFLICT (add/add): Merge conflict in tools/byte_lm_state_compare.py",
+        "CONFLICT (add/add): Merge conflict in tools/check_linux_release_qualification.py",
+        "CONFLICT (add/add): Merge conflict in tools/continued_cert_checks.sh",
+        "CONFLICT (content): Merge conflict in tools/gemm_remote_leg.sh",
+        "CONFLICT (content): Merge conflict in tools/linux_surface_qualification.sh",
+        "CONFLICT (content): Merge conflict in tools/nvidia_public_compare.py",
+        "CONFLICT (add/add): Merge conflict in tools/root_job_receipt.py",
+        "CONFLICT (add/add): Merge conflict in tools/test_amd_serial_guard.py",
+        "CONFLICT (add/add): Merge conflict in tools/test_check_linux_release_qualification.py",
+        "CONFLICT (add/add): Merge conflict in tools/tests/test_byte_lm_state_compare.py",
+        "CONFLICT (add/add): Merge conflict in tools/verify_linux_surface_qualification.py",
+        "CONFLICT (add/add): Merge conflict in training/byte_lm.mojo",
+        "CONFLICT (add/add): Merge conflict in training/checks/cross_vendor_resume.mojo",
+        "CONFLICT (add/add): Merge conflict in training/checks/train_gradient_capture.mojo"
+      ],
+      "fatal": []
+    }
+  ]
+}
