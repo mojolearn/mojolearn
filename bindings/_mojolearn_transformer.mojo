@@ -209,6 +209,11 @@ def _upload_addr(
     if n_buf < 1:
         n_buf = 1
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TRANSFORMER_CALLER_TRANSFER"]():
+        if n > 0:
+            ctx.enqueue_copy(dst_buf=dev, src_ptr=p)
+            ctx.synchronize()
+            return dev^
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     ctx.synchronize()
     if n > 0:
@@ -226,6 +231,14 @@ def _download_addr(
     buffer: one `enqueue_copy` into a pinned staging buffer, one `memcpy`
     out of it."""
     var p = _f32_ptr(addr)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TRANSFORMER_CALLER_TRANSFER"]():
+        if n == len(buf):
+            ctx.enqueue_copy(dst_ptr=p, src_buf=buf)
+        else:
+            var direct_view = buf.create_sub_buffer[DType.float32](0, n)
+            ctx.enqueue_copy(dst_ptr=p, src_buf=direct_view)
+        ctx.synchronize()
+        return
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
     if n == len(buf):
