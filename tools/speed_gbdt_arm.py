@@ -1497,9 +1497,11 @@ def prepare_cuml_labels(data):
 # The runner. Arms ALTERNATE; they never run in blocks.
 # --------------------------------------------------------------------------
 
-def run(lane, arms, data, n_rounds, size, dev=None):
+def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False):
     """One untimed warm-up per arm, then `n_rounds` timed rounds in which
     every surviving arm takes one turn before any arm takes its second.
+    Optional rotate_order advances the first arm each round to distribute
+    position effects; it does not remove noise or establish timing stability.
 
     THE ALTERNATION IS THE POINT AND NOT A STYLE CHOICE. A rented box may
     throttle mid-run. Blocks give you the first arm's cold clocks against the
@@ -1542,7 +1544,13 @@ def run(lane, arms, data, n_rounds, size, dev=None):
         live.append(arm)
 
     for r in range(1, n_rounds + 1):
-        for arm in list(live):
+        ordered = list(live)
+        if rotate_order and ordered:
+            offset = (r - 1) % len(ordered)
+            ordered = ordered[offset:] + ordered[:offset]
+        print("FSPEED-ORDER lane=%s round=%d arms=%s"
+              % (lane, r, ",".join(arm.name for arm in ordered)))
+        for arm in ordered:
             if time.time() > deadline:
                 emit_refused(lane, arm.name,
                              "process deadline reached at round %d" % r)
