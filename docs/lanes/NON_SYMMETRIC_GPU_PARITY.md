@@ -4,6 +4,10 @@ This work implements GPU training controls. It does not add a CPU learner
 or enable objectives solely to match CatBoost CPU. See
 [TREE_GROWTH_SCOPE.md](TREE_GROWTH_SCOPE.md) for the persistent task scope.
 
+Update 2026-09-10: [minimum child Hessian](GBDT_MIN_CHILD_HESSIAN.md) adds
+optional candidate eligibility for RMSE/Logloss/CrossEntropy with Newton
+scoring. Other objective/score combinations remain outside that option.
+
 ## Reference boundary
 
 CatBoost's current GPU Depthwise/Lossguide registry has eleven objectives:
@@ -34,7 +38,7 @@ produce identical models to CatBoost.
 | NaN Min / Max / Forbidden | Existing; not a learned missing direction at each split |
 | Four split scores and L2 regularization | Existing; score choice determines minimum-gain units |
 | Interaction constraints / monotonic constraints | Still absent from public GPU growth |
-| Minimum child Hessian/weight sum | Still absent as a separate user control |
+| Minimum child Hessian | Optional `min_child_hessian` for the three audited scalar losses with Newton scoring; not a general child-weight control |
 | Per-tree / per-node column sampling | Still absent from the main GBDT API |
 | L1 leaf regularization / maximum leaf step | Still absent as general controls |
 | CatBoost fixed binary splits / full feature-weight tuning | Still absent from the main public estimator |

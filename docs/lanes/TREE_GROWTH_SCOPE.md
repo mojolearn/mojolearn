@@ -28,7 +28,10 @@ continuing tree work in later sessions.
   options. A shared option name does not imply the same objective scaling,
   split scoring, default, tie handling or resulting model.
 
-## Current work
+## Initial September 9 work
+
+These slices have been implemented or measured; the consolidated roadmap
+records their current qualification and remaining device work.
 
 1. Retain unchanged IDENTICAL leaf statistics; recompute both split children
    with the original pinned reduction schedule. Validate against a full-sweep
@@ -43,9 +46,14 @@ continuing tree work in later sessions.
    must retain the existing CatBoost-derived behavior. The threshold uses
    our selected split-score improvement, not XGBoost gamma's units.
 
+Update 2026-09-10: optional [minimum child Hessian](GBDT_MIN_CHILD_HESSIAN.md)
+is implemented for Depthwise/Lossguide with Newton scoring and
+RMSE/Logloss/CrossEntropy. Native and public checks pass on M4 in all three
+modes; this does not certify other vendors or all objective/score pairs.
+
 ## Subsequent GPU capabilities to assess
 
-- Minimum child Hessian/weight constraints and feature subsampling can reduce
+- Broader child-Hessian/weight constraints and feature subsampling can reduce
   search work as well as regularize trees. They change the learner when
   enabled and require explicit deterministic sampling/reduction rules.
 - Interaction constraints restrict eligible features along each path.

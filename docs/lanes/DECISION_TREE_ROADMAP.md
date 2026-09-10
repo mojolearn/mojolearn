@@ -33,7 +33,9 @@ Backend support in competitors must be checked separately from general APIs.
 
 Current order:
 
-1. Establish RF column-tile timings; implement minimum-child-Hessian control.
+1. RF timing refresh is complete but inconclusive; keep candidates opt-in.
+   The bounded minimum-child-Hessian control now passes native/public M4
+   checks in all modes; broader device qualification remains.
 2. Start common metrics and sklearn protocol work from the pipeline plan;
    then add GBDT feature sampling and expose prepared datasets through Python.
 3. On an available NVIDIA GPU, qualify RF/ET candidates, large stable
@@ -58,6 +60,7 @@ and regression review; lane completion is not main/release completion.
 | Split controls | CatBoost-style terminal row-count limit; optional `min_split_gain` for non-symmetric trees | Row count is not a guaranteed minimum in both children; gain units are our selected score |
 | IDENTICAL partition statistics | Unchanged leaves cached; both new children recomputed with pinned schedule | M4 Lossguide fit improvement about 2.8%; new path needs cross-vendor qualification |
 | Prepared numeric GBDT | Native reusable borders/input/target/weight buffers; three losses and all policies/modes | Python handles, eval/categorical pools and general workspace reuse remain |
+| Child Hessian eligibility | Optional Newton-score control for RMSE/Logloss/CrossEntropy, including prepared/native/public APIs | Broader objective/score support and cross-vendor qualification remain; see [feature contract](GBDT_MIN_CHILD_HESSIAN.md) |
 | RF column tiles | Opt-in two/four-column shared histograms; same row and label loaded for multiple features | Sep9 full-forest gates pass; no established speedup; defaults off |
 | ET shared counts | Apple default for 5–32 classes; exact shared integer class counts | Strong local multiclass gains; binary/regression and other vendors keep old default |
 | Symmetric row-index splits | Existing optional FAST experiment | Workload-dependent regression prevents global default change |
@@ -102,7 +105,7 @@ per-node Python scalar construction during fit.
 
 | ID / priority | Reference | Mojo implementation and dependency | Required evidence |
 | --- | --- | --- | --- |
-| F1 / in qualification: minimum child Hessian | LightGBM `min_sum_hessian_in_leaf`; XGBoost `min_child_weight` | Apply eligibility to each candidate before winner selection using actual objective curvature, not a score denominator mislabeled as Hessian. First slice supports NewtonL2/NewtonCosine with RMSE/Logloss/CrossEntropy and explicit weighting/bootstrap semantics. Other scores/losses need a separate curvature plane or audit. Default disabled; plumb through native, prepared, Python and binding APIs. | Analytic weighted regression/logistic cases, equality boundary, highest-score-ineligible but second-best-valid split, default fingerprints, mode readback and public fits. |
+| F1 / implemented bounded slice: minimum child Hessian | LightGBM `min_sum_hessian_in_leaf`; XGBoost `min_child_weight` | Apply eligibility to each candidate before winner selection using actual objective curvature, not a score denominator mislabeled as Hessian. First slice supports NewtonL2/NewtonCosine with RMSE/Logloss/CrossEntropy and explicit weighting/bootstrap semantics. Other scores/losses need a separate curvature plane or audit. Default disabled; plumb through native, prepared, Python and binding APIs. | Analytic weighted regression/logistic cases, equality boundary, highest-score-ineligible but second-best-valid split, default fingerprints, mode readback and public fits. |
 | F2 / next: feature sampling | LightGBM per-tree/per-node fractions; XGBoost `colsample_*` | Deterministic masks keyed by seed/tree/node and a specified stable feature order. First implement per-tree, then per-node; thread masks into candidate enumeration to avoid work. Specify intersection with categorical sources, interaction constraints and shared symmetric-depth splits. | Fraction-one default equivalence, known RNG vectors and selected-feature witnesses, no empty masks, all policies/modes, cross-device masks, work counters and quality/time comparison. |
 | F3 / next: interaction constraints | XGBoost/LightGBM permitted interaction groups | Carry allowed-feature state along each path. Respect overlapping groups; intersect with sampling masks. Define symmetric-tree shared-split eligibility explicitly. | Exhaustive tiny path oracle, overlapping/disjoint groups, invalid feature IDs, unseen features, save/load and constraint verification over every model path. |
 | F4 / later: monotonic constraints | XGBoost constrained split evaluation; LightGBM monotone bounds | Start with numeric features and a bounded objective/leaf-estimation profile. Carry descendant lower/upper bounds, score feasible leaves and enforce bounds in final estimation. Split filtering alone is insufficient. | Independent ordered-pair predictions, descendant-bound oracle, weighted/NaN cases, repeated estimation steps, round trips and cross-device identity. |
@@ -196,7 +199,7 @@ before shipping the core GPU growth controls.
 | --- | --- |
 | Consolidated roadmap | Written in this file; keep status and evidence links current |
 | RF timing refresh | Completed: all four timing windows failed stability; 120 model fingerprints match. [Sep10 evidence](../../bench/results/rf_column_tiles_2026-09-10/EVIDENCE.md). Defaults unchanged. |
-| Minimum child Hessian | Active design/implementation; not yet qualified or claimed public |
+| Minimum child Hessian | Implemented for the three audited scalar losses with Newton scoring; native/public checks pass in all modes on M4. [Feature and evidence](GBDT_MIN_CHILD_HESSIAN.md). Cross-vendor qualification remains. |
 | Sub-byte layout gate | Retained for live histogram layouts; named pixi task and hardware-matrix entry both pass all three internal negative controls. [Audit and commands](SUB_BYTE_LAYOUT_GATE.md). |
 | Pipeline expansion | Audited and planned: metrics, preprocessing, sklearn protocol and model selection. Keep DETERMINISTIC; measure cost/benefit before deprecation. [Detailed plan](GPU_PIPELINE_PLAN.md). |
 | Other features above | Planned; start independent slices after current gates finish |
