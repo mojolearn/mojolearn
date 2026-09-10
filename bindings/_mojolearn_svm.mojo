@@ -44,6 +44,8 @@ still loads this module itself, mode-aware, and cross-checks
 there.
 """
 
+# DEVIATION 2486: shared byte-preserving host copies.
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -68,21 +70,15 @@ from svm.estimator import (
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float32 buffer address")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f32_ptr(addr)
 
 
 def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int32 buffer address")
-    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return i32_ptr(addr)
 
 
 def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float64 buffer address")
-    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f64_ptr(addr)
 
 
 def svm_numeric_mode_binding() raises -> PythonObject:
@@ -163,21 +159,18 @@ def svc_fit_binding(
         raise Error("svc_fit: n_rows and n_features must both be positive")
     var x = List[Float32]()
     var y = List[Float32]()
-    for i in range(n_rows * n_cols):
-        x.append(xp.unsafe_load(i))
-    for i in range(n_rows):
-        y.append(yp.unsafe_load(i))
+    x = read_f32(Int(xp), max(0, n_rows * n_cols))
+    y = read_f32(Int(yp), max(0, n_rows))
     var res = SvcFitOutputs()
     with GILReleased(Python()):
         res = svc_fit_host(
             x, y, n_rows, n_cols, kernel, gamma, c, tol, max_iter,
             nochange_steps,
         )
+    copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
     for i in range(res.n_support):
-        dp.unsafe_store(i, res.dual_coefs[i])
         sip.unsafe_store(i, res.support_idx[i])
-    for i in range(res.n_support * n_cols):
-        smp.unsafe_store(i, res.support_matrix[i])
+    copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)
     ip.unsafe_store(0, Float64(res.b))
     ip.unsafe_store(1, Float64(res.n_support))
     ip.unsafe_store(2, Float64(res.n_iter))
@@ -239,25 +232,21 @@ def svc_predict_binding(
     if n_support < 0:
         raise Error("svc_predict: n_support cannot be negative")
     var x = List[Float32]()
-    for i in range(n_rows * n_cols):
-        x.append(xp.unsafe_load(i))
+    x = read_f32(Int(xp), max(0, n_rows * n_cols))
     var dual = List[Float32]()
     var support = List[Float32]()
     if n_support > 0:
         var dp = _f32_ptr(Int(py=dual_addr))
         var smp = _f32_ptr(Int(py=support_matrix_addr))
-        for i in range(n_support):
-            dual.append(dp.unsafe_load(i))
-        for i in range(n_support * n_cols):
-            support.append(smp.unsafe_load(i))
+        dual = read_f32(Int(dp), max(0, n_support))
+        support = read_f32(Int(smp), max(0, n_support * n_cols))
     var out = List[Float32]()
     with GILReleased(Python()):
         out = svc_predict_host(
             x, n_rows, n_cols, support, dual, n_support, b, label0, label1,
             kernel, gamma, predict_class, buffer_mib,
         )
-    for i in range(n_rows):
-        op.unsafe_store(i, out[i])
+    copy_f32(out.unsafe_ptr(), op, n_rows)
     return PythonObject(n_rows)
 
 
@@ -341,21 +330,18 @@ def svr_fit_binding(
         raise Error("svr_fit: n_rows and n_features must both be positive")
     var x = List[Float32]()
     var y = List[Float32]()
-    for i in range(n_rows * n_cols):
-        x.append(xp.unsafe_load(i))
-    for i in range(n_rows):
-        y.append(yp.unsafe_load(i))
+    x = read_f32(Int(xp), max(0, n_rows * n_cols))
+    y = read_f32(Int(yp), max(0, n_rows))
     var res = SvrFitOutputs()
     with GILReleased(Python()):
         res = svr_fit_host(
             x, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
             nochange_steps,
         )
+    copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
     for i in range(res.n_support):
-        dp.unsafe_store(i, res.dual_coefs[i])
         sip.unsafe_store(i, res.support_idx[i])
-    for i in range(res.n_support * n_cols):
-        smp.unsafe_store(i, res.support_matrix[i])
+    copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)
     ip.unsafe_store(0, Float64(res.b))
     ip.unsafe_store(1, Float64(res.n_support))
     ip.unsafe_store(2, Float64(res.n_iter))
@@ -415,25 +401,21 @@ def svr_predict_binding(
     if n_support < 0:
         raise Error("svr_predict: n_support cannot be negative")
     var x = List[Float32]()
-    for i in range(n_rows * n_cols):
-        x.append(xp.unsafe_load(i))
+    x = read_f32(Int(xp), max(0, n_rows * n_cols))
     var dual = List[Float32]()
     var support = List[Float32]()
     if n_support > 0:
         var dp = _f32_ptr(Int(py=dual_addr))
         var smp = _f32_ptr(Int(py=support_matrix_addr))
-        for i in range(n_support):
-            dual.append(dp.unsafe_load(i))
-        for i in range(n_support * n_cols):
-            support.append(smp.unsafe_load(i))
+        dual = read_f32(Int(dp), max(0, n_support))
+        support = read_f32(Int(smp), max(0, n_support * n_cols))
     var out = List[Float32]()
     with GILReleased(Python()):
         out = svr_predict_host(
             x, n_rows, n_cols, support, dual, n_support, b, kernel, gamma,
             buffer_mib,
         )
-    for i in range(n_rows):
-        op.unsafe_store(i, out[i])
+    copy_f32(out.unsafe_ptr(), op, n_rows)
     return PythonObject(n_rows)
 
 
