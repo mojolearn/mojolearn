@@ -75,6 +75,15 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     # the one that was asked for, so a wheel that silently shipped only the
     # fast set fails here rather than on a user's machine.
     okmode=1
+    # Verify the installed runtime before adding reference-test dependencies.
+    if (cd "$tmp" && unset PYTHONPATH PYTHONHOME &&
+            "$tmp/venv/bin/python" "$here/tools/check_numpy_free_runtime.py" --installed $SMOKE_ARGS); then :; else
+        echo "FAIL $py: dependency-free installed runtime"; okmode=0
+    fi
+    # NumPy belongs to the test harness, not the wheel's runtime metadata.
+    if ! "$tmp/venv/bin/pip" install --quiet 'numpy>=1.24'; then
+        echo "FAIL $py: reference-test dependency installation"; okmode=0
+    fi
     if [ "${MOJOLEARN_PACKAGE_BYTE_LM:-0}" = 1 ]; then
         # Availability plus bounded generalized/resident native execution.
         if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=identical \

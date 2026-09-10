@@ -5,13 +5,31 @@ Run with an installed package (no PYTHONPATH) for wheel qualification, or
 PYTHONPATH=python for a source-tree correctness check. Requires a GPU and
 current native bindings. This is deliberately not a performance benchmark.
 """
-import importlib.abc, sys, json
+import argparse, importlib.abc, importlib.metadata, pathlib, sys, json
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--no-gpu", action="store_true")
+parser.add_argument("--installed", action="store_true")
+args = parser.parse_args()
 class RejectNumpy(importlib.abc.MetaPathFinder):
  def find_spec(self, fullname, path=None, target=None):
   if fullname=='numpy' or fullname.startswith('numpy.'):
    raise ImportError('NumPy blocked for runtime qualification')
 sys.meta_path.insert(0,RejectNumpy())
 import mojolearn as ml
+if args.installed:
+ try:
+  importlib.metadata.distribution('numpy')
+ except importlib.metadata.PackageNotFoundError:
+  pass
+ else:
+  raise AssertionError('Installed qualification requires a clean environment without NumPy')
+ assert pathlib.Path(ml.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()), ml.__file__
+ required = importlib.metadata.requires('mojolearn') or []
+ assert not [r for r in required if 'extra ==' not in r], required
+if args.no_gpu:
+ assert ml.Array.from_list([1, 2], '<i4').tolist() == [1, 2]
+ print(json.dumps(dict(numpy_loaded=False, package_file=ml.__file__, scope='import and Array only; GPU not tested')))
+ sys.exit(0)
 from mojolearn import metrics
 X=ml.Array.from_list([[float(i),float(i%3)] for i in range(16)],'<f4')
 y=[i%2 for i in range(16)]

@@ -75,16 +75,20 @@ Retained integrated samples, path names, output hashes and binary hash:
    artifacts are frozen. Rebuild native files; do not overlay new Python
    calls onto binaries missing the helpers. Publish only the qualified set.
 
-## Local validation and known artifact issue
+## Local validation and corrected fixture pins
 
-The merged source suite ran 930 passing tests, 88 passing subtests and
-53 skips (including optional PyTorch reference checks). Two UMAP pinned
-fixture checks fail against the existing local metrics binary. Running the
-pre-merge NumPy wrapper and merged wrapper against that same IDENTICAL
-binary gives identical output bits for both fixtures; the discrepancy is
-pre-existing. Expected fixture bits were not changed. See
+The follow-up full source suite passes 943 tests and 89 subtests, with 53
+optional/inapplicable skips. Rebuilding the IDENTICAL metrics extension did
+not restore the old UMAP pins: both current layouts instead match every
+word of the previously retained Apple AND NVIDIA H100 native captures in
+`bench/results/umap_portable_host_math_2026-09-10/`. The Python tests still
+used earlier captures predating the device optimizer. Their literal pins
+now reference those independently recorded current captures (16 and 48
+layout words). No tolerance was relaxed and no algorithm was changed.
+The earlier pre-merge-wrapper comparison remains historical evidence in
 [the comparison](../../bench/results/numpy-free/2026-09-10-umap-head-comparison.log).
-This still needs artifact/source qualification before publication.
+This resolves the two local failures; fresh installed release artifacts
+still require qualification.
 
 `tools/check_numpy_free_runtime.py` blocks NumPy imports while running real
 GPU RF/ET fit/predict, scoring and both scalers. The local source-tree check
@@ -95,3 +99,29 @@ and conversion checks (32 inapplicable no-conversion combinations skipped).
 Additional NumPy-free CV tests pass with both NumPy and sklearn imports
 blocked. The real GPU runtime smoke, including CV, passed on local CPython
 3.10, 3.11, 3.12, 3.13 and 3.14; these are source-tree checks.
+
+## Dependency audit and release checks
+
+| Dependency | Role and action |
+|---|---|
+| NumPy | Removed from required Python runtime metadata. Keep optional conversion/serialization/numerical test oracles and explicit transformer diagnostic references. |
+| SciPy | Removed the spectral affinity boundary's import. Caller-supplied COO/CSR/CSC objects use their `tocoo()` protocol; dense inputs need no SciPy. |
+| scikit-learn | Optional external Pipeline/tags/exceptions interoperability and test oracle. Built-in CV and estimators do not require installation. |
+| PyTorch | Optional neural correctness oracle; not a runtime requirement. |
+| setuptools and wheel | Python wheel build dependencies, not installed runtime requirements. Retain the working packaging toolchain. |
+| Mojo and MAX | Build toolchain and compiled runtime support. Native runtime libraries are bundled by release packaging; removing them requires replacing the execution backend. |
+| GPU driver/runtime | Metal/CUDA/HIP platform requirements remain. This is a GPU library. |
+
+Both macOS and Linux release qualification now run the installed package's
+NumPy-blocked check BEFORE installing NumPy for reference smoke tests. The
+check verifies the package comes from the venv, runtime metadata has no
+required distributions, and NumPy is absent. macOS `--no-gpu` only checks
+import/Array and keeps its explicit device-not-tested label. The full
+macOS interpreter matrix still runs all requested numeric modes using the
+reference harness afterward. Linux records runtime and test dependencies
+separately. Ten shell-harness tests pass, including a sabotage proving a
+failed dependency-free check cannot be hidden by successful oracle tests.
+
+These changes repair the qualification harness; they do not constitute a
+new installed-wheel release run. No 0.8.0 package has been published by this
+work.

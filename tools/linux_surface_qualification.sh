@@ -223,6 +223,13 @@ timeout -k 10 180 "$VPY" -m pip install --disable-pip-version-check --only-binar
     "$WHEEL" > "$DEST/install.log" 2>&1
 "$VPY" -m pip check > "$DEST/dependency-check.log" 2>&1
 "$VPY" -m pip freeze > "$DEST/installed-dependencies.txt"
+(cd "$DEST" && env -u PYTHONPATH -u PYTHONHOME "$VPY" \
+    "$ROOT/tools/check_numpy_free_runtime.py" --installed) \
+    > "$DEST/numpy-free-runtime.log" 2>&1
+# Only after the dependency-free installed GPU path passes, add the oracle.
+timeout -k 10 180 "$VPY" -m pip install --disable-pip-version-check --only-binary=:all: \
+    'numpy>=1.24' > "$DEST/oracle-install.log" 2>&1
+"$VPY" -m pip freeze > "$DEST/test-dependencies.txt"
 
 cat > "$DEST/run_installed.py" <<'PYRUN'
 import hashlib, json, os, pathlib, runpy, sys

@@ -51,11 +51,10 @@ def _coo_triples(A):
     input. Converting a dense matrix through COO DROPS EXACT ZEROS, which is
     theirs and is also what makes a dense input usable at all.
     """
-    try:
-        import scipy.sparse as sp
-    except ImportError:
-        sp = None
-    if sp is not None and sp.issparse(A):
+    # Consume the sparse object's public conversion protocol. Importing
+    # scipy here pulled NumPy into even dense precomputed-affinity calls.
+    # COO/CSR/CSC inputs supplied by callers continue to own that dependency.
+    if callable(getattr(A, "tocoo", None)):
         coo = A.tocoo()
         n = coo.shape[0]
         if coo.shape[0] != coo.shape[1]:

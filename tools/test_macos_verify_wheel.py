@@ -30,9 +30,10 @@ class WheelMatrixTests(unittest.TestCase):
         self.env = dict(os.environ, PATH=str(self.bin), MOJOLEARN_RELEASE_MODES='fast deterministic identical')
 
     def interpreters(self, versions=range(10, 15), *, venv_fail=False, smoke_fail=False,
-                     smoke_output=''):
+                     smoke_output='', runtime_fail=False):
         pip_script = '#!/bin/sh\nexit 0\n'
-        smoke_script = ("#!/bin/sh\nprintf '%s\\n' " + shlex.quote(smoke_output)
+        runtime_guard = 'case "$*" in *--installed*) exit 1;; esac\n' if runtime_fail else ''
+        smoke_script = ("#!/bin/sh\n" + runtime_guard + "printf '%s\\n' " + shlex.quote(smoke_output)
                         + '\nexit ' + ('1' if smoke_fail else '0') + '\n')
         for version in versions:
             path = self.bin / ('python3.' + str(version))
@@ -80,6 +81,13 @@ class WheelMatrixTests(unittest.TestCase):
             if args:
                 self.assertIn('DEVICE NOT TESTED', result.stdout.splitlines()[-1])
 
+    def test_dependency_free_failure_cannot_be_hidden_by_oracle_success(self):
+        self.interpreters(runtime_fail=True)
+        result = self.run_gate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.count('dependency-free installed runtime'), 5)
+        self.assertEqual(result.stdout.count('PASS python3.'), 15)
+
     def test_ambiguous_wheel_is_refused(self):
         (self.dist / 'mojolearn-other.whl').touch()
         result = self.run_gate()
@@ -101,7 +109,7 @@ class WheelMatrixTests(unittest.TestCase):
         for fails in (False, True):
             self.interpreters(smoke_fail=fails, smoke_output=evidence)
             result = self.run_gate()
-            self.assertEqual(result.stdout.count(evidence), 15, result.stdout)
+            self.assertEqual(result.stdout.count(evidence), 20, result.stdout)
             self.assertEqual(result.returncode == 0, not fails)
 
 
