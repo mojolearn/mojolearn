@@ -25,14 +25,12 @@ Other K values use the retained runtime baseline.
 from std.gpu import block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
-from std.sys import llvm_intrinsic
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import (
     TARGET_COLUMN,
     knn_selector_shuffle_for,
-    knn_selector_redux_for,
     knn_selector_specialize_common_for,
     lib_lane_width_for,
 )
@@ -238,17 +236,6 @@ def _shuffle_xor_u64(v: UInt64, offset: UInt32) -> UInt64:
 
 @always_inline
 def _lane_group_min_u64(v: UInt64) -> UInt64:
-    comptime if knn_selector_redux_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
-        # PTX redux.sync.min.u32 (SM80+) reduces all32 converged lanes.
-        # First minimize the high key word, then the low word only among
-        # lanes with that high word: exactly UInt64 lexicographic minimum.
-        # https://docs.nvidia.com/cuda/parallel-thread-execution/#parallel-synchronization-and-communication-instructions-redux-sync
-        var hi = UInt32(v >> UInt64(32))
-        var lo = UInt32(v & UInt64(0xffffffff))
-        var min_hi = llvm_intrinsic["llvm.nvvm.redux.sync.umin", UInt32, has_side_effect=True](hi, UInt32(0xffffffff))
-        var eligible_lo = lo if hi == min_hi else UInt32(0xffffffff)
-        var min_lo = llvm_intrinsic["llvm.nvvm.redux.sync.umin", UInt32, has_side_effect=True](eligible_lo, UInt32(0xffffffff))
-        return (UInt64(min_hi) << UInt64(32)) | UInt64(min_lo)
     var m = v
     var offset = 1
     while offset < SMALLK_LANES:

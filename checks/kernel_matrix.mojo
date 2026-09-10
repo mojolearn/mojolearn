@@ -938,31 +938,15 @@ def knn_distance_zero_fma_repair_for[column: Int, identical: Bool]() -> Bool:
 
 @always_inline
 def knn_distance_preflight_for[column: Int, identical: Bool]() -> Bool:
-    """Experimental exact exponent admission outside the register tile's FMA loop."""
-    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_PREFLIGHT"]():
-        return identical and column == COLUMN_APPLE
-    return False
-
-
-@always_inline
-def knn_selector_redux_for[column: Int, identical: Bool]() -> Bool:
-    """Opt-in SM80+ exact two-word warp minimum. No default architecture change."""
-    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_REDUX"]():
-        return identical and column == COLUMN_NVIDIA
-    return False
+    """Exact whole-chain exponent admission avoids unnecessary Apple repairs."""
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_PREFLIGHT"]():
+        return False
+    return identical and column == COLUMN_APPLE
 
 
 @always_inline
 def knn_distance_hardware_flush_for[column: Int, identical: Bool]() -> Bool:
-    """Opt-in fully rounded FMA followed by hardware FTZ multiplication by one."""
-    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_HARDWARE_FLUSH"]():
-        return identical and column == COLUMN_NVIDIA
-    return False
-
-
-@always_inline
-def knn_distance_chunk4_for[column: Int, identical: Bool]() -> Bool:
-    """Opt-in four-feature cached exponent admission with no duplicate loads."""
-    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_CHUNK4"]():
-        return identical and column == COLUMN_APPLE
-    return False
+    """Fully rounded NVIDIA FMA followed by exact hardware FTZ multiplication."""
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SOFTWARE_FLUSH"]():
+        return False
+    return identical and column == COLUMN_NVIDIA
