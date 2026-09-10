@@ -1,8 +1,9 @@
 # GPU classification metrics: bounded A2 slice
 
 The public surface adds `mojolearn.metrics.confusion_matrix`,
-`precision_score`, `recall_score` and `f1_score`. Log loss and ranking curves
-remain separate work. Functions accept explicit `numeric_mode=` and otherwise
+`precision_score`, `recall_score` and `f1_score`. [GPU log loss](GPU_LOG_LOSS.md)
+is implemented separately with build/smoke validation only; ranking curves
+remain planned. Functions accept explicit `numeric_mode=` and otherwise
 resolve the process default at call time through the shared metrics loader.
 
 ```python

@@ -65,6 +65,7 @@ from metrics.estimator import (
     mutual_info_score_host,
     r2_score_host,
     regression_error_host,
+    log_loss_host,
     confusion_matrix_host,
     precision_recall_fscore_host,
     rand_score_host,
@@ -359,6 +360,23 @@ def regression_error_binding[absolute: Bool = False, root: Bool = False](
     return PythonObject(Float64(result))
 
 
+
+
+def log_loss_binding(
+    true_addr: PythonObject, probabilities_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    _want(String("log_loss"), params, 3)
+    var n = Int(py=params[0])
+    var k = Int(py=params[1])
+    var normalize = Int(py=params[2])
+    if n <= 0 or n > 2147483647 or k < 2 or k > 2147483647 // n:
+        raise Error("log_loss: invalid input dimensions")
+    var y = _load_i32(Int(py=true_addr), n)
+    var probability = _load_f32(Int(py=probabilities_addr), n*k)
+    var out = _f32_ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        out.unsafe_store(0, log_loss_host(y,probability,n,k,normalize))
+    return PythonObject(1)
 
 
 def confusion_matrix_binding(
@@ -802,6 +820,7 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         m.def_function[completeness_score_binding]("completeness_score")
         m.def_function[v_measure_score_binding]("v_measure_score")
         m.def_function[r2_score_binding]("r2_score")
+        m.def_function[log_loss_binding]("log_loss")
         m.def_function[confusion_matrix_binding]("confusion_matrix")
         m.def_function[precision_recall_fscore_binding]("precision_recall_fscore")
         m.def_function[regression_error_binding[False, False]]("mean_squared_error")

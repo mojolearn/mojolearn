@@ -8,8 +8,9 @@ implemented; see [regression metrics](GPU_REGRESSION_METRICS.md) and
 [forest compatibility](FOREST_SKLEARN_PROTOCOL.md) for contracts and qualification.
 A2 unweighted confusion counts and precision/recall/F1 are implemented;
 [the classification contract](GPU_CLASSIFICATION_METRICS.md) records its bounded
-label, averaging and device qualification scope. Log loss remains next,
-followed by ranking curves and the remaining phases. A complete cross-vendor
+label, averaging and device qualification scope. Bounded [GPU log loss](GPU_LOG_LOSS.md)
+is now implemented with build/smoke validation only; broader numerical
+qualification remains pending. Ranking curves and the remaining phases follow. A complete cross-vendor
 pipeline has not been qualified. Metrics and estimator compatibility take priority over
 the longer-tail tree features.
 
@@ -87,25 +88,30 @@ and fit/transform (with fit_transform delegation where appropriate), so
 Pipeline can clone and tune every step, not only the final estimator.
 Run device/build qualification serially on each shared device.
 
-## Next probability-metric slice
+## Probability metric: implementation and remaining qualification
 
-After integer classification counts and precision/recall/F1, implement log loss
-as a separate bounded GPU API. Follow the
-[scikit-learn 1.8 mathematical contract](https://scikit-learn.org/1.8/modules/generated/sklearn.metrics.log_loss.html)
-while documenting the Float32 result policy. Start with unweighted single-label
-binary and multiclass targets, explicit probability-column label ordering,
-finite Float32 probabilities, and mean or sum output. Validate probability
-shape/range and row sums; state the row-sum tolerance and any normalization
-policy explicitly rather than silently repairing malformed probabilities.
+The bounded [GPU log-loss API](GPU_LOG_LOSS.md) is implemented for unweighted
+single-label binary and multiclass probabilities. It uses explicit label
+ordering, finite Float32 inputs, epsilon clipping, no renormalization and GPU
+mean/sum reduction. The feature contract records shape, bounds and tolerance.
 
-Encode labels on the host, then compute clipping, selected-class negative log,
-and the complete reduction on the GPU. Reuse `identical_log` and the A1 pinned
-256-slot reduction/final-fold schedule. Define Float32 epsilon clipping and
-binary positive-class interpretation before exposing the API. Test probabilities
-at 0/1 and their neighboring representable values, absent classes, permuted
-columns, ragged lengths and repeated/interleaved modes against an independent
-high-precision oracle. Keep log loss separate from ROC-AUC/PR curves: those
-require an ordered score/count primitive, not a logarithm or sum alone.
+This turn deliberately runs build/smoke checks only at the user's request.
+Full qualification remains queued: probabilities at 0/1 and neighboring
+representable values, absent classes, permuted columns, ragged lengths,
+independent high-precision oracles and repeated/interleaved-mode fingerprints.
+Cross-vendor identity and throughput remain unmeasured. ROC-AUC/PR curves
+still require an ordered score/count primitive, not a logarithm or sum alone.
+
+The next A3 implementation can reuse `launch_radix_sort_bins` in
+`gbdt/gpu_util/kernel/radix_sort.mojo` for stable UInt32 key/index sorting,
+the Float32 key mapping in `gbdt/gpu_util/kernel/segmented_sort.mojo`, and
+`launch_scan_vector_u32` in `gbdt/gpu_util/kernel/scan.mojo` for inclusive
+positive counts and tie-end compaction. Complement sortable keys for descending
+order, canonicalize signed zero, and compare integer keys for ties so subnormal
+scores are not merged by floating-point flushing. Emit TP/FP only at complete
+tie-group ends. Keep scan input/output separate and widen products before AUC
+arithmetic. The existing radix sort uses 32 one-bit passes and serial block-total
+scans; measure its scaling before calling this a high-throughput ranking path.
 
 ## Why sklearn compatibility is not just three methods
 
@@ -172,5 +178,6 @@ qualify that entire pipeline as cross-vendor IDENTICAL.
 Do not claim arbitrary sklearn pipelines are identical, or that no competitor
 can offer a similar guarantee. Publish the precise certified workflow and
 its intermediate evidence instead. This plan remains the implementation and qualification queue. A1 unweighted
-Float32 errors, A2 unweighted confusion/PRF and B1 forest compatibility are implemented slices;
+Float32 errors, A2 unweighted confusion/PRF, bounded log loss and B1 forest
+compatibility are implemented slices; log loss has only build/smoke validation;
 weights, multiple outputs and broader protocol support remain pending.

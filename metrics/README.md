@@ -1,10 +1,13 @@
 # Metrics
 
 GPU implementations of selected cuML metrics, their RAFT statistics primitives,
-native Float32 MSE/MAE/RMSE, and unweighted classification counts/scores. See the [new error metric contract](../docs/lanes/GPU_REGRESSION_METRICS.md).
+native Float32 MSE/MAE/RMSE, unweighted classification counts/scores and log loss. See the [new error metric contract](../docs/lanes/GPU_REGRESSION_METRICS.md).
 
 See the [classification metric contract](../docs/lanes/GPU_CLASSIFICATION_METRICS.md)
 for label encoding, averaging, numeric modes and current limits.
+[GPU log loss](../docs/lanes/GPU_LOG_LOSS.md) documents probability ordering,
+clipping and mean/sum arithmetic; its validation is limited to build/smoke
+checks, with full numerical and cross-vendor qualification pending.
 
 `DERIVATION_MAP.tsv` identifies the upstream source for each implementation.
 `NOT_IMPLEMENTED.tsv` is the explicit refusal ledger. Integer reductions can be order independent;

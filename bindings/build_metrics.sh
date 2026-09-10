@@ -316,6 +316,10 @@ for score, expected in ((M.precision_score, 1.0), (M.recall_score, 2 / 3),
     assert abs(score(ct, cp) - expected) < 1e-6
 # Selected labels retain false negatives/positives against omitted classes.
 assert abs(M.recall_score(ct, cp, labels=[1], average="macro") - 2 / 3) < 1e-6
+# Selected-probability log and the GPU final mean/sum reduction.
+prob = np.array([0.25, 0.75], dtype=np.float32)
+assert abs(M.log_loss([0, 1], prob) + np.log(0.75)) < 1e-6
+assert abs(M.log_loss([0, 1], prob, normalize=False) + 2 * np.log(0.75)) < 1e-6
 
 M.kl_divergence(np.abs(y) + 1e-3, np.abs(yhat) + 1e-3)   # group B
 M.silhouette_score(X, lt)                      # group C, the batched path

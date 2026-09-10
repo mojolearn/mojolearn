@@ -69,6 +69,7 @@ __all__ = [
     "precision_score",
     "recall_score",
     "f1_score",
+    "log_loss",
     "adjusted_rand_score",
     "completeness_score",
     "entropy",
@@ -902,6 +903,65 @@ def _classification_pair(y_true, y_pred, sample_weight):
     return true, pred, kind, sorted(set(true) | set(pred))
 
 
+
+def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
+             numeric_mode=None):
+    """GPU log loss for strict Float32 probabilities and single-label targets.
+
+    A vector or one-column matrix contains binary positive-class probabilities;
+    columns expand to [1-p, p]. Otherwise columns follow explicit unique labels
+    in caller order, or sorted observed target labels when labels is omitted.
+    At least two labels are required; explicit labels permit one observed class.
+    Probabilities must lie in [0,1], with row sums within sqrt(Float32 epsilon)
+    of one. Validation does not renormalize. The GPU clips selected probabilities
+    to [Float32 epsilon, 1-epsilon] and returns a Float32 mean (normalize=True)
+    or sum. Sample weights and empty inputs are not supported.
+    """
+    if sample_weight is not None:
+        raise NotImplementedError("log_loss does not yet support sample_weight")
+    if not isinstance(normalize, (bool, np.bool_)):
+        raise ValueError("normalize must be a bool")
+    true, kind = _classification_labels(y_true, "y_true")
+    selected = _selected_labels(labels, kind, sorted(set(true)))
+    if len(selected) < 2:
+        raise ValueError("log_loss requires at least two labels; pass labels for one observed class")
+    mapping = {label: i for i, label in enumerate(selected)}
+    if any(label not in mapping for label in true):
+        raise ValueError("y_true contains a label missing from labels")
+    probabilities = np.asarray(y_pred)
+    if probabilities.dtype != np.dtype("float32"):
+        raise TypeError("log_loss probabilities must have dtype float32")
+    if probabilities.ndim not in (1, 2):
+        raise ValueError("log_loss probabilities must have shape (n,), (n,1) or (n,k)")
+    if probabilities.shape[0] != len(true):
+        raise ValueError("y_true and probability row counts differ")
+    if not np.all(np.isfinite(probabilities)):
+        raise ValueError("log_loss probabilities must be finite")
+    if np.any(probabilities < 0) or np.any(probabilities > 1):
+        raise ValueError("log_loss probabilities must lie in [0,1]")
+    binary = probabilities.ndim == 1 or probabilities.shape[1] == 1
+    if binary:
+        if len(selected) != 2:
+            raise ValueError("one-column probabilities require exactly two labels")
+        positive = probabilities.reshape(-1)
+        probabilities = np.column_stack((np.float32(1) - positive, positive))
+    elif probabilities.shape[1] < 2 or probabilities.shape[1] != len(selected):
+        raise ValueError("probability columns must match the label count (at least two)")
+    if len(true) > np.iinfo(np.int32).max or probabilities.size > np.iinfo(np.int32).max:
+        raise ValueError("log_loss exceeds the native Int32 indexing bound")
+    # Host Float64 sums are validation only, not the metric's reduction.
+    tolerance = float(np.sqrt(np.finfo(np.float32).eps))
+    if np.any(np.abs(np.sum(probabilities, axis=1, dtype=np.float64) - 1) > tolerance):
+        raise ValueError("log_loss probability rows must sum to one within sqrt(float32 eps)")
+    encoded = np.asarray([mapping[label] for label in true], dtype=np.int32)
+    probabilities = np.ascontiguousarray(probabilities)
+    result = np.empty(1, dtype=np.float32)
+    _get_binding(numeric_mode).log_loss(
+        _addr_ro(encoded), _addr_ro(probabilities), _addr(result),
+        [len(true), len(selected), int(normalize)])
+    return float(result[0])
+
+
 def _selected_labels(labels, kind, observed):
     if labels is None:
         return observed.copy()
@@ -1056,7 +1116,6 @@ _NOT_PORTED = {
     "adjusted_mutual_info_score": "expected mutual information and its public contract are not implemented",
     "fowlkes_mallows_score": "public score and normalization checks are not implemented",
     "roc_auc_score": "planned stable score ordering, tie grouping and GPU prefix counts",
-    "log_loss": "planned clipped-probability GPU reduction and label validation",
     "precision_recall_curve": "planned shared ordered-count primitive and curve endpoint contract",
     "hinge_loss": "GPU margin reduction and its public label contract are not implemented",
 }
