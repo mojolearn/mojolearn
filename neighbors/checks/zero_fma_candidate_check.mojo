@@ -24,10 +24,10 @@ def oracle_kernel(words: MutPointer[UInt32, MutAnyOrigin], output: MutPointer[UI
         v = repair_zero_fma(a, b, c, zero)
     output.unsafe_store(row * 3 + 1, bitcast[DType.uint32](v))
     # The production tile's complete admission/accumulation path must also
-    # satisfy the oracle. Two features compute c*1 followed by a*b+c.
+    # satisfy the oracle. Four features compute two leading zeros, c*1, then a*b+c.
     var r = SIMD[DType.int32, RT_ROWS](0)
     var col = SIMD[DType.int32, RT_COLS](0)
-    var tile = _rt_accumulate_tile(packed.unsafe_offset(row * 4), packed.unsafe_offset(row * 4 + 2), r, col, 2, 1)
+    var tile = _rt_accumulate_tile(packed.unsafe_offset(row * 8), packed.unsafe_offset(row * 8 + 4), r, col, 4, 1)
     output.unsafe_store(row * 3 + 2, bitcast[DType.uint32](tile[0]))
 
 
@@ -43,16 +43,18 @@ def main() raises:
     with DeviceContext() as ctx:
         var host = ctx.enqueue_create_host_buffer[DType.uint32](len(data))
         var actual = ctx.enqueue_create_host_buffer[DType.uint32](count * 3)
-        var packed_host = ctx.enqueue_create_host_buffer[DType.float32](count * 4)
+        var packed_host = ctx.enqueue_create_host_buffer[DType.float32](count * 8)
         ctx.synchronize()
         for i in range(len(data)):
             host.unsafe_ptr().unsafe_store(i, data[i])
         for row in range(count):
-            packed_host.unsafe_ptr().unsafe_store(row * 4, bitcast[DType.float32](data[row * 5 + 2]))
-            packed_host.unsafe_ptr().unsafe_store(row * 4 + 1, bitcast[DType.float32](data[row * 5]))
-            packed_host.unsafe_ptr().unsafe_store(row * 4 + 2, Float32(1.0))
-            packed_host.unsafe_ptr().unsafe_store(row * 4 + 3, bitcast[DType.float32](data[row * 5 + 1]))
-        var packed = ctx.enqueue_create_buffer[DType.float32](count * 4)
+            for i in range(8):
+                packed_host.unsafe_ptr().unsafe_store(row * 8 + i, Float32(0.0))
+            packed_host.unsafe_ptr().unsafe_store(row * 8 + 2, bitcast[DType.float32](data[row * 5 + 2]))
+            packed_host.unsafe_ptr().unsafe_store(row * 8 + 3, bitcast[DType.float32](data[row * 5]))
+            packed_host.unsafe_ptr().unsafe_store(row * 8 + 6, Float32(1.0))
+            packed_host.unsafe_ptr().unsafe_store(row * 8 + 7, bitcast[DType.float32](data[row * 5 + 1]))
+        var packed = ctx.enqueue_create_buffer[DType.float32](count * 8)
         ctx.enqueue_copy(dst_buf=packed, src_ptr=packed_host.unsafe_ptr())
         var words = ctx.enqueue_create_buffer[DType.uint32](len(data))
         var output = ctx.enqueue_create_buffer[DType.uint32](count * 3)

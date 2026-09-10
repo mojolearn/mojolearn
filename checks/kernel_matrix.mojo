@@ -958,3 +958,11 @@ def knn_distance_hardware_flush_for[column: Int, identical: Bool]() -> Bool:
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_HARDWARE_FLUSH"]():
         return identical and column == COLUMN_NVIDIA
     return False
+
+
+@always_inline
+def knn_distance_chunk4_for[column: Int, identical: Bool]() -> Bool:
+    """Opt-in four-feature cached exponent admission with no duplicate loads."""
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_CHUNK4"]():
+        return identical and column == COLUMN_APPLE
+    return False

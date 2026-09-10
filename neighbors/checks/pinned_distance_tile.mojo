@@ -54,7 +54,7 @@ calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
-from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for, knn_distance_hardware_flush_for
+from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for, knn_distance_hardware_flush_for, knn_distance_chunk4_for
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
 
 from checks.numerics import (
@@ -207,6 +207,52 @@ def _rt_dot_tile[REPAIR: Bool](
 
 
 @always_inline
+def _rt_dot_tile_chunk4(
+    q: MutPointer[Float32, MutAnyOrigin],
+    yt: MutPointer[Float32, MutAnyOrigin],
+    rows_idx: SIMD[DType.int32, RT_ROWS],
+    cols_idx: SIMD[DType.int32, RT_COLS],
+    d: Int, y_stride: Int,
+) -> SIMD[DType.float32, RT_ROWS * RT_COLS]:
+    var acc = SIMD[DType.float32, RT_ROWS * RT_COLS](0.0)
+    var f = 0
+    while f < d:
+        var end = 4 if f + 4 <= d else d - f
+        var q_values = SIMD[DType.float32, RT_ROWS * 4](0.0)
+        var y_values = SIMD[DType.float32, RT_COLS * 4](0.0)
+        var q_min = UInt32(255)
+        var y_min = UInt32(255)
+        comptime for p in range(4):
+            if p < end:
+                comptime for r in range(RT_ROWS):
+                    var v = _rt_load(q.unsafe_load(Int(rows_idx[r]) * d + f + p))
+                    q_values[p * RT_ROWS + r] = v
+                    var e = (bitcast[DType.uint32](v) >> 23) & 255
+                    if e != 0 and e < q_min:
+                        q_min = e
+                comptime for c in range(RT_COLS):
+                    var v = _rt_load(yt.unsafe_load((f + p) * y_stride + Int(cols_idx[c])))
+                    y_values[p * RT_COLS + c] = v
+                    var e = (bitcast[DType.uint32](v) >> 23) & 255
+                    if e != 0 and e < y_min:
+                        y_min = e
+        if q_min + y_min >= 151:
+            comptime for p in range(4):
+                if p < end:
+                    comptime for r in range(RT_ROWS):
+                        comptime for c in range(RT_COLS):
+                            acc[r * RT_COLS + c] = ftz(identical_mul_add(q_values[p * RT_ROWS + r], y_values[p * RT_COLS + c], acc[r * RT_COLS + c]))
+        else:
+            comptime for p in range(4):
+                if p < end:
+                    comptime for r in range(RT_ROWS):
+                        comptime for c in range(RT_COLS):
+                            acc[r * RT_COLS + c] = _rt_step(q_values[p * RT_ROWS + r], y_values[p * RT_COLS + c], acc[r * RT_COLS + c])
+        f += 4
+    return acc
+
+
+@always_inline
 def _rt_accumulate_tile(
     q: MutPointer[Float32, MutAnyOrigin],
     yt: MutPointer[Float32, MutAnyOrigin],
@@ -214,6 +260,8 @@ def _rt_accumulate_tile(
     cols_idx: SIMD[DType.int32, RT_COLS],
     d: Int, y_stride: Int,
 ) -> SIMD[DType.float32, RT_ROWS * RT_COLS]:
+    comptime if knn_distance_chunk4_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
+        return _rt_dot_tile_chunk4(q, yt, rows_idx, cols_idx, d, y_stride)
     comptime if knn_distance_preflight_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
         # Ignore exponent-zero operands: _rt_load flushes them to signed zero,
         # and a zero product cannot create an underflow-rounding boundary.
