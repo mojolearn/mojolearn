@@ -35,10 +35,17 @@ honors: the block solve was 2.73 s and the full kernel tile 3.58 s of a
   rows to 64 features; wider inputs keep the GEMM path. IDENTICAL keeps
   `identical_gemm_into` and the pinned epilogue. Full tile 3.58 s to 0.39 s.
 
-Fit 7.5 s to 2.2 s under the stage clock; `svc_main.mojo` 44/44 in FAST,
-43/44 in IDENTICAL where the one failure (`svr_device_matches_oracle`,
-ws sequence at outer iteration 0) is pre-existing on main at deb01bcf and
-untouched by these changes. Numbers against scikit-learn:
+Fit 7.5 s to 2.2 s under the stage clock; `svc_main.mojo` 44/44 in FAST
+and, after the trace fix below, 44/44 in IDENTICAL.
+
+`svr_device_matches_oracle` had failed under IDENTICAL since the SVR path
+landed ("ws sequence differs at outer iteration 0", every SVR fixture; FAST
+only reported it). The solver's trace recorded the working set PROJECTED
+into `[0, n_rows)` (`ws_idx_mod`, the buffer that addresses rows of X)
+while the oracle keeps the raw 2n-space indices; b, the dual coefficients
+and every other stage were already bit-equal. The trace now records the
+raw indices (`ws_idx_mod_svr`; equal to the projected ones for C_SVC), and
+the six SVR fixtures compare IDENTICAL. Numbers against scikit-learn:
 `bench/results/svm_fast_2026-09-10/`. The next phase by size is
 `select_ws` (a 32-pass one-bit radix sort, about 130 launches per outer
 iteration, 0.58 s of the 2.2 s).

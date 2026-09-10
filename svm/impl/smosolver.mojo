@@ -779,7 +779,15 @@ struct SmoSolver(Movable):
             card.record_device[DType.float32](ctx, tag + ".alpha", self.alpha, self.n_train)
             card.record_device[DType.float32](ctx, tag + ".f", self.f, self.n_train)
             if self.record_iterations:
-                self.trace.ws_seq.append(read_i32(ctx, cache.ws_idx_mod, n_ws))
+                # The oracle's `ws.idx` lives in the UNPROJECTED n_train
+                # space (2n for EPSILON_SVR), so the trace compares the raw
+                # indices; `ws_idx_mod` is the projection into [0, n_rows)
+                # that addresses rows of X. For C_SVC the two are equal.
+                # Recording the projected one here was why
+                # `check_svr_device_matches_oracle` reported "ws sequence
+                # differs at outer iteration 0" on every SVR fixture while
+                # b, the dual coefficients and every other stage agreed.
+                self.trace.ws_seq.append(read_i32(ctx, cache.ws_idx_mod_svr, n_ws))
                 self.trace.alpha_hash_seq.append(
                     hash_f32_list(read_f32(ctx, self.alpha, self.n_train))
                 )
