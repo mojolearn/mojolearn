@@ -24,6 +24,15 @@ compares counts, run_begin, used perm and dW bitwise. The independent host key
 check and negative control remain. Device evidence is recorded separately;
 implementation availability is not a claim that all vendors have run the gate.
 
+**Validation:** Apple and NVIDIA H100 pass the real 17-fixture, 102-comparison
+clause (d), the 56 edge combinations, and the registered device-sort negative
+control. H100 additionally passes the mandatory V128256/D4096/T4096 shape,
+comparing all 525,336,576 FP32 output cells bitwise at both plans and three geometries.
+See [`embedding_plan_sort_2026-09-10`](../bench/results/embedding_plan_sort_2026-09-10/README.md)
+for commands, raw evidence, single-call timing diagnostics and remaining debt.
+The existing device nonfinite refusal gap remains open; this is not a claim
+that every embedding contract clause has passed.
+
 ## Historical status (2026-08-28)
 
 **COMPILED, RUN AND CARDED ON TWO COLUMNS, APPLE AND AMD, 2026-08-28. CLAUSE
@@ -856,8 +865,11 @@ At `V = 128256`, `d = 4096`, `T = 4096`, against an atomic scatter, both pay
 the same `V*d` = 525.3 M zero-fill stores and the same `T*d` = 16.8 M adds,
 theirs ATOMIC and ours plain and flushed. Ours adds one compare and one select
 per add for seam E3, plus `2*V*T` = 1.05 G integer compares for `PLAN_SCAN`'s
-run structure (or about 68 launches for `PLAN_SORT`), `V` integer adds for the
-prefix scan, and 1.0 MB of CSR.
+run structure and `V` integer adds for its prefix scan. At `T=4096`, the
+implemented `PLAN_SORT` instead uses 78 compare/exchange launches plus three
+pack/run/perm launches, 32 KiB of temporary keys, and per-row integer binary
+searches. Both retain about 1.0 MB of CSR. These are operation counts, not
+measured prices.
 
 **The single largest fact is that the `+0.0` fill dominates everything and both
 spellings pay it.** 2.10 GB of fill against 67.1 MB of gradient, a ratio of

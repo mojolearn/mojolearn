@@ -1,3 +1,4 @@
+7978 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b94c0000000, nodemask=2)
 embedding sort gate sabotage= SORT_NEGATIVE_CONTROL
   OK    dw  (21 cells)
   OK    dw  (21 cells)

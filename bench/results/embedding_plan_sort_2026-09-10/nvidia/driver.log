@@ -1,0 +1,47 @@
+7804 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79b400000000, nodemask=2)
+/root/embedding-sort/embedding/checks/embedding_check.mojo:1119:26: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if EMB_MAX_POSITIONS != 1073741823:
+                         ^
+/root/embedding-sort/embedding/checks/embedding_check.mojo:1126:27: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if EMB_NO_PADDING_IDX >= 0:
+                          ^
+/root/embedding-sort/embedding/checks/embedding_check.mojo:1891:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Contract 11(e) and contract 7.4, DEVIATION 1309. **The contract's own
+       ^
+Imported from /root/embedding-sort/embedding/checks/embedding_check.mojo:229:
+/root/embedding-sort/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/embedding-sort/embedding/checks/embedding_check.mojo:229:
+/root/embedding-sort/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/embedding-sort/embedding/checks/embedding_check.mojo:229:
+/root/embedding-sort/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/embedding-sort/embedding/checks/embedding_check.mojo:229:
+/root/embedding-sort/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/embedding-sort/embedding/checks/embedding_check.mojo:1837:21: warning: assignment to 'lo' was never used; assign to '_' instead?
+        var lo = Int(begin2[v])
+                    ^
+7887 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a8dc0000000, nodemask=2)
+/root/embedding-sort/embedding/checks/embedding_sort_check.mojo:36:17: warning: ref 'i' was never used, remove it?
+            for i in range(n + 3):
+                ^
+7945 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1962c0000000, nodemask=2)
+/root/embedding-sort/embedding/checks/embedding_sort_check.mojo:36:17: warning: ref 'i' was never used, remove it?
+            for i in range(n + 3):
+                ^
+tools/check_embedding_plan_sort.sh: line 18: rg: command not found
+FAIL: device negative control was not registered

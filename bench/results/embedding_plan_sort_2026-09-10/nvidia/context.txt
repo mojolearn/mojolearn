@@ -1,0 +1,13 @@
+Thu Sep 10 09:25:04 UTC 2026
+Linux 78d2744186a1 6.8.0-90-generic #91-Ubuntu SMP PREEMPT_DYNAMIC Tue Nov 18 14:14:30 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+NVIDIA H100 80GB HBM3, GPU-ca4ba095-66db-bdcb-6aee-659553543799, 580.126.09, 81559 MiB
+7763 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x588940000000, nodemask=2)
+Mojo 1.0.0 (ed45d567)
+Executable source: 0250d63b (production registry316f4c5f)
+eaa26279661db0f06fcc9bdf166f35472142c6134c9b31aa56d41bdb005699dc  embedding/checks/embedding_identical.mojo
+bc0a4c033d8df2ee4901d77b7c355824d0edfd9daffe27a25b83591c9abf23c9  embedding/checks/embedding_sort.mojo
+7b4ce2d4c26af21266cac49982983c41be30de2fc0a2486cba4ceed032319707  embedding/checks/embedding_check.mojo
+74b3605a2e2694b9a44596c1ab26bd7639c4da5855ee8085dde9db9912582cfe  embedding/checks/embedding_sort_check.mojo
+2cd2fb17a4752b49c1dfb67b6e58460f210f797e8a9073aa925dc37d35afe74d  embedding/checks/embedding_sort_shipped_check.mojo
+be39356227623c34c1ee288d638b5f30b8d0a45123f38ffd5b8694cb40ce0daf  tools/check_embedding_plan_sort.sh
+5e91a392ca7cb8a3b10cf2b40666ba4cf165d32a5c9f292f97cf6b805e1d5532  tools/check_embedding_plan_sort.sh

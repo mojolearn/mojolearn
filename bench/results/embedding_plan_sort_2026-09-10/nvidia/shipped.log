@@ -1,0 +1,33 @@
+8137 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bbf40000000, nodemask=2)
+shipped diagnostic plan=0 threads= 256 single_call_ms= 9.807279
+shipped diagnostic plan= 0 threads= 32 single_call_ms= 26.93925
+  OK    counts  (128256 cells)
+  OK    begin  (128257 cells)
+  OK    perm  (3855 cells)
+shipped PASS plan= 0 threads= 32 FP32 cells= 525336576 used perm= 3855
+shipped diagnostic plan= 0 threads= 96 single_call_ms= 13.798866
+  OK    counts  (128256 cells)
+  OK    begin  (128257 cells)
+  OK    perm  (3855 cells)
+shipped PASS plan= 0 threads= 96 FP32 cells= 525336576 used perm= 3855
+shipped diagnostic plan= 0 threads= 160 single_call_ms= 11.250845
+  OK    counts  (128256 cells)
+  OK    begin  (128257 cells)
+  OK    perm  (3855 cells)
+shipped PASS plan= 0 threads= 160 FP32 cells= 525336576 used perm= 3855
+shipped diagnostic plan= 1 threads= 32 single_call_ms= 20.073677
+  OK    counts  (128256 cells)
+  OK    begin  (128257 cells)
+  OK    perm  (3855 cells)
+shipped PASS plan= 1 threads= 32 FP32 cells= 525336576 used perm= 3855
+shipped diagnostic plan= 1 threads= 96 single_call_ms= 6.802507
+  OK    counts  (128256 cells)
+  OK    begin  (128257 cells)
+  OK    perm  (3855 cells)
+shipped PASS plan= 1 threads= 96 FP32 cells= 525336576 used perm= 3855
+shipped diagnostic plan= 1 threads= 160 single_call_ms= 4.168227
+  OK    counts  (128256 cells)
+  OK    begin  (128257 cells)
+  OK    perm  (3855 cells)
+shipped PASS plan= 1 threads= 160 FP32 cells= 525336576 used perm= 3855
+PLAN_SORT shipped gate PASS: V128256 D4096 T4096, both plans, three geometries, every output bit

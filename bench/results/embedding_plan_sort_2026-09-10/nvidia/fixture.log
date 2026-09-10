@@ -1,3 +1,4 @@
+7860 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b01c0000000, nodemask=2)
 === embedding identity gate, profile mojolearn.identical.embedding.fp32.v1
 === embedding_check: clause (a) ran on Apple and AMD, cards md5 c7f824c3, 6887 cells. NO SABOTAGE ARM EXISTS, so this gate has never been shown capable of failing. Read the header.
 mode IDENTICAL   sabotage: none   EMB_TPB: 256
@@ -56,7 +57,7 @@ clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
         shape sweep; no plant
   case 18 f_d0  V=4 d=0 T=3 pad=-1 acc=False R_max=2 empty_rows=2  15 cells: 9/9 stages bit-identical
         shape sweep; no plant
-card: 9 records at /tmp/mojolearn_embedding.trace, contract section 10 wants 9
+card: 9 records at /root/jobs/embedding-plan-sort/embedding.identical.card, contract section 10 wants 9
 card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
 clause (a): PASS, 17 cases, 9/9 stages bit-identical to the oracle on all 6887 cells, 9/9 card tags
 clause (a) NOTE, DEVIATION 1517: at d == 0 and at T == 0 the device backward returns BEFORE R1, R2 and R3, so emb.counts, emb.run_begin and emb.perm are never written -- while emb_backward_stages computes and records all three. Those three stages are SKIPPED on f_t0 and f_d0 and the skip is reported here rather than passed over. Contract section 8 declares both shapes LEGAL, so the two cards disagree at three of nine stages on two legal shapes.
