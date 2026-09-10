@@ -133,18 +133,21 @@ and not merely once per fit or growth-policy selection. Its cost can amortize
 over a deep tree. Decide from whole-fit measurements rather than rejecting
 packing on its name or assuming it is negligible.
 
-## Performance priority update — 2026-09-10
+## Performance priority update — corrected 2026-09-10
 
-The user explicitly does not want FAST-versus-IDENTICAL speed as the project
-objective. Prioritize IDENTICAL RF/ET optimization and NVIDIA cuML RF comparison;
-retain FAST RF/cuML and FAST symmetric GBDT/CatBoost comparisons. ET needs a real
-equivalent competitor before calling a result ET parity. HIP qualification and
-performance are separate from cuML, which targets NVIDIA. See the roadmap's
-performance priorities for measurement and rollout.
+IDENTICAL versus GPU competitors on NVIDIA is the user's performance target
+EVERYWHERE, for all learners. FAST matters only for decision trees on the
+MacBook. This supersedes the earlier NVIDIA FAST comparison priority. Do not
+optimize an internal mode ratio or claim that identity is free or causes a
+speedup. DETERMINISTIC is not integer-only: integer statistics coexist with
+floating scoring and regression work. Similar timings cannot isolate the cost
+of identity across differently optimized implementations.
 
-Tree overlap is currently an audited design, not a production feature or flag.
-Implement an opt-in control first, with private scratch and fixed RNG/output
-ordering; retain serial fallback until whole-fit and memory evidence supports
-promotion. IDENTICAL may match other modes where exact integer work dominates,
-but no equal-speed guarantee follows for floating reductions, regression or
-weighted workloads. Do not change its numerical contract to chase a ratio.
+Use cuML RF and CatBoost GPU symmetric GBDT as the appropriate NVIDIA
+comparators. ET needs a real equivalent competitor before claiming ET parity.
+HIP correctness/identity remains in scope; cuML is NVIDIA-only.
+
+Tree overlap is an audited design, not a production feature or flag. Implement
+an opt-in concurrency control first, with private scratch, fixed RNG/output
+ordering and a serial fallback. Preserve IDENTICAL's floating reduction order.
+Promote only when whole-fit timing and memory evidence support it.

@@ -34,31 +34,35 @@ Backend support in competitors must be checked separately from general APIs.
 
 ## Performance priorities — user steering, 2026-09-10
 
-Success is competitor-relative performance, not closing an internal FAST versus
-IDENTICAL gap. Prioritize IDENTICAL RF against cuML RF on the same NVIDIA GPU;
-also measure FAST RF against cuML and FAST symmetric/oblivious GBDT against
-CatBoost GPU with comparable settings and heldout quality. Optimize ET's
-IDENTICAL path first and retain FAST competitor measurements only where an
-actual equivalent ET learner is identified. Do not label cuML RF as an ET
-algorithm-equivalent baseline. cuML is not an AMD backend: qualify MojoLearn HIP
-separately and label cross-hardware throughput/cost comparisons explicitly.
-DETERMINISTIC remains supported, but an internal three-mode speed contest is
-not a deliverable. Share optimizations across modes without relaxing identity.
+Success is IDENTICAL versus the relevant GPU competitor on NVIDIA, across
+all learners, including RF, ET and symmetric/oblivious GBDT. FAST performance
+work is requested only for decision trees on the local MacBook. This latest
+user clarification supersedes earlier FAST-versus-cuML/CatBoost NVIDIA plans.
+An internal FAST/DETERMINISTIC/IDENTICAL speed contest is not a deliverable.
+Keep supported modes correct through shared source, but spend NVIDIA tuning
+and benchmark effort on IDENTICAL. Do not describe identity as free or as an
+acceleration mechanism; similar observed timings do not isolate identity cost.
+DETERMINISTIC is not an integer-only algorithm. Integer counts may be shared
+across modes while floating scoring, regression and reductions still differ.
+
+Use cuML RF as the NVIDIA RF competitor and CatBoost GPU as the symmetric
+GBDT competitor. ET needs an actual equivalent learner before claiming ET
+parity; cuML RF is only a labeled contextual comparison. Qualify HIP correctness
+and identity separately: cuML is not an AMD backend. Preserve competitor
+semantics, quality measurements and honest workload boundaries.
 
 Current order:
 
-1. Dedicated NVIDIA competitor baselines and profiling for RF/ET, then FAST
-   symmetric GBDT versus CatBoost. Include fit and prediction separately,
-   transfer-inclusive timings, memory, quality, and stable repeated runs.
+1. Dedicated NVIDIA IDENTICAL-versus-competitor baselines and profiling, starting
+   with RF/cuML and symmetric GBDT/CatBoost. Include fit and prediction
+   separately, transfer-inclusive timings, memory, quality and repeated runs.
 2. Optimize IDENTICAL RF/ET bottlenecks: existing shared histogram/count
    candidates, scratch/input reuse, independent-tree overlap, and shared GPU
-   forest inference. RF already has cuML-derived shared histograms; do not
-   propose reimplementing that existing architecture from scratch.
-3. Qualify CUDA/HIP correctness and identity for changed paths. AMD tuning
-   follows measurements; Apple timings do not choose NVIDIA/AMD defaults.
+   forest inference. RF already has cuML-derived shared histograms.
+3. Qualify CUDA/HIP correctness and identity for changed paths. MacBook FAST
+   decision-tree tuning is a separate target, not evidence for NVIDIA defaults.
 4. Continue useful feature gaps and prepared-data ownership in bounded slices;
-   retain the full backlog below without letting API breadth displace the
-   requested competitor performance work.
+   retain the full backlog without displacing competitor performance work.
 
 Independent-tree overlap is not implemented in production yet. Introduce it
 behind an explicit opt-in concurrency control, defaulting to the existing serial
@@ -71,10 +75,9 @@ peak scratch memory: overlap can be slower. Promote only measured workload and
 device configurations; keep a serial fallback. An opt-in flag alone is not a
 performance improvement.
 
-The user permits RunPod performance tests when warranted. The previously
-suggested $100 campaign is a proposal, not an explicitly selected spending cap.
-Use bounded leases and teardown for any authorized rental; never consume the
-protected training pod. Parallelize source work and review; serialize local
+The user permits RunPod performance tests when warranted and has instructed
+us to proceed. Start with a bounded single-GPU measurement session and automatic
+teardown, not an open-ended campaign; never consume the protected training pod. Parallelize source work and review; serialize local
 heavy builds through `tools/with_build_lock.sh`. Commit completed slices and
 push to main after integration/conflict review, as explicitly requested.
 
