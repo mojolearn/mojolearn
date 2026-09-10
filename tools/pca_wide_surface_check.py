@@ -16,6 +16,10 @@ for m, n in ((4, 8), (8, 17), (17, 33), (4, 129)):
     np.testing.assert_allclose(rebuilt, x, rtol=0, atol=3e-5)
     one = PCA(n_components=1, svd_solver='full', numeric_mode='identical').fit(x)
     np.testing.assert_allclose(one.noise_variance_, (ref[1:]**2).sum() / ((m-1)*(m-1)), rtol=3e-5, atol=1e-6)
+    white = PCA(n_components=m-1, svd_solver='full', whiten=True, numeric_mode='identical').fit(x)
+    z = white.transform(x)
+    np.testing.assert_allclose(z.var(axis=0, ddof=1), 1, rtol=2e-4, atol=2e-5)
+    np.testing.assert_allclose(white.inverse_transform(z), x, rtol=0, atol=3e-5)
     print('PCA_WIDE_PUBLIC', m, n, hashlib.sha256(fit.components_.tobytes()).hexdigest())
 try:
     PCA(n_components=5, svd_solver='full', numeric_mode='identical').fit(np.zeros((4,8), np.float32))
