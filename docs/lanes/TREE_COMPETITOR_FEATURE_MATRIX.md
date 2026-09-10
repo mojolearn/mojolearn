@@ -94,7 +94,7 @@ Do not treat every row as an obligation to reproduce every API. In particular,
 RF-like boosting modes are not proof of identical random-forest semantics;
 Extra Trees random thresholds must remain distinct. cuML remains our RF
 performance reference. RF class weights now have bounded public dict/balanced wiring through the
-existing engine ([contract](RF_CLASS_WEIGHT.md)); OOB remains refused pending a GPU path; standalone DecisionTree exports and ET weighting/missing/criteria
+existing engine ([contract](../RF_CLASS_WEIGHT.md)); OOB remains refused pending a GPU path; standalone DecisionTree exports and ET weighting/missing/criteria
 support are tracked separately in the main roadmap.
 
 MojoLearn evidence: [public tree inventory](../TREE_ALPHA_FEATURE_STATUS.md),
