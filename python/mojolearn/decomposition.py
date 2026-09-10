@@ -28,6 +28,10 @@ class PCA(NumericModeMixin):
     (decomposition/NOT_IMPLEMENTED.tsv); this class accepts 'auto' and runs
     the Jacobi arm, and says so here.
 
+    Wide IDENTICAL full fits use transposed QR, at most min(X.shape)
+    components, and a 64-sweep/1e-6 Jacobi budget. Tall fits retain their
+    existing 15-sweep/1e-7 budget. Nonconvergence still raises.
+
     `svd_solver='full'` is the second arm and a genuinely different
     algorithm: an R-SVD of the centered data that never forms the
     covariance, so it never squares the condition number. That is

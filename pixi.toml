@@ -1264,6 +1264,8 @@ check-arima-surface = "cd python && python3 -m mojolearn.tests.test_arima_surfac
 # 2026-08-23 have NEVER BEEN COMPILED, so a syntax error in them would break this build.
 check-spectral = "mojo run -I . spectral/checks/spectral_check.mojo"
 spectral-card = "mojo run -I . spectral/spectral_main.mojo"
+check-portable-pow64 = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/portable_pow64_check.mojo"
+check-umap-portable-host-math = "bash tools/check_umap_portable_host_math.sh /tmp/mojolearn-umap-portable-host-math"
 check-svd-wide-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . decomposition/checks/svd_wide_check.mojo"
 check-umap = "mojo run -I . umap/checks/graph_check.mojo"
 check-umap-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/graph_check.mojo"
