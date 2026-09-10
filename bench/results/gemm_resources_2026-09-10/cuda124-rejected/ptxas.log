@@ -1,0 +1,2 @@
+ptxas /root/jobs/gemm-resources/input.ptx, line 5; fatal   : Unsupported .version 8.5; current version is '8.4'
+ptxas fatal   : Ptx assembly aborted due to errors

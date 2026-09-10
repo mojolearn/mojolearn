@@ -1,0 +1,33 @@
+1789 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7975c0000000, nodemask=2)
+== selected baseline vs candidate, BITS and FP32 TFLOP/s ==
+baseline_selector=-2 candidate_selector=-1 (-2 baseline=current dispatch; -1 baseline=pre-tuned, candidate=current dispatch; >=0 explicit plan)
+timing=host-synchronized arithmetic-mean-ms; raw samples below; digest passes serve as warmup
+DIGEST llama8b.qkv.t512 baseline=0x45186763eeee1b22 candidate=0x45186763eeee1b22 elements=2097152
+SAMPLE llama8b.qkv.t512 round=0 candidate_first=False baseline_ns=1508337 candidate_ns=1499766
+SAMPLE llama8b.qkv.t512 round=1 candidate_first=True baseline_ns=1501273 candidate_ns=1500818
+SAMPLE llama8b.qkv.t512 round=2 candidate_first=False baseline_ns=1498395 candidate_ns=1498719
+SAMPLE llama8b.qkv.t512 round=3 candidate_first=True baseline_ns=1502220 candidate_ns=1499687
+SAMPLE llama8b.qkv.t512 round=4 candidate_first=False baseline_ns=1500257 candidate_ns=1506419
+SAMPLE llama8b.qkv.t512 round=5 candidate_first=True baseline_ns=1506685 candidate_ns=1500366
+SAMPLE llama8b.qkv.t512 round=6 candidate_first=False baseline_ns=1502166 candidate_ns=1499426
+   OK  llama8b.qkv.t512 [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) -> TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]  m=512 n=4096 k=4096  BITS MATCH  baseline=1.5027618571428571ms candidate=1.500743ms  baseline_tflops=11.432196726541502 candidate_tflops=11.447575756808462
+DIGEST llama8b.mlp_up.t512 baseline=0xb614c319e390d613 candidate=0xb614c319e390d613 elements=7340032
+SAMPLE llama8b.mlp_up.t512 round=0 candidate_first=False baseline_ns=6142333 candidate_ns=6121206
+SAMPLE llama8b.mlp_up.t512 round=1 candidate_first=True baseline_ns=6118587 candidate_ns=6111544
+SAMPLE llama8b.mlp_up.t512 round=2 candidate_first=False baseline_ns=6144383 candidate_ns=6123994
+SAMPLE llama8b.mlp_up.t512 round=3 candidate_first=True baseline_ns=6127662 candidate_ns=6119290
+SAMPLE llama8b.mlp_up.t512 round=4 candidate_first=False baseline_ns=6127670 candidate_ns=6134567
+SAMPLE llama8b.mlp_up.t512 round=5 candidate_first=True baseline_ns=6129701 candidate_ns=6128215
+SAMPLE llama8b.mlp_up.t512 round=6 candidate_first=False baseline_ns=6139783 candidate_ns=6119457
+   OK  llama8b.mlp_up.t512 [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) -> TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]  m=512 n=14336 k=4096  BITS MATCH  baseline=6.132874142857143ms candidate=6.122610428571429ms  baseline_tflops=9.804463738104243 candidate_tflops=9.820899573064924
+DIGEST llama8b.mlp_down.t512 baseline=0x87c936584fbf409 candidate=0x87c936584fbf409 elements=2097152
+SAMPLE llama8b.mlp_down.t512 round=0 candidate_first=False baseline_ns=5327857 candidate_ns=5321811
+SAMPLE llama8b.mlp_down.t512 round=1 candidate_first=True baseline_ns=5321064 candidate_ns=5325245
+SAMPLE llama8b.mlp_down.t512 round=2 candidate_first=False baseline_ns=5318595 candidate_ns=5319031
+SAMPLE llama8b.mlp_down.t512 round=3 candidate_first=True baseline_ns=5322329 candidate_ns=5320181
+SAMPLE llama8b.mlp_down.t512 round=4 candidate_first=False baseline_ns=5319012 candidate_ns=5317638
+SAMPLE llama8b.mlp_down.t512 round=5 candidate_first=True baseline_ns=5316791 candidate_ns=5322818
+SAMPLE llama8b.mlp_down.t512 round=6 candidate_first=False baseline_ns=5320627 candidate_ns=5319778
+   OK  llama8b.mlp_down.t512 [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) -> TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]  m=512 n=4096 k=14336  BITS MATCH  baseline=5.320896428571428ms candidate=5.3209288571428575ms  baseline_tflops=11.300641339516503 candidate_tflops=11.30057246739573
+
+   3 match, 0 MOVED, 0 refused.

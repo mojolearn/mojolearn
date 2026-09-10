@@ -133,3 +133,36 @@ has **not run**. This Mac has no ptxas, and the RunPod REST pod-list request
 returned HTTP 403 during this continuation. No rental was created. H100
 register/spill results, profiler evidence and large paired timings remain owed.
 No kernel arithmetic, dispatch gate, or opponent measurement changed.
+
+
+## H100 resource inspection and rejected scalar-load trial
+
+The follow-up obtained a dedicated H100 80GB HBM3, driver 580.126.09, and
+assembled the retained PTX with ptxas 12.6.85. CUDA 12.4 first refused PTX
+8.5; that failure is retained too. The selected 128x128 KS16 specialization
+uses **255 registers/thread, 4144 bytes stack/thread, 44 bytes spill stores
+and 44 bytes spill loads**, and 40960 bytes static shared memory. The CUDA
+driver reports one active 256-thread block per SM for this offline cubin:
+**12.5% theoretical thread occupancy**. This is a static occupancy query,
+not achieved occupancy or proof that the runtime JIT emits the same cubin.
+The ptxas spill byte counts describe static compiler output, not dynamic
+traffic. cuobjdump's 41984 shared resource figure includes more than the
+40960-byte user allocation reported by ptxas and the driver; raw reports
+are preserved without conflating those figures.
+
+A forced experiment routes full windows through the existing ascending
+scalar shared-read loop, preserving the arithmetic and fold. Two seven-round
+captures per executable in baseline/candidate/candidate/baseline order cover
+the actual three large Llama shapes. Every full-output digest agrees across
+executables. QKV is effectively flat, up improves about 0.6%, down is slightly
+slower. Its offline assembly still uses 255 registers and one block/SM,
+with 48-byte spill counts; the intended occupancy improvement did not happen.
+This is insufficient benefit to retain: **candidate rejected, default
+unchanged**. The patch is archived only; the probe now prints successful
+output digests so separate executable captures can be checked explicitly.
+
+Evidence: `bench/results/gemm_resources_2026-09-10/`. No opponent was rerun.
+The next occupancy experiment must reduce live storage enough to change the
+resident-block limit while preserving the numerical fold. More work on fold
+storage or operand lifetimes needs new evidence, not another blind replay of
+previously rejected tile or stack-capacity choices.

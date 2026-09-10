@@ -170,6 +170,8 @@ def main() raises:
             _ = da^; _ = db^; _ = dc^; _ = dw^; _ = ctx^
             continue
         var dt = _digest(ctx, dc, mn)
+        print("DIGEST " + gemm_shape_name(i) + " baseline=" + hex(dp[0])
+              + " candidate=" + hex(dt[0]) + " elements=" + String(mn))
         var ns_p = 0
         var ns_t = 0
         for r in range(rounds):

@@ -1,0 +1,79 @@
+{
+  "target": "sm_90a",
+  "entries": [
+    "gemm_checks_gemm_identical_id6A6A6A6A6A6A_f9dade9e4111c0be"
+  ],
+  "ptx_sha256": "e5f93b86bb67b62a7da5893eaba16d90e481ab6f176e1959f579ee9fc9de2e95",
+  "source": "/root/jobs/scalar-asm/probe_gemm_checks_gemm_identical_id6A6A6A6A6A6A_f9dade9e4111c0be.ptx",
+  "source_sha256": "e5f93b86bb67b62a7da5893eaba16d90e481ab6f176e1959f579ee9fc9de2e95",
+  "host": "Linux-6.8.0-90-generic-x86_64-with-glibc2.35",
+  "status": "assembled",
+  "scope": "offline assembly; no execution, timing, or achieved occupancy",
+  "runtime_jit_equivalence": "not established",
+  "commands": [
+    {
+      "argv": [
+        "/root/cuda126-tools/nvidia/cuda_nvcc/bin/ptxas",
+        "--version"
+      ],
+      "log": "ptxas-version.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/local/cuda-12.4/bin/cuobjdump",
+        "--version"
+      ],
+      "log": "cuobjdump-version.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/root/cuda126-tools/nvidia/cuda_nvcc/bin/ptxas",
+        "--verbose",
+        "--gpu-name",
+        "sm_90a",
+        "/root/jobs/scalar-resources/input.ptx",
+        "--output-file",
+        "/root/jobs/scalar-resources/kernel.cubin"
+      ],
+      "log": "ptxas.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/local/cuda-12.4/bin/cuobjdump",
+        "--dump-resource-usage",
+        "/root/jobs/scalar-resources/kernel.cubin"
+      ],
+      "log": "resources.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/local/cuda-12.4/bin/cuobjdump",
+        "--dump-sass",
+        "/root/jobs/scalar-resources/kernel.cubin"
+      ],
+      "log": "sass.log",
+      "returncode": 0
+    }
+  ],
+  "ptxas": {
+    "path": "/root/cuda126-tools/nvidia/cuda_nvcc/bin/ptxas",
+    "sha256": "81ef7761e3769ec17980aba4e416ecbc85352b8dce26cdd392b7204302a909a2"
+  },
+  "cuobjdump": {
+    "path": "/usr/local/cuda-12.4/bin/cuobjdump",
+    "sha256": "99964c9ef10074bad96b224fe04628d153b6f518328ca1e330538e568baabdda"
+  },
+  "artifacts": {
+    "cuobjdump-version.log": "7a0cbe32e10d72cb84cb0152f0f1e1de3f02edc42115e70ab0f4d7744b837fdf",
+    "input.ptx": "e5f93b86bb67b62a7da5893eaba16d90e481ab6f176e1959f579ee9fc9de2e95",
+    "kernel.cubin": "6258677585541ff892ead1ef9cfa031a168e2564ebb151dee6c4a3ae8f8322d2",
+    "ptxas-version.log": "7fac101e1cc8eb83e134dadb8801a66ce93bc6d6feb6ba6183dab4103cbe0087",
+    "ptxas.log": "67b3e0312ae0c2f7464997c8a70f249bdf316a6dff891ee79af0779870dc5d51",
+    "resources.log": "071a7d357a9f88e7e27f18d4b0e81e21916ee8b7df61895041bb3c30ff8ede92",
+    "sass.log": "4f03f42cb68cbe334ea0909f76532721b2b86a746da4e8e15152ad30ccaa0928"
+  }
+}

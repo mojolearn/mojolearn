@@ -100,7 +100,7 @@ worktree branch lane/knn-identical,
 `umap/` (7 rounds). "request" includes host transfers, "device" excludes
 them. k=10 and k=15 are separate rows; do not substitute one for the other.
 
-| index | queries | k | cuML brute NearestNeighbors request | cuML device | IDENTICAL request Sep10 | IDENTICAL device Sep10 | request ratio |
+| index | queries | k | cuML brute NearestNeighbors request | cuML device | Historical Sep10 request | Historical Sep10 device | historical request ratio |
 |---:|---:|---:|---:|---:|---:|---:|---:|
 | 100k x 32 | 32 | 10 | 1.125 | 0.669 | 0.528 | 0.262 | 0.47x |
 | 100k x 32 | 128 | 10 | 0.914 | 0.459 | 0.657 | 0.388 | 0.72x |
@@ -119,7 +119,12 @@ them. k=10 and k=15 are separate rows; do not substitute one for the other.
 | 400k x 32 | 1000 | 15 | 4.183 | 3.750 | 11.216 | 10.203 | 2.68x |
 | 400k x 32 | 4000 | 15 | 10.817 | 9.756 | 40.956 | 39.814 | 3.79x |
 
-The current Sep10 IDENTICAL columns use the eight-query register tile from
+Later 512-query batching supersedes the 400k/4000 rows: final request
+27.525704 ms (k10) and 31.860726 ms (k15), or 2.69x/2.95x the cached
+references. See "Sep10 bounded kNN query batches" below for provenance.
+The full historical grid is retained rather than mixing captures.
+
+The historical Sep10 IDENTICAL columns above use the eight-query register tile from
 `edada38d` with `MOJOLEARN_KNN_IDENTICAL_ROWS8=1` (adopted as default in
 `0e213d65`; original lane commits `8fdfd85f` and `c03bbcfc`). NVIDIA H100 80GB HBM3, driver580.126.09, Mojo1.0.0(ed45d567),
 IDENTICAL, dyadic-v1, two warmups and seven rounds; evidence:
