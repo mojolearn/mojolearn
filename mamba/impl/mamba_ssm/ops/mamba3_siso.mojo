@@ -109,6 +109,11 @@ from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -1170,6 +1175,67 @@ def m3_yintra_kernel(
 # ===========================================================================
 
 
+# Eight independent token rows by 32 independent channels. Cooperative
+# operand loads preserve each output's ascending N fold, including FTZ.
+# The 33-column shared stride avoids bank conflicts in both directions.
+def m3_ystate_tiled_kernel(
+    ystate: MutPointer[Float32, MutAnyOrigin],
+    rotq_work: MutPointer[Float32, MutAnyOrigin],
+    pass_states: MutPointer[Float32, MutAnyOrigin],
+    dacs: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, q0_in: Int32, nh_in: Int32,
+    nc_in: Int32, q_in: Int32,
+):
+    var sq = stack_allocation[256, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sh = stack_allocation[1056, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var l = Int(l_in)
+    var q0 = Int(q0_in)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var tw = q0 + l
+    var tiles_t = (tw + 7) // 8
+    var tile = Int(block_idx.x)
+    var pbase = (tile % 2) * 32
+    tile = tile // 2
+    var tbase = (tile % tiles_t) * 8
+    tile = tile // tiles_t
+    var hh = tile % nh
+    var bb = tile // nh
+    var c = tbase // qv
+    var row = tid // 32
+    var pp = tid % 32
+    var t = tbase + row
+    var acc = Float32(0.0)
+    var e_i = Float32(0.0)
+    if t >= q0 and t < tw:
+        e_i = ftz(identical_exp(ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + t - c * qv))))
+    for k0 in range(0, M3_D_STATE, 32):
+        var qword = Float32(0.0)
+        if t < tw:
+            qword = ftz(rotq_work.unsafe_load(((bb * tw + t) * nh + hh) * M3_D_STATE + k0 + pp))
+        sq[row * 32 + pp] = qword
+        for group in range(4):
+            var hp = row + group * 8
+            sh[pp * 33 + hp] = ftz(pass_states.unsafe_load(((((bb * nc + c) * nh + hh) * M3_HEADDIM) + pbase + hp) * M3_D_STATE + k0 + pp))
+        barrier()
+        for kk in range(32):
+            var qword2 = sq[row * 32 + kk]
+            var hword = sh[kk * 33 + pp]
+            comptime if SAB3_STATE_TERM_SCALE_FIRST:
+                acc = ftz(identical_mul_add(ftz(pinned_mul(qword2, e_i)), hword, acc))
+            else:
+                acc = ftz(identical_mul_add(qword2, hword, acc))
+        barrier()
+    if t >= q0 and t < tw:
+        var cell = ((bb * l + t - q0) * nh + hh) * M3_HEADDIM + pbase + pp
+        comptime if SAB3_STATE_TERM_SCALE_FIRST:
+            ystate.unsafe_store(cell, ftz(acc))
+        else:
+            ystate.unsafe_store(cell, ftz(pinned_mul(ftz(acc), e_i)))
+
+
 def m3_ystate_kernel(
     ystate: MutPointer[Float32, MutAnyOrigin],  # [M, H, P]
     rotq_work: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, N]
@@ -1666,20 +1732,36 @@ def m3_siso_forward(
         block_dim=(MAMBA3_TPB, 1, 1),
     )
     m3_phase_tick(ctx, phase_tick, String("m3_yintra_kernel"))
-    ctx.enqueue_function[m3_ystate_kernel](
-        ystate.unsafe_ptr(),
-        rotq_work.unsafe_ptr(),
-        pass_states.unsafe_ptr(),
-        dacs.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(q0),
-        Int32(nh),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(_grid(b * l * nh * p_dim), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_TILED_YSTATE"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
+        ctx.enqueue_function[m3_ystate_tiled_kernel](
+            ystate.unsafe_ptr(),
+            rotq_work.unsafe_ptr(),
+            pass_states.unsafe_ptr(),
+            dacs.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(q0),
+            Int32(nh),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(b * nh * ((q0 + l + 7) // 8) * 2, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[m3_ystate_kernel](
+            ystate.unsafe_ptr(),
+            rotq_work.unsafe_ptr(),
+            pass_states.unsafe_ptr(),
+            dacs.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(q0),
+            Int32(nh),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(_grid(b * l * nh * p_dim), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
     m3_phase_tick(ctx, phase_tick, String("m3_ystate_kernel"))
     ctx.enqueue_function[m3_skip_gate_kernel](
         skip_out.unsafe_ptr(),
