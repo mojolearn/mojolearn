@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Diagnostic only: explicit synchronizations perturb request/device timings.
+# Phase mode is diagnostic; price mode disables phase synchronization.
+# MOJOLEARN_KNN_PROBE_MODE=price requires the complete large-target grid.
 # Run only under root's granted build/device slot in an activated Pixi env.
 # Usage: bash tools/knn_residual_phase_probe.sh apple|nvidia /fresh/absolute/output
 set -euo pipefail
@@ -9,6 +10,18 @@ if [[ ${MOJOLEARN_BUILD_LOCK_HELD:-0} != 1 ]]; then
   exec nice -n 19 tools/with_build_lock.sh bash "$0" "$@"
 fi
 export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
+mode=${MOJOLEARN_KNN_PROBE_MODE:-phase}
+case "$mode" in
+  phase) rounds=3 ;;
+  price)
+    rounds=5
+    if [[ ${MOJOLEARN_KNN_PHASE_SMOKE:-0} == 1 ]]; then
+      echo 'price mode requires large targets; small smoke cannot qualify performance' >&2
+      exit 2
+    fi
+    ;;
+  *) echo 'MOJOLEARN_KNN_PROBE_MODE must be phase or price' >&2; exit 2 ;;
+esac
 column=${1:?apple or nvidia required}
 output=${2:?fresh absolute output directory required}
 case "$column" in
@@ -28,9 +41,10 @@ if git rev-parse HEAD > "$output/source.txt" 2>/dev/null; then
 else
   cat commit.txt > "$output/source.txt"
 fi
-printf '%s\n' "column=$column" "control=$control" 'phase_synchronization=enabled; prices are diagnostic only' > "$output/experiment.txt"
+printf '%s\n' "column=$column" "control=$control" "mode=$mode" "rounds=$rounds" > "$output/experiment.txt"
 for arm in default control; do
-  flags=(-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_PHASE_TIMERS=1)
+  flags=(-D MOJOLEARN_NUMERIC_IDENTICAL=1)
+  [[ "$mode" != phase ]] || flags+=(-D MOJOLEARN_KNN_PHASE_TIMERS=1)
   [[ "$arm" != control ]] || flags+=(-D "$control=1")
   mojo build -j 2 -I "$root" "${flags[@]}" bench/knn_reference_price_main.mojo \
     -o "$output/$arm" > "$output/$arm-build.log" 2>&1
@@ -52,14 +66,19 @@ for pass in 0 1; do
     for arm in "${arms[@]}"; do
       MOJOLEARN_KNN_REF_INDEX=$n MOJOLEARN_KNN_REF_QUERIES=$q \
       MOJOLEARN_KNN_REF_FEATURES=$d MOJOLEARN_KNN_REF_K=$k \
-      MOJOLEARN_KNN_REF_ROUNDS=3 MOJOLEARN_KNN_REF_DUMP_FULL="$output/$tag-$arm.bin" \
+      MOJOLEARN_KNN_REF_ROUNDS=$rounds MOJOLEARN_KNN_REF_DUMP_FULL="$output/$tag-$arm.bin" \
         "$output/$arm" > "$output/$tag-$arm.log" 2>&1
-      # Missing phase records must not produce an apparently useful result.
-      awk '/^KNN_PHASE_TIMERS/ {print; n++} END {if (!n) exit 1}' \
-        "$output/$tag-$arm.log" > "$output/$tag-$arm.phases"
+      if [[ "$mode" == phase ]]; then
+        # Missing phase records must not produce an apparently useful result.
+        awk '/^KNN_PHASE_TIMERS/ {print; n++} END {if (!n) exit 1}' \
+          "$output/$tag-$arm.log" > "$output/$tag-$arm.phases"
+      else
+        # Never silently qualify instrumented timing as an ordinary price.
+        awk '/^KNN_PHASE_TIMERS/ {exit 1}' "$output/$tag-$arm.log"
+      fi
     done
     cmp "$output/$tag-default.bin" "$output/$tag-control.bin"
     pairs=$((pairs + 1))
   done
 done
-printf '%s\n' "PASS: $pairs paired full-output comparisons; phase times are diagnostic only" > "$output/status.txt"
+printf '%s\n' "PASS: $pairs paired full-output comparisons; mode=$mode; review large timings and drift before any default change" > "$output/status.txt"

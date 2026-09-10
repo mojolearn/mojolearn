@@ -145,3 +145,17 @@ measurement; old/new default trajectory and cross-vendor runtime-shape checks;
 large-shape same-binary Mamba regime reproduction with phase/clock evidence;
 kNN metadata reuse with stable target-shape timings; original Transformer GPU
 stage attribution. Scalable checkpoints remain separate future work.
+
+## Large-workload decision policy
+
+See `PERFORMANCE_GATE_AUDIT_2026-09-10.md` for the recovered decision history
+and required large workloads. Small numerical checks qualify correctness only;
+performance defaults require stable large target runs and large output checks.
+Correctness repairs remain mandatory regardless of timing.
+
+The large-target audit now retains phase and ordinary kNN measurements at
+400k rows / 4000 queries / d32 / k10,k15, with both run orders and complete
+output checks. Existing Apple preflight is retained: 3.6–7.4% lower k10 and
+4.1–6.3% lower k15 request latency versus safe NO_PREFLIGHT. No new default
+was enabled. Evidence: `bench/results/knn_large_gate_audit_2026-09-10/`.
+Historical Apple preflight measurements were 400k/1000, corrected in the audit.

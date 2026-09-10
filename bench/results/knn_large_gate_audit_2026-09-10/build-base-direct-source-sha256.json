@@ -1,0 +1,6 @@
+{
+  "neighbors/checks/pinned_distance_tile.mojo": "ea3c3c9e5b59f8002be5369af04289fd8569694786cdb9e40d5456c7da180885",
+  "neighbors/impl/neighbors/detail/knn_brute_force.mojo": "918be9a88fa07748d4f36b439054e80ffa433f4a5b8417c8aff28bc553a25bc5",
+  "checks/kernel_matrix.mojo": "df530a15d8d6a064963c4c1797158e11e36a4ac21717244c9a627b588b35e94f",
+  "bench/knn_reference_price_main.mojo": "dc415c0408124f29ea120ab7de03e1c81cc000d0ba6adfdfd7fb422361ca5bfe"
+}

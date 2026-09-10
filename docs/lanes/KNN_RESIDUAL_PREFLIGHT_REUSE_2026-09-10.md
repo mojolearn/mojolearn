@@ -53,3 +53,21 @@ redux, composite-key value decode or four-feature cached preflight without new
 evidence. These are documented in the retained selector/residual results.
 
 Root continuation: the small Apple phase smoke passes two reversed-order full-output comparisons. Large drift and ranking reversal prevent a speed conclusion. The script now enforces build serialization/two jobs; MOJOLEARN_KNN_PHASE_SMOKE=1 selects only the small fixture. Evidence: bench/results/knn_phase_2026-09-10/.
+
+## Large-target continuation
+
+`MOJOLEARN_KNN_PROBE_MODE=price` now disables phase instrumentation and runs
+five timed rounds after two warmups, in both arm orders, on the complete
+400k/4k/d32 k10/k15 grid plus low-feature and ragged controls. This mode
+refuses `MOJOLEARN_KNN_PHASE_SMOKE=1`. Summarize retained output with:
+
+```sh
+MOJOLEARN_KNN_PROBE_MODE=price bash tools/knn_residual_phase_probe.sh apple /fresh/absolute/apple-knn-prices
+python tools/knn_probe_summary.py /fresh/absolute/apple-knn-prices > /fresh/absolute/apple-knn-prices/summary.json
+```
+
+The summary requires all large shapes and both orders, verifies complete output
+hashes and sample counts, reports within-run drift, and never automatically
+approves a default. Historical Apple preflight acceptance used 400k index rows
+and 1000 queries; it did not establish the full 4000-query target. The audit
+records that scope explicitly in `PERFORMANCE_GATE_AUDIT_2026-09-10.md`.

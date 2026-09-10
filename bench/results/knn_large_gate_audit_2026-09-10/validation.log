@@ -1,0 +1,6 @@
+PASS retained phase large targets, samples, output hashes, both orders
+PASS retained price large targets, samples, output hashes, both orders
+PASS small-only evidence refused
+PASS corrupted large output refused
+PASS price mode refuses smoke before building or running
+PASS bash syntax

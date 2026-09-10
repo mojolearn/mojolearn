@@ -1,0 +1,1 @@
+PASS: 8 paired full-output comparisons; phase times are diagnostic only

@@ -1,0 +1,4 @@
+column=apple
+control=MOJOLEARN_KNN_IDENTICAL_NO_PREFLIGHT
+mode=price
+rounds=5

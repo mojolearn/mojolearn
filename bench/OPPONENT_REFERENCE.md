@@ -647,3 +647,22 @@ The small kNN phase smoke (`knn_phase_2026-09-10`) and Mamba tiny smoke
 (`mamba_regime_2026-09-10`) are diagnostics, not replacement target-shape
 prices. Transformer remains numerically unadmitted. Reuse existing qualified
 opponent rows only within their recorded shape, arithmetic and hardware scope.
+
+### Sep10 Apple large-target preflight audit (own arms only)
+
+No opponent was rerun. Current Apple IDENTICAL preflight versus safe
+NO_PREFLIGHT control, 400k rows / 4000 queries / d32, five rounds after two
+warmups in both orders, phase instrumentation disabled:
+
+| k | Default request ms, orders 0/1 | Control request ms, orders 0/1 | Request reduction |
+|---|---:|---:|---:|
+|10|1380.890 / 1305.022|1432.033 / 1409.590|3.6–7.4%|
+|15|1332.921 / 1351.913|1389.374 / 1442.922|4.1–6.3%|
+
+Complete outputs match both arms and both orders, including low-feature and
+ragged controls. Keep the existing preflight; no new default changed. Normal
+desktop activity and small-control request noise limit generalization. These
+are own-arm comparisons, not Apple/cuML opponent ratios. Raw samples, phase
+diagnostics, binary hashes and scope: `bench/results/knn_large_gate_audit_2026-09-10/`.
+Historical Apple admission used 400k rows with 1000 queries; these new runs
+cover the full 4000-query target. Decision history: `docs/lanes/PERFORMANCE_GATE_AUDIT_2026-09-10.md`.
