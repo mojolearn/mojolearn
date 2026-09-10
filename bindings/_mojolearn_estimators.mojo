@@ -15,6 +15,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
@@ -568,6 +569,16 @@ def kde_score_samples_binding(
     return PythonObject(n_query)
 
 
+def estimators_numeric_mode_binding() raises -> PythonObject:
+    """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
+    IDENTICAL, 2 DETERMINISTIC. The same shape as `svm_numeric_mode`. This
+    binding had no read-back until 2026-09-10, so
+    `NumericModeMixin.numeric_mode_used()` fell through to the module path
+    hint, which for the FAST tier is the package directory itself and read
+    back as the word 'mojolearn' rather than a tier."""
+    return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
 def estimators_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
@@ -584,6 +595,7 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
         m.def_function[estimators_vendor_binding]("estimators_vendor")
+        m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
         m.def_function[dbscan_fit_binding]("dbscan_fit")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[pca_fit_binding]("pca_fit")

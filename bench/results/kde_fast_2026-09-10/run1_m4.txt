@@ -1,0 +1,19 @@
+mode=fast vendor=metal sklearn=1.9.0 numpy=2.5.2
+
+# paired: sklearn KDTree (one core, exact) vs ours FAST; min of pairs, ms
+| train x query x d | sklearn min ms | ours min ms | ratio sklearn/ours | max abs diff | sklearn first->last spread |
+|---|---:|---:|---:|---:|---:|
+| 2000 x 2000 x 8 | 114.5 | 4.5 | 25.2x | 4.0e-06 | -2.0% |
+| 8000 x 8000 x 8 | 1890.3 | 16.9 | 111.9x | 9.0e-06 | +0.6% |
+| 16000 x 16000 x 8 | 7671.4 | 30.3 | 252.8x | 1.7e-05 | +1.9% |
+| 16000 x 16000 x 32 | 9445.4 | 46.0 | 205.3x | 9.3e-07 | -0.4% |
+
+# ours alone, min of 3, the shapes the staged path could not allocate
+| train x query x d | ours min ms | Gcells/s |
+|---|---:|---:|
+| 50000 x 50000 x 8 | 132.6 | 18.8 |
+| 100000 x 100000 x 8 | 499.1 | 20.0 |
+| 100000 x 100000 x 32 | 994.4 | 10.1 |
+| 1000000 x 20000 x 8 | 1076.4 | 18.6 |
+| 20000 x 20000 x 64 | 83.2 | 4.8 |
+| 20000 x 20000 x 100 | 655.2 | 0.6 |

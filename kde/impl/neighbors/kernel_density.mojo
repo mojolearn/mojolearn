@@ -99,7 +99,10 @@ from std.math import lgamma, log, pi, sqrt
 from std.memory import bitcast
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 from core.identity_trace import IdentityTrace
 from kde.impl.distance.distance import pairwise_distance
@@ -114,9 +117,11 @@ from kde.impl.distance.distance_ops import (
 )
 from neighbors.impl.distance.detail.distance_ops import (
     cosine_zero_norm_row,
+    validate_metric_arg,
 )
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     identical_cos,
@@ -889,6 +894,600 @@ def host_sum_weights(weights: List[Float32]) -> Float32:
     return s
 
 
+
+# ---------------------------------------------------------------------------
+# DEVIATION 2490 (2026-09-10): THE FUSED FAST SCORE PASS
+# ---------------------------------------------------------------------------
+# The staged path above materializes TWO `n_query x n_train` float32
+# matrices (the distances, then the log-kernel values) and walks the second
+# one twice from global memory, one thread per query. That is 16 bytes of
+# device traffic per cell for arithmetic that needs none, and it caps the
+# problem at the matrices' size (2 x 4 bytes x cells: 16k x 16k already
+# holds 2 GB, 100k x 100k cannot be allocated at all). It is the shape
+# upstream ships (`kernel_density.py:332-342`, cupy matrices between numba
+# kernels), and IDENTICAL keeps it because the card certifies each stage
+# (`kde.dists`, `kde.logk`, `kde.rowmax`) and its serial ascending fold.
+#
+# FAST takes ONE kernel instead. Each thread owns one query row; the block
+# streams the training set through shared memory in tiles; per cell the
+# thread forms the distance, the log-kernel value, the log-weight and folds
+# it into an ONLINE log-sum-exp (running max `m`, running sum `s` of
+# `exp(v - m)`, rescaled by `exp(m_old - m_new)` when the max moves).
+# Nothing is written per cell. Memory is O(n_query + n_train). The
+# per-query fold still walks `j` ascending, so a query's score does not
+# depend on which other queries share the launch (the launch-invariance
+# gate's case D) -- but the fold ORDER is not the two-pass serial one and
+# the bits differ from the staged path, which is exactly what FAST may do
+# and IDENTICAL may not (`checks/numerics.mojo`). This arm is taken ONLY
+# when `GLOBAL_NUMERIC_MODE == NUMERIC_FAST` AND no identity trace is
+# recording (a trace asks for the staged card, so it gets the stages).
+#
+# Semantics kept from the staged path: `-inf` cells (an overflowed
+# gaussian/exponential exponent) fold to `-inf` when every cell is `-inf`
+# (DEVIATION 603) and contribute `exp(-inf) = 0` otherwise; tophat's
+# FLOAT_MIN "log zero" behaves as in the two-pass fold (a row of all
+# FLOAT_MIN scores FLOAT_MIN, since `log(n) + FLOAT_MIN == FLOAT_MIN` in
+# float32); cosine's zero-norm refusal happens on the host before any
+# launch, as before. Gaussian over euclidean skips the sqrt: the kernel
+# wants `x * x`, which IS the summed square.
+#
+# Scheduling constants. 128 queries per block. The train tile is
+# `KDE_FUSED_TILE_FLOATS` floats of shared memory (12 KB) holding
+# `rows = min(KDE_FUSED_TILE_FLOATS // d, KDE_FUSED_TILE_ROWS_MAX)` rows,
+# plus `KDE_FUSED_TILE_ROWS_MAX` floats of log-weights (4 KB): 16 KB,
+# inside Apple's 32 KB threadgroup limit with room for the compiler. A
+# query row with `d <= KDE_FUSED_QREG` lives in registers (the feature
+# loop is unrolled at compile time and predicated on `d`); wider rows are
+# re-read from global memory per cell, which is correct and slower. When
+# `d > KDE_FUSED_TILE_FLOATS` the tile cannot hold one row and the staged
+# path runs instead.
+comptime KDE_FUSED_TPB = 128
+comptime KDE_FUSED_TILE_FLOATS = 3072
+comptime KDE_FUSED_TILE_ROWS_MAX = 1024
+comptime KDE_FUSED_QREG = 64
+
+
+@always_inline
+def _kde_fused_cell_distance[DPAD: Int, qo: MutOrigin, to: MutOrigin](
+    qreg: MutPointer[Float32, qo],
+    query: MutPointer[Float32, MutAnyOrigin],
+    tile: MutPointer[Float32, to, address_space = AddressSpace.SHARED],
+    qbase: Int,
+    tb: Int,
+    d: Int,
+    metric: Int,
+    metric_arg: Float32,
+    mut tnorm: Float32,
+) -> Float32:
+    """The per-cell distance accumulator: summed squares (both L2 spellings),
+    summed |diff| (L1), max |diff| (Linf), the dot product with the train
+    row's summed squares in `tnorm` (cosine), or summed |diff|^p (Lp).
+    `DPAD > 0` walks a compile-time-unrolled, zero-padded register row;
+    `DPAD == 0` is the wide-row fallback that re-reads the query from global
+    memory over the runtime `d`."""
+    from std.math import exp, log
+
+    var acc = Float32(0.0)
+    comptime if DPAD > 0:
+        if metric == DIST_L2_SQRT_UNEXPANDED or metric == DIST_L2_EXPANDED:
+            comptime for f in range(DPAD):
+                var diff = qreg.unsafe_load(f) - tile.unsafe_load(tb + f)
+                acc += diff * diff
+        elif metric == DIST_L1:
+            comptime for f in range(DPAD):
+                acc += abs(qreg.unsafe_load(f) - tile.unsafe_load(tb + f))
+        elif metric == DIST_LINF:
+            comptime for f in range(DPAD):
+                var a = abs(qreg.unsafe_load(f) - tile.unsafe_load(tb + f))
+                if a > acc:
+                    acc = a
+        elif metric == DIST_COSINE_EXPANDED:
+            comptime for f in range(DPAD):
+                var t = tile.unsafe_load(tb + f)
+                acc += qreg.unsafe_load(f) * t
+                tnorm += t * t
+        else:
+            comptime for f in range(DPAD):
+                var a = abs(qreg.unsafe_load(f) - tile.unsafe_load(tb + f))
+                if a > Float32(0.0):
+                    acc += exp(metric_arg * log(a))
+    else:
+        if metric == DIST_L2_SQRT_UNEXPANDED or metric == DIST_L2_EXPANDED:
+            for f in range(d):
+                var diff = query.unsafe_load(qbase + f) - tile.unsafe_load(tb + f)
+                acc += diff * diff
+        elif metric == DIST_L1:
+            for f in range(d):
+                acc += abs(query.unsafe_load(qbase + f) - tile.unsafe_load(tb + f))
+        elif metric == DIST_LINF:
+            for f in range(d):
+                var a = abs(query.unsafe_load(qbase + f) - tile.unsafe_load(tb + f))
+                if a > acc:
+                    acc = a
+        elif metric == DIST_COSINE_EXPANDED:
+            for f in range(d):
+                var t = tile.unsafe_load(tb + f)
+                acc += query.unsafe_load(qbase + f) * t
+                tnorm += t * t
+        else:
+            for f in range(d):
+                var a = abs(query.unsafe_load(qbase + f) - tile.unsafe_load(tb + f))
+                if a > Float32(0.0):
+                    acc += exp(metric_arg * log(a))
+    return acc
+
+
+def kde_fused_logsumexp_kernel[DPAD: Int](
+    lse: MutPointer[Float32, MutAnyOrigin],
+    query: MutPointer[Float32, MutAnyOrigin],
+    train: MutPointer[Float32, MutAnyOrigin],
+    logw: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+    d_in: Int32,
+    has_weights_in: Int32,
+    bandwidth: Float32,
+    kernel_in: Int32,
+    metric_in: Int32,
+    metric_arg: Float32,
+):
+    """DEVIATION 2490: distance + log-kernel + log-weight + online
+    log-sum-exp in one pass, one thread per query, train tiles in shared
+    memory. FAST only; see the block comment above.
+
+    `DPAD` is the feature count rounded up to a multiple of 4 when
+    `d <= KDE_FUSED_QREG` (the query row sits in `DPAD` registers, the tile
+    rows are stored at stride `DPAD` with zero padding, and the feature
+    loop is unrolled with no predicate), or 0 for the wide-row fallback
+    (tile stride `d`, runtime feature loop, query re-read from global
+    memory). A zero pad lane contributes `0 - 0` to every metric, so it
+    changes no distance."""
+    from std.math import exp, log, sqrt
+    comptime IN_REGS = DPAD > 0
+
+    var n_query = Int(n_query_in)
+    var n_train = Int(n_train_in)
+    var d = Int(d_in)
+    var has_weights = Int(has_weights_in) != 0
+    var kernel = Int(kernel_in)
+    var metric = Int(metric_in)
+    var tid = Int(thread_idx.x)
+    var q = Int(block_idx.x) * KDE_FUSED_TPB + tid
+    var active = q < n_query
+
+    var tile = stack_allocation[
+        KDE_FUSED_TILE_FLOATS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tile_w = stack_allocation[
+        KDE_FUSED_TILE_ROWS_MAX,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var qreg = stack_allocation[
+        DPAD if IN_REGS else 1, Scalar[DType.float32]
+    ]()
+
+    # Tile row stride and rows per tile.
+    var dp: Int
+    comptime if IN_REGS:
+        dp = DPAD
+    else:
+        dp = d
+    var rows = KDE_FUSED_TILE_FLOATS // dp
+    if rows > KDE_FUSED_TILE_ROWS_MAX:
+        rows = KDE_FUSED_TILE_ROWS_MAX
+
+    # The query row, once. Inactive threads hold zeros and never store.
+    var qbase = q * d
+    var qnorm = Float32(0.0)
+    comptime if IN_REGS:
+        comptime for f in range(DPAD):
+            var v = Float32(0.0)
+            if active and f < d:
+                v = query.unsafe_load(qbase + f)
+            qreg.unsafe_store(f, v)
+            qnorm += v * v
+    else:
+        if active:
+            for f in range(d):
+                var v = query.unsafe_load(qbase + f)
+                qnorm += v * v
+    qnorm = sqrt(qnorm)
+
+    var neg_inv_2h2 = Float32(-1.0) / (Float32(2.0) * bandwidth * bandwidth)
+    var one_over_p = Float32(1.0) / metric_arg
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var m = neg_inf
+    var s = Float32(0.0)
+
+    var t0 = 0
+    while t0 < n_train:
+        var rows_here = n_train - t0
+        if rows_here > rows:
+            rows_here = rows
+        barrier()
+        var total = rows_here * dp
+        var idx = tid
+        while idx < total:
+            var v = Float32(0.0)
+            comptime if IN_REGS:
+                var r = idx // DPAD
+                var f = idx - r * DPAD
+                if f < d:
+                    v = train.unsafe_load((t0 + r) * d + f)
+            else:
+                v = train.unsafe_load(t0 * d + idx)
+            tile.unsafe_store(idx, v)
+            idx += KDE_FUSED_TPB
+        if has_weights:
+            idx = tid
+            while idx < rows_here:
+                tile_w.unsafe_store(idx, logw.unsafe_load(t0 + idx))
+                idx += KDE_FUSED_TPB
+        barrier()
+        if active:
+            for j in range(rows_here):
+                var tnorm = Float32(0.0)
+                var acc = _kde_fused_cell_distance[DPAD](
+                    qreg, query, tile, qbase, j * dp, d, metric, metric_arg, tnorm
+                )
+                # The log-kernel value of this cell.
+                var v: Float32
+                if kernel == KDE_KERNEL_GAUSSIAN and metric == DIST_L2_SQRT_UNEXPANDED:
+                    v = acc * neg_inv_2h2
+                else:
+                    var x: Float32
+                    if metric == DIST_L2_SQRT_UNEXPANDED:
+                        x = sqrt(acc)
+                    elif metric == DIST_COSINE_EXPANDED:
+                        x = Float32(1.0) - acc / (qnorm * sqrt(tnorm))
+                    elif metric == DIST_LP_UNEXPANDED:
+                        x = Float32(0.0)
+                        if acc > Float32(0.0):
+                            x = exp(one_over_p * log(acc))
+                    else:
+                        x = acc
+                    v = compute_log_kernel(x, bandwidth, kernel)
+                if has_weights:
+                    v = v + tile_w.unsafe_load(j)
+
+                # Online log-sum-exp. Natural base on purpose: a base-2
+                # rescale of the FLOAT_MIN "log zero" overflows to -inf and
+                # a row of all-out-of-range cells would score -inf instead of
+                # the FLOAT_MIN sentinel the staged path and cuML give.
+                if v > m:
+                    s = s * exp(m - v) + Float32(1.0)
+                    m = v
+                elif v == m:
+                    s += Float32(1.0)
+                else:
+                    s += exp(v - m)
+        t0 += rows
+    if active:
+        if m == neg_inf:
+            lse.unsafe_store(q, neg_inf)
+        else:
+            lse.unsafe_store(q, log(s) + m)
+
+
+
+comptime KDE_FUSED_WIDE_ROWS = KDE_FUSED_TILE_FLOATS // (KDE_FUSED_QREG + 1)
+
+
+def kde_fused_wide_kernel(
+    lse: MutPointer[Float32, MutAnyOrigin],
+    query: MutPointer[Float32, MutAnyOrigin],
+    train: MutPointer[Float32, MutAnyOrigin],
+    logw: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+    d_in: Int32,
+    has_weights_in: Int32,
+    bandwidth: Float32,
+    kernel_in: Int32,
+    metric_in: Int32,
+    metric_arg: Float32,
+):
+    """DEVIATION 2490's wide-row arm, `d > KDE_FUSED_QREG`. Same fold as
+    `kde_fused_logsumexp_kernel`, but the feature axis is walked in chunks
+    of `KDE_FUSED_QREG` registers OUTSIDE the row loop: one chunk of the
+    query row is loaded, every tile row's partial distance is advanced in a
+    per-row accumulator, then the next chunk. Every metric here is a fold
+    over features (sum, max, or dot with a norm), so the chunk order
+    changes only the association. Tile rows per pass are
+    `KDE_FUSED_TILE_FLOATS // d` (at most `KDE_FUSED_WIDE_ROWS`), which is
+    also the accumulator count."""
+    from std.math import exp, log, sqrt
+    comptime Q = KDE_FUSED_QREG
+
+    var n_query = Int(n_query_in)
+    var n_train = Int(n_train_in)
+    var d = Int(d_in)
+    var has_weights = Int(has_weights_in) != 0
+    var kernel = Int(kernel_in)
+    var metric = Int(metric_in)
+    var tid = Int(thread_idx.x)
+    var q = Int(block_idx.x) * KDE_FUSED_TPB + tid
+    var active = q < n_query
+
+    var tile = stack_allocation[
+        KDE_FUSED_TILE_FLOATS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tile_w = stack_allocation[
+        KDE_FUSED_WIDE_ROWS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var qreg = stack_allocation[Q, Scalar[DType.float32]]()
+    var acc = stack_allocation[KDE_FUSED_WIDE_ROWS, Scalar[DType.float32]]()
+    var tn = stack_allocation[KDE_FUSED_WIDE_ROWS, Scalar[DType.float32]]()
+
+    var rows = KDE_FUSED_TILE_FLOATS // d
+    if rows > KDE_FUSED_WIDE_ROWS:
+        rows = KDE_FUSED_WIDE_ROWS
+    var qbase = q * d
+    var qnorm = Float32(0.0)
+    if active:
+        for f in range(d):
+            var v = query.unsafe_load(qbase + f)
+            qnorm += v * v
+    qnorm = sqrt(qnorm)
+
+    var neg_inv_2h2 = Float32(-1.0) / (Float32(2.0) * bandwidth * bandwidth)
+    var one_over_p = Float32(1.0) / metric_arg
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var m = neg_inf
+    var s = Float32(0.0)
+    var is_l2 = metric == DIST_L2_SQRT_UNEXPANDED or metric == DIST_L2_EXPANDED
+
+    var t0 = 0
+    while t0 < n_train:
+        var rows_here = n_train - t0
+        if rows_here > rows:
+            rows_here = rows
+        barrier()
+        var total = rows_here * d
+        var idx = tid
+        while idx < total:
+            tile.unsafe_store(idx, train.unsafe_load(t0 * d + idx))
+            idx += KDE_FUSED_TPB
+        if has_weights:
+            idx = tid
+            while idx < rows_here:
+                tile_w.unsafe_store(idx, logw.unsafe_load(t0 + idx))
+                idx += KDE_FUSED_TPB
+        barrier()
+        if active:
+            for j in range(rows_here):
+                acc.unsafe_store(j, Float32(0.0))
+                tn.unsafe_store(j, Float32(0.0))
+            var c0 = 0
+            while c0 < d:
+                var width = d - c0
+                if width > Q:
+                    width = Q
+                comptime for f in range(Q):
+                    var v = Float32(0.0)
+                    if f < width:
+                        v = query.unsafe_load(qbase + c0 + f)
+                    qreg.unsafe_store(f, v)
+                for j in range(rows_here):
+                    var tb = j * d + c0
+                    var a = acc.unsafe_load(j)
+                    if is_l2:
+                        comptime for f in range(Q):
+                            if f < width:
+                                var diff = qreg.unsafe_load(f) - tile.unsafe_load(tb + f)
+                                a += diff * diff
+                    elif metric == DIST_L1:
+                        comptime for f in range(Q):
+                            if f < width:
+                                a += abs(qreg.unsafe_load(f) - tile.unsafe_load(tb + f))
+                    elif metric == DIST_LINF:
+                        comptime for f in range(Q):
+                            if f < width:
+                                var x = abs(qreg.unsafe_load(f) - tile.unsafe_load(tb + f))
+                                if x > a:
+                                    a = x
+                    elif metric == DIST_COSINE_EXPANDED:
+                        var t2 = tn.unsafe_load(j)
+                        comptime for f in range(Q):
+                            if f < width:
+                                var t = tile.unsafe_load(tb + f)
+                                a += qreg.unsafe_load(f) * t
+                                t2 += t * t
+                        tn.unsafe_store(j, t2)
+                    else:
+                        comptime for f in range(Q):
+                            if f < width:
+                                var x = abs(qreg.unsafe_load(f) - tile.unsafe_load(tb + f))
+                                if x > Float32(0.0):
+                                    a += exp(metric_arg * log(x))
+                    acc.unsafe_store(j, a)
+                c0 += Q
+            for j in range(rows_here):
+                var a = acc.unsafe_load(j)
+                var v: Float32
+                if kernel == KDE_KERNEL_GAUSSIAN and metric == DIST_L2_SQRT_UNEXPANDED:
+                    v = a * neg_inv_2h2
+                else:
+                    var x: Float32
+                    if metric == DIST_L2_SQRT_UNEXPANDED:
+                        x = sqrt(a)
+                    elif metric == DIST_COSINE_EXPANDED:
+                        x = Float32(1.0) - a / (qnorm * sqrt(tn.unsafe_load(j)))
+                    elif metric == DIST_LP_UNEXPANDED:
+                        x = Float32(0.0)
+                        if a > Float32(0.0):
+                            x = exp(one_over_p * log(a))
+                    else:
+                        x = a
+                    v = compute_log_kernel(x, bandwidth, kernel)
+                if has_weights:
+                    v = v + tile_w.unsafe_load(j)
+                if v > m:
+                    s = s * exp(m - v) + Float32(1.0)
+                    m = v
+                elif v == m:
+                    s += Float32(1.0)
+                else:
+                    s += exp(v - m)
+        t0 += rows
+    if active:
+        if m == neg_inf:
+            lse.unsafe_store(q, neg_inf)
+        else:
+            lse.unsafe_store(q, log(s) + m)
+
+
+def _kde_fused_launch[DPAD: Int](
+    ctx: DeviceContext,
+    mut lse: DeviceBuffer[DType.float32],
+    mut query: DeviceBuffer[DType.float32],
+    mut train: DeviceBuffer[DType.float32],
+    mut logw: DeviceBuffer[DType.float32],
+    n_query: Int,
+    n_train: Int,
+    n_features: Int,
+    has_weights: Bool,
+    bandwidth: Float32,
+    kernel: Int,
+    metric: Int,
+    metric_arg: Float32,
+) raises:
+    comptime if DPAD == 0:
+        ctx.enqueue_function[kde_fused_wide_kernel](
+            lse.unsafe_ptr(),
+            query.unsafe_ptr(),
+            train.unsafe_ptr(),
+            logw.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_train),
+            Int32(n_features),
+            Int32(1 if has_weights else 0),
+            bandwidth,
+            Int32(kernel),
+            Int32(metric),
+            metric_arg,
+            grid_dim=((n_query + KDE_FUSED_TPB - 1) // KDE_FUSED_TPB, 1, 1),
+            block_dim=(KDE_FUSED_TPB, 1, 1),
+        )
+        return
+    ctx.enqueue_function[kde_fused_logsumexp_kernel[DPAD]](
+        lse.unsafe_ptr(),
+        query.unsafe_ptr(),
+        train.unsafe_ptr(),
+        logw.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_train),
+        Int32(n_features),
+        Int32(1 if has_weights else 0),
+        bandwidth,
+        Int32(kernel),
+        Int32(metric),
+        metric_arg,
+        grid_dim=((n_query + KDE_FUSED_TPB - 1) // KDE_FUSED_TPB, 1, 1),
+        block_dim=(KDE_FUSED_TPB, 1, 1),
+    )
+
+
+def _kde_score_samples_fused(
+    ctx: DeviceContext,
+    mut train: DeviceBuffer[DType.float32],
+    mut query: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    sum_weights: Float32,
+    n_train: Int,
+    n_query: Int,
+    n_features: Int,
+    bandwidth: Float32,
+    kernel: Int,
+    metric: Int,
+    metric_arg: Float32,
+    mut scores: DeviceBuffer[DType.float32],
+    elem_tpb: Int,
+) raises:
+    """DEVIATION 2490's host side: log-weights (if any), the fused pass,
+    the normalization. Two or three launches, one drain."""
+    if n_train <= 0 or n_features <= 0:
+        raise Error(
+            "kde: n_train and n_features must be positive, got "
+            + String(n_train) + ", " + String(n_features)
+        )
+    # DEVIATION 552: Minkowski's p refused by value before any launch; the
+    # staged path does this inside `pairwise_distance`, which the fused
+    # pass does not call.
+    validate_metric_arg(metric, metric_arg)
+    var lse = ctx.enqueue_create_buffer[DType.float32](n_query)
+    var logw: DeviceBuffer[DType.float32]
+    if has_weights:
+        logw = ctx.enqueue_create_buffer[DType.float32](n_train)
+        ctx.enqueue_function[log_weights_kernel](
+            logw.unsafe_ptr(),
+            weights.unsafe_ptr(),
+            Int32(n_train),
+            grid_dim=((n_train + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+    else:
+        logw = ctx.enqueue_create_buffer[DType.float32](1)
+    # The register row: d rounded up to a multiple of 4, up to KDE_FUSED_QREG.
+    var dpad = ((n_features + 3) // 4) * 4
+    if dpad == 4:
+        _kde_fused_launch[4](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 8:
+        _kde_fused_launch[8](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 12:
+        _kde_fused_launch[12](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 16:
+        _kde_fused_launch[16](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 20:
+        _kde_fused_launch[20](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 24:
+        _kde_fused_launch[24](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 28:
+        _kde_fused_launch[28](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 32:
+        _kde_fused_launch[32](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 36:
+        _kde_fused_launch[36](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 40:
+        _kde_fused_launch[40](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 44:
+        _kde_fused_launch[44](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 48:
+        _kde_fused_launch[48](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 52:
+        _kde_fused_launch[52](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 56:
+        _kde_fused_launch[56](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 60:
+        _kde_fused_launch[60](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    elif dpad == 64:
+        _kde_fused_launch[64](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    else:
+        _kde_fused_launch[0](ctx, lse, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, metric_arg)
+    var log_sw = ftz(identical_log(sum_weights))
+    var norm = log_kernel_norm(kernel, bandwidth, n_features)
+    ctx.enqueue_function[normalize_scores_kernel](
+        scores.unsafe_ptr(),
+        lse.unsafe_ptr(),
+        Int32(n_query),
+        log_sw,
+        norm,
+        grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.synchronize()
+    _ = lse^
+    _ = logw^
+
+
 def kde_score_samples_device(
     ctx: DeviceContext,
     mut train: DeviceBuffer[DType.float32],
@@ -920,6 +1519,15 @@ def kde_score_samples_device(
         raise Error("kde: X must have at least one row (n_query)")
     if elem_tpb <= 0 or lse_tpb <= 0:
         raise Error("kde: block widths must be positive")
+    # DEVIATION 2490: FAST with no trace recording takes the fused pass.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        if not trace.enabled and n_features <= KDE_FUSED_TILE_FLOATS:
+            _kde_score_samples_fused(
+                ctx, train, query, weights, has_weights, sum_weights,
+                n_train, n_query, n_features, bandwidth, kernel, metric,
+                metric_arg, scores, elem_tpb,
+            )
+            return
     var cells = n_query * n_train
 
     # distances = pairwise_distances(X, self.X_, metric=self.metric)  (:332-340)
