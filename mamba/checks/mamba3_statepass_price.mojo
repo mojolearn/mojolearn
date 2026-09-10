@@ -6,6 +6,7 @@ scratch allocation are outside the timed call; input refusal, projections,
 all core stages, output and synchronization are inside. Each sample starts
 with a fresh prefill state. This is not the September 7 torch fixture.
 """
+from std.memory import bitcast
 from std.time import perf_counter_ns
 from std.sys import argv
 from max.gpu.host import DeviceContext
@@ -44,5 +45,5 @@ def main() raises:
         var values = mamba_download(ctx, stages.residual_out, l * dims.d_model)
         var bits = UInt64(1469598103934665603)
         for i in range(len(values)):
-            bits = (bits ^ UInt64(values[i].bitcast[DType.uint32]())) * UInt64(1099511628211)
+            bits = (bits ^ UInt64(bitcast[DType.uint32](values[i]))) * UInt64(1099511628211)
         print("M3_BLOCK", l, r, elapsed, bits)
