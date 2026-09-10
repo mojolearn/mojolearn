@@ -613,7 +613,7 @@ def rbc_knn_search_binding(
     return PythonObject(n_dists)
 
 # ===========================================================================
-# HOST CONVERTERS, DEVIATION 2470, 2471 and 2472 (2026-09-10).
+# HOST CONVERTERS, DEVIATION 2470, 2471, 2472 and 2489 (2026-09-10).
 #
 # `python/mojolearn/_buffer.py` turns whatever a caller hands an estimator
 # into the float32 block the kernels read. When NumPy left the Python layer
@@ -787,6 +787,99 @@ def transpose_f32_binding(
     with GILReleased(Python()):
         _tiled_transpose_to_f32(sp, dp, nr, nc)
     return PythonObject(0)
+
+
+def nonzero_f64_count_binding(
+    src_addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """How many of the `n` float64 values at `src` are nonzero under the
+    test `v != 0.0` (DEVIATION 2489). That is the Python loop's test, so
+    -0.0 is a zero and NaN is NOT: NaN compares unequal to everything,
+    `np.nonzero` kept it, the Python loop kept it, this keeps it. The
+    count is what `nonzero_f64_fill` needs its three outputs sized to; the
+    two-call shape is `radius_neighbors_count`/`_fill` above. An empty
+    input reads nothing; a negative count is refused.
+    """
+    var count = Int(py=n)
+    if count < 0:
+        raise Error(
+            "nonzero_f64_count: n must be non-negative, got " + String(count)
+        )
+    if count == 0:
+        return PythonObject(0)
+    var sp = _f64_ptr(Int(py=src_addr))
+    var nz = 0
+    with GILReleased(Python()):
+        for i in range(count):
+            if sp.unsafe_load(i) != 0.0:
+                nz += 1
+    return PythonObject(nz)
+
+
+def nonzero_f64_fill_binding(
+    src_addr: PythonObject,
+    rows: PythonObject,
+    cols: PythonObject,
+    outs: PythonObject,
+    capacity: PythonObject,
+) raises -> PythonObject:
+    """COO triples of a C-contiguous float64 `[rows, cols]` matrix at `src`
+    (DEVIATION 2489): for every entry with `v != 0.0`, in row-major scan
+    order, write its row to `outs[0]` (int32), its column to `outs[1]`
+    (int32) and `Float32(v)` to `outs[2]` (float32), the same
+    round-to-nearest-even narrowing `array.array('f')` applies. Returns the
+    number written. `capacity` is the length of each output; the fill
+    STOPS and raises if the matrix holds more nonzeros than that, so a
+    stale count cannot write past the buffers. Byte-for-byte the output of
+    `_spectral_impl._coo_triples`'s Python loop, which is the oracle.
+    """
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    var cap = Int(py=capacity)
+    if nr < 0 or nc < 0:
+        raise Error(
+            "nonzero_f64_fill: rows and cols must be non-negative, got "
+            + String(nr) + " x " + String(nc)
+        )
+    if cap < 0:
+        raise Error(
+            "nonzero_f64_fill: capacity must be non-negative, got "
+            + String(cap)
+        )
+    if len(outs) != 3:
+        raise Error(
+            "nonzero_f64_fill: outs must hold 3 addresses, got "
+            + String(len(outs))
+        )
+    if nr == 0 or nc == 0:
+        return PythonObject(0)
+    var sp = _f64_ptr(Int(py=src_addr))
+    var rp = _i32_ptr(Int(py=outs[0]))
+    var cp = _i32_ptr(Int(py=outs[1]))
+    var vp = _f32_ptr(Int(py=outs[2]))
+    var k = 0
+    var overflow = False
+    with GILReleased(Python()):
+        for r in range(nr):
+            var base = r * nc
+            for c in range(nc):
+                var v = sp.unsafe_load(base + c)
+                if v != 0.0:
+                    if k >= cap:
+                        overflow = True
+                        break
+                    rp.unsafe_store(k, Int32(r))
+                    cp.unsafe_store(k, Int32(c))
+                    vp.unsafe_store(k, v.cast[DType.float32]())
+                    k += 1
+            if overflow:
+                break
+    if overflow:
+        raise Error(
+            "nonzero_f64_fill: more than " + String(cap)
+            + " nonzero entries; count first with nonzero_f64_count"
+        )
+    return PythonObject(k)
 
 
 # ===========================================================================
@@ -1109,6 +1202,8 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
             "cast_colmajor_f64_to_f32"
         )
         m.def_function[transpose_f32_binding]("transpose_f32")
+        m.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
+        m.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
         # DEVIATION 2325: the three host helpers of DEVIATION 2303.
         m.def_function[all_finite_f32_binding]("all_finite_f32")
         m.def_function[all_finite_f64_binding]("all_finite_f64")

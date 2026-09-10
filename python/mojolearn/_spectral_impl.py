@@ -25,7 +25,7 @@ metrics functions and is loaded through `_metrics_impl._get_binding`.
 
 from ._array import Array
 from ._buffer import (
-    addr, addr_ro, all_finite, as_f32_c, as_f64_c, as_i32_c, empty,
+    _native, addr, addr_ro, all_finite, as_f32_c, as_f64_c, as_i32_c, empty,
 )
 from ._metrics_impl import _get_binding
 from .linear_model import _shape_of
@@ -50,37 +50,71 @@ def _coo_triples(A):
     cupy sparse in COO/CSR/CSC and calls `sp.coo_matrix(X)` on a dense
     input. Converting a dense matrix through COO DROPS EXACT ZEROS, which is
     theirs and is also what makes a dense input usable at all.
+
+    A sparse input is recognized by DUCK TYPE, not by importing SciPy: any
+    object with a `tocoo()` whose result carries `shape`, `row`, `col` and
+    `data` is taken as sparse, and those three arrays are read through the
+    buffer protocol like every other input (DEVIATION 2489). SciPy, CuPy
+    (after `.get()`), and anything else shaped like them qualify; nothing
+    is imported to ask.
     """
-    # Consume the sparse object's public conversion protocol. Importing
-    # scipy here pulled NumPy into even dense precomputed-affinity calls.
-    # COO/CSR/CSC inputs supplied by callers continue to own that dependency.
-    if callable(getattr(A, "tocoo", None)):
-        coo = A.tocoo()
-        n = coo.shape[0]
-        if coo.shape[0] != coo.shape[1]:
+    tocoo = getattr(A, "tocoo", None)
+    if callable(tocoo):
+        coo = tocoo()
+        shape = tuple(coo.shape)
+        if len(shape) != 2 or shape[0] != shape[1]:
             raise ValueError(
                 "mojolearn SpectralClustering: a precomputed affinity matrix "
-                f"must be square, got shape {coo.shape}"
+                f"must be square, got shape {shape}"
             )
         rows, _ = as_i32_c(coo.row, ndim=1, name="rows")
         cols, _ = as_i32_c(coo.col, ndim=1, name="cols")
         vals, _ = as_f32_c(coo.data, ndim=1, name="vals")
-        return rows, cols, vals, int(n)
+        return rows, cols, vals, int(shape[0])
     shape = _shape_of(A)
     if len(shape) != 2 or shape[0] != shape[1]:
         raise ValueError(
             "mojolearn SpectralClustering: with affinity='precomputed', X "
-            "must be a square affinity matrix or a scipy sparse matrix, got "
-            f"shape {shape}"
+            "must be a square affinity matrix or a sparse matrix with "
+            f"`tocoo()`, got shape {shape}"
         )
-    # DEVIATION 2373 -- the `np.nonzero` scan is a PYTHON LOOP over the
-    # dense n x n matrix, FLAGGED AS A DEFECT: proportionate to an input
-    # that is itself O(n^2), but slow. The test is made in float64, the
-    # widest dtype the boundary carries, so an entry that is nonzero in a
-    # float64 input and rounds to 0.0f is KEPT as an explicit zero, exactly
-    # as `np.nonzero` on the source dtype kept it; the values are narrowed
-    # to float32 afterwards, one rounding each, as before.
+    # The nonzero test is made in float64, the widest dtype the boundary
+    # carries, so an entry that is nonzero in a float64 input and rounds to
+    # 0.0f is KEPT as an explicit zero, exactly as `np.nonzero` on the
+    # source dtype kept it; the values are narrowed to float32 afterwards,
+    # one rounding each. -0.0 is a zero, NaN is not (it compares unequal).
     dense, _ = as_f64_c(A, ndim=2, name="X")
+    n = int(shape[0])
+    count_fn = _native("nonzero_f64_count")
+    fill_fn = _native("nonzero_f64_fill")
+    if count_fn is not None and fill_fn is not None and dense.size:
+        # DEVIATION 2489: the scan in Mojo, two calls, count then fill into
+        # buffers this side allocates; the Python loop below is the oracle
+        # it is gated against byte-for-byte (tests/test_native_nonzero.py).
+        src = addr_ro(dense, name="X")
+        nnz = int(count_fn(src, dense.size))
+        rows = empty((nnz,), "<i4")
+        cols = empty((nnz,), "<i4")
+        vals = empty((nnz,), "<f4")
+        if nnz == 0:
+            # Nothing to write, and an empty Array has no address to hand
+            # the binding (its pointer helpers refuse a null by design).
+            return rows, cols, vals, n
+        wrote = int(fill_fn(
+            src, n, n,
+            [addr(rows, name="rows"), addr(cols, name="cols"),
+             addr(vals, name="vals")],
+            nnz,
+        ))
+        if wrote != nnz:
+            raise RuntimeError(
+                f"mojolearn SpectralClustering: nonzero_f64_fill wrote "
+                f"{wrote} of {nnz} entries"
+            )
+        return rows, cols, vals, n
+    # DEVIATION 2373 -- the pure-Python scan, a PYTHON LOOP over the dense
+    # n x n matrix, kept as the fallback when the base binding predates
+    # DEVIATION 2489 and as the oracle for it.
     r_idx, c_idx, values = [], [], []
     for r, row in enumerate(dense.tolist()):
         for c, v in enumerate(row):
@@ -91,7 +125,7 @@ def _coo_triples(A):
     rows = Array.from_list(r_idx, "<i4")
     cols = Array.from_list(c_idx, "<i4")
     vals = Array.from_list(values, "<f4")
-    return rows, cols, vals, int(shape[0])
+    return rows, cols, vals, n
 
 
 class SpectralClustering:

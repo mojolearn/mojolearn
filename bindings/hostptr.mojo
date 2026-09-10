@@ -57,3 +57,14 @@ def read_f32(addr: Int, n: Int) raises -> List[Float32]:
     if n > 0:
         memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
+
+
+def read_i32(addr: Int, n: Int) raises -> List[Int32]:
+    """Owned integer copy for metric labels; no float conversion."""
+    var src = i32_ptr(addr)
+    if n < 0:
+        raise Error("mojolearn: negative int32 copy length")
+    var out = List[Int32](length=n, fill=Int32(0))
+    if n > 0:
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+    return out^
