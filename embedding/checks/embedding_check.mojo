@@ -75,7 +75,7 @@ clamped, not wrapped, not silently dropped". Both are TRUE of
 `emb_forward_oracle` and `emb_backward_oracle`, which call
 `emb_refuse_shape`, `emb_refuse_ids` and `refuse_nonfinite` on entry. **Both
 are FALSE of `identical_embedding_forward_into` and
-`identical_embedding_backward_into`, which check nothing.** That file's own
+`identical_embedding_backward_into`, which check IDs but omit nonfinite input refusal.** That file's own
 docstring says so and calls it a design -- "THE HOST REFUSALS RUN BEFORE
 THIS, NOT INSIDE IT" -- and the design has no enforcement anywhere: there is
 no wrapper in the profile that does both, so a caller who forgets gets
@@ -2490,28 +2490,12 @@ def clause_f(ctx: DeviceContext) raises:
         )
         return
     var complaint = (
-        String("embedding_check: **DEVIATION 1506 IS OPEN.** Contract 9.1")
-        + " says a NaN 'is refused by name, refuse_nonfinite ... before any"
-        + " recorded stage' and contract section 8 says an out-of-range id"
-        + " 'is REFUSED BY NAME ... Not clamped, not wrapped, not silently"
-        + " dropped'. Both are TRUE of emb_forward_oracle and"
-        + " emb_backward_oracle and FALSE of"
-        + " identical_embedding_forward_into and"
-        + " identical_embedding_backward_into, which check NOTHING. The"
-        + " planted NaN reached the device (measured, 1 cell) and "
+        String("embedding_check: DEVIATION 1506 nonfinite refusal remains open. ")
+        + "Production entry points check ID bounds, but do not refuse NaN/inf in W or dY. "
+        + "The planted NaN reached device W (measured), and "
         + String(leaked)
-        + " non-finite cells came back out of the gather. Nothing in the"
-        + " profile forces a caller to run the host refusals first, and for"
-        + " a NEGATIVE id the consequence is not a bad number, it is"
-        + " emb_gather_kernel computing weight.unsafe_load(v * width + j)"
-        + " with v = -1, a read BEFORE the buffer. THE FIX, one function:"
-        + " a refusing wrapper in embedding_identical.mojo that calls"
-        + " emb_refuse_shape, emb_refuse_ids and refuse_nonfinite and then"
-        + " the _into form -- which is the only way the contract's sentence"
-        + " becomes true of anything a caller can reach. This gate may not"
-        + " edit that file. The out-of-range half was NOT RUN: running an"
-        + " out-of-bounds read to demonstrate that it is out of bounds is"
-        + " not a test."
+        + " nonfinite cells returned from gather. This is an existing input-refusal gap, "
+        + "independent of PLAN_SCAN/PLAN_SORT integer run construction."
     )
     if env_on("MOJOLEARN_EMB_DEVICE_REFUSAL_GAP_ACK"):
         print(complaint)
@@ -3180,7 +3164,7 @@ def main() raises:
                 "clause (f): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_F=1)."
                 " NOTE: it runs LAST when it runs, because DEVIATION 1506"
                 " makes it RAISE on a defect in a file this gate may not"
-                " edit -- the device entry points perform NO refusal at all"
+                " edit -- the device entry points still omit nonfinite input refusal"
                 " -- and a raise there must not cost the other clauses their"
                 " measurements."
             )

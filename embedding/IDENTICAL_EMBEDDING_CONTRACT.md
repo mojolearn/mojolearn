@@ -44,10 +44,8 @@ inert on device, a cross-vendor hole every other lane's fixtures had hidden.
 
 **Two columns are not three, and clause (a) is not the contract.** Still
 absent, each named by the run's own SCOPE line. No NVIDIA leg. Clauses (b),
-(c), (d), (e) and (f) SKIPPED on both columns. `PLAN_SORT` is not written, so
-clause (d) cannot run at all, which means **the plan-invariance gate, the
-strongest available evidence that the arithmetic does not read the plan, has
-never run and cannot.** The shipped shape `V=128256 d=4096 T=4096` that 11.2
+(c), (d), (e) and (f) SKIPPED on both columns. At that historical run, `PLAN_SORT` was not written and clause (d) was
+unavailable; the 2026-09-10 update above supersedes that implementation status. The shipped shape `V=128256 d=4096 T=4096` that 11.2
 calls mandatory, which is 2.10 GB of `dW` and belongs on a rented GPU. FAST
 mode. All fifteen buildable sabotage arms, of the eighteen in 11.1; the run's
 ledger line reports the binary as CLEAN, meaning no arm was compiled in. And
@@ -796,14 +794,14 @@ defect and not a numerics one.
 
 Each must move the stage its OWN clause writes and no earlier one.
 
-**TWO CANNOT BE BUILT TODAY, and it is not because they are wrong.**
-`EMB_SORT_KEY_ID_ONLY_UNSTABLE` is a `PLAN_SORT` arm and `PLAN_SORT` is not
-written. `EMB_SORT_TIE_REVERSED` has a `PLAN_SCAN` spelling in
-`embedding_identical.mojo` and its `PLAN_SORT` half does not exist. **So the
-sort clause is HALF gated by construction and half not gated at all.** A third,
-`EMB_FOLD_VIA_GEMM_ONEHOT`, has no switch anywhere (DEVIATION 1505), and a
-fourth, `EMB_ACCUM_BY_ADD`, is falsifiable only under clause (e), which
-neither leg ran.
+**Remaining sabotage debt (updated 2026-09-10).** The dedicated
+`EMB_SORT_KEY_ID_ONLY_UNSTABLE` switch remains unimplemented.
+`EMB_SORT_TIE_REVERSED` retains its original PLAN_SCAN spelling. The new
+`MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL` instead reverses ties in the actual
+PLAN_SORT key stream and decodes original positions, providing a separate
+negative control for the real sort permutation gate. `EMB_FOLD_VIA_GEMM_ONEHOT`
+still has no switch (DEVIATION 1505); `EMB_ACCUM_BY_ADD` remains falsifiable
+only through clause (e). This update does not claim those other arms ran.
 
 **Five pass by construction on the obvious fixture and are the ones most
 likely to be deleted as broken arms.** `EMB_FOLD_BALANCED_TREE` needs a run of
