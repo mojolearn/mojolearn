@@ -1,0 +1,79 @@
+31165 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x190e00000000, nodemask=2)
+Imported from /root/mojolearn/neighbors/checks/knn_selector_long_rows_check.mojo:13:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:326:22: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                heads[page + warp] = group_min
+                ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_long_rows_check.mojo:13:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:328:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var winner = heads[page]
+                         ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_long_rows_check.mojo:13:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:330:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var other = heads[page + w]
+                            ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_long_rows_check.mojo:13:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:344:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            heads[tid] = mine
+            ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_long_rows_check.mojo:13:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:349:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var other = heads[tid + stride]
+                                ~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_long_rows_check.mojo:13:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:350:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    if other < heads[tid]:
+                               ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_long_rows_check.mojo:13:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:351:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        heads[tid] = other
+                        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_long_rows_check.mojo:13:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:354:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var winner = heads[0]
+                         ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+31165 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x710340000000, nodemask=1)
+SELECTOR_LONG_CASE_PASS 8192 1 True 3
+SELECTOR_LONG_CASE_PASS 8192 1 False 3
+SELECTOR_LONG_CASE_PASS 8192 10 True 30
+SELECTOR_LONG_CASE_PASS 8192 10 False 30
+SELECTOR_LONG_CASE_PASS 8192 15 True 45
+SELECTOR_LONG_CASE_PASS 8192 15 False 45
+SELECTOR_LONG_CASE_PASS 8192 17 True 51
+SELECTOR_LONG_CASE_PASS 8192 17 False 51
+SELECTOR_LONG_CASE_PASS 8192 33 True 99
+SELECTOR_LONG_CASE_PASS 8192 33 False 99
+SELECTOR_LONG_CASE_PASS 8192 64 True 192
+SELECTOR_LONG_CASE_PASS 8192 64 False 192
+SELECTOR_LONG_CASE_PASS 8193 1 True 3
+SELECTOR_LONG_CASE_PASS 8193 1 False 3
+SELECTOR_LONG_CASE_PASS 8193 10 True 30
+SELECTOR_LONG_CASE_PASS 8193 10 False 30
+SELECTOR_LONG_CASE_PASS 8193 15 True 45
+SELECTOR_LONG_CASE_PASS 8193 15 False 45
+SELECTOR_LONG_CASE_PASS 8193 17 True 51
+SELECTOR_LONG_CASE_PASS 8193 17 False 51
+SELECTOR_LONG_CASE_PASS 8193 33 True 99
+SELECTOR_LONG_CASE_PASS 8193 33 False 99
+SELECTOR_LONG_CASE_PASS 8193 64 True 192
+SELECTOR_LONG_CASE_PASS 8193 64 False 192
+SELECTOR_LONG_CASE_PASS 65537 1 True 3
+SELECTOR_LONG_CASE_PASS 65537 1 False 3
+SELECTOR_LONG_CASE_PASS 65537 10 True 30
+SELECTOR_LONG_CASE_PASS 65537 10 False 30
+SELECTOR_LONG_CASE_PASS 65537 15 True 45
+SELECTOR_LONG_CASE_PASS 65537 15 False 45
+SELECTOR_LONG_CASE_PASS 65537 17 True 51
+SELECTOR_LONG_CASE_PASS 65537 17 False 51
+SELECTOR_LONG_CASE_PASS 65537 33 True 99
+SELECTOR_LONG_CASE_PASS 65537 33 False 99
+SELECTOR_LONG_CASE_PASS 65537 64 True 192
+SELECTOR_LONG_CASE_PASS 65537 64 False 192
+KNN LONG-ROW SELECTOR PASS cases 36

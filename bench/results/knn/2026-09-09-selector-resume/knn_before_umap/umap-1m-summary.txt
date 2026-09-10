@@ -1,0 +1,2 @@
+UMAP_PHASE_HEADER mode IDENTICAL column nvidia rows 1000000 features 32 neighbors 15 epochs 200 rounds 1 fixture dyadic-v1 device_optimizer 1 opt_tpb 128
+UMAP_PHASE_ROUND 0 knn_ms 33193.850253 graph_ms 10282.132337 spectral_ms 8927.926714 optimize_ms 4629.638169 total_ms 57033.548365 edges 20914722 embedding_fnv1a64 160286130194205729

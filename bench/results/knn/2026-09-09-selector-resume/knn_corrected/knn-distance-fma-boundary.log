@@ -1,0 +1,2 @@
+31003 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x391600000000, nodemask=2)
+KNN DISTANCE FMA BOUNDARY PASS cases 8
