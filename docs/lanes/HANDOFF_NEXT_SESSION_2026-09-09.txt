@@ -62,8 +62,24 @@ Uncommitted on main: nothing (bench/results/runpod_leases/ is an untracked guard
    the eager path on Apple (same bits by construction); the fused check expects the column's
    answer. Next: register-blocked fused kernels (design in docs/lanes/HANDOFF_fused_attention.md).
 
-=== NO LANES OPEN. All five agent worktrees under .claude/worktrees/ are merged; branches
-    lane/* stay for history. Any further work needs Andrew's go (no new lanes).
+=== ROUND 3 (Andrew's go, 19:05 EDT, "just 2 lanes at most"): TWO LANES OPEN ===
+   lane/knn-selector (worktree agent-a8b4f188a0e93ff39): profile per launch class first (host
+   timers behind a define; the image has no nsys), then the selector at many queries (warp
+   shuffle minima, several queries per block, wider distance tile if it dominates). Target
+   400k/4000q/k10 at or under 2x of cuML on the H100 (under 20.5 ms, from 66.5), 100k/1000q
+   under 3.2 ms; 1M UMAP self-kNN phase before/after. Gates: four-arm cells 49c0f025..., the
+   knn card, fingerprints of the H100 ref logs, UMAP 20k fingerprint 12938647291752780014.
+   Handoff it must leave: docs/lanes/HANDOFF_knn_selector.md. Budget 3 pod hours.
+   lane/fused-attention-regblock (worktree agent-afe1520062beaa327): register-blocked fused
+   forward/backward kernels (TQ x BK score tile, RPT x CPT per thread, both operands staged),
+   same arithmetic and fold order; shared pages chosen per column through lib_smem_page_fits_for
+   so head dim 128 fits Apple with BK 32. Target forward at or under 5x of torch SDPA on the
+   L40S (under 168 ms from 249), fwd+bwd at or under 3x (under 321 from 526), core under 60 ms.
+   Gates: fused check (12 cases + new ones), both cards byte-equal, surface 116. Handoff: the
+   updated docs/lanes/HANDOFF_fused_attention.md. Budget 3 pod hours.
+   RunPod balance at launch $565.84; only the foreign samba-train pod was running.
+   Resume a dead lane with SendMessage to its agent id (that is not a new lane). No third lane.
+   All earlier worktrees under .claude/worktrees/ are merged; branches lane/* stay for history.
 
 === LESSON OF THE DAY (both round-2 GPU lanes) ===
    A kernel whose shared page was only ever created on 48 KB boxes is UNVERIFIED on Apple
