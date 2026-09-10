@@ -5,6 +5,15 @@ Reuse `bench/OPPONENT_REFERENCE.md` only for its exact hardware, driver,
 library, shape, fixture and timing scope. Internal before/after improvements
 are separate. Trees remain outside this lane.
 
+Latest LM continuation: opt-in owned IDENTICAL sessions retain model/Adam state
+across Python calls. Apple M4 pilots at B1/L2048, six layers, DM256/V8192
+(9.31M parameters) show lower median step times, with all output bytes matching.
+The final build's 46-second pilot measured 4.928 → 4.137 seconds (16.1% lower
+median), but substantial timing drift and one slower resident pair leave the
+gain provisional. This is not a target-model default gate or an opponent ratio. Host snapshots
+and validation readbacks remain. See `HANDOFF_lm_session_2026-09-10.md` for
+the opt-in API, lifecycle checks, raw evidence and remaining work.
+
 | Area | Latest usable evidence | Remaining work |
 |---|---|---|
 | Apple kNN, measured 400k/4k/d32 k10/k15 | Actual scoped default saves 15.7–25.0% request time in both orders; all outputs match | Expand scope only with additional large evidence; late-window drift is retained |

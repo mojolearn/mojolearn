@@ -166,7 +166,7 @@ _MODULES = (
     "_mojolearn_linalg",
     "_mojolearn_arima",
     "_mojolearn_training",
-    # Fixed two-block byte-LM trainer; source integration is not qualification.
+    # Runtime-shaped decoder LM trainer; source integration is not qualification.
     "_mojolearn_byte_lm",
     # Added 2026-09-01 with the GaussianProcessRegressor exposure. The
     # binding itself (bindings/_mojolearn_gp.mojo + build_gp.sh) is OWED at
@@ -906,6 +906,17 @@ def load_set(mode):
         existing = sys.modules.get(full)
         if existing is not None:
             modules[name] = existing
+            continue
+        # select() may already have initialized this exact binary under its
+        # canonical name. Reinitializing it under _sets registers Mojo-owned
+        # Python types twice and aborts. Share only the same resolved file;
+        # other tiers/vendors retain their separate loading and validation.
+        canonical = sys.modules.get(f"mojolearn.{name}")
+        canonical_path = vars(canonical).get('__file__') if canonical is not None else None
+        if canonical_path and os.path.realpath(canonical_path) == os.path.realpath(path):
+            _check_vendor(canonical, name, path)
+            sys.modules[full] = canonical
+            modules[name] = canonical
             continue
         loader = importlib.machinery.ExtensionFileLoader(full, path)
         spec = importlib.util.spec_from_loader(full, loader, origin=path)

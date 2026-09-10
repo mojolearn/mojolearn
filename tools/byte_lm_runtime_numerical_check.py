@@ -43,6 +43,7 @@ def write_json(path, value):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', action='store_true')
+    parser.add_argument('--resident', action='store_true', help='Exercise owned native sessions')
     parser.add_argument('--native-vendor', choices=('metal', 'cuda', 'hip'), required=True)
     parser.add_argument('--oracle-device', choices=('cpu', 'cuda'), required=True)
     parser.add_argument('--out', type=Path, required=True)
@@ -60,7 +61,7 @@ def main():
         torch.backends.cuda.matmul.allow_tf32 = False
     source = Path(__file__).resolve().parents[1]
     metadata = {'schema': 'mojolearn.byte-lm.runtime-numerical.v1',
-                'python': sys.version, 'platform': platform.platform(),
+                'resident': args.resident, 'python': sys.version, 'platform': platform.platform(),
                 'numpy': np.__version__, 'torch': torch.__version__,
                 'oracle_device': args.oracle_device, 'native_vendor': args.native_vendor,
                 'oracle_device_name': torch.cuda.get_device_name() if args.oracle_device == 'cuda' else 'CPU FP64',
@@ -87,7 +88,7 @@ def main():
                 initial[start:start + entry['count']] += np.float32(1)
         trainer = SmallByteLanguageModelTrainer(initial,
             data_schedule={'kind': 'bounded synthetic numerical fixture', 'seed': 20260910 + case_index},
-            shape=cfg)
+            shape=cfg, resident=args.resident)
         runtime = trainer.run_metadata()
         assert runtime['native_vendor'] == args.native_vendor, runtime
         write_json(args.out / f'{name}-runtime.json', runtime)

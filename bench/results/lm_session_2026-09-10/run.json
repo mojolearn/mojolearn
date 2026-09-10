@@ -1,0 +1,23 @@
+{
+  "base_commit": "587a9107",
+  "numeric_mode": "identical",
+  "native_vendor": "metal",
+  "host_tests_passed": 112,
+  "native_gate_train_steps": 24,
+  "native_gate_eval_checks": 24,
+  "native_lifecycle_controls": "lifecycle.json",
+  "default_resident": false,
+  "opponents_rerun": false,
+  "qualification": "Local regression and 9.31M parameter pilot only; target-model and CUDA/HIP session qualification remain open",
+  "source_sha256": {
+    "bindings/_mojolearn_byte_lm.mojo": "215eac96195c97581659cd0e7c92c0fc5ed95be162a3f546596b62395ec17567",
+    "python/mojolearn/_backend.py": "ff86674506d5c6ca8977397eef9e89f3c4afe68f604d93df28378e206d14826f",
+    "python/mojolearn/_byte_lm_impl.py": "1fd770994a712b312b921c265b07edb7157fb0d029e53e127e39fd98d6a5fd59",
+    "tools/byte_lm_session_bench.py": "6a81c02b85998bd60c8bbd1f09f7627c8ba0f2fc346027897391140ce3f1ad39",
+    "tools/byte_lm_session_check.py": "2567ca9b965efd795ac466e4022a9fe1e82e86b5cf663cad67fd22427a19068b",
+    "tools/byte_lm_runtime_numerical_check.py": "6ae495ad2bc1e6376939e9a4dbfe1e49d1b89f5a0f16f38d10e7eb3bd3a2dcc8"
+  },
+  "binary_sha256": "294a4d1955e08427070379cf82e413102a88d59e4600dd4396c38a684cc04ad9",
+  "current_pilot": "pilot-admitted",
+  "timing_qualification": "Provisional: substantial within-run drift; one of four resident timed pairs slower. Default unchanged."
+}
