@@ -1,0 +1,78 @@
+[
+  {
+    "path": "cuda/kernel-1m-depth16-output2.log",
+    "mode": "identical",
+    "vendor": "cuda",
+    "rows": 1000000,
+    "features": 28,
+    "trees": 100,
+    "depth": 16,
+    "outputs": 2,
+    "arms": {
+      "scalar": {
+        "samples_ms": [
+          26.515095,
+          26.531437,
+          26.557088,
+          26.512002,
+          26.528963,
+          26.490349
+        ],
+        "median_ms": 26.522029,
+        "spread": 1.0025193703563513
+      },
+      "vector": {
+        "samples_ms": [
+          25.635134,
+          25.40884,
+          25.571099,
+          25.340809,
+          25.578607,
+          25.556749
+        ],
+        "median_ms": 25.563924,
+        "spread": 1.0116146647094022
+      }
+    },
+    "timing_stable": true,
+    "scope": "synthetic resident kernel, excludes input/model transfer and output readback"
+  },
+  {
+    "path": "cuda/kernel-1m-depth16-output7.log",
+    "mode": "identical",
+    "vendor": "cuda",
+    "rows": 1000000,
+    "features": 28,
+    "trees": 100,
+    "depth": 16,
+    "outputs": 7,
+    "arms": {
+      "scalar": {
+        "samples_ms": [
+          71.130686,
+          71.173746,
+          71.240819,
+          71.076867,
+          71.139123,
+          71.142345
+        ],
+        "median_ms": 71.14073400000001,
+        "spread": 1.0023066858025693
+      },
+      "vector": {
+        "samples_ms": [
+          38.009942,
+          37.98723,
+          37.936381,
+          38.04137,
+          37.953154,
+          38.097976
+        ],
+        "median_ms": 37.998586,
+        "spread": 1.0042596314076455
+      }
+    },
+    "timing_stable": true,
+    "scope": "synthetic resident kernel, excludes input/model transfer and output readback"
+  }
+]

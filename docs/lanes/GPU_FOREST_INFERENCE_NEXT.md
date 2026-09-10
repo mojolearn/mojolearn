@@ -143,36 +143,24 @@ cancellation cases. Training-mode contracts are not evidence for inference bits.
 
 ## Ordered-fold reference sequence (candidate A, not the final performance target)
 
-1. Use the resolved nvForest source above for packed traversal, shared-input
-   caching and vector-leaf layout decisions. Explicitly choose an IDENTICAL
-   arithmetic deviation: retain the sequential tree fold rather than
-   copying nvForest's grove/shuffle reduction. The first bounded GPU slice can
-   parallelize rows while preserving that fold. A later per-tree-output kernel
-   plus ordered fold is possible but adds rows×trees×outputs scratch; do not
-   silently introduce that memory cost. FAST may separately port the production
-   grove reduction after its own quality and timing gates. The updated target
-   below also permits fixed-grove parallelism in IDENTICAL with an explicit
-   numerical migration and cross-device gates.
-2. Add one shared GPU flat-forest kernel plus a synchronous upload/download helper,
-   with RF/ET thin wrappers. Start Float32 binary probabilities and scalar
-   regression, finite input, valid acyclic flat forests. Validate offsets, feature
-   and child bounds and output sizes before GPU access, including loaded models.
-3. Compare full Float32 output bits against the current host route for both RF/ET,
-   all numeric modes, single/multiple trees, equality thresholds, local-child
-   offsets, one-node trees, non-power-of-two counts, fractional/regression leaves,
-   cancellation, signed zero and subnormals. Include independent small hand-built
-   forests so two routes cannot share a hidden tree-layout error. No CPU learner
-   is introduced by retaining the existing prediction oracle.
-4. Run large real-data NVIDIA IDENTICAL public inference A/B separately from fit
-   timing: identical stored forest and HIGGS held-out rows, warmups, balanced order,
-   raw latency, quality and complete probability hashes. Compare cuML's actual
-   nvForest public prediction with clear model/quality differences, not its host
-   fallback. Mac FAST tree inference is a separate requested performance leg.
-5. Only after that baseline, consider persistent GPU model buffers and chunked X
-   uploads. Existing Python arrays can be mutated and models can be refitted,
-   unpickled or loaded, so caching needs explicit invalidation/version ownership.
-   The first implementation may upload per call and must include that cost in
-   public timing. Do not hide setup cost by timing a private resident-buffer API.
+1. The shared GPU flat-forest implementation now follows nvForest's row/tree
+   task decomposition, vector-leaf traversal and fixed-grove reduction. The
+   fixed 32-group graph is the declared IDENTICAL deviation; it does not promise
+   the previous sequential tree-fold bits.
+2. RF and ET share graph/finite validation, kernel dispatch, native ownership
+   and Python cache invalidation. Both classifier and regressor paths are wired.
+3. Handcrafted graph oracles, threshold/subnormal cases, output specializations,
+   lifecycle checks and public archive/pickle checks have passed on CUDA and
+   Metal in the scopes recorded below. No CPU learner was added.
+4. Large real-data public inference measurements now separate transient model
+   upload, resident-model staging and borrowed host input/output. Single-call
+   timings and batched throughput are recorded separately from fitting and from
+   the private resident-kernel experiment.
+5. Model buffers/context persist across calls. Immutable host snapshots prevent
+   stale device state; replacement/refit invalidates the cache, and GPU handles
+   are excluded from pickle. Borrowed host input/output avoids intermediate
+   Lists. Device input/output buffers are still allocated per call. Their reuse,
+   GPU-array inputs and nvForest-style packed node layout remain next work.
 
 The shared engine and new native entrypoints are implemented. Bounded CUDA and
 Metal kernel checks and public CUDA RF/ET checks passed; broader cross-vendor
@@ -200,25 +188,24 @@ It can change prediction bits relative to the previous host traversal. Report
 that numerical migration directly, compare quality, and require new cross-device
 exact-output gates; do not hide it behind a sequential-bit equivalence claim.
 
-### Implemented first GPU engine
+### Implemented GPU engine
 
 * The shared RF/ET buffers retain offsets, column IDs, thresholds, local left
   children, contiguous Float32 node/output leaves and row-major Float32 X.
   Positive output dimensions are supported within explicit Int32 element bounds;
-  this scalar-output implementation introduces no arbitrary 32-class cap.
-* A 128-thread block handles four scalar `(row, output)` items. Logical grove
-  `thread_id % 32` visits trees g, g+32, ... for its item. `thread_id // 32`
-  selects the item, and each thread keeps one Float32 accumulator. This
-  parallelizes rows, components and tree groups, but repeats traversal for each
-  component; nvForest's vector-leaf traversal reuse remains a next optimization.
-* The shared reduction workspace is 128 Float32 values (512 bytes). Steps
-  16/8/4/2/1 use whole-block barriers and explicit indices, independent of
-  hardware warp/wave width. Inactive tail items still execute all barriers.
-  Grove zero divides once by the number of trees. No floating atomics or
-  scheduling-dependent association are used.
-* Both bindings upload and download through the shared helper. Host graph and
-  finite-value validation prevent cyclic/out-of-bounds traversal before launch.
-  Persistent device models and borrowed input buffers are not implemented yet.
+  no arbitrary 32-class cap is imposed.
+* A 128-thread block handles four rows for 2–8 outputs, reusing each tree
+  traversal across output components. Logical grove `thread_id % 32` visits
+  trees g, g+32, ... and keeps one accumulator per output. Scalar regression
+  and outputs above eight use four scalar `(row, output)` items per block.
+* The shared reduction workspace is 512 bytes per output capacity (up to
+  4 KiB). Steps 16/8/4/2/1 retain explicit indices and whole-block barriers,
+  independent of hardware warp/wave width. Inactive tails hit all barriers.
+  Each output divides once; there are no floating atomics or scheduling-based
+  changes in association.
+* Both bindings share a validated resident model and synchronous borrowed host
+  I/O. Model graph/finite validation occurs at preparation, input finite
+  validation before launch, and output finite validation after readback.
 * The public names are `sequential` (existing default) and `parallel_groves`
   (opt-in GPU). A test-only ordered-fold GPU kernel is retained as a graph
   reference; it is not an additional public inference-engine setting.
@@ -238,5 +225,4 @@ archives as inputs: this is an inference arithmetic change, not a retraining dem
 Then measure large real-data public predict calls, including uploads/downloads,
 against both the old route and cuML's actual cached nvForest prediction, reporting
 model/quality differences and warm/cold residency separately. No speed estimate is
-inferred from the algorithm. Product code is still unchanged by this document;
-root must coordinate shared kernel and binding ownership before implementation.
+inferred from the algorithm. The [September 10 campaign](../../bench/results/forest_groves_2026-09-10/README.md) records implemented paths, exact-output checks, stable ET throughput cells and remaining noisy RF comparisons.

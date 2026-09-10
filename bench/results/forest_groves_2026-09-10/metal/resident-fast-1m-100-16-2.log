@@ -1,0 +1,32 @@
+COMMAND: /tmp/forest-grove-kernel-fast 1000000 100 16 2 6
+numeric_mode FAST
+vendor metal
+dimensions 1000000 28 100 16 2 nodes 13107100 array_bytes_estimate 780284808
+fixture_validation_upload_ms 238.136
+warmup_ms 0 scalar 1959.294
+warmup_ms 0 vector 1522.934
+fingerprint 0 8937473431910161251
+warmup_ms 1 vector 1532.35
+warmup_ms 1 scalar 1967.697
+fingerprint 1 8937473431910161251
+kernel_ms 2 scalar 1984.596
+kernel_ms 2 vector 1530.803
+fingerprint 2 8937473431910161251
+kernel_ms 3 vector 1538.075
+kernel_ms 3 scalar 1968.727
+fingerprint 3 8937473431910161251
+kernel_ms 4 scalar 1974.685
+kernel_ms 4 vector 1551.074
+fingerprint 4 8937473431910161251
+kernel_ms 5 vector 1544.236
+kernel_ms 5 scalar 1958.348
+fingerprint 5 8937473431910161251
+kernel_ms 6 scalar 1930.016
+kernel_ms 6 vector 1532.846
+fingerprint 6 8937473431910161251
+kernel_ms 7 vector 1537.195
+kernel_ms 7 scalar 1970.836
+fingerprint 7 8937473431910161251
+PASS resident scalar/vector exact output bits
+
+EXIT_CODE=0

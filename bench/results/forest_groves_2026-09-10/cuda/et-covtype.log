@@ -1,0 +1,30 @@
+3368 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a1800000000, nodemask=2)
+FSPEED-SCALE stage=inference-before rows=522911 features=54 input_mib=107.7 large_candidate=false
+FSPEED-REMINDER stage=inference-before SMALL WORKLOAD: useful for correctness/smoke diagnostics; do not use this run alone for training-speed claims or optimization/default decisions. Also test representative large datasets (for example HIGGS 1M rows).
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so
+3368 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72dd00000000, nodemask=1)
+INFERENCE_DISPATCH identical cuda outputs= 7 compiled_vector_groves= True
+{"arm": "parallel_groves_transient", "round": 0, "warmup": true, "ms": 57.44458734989166, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_resident", "round": 0, "warmup": true, "ms": 61.93275563418865, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_borrowed", "round": 0, "warmup": true, "ms": 3.9713233709335327, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_transient", "round": 1, "warmup": false, "ms": 38.59718330204487, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_resident", "round": 1, "warmup": false, "ms": 6.654543802142143, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_borrowed", "round": 1, "warmup": false, "ms": 3.577813506126404, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_resident", "round": 2, "warmup": false, "ms": 6.42496719956398, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_borrowed", "round": 2, "warmup": false, "ms": 3.4357868134975433, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_transient", "round": 2, "warmup": false, "ms": 33.998092636466026, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_borrowed", "round": 3, "warmup": false, "ms": 3.715524449944496, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_transient", "round": 3, "warmup": false, "ms": 32.88455121219158, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_resident", "round": 3, "warmup": false, "ms": 74.47490841150284, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_transient", "round": 4, "warmup": false, "ms": 41.27969034016132, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_resident", "round": 4, "warmup": false, "ms": 7.122533395886421, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_borrowed", "round": 4, "warmup": false, "ms": 3.5417526960372925, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_resident", "round": 5, "warmup": false, "ms": 6.342878565192223, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_borrowed", "round": 5, "warmup": false, "ms": 3.372998908162117, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_transient", "round": 5, "warmup": false, "ms": 42.31139272451401, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_borrowed", "round": 6, "warmup": false, "ms": 3.512101247906685, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_transient", "round": 6, "warmup": false, "ms": 33.07389281690121, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+{"arm": "parallel_groves_resident", "round": 6, "warmup": false, "ms": 6.548821926116943, "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"}
+FSPEED-SCALE stage=inference-after rows=522911 features=54 input_mib=107.7 large_candidate=false
+FSPEED-REMINDER stage=inference-after SMALL WORKLOAD: useful for correctness/smoke diagnostics; do not use this run alone for training-speed claims or optimization/default decisions. Also test representative large datasets (for example HIGGS 1M rows).
+PASS inference comparison; stable= False (completion is not performance qualification)

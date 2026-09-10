@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bench/speed/forest_inference_ab.py", line 346, in <module>
+    main()
+    ~~~~^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bench/speed/forest_inference_ab.py", line 187, in main
+    data = forest.spec.load_dataset(args.dataset, args.size, args.rows)
+  File "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/tools/speed_gbdt_arm.py", line 669, in load_dataset
+    return load_year(size, rows_cap)
+  File "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/tools/speed_gbdt_arm.py", line 422, in load_year
+    import pandas as pd
+ModuleNotFoundError: No module named 'pandas'
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+  File "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/.pixi/envs/default/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/.pixi/envs/default/bin/python', 'bench/speed/forest_inference_ab.py', '--lane', 'et', '--dataset', 'year', '--rows', '500000', '--trees', '100', '--depth', '16', '--rounds', '6', '--borrowed-buffers', '--staged-rounds', '2', '--output', 'bench/results/forest_groves_2026-09-10/metal/et-year-resident-borrowed.json']' returned non-zero exit status 1.

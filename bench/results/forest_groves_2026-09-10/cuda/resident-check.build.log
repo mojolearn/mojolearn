@@ -1,0 +1,26 @@
+1143 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5266c0000000, nodemask=1)
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:7:
+/root/mojolearn/core/forest_inference.mojo:149:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:7:
+/root/mojolearn/core/forest_inference.mojo:156:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:7:
+/root/mojolearn/core/forest_inference.mojo:162:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:7:
+/root/mojolearn/core/forest_inference.mojo:169:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:7:
+/root/mojolearn/core/forest_inference.mojo:175:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 

@@ -1,0 +1,13 @@
+{
+  "pod_id": "1dqcr75f220ola",
+  "name": "mojolearn-forest-resident-20260910-160503",
+  "created_utc": "2026-09-10T16:05:04.215000+00:00",
+  "deleted_verified_utc": "2026-09-10T16:33:55.012084+00:00",
+  "delete_http": 204,
+  "absence_http": 404,
+  "hourly_compute_usd": 3.49,
+  "estimated_compute_usd": 1.68,
+  "cost_scope": "Compute estimate only, excludes storage; not invoice",
+  "protected_training_pod_touched": false,
+  "retrieved_archive_sha256": "273528dd76186859c3ef1a9d1713fed9b25a3831209ebfa6cb10db8d37e72353"
+}

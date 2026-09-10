@@ -1,0 +1,30 @@
+3183 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3ab1c0000000, nodemask=2)
+3183 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x317580000000, nodemask=1)
+FSPEED-SCALE stage=inference-before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=inference-before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so
+INFERENCE_DISPATCH identical cuda outputs= 2 compiled_vector_groves= True
+{"arm": "parallel_groves_transient", "round": 0, "warmup": true, "ms": 212.64592930674553, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_resident", "round": 0, "warmup": true, "ms": 135.1558156311512, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_borrowed", "round": 0, "warmup": true, "ms": 29.5134037733078, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_transient", "round": 1, "warmup": false, "ms": 111.65044642984867, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_resident", "round": 1, "warmup": false, "ms": 42.767198756337166, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_borrowed", "round": 1, "warmup": false, "ms": 26.113171130418777, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_resident", "round": 2, "warmup": false, "ms": 43.62691193819046, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_borrowed", "round": 2, "warmup": false, "ms": 25.476379320025444, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_transient", "round": 2, "warmup": false, "ms": 94.96393986046314, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_borrowed", "round": 3, "warmup": false, "ms": 29.939070343971252, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_transient", "round": 3, "warmup": false, "ms": 82.82185718417168, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_resident", "round": 3, "warmup": false, "ms": 40.90503416955471, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_transient", "round": 4, "warmup": false, "ms": 83.10013450682163, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_resident", "round": 4, "warmup": false, "ms": 45.65395973622799, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_borrowed", "round": 4, "warmup": false, "ms": 24.486586451530457, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_resident", "round": 5, "warmup": false, "ms": 45.248376205563545, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_borrowed", "round": 5, "warmup": false, "ms": 24.302983656525612, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_transient", "round": 5, "warmup": false, "ms": 82.47750252485275, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_borrowed", "round": 6, "warmup": false, "ms": 30.01069836318493, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_transient", "round": 6, "warmup": false, "ms": 78.30437645316124, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+{"arm": "parallel_groves_resident", "round": 6, "warmup": false, "ms": 48.32623712718487, "hash": "d7dce9ce526fedfae2b19b772f02cdee5ecd616eb62334a3848ef4ca20de5e34"}
+FSPEED-SCALE stage=inference-after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=inference-after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+PASS inference comparison; stable= False (completion is not performance qualification)

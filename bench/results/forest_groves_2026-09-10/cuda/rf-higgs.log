@@ -1,0 +1,45 @@
+2804 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x704d40000000, nodemask=1)
+FSPEED-SCALE stage=inference-before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=inference-before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+2804 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x704d80000000, nodemask=1)
+INFERENCE_DISPATCH identical cuda outputs= 2 compiled_vector_groves= True
+{"arm": "parallel_groves_transient", "round": 0, "warmup": true, "ms": 157.4463862925768, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 0, "warmup": true, "ms": 118.69177222251892, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 0, "warmup": true, "ms": 25.073954835534096, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "cuml_gpu", "round": 0, "warmup": true, "ms": 34.20409373939037, "hash": "65f6125f726f5620817b9d8de349b8e9b34dad15adae16f59e4199790027b2a3"}
+{"arm": "parallel_groves_transient", "round": 1, "warmup": false, "ms": 113.09047043323517, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 1, "warmup": false, "ms": 36.58495843410492, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 1, "warmup": false, "ms": 24.284912273287773, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "cuml_gpu", "round": 1, "warmup": false, "ms": 11.473339051008224, "hash": "65f6125f726f5620817b9d8de349b8e9b34dad15adae16f59e4199790027b2a3"}
+{"arm": "parallel_groves_resident", "round": 2, "warmup": false, "ms": 53.590141236782074, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 2, "warmup": false, "ms": 24.204537272453308, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "cuml_gpu", "round": 2, "warmup": false, "ms": 11.654147878289223, "hash": "65f6125f726f5620817b9d8de349b8e9b34dad15adae16f59e4199790027b2a3"}
+{"arm": "parallel_groves_transient", "round": 2, "warmup": false, "ms": 154.64065596461296, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 3, "warmup": false, "ms": 24.619415402412415, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "cuml_gpu", "round": 3, "warmup": false, "ms": 11.304089799523354, "hash": "65f6125f726f5620817b9d8de349b8e9b34dad15adae16f59e4199790027b2a3"}
+{"arm": "parallel_groves_transient", "round": 3, "warmup": false, "ms": 135.9574105590582, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 3, "warmup": false, "ms": 37.18172200024128, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "cuml_gpu", "round": 4, "warmup": false, "ms": 13.234945014119148, "hash": "65f6125f726f5620817b9d8de349b8e9b34dad15adae16f59e4199790027b2a3"}
+{"arm": "parallel_groves_transient", "round": 4, "warmup": false, "ms": 118.29322203993797, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 4, "warmup": false, "ms": 44.029343873262405, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 4, "warmup": false, "ms": 25.03453940153122, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_transient", "round": 5, "warmup": false, "ms": 116.46722815930843, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 5, "warmup": false, "ms": 41.973790153861046, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 5, "warmup": false, "ms": 29.773971065878868, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "cuml_gpu", "round": 5, "warmup": false, "ms": 11.929178610444069, "hash": "65f6125f726f5620817b9d8de349b8e9b34dad15adae16f59e4199790027b2a3"}
+{"arm": "parallel_groves_resident", "round": 6, "warmup": false, "ms": 38.961609825491905, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 6, "warmup": false, "ms": 24.698792025446892, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "cuml_gpu", "round": 6, "warmup": false, "ms": 11.704212054610252, "hash": "65f6125f726f5620817b9d8de349b8e9b34dad15adae16f59e4199790027b2a3"}
+{"arm": "parallel_groves_transient", "round": 6, "warmup": false, "ms": 116.13474786281586, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 7, "warmup": false, "ms": 24.720553308725357, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "cuml_gpu", "round": 7, "warmup": false, "ms": 13.03170621395111, "hash": "65f6125f726f5620817b9d8de349b8e9b34dad15adae16f59e4199790027b2a3"}
+{"arm": "parallel_groves_transient", "round": 7, "warmup": false, "ms": 118.83214302361012, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 7, "warmup": false, "ms": 37.278586998581886, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "cuml_gpu", "round": 8, "warmup": false, "ms": 12.327037751674652, "hash": "65f6125f726f5620817b9d8de349b8e9b34dad15adae16f59e4199790027b2a3"}
+{"arm": "parallel_groves_transient", "round": 8, "warmup": false, "ms": 148.7551461905241, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 8, "warmup": false, "ms": 37.523241713643074, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 8, "warmup": false, "ms": 33.773256465792656, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+FSPEED-SCALE stage=inference-after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=inference-after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+PASS inference comparison; stable= False (completion is not performance qualification)

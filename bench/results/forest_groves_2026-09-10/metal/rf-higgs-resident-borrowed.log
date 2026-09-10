@@ -1,0 +1,28 @@
+FSPEED-SCALE stage=inference-before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=inference-before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=metal path=/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/_mojolearn_rf.so
+INFERENCE_DISPATCH fast metal outputs= 2 compiled_vector_groves= True
+{"arm": "parallel_groves_transient", "round": 0, "warmup": true, "ms": 618.9863330218941, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 0, "warmup": true, "ms": 587.545415997738, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 0, "warmup": true, "ms": 537.6119999855291, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_transient", "round": 1, "warmup": false, "ms": 588.2287090062164, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 1, "warmup": false, "ms": 523.6327089951374, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 1, "warmup": false, "ms": 503.322875010781, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 2, "warmup": false, "ms": 550.4289160016924, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 2, "warmup": false, "ms": 517.0006249973085, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_transient", "round": 2, "warmup": false, "ms": 591.5421659883577, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 3, "warmup": false, "ms": 508.146084001055, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_transient", "round": 3, "warmup": false, "ms": 646.4907079935074, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 3, "warmup": false, "ms": 617.7562499942724, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_transient", "round": 4, "warmup": false, "ms": 647.4267499870621, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 4, "warmup": false, "ms": 551.0323749913368, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 4, "warmup": false, "ms": 513.9622919959947, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 5, "warmup": false, "ms": 547.4639589956496, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 5, "warmup": false, "ms": 541.5288330113981, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_transient", "round": 5, "warmup": false, "ms": 580.3412919922266, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_borrowed", "round": 6, "warmup": false, "ms": 510.2008750254754, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_transient", "round": 6, "warmup": false, "ms": 574.1065409965813, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+{"arm": "parallel_groves_resident", "round": 6, "warmup": false, "ms": 557.7141660032794, "hash": "6417e3262914c8567acb85f6ce55b93204ed38d948a11f83c65954096caa6914"}
+FSPEED-SCALE stage=inference-after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=inference-after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+PASS inference comparison; stable= False (completion is not performance qualification)

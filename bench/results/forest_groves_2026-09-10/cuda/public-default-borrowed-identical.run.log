@@ -1,0 +1,6 @@
+3930 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72e580000000, nodemask=1)
+{"estimator": "RandomForestClassifier", "mode": "identical", "vendor": "cuda", "borrowed_buffers": true, "hash": "766a1bc69d34db173222685a524f87a8b06fd814b8fa84a35f6c885faaf9917b", "max_difference": 2.384185791015625e-07}
+{"estimator": "RandomForestRegressor", "mode": "identical", "vendor": "cuda", "borrowed_buffers": true, "hash": "d91bb7fbd0ef3d77c1430fc779d52734cb449f7e54b69431d6df06d1be1cc9f5", "max_difference": 3.5762786865234375e-07}
+{"estimator": "ExtraTreesClassifier", "mode": "identical", "vendor": "cuda", "borrowed_buffers": true, "hash": "f462f9fa903bf0a117a54a72f4ead469f91691e9a8e5487a1d28b9b647118977", "max_difference": 1.7881393432617188e-07}
+{"estimator": "ExtraTreesRegressor", "mode": "identical", "vendor": "cuda", "borrowed_buffers": true, "hash": "3c89977f700f2e5716cfa7a7f77543fa490ffaef19700ad5f39fca0f3b96cf21", "max_difference": 9.5367431640625e-07}
+PASS public parallel-groves GPU inference, graph oracle, resident reuse/release, pickle, versioned archives

@@ -1,0 +1,21 @@
+{
+  "source_sha256": {
+    "core/forest_inference_model.mojo": "a7cd8abee517bc1a094f6a9507df70c688a3ca9c146742399e3f71baaf24f0bb",
+    "core/forest_inference.mojo": "d44b606e8f8d26810470f8556fb3980014bb9c78178e8509971acc672ca819b2",
+    "bindings/forest_inference_binding.mojo": "13db00d5b52d7e659bb37818dea8518ba47df36dc91abe43c20b28b7141c268e",
+    "bindings/_mojolearn_rf.mojo": "a7cc5f9331a6d8f862c837c6aad578a22ef2647c662e2f60fdfc7b9593985407",
+    "bindings/_mojolearn_trees.mojo": "49c9b46204335d28b1452b410676b73fc6df181aa3daa7d2b9440746176a4009",
+    "checks/forest_inference_model.mojo": "93f3ec945198a34a864e126dcb9a2710a06f79ed2c4158b978d182c37e358740"
+  },
+  "binary_sha256": {
+    "python/mojolearn/_mojolearn_rf.so": "b1b71ce2316932f7b94d9ebab077037e8a053a22317450de72f059150342ee05",
+    "python/mojolearn/_mojolearn_trees.so": "a2534aa61f8a796e02237f0fb868216162c0783ce24dfa4c65d7e06aea1aafad",
+    "/tmp/resident_into_check_final": "8cee6ed6e66a5a2eb2e695bb292e7607080fa2d502eb6c5bb715e3653d268538"
+  },
+  "bindings_mode": "fast",
+  "bindings_flags": [
+    "MOJOLEARN_FOREST_VECTOR_GROVES=1"
+  ],
+  "native_check_mode": "identical",
+  "scope": "Metal correctness/build only; borrowed path has not been timed or made public default"
+}
