@@ -102,6 +102,16 @@ def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
+def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
+    """A caller's float64 buffer, borrowed, never owned; `_f32_ptr`'s twin
+    (DEVIATION 2321). The same helper, spelled the same way, sits in
+    `bindings/_mojolearn_gbdt.mojo`, `_mojolearn_estimators.mojo`,
+    `_mojolearn_svm.mojo` and `_mojolearn_gp.mojo`."""
+    if addr == 0:
+        raise Error("mojolearn: null buffer address")
+    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
 def _u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("mojolearn: null buffer address")
@@ -588,6 +598,131 @@ def rbc_knn_search_binding(
         )
     return PythonObject(n_dists)
 
+# ===========================================================================
+# HOST CONVERTERS, DEVIATION 2470 and 2471 (2026-09-10).
+#
+# `python/mojolearn/_buffer.py` turns whatever a caller hands an estimator
+# into the float32 block the kernels read. When NumPy left the Python layer
+# that cast became a pure-Python `array.array` loop and the column-major
+# reorder a per-column memoryview slice; measured at 2,000,000 x 20 float64
+# on the M4 they cost 1,235 ms and 1,424 ms against NumPy's 5.7 ms and
+# 119.4 ms. These two helpers put the work back in compiled code.
+#
+# Neither touches a device. Each is one pass over host memory with the GIL
+# released, the `all_finite_f64_binding` shape from DEVIATION 2303: refuse a
+# negative count by name, do nothing for an empty one, otherwise loop.
+#
+# THE CAST IS THE DEFINITION. Every float64 becomes float32 through exactly
+# one IEEE-754 round-to-nearest-even narrowing, `SIMD.cast[DType.float32]`,
+# which is the hardware `fcvt`/`cvtsd2ss` and the same operation NumPy's
+# `astype(float32)` and CPython's `array.array('f')` item setter perform.
+# Overflow goes to the signed infinity, NaN stays NaN (payload not
+# promised), subnormal float64 rounds like any other value. No flush to
+# zero, no other rounding mode. The bytes therefore equal
+# `numpy.ascontiguousarray(x, dtype=float32)`'s and
+# `numpy.asfortranarray(x, dtype=float32)`'s, and
+# `python/mojolearn/tests/test_native_convert.py` holds them to that on
+# ties, overflows, subnormals and non-finite input.
+# ===========================================================================
+
+comptime _CAST_WIDTH = 8
+"""SIMD lanes per step of the flat cast: 8 float64 in, 8 float32 out. A
+tail shorter than this is finished one element at a time through the same
+`cast`, so the width never changes a bit of the answer."""
+
+comptime _TILE_ROWS = 128
+comptime _TILE_COLS = 64
+"""The fused cast-and-transpose walks the source in `_TILE_ROWS` x
+`_TILE_COLS` tiles: 64 KB of float64 in, 32 KB of float32 out, sized to
+stay in a performance core's L1 so the strided side of the transpose hits
+cache instead of memory. That is DEVIATION 1887's row-tile arm, which the
+pure-Python converter does not carry, moved to where it can be fast. The
+tile shape changes only the order in which independent elements are
+written; each element's value is the same single cast."""
+
+
+def cast_f64_to_f32_binding(
+    src_addr: PythonObject, dst_addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """Write `Float32(src[i])` to `dst[i]` for `i` in `[0, n)` (DEVIATION
+    2470). Returns 0. `n == 0` writes nothing and does not read either
+    address; a negative `n` is refused rather than read. `src` and `dst`
+    must not overlap.
+    """
+    var count = Int(py=n)
+    if count < 0:
+        raise Error(
+            "cast_f64_to_f32: n must be non-negative, got " + String(count)
+        )
+    if count == 0:
+        return PythonObject(0)
+    var sp = _f64_ptr(Int(py=src_addr))
+    var dp = _f32_ptr(Int(py=dst_addr))
+    with GILReleased(Python()):
+        var i = 0
+        var body = count - (count % _CAST_WIDTH)
+        while i < body:
+            var v = sp.unsafe_load[width=_CAST_WIDTH](i)
+            dp.unsafe_store[width=_CAST_WIDTH](i, v.cast[DType.float32]())
+            i += _CAST_WIDTH
+        while i < count:
+            dp.unsafe_store(i, sp.unsafe_load(i).cast[DType.float32]())
+            i += 1
+    return PythonObject(0)
+
+
+def cast_colmajor_f64_to_f32_binding(
+    src_addr: PythonObject,
+    dst_addr: PythonObject,
+    rows: PythonObject,
+    cols: PythonObject,
+) raises -> PythonObject:
+    """Read a C-contiguous float64 `[rows, cols]` matrix at `src`, write the
+    COLUMN-MAJOR float32 matrix at `dst`, `dst[c * rows + r] ==
+    Float32(src[r * cols + c])` (DEVIATION 2471). Returns 0. ONE fused
+    pass: every element is read once, narrowed once and written once to
+    its transposed position; there is no float32 intermediate in the
+    source layout. An empty matrix writes nothing and reads neither
+    address; a negative dimension is refused rather than read. `src` and
+    `dst` must not overlap.
+    """
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    if nr < 0:
+        raise Error(
+            "cast_colmajor_f64_to_f32: rows must be non-negative, got "
+            + String(nr)
+        )
+    if nc < 0:
+        raise Error(
+            "cast_colmajor_f64_to_f32: cols must be non-negative, got "
+            + String(nc)
+        )
+    if nr == 0 or nc == 0:
+        return PythonObject(0)
+    var sp = _f64_ptr(Int(py=src_addr))
+    var dp = _f32_ptr(Int(py=dst_addr))
+    with GILReleased(Python()):
+        var r0 = 0
+        while r0 < nr:
+            var r1 = min(r0 + _TILE_ROWS, nr)
+            var c0 = 0
+            while c0 < nc:
+                var c1 = min(c0 + _TILE_COLS, nc)
+                # Inside the tile: one column at a time, so the writes are
+                # contiguous and the strided reads stay within the tile's
+                # rows, which the previous column just pulled into cache.
+                for c in range(c0, c1):
+                    var dbase = c * nr
+                    for r in range(r0, r1):
+                        dp.unsafe_store(
+                            dbase + r,
+                            sp.unsafe_load(r * nc + c).cast[DType.float32](),
+                        )
+                c0 = c1
+            r0 = r1
+    return PythonObject(0)
+
 
 @export
 def PyInit__mojolearn() abi("C") -> PythonObject:
@@ -604,6 +739,10 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         )
         m.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
         m.def_function[rbc_knn_search_binding]("rbc_knn_search")
+        m.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
+        m.def_function[cast_colmajor_f64_to_f32_binding](
+            "cast_colmajor_f64_to_f32"
+        )
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

@@ -400,14 +400,50 @@ def _has_buffer(obj):
 
 def _convert(a, dtype, order):
     """`a` itself when it already has `dtype` and `order`, else a converted
-    copy. Returns `(Array, copied)`."""
+    copy. Returns `(Array, copied)`.
+
+    A float64 -> float32 conversion goes through the base binding's host
+    converters when the binding is built (DEVIATION 2470, 2471): the flat
+    cast, or ONE fused cast-and-transpose when a C-order source wants
+    column-major output. Without the binding the pure-Python path below
+    runs and produces the same bytes; the native path is a speed choice,
+    never a different answer, and `tests/test_native_convert.py` holds the
+    two to byte equality.
+    """
     if a.dtype == dtype and a._has_order(order):
         # a (1, n) or (n, 1) block is both C- and F-contiguous; relabeling
         # it is free and is not a copy
         return a._as_order(order), False
+    if a.dtype == "<f8" and dtype == "<f4" and a.size:
+        out = _native_f64_to_f32(a, order)
+        if out is not None:
+            return out, True
     if a.dtype != dtype:
         a = a.astype(dtype)  # keeps a's order; the cast is done once
     return a._as_order(order), True
+
+
+def _native_f64_to_f32(a, order):
+    """`a` (float64) as a float32 Array in `order` through the native
+    converters, or None when the binding is not built (the caller then
+    takes the pure-Python path). The result always owns fresh storage."""
+    from ._array import _new_store
+
+    if order == "F" and a.order == "C" and a.ndim == 2 and not a._both_orders():
+        fn = _native("cast_colmajor_f64_to_f32")
+        if fn is None:
+            return None
+        store = _new_store(_CODE["<f4"], a.size)
+        rows, cols = a.shape
+        fn(a._addr, store.buffer_info()[0], rows, cols)
+        return Array._owned(store, a.shape, "<f4", "F")
+    fn = _native("cast_f64_to_f32")
+    if fn is None:
+        return None
+    # the flat cast keeps a's storage order; a relabel or reorder follows
+    store = _new_store(_CODE["<f4"], a.size)
+    fn(a._addr, store.buffer_info()[0], a.size)
+    return Array._owned(store, a.shape, "<f4", a.order)._as_order(order)
 
 
 def _as_typed(obj, dtype, order, ndim, name):
@@ -534,8 +570,11 @@ def all_finite(arr):
 _NATIVE = {}
 
 
-def _native_all_finite(dtype):
-    key = "all_finite_f32" if dtype == "<f4" else "all_finite_f64"
+def _native(key):
+    """The base binding's host helper `key`, cached, or None when the
+    binding is not built, is the wrong tier, or lacks the symbol. Setting
+    `_NATIVE[key] = None` forces the pure-Python path for that helper,
+    which is how the tests and the timing script compare the two arms."""
     if key in _NATIVE:
         return _NATIVE[key]
     fn = None
@@ -546,3 +585,7 @@ def _native_all_finite(dtype):
         fn = None
     _NATIVE[key] = fn
     return fn
+
+
+def _native_all_finite(dtype):
+    return _native("all_finite_f32" if dtype == "<f4" else "all_finite_f64")

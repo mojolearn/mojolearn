@@ -1,0 +1,10 @@
+pairs per case: 7; minimum of each arm reported (ms)
+case                                                     numpy    native     python  np spread
+1,000,000 x 10 f64 C -> f32 C (as_f32_c)                 2.768     3.093    226.170       6.7%
+1,000,000 x 10 f64 C -> f32 F (as_f32_colmajor)         12.811     4.806    271.619       1.2%
+1,000,000 x 10 f32 F -> f32 F (borrow)                   0.002     0.016      0.019     255.3%  VOID
+2,000,000 x 20 f64 C -> f32 C (as_f32_c)                11.625    16.047    910.422       3.7%
+2,000,000 x 20 f64 C -> f32 F (as_f32_colmajor)        127.426    27.839   1105.729      39.7%  VOID
+2,000,000 x 20 f32 F -> f32 F (borrow)                   0.003     0.025      0.030     159.4%  VOID
+
+AT LEAST ONE WINDOW VOID: NumPy drifted more than 20% first to last; the box was heating. Take it again.
