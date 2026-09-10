@@ -14,6 +14,8 @@ for arm in baseline batch512; do
   flags=(-D MOJOLEARN_NUMERIC_IDENTICAL=1)
   if [[ "$arm" == batch512 ]]; then
     flags+=(-D MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512=1)
+  else
+    flags+=(-D MOJOLEARN_KNN_LEGACY_QUERY_TILE=1)
   fi
   mojo build -I "$root" "${flags[@]}" neighbors/checks/query_batch_check.mojo -o "$output/$arm-gate" > "$output/$arm-build-gate.log" 2>&1
   "$output/$arm-gate" > "$output/$arm-gate.log" 2>&1

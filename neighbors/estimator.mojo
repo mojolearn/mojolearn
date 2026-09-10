@@ -229,13 +229,16 @@ from neighbors.impl.neighbors.ball_cover.ball_cover import (
 )
 
 
-# Opt-in bounded scheduling probe; no arithmetic or per-row selector changes.
+# Measured NVIDIA IDENTICAL query batching; row arithmetic is unchanged.
+# Other columns retain256 unless explicitly opting into qualification.
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA
 comptime QUERY_TILE_512_CANDIDATE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]()
+    and not is_defined["MOJOLEARN_KNN_LEGACY_QUERY_TILE"]()
+    and (TARGET_COLUMN == COLUMN_NVIDIA or is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]())
 )
 comptime DEFAULT_QUERY_TILE = 512 if QUERY_TILE_512_CANDIDATE else 256
-"""`bench/bench_main.mojo:72`. The value the published 1.51x was taken at."""
+"""Original256 schedule; measured NVIDIA IDENTICAL512, bounded below."""
 
 comptime MIN_QUERY_TILE = 32
 """The floor the workspace cap will not lower past. Below this the tile loop
@@ -267,7 +270,7 @@ def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int) -> Int:
         # n_index > 400000 the historical estimate necessarily halves 512
         # to 256 (already >768MiB), then follows the exact old default path.
         # This prevents larger radix scratch on unmeasured large indices.
-        if n_index <= 400000:
+        if n_index <= 400000 and tile <= 512:
             per_row_bytes = identical_index_tile(n_index) * 4
     if per_row_bytes > 0:
         while (

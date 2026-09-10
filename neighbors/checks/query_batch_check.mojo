@@ -57,6 +57,8 @@ def main() raises:
         raise Error("large-index historical floor changed")
     if plan_query_tile(100000000, 1, DEFAULT_QUERY_TILE) != 1:
         raise Error("large-index query clamp changed")
+    if plan_query_tile(400000, 4000, 1024) != 256:
+        raise Error("explicit oversized query tile must retain historical cap")
     _case(513, 513, 17, 10)
     _case(65537, 513, 8, 15)
     print("QUERY BATCH PASS", "enabled", QUERY_TILE_512_CANDIDATE, "cases", 2)
