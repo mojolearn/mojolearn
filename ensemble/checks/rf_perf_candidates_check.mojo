@@ -78,6 +78,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     DeviceArgs,
     HistogramArgs,
     launch_build_histograms_kernel,
+    build_histograms_binned_columns_kernel,
 )
 from ensemble.randomforest import sort_passes_for, sort_selected_rows
 from core.segmented_sort import SORT_BLOCK
@@ -426,7 +427,7 @@ def expected_histogram(fx: Fixture) -> List[UInt32]:
 
 
 def run_histogram_arm[
-    sabotage: Int = 0, SMEM_COPIES: Int = 1, SMEM_SLOTS: Int = 4096
+    sabotage: Int = 0, SMEM_COPIES: Int = 1, SMEM_SLOTS: Int = 4096, TILE: Int = 0
 ](
     ctx: DeviceContext,
     mut fx: Fixture,
@@ -445,28 +446,39 @@ def run_histogram_arm[
     var argsp = blob.upload(
         ctx, HistogramArgs[ObjT](fx.dataset(), fx.quantiles(), obj^)
     )
-    launch_build_histograms_kernel[
-        ObjT,
-        TPB=TPB,
-        SMEM_BIN_SLOTS=SMEM_SLOTS,
-        sabotage=sabotage,
-        SMEM_COPIES=SMEM_COPIES,
-    ](
-        ctx,
-        hists.unsafe_ptr()
-        .unsafe_origin_cast[MutUntrackedOrigin]()
-        .unsafe_bitcast[BinT](),
-        MAX_N_BINS,
-        fx.dataset(),
-        fx.wi_ptr(),
-        COL_START,
-        fx.cs_ptr(),
-        fx.wl_ptr(coarse_table),
-        fx.n_coarse if coarse_table else fx.n_fine,
-        GRID_Y,
-        SharedMemoryConfig(use_global, 0),
-        argsp,
-    )
+    comptime if TILE > 0:
+        ctx.enqueue_function[build_histograms_binned_columns_kernel[ObjT, TPB, TILE, SMEM_SLOTS, False, sabotage]](
+            argsp.unsafe_origin_cast[MutAnyOrigin](),
+            hists.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[BinT](),
+            Int32(MAX_N_BINS), fx.wi_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            Int32(COL_START), fx.cs_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            fx.wl_ptr(coarse_table).unsafe_origin_cast[MutAnyOrigin](), Int32(GRID_Y),
+            grid_dim=(fx.n_coarse if coarse_table else fx.n_fine, (GRID_Y + TILE - 1) // TILE),
+            block_dim=TPB,
+        )
+    else:
+        launch_build_histograms_kernel[
+            ObjT,
+            TPB=TPB,
+            SMEM_BIN_SLOTS=SMEM_SLOTS,
+            sabotage=sabotage,
+            SMEM_COPIES=SMEM_COPIES,
+        ](
+            ctx,
+            hists.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[BinT](),
+            MAX_N_BINS,
+            fx.dataset(),
+            fx.wi_ptr(),
+            COL_START,
+            fx.cs_ptr(),
+            fx.wl_ptr(coarse_table),
+            fx.n_coarse if coarse_table else fx.n_fine,
+            GRID_Y,
+            SharedMemoryConfig(use_global, 0),
+            argsp,
+        )
     ctx.synchronize()
     var got = List[UInt32]()
     with hists.map_to_host() as h:
@@ -503,6 +515,20 @@ def main() raises:
     var fx = Fixture(ctx)
     var want = expected_histogram(fx)
     var failures = 0
+
+    # Tiled CTA oracle: ragged nodes, nonzero column start and TILE4 tail.
+    var tiled2 = run_histogram_arm[TILE=2](ctx, fx, False, False)
+    failures += compare_cells("columns2-fine", tiled2, want)
+    var tiled4 = run_histogram_arm[TILE=4](ctx, fx, True, False)
+    failures += compare_cells("columns4-coarse-tail", tiled4, want)
+    var broken = run_histogram_arm[TILE=4, sabotage=3](ctx, fx, True, False)
+    var tile_moved = 0
+    for cell in range(len(want)):
+        if broken[cell] != want[cell]:
+            tile_moved += 1
+    if tile_moved == 0:
+        raise Error("tiled constant-bin negative control did not move")
+    print("columns4 constant-bin negative control moved", tile_moved, "cells")
 
     # ---- G0: baseline (fine table, shared + global) ---------------------
     var g0s = run_histogram_arm(ctx, fx, False, False)

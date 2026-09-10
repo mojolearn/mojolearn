@@ -1,0 +1,17 @@
+numeric_mode DETERMINISTIC
+tile2 False tile4 False
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+fingerprint c2_boot 5726606944640275184
+fingerprint c5_no_boot 12455502853884832092
+fingerprint c5_weighted 1100002076852900240
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+fingerprint c2_weighted_boot 7570235889477969784
+fingerprint c17_capacity 17983501026057668149
+fingerprint c2_bins256 14909814947243426955
+fingerprint c5_search 10218596456525895131
+fingerprint c2_leaf_cap 1679664103476447987
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+fingerprint reg_boot 17968405077015371337
+fingerprint reg_weighted 2237185631435401690
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+fingerprint reg_weighted_boot 12329541255570484614

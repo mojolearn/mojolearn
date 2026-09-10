@@ -1800,6 +1800,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             n_blocks_dimy,
             smem_config,
             hist_argsp,
+            n_classes,
         )
         # DEVIATION 401 -- the column block's REDUCED histograms, hashed
         # between the histogram kernel and the split kernel so the record
