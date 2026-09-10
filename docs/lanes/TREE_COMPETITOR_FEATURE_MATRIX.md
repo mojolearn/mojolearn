@@ -166,5 +166,7 @@ Cross-device identity is a later evidence gate, not a synonym for compilation.
 Update: numeric F2a is implemented; see the [feature contract](GBDT_FEATURE_FRACTION.md)
 for its limited local checks and exploratory timing. Default-one behavior is
 retained. Buffer reuse and dedicated AMD/NVIDIA evidence take priority over
-additional feature knobs. Continue to commit/push completed slices to the lane.
-Main integration remains a separate reviewed step.
+additional feature knobs. Main integration was authorized and the integration
+merge is recorded at `b5d7913d`; retain separate review and evidence for subsequent
+changes. The [symmetric CatBoost comparison audit](SYMMETRIC_CATBOOST_COMPARISON.md)
+distinguishes matched controls, searcher differences and timing qualification.

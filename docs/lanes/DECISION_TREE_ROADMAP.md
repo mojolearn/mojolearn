@@ -268,3 +268,8 @@ per MojoLearn learner retained model/prediction hashes. Competitor timing
 spreads were too large for accepted parity claims; no performance defaults
 changed. The CUDA stream capability probe passed. NVIDIA remains IDENTICAL
 versus competitors for every learner; FAST is a MacBook decision-tree target.
+
+The [symmetric CatBoost comparison audit](SYMMETRIC_CATBOOST_COMPARISON.md)
+records the corrected no-noise profile, different structure-search dispatch,
+and the evidence required before accepting a speed comparison. Historical H100
+artifacts remain unchanged.
