@@ -22,14 +22,11 @@ mojo --version > "$out/compiler.txt" 2>&1
 sha256sum mamba/impl/mamba_ssm/ops/mamba3_siso.mojo gemm/checks/gemm_identical.mojo bindings/_mojolearn_mamba.mojo python/mojolearn/_mamba_impl.py > "$out/source-sha256.txt"
 mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba3_increment_tile_check.mojo -o "$out/increment-check" > "$out/build-increment.log" 2>&1
 "$out/increment-check" > "$out/increment.log" 2>&1
-# Restore the exact archived public harness in the isolated checkout if absent.
-if [ ! -f bench/speed/seq_py_speed_arm.py ]; then
-  mkdir -p bench/speed
-  cp bench/results/mamba3/2026-09-09-statepass/reproduction/seq_py_speed_arm.py bench/speed/
-fi
-if [ ! -f tools/speed_torch_seq.py ]; then
-  cp bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py tools/
-fi
+# Use the MATCHED archived driver/helper pair; the main-tree helper predates
+# the public grid and lacks py_rows. This script requires an isolated checkout.
+mkdir -p bench/speed
+cp bench/results/mamba3/2026-09-09-statepass/reproduction/seq_py_speed_arm.py bench/speed/
+cp bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py tools/
 mkdir -p python/mojolearn/identical
 export PYTHONPATH="$repo/python" MOJOLEARN_NUMERIC_MODE=identical
 for arm in baseline tiled; do
