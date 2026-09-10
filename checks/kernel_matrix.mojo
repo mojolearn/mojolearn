@@ -349,6 +349,10 @@ comptime TARGET_COLUMN = (
     COLUMN_NVIDIA if is_defined["MOJOLEARN_COLUMN_NVIDIA"]() else
     COLUMN_AMD if is_defined["MOJOLEARN_COLUMN_AMD"]() else
     COLUMN_AMD_RDNA if is_defined["MOJOLEARN_COLUMN_AMD_RDNA"]() else
+    # Explicit declaration simulation only; these do not enable a backend.
+    COLUMN_QUALCOMM if is_defined["MOJOLEARN_COLUMN_QUALCOMM"]() else
+    COLUMN_INTEL if is_defined["MOJOLEARN_COLUMN_INTEL"]() else
+    COLUMN_SPEC_BASELINE if is_defined["MOJOLEARN_COLUMN_SPEC_BASELINE"]() else
     COLUMN_AMD if has_amd_gpu_accelerator() else
     COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
     COLUMN_APPLE
