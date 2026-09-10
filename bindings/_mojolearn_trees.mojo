@@ -247,8 +247,12 @@ def et_classifier_fit_binding(
     var times = StageTimes()
     var total_start = times.start()
     var stamp = times.start()
-    var x = _copy_f32(x_addr, n_rows * n_features)
-    times.stop_host("boundary_x_list", stamp)
+    # DEVIATION 2481: caller keeps the immutable feature buffer alive through
+    # this synchronous fit; only labels still require owned staging.
+    var x_pointer = Int(py=x_addr)
+    _ = _f32_ptr(x_pointer)
+    var x = List[Float32]()
+    times.stop_host("boundary_x_borrow", stamp)
     stamp = times.start()
     var y = _copy_f32(y_addr, n_rows)
     times.stop_host("boundary_y_list", stamp)
@@ -259,7 +263,7 @@ def et_classifier_fit_binding(
         var ctx = DeviceContext()
         result = fit_extra_trees_classifier_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
-            config,
+            config, x_addr=x_pointer,
         )
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
@@ -299,8 +303,12 @@ def et_regressor_fit_binding(
     var times = StageTimes()
     var total_start = times.start()
     var stamp = times.start()
-    var x = _copy_f32(x_addr, n_rows * n_features)
-    times.stop_host("boundary_x_list", stamp)
+    # DEVIATION 2481: caller keeps the immutable feature buffer alive through
+    # this synchronous fit; only labels still require owned staging.
+    var x_pointer = Int(py=x_addr)
+    _ = _f32_ptr(x_pointer)
+    var x = List[Float32]()
+    times.stop_host("boundary_x_borrow", stamp)
     stamp = times.start()
     var y = _copy_f32(y_addr, n_rows)
     times.stop_host("boundary_y_list", stamp)
@@ -310,7 +318,8 @@ def et_regressor_fit_binding(
     with GILReleased(Python()):
         var ctx = DeviceContext()
         result = fit_extra_trees_regressor_device(
-            ctx, x, y, Int32(n_rows), Int32(n_features), config
+            ctx, x, y, Int32(n_rows), Int32(n_features), config,
+            x_addr=x_pointer,
         )
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()

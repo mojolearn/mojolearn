@@ -25,6 +25,8 @@ with the with-replacement `RowSampler` wired. This extension is that
 sampler's first Python caller.
 """
 
+from std.memory import memcpy
+
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -341,10 +343,10 @@ def _rf_classifier_fit(
         var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
         var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
         ctx.synchronize()
-        for i in range(n_rows * n_cols):
-            hx.unsafe_ptr().unsafe_store(i, xp[i])
-        for i in range(n_rows):
-            hy.unsafe_ptr().unsafe_store(i, yp[i])
+        # DEVIATION 2481: bulk typed copies preserve every input bit while
+        # avoiding scalar stores into pinned memory.
+        memcpy(dest=hx.unsafe_ptr(), src=xp, count=n_rows * n_cols)
+        memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
         var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
         var dy = ctx.enqueue_create_buffer[CLT](n_rows)
@@ -364,12 +366,12 @@ def _rf_classifier_fit(
             var scales = BinScales(Float32(1), Float32(scale))
             forest = fit_forest[WeightedClsObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-                scales, sample_weight_host=weights,
+                scales, sample_weight_host=weights, host_x_addr=Int(xp),
             )
         else:
             forest = fit_forest[ClsObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-                sample_weight_host=weights,
+                sample_weight_host=weights, host_x_addr=Int(xp),
             )
         ctx.synchronize()
         _ = dx^
@@ -443,10 +445,10 @@ def rf_regressor_fit_binding(
         var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
         var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
         ctx.synchronize()
-        for i in range(n_rows * n_cols):
-            hx.unsafe_ptr().unsafe_store(i, xp[i])
-        for i in range(n_rows):
-            hy.unsafe_ptr().unsafe_store(i, yp[i])
+        # DEVIATION 2481: bulk typed copies preserve every input bit while
+        # avoiding scalar stores into pinned memory.
+        memcpy(dest=hx.unsafe_ptr(), src=xp, count=n_rows * n_cols)
+        memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
         var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
         var dy = ctx.enqueue_create_buffer[RLT](n_rows)
@@ -471,7 +473,8 @@ def rf_regressor_fit_binding(
         # `n_unique_labels` is 1 for regression, exactly what
         # `rf_regressor_fit`'s cuML counterpart passes.
         forest = fit_forest[RegObj](
-            ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, scales
+            ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
+            host_x_addr=Int(xp),
         )
         ctx.synchronize()
         _ = dx^

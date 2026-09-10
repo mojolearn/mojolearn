@@ -2,6 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
+from std.memory import memcpy
+
 from ensemble.instruments import StageTimes
 
 from extratrees.checks.host_splitter import (
@@ -1998,25 +2000,34 @@ def upload_dataset(
     n_rows: Int32,
     n_cols: Int32,
     n_classes: Int32,
+    x_addr: Int = 0,
 ) raises -> DeviceDataset:
     """Put the immutable half of the fit on the device, once. DEVIATION 184."""
-    if len(x_col_major) != Int(n_rows) * Int(n_cols):
+    if x_addr == 0 and len(x_col_major) != Int(n_rows) * Int(n_cols):
         raise Error("x_col_major must be n_rows * n_cols long, column major")
     if len(class_ids) != Int(n_rows):
         raise Error("class_ids must be n_rows long")
+    # DEVIATION 2481: a nonzero address borrows caller-owned column-major X
+    # through this synchronous upload. List callers use the identical staging
+    # path; labels remain validated/quantized by the existing forest entry.
+    var count = Int(n_rows) * Int(n_cols)
     var boundary_times = StageTimes()
     var boundary_start = boundary_times.start()
-    var d_data = ctx.enqueue_create_buffer[DType.float32](len(x_col_major))
+    var d_data = ctx.enqueue_create_buffer[DType.float32](count)
     var d_labels = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
     var h_data = ctx.enqueue_create_host_buffer[DType.float32](
-        len(x_col_major)
+        count
     )
     var h_labels = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
     ctx.synchronize()
-    for i in range(len(x_col_major)):
-        h_data.unsafe_ptr().unsafe_store(i, x_col_major[i])
-    for i in range(Int(n_rows)):
-        h_labels.unsafe_ptr().unsafe_store(i, class_ids[i])
+    if x_addr != 0:
+        var source = MutPointer[Float32, MutUntrackedOrigin](
+            unsafe_from_address=x_addr
+        )
+        memcpy(dest=h_data.unsafe_ptr(), src=source, count=count)
+    else:
+        memcpy(dest=h_data.unsafe_ptr(), src=x_col_major.unsafe_ptr(), count=count)
+    memcpy(dest=h_labels.unsafe_ptr(), src=class_ids.unsafe_ptr(), count=Int(n_rows))
     ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
     ctx.synchronize()
