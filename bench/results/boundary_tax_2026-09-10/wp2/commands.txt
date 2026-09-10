@@ -10,3 +10,5 @@ PYTHONPATH=python /tmp/mojolearn-release-080/tests-env/bin/python tools/bench_fo
 # Native FAST DSO snapshots retained outside git:
 # /tmp/mojolearn-boundary-candidate/fast/_mojolearn_trees.so
 # /tmp/mojolearn-boundary-candidate/fast/_mojolearn_rf.so
+
+Retained compiler logs normalize trailing whitespace only; raw originals remain /tmp/wp2-*.build.log.

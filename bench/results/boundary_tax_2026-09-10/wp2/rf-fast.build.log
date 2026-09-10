@@ -201,27 +201,27 @@ Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_
 ./core/forest_inference.mojo:171:5: warning: '@parameter for' is deprecated; use 'comptime for'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:41:
 ./core/forest_inference.mojo:178:13: warning: '@parameter for' is deprecated; use 'comptime for'
             @parameter
             ^~~~~~~~~~
-            comptime 
+            comptime
 Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:41:
 ./core/forest_inference.mojo:184:5: warning: '@parameter for' is deprecated; use 'comptime for'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:41:
 ./core/forest_inference.mojo:191:13: warning: '@parameter for' is deprecated; use 'comptime for'
             @parameter
             ^~~~~~~~~~
-            comptime 
+            comptime
 Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:41:
 ./core/forest_inference.mojo:197:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_rf.mojo:858:29: warning: unreachable code after function that never returns
         return PythonObject(None)
                             ^

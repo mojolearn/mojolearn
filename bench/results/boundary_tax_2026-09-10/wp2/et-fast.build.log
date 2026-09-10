@@ -205,27 +205,27 @@ Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_
 ./core/forest_inference.mojo:171:5: warning: '@parameter for' is deprecated; use 'comptime for'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_trees.mojo:42:
 ./core/forest_inference.mojo:178:13: warning: '@parameter for' is deprecated; use 'comptime for'
             @parameter
             ^~~~~~~~~~
-            comptime 
+            comptime
 Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_trees.mojo:42:
 ./core/forest_inference.mojo:184:5: warning: '@parameter for' is deprecated; use 'comptime for'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_trees.mojo:42:
 ./core/forest_inference.mojo:191:13: warning: '@parameter for' is deprecated; use 'comptime for'
             @parameter
             ^~~~~~~~~~
-            comptime 
+            comptime
 Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_trees.mojo:42:
 ./core/forest_inference.mojo:197:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bindings/_mojolearn_trees.mojo:64:
 Imported from ./extratrees/impl/randomforest/randomforest.mojo:95:
 ./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2787:24: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
