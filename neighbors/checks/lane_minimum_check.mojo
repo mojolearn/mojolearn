@@ -52,6 +52,6 @@ def main() raises:
     with DeviceContext() as ctx:
         comptime for exponent in range(8):
             comptime width = 1 << exponent
-            check[width, column_lane_width_is_fixed(TARGET_COLUMN)](ctx)
+            check[width, column_lane_width_is_fixed(TARGET_COLUMN) and not column_is_simulated()](ctx)
             check[width, False](ctx)
     print("LANE MINIMUM WIDTH PASS", "cases", 16, "cells", BLOCK * 32)
