@@ -55,6 +55,16 @@ Serial pipeline CV now has a bounded public API; see the
 [cross-validation contract](GPU_CROSS_VALIDATION.md). Native GPU splitting,
 encoders and device-resident pipeline ownership remain queued.
 
+## Competitor feature gaps and implementation sequence
+
+The [feature-by-feature comparison](TREE_COMPETITOR_FEATURE_MATRIX.md) lists
+LightGBM, XGBoost, CatBoost and MojoLearn side by side, with GPU restrictions,
+implementation dependencies and source references. Core growth is present;
+broad product parity remains incomplete. Next feature slice: F2a numeric
+per-tree feature sampling, followed by interaction masks and coherent leaf
+regularization/monotonic bounds. P6 reusable Python datasets remains the
+parallel performance priority. All three numeric modes stay supported.
+
 ## What is already present
 
 | Area | Implemented scope | Remaining qualification or limitation |
@@ -205,5 +215,5 @@ before shipping the core GPU growth controls.
 | RF timing refresh | Completed: all four timing windows failed stability; 120 model fingerprints match. [Sep10 evidence](../../bench/results/rf_column_tiles_2026-09-10/EVIDENCE.md). Defaults unchanged. |
 | Minimum child Hessian | Implemented for the three audited scalar losses with Newton scoring; native/public checks pass in all modes on M4. [Feature and evidence](GBDT_MIN_CHILD_HESSIAN.md). Cross-vendor qualification remains. |
 | Sub-byte layout gate | Retained for live histogram layouts; named pixi task and hardware-matrix entry both pass all three internal negative controls. [Audit and commands](SUB_BYTE_LAYOUT_GATE.md). |
-| Pipeline expansion | A1 unweighted Float32 MSE/MAE/RMSE, A2 unweighted confusion/precision/recall/F1, and B1 RF/ET sklearn protocol implemented; see their contracts in the [detailed plan](GPU_PIPELINE_PLAN.md). [GPU log loss](GPU_LOG_LOSS.md) is implemented with build/smoke validation only; full numerical qualification is pending. [Binary ROC-AUC/PR curves](GPU_RANKING_METRICS.md) are implemented with local build/smoke checks only; they do not add learning-to-rank. [GPU MinMaxScaler](GPU_MINMAX_SCALER.md) adds bounded finite Float32 preprocessing with limited local checks; [GPU StandardScaler](GPU_STANDARD_SCALER.md) adds centered Float32 population variance under the same limited validation scope. [B2 GBDT adapters](GBDT_SKLEARN_ADAPTER_PLAN.md) now cover RMSE regression and binary Logloss classification with GPU Float32 probabilities, preserving the legacy learner API; local qualification evidence is pending. Broader model selection remains planned. Keep DETERMINISTIC pending measurements. |
+| Pipeline expansion | A1 unweighted Float32 MSE/MAE/RMSE, A2 unweighted confusion/precision/recall/F1, and B1 RF/ET sklearn protocol implemented; see their contracts in the [detailed plan](GPU_PIPELINE_PLAN.md). [GPU log loss](GPU_LOG_LOSS.md) is implemented with build/smoke validation only; full numerical qualification is pending. [Binary ROC-AUC/PR curves](GPU_RANKING_METRICS.md) are implemented with local build/smoke checks only; they do not add learning-to-rank. [GPU MinMaxScaler](GPU_MINMAX_SCALER.md) adds bounded finite Float32 preprocessing with limited local checks; [GPU StandardScaler](GPU_STANDARD_SCALER.md) adds centered Float32 population variance under the same limited validation scope. [B2 GBDT adapters](GBDT_SKLEARN_ADAPTER_PLAN.md) now cover RMSE regression and binary Logloss classification with GPU Float32 probabilities, preserving the legacy learner API; local build/smoke evidence is recorded. Bounded [serial cross-validation](GPU_CROSS_VALIDATION.md) is implemented using optional sklearn splitting/cloning; native splitters and broader model selection remain planned. Keep DETERMINISTIC pending measurements. |
 | Other features above | Planned; start independent slices after current gates finish |
