@@ -35,8 +35,13 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SKIP_DIRS = {".git", ".pixi", "archive", "bench/results", "__pycache__", ".venv",
-             "upstream", "node_modules", "corpus", "python/build"}
+#: `.claude` holds agent worktrees, each a full checkout of this repository.
+#: Without it here the walk crosses every one of them and takes minutes on a
+#: tree that is otherwise scanned in about a second, which is the difference
+#: between a gate somebody runs and a script nobody does.
+SKIP_DIRS = {".git", ".pixi", ".claude", "archive", "bench/results",
+             "__pycache__", ".venv", "upstream", "node_modules", "corpus",
+             "python/build"}
 SCAN_EXT = {".md", ".py", ".sh", ".mojo", ".toml"}
 
 #: A backticked token is treated as a path claim only if it looks like one:
@@ -65,21 +70,44 @@ def environments():
     return set(re.findall(r"^([A-Za-z0-9_-]+)\s*=", m.group(1), re.M))
 
 
+#: Never descended by either walk. `.claude` holds agent worktrees, each a
+#: full checkout of this repository, so crossing them multiplies the tree by
+#: however many lanes are open.
+PRUNE = (".git", ".pixi", ".claude", "node_modules", ".venv")
+
+
+def _in(rel, names):
+    return any(rel.startswith(d) or f"/{d}/" in f"/{rel}" for d in names)
+
+
+def walk(extra=()):
+    """Every file under ROOT, pruning instead of descending."""
+    prune = PRUNE + tuple(extra)
+    stack = [ROOT]
+    while stack:
+        for entry in stack.pop().iterdir():
+            rel = entry.relative_to(ROOT).as_posix()
+            if _in(rel, prune):
+                continue
+            if entry.is_dir():
+                if not entry.is_symlink():
+                    stack.append(entry)
+            elif entry.is_file():
+                yield entry, rel
+
+
 def scan_files():
-    for p in ROOT.rglob("*"):
-        if p.suffix not in SCAN_EXT or not p.is_file():
-            continue
-        rel = p.relative_to(ROOT).as_posix()
-        if any(rel.startswith(d) or f"/{d}/" in f"/{rel}" for d in SKIP_DIRS):
-            continue
-        yield p, rel
+    """Files whose TEXT is read for claims. SKIP_DIRS is about the claims, so
+    `archive/` is not scanned; it is still indexed below, because a citation
+    OF an archived file has to keep resolving."""
+    for p, rel in walk(SKIP_DIRS):
+        if p.suffix in SCAN_EXT:
+            yield p, rel
 
 
 def main():
     global REPO_FILES
-    REPO_FILES = [f.relative_to(ROOT) for f in ROOT.rglob("*")
-                  if f.is_file() and ".git/" not in f.as_posix()
-                  and "/.pixi/" not in f.as_posix()]
+    REPO_FILES = [pathlib.Path(rel) for _, rel in walk()]  # index everything
     envs = environments()
     print(f"pixi environments defined: {', '.join(sorted(envs)) or '(none)'}")
     bad_env, bad_path, checked = [], [], 0

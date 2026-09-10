@@ -39,16 +39,21 @@ max = ">=26.5.0,<27"
 probe = "mojo run -I . probe_main.mojo"
 
 # ---------------------------------------------------------------------------
-# DOC GATES. Neither needs a GPU and both run in about a second, so there is
-# no reason for a restated fact to rot between releases.
+# DOC GATES. Neither needs a GPU, one takes a second and the other about six,
+# so there is no reason for a restated fact to rot between releases.
 #
 # `check-docs` settles the two classes a machine can settle without guessing
-# at meaning: a `pixi run -e` naming an environment pixi.toml never defines,
-# and a backticked path that is not on disk.
+# at meaning, a `pixi run -e` naming an environment pixi.toml never defines
+# and a backticked path that is not on disk. IT IS A REPORT, NOT YET A GATE.
+# On 2026-09-10 it lists 345 dead citations, most of them `archive/` paths
+# that no longer exist. It also used to take minutes, because it indexed
+# every agent worktree under .claude/ and then scanned that index once per
+# citation; pruning those took it to about six seconds, which is the
+# difference between a check somebody runs and one nobody does.
 #
-# `check-docs-facts` settles a third: the handful of facts with exactly ONE
-# source of truth in the tree that then get RESTATED in prose, in an install
-# command and in a badge. The version, the default numeric mode and the DOI.
+# `check-docs-facts` settles a third class, the handful of facts with exactly
+# ONE source of truth in the tree that then get RESTATED in prose, in an
+# install command and in a badge. The version, the default mode and the DOI.
 # `--write` repairs the marked spans; the pins and the prose are edits a
 # person makes. Run it at Freeze, step 1 of docs/RELEASE_CHECKLIST.md.
 check-docs = "python3 tools/check_docs_reference_reality.py"

@@ -112,7 +112,7 @@ workloads. Those measurements reflect both the numerical constraints and
 optimization gaps in the current kernels. The numbers are in the accompanying
 paper; the raw records behind them live under `bench/results/`.
 
-**`identical` is the default**, in the published 0.7.0 wheels and in this
+**`identical` is the default**, in the published <!--fact:version-->0.7.0<!--/fact--> wheels and in this
 source. You opt out of it, not into it, by setting
 `MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment before
 import, or by calling `mojolearn.set_numeric_mode(...)` in code.
@@ -142,7 +142,7 @@ source .venv/bin/activate
 pip install mojolearn
 ```
 
-Version **0.7.0 is published on PyPI** as an alpha API release, a macOS arm64
+Version **<!--fact:version-->0.7.0<!--/fact--> is published on PyPI** as an alpha API release, a macOS arm64
 wheel and one Linux x86-64 wheel that now carries **CUDA sm_89, CUDA sm_90 and
 HIP gfx942** together, each in all three numeric modes, plus the
 identical-mode byte-LM trainer extension per architecture. NVIDIA Linux is no
@@ -168,7 +168,7 @@ as released-wheel support.
 
 ### Stability and release cadence
 
-mojolearn went from 0.1.0 on 2026-08-23 to 0.7.0 on 2026-09-09, seven PyPI
+mojolearn went from 0.1.0 on 2026-08-23 to <!--fact:version-->0.7.0<!--/fact--> on <!--fact:version_date-->2026-09-09<!--/fact-->, seven PyPI
 releases in under three weeks (0.1.0, 0.2.0, 0.3.0, 0.3.1, 0.5.0, 0.6.0,
 0.7.0; 0.3.2, 0.4.0 and 0.6.1 are recorded in [CHANGELOG.md](CHANGELOG.md) but
 were not published to PyPI). One release was yanked. 0.3.0, published

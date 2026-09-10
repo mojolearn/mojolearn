@@ -20,7 +20,17 @@ on the release Mac is 30 to 60 minutes.
 ## 1. Freeze
 
 Bump `python/mojolearn/_version.py` and `python/pyproject.toml`, add the
-CHANGELOG entry, commit, push. Every build below runs from that commit.
+CHANGELOG entry, then
+
+```sh
+pixi run write-docs-facts   # rewrites the marked spans in README.md
+pixi run check-docs-facts   # fails if a pin, a badge or a prose default drifted
+```
+
+`_version.py` is the source of truth and the checker holds `pyproject.toml`,
+`CITATION.cff` and the newest published CHANGELOG heading to it, so a
+half-finished bump goes red here rather than shipping in a README. Commit,
+push. Every build below runs from that commit.
 
 ## 2. Build the three Linux sets (parallel, about 30 minutes)
 
