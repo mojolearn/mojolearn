@@ -198,3 +198,141 @@ still agree), 116 checks 0 failed.
    `/root/bin/fused_check` first (seconds), then the two cards, then time
    with `MOJOLEARN_TRANSFORMER_TIMING=1 ... --rounds 1` for the breakdown.
 4. Merge after the Apple RUN OWED list is green.
+
+## Wound down 2026-09-09 (round 3, register-blocked lane, Andrew's order)
+
+Branch `lane/fused-attention-regblock` (worktree
+`.claude/worktrees/agent-afe1520062beaa327`), created on main `bdc110a0`.
+The wind-down order arrived while the design was being turned into code.
+
+**What exists.** No kernel code was written to the tree. The default path
+on the branch is exactly main's (the landed three-pass kernels); nothing
+is behind a define because nothing was added. **No pod was rented** (no
+`attn_pod.sh up`, no state file, 0.0 pod hours). **No gate ran** and no
+timing was taken. The only product of this round is the design below,
+which was worked out against the landed kernels, the tuned GEMM's
+register tile (`gemm_identical.mojo::identical_gemm_tuned_kernel`,
+`_tuned_g2r`), and the kernel matrix's `lib_smem_page_fits_for`.
+
+### The register-blocked design as worked out (not built)
+
+Every kernel keeps 256 threads. The rows-per-block kernels (forward,
+zdot, dq) own `TQ = 64` query rows of one `(batch, head)`; dkdv owns
+`BJ = 64` keys of one `(batch, kv head)`. The score tile of one key (or
+query) block is `64 x BK` with thread `(tr = tid // 16, tc = tid % 16)`
+holding rows `tr + u * 16` (u < 4) and columns `tc + v * 16` (v < BK/16),
+which is the tuned GEMM's `accrow`/`acccol` mapping and its 4x4 register
+tile at `BK = 64`. Both operands are staged per `KS`-wide window of
+`head_dim` as `[rows][KS + 4]` shared pages (the GEMM's `SSTRIDE`, float4
+loads along `p`, bank-conflict free), flushed once at staging
+(`ftz_simd`), and the dot is the same ascending `_step` chain over `p`
+(windows ascending, `p` ascending inside each), so the score bits cannot
+move. `KS = 16` or `32` where `head_dim % KS == 0`, else `KS = head_dim`
+(hd 24).
+
+Row chains. Pass 1 (max) folds each thread's cells into per-row register
+partials, then 16 partials per row combine through shared memory (any
+order, contract 5.1). Pass 2 (denominator) stores `e` into a row-major
+`[64][BK + 1]` shared tile and threads `tid < 64` walk their row's cells
+ascending with `ftz(ftz(acc) + ftz(e))`, skipping masked cells by the
+row's `[j_lo, j_hi]` predicate exactly as today. Pass 3 (context) stores
+`w` TRANSPOSED as `[BK][64 + 4]` so the chain thread `(row group of 4,
+d-quad)` reads one float4 of `w` (4 rows) and one float4 of `v` (4 d's)
+per key: 2 LDS.128 per 16 fma, with the visible-range predicate per row
+per key (a compare against a comptime column index) and `-0.0` corner
+check at the end exactly as today (`acc == -0.0 and j_hi < s - 1`).
+Head dims above 64 give each thread `ceil((64/4) * (hd/4) / 256)` chain
+slots (2 at hd 128); hd 16 and 24 leave chain threads idle. The V tile
+`[BK][hd]` (no pad; every chain thread reads the same key row at once)
+is staged into the SAME buffer as the q/k windows after the score phase
+(a union, one extra barrier per key tile), which is what makes hd 128 fit
+a 32 KB column. zdot keeps two row-major tiles (`y`, `dy`) and a 64-thread
+chain; dq stores one transposed `dcell` tile and stages the full K tile
+into the window buffer for a `(row group, d-quad)` chain; dkdv's score
+tile is `[64 keys] x [TT queries]`, the per-query scalars `amax/denom/
+zdot` are loaded per column, `y` and `dcell` are stored `[TT][64 + 4]`,
+and the full q and dctx tiles `[TT][hd]` share the window buffer for the
+`(key group, d-quad)` chain over queries ascending inside heads ascending,
+with the per-head `-0.0` check as today.
+
+Page bytes (floats x 4; `stg` is the union buffer, `tile` the e/w tile
+which is `max(64 * (BK + 1), BK * 68, 2 * 64 * 16)` floats, plus 64 floats
+of row scalars in the forward):
+
+| kernel | hd | plan (BK or TT, KS) | bytes | 48 KB (NVIDIA) | 32 KB (Apple) |
+|---|---|---|---|---|---|
+| forward | 64 | BK 64, KS 32 | 36,096 | fits | no |
+| forward | 64 | BK 32, KS 32 | 22,784 | fits | fits |
+| forward | 128 | BK 64, any KS | 50,432 | no | no |
+| forward | 128 | BK 32, KS 32 | 25,344 | fits | fits |
+| forward | 16 | BK 64, KS 16 | 27,904 | fits | fits |
+| forward | 24 | BK 64, KS 24 | 32,000 | fits | fits (768 B spare) |
+| zdot | 64 | BK 64, KS 32 | 51,712 | no | no |
+| zdot | 64 | BK 64, KS 16 | 43,520 | fits | no |
+| zdot | 64 | BK 32, KS 32 | 30,720 | fits | fits |
+| dq | 64 | BK 64, KS 32 | 35,840 | fits | no |
+| dq | 64 | BK 32, KS 32 | 22,528 | fits | fits |
+| dkdv | 64 | TT 32, KS 32 | 33,792 | fits | no |
+| dkdv | 64 | TT 16, KS 32 | 20,224 | fits | fits |
+| dkdv | 128 | TT 32, KS 32 | 50,176 | no | no |
+| dkdv | 128 | TT 16, KS 32 | 25,088 | fits | fits |
+
+The intended resolver is one comptime scan per (kernel kind, head dim)
+over the candidate list `(64,32), (64,16), (32,32), (32,16), (16,16)`
+(dkdv over `(32,32), (32,16), (16,32), (16,16)`), taking the first plan
+whose bytes pass `lib_smem_page_fits_for[TARGET_COLUMN, bytes]()`, with
+the plan encoded as `bk * 1000 + ks` in a comptime Int and
+`fused_supported_head_dim` reporting whether the resolved plans of all
+four kinds fit. No new kernel-matrix row is needed. The kernel matrix's
+`lib_smem_page_fits_for` docstring still says hd 128 claims 35,600 bytes
+and takes the eager path on Apple; that sentence becomes stale the day
+the BK 32 plan lands (the orchestrator owns that file).
+
+Why the masked cells are handled by predicate and not by folding
+`+0.0` weights. Folding them would be exact for the denominator (the
+chain is never `-0.0`) and would reproduce the eager tail laundering for
+the context, zdot and dq chains, which would make the `underflow` case
+report RAN instead of CORNER; the round-3 brief asks for the corner
+semantics unchanged, so the chains skip by predicate (2 integer compares
+and a predicated fma per cell, second order next to the 64-term dots).
+
+### Where the 177 ms forward core goes, as estimated (not measured)
+
+The landed kernel stages one 16 KB K tile per 4 query rows per pass
+(about 100 GB of L2 to SM traffic at the Samba shape), runs the
+denominator chain on 4 of 256 threads per block, and runs the context
+chain as a runtime loop with two scalar LDS and a branch per fma. The
+tiled design cuts the staging traffic about 8x (64 rows per staged tile,
+q re-staged per window), runs 64 chains per block, and unrolls the chains
+over comptime column indices. The `identical_exp` (about 25 fp32 ops)
+and `identical_div` (one hardware division) seams are cheap; they are
+not where the time is. This paragraph is an estimate; the next agent
+should measure the phase breakdown before and after
+(`MOJOLEARN_TRANSFORMER_TIMING=1 ... --rounds 1`).
+
+### RUN OWED on the Apple M4
+
+Nothing new. The branch's code is main's; the round-2 list above stands.
+
+### Next commands for a fresh agent, in order
+
+1. `git checkout lane/fused-attention-regblock`; read this section, the
+   file header of `fused_attention.mojo`, and the tuned GEMM's
+   `identical_gemm_tuned_kernel` accumulate loop and `_tuned_g2r`.
+2. Write the four kernels as above in `fused_attention.mojo` with the
+   comptime plan resolver; keep the launcher signatures (raw buffers) so
+   `modeling_llama.mojo` and `transformer_backward.mojo` do not change.
+   A shared-memory pointer crosses a helper boundary with
+   `[origin: MutOrigin, //]` and
+   `MutPointer[Float32, origin, address_space = AddressSpace.SHARED]`
+   (`checks/shared_pointer_probe.mojo`).
+3. Add fused-check cases for hd 128 at the BK 32 plan and for a visible
+   run length that is not a multiple of 64 or of BK (for example L 150
+   with window 45), and print the resolved plans in the check's header.
+4. Rent one L40S (`tools/attn_pod.sh up "NVIDIA L40S"`), ship the commit
+   ONCE (the archive is about 10 MB at 30 KB/s), then iterate with
+   `attn_pod.sh put` on the single changed file; build with
+   `tools/with_identical_mode.sh pixi run mojo build -I . transformer/checks/transformer_fused_check.mojo -o /root/bin/fused_check`
+   and run it first (seconds), then the two cards, the surface test, and
+   the timing per the round-2 job log
+   `bench/results/attnlane_fused_2026-09-09/round2_8b996d6d/full.log`.
