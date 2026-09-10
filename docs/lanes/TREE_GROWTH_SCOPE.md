@@ -11,6 +11,12 @@ Consolidated implementation sequence and backlog: [DECISION_TREE_ROADMAP.md](DEC
 Decision recorded 2026-09-09 at the user's request. Keep this scope when
 continuing tree work in later sessions.
 
+- Prioritize large-data GPU training. Base training-speed decisions and
+  performance defaults on representative large real datasets (HIGGS 1M is one
+  example), recording memory pressure and held-out quality. Choose scale using
+  features, classes, bins, depth and device capacity as well as row count;
+  there is no universal minimum row threshold. Small correctness/smoke and
+  diagnostic fixtures are welcome but are not large-data speed evidence.
 - Optimize and extend the GPU learner. Do not build a CPU tree-training
   backend or pursue CPU-only CatBoost parity for its own sake.
 - CPU preparation and coordination are intentional parts of the GPU pipeline:

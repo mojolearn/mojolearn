@@ -34,6 +34,13 @@ Backend support in competitors must be checked separately from general APIs.
 
 ## Performance priorities — user steering, 2026-09-10
 
+Large-data training is the optimization target. Accept training-speed claims
+and performance-driven defaults only with representative large real datasets,
+including held-out quality, stable whole-fit timing and memory-pressure evidence.
+HIGGS 1M is an example, not a universal size threshold: feature/class counts,
+bins, depth and device capacity can dominate rows. Small correctness/smoke tests
+and kernel diagnostics remain useful; they cannot establish a large-data gain.
+
 Success is IDENTICAL versus the relevant GPU competitor on NVIDIA, across
 all learners, including RF, ET and symmetric/oblivious GBDT. FAST performance
 work is requested only for decision trees on the local MacBook. This latest
