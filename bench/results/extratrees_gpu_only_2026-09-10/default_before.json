@@ -1,0 +1,8 @@
+{
+  "deterministic/ExtraTreesClassifier": "79780f97d754dd820e0645431bf65f54dbbfa603419e2eb22d20db0c125bf5d1",
+  "deterministic/ExtraTreesRegressor": "11dc3fdb120a869cb0d9d08d992a7317ff0fa466a1b294ea805c7207fec509ea",
+  "fast/ExtraTreesClassifier": "79780f97d754dd820e0645431bf65f54dbbfa603419e2eb22d20db0c125bf5d1",
+  "fast/ExtraTreesRegressor": "11dc3fdb120a869cb0d9d08d992a7317ff0fa466a1b294ea805c7207fec509ea",
+  "identical/ExtraTreesClassifier": "79780f97d754dd820e0645431bf65f54dbbfa603419e2eb22d20db0c125bf5d1",
+  "identical/ExtraTreesRegressor": "11dc3fdb120a869cb0d9d08d992a7317ff0fa466a1b294ea805c7207fec509ea"
+}

@@ -60,8 +60,10 @@ encoders and device-resident pipeline ownership remain queued.
 The [feature-by-feature comparison](TREE_COMPETITOR_FEATURE_MATRIX.md) lists
 LightGBM, XGBoost, CatBoost and MojoLearn side by side, with GPU restrictions,
 implementation dependencies and source references. Core growth is present;
-broad product parity remains incomplete. Next feature slice: F2a numeric
-per-tree feature sampling, followed by interaction masks and coherent leaf
+broad product parity remains incomplete. F2a numeric
+[per-tree feature sampling](GBDT_FEATURE_FRACTION.md) is implemented; focus next
+on its allocation costs and AMD/NVIDIA evidence before proceeding to interaction
+masks and coherent leaf
 regularization/monotonic bounds. P6 reusable Python datasets remains the
 parallel performance priority. All three numeric modes stay supported.
 
@@ -92,6 +94,12 @@ Evidence and bounded feature coverage:
 
 ## Performance work: preserve the learner
 
+Latest steering: prioritize measured end-to-end speed over developer ergonomics.
+The [reuse audit](TREE_CODE_REUSE_AUDIT.md) separates safe shared primitives
+from algorithm differences. Optional feature sampling changes the learner; its
+packing/cache costs need whole-fit measurements, not a histogram-count claim.
+
+
 | ID / priority | Reference and implementation approach in Mojo | Acceptance gate |
 | --- | --- | --- |
 | P1 / now: RF histogram tiles | cuML batched shared histograms already underpin RF. Measure current two/four-column kernels that amortize row/label gathers and size shared storage to actual bins/classes; profile before adding other layouts. | Full model, prediction and OOB fingerprints; positive dispatch witnesses; stable repeated FAST/IDENTICAL timing; no default selection from noisy runs. |
@@ -120,7 +128,7 @@ per-node Python scalar construction during fit.
 | ID / priority | Reference | Mojo implementation and dependency | Required evidence |
 | --- | --- | --- | --- |
 | F1 / implemented bounded slice: minimum child Hessian | LightGBM `min_sum_hessian_in_leaf`; XGBoost `min_child_weight` | Apply eligibility to each candidate before winner selection using actual objective curvature, not a score denominator mislabeled as Hessian. First slice supports NewtonL2/NewtonCosine with RMSE/Logloss/CrossEntropy and explicit weighting/bootstrap semantics. Other scores/losses need a separate curvature plane or audit. Default disabled; plumb through native, prepared, Python and binding APIs. | Analytic weighted regression/logistic cases, equality boundary, highest-score-ineligible but second-best-valid split, default fingerprints, mode readback and public fits. |
-| F2 / next: feature sampling | LightGBM per-tree/per-node fractions; XGBoost `colsample_*` | Deterministic masks keyed by seed/tree/node and a specified stable feature order. First implement per-tree, then per-node; thread masks into candidate enumeration to avoid work. Specify intersection with categorical sources, interaction constraints and shared symmetric-depth splits. | Fraction-one default equivalence, known RNG vectors and selected-feature witnesses, no empty masks, all policies/modes, cross-device masks, work counters and quality/time comparison. |
+| F2 / bounded per-tree slice implemented; node/level later | LightGBM per-tree/per-node fractions; XGBoost `colsample_*` | Deterministic masks keyed by seed/tree/node and a specified stable feature order. Numeric per-tree sampling now reuses the existing searchers with selected-bin projection. Node/level sampling remains queued; measure packing/cache overhead before speed claims. Specify intersection with categorical sources, interaction constraints and shared symmetric-depth splits. | Fraction-one default equivalence, known RNG vectors and selected-feature witnesses, no empty masks, all policies/modes, cross-device masks, work counters and quality/time comparison. |
 | F3 / next: interaction constraints | XGBoost/LightGBM permitted interaction groups | Carry allowed-feature state along each path. Respect overlapping groups; intersect with sampling masks. Define symmetric-tree shared-split eligibility explicitly. | Exhaustive tiny path oracle, overlapping/disjoint groups, invalid feature IDs, unseen features, save/load and constraint verification over every model path. |
 | F4 / later: monotonic constraints | XGBoost constrained split evaluation; LightGBM monotone bounds | Start with numeric features and a bounded objective/leaf-estimation profile. Carry descendant lower/upper bounds, score feasible leaves and enforce bounds in final estimation. Split filtering alone is insufficient. | Independent ordered-pair predictions, descendant-bound oracle, weighted/NaN cases, repeated estimation steps, round trips and cross-device identity. |
 | F5 / later: L1 and bounded updates | XGBoost `reg_alpha`/`max_delta_step`; LightGBM leaf regularization | Specify objective scaling and apply soft-thresholding/bounds coherently to gain and leaf estimation. Integrate with monotonic bounds and iterative leaf updates; do not only change the score kernel. | Closed-form one-leaf/two-leaf cases, zero/default equivalence, threshold edges, weighted losses and independent loss checks. |
@@ -216,4 +224,6 @@ before shipping the core GPU growth controls.
 | Minimum child Hessian | Implemented for the three audited scalar losses with Newton scoring; native/public checks pass in all modes on M4. [Feature and evidence](GBDT_MIN_CHILD_HESSIAN.md). Cross-vendor qualification remains. |
 | Sub-byte layout gate | Retained for live histogram layouts; named pixi task and hardware-matrix entry both pass all three internal negative controls. [Audit and commands](SUB_BYTE_LAYOUT_GATE.md). |
 | Pipeline expansion | A1 unweighted Float32 MSE/MAE/RMSE, A2 unweighted confusion/precision/recall/F1, and B1 RF/ET sklearn protocol implemented; see their contracts in the [detailed plan](GPU_PIPELINE_PLAN.md). [GPU log loss](GPU_LOG_LOSS.md) is implemented with build/smoke validation only; full numerical qualification is pending. [Binary ROC-AUC/PR curves](GPU_RANKING_METRICS.md) are implemented with local build/smoke checks only; they do not add learning-to-rank. [GPU MinMaxScaler](GPU_MINMAX_SCALER.md) adds bounded finite Float32 preprocessing with limited local checks; [GPU StandardScaler](GPU_STANDARD_SCALER.md) adds centered Float32 population variance under the same limited validation scope. [B2 GBDT adapters](GBDT_SKLEARN_ADAPTER_PLAN.md) now cover RMSE regression and binary Logloss classification with GPU Float32 probabilities, preserving the legacy learner API; local build/smoke evidence is recorded. Bounded [serial cross-validation](GPU_CROSS_VALIDATION.md) is implemented using optional sklearn splitting/cloning; native splitters and broader model selection remain planned. Keep DETERMINISTIC pending measurements. |
-| Other features above | Planned; start independent slices after current gates finish |
+| Code reuse / GPU-only training | Shared RF/ET log helper landed with six mode/objective checks. ET CPU public dispatch retired; native public fits delegate GPU, explicit host references remain for checks. [Reuse audit](TREE_CODE_REUSE_AUDIT.md). Host RF/ET inference remains a separate GPU migration. |
+| Numeric per-tree sampling | Implemented all three modes/policies with unchanged default fingerprints. [Contract](GBDT_FEATURE_FRACTION.md). Exploratory M4 timing establishes no speed gain; prioritize buffer reuse and dedicated GPU evidence. |
+| Other features above | Planned; prioritize measured speed and bounded feature work as described above |

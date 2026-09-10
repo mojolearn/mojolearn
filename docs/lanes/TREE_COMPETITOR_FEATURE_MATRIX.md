@@ -36,7 +36,7 @@ References for this table: [LightGBM parameters](https://lightgbm.readthedocs.io
 | Depth / leaf budgets | Both | Both, method-dependent | Policy-dependent | Implemented, policy-dependent |
 | Child eligibility | Row/Hessian limits | Child Hessian | Terminal leaf row count | Parent terminal count plus bounded child Hessian; separate strict child counts F8 |
 | Minimum split improvement | `min_gain_to_split` | `gamma` | Different score controls | Bounded non-symmetric `min_split_gain`; score units differ |
-| Column sampling | Tree/node fractions | Tree/level/node fractions | `rsm`, GPU restricted | Missing main GBDT API; F2 first |
+| Column sampling | Tree/node fractions | Tree/level/node fractions | `rsm`, GPU restricted | Numeric per-tree fraction implemented; node/level F2 remains |
 | Row sampling | Bagging / GOSS | Uniform / gradient-based | Bootstrap families | Supported bootstrap subset; not GOSS or general gradient-based sampling |
 | L2 leaf regularization | Yes | Yes | Yes | Implemented |
 | L1 / maximum update | Both | Both | No directly equivalent general pair | Missing; F5 |
@@ -163,7 +163,8 @@ work must use existing mode-aware primitives and preserve reduction order in
 IDENTICAL. Integer masks still need stable feature order, RNG and tie rules.
 Cross-device identity is a later evidence gate, not a synonym for compilation.
 
-This update changes documentation only. It adds no advertised estimator knobs
-or new implementation claims. No GPU timing or remote work was run. Implement
-F2a next, with focused checks, and continue to commit/push completed slices to
-the lane. Main integration remains a separate reviewed step.
+Update: numeric F2a is implemented; see the [feature contract](GBDT_FEATURE_FRACTION.md)
+for its limited local checks and exploratory timing. Default-one behavior is
+retained. Buffer reuse and dedicated AMD/NVIDIA evidence take priority over
+additional feature knobs. Continue to commit/push completed slices to the lane.
+Main integration remains a separate reviewed step.

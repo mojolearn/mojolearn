@@ -21,7 +21,7 @@ THREE ARMS, NOT TWO. scikit-learn's own default is `n_jobs=None`, one
 thread, and that is the arm whose parameters match ours exactly. A user who
 types `n_jobs=-1` gets all ten cores of this box. Reporting only the first
 would be choosing the flattering comparison, so both run, alternating with
-ours, in the same window. `host` adds our own CPU arm, which is off by
+ours, in the same window. `host` adds the independent host reference, which is off by
 default because it is a serial reference implementation and it is slow.
 
 WHAT IS TIMED. `fit`, on both sides, and nothing else. Loading, the
@@ -52,7 +52,7 @@ from extratrees.bench.bench_data import (
 from extratrees.estimator import (
     ExtraTreesConfig,
     resolve_max_features,
-    fit_extra_trees_classifier,
+    fit_extra_trees_classifier_reference,
     fit_extra_trees_classifier_device,
 )
 from extratrees.checks.fixed_point import choose_scale, quantize
@@ -91,7 +91,7 @@ def main() raises:
     var depths = List[Int]()
     for piece in String(args[7]).split(","):
         depths.append(Int(String(piece)))
-    # Trailing options, order-independent: `host` adds our own CPU arm, a bare
+    # Trailing options, order-independent: `host` adds the independent host reference, a bare
     # integer sets the rep count. Three reps is the default because one rep of
     # anything on this box is a sample of the window, not of the code.
     var want_host = False
@@ -360,7 +360,7 @@ def main() raises:
 
           if want_host:
               var th = perf_counter_ns()
-              var hres = fit_extra_trees_classifier(
+              var hres = fit_extra_trees_classifier_reference(
                   x,
                   labels,
                   Int32(n_rows),
@@ -375,11 +375,11 @@ def main() raises:
               for t in range(len(hres.forest.trees)):
                   hnodes += hres.forest.trees[t].num_nodes()
               print(
-                  "        ours-cpu",
+                  "        host-reference",
                   host_ms,
                   "ms/tree  nodes",
                   hnodes,
-                  " gpu speedup over our own cpu",
+                  " gpu speedup over host reference",
                   host_ms / ours_ms,
                   "x",
               )

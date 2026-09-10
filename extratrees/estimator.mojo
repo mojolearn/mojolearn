@@ -2,6 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The callable surface: sklearn's parameter names, and refusal by name.
 
+CURRENT PUBLIC CONTRACT (2026-09-10): unsuffixed fits create a DeviceContext
+and delegate to the GPU entrypoints. Host bodies are explicitly named
+*_reference and are retained for independent checks only. Historical "host
+arm" descriptions below refer to those reference routines, not a public CPU
+backend. The context-taking *_device APIs and GPU algorithms are unchanged.
+
+
 **Why this file exists.** `impl/randomforest/randomforest.mojo` already fits
 a forest, but its arguments are cuML's: a `DecisionTreeParams` whose
 `max_features` is a RATIO, an `n_trees`, a seed. A caller arriving from
@@ -500,7 +507,7 @@ def depth_cap_bound(forest: Forest, plan: FitPlan) -> Bool:
     return bound
 
 
-def fit_extra_trees_classifier(
+def fit_extra_trees_classifier_reference(
     x_col_major: List[Float32],
     labels: List[Float32],
     n_rows: Int32,
@@ -508,7 +515,7 @@ def fit_extra_trees_classifier(
     n_classes: Int32,
     config: ExtraTreesConfig,
 ) raises -> FitResult:
-    """`ExtraTreesClassifier.fit`, with sklearn's names honoured or refused."""
+    """Host reference for independent checks; public fit is GPU-only."""
     var plan = classifier_plan(config, n_rows, n_features)
     var forest = fit_classification(
         x_col_major,
@@ -616,14 +623,14 @@ def quantize_labels(
     return (q^, scale)
 
 
-def fit_extra_trees_regressor(
+def fit_extra_trees_regressor_reference(
     x_col_major: List[Float32],
     y: List[Float32],
     n_rows: Int32,
     n_features: Int32,
     config: ExtraTreesConfig,
 ) raises -> FitResult:
-    """`ExtraTreesRegressor.fit`, same contract."""
+    """Host reference for independent checks; public fit is GPU-only."""
     var plan = regressor_plan(config, n_rows, n_features)
     var forest = fit_regression(
         x_col_major,
@@ -693,3 +700,28 @@ def fit_extra_trees_regressor_device(
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
+
+
+# Public no-context convenience entrypoints train on the GPU. Explicit
+# *_reference routines above retain the independent host oracle for checks.
+def fit_extra_trees_classifier(
+    x_col_major: List[Float32], labels: List[Float32],
+    n_rows: Int32, n_features: Int32, n_classes: Int32,
+    config: ExtraTreesConfig,
+) raises -> FitResult:
+    """GPU-only public fit; the context is owned for this call."""
+    var ctx = DeviceContext()
+    return fit_extra_trees_classifier_device(
+        ctx, x_col_major, labels, n_rows, n_features, n_classes, config
+    )
+
+
+def fit_extra_trees_regressor(
+    x_col_major: List[Float32], y: List[Float32],
+    n_rows: Int32, n_features: Int32, config: ExtraTreesConfig,
+) raises -> FitResult:
+    """GPU-only public fit; use *_reference only for independent checks."""
+    var ctx = DeviceContext()
+    return fit_extra_trees_regressor_device(
+        ctx, x_col_major, y, n_rows, n_features, config
+    )

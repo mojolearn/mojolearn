@@ -24,8 +24,8 @@ from extratrees.estimator import (
     MAX_FEATURES_LOG2,
     MAX_FEATURES_SQRT,
     count_to_ratio,
-    fit_extra_trees_classifier,
-    fit_extra_trees_regressor,
+    fit_extra_trees_classifier_reference,
+    fit_extra_trees_regressor_reference,
     refuse_unported,
     resolve,
     resolve_max_features,
@@ -390,7 +390,7 @@ def main() raises:
     var small = base.copy()
     small.n_estimators = 8
     small.max_depth = 1
-    var bound_fit = fit_extra_trees_classifier(
+    var bound_fit = fit_extra_trees_classifier_reference(
         gx,
         glab,
         Int32(gap.data.n_rows),
@@ -404,7 +404,7 @@ def main() raises:
     )
     var loose = base.copy()
     loose.n_estimators = 8
-    var free_fit = fit_extra_trees_classifier(
+    var free_fit = fit_extra_trees_classifier_reference(
         gx,
         glab,
         Int32(gap.data.n_rows),
@@ -467,7 +467,7 @@ def main() raises:
         hy.append(hashed.y[r])
     var rcfg = ExtraTreesConfig().for_regression()
     rcfg.n_estimators = 6
-    var rfit = fit_extra_trees_regressor(
+    var rfit = fit_extra_trees_regressor_reference(
         hx, hy, Int32(hashed.n_rows), Int32(hashed.n_cols), rcfg
     )
     assert_equal(
@@ -501,19 +501,19 @@ def main() raises:
     ce4.criterion = CRITERION_ENTROPY
     var cb4 = cg.copy()
     cb4.bootstrap = True
-    var fg = fit_extra_trees_classifier(
+    var fg = fit_extra_trees_classifier_reference(
         x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cg
     )
-    var fe = fit_extra_trees_classifier(
+    var fe = fit_extra_trees_classifier_reference(
         x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, ce4
     )
-    var fb = fit_extra_trees_classifier(
+    var fb = fit_extra_trees_classifier_reference(
         x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cb4
     )
-    var fb2 = fit_extra_trees_classifier(
+    var fb2 = fit_extra_trees_classifier_reference(
         x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cb4
     )
-    var fg2 = fit_extra_trees_classifier(
+    var fg2 = fit_extra_trees_classifier_reference(
         x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cg
     )
     assert_true(

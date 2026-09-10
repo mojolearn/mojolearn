@@ -35,7 +35,7 @@ from extratrees.checks.fixtures import (
 from extratrees.estimator import (
     ExtraTreesConfig,
     MAX_FEATURES_ALL,
-    fit_extra_trees_classifier,
+    fit_extra_trees_classifier_reference,
     fit_extra_trees_classifier_device,
 )
 from extratrees.impl.randomforest.randomforest import Forest
@@ -122,7 +122,7 @@ def main() raises:
     var clf = hashed_classification(FP_SEED, FP_ROWS, FP_COLS, FP_CLASSES)
     var xc = column_major(clf)
     var lab = float_labels(clf)
-    var fit = fit_extra_trees_classifier(
+    var fit = fit_extra_trees_classifier_reference(
         xc, lab, Int32(FP_ROWS), Int32(FP_COLS), Int32(FP_CLASSES),
         default_config(),
     )

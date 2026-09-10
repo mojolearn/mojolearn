@@ -66,9 +66,9 @@ from extratrees.checks.fixtures import (
 from extratrees.estimator import (
     ExtraTreesConfig,
     MAX_FEATURES_ALL,
-    fit_extra_trees_classifier,
+    fit_extra_trees_classifier_reference,
     fit_extra_trees_classifier_device,
-    fit_extra_trees_regressor,
+    fit_extra_trees_regressor_reference,
     fit_extra_trees_regressor_device,
 )
 from extratrees.impl.decisiontree.decisiontree import (
@@ -418,7 +418,7 @@ def main() raises:
     # =====================================================================
     # 1. THE MODE IS OFF BY DEFAULT
     # =====================================================================
-    var default_fit = fit_extra_trees_classifier(
+    var default_fit = fit_extra_trees_classifier_reference(
         xc, lab, Int32(FP_ROWS), Int32(FP_COLS), Int32(FP_CLASSES),
         bf_config(-1),
     )
@@ -489,7 +489,7 @@ def main() raises:
     # =====================================================================
     # 2. `max_leaf_nodes=k` YIELDS EXACTLY k LEAVES
     # =====================================================================
-    var host_bf = fit_extra_trees_classifier(
+    var host_bf = fit_extra_trees_classifier_reference(
         xc, lab, Int32(FP_ROWS), Int32(FP_COLS), Int32(FP_CLASSES),
         bf_config(K),
     )
@@ -516,7 +516,7 @@ def main() raises:
     )
     var rbase = bf_config(K)
     var rcfg = rbase.for_regression()
-    var host_bfr = fit_extra_trees_regressor(
+    var host_bfr = fit_extra_trees_regressor_reference(
         xr, reg.y, Int32(FP_ROWS), Int32(FP_COLS), rcfg
     )
     assert_equal(
@@ -573,7 +573,7 @@ def main() raises:
     # only control that isolates the thing under test: both arms stop at k
     # leaves, so a difference in the tree is a difference in WHICH k nodes
     # were expanded and in what order, and cannot be a difference in size.
-    var cap_fit = fit_extra_trees_classifier(
+    var cap_fit = fit_extra_trees_classifier_reference(
         xc, lab, Int32(FP_ROWS), Int32(FP_COLS), Int32(FP_CLASSES),
         cuml_cap_config(K),
     )

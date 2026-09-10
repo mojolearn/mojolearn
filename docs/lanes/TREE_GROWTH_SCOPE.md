@@ -83,3 +83,51 @@ GPU benchmarks/builds without establishing that the training work is protected.
 An unavailable direct TCP endpoint can have a separate RunPod basic SSH proxy
 or browser-terminal route; connection refusal does not prove another session
 has occupied the endpoint. See [RunPod SSH](https://docs.runpod.io/pods/configuration/use-ssh).
+
+## GPU-only and code reuse decision — reaffirmed 2026-09-10
+
+The user explicitly reaffirmed GPU access as a requirement. Do not add a
+separate CPU training arm, automatic CPU fallback, or duplicate GPU learners
+for each numeric mode. Host validation, feature-mask metadata, packing and
+scheduling remain intentional orchestration; host test oracles remain allowed.
+
+Random Forest's native owner is `ensemble/randomforest.mojo`, with its tree
+builder in `ensemble/decisiontree/`. Extra Trees lives in `extratrees/` and
+GBDT in `gbdt/`. Python entry points are `randomforest.py`, `extratrees.py`
+and `ensemble.py` respectively; Python `ensemble.py` does not own the native
+random-forest engine.
+
+Before adding tree functionality, audit existing shared primitives and both
+callers. Share identical data structures, arithmetic helpers, RNG primitives,
+validation/packing and orchestration when contracts match. Retain explicit
+algorithm differences: RF binned threshold search, ET random thresholds and
+GBDT gradient/Hessian scoring are not interchangeable. Keep borrowed upstream
+provenance and numeric schedules when extracting helpers. Similar filenames
+alone are not evidence that entire builders should be merged.
+
+Track concrete findings and bounded extractions in
+[TREE_CODE_REUSE_AUDIT.md](TREE_CODE_REUSE_AUDIT.md). New per-tree GBDT feature
+sampling should have one implementation reused across growth policies and
+native/prepared/public callers, with mode-specific arithmetic policy rather
+than independent copies. Refuse unsupported configurations instead of silently
+falling back to a CPU learner or a different algorithm.
+
+## Speed priority — latest user steering, 2026-09-10
+
+Prioritize end-to-end training/inference speed over developer ergonomics.
+Code reuse is valuable when it prevents divergent algorithms or supports faster
+execution; cosmetic architectural unification is not the primary work queue.
+Feature sampling is an optional learning control: packing fewer features can
+reduce histograms while adding projection/allocation/synchronization and cache
+rebuild cost. Measure the whole fit and heldout quality before presenting it
+as a performance improvement. Investigate original-layout masked histograms
+or reusable projection plans where they can preserve the sampling contract.
+Keep default-one behavior unchanged and make no speed claim from work counts.
+
+Clarification in the same turn: shared code and cheap dispatch remain welcome;
+engineering convenience is not inherently a runtime cost. Distinguish a
+one-time branch from actual data movement. The current feature-sampling
+projection runs once per sampled boosting tree, not at every depth/leaf split
+and not merely once per fit or growth-policy selection. Its cost can amortize
+over a deep tree. Decide from whole-fit measurements rather than rejecting
+packing on its name or assuming it is negligible.
