@@ -164,16 +164,32 @@ per-node Python scalar construction during fit.
 
 ## Growth features: explicit changes to the learner
 
+The next bounded feature sequence is F8 strict child counts, F6 learned missing
+routing, then F3 interaction masks and F2b node/level sampling. Follow with F5
+coherent leaf regularization and F4 monotonic descendant bounds. F7 non-symmetric
+multiclass needs its own objective/dimension/scoring/inference design; it is not
+an omitted wrapper flag or a missing port from the audited CatBoost GPU registry.
+This sequence does not displace large-real-data NVIDIA IDENTICAL measurements
+for RF, ET and GBDT, or MacBook FAST tree work. Do not add a CPU comparison arm.
+
+Completed foundations are optional minimum split gain, bounded child Hessian,
+numeric per-tree feature fraction with reusable projection buffers, and scalar
+classifier/regressor adapters. Native prepared numeric data exists; public
+prepared-pool ownership remains P6. Current Min/Max/Forbidden missing handling
+is implemented; learning a separate route for each split is still F6. Use the
+feature contracts and retained results for qualification rather than treating
+an implemented control as cross-device or performance-qualified.
+
 | ID / priority | Reference | Mojo implementation and dependency | Required evidence |
 | --- | --- | --- | --- |
 | F1 / implemented bounded slice: minimum child Hessian | LightGBM `min_sum_hessian_in_leaf`; XGBoost `min_child_weight` | Apply eligibility to each candidate before winner selection using actual objective curvature, not a score denominator mislabeled as Hessian. First slice supports NewtonL2/NewtonCosine with RMSE/Logloss/CrossEntropy and explicit weighting/bootstrap semantics. Other scores/losses need a separate curvature plane or audit. Default disabled; plumb through native, prepared, Python and binding APIs. | Analytic weighted regression/logistic cases, equality boundary, highest-score-ineligible but second-best-valid split, default fingerprints, mode readback and public fits. |
 | F2 / bounded per-tree slice implemented; node/level later | LightGBM per-tree/per-node fractions; XGBoost `colsample_*` | Deterministic masks keyed by seed/tree/node and a specified stable feature order. Numeric per-tree sampling now reuses the existing searchers with selected-bin projection. Node/level sampling remains queued; measure packing/cache overhead before speed claims. Specify intersection with categorical sources, interaction constraints and shared symmetric-depth splits. | Fraction-one default equivalence, known RNG vectors and selected-feature witnesses, no empty masks, all policies/modes, cross-device masks, work counters and quality/time comparison. |
-| F3 / next: interaction constraints | XGBoost/LightGBM permitted interaction groups | Carry allowed-feature state along each path. Respect overlapping groups; intersect with sampling masks. Define symmetric-tree shared-split eligibility explicitly. | Exhaustive tiny path oracle, overlapping/disjoint groups, invalid feature IDs, unseen features, save/load and constraint verification over every model path. |
+| F3 / after missing routing: interaction constraints | XGBoost/LightGBM permitted interaction groups | Carry allowed-feature state along each path. Respect overlapping groups; intersect with sampling masks. Define symmetric-tree shared-split eligibility explicitly. | Exhaustive tiny path oracle, overlapping/disjoint groups, invalid feature IDs, unseen features, save/load and constraint verification over every model path. |
 | F4 / later: monotonic constraints | XGBoost constrained split evaluation; LightGBM monotone bounds | Start with numeric features and a bounded objective/leaf-estimation profile. Carry descendant lower/upper bounds, score feasible leaves and enforce bounds in final estimation. Split filtering alone is insufficient. | Independent ordered-pair predictions, descendant-bound oracle, weighted/NaN cases, repeated estimation steps, round trips and cross-device identity. |
 | F5 / later: L1 and bounded updates | XGBoost `reg_alpha`/`max_delta_step`; LightGBM leaf regularization | Specify objective scaling and apply soft-thresholding/bounds coherently to gain and leaf estimation. Integrate with monotonic bounds and iterative leaf updates; do not only change the score kernel. | Closed-form one-leaf/two-leaf cases, zero/default equivalence, threshold edges, weighted losses and independent loss checks. |
-| F6 / later: learned missing direction | XGBoost/LightGBM missing-value split routing | Preserve current CatBoost Min/Max/Forbidden defaults. Optional per-split route requires separate missing statistics, eligibility/scoring both directions, model serialization and inference routing. | All-missing/mixed/absent-at-train cases, tie rule, both directions chosen in witnesses, constraints interaction and round trips. |
+| F6 / after strict counts: learned missing direction | XGBoost/LightGBM missing-value split routing | Preserve current CatBoost Min/Max/Forbidden defaults. Optional per-split route requires separate missing statistics, eligibility/scoring both directions, model serialization and inference routing. | All-missing/mixed/absent-at-train cases, tie rule, both directions chosen in witnesses, constraints interaction and round trips. |
 | F7 / later: multiclass non-symmetric growth | LightGBM/XGBoost multiclass boosting designs | Choose/document classwise scalar trees versus vector leaves; neither follows automatically from current symmetric multiclass support. Implement dimensions, objective statistics, scoring and prediction together. | Independent multiclass loss/probabilities, class weights, per-policy trees, memory scaling and mode/cross-vendor checks. |
-| F8 / assess: stricter leaf-size controls | LightGBM/XGBoost-style child eligibility, contrasted with current CatBoost parent terminal size | If requested, add a separate explicit both-child count/weight constraint rather than silently redefining `min_data_in_leaf`. Reuse F1 candidate-filter machinery where correct. | Tiny skewed partitions distinguishing parent/child semantics, counts versus Hessians, equality and weighted cases. |
+| F8 / next feature: stricter child counts | LightGBM/XGBoost-style child eligibility, contrasted with current CatBoost parent terminal size | Add a separate explicit both-child row-count constraint rather than silently redefining `min_data_in_leaf`; do not conflate counts, sample weights and Hessians. Reuse F1 candidate-filter machinery where correct. | Tiny skewed partitions distinguishing parent/child semantics, counts versus Hessians, equality and weighted cases. |
 
 Feature controls may reduce search work, but changing the fitted model is not
 a performance-only win. Report heldout quality and tree size alongside timing.
