@@ -44,11 +44,28 @@ def finite_key(value: Float32) -> UInt32:
 
 
 @always_inline
-def reached_leaf[RF_INPUT: Bool](
+def reached_leaf[RF_INPUT: Bool, PACKED: Bool = False](
     offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
     thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin], tree: Int, row: Int, features: Int,
 ) -> Int:
+    comptime if PACKED:
+        # nvForest cef3a50d detail/node.hpp:81-175 and evaluate_tree.hpp:44-65.
+        # Four Int32 words: threshold-bits OR compact leaf ID, local left,
+        # feature, padding. Field loads avoid Metal whole-struct load issues.
+        # Existing sibling layout and inclusive finite-key comparison remain.
+        var base = Int(offsets.unsafe_load(tree))
+        var node = base
+        var child = Int(columns.unsafe_load(node * 4 + 1))
+        while child != -1:
+            var value = x.unsafe_load(row * features + Int(columns.unsafe_load(node * 4 + 2)))
+            comptime if RF_INPUT:
+                value = ftz(value)
+            var threshold = bitcast[DType.float32](columns.unsafe_load(node * 4))
+            var go_left = finite_key(value) <= finite_key(threshold)
+            node = base + child + (0 if go_left else 1)
+            child = Int(columns.unsafe_load(node * 4 + 1))
+        return Int(columns.unsafe_load(node * 4))
     var base = Int(offsets.unsafe_load(tree))
     var node = base
     var child = Int(left.unsafe_load(node))
@@ -62,7 +79,7 @@ def reached_leaf[RF_INPUT: Bool](
     return node
 
 
-def forest_ordered_kernel[RF_INPUT: Bool](
+def forest_ordered_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
     thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
     leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
@@ -76,12 +93,12 @@ def forest_ordered_kernel[RF_INPUT: Bool](
     if item < rows*outputs:
         var total = Float32(0)
         for tree in range(trees):
-            var node = reached_leaf[RF_INPUT](offsets,columns,thresholds,left,x,tree,item//outputs,features)
+            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item//outputs,features)
             total = forest_add(total,leaves.unsafe_load(node*outputs+item%outputs))
         output.unsafe_store(item,ftz(identical_div(ftz(total),Float32(trees))))
 
 
-def forest_grove32_kernel[RF_INPUT: Bool](
+def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
     thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
     leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
@@ -99,7 +116,7 @@ def forest_grove32_kernel[RF_INPUT: Bool](
     if item < rows*outputs:
         var tree = lane
         while tree < trees:
-            var node = reached_leaf[RF_INPUT](offsets,columns,thresholds,left,x,tree,item//outputs,features)
+            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item//outputs,features)
             total = forest_add(total,leaves.unsafe_load(node*outputs+item%outputs))
             tree += 32
     var sums = stack_allocation[128,Float32,address_space=AddressSpace.SHARED]()
@@ -128,7 +145,7 @@ def vector_groves_for(outputs: Int) -> Bool:
             and outputs >= 2 and outputs <= 8)
 
 
-def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int](
+def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: Bool = False](
     offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
     thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
     leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
@@ -157,7 +174,7 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int](
     if row < rows:
         var tree = lane
         while tree < trees:
-            var node = reached_leaf[RF_INPUT](offsets,columns,thresholds,left,x,tree,row,features)
+            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
             @parameter
             for c in range(OUTPUT_CAPACITY):
                 if c < outputs:
@@ -183,7 +200,7 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int](
                 output.unsafe_store(row*outputs+c,ftz(identical_div(ftz(sums[unsafe_offset=c*128+tid]),Float32(trees))))
 
 
-def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool](
+def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
     ctx: DeviceContext,
     mut doff: DeviceBuffer[DType.int32], mut dcol: DeviceBuffer[DType.int32],
     mut dthr: DeviceBuffer[DType.float32], mut dleft: DeviceBuffer[DType.int32],
@@ -202,31 +219,31 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool](
     comptime if GROVE:
         if vector_groves_for(n_outputs):
             if n_outputs <= 2:
-                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,2]](
+                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,2,PACKED]](
                     doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                     dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
                     grid_dim=(n_rows+3)//4,block_dim=128,
                 )
             elif n_outputs <= 4:
-                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,4]](
+                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,4,PACKED]](
                     doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                     dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
                     grid_dim=(n_rows+3)//4,block_dim=128,
                 )
             else:
-                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,8]](
+                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,8,PACKED]](
                     doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                     dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
                     grid_dim=(n_rows+3)//4,block_dim=128,
                 )
         else:
-            ctx.enqueue_function[forest_grove32_kernel[RF_INPUT]](
+            ctx.enqueue_function[forest_grove32_kernel[RF_INPUT,PACKED]](
                 doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                 dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
                 grid_dim=(n_rows*n_outputs+3)//4,block_dim=128,
             )
     else:
-        ctx.enqueue_function[forest_ordered_kernel[RF_INPUT]](
+        ctx.enqueue_function[forest_ordered_kernel[RF_INPUT,PACKED]](
             doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
             dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
             grid_dim=(n_rows*n_outputs+127)//128,block_dim=128,

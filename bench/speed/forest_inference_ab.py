@@ -212,8 +212,10 @@ def main():
     if not callable(vector_getter):
         raise RuntimeError('rebuild binding: compiled vector dispatch readback is missing')
     vector_dispatch = bool(vector_getter(int(ours._num_outputs)))
+    layout_getter = getattr(ours._bind(), 'forest_resident_layout', None)
+    resident_layout = str(layout_getter()) if callable(layout_getter) else 'unreported'
     print('INFERENCE_DISPATCH', mode, vendor, 'outputs=', int(ours._num_outputs),
-          'compiled_vector_groves=', vector_dispatch, flush=True)
+          'compiled_vector_groves=', vector_dispatch, 'resident_layout=', resident_layout, flush=True)
     method = 'predict' if data.task == 'regression' else 'predict_proba'
     arrays = [(name, getattr(ours, name)) for name in
               ('_offsets', '_colid', '_quesval', '_left_child', '_leaves')]
@@ -251,6 +253,7 @@ def main():
         rows_fit=len(data.y_train), rows_predict=len(data.y_test),
         features=data.X_train.shape[1], outputs=int(ours._num_outputs),
         numeric_mode=mode, vendor=vendor, binding=witness, config=cfg, versions=versions,
+        resident_layout=resident_layout, transient_layout='separate_arrays',
         compiled_vector_groves=vector_dispatch, borrowed_buffers=args.borrowed_buffers or args.reuse_io, reuse_io=args.reuse_io,
         first_call_contract='round0 includes lazy preparation for each engine; measured repeats may reuse resident state',
         trees=int(ours._n_trees), nodes=int(ours._colid.size),

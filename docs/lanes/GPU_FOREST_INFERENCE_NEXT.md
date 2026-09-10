@@ -254,4 +254,32 @@ separately on large HIGGS/Year/Covtype forests. Compare complete outputs against
 the direct-layout kernel, with threshold equality, subnormal RF/ET policy,
 root leaves, ragged trees and every output specialization. A default decision
 requires the same large NVIDIA IDENTICAL and separate Metal FAST evidence as
-other inference candidates. No packed-node kernel is implemented by this note.
+other inference candidates. The first candidate now specializes the shared node reader with a packed sibling
+layout and compact leaf vectors. It is enabled only in diagnostic builds with
+`-D MOJOLEARN_FOREST_PACKED_NODES=1`; ordinary builds retain separate arrays.
+Resident preparation packs once, while the transient path stays a direct-layout
+reference. The fixed grove kernels and comparison arithmetic are shared.
+
+This bounded candidate retains sibling order rather than implementing upstream's
+default depth-first ordering. Each node uses four Int32 words (threshold bits or
+leaf ID, local left child, feature ID, padding); field loads avoid the recorded
+Metal whole-struct load issue. Only leaves occupy the output buffer. Device model
+bytes are `4*(trees+1) + 16*nodes + 4*leaf_count*outputs + 8` (the last eight bytes
+are unused ABI operands), versus `4*(trees+1) + 12*nodes + 4*nodes*outputs` before.
+This can increase regression storage and is not a demonstrated speedup.
+
+`pixi run check-forest-resident-layouts` explicitly checks both layouts under
+FAST and IDENTICAL. The initial Metal matrix passed full-bit comparisons with
+separate-array GPU inference for RF/ET, outputs 1/2/3/5/8/9, ragged 33-tree
+forests, root leaves, equality/subnormal routing and five-row tails. A poisoned
+compact leaf buffer must alter predictions. Lifecycle, validation and both I/O
+allocation policies also pass. These are small correctness fixtures, not a
+large-model or cross-vendor identity qualification.
+
+Next: run the same checks on NVIDIA, then build a same-process **resident versus
+resident** layout A/B retaining identical I/O and grove dispatch, and measure
+large HIGGS/Year/Covtype preparation, memory and complete prediction calls. The
+existing transient-versus-resident harness now reports native resident layout,
+but cannot isolate layout cost because its transient arm also reuploads models.
+Do not use that comparison alone to promote this candidate. Depth-first node
+reordering remains a separate upstream layout slice.

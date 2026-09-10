@@ -5,6 +5,7 @@ The calling extension holds the GIL throughout prepare/predict/release, so no
 native handle can be released while another call is using it.
 """
 from std.python import PythonObject
+from std.sys.compile import is_defined
 from core.forest_inference import vector_groves_for
 from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into
 
@@ -111,3 +112,9 @@ def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool, REUSE_IO: Bool = Fa
         xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
         rows, features, outputs, REUSE_IO)
     return PythonObject(rows)
+
+
+def forest_resident_layout_binding() raises -> PythonObject:
+    comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+        return PythonObject("packed_siblings")
+    return PythonObject("separate_arrays")

@@ -33,6 +33,8 @@ mojo = ">=1.0.0,<2"
 max = ">=26.5.0,<27"
 
 [tasks]
+# Explicit direct/packed resident GPU correctness arms, FAST and IDENTICAL.
+check-forest-resident-layouts = "bash tools/check_forest_resident_layouts.sh"
 # Host-only runtime byte-model shape/registry checks; no GPU import or context.
 check-byte-lm-config = "mojo run -j 2 -I . training/checks/byte_lm_config_check.mojo"
 

@@ -4,6 +4,7 @@ from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from core.forest_inference import forest_predict_gpu
 from core.forest_inference_model import resident_prepare, resident_predict, resident_release, ResidentForest, resident_predict_into
 
@@ -54,7 +55,64 @@ def check_workspace[RF_INPUT: Bool]() raises:
     print("WORKSPACE_PASS RF_INPUT", RF_INPUT, "cached/uncached resize/reuse/empty/changed-input/close")
 
 
+def check_layout[RF_INPUT: Bool](outputs: Int) raises:
+    # Ragged forest, root leaves, nonzero local child IDs, 33-tree grove tail,
+    # five-row block tail and every vector capacity/scalar fallback.
+    var offsets: List[Int32] = [0]
+    var columns = List[Int32]()
+    var thresholds = List[Float32]()
+    var left = List[Int32]()
+    var leaves = List[Float32]()
+    for tree in range(33):
+        var count = 1 if tree % 3 == 0 else 5
+        for node in range(count):
+            var internal = count == 5 and (node == 0 or node == 2)
+            columns.append(Int32(0 if node == 0 else 1) if internal else Int32(-1))
+            thresholds.append(bitcast[DType.float32](UInt32(1)) if node == 0 else Float32(2))
+            left.append(Int32(1 if node == 0 else 3) if internal else Int32(-1))
+            for c in range(outputs):
+                # Poison internal output slots: accidentally using an old node
+                # ID in compact storage cannot pass this scattered-value oracle.
+                leaves.append(Float32(-999) if internal else Float32(tree * 7 + node * 3 + c) / Float32(128))
+        offsets.append(Int32(len(columns)))
+    var x: List[Float32] = [0, 1, bitcast[DType.float32](UInt32(1)), 2,
+        bitcast[DType.float32](UInt32(2)), 3, -1, 4, 1, 2]
+    var ctx = DeviceContext()
+    var expected = forest_predict_gpu[RF_INPUT, True](ctx, offsets, columns,
+        thresholds, left, leaves, x, 5, 2, outputs)
+    var model = ResidentForest(offsets, columns, thresholds, left, leaves, 2, outputs)
+    for reuse in range(2):
+        var actual = List[Float32](length=5 * outputs, fill=Float32(-7))
+        model.predict_into[RF_INPUT](x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            actual.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 5, 2, outputs, reuse == 1)
+        for i in range(len(actual)):
+            if bitcast[DType.uint32](actual[i]) != bitcast[DType.uint32](expected[i]):
+                raise Error("resident layout/direct GPU bit mismatch")
+    comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+        # Sabotage actual packed device leaf data, then require prediction to
+        # change. This proves the candidate buffer is reached, not just built.
+        var leaf_count = 0
+        for child in left:
+            if child == -1:
+                leaf_count += 1
+        var poison = ctx.enqueue_create_host_buffer[DType.float32](leaf_count * outputs)
+        for i in range(leaf_count * outputs):
+            poison.unsafe_ptr().unsafe_store(i, Float32(10000))
+        model.ctx.value().enqueue_copy(dst_buf=model.leaves.value(), src_ptr=poison.unsafe_ptr())
+        model.ctx.value().synchronize()
+        var changed = model.predict[RF_INPUT](x, 5, 2, outputs)
+        if bitcast[DType.uint32](changed[0]) == bitcast[DType.uint32](expected[0]):
+            raise Error("packed leaf sabotage did not change prediction")
+    model.close()
+    print("LAYOUT_PASS RF_INPUT", RF_INPUT, "outputs", outputs)
+
+
 def main() raises:
+    print("RESIDENT_LAYOUT_PACKED", is_defined["MOJOLEARN_FOREST_PACKED_NODES"]())
+    var output_counts: List[Int] = [1, 2, 3, 5, 8, 9]
+    for outputs in output_counts:
+        check_layout[True](outputs)
+        check_layout[False](outputs)
     check_workspace[True]()
     check_workspace[False]()
     print("RESIDENT_MODE", Int(GLOBAL_NUMERIC_MODE), "VENDOR", String(COMPILED_VENDOR))

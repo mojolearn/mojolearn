@@ -147,3 +147,13 @@ All four public estimators passed independent graph, repeat, pickle and archive
 checks with baseline and reuse paths. The promoted default was checked on CUDA
 IDENTICAL and Metal FAST, and 67 host tests passed. HIP and broader large-model
 cross-vendor qualification remain open.
+
+### Packed resident layout candidate
+
+Shared RF/ET inference changes apply to both Metal FAST and NVIDIA IDENTICAL;
+each platform still needs its own performance measurement. The diagnostic build
+define `MOJOLEARN_FOREST_PACKED_NODES` selects one-time resident node packing and
+compact leaf outputs while preserving the existing grove arithmetic. It is not
+a new engine or a production default. Both layouts pass the initial Metal FAST
+and IDENTICAL correctness matrix; NVIDIA qualification and large-data layout
+A/B remain pending. See the [layout experiment](lanes/GPU_FOREST_INFERENCE_NEXT.md#next-layout-experiment-after-io-measurement).

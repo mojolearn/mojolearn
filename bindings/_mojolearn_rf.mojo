@@ -33,6 +33,7 @@ from std.python.bindings import PythonModuleBuilder
 from forest_inference_binding import (
     forest_prepare_gpu_binding, forest_predict_resident_gpu_binding, forest_release_gpu_binding,
     forest_vector_groves_binding, forest_predict_resident_into_gpu_binding,
+    forest_resident_layout_binding,
 )
 from core.forest_inference import forest_predict_gpu
 from checks.vendor import COMPILED_VENDOR
@@ -789,6 +790,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
         m.def_function[rf_predict_proba_gpu_parallel_binding]("rf_predict_proba_gpu_parallel")
         m.def_function[rf_predict_reg_gpu_parallel_binding]("rf_predict_reg_gpu_parallel")
+        m.def_function[forest_resident_layout_binding]("forest_resident_layout")
         m.def_function[forest_prepare_gpu_binding[True]]("forest_prepare_gpu")
         m.def_function[forest_predict_resident_gpu_binding[True]]("forest_predict_resident_gpu")
         m.def_function[forest_release_gpu_binding[True]]("forest_release_gpu")

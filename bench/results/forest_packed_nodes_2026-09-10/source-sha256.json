@@ -1,0 +1,9 @@
+{
+  "core/forest_inference.mojo": "10b36c6c256fb2fb5fb28f3421fbec713f61fc508b5adc3640185301c1c8ed7b",
+  "core/forest_inference_model.mojo": "c3aa4cead698236e8a76edeb6109c7e7d515282bba7876eecb51a3871fcb7bdc",
+  "checks/forest_inference_model.mojo": "2b42e5d78c3e1be2b420271f26aceab0b9380c2d9fa9edb99efa63c0b950714d",
+  "bindings/forest_inference_binding.mojo": "30cb7588d051d778f2c765ee66547c0e7823c2ef63a2bfcc1634d22e50bc2c09",
+  "bindings/_mojolearn_rf.mojo": "5a827b9ce8cd7773560d4e850af8b929173a1dc86f45236719306a529317c8a9",
+  "bindings/_mojolearn_trees.mojo": "d2fe0b96a9ec852165b3b8af49e2c6c07c577f334e7f4afe3b43dc014cf2c04b",
+  "tools/check_forest_resident_layouts.sh": "7ac60b550ecdf45f5610c4a0fdf23e2215b09a0e3cef5ded04b92ce722f0c039"
+}

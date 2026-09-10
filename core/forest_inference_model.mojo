@@ -9,6 +9,7 @@ Snapshots own model buffers and a context; release drops buffers before context.
 Only input validation/upload and result readback recur per prediction.
 """
 from std.ffi import _Global
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from max.gpu.host import DeviceContext, DeviceBuffer
@@ -52,19 +53,51 @@ struct ResidentForest(Movable):
         self.thresholds = Optional[DeviceBuffer[DType.float32]]()
         self.left = Optional[DeviceBuffer[DType.int32]]()
         self.leaves = Optional[DeviceBuffer[DType.float32]]()
+        # DEVIATION BLOCK FOREST-PACKED-1 (experimental, no speed claim):
+        # nvForest cef3a50d detail/node.hpp:81-175 packs node fields; builder
+        # detail/decision_forest_builder.hpp:135-149 stores only leaf vectors.
+        # Keep our sibling node order/local child IDs and raw <= policy;
+        # do not adopt depth-first offsets or converted thresholds here.
+        # Archive arrays are unchanged. Packing runs once per resident snapshot.
+        var packed_nodes = List[Int32]()
+        var compact_leaves = List[Float32]()
+        comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+            if len(columns) > 2147483647 // 4:
+                raise Error("packed forest node word count exceeds Int32")
+            for node in range(len(columns)):
+                var payload = bitcast[DType.int32](thresholds[node])
+                if left[node] == -1:
+                    payload = Int32(len(compact_leaves) // outputs)
+                    for c in range(outputs):
+                        compact_leaves.append(leaves[node * outputs + c])
+                packed_nodes.append(payload)
+                packed_nodes.append(left[node])
+                packed_nodes.append(columns[node])
+                packed_nodes.append(0)
         self.ctx = DeviceContext()
         try:
             self.offsets = self.ctx.value().enqueue_create_buffer[DType.int32](len(offsets))
-            self.columns = self.ctx.value().enqueue_create_buffer[DType.int32](len(columns))
-            self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](len(thresholds))
-            self.left = self.ctx.value().enqueue_create_buffer[DType.int32](len(left))
-            self.leaves = self.ctx.value().enqueue_create_buffer[DType.float32](len(leaves))
             self.ctx.value().enqueue_copy(dst_buf=self.offsets.value(), src_ptr=offsets.unsafe_ptr())
-            self.ctx.value().enqueue_copy(dst_buf=self.columns.value(), src_ptr=columns.unsafe_ptr())
-            self.ctx.value().enqueue_copy(dst_buf=self.thresholds.value(), src_ptr=thresholds.unsafe_ptr())
-            self.ctx.value().enqueue_copy(dst_buf=self.left.value(), src_ptr=left.unsafe_ptr())
-            self.ctx.value().enqueue_copy(dst_buf=self.leaves.value(), src_ptr=leaves.unsafe_ptr())
+            comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+                self.columns = self.ctx.value().enqueue_create_buffer[DType.int32](len(packed_nodes))
+                # Unused ABI operands; avoid retaining original SoA buffers.
+                self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](1)
+                self.left = self.ctx.value().enqueue_create_buffer[DType.int32](1)
+                self.leaves = self.ctx.value().enqueue_create_buffer[DType.float32](len(compact_leaves))
+                self.ctx.value().enqueue_copy(dst_buf=self.columns.value(), src_ptr=packed_nodes.unsafe_ptr())
+                self.ctx.value().enqueue_copy(dst_buf=self.leaves.value(), src_ptr=compact_leaves.unsafe_ptr())
+            else:
+                self.columns = self.ctx.value().enqueue_create_buffer[DType.int32](len(columns))
+                self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](len(thresholds))
+                self.left = self.ctx.value().enqueue_create_buffer[DType.int32](len(left))
+                self.leaves = self.ctx.value().enqueue_create_buffer[DType.float32](len(leaves))
+                self.ctx.value().enqueue_copy(dst_buf=self.columns.value(), src_ptr=columns.unsafe_ptr())
+                self.ctx.value().enqueue_copy(dst_buf=self.thresholds.value(), src_ptr=thresholds.unsafe_ptr())
+                self.ctx.value().enqueue_copy(dst_buf=self.left.value(), src_ptr=left.unsafe_ptr())
+                self.ctx.value().enqueue_copy(dst_buf=self.leaves.value(), src_ptr=leaves.unsafe_ptr())
             self.ctx.value().synchronize()
+            _ = len(packed_nodes)
+            _ = len(compact_leaves)
             _ = len(offsets)
             _ = len(columns)
             _ = len(thresholds)
@@ -115,7 +148,7 @@ struct ResidentForest(Movable):
         var hout = self.ctx.value().enqueue_create_host_buffer[DType.float32](rows * outputs)
         try:
             self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_ptr())
-            launch_forest_inference[RF_INPUT, True](
+            launch_forest_inference[RF_INPUT, True, is_defined["MOJOLEARN_FOREST_PACKED_NODES"]()](
                 self.ctx.value(), self.offsets.value(), self.columns.value(),
                 self.thresholds.value(), self.left.value(), self.leaves.value(),
                 dx, dout, rows, features, outputs, self.trees,
@@ -203,7 +236,7 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     mut dx: DeviceBuffer[DType.float32], mut dout: DeviceBuffer[DType.float32]) raises:
     try:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-        launch_forest_inference[RF_INPUT, True](ctx, offsets, columns,
+        launch_forest_inference[RF_INPUT, True, is_defined["MOJOLEARN_FOREST_PACKED_NODES"]()](ctx, offsets, columns,
             thresholds, left, leaves, dx, dout, rows, features, outputs, trees)
         ctx.enqueue_copy(dst_ptr=output, src_buf=dout)
         ctx.synchronize()
