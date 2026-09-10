@@ -6,18 +6,22 @@
 **GPU machine learning in Mojo for Apple, NVIDIA and AMD GPUs, with an
 explicit reproducibility contract.**
 
-CatBoost, XGBoost, LightGBM and cuML have no Metal backend. mojolearn ports
-the GPU kernels of CatBoost, cuML, cuVS, RAFT and FAISS into one Mojo source
-that builds for Apple Metal, NVIDIA CUDA and AMD HIP, under the repository's
-copy-do-not-improve rule ([PORTING_RULES.md](PORTING_RULES.md)), so GPU tree
+CatBoost, XGBoost, LightGBM and cuML have no Metal backend. mojolearn is one
+Mojo source that builds for Apple Metal, NVIDIA CUDA and AMD HIP, so GPU tree
 training and GPU classical learning run on Apple silicon, hardware the
-originals cannot reach. On top of that port sits a numerical contract. The
-same machine-learning workload can produce different bits on different GPUs,
-changing predictions, learned models and subsequent training updates. In
-mojolearn's opt-in `identical` mode, supported inference and training return
-the same bits on certified Apple, NVIDIA and AMD GPUs. The claim is proven by
-stage-level identity cards and separating sabotage tests, never inferred from
-a final-output hash, and it applies only to configurations recorded in
+originals cannot reach. Its kernels mirror the GPU designs of CatBoost, cuML,
+cuVS, RAFT and FAISS, deliberately and file for file, under the repository's
+copy-do-not-improve rule ([PORTING_RULES.md](PORTING_RULES.md)), and the
+correspondence is recorded per file in the `DERIVATION_MAP.tsv` tables.
+
+Beside that portability sits a numerical contract, and it is what the rest of
+this repository is built around. The same machine-learning workload can
+produce different bits on different GPUs, changing predictions, learned models
+and subsequent training updates. In mojolearn's opt-in `identical` mode,
+supported inference and training return the same bits on certified Apple,
+NVIDIA and AMD GPUs. The claim is proven by stage-level identity cards and
+separating sabotage tests, never inferred from a final-output hash, and it
+applies only to configurations recorded in
 [the support matrix](SUPPORT_MATRIX.md).
 
 What the contract covers today, with the evidence each claim rests on:
