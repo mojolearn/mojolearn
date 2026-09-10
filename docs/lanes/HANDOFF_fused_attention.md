@@ -336,3 +336,87 @@ Nothing new. The branch's code is main's; the round-2 list above stands.
    and run it first (seconds), then the two cards, the surface test, and
    the timing per the round-2 job log
    `bench/results/attnlane_fused_2026-09-09/round2_8b996d6d/full.log`.
+
+## Resumed 2026-09-09: register-blocked hd64 forward
+
+The hd64 forward now uses 64 query rows per block, a 32-key tile, and
+16-wide contracted windows. Each of 256 threads holds a 4x2 score tile
+in registers; the staged operands feed eight independent ascending dot
+chains. The denominator still folds keys ascending on one thread per row,
+and context threads hold sixteen independent output chains, each folding
+keys ascending. The three passes, scalar seams, visible predicates,
+regime refusal and signed-zero corner fallback are unchanged. Backward
+and other head dimensions retain their previous implementation.
+
+Shared allocation is 17,152 bytes: 2,048 floats reused for Q/K windows and
+V, 64x33 floats for scores/weights, and 128 row scalars. This fits Apple’s
+32 KB limit; the existing conservative hd64 support check claims 19,744
+bytes and remains sufficient. No kernel-matrix row changed. The existing
+hd128 refusal on Apple remains.
+
+### NVIDIA results
+
+Dedicated pod `m4gh2e66ikwihq`, L40S, driver 580.159.03, torch 2.4.1+cu124.
+Base source `497e517c9b308c24320b383c0d80b0ec54482ca7`; candidate is that
+source with the two attention files changed. Only our IDENTICAL arm ran.
+Evidence: `bench/results/attnlane_regblock_2026-09-09/jobs/`.
+
+Same pod, same driver, same shape and timing harness for all rows below:
+d_model 1024, heads 16, kv heads 4, head_dim 64, intermediate 4096,
+window 2048, sequence 4096, batch 4; one warmup, median of three rounds.
+The Python surface includes our host transfers, as in the original table.
+Torch SDPA was measured once for this previously absent driver tuple.
+
+| Arm | Forward ms | Forward + backward ms | Source log |
+|---|---:|---:|---|
+| Before (landed fused kernels) | 252.0 | 532.5 | `baseline_timing.json` (text) |
+| Register-blocked BK32, retained | 154.7 | 444.9 | `candidate_timing.log` |
+| Torch eager FP32 SDPA | 35.9 | 114.3 | `torch_reference.log` |
+| BK64 experiment, rejected | 209.5 | 453.4 | `bk64_timing.log` |
+
+Retained candidate / opponent: **4.31x forward, 3.89x forward + backward**.
+Forward decreased 38.6%; forward + backward decreased 16.5% from the
+same-pod baseline. Synchronized phase diagnostics put the attention core
+at about 75 ms, down from 177 ms; backward remains about 138 ms.
+
+BK64 (4x4 score registers, 33,536 shared bytes, matrix fit selecting BK32
+on Apple) passed its NVIDIA bit gate but increased core time to about
+88 ms. Its implementation is preserved only as
+`rejected_bk64.mojo.txt` in the results directory; it is not product code.
+No timing claim uses the earlier driver’s opponent row.
+
+Validation on NVIDIA, retained BK32:
+
+- `check-transformer-fused`: 13 cases, every compared buffer bit identical,
+  all expected statuses. Added L150/window45, crossing query and key tile
+  boundaries; existing decode, ring-span, underflow and regime cases pass.
+- Forward check with clause (d): PASS; card byte equal by `cmp` to the
+  shipped Apple forward card.
+- Backward check: PASS; card byte equal by `cmp` to the shipped Apple
+  backward card.
+- IDENTICAL transformer binding rebuilt; surface: 116 checks, 0 failed.
+- `full.rc` is 0, including both card comparisons and surface validation.
+
+### Apple RUN OWED
+
+The orchestrator already ran the new 13-case fused check: PASS, every
+compared buffer bit identical (`/tmp/mojolearn-attention-next-apple.log`).
+The final source remains BK32; the rejected BK64 experiment only ran on
+the isolated pod. The original full Apple list above (binding, forward
+card with clause d, backward card, surface) is still owed to this change
+until the orchestrator records its completion. No agent ran Mac builds.
+
+Backward register blocking, hd128 Apple fusion, persistent weights and
+AMD validation remain unfinished. The existing 8192-position ceiling is
+unchanged.
+
+Pod cleanup: DELETE HTTP 204 at 21:06:02 EDT, GET HTTP 404 at 21:06:07;
+verified gone. Approximately 0.18 pod hours, lease never extended.
+
+### Completed Apple integration, 2026-09-09
+
+The final BK32 source passed all 13 fused cases, both original forward and
+backward cards compared byte-for-byte equal, and the rebuilt IDENTICAL
+transformer binding passed 116/116 surface checks. Logs are in
+`bench/results/attnlane_regblock_2026-09-09/apple/`. No Apple run remains
+owed for this change; AMD remains unmeasured.

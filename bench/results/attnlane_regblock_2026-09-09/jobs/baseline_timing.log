@@ -1,0 +1,87 @@
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 3
+484 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x707f40000000, nodemask=1)
+ours: tier identical vendor cuda
+ours forward            median 252.0 ms  rounds ['275.9', '252.0', '248.4']
+ours forward+backward   median 532.5 ms  rounds ['563.4', '511.4', '532.5']
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 1
+577 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72a200000000, nodemask=1)
+ours: tier identical vendor cuda
+timing surface.weights_up 755.464551 ms
+timing surface.cache_stages_x_up 16.27852 ms
+timing block.norm1 0.807374 ms
+timing attn.qkv_proj 7.320287 ms
+timing attn.rope_and_cache 0.560869 ms
+timing attn.core 176.241356 ms
+timing attn.o_proj 2.517743 ms
+timing block.attention_total 186.657865 ms
+timing block.mlp_and_residuals 30.796371 ms
+timing surface.forward 218.346791 ms
+timing surface.outputs_down 18.856765 ms
+timing surface.weights_up 38.549674 ms
+timing surface.cache_stages_x_up 10.878027 ms
+timing block.norm1 0.678952 ms
+timing attn.qkv_proj 3.728264 ms
+timing attn.rope_and_cache 0.372917 ms
+timing attn.core 176.086682 ms
+timing attn.o_proj 2.522334 ms
+timing block.attention_total 182.726327 ms
+timing block.mlp_and_residuals 30.525866 ms
+timing surface.forward 214.006106 ms
+timing surface.outputs_down 10.550492 ms
+ours forward            median 275.1 ms  rounds ['275.1']
+timing surface.inputs_up 24.727316 ms
+timing block.norm1 0.678512 ms
+timing attn.qkv_proj 3.813596 ms
+timing attn.rope_and_cache 0.380426 ms
+timing attn.core 177.131881 ms
+timing attn.o_proj 2.542404 ms
+timing block.attention_total 183.885357 ms
+timing block.mlp_and_residuals 32.676923 ms
+timing surface.forward 217.324673 ms
+timing bwd.before_attention 0.00398 ms
+timing bwd.attention 134.044419 ms
+timing bwd.after_attention 22.1106 ms
+timing surface.backward 290.187068 ms
+timing surface.outputs_down 17.221947 ms
+timing surface.inputs_up 38.645716 ms
+timing block.norm1 0.673611 ms
+timing attn.qkv_proj 3.759394 ms
+timing attn.rope_and_cache 0.373147 ms
+timing attn.core 176.948977 ms
+timing attn.o_proj 2.553514 ms
+timing block.attention_total 183.656874 ms
+timing block.mlp_and_residuals 30.746109 ms
+timing surface.forward 215.155906 ms
+timing bwd.before_attention 0.0069 ms
+timing bwd.attention 135.455303 ms
+timing bwd.after_attention 22.160721 ms
+timing surface.backward 299.310034 ms
+timing surface.outputs_down 27.535665 ms
+ours forward+backward   median 582.6 ms  rounds ['582.6']
+timing surface.weights_up 25.145493 ms
+timing surface.cache_stages_x_up 16.430413 ms
+timing block.norm1 0.732722 ms
+timing attn.qkv_proj 3.788805 ms
+timing attn.rope_and_cache 0.381436 ms
+timing attn.core 176.988789 ms
+timing attn.o_proj 2.541473 ms
+timing block.attention_total 183.719595 ms
+timing block.mlp_and_residuals 30.742809 ms
+timing surface.forward 215.332879 ms
+timing surface.outputs_down 18.60292 ms
+timing surface.inputs_up 27.681997 ms
+timing block.norm1 0.680842 ms
+timing attn.qkv_proj 3.808565 ms
+timing attn.rope_and_cache 0.390417 ms
+timing attn.core 177.036839 ms
+timing attn.o_proj 2.573514 ms
+timing block.attention_total 183.828916 ms
+timing block.mlp_and_residuals 30.78697 ms
+timing surface.forward 215.39331 ms
+timing bwd.before_attention 0.00711 ms
+timing bwd.attention 135.674857 ms
+timing bwd.after_attention 22.284514 ms
+timing surface.backward 284.714023 ms
+timing surface.outputs_down 24.410901 ms

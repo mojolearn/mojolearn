@@ -95,6 +95,7 @@ struct FusedCase(Copyable, Movable):
 
 def cases() -> List[FusedCase]:
     var out = List[FusedCase]()
+    out.append(FusedCase("win45_hd64_l150", 1, 150, 4, 2, 64, 45, 0, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
     out.append(FusedCase("base_hd64_l300", 2, 300, 4, 2, 64, 0, 0, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
     out.append(FusedCase("win96_hd64_l300", 2, 300, 4, 2, 64, 96, 0, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
     out.append(FusedCase("win2048_hd64_l700_nrep4", 1, 700, 4, 1, 64, 2048, 0, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
