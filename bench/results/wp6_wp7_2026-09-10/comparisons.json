@@ -1,0 +1,307 @@
+[
+  {
+    "surface": "deterministic/arima.bin",
+    "bytes": 3724,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/arima.trace",
+    "bytes": 7569,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/classical.bin",
+    "bytes": 5471,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/estimator_check.trace",
+    "bytes": 740,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/gmm_check.trace",
+    "bytes": 497897,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/gp.bin",
+    "bytes": 322,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/gp.trace",
+    "bytes": 2822,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/hw_check.trace",
+    "bytes": 8300,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/ivf_check.trace",
+    "bytes": 754,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/km.known_baseline_failure",
+    "bytes": 13,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/km_check.trace",
+    "bytes": 1205,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/resample_check.trace",
+    "bytes": 26546,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/spectral_check.trace",
+    "bytes": 8712,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/svr.bin",
+    "bytes": 10563,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/svr.trace",
+    "bytes": 51050,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/transform_check.trace",
+    "bytes": 1472,
+    "bits_match": true
+  },
+  {
+    "surface": "deterministic/trustworthiness_check.trace",
+    "bytes": 1404,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/arima.bin",
+    "bytes": 3724,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/arima.trace",
+    "bytes": 7569,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/classical.bin",
+    "bytes": 5471,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/estimator_check.trace",
+    "bytes": 740,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/gmm.card",
+    "bytes": 2349,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/gmm_check.trace",
+    "bytes": 497897,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/gp.bin",
+    "bytes": 322,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/gp.trace",
+    "bytes": 2822,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/hw_check.trace",
+    "bytes": 8300,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/ivf_check.trace",
+    "bytes": 754,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/km.known_baseline_failure",
+    "bytes": 13,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/km_check.trace",
+    "bytes": 1196,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/resample_check.trace",
+    "bytes": 26546,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/spectral_check.trace",
+    "bytes": 8712,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/svr.bin",
+    "bytes": 10563,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/svr.trace",
+    "bytes": 51050,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/transform_check.trace",
+    "bytes": 1472,
+    "bits_match": true
+  },
+  {
+    "surface": "fast/trustworthiness_check.trace",
+    "bytes": 1404,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/arima.bin",
+    "bytes": 3724,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/arima.trace",
+    "bytes": 7743,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/byte_lm-0-eval.bin",
+    "bytes": 1015784,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/byte_lm-0-train.bin",
+    "bytes": 564335,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/byte_lm-1-eval.bin",
+    "bytes": 1015784,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/byte_lm-1-train.bin",
+    "bytes": 564335,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/classical.bin",
+    "bytes": 5549,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/estimator_check.trace",
+    "bytes": 740,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/gmm.card",
+    "bytes": 2349,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/gmm_check.trace",
+    "bytes": 535615,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/gp.bin",
+    "bytes": 322,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/gp.trace",
+    "bytes": 2822,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/hw_check.trace",
+    "bytes": 8252,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/ivf_check.trace",
+    "bytes": 754,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/km_check.trace",
+    "bytes": 1201,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/mamba.bin",
+    "bytes": 2011638,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/mamba1_backward.bin",
+    "bytes": 48128,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/mamba23_backward.bin",
+    "bytes": 1444344,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/resample_check.trace",
+    "bytes": 26546,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/resident-multi.bin",
+    "bytes": 2144454,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/spectral_check.trace",
+    "bytes": 8712,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/svr.bin",
+    "bytes": 10363,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/svr.trace",
+    "bytes": 51050,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/transform_check.trace",
+    "bytes": 1472,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/transformer.bin",
+    "bytes": 437691,
+    "bits_match": true
+  },
+  {
+    "surface": "identical/trustworthiness_check.trace",
+    "bytes": 1404,
+    "bits_match": true
+  }
+]

@@ -24,7 +24,9 @@ def main():
     parser.add_argument('before', type=Path)
     parser.add_argument('after', type=Path)
     parser.add_argument('out', type=Path)
+    parser.add_argument('--warmup-pairs', type=int, default=1)
     args = parser.parse_args()
+    assert 1 <= args.warmup_pairs <= 4
     import numpy as np
     modules = {name: load(path, name) for name, path in [('before',args.before),('after',args.after)]}
     metadata = {name: {'mode': int(mod.gp_numeric_mode()), 'vendor': str(mod.gp_vendor())}
@@ -44,7 +46,7 @@ def main():
                for name in modules}
     samples={name:[] for name in modules}; comparisons=[]
     start=time.monotonic()
-    for pair in range(6):
+    for pair in range(args.warmup_pairs + 5):
         for name in (('before','after') if pair%2==0 else ('after','before')):
             arrays=inputs+outputs[name]
             addresses=[int(value.ctypes.data) for value in arrays]
@@ -52,7 +54,7 @@ def main():
             count=modules[name].gpr_predict(addresses,[n,1,4,1,1,0,0])
             elapsed=time.perf_counter()-tick
             assert count == 0
-            if pair: samples[name].append(elapsed)
+            if pair >= args.warmup_pairs: samples[name].append(elapsed)
         match=outputs['before'][0].tobytes()==outputs['after'][0].tobytes()
         assert match and np.isfinite(outputs['after'][0]).all()
         comparisons.append({'pair':pair,'bits_match':match})
@@ -60,7 +62,7 @@ def main():
     baseline=samples['before']
     spread=(max(baseline)-min(baseline))/min(baseline)
     result={'shape':{'n_train':n,'n_features':1,'n_star':4,'return_std':False},
-            'factor_bytes':factor.nbytes,'synthetic_preconstructed_model':True,
+            'warmup_pairs':args.warmup_pairs,'timed_pairs':5,'factor_bytes':factor.nbytes,'synthetic_preconstructed_model':True,
             'metadata':metadata,'samples_seconds':samples,'minimum_seconds':minima,
             'median_seconds':{k:statistics.median(v) for k,v in samples.items()},
             'baseline_range_over_min':spread,

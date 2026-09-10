@@ -1,0 +1,67 @@
+[
+  {
+    "capture": "gp.bin",
+    "bytes": 322,
+    "bits_match": true
+  },
+  {
+    "capture": "svr.bin",
+    "bytes": 10363,
+    "bits_match": true
+  },
+  {
+    "capture": "mamba.bin",
+    "bytes": 2011638,
+    "bits_match": true
+  },
+  {
+    "capture": "mamba1_backward.bin",
+    "bytes": 48128,
+    "bits_match": true
+  },
+  {
+    "capture": "mamba23_backward.bin",
+    "bytes": 1444344,
+    "bits_match": true
+  },
+  {
+    "capture": "transformer.bin",
+    "bytes": 437691,
+    "bits_match": true
+  },
+  {
+    "capture": "arima.bin",
+    "bytes": 3724,
+    "bits_match": true
+  },
+  {
+    "capture": "classical.bin",
+    "bytes": 5549,
+    "bits_match": true
+  },
+  {
+    "capture": "byte_lm-0-train.bin",
+    "bytes": 564335,
+    "bits_match": true
+  },
+  {
+    "capture": "byte_lm-0-eval.bin",
+    "bytes": 1015784,
+    "bits_match": true
+  },
+  {
+    "capture": "byte_lm-1-train.bin",
+    "bytes": 564335,
+    "bits_match": true
+  },
+  {
+    "capture": "byte_lm-1-eval.bin",
+    "bytes": 1015784,
+    "bits_match": true
+  },
+  {
+    "capture": "resident-multi.bin",
+    "bytes": 2144454,
+    "bits_match": true
+  }
+]

@@ -1,0 +1,39 @@
+{
+  "gp.so": [
+    "libKGENCompilerRTShared.so",
+    "libAsyncRTMojoBindings.so",
+    "libc.so.6"
+  ],
+  "libAsyncRTMojoBindings.so": [
+    "libm.so.6",
+    "libstdc++.so.6",
+    "libMSupportGlobals.so",
+    "libAsyncRTRuntimeGlobals.so",
+    "libgcc_s.so.1",
+    "libc.so.6",
+    "ld-linux-x86-64.so.2"
+  ],
+  "libAsyncRTRuntimeGlobals.so": [
+    "libm.so.6",
+    "libstdc++.so.6",
+    "libMSupportGlobals.so",
+    "libgcc_s.so.1",
+    "libc.so.6",
+    "ld-linux-x86-64.so.2"
+  ],
+  "libMSupportGlobals.so": [
+    "libm.so.6",
+    "libstdc++.so.6",
+    "libgcc_s.so.1",
+    "libc.so.6"
+  ],
+  "libKGENCompilerRTShared.so": [
+    "libm.so.6",
+    "libstdc++.so.6",
+    "libMSupportGlobals.so",
+    "libAsyncRTRuntimeGlobals.so",
+    "libgcc_s.so.1",
+    "libc.so.6",
+    "ld-linux-x86-64.so.2"
+  ]
+}

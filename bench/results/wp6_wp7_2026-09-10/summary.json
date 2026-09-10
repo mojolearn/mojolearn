@@ -1,0 +1,62 @@
+{
+  "qualification": {
+    "captured_array_records": 956,
+    "output_capture_files": 21,
+    "stage_traces": 36,
+    "additional_cards": 2,
+    "retained_preexisting_failure_markers": 2,
+    "integration_host_tests_passed": 88,
+    "integration_output_captures_matched": 13,
+    "apple_host_helper_cells": 54944
+  },
+  "gp": {
+    "median_before_seconds": 4.073340464383364,
+    "median_after_seconds": 1.5138717647641897,
+    "median_time_reduction_pct": 62.834637123971305,
+    "minimum_speedup": 2.7579598466232684,
+    "baseline_range_over_min": 0.05112778342848722
+  },
+  "knn": [
+    {
+      "k": 10,
+      "weights": "uniform",
+      "median_before_ms": 43.11808599959477,
+      "median_after_ms": 42.15641799964942,
+      "median_time_reduction_pct": 2.2303123565234007,
+      "minimum_before_ms": 42.97476600004302,
+      "minimum_after_ms": 41.930665000109,
+      "baseline_range_over_min": 0.027379323030575685
+    },
+    {
+      "k": 10,
+      "weights": "distance",
+      "median_before_ms": 45.50560899951961,
+      "median_after_ms": 43.70454199943197,
+      "median_time_reduction_pct": 3.957901102052397,
+      "minimum_before_ms": 45.272815999851446,
+      "minimum_after_ms": 43.43475899986515,
+      "baseline_range_over_min": 0.020141866155272494
+    },
+    {
+      "k": 15,
+      "weights": "uniform",
+      "median_before_ms": 46.66114900010143,
+      "median_after_ms": 44.5484599995325,
+      "median_time_reduction_pct": 4.527726054419157,
+      "minimum_before_ms": 46.54837900034181,
+      "minimum_after_ms": 44.509219999781635,
+      "baseline_range_over_min": 0.0034813457239256883
+    },
+    {
+      "k": 15,
+      "weights": "distance",
+      "median_before_ms": 48.896390000663814,
+      "median_after_ms": 46.536718000425026,
+      "median_time_reduction_pct": 4.825861377919216,
+      "minimum_before_ms": 48.584557000140194,
+      "minimum_after_ms": 46.23012499996548,
+      "baseline_range_over_min": 0.032468835731720665
+    }
+  ],
+  "opponents_run": false
+}

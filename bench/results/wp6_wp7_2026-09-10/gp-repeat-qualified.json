@@ -1,0 +1,85 @@
+{
+  "shape": {
+    "n_train": 20000,
+    "n_features": 1,
+    "n_star": 4,
+    "return_std": false
+  },
+  "warmup_pairs": 3,
+  "timed_pairs": 5,
+  "factor_bytes": 1600000000,
+  "synthetic_preconstructed_model": true,
+  "metadata": {
+    "before": {
+      "mode": 1,
+      "vendor": "cuda"
+    },
+    "after": {
+      "mode": 1,
+      "vendor": "cuda"
+    }
+  },
+  "samples_seconds": {
+    "before": [
+      3.9236427787691355,
+      4.006495927460492,
+      4.07897684443742,
+      4.124249937012792,
+      4.073340464383364
+    ],
+    "after": [
+      1.5150589905679226,
+      1.4226613137871027,
+      1.4649852430447936,
+      1.5138717647641897,
+      1.5594693217426538
+    ]
+  },
+  "minimum_seconds": {
+    "before": 3.9236427787691355,
+    "after": 1.4226613137871027
+  },
+  "median_seconds": {
+    "before": 4.073340464383364,
+    "after": 1.5138717647641897
+  },
+  "baseline_range_over_min": 0.05112778342848722,
+  "baseline_first_to_last_relative": 0.03815273052486931,
+  "timing_window_valid": true,
+  "comparisons": [
+    {
+      "pair": 0,
+      "bits_match": true
+    },
+    {
+      "pair": 1,
+      "bits_match": true
+    },
+    {
+      "pair": 2,
+      "bits_match": true
+    },
+    {
+      "pair": 3,
+      "bits_match": true
+    },
+    {
+      "pair": 4,
+      "bits_match": true
+    },
+    {
+      "pair": 5,
+      "bits_match": true
+    },
+    {
+      "pair": 6,
+      "bits_match": true
+    },
+    {
+      "pair": 7,
+      "bits_match": true
+    }
+  ],
+  "elapsed_seconds": 47.98493856564164,
+  "qualification": "native complete-prediction calls; excludes Python estimator preparation; no opponent"
+}

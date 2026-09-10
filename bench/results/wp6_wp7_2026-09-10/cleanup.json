@@ -1,0 +1,34 @@
+[
+  {
+    "run": "wp67-rental",
+    "result": "delete zx62ht9mak7o4c 204"
+  },
+  {
+    "run": "wp67-rental",
+    "result": "verify absent 404"
+  },
+  {
+    "run": "wp67-rental2",
+    "result": "delete 6d79rhyrxaat7t 204"
+  },
+  {
+    "run": "wp67-rental2",
+    "result": "verify absent 404"
+  },
+  {
+    "run": "wp67-gp-repeat",
+    "result": "delete 81hxrdpt6mamv1 204"
+  },
+  {
+    "run": "wp67-gp-repeat",
+    "result": "verify absent 404"
+  },
+  {
+    "run": "wp67-gp-repeat2",
+    "result": "delete jl9g9obee9h76t 204"
+  },
+  {
+    "run": "wp67-gp-repeat2",
+    "result": "verify absent 404"
+  }
+]

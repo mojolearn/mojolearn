@@ -38,7 +38,7 @@ the corrected order; classification otherwise reuses the original allocation.
 Weighted arithmetic remains in its existing host order. This does not claim
 to eliminate the weighted arm's distance download or weight upload.
 
-## Qualification in progress
+## Qualification
 
 The shared helper passed 54,944 host bit checks on Apple M4, including signed
 zeros, infinities, subnormals, NaN payloads, integer labels, misalignment,
@@ -49,7 +49,7 @@ copies passed. The gate lives at `checks/hostptr_check.mojo`; a directory named
 The earlier `gp-candidate-UNQUALIFIED.patch` is a historical draft, superseded
 by the actual source changes on this branch; do not apply it again.
 
-NVIDIA qualification uses an expiring RTX 4090 rental, bounded builds/checks,
+NVIDIA qualification used expiring RTX 4090 rentals and bounded builds/checks,
 complete exported-array captures and estimator cards. Classical surfaces run
 in all three numeric tiers; neural surfaces run only in IDENTICAL, matching
 main's current supported split. Test repairs apply equally to both versions:
@@ -66,14 +66,53 @@ Both that sequence and separate training/evaluation calls for each lifetime
 mode are captured. The failed mixed/stateless sequences are retained separately
 from passing captures. The cause of the context-recreation timeout remains open.
 
-The rebased branch passed 84 byte-LM host tests. Native arithmetic qualification
-is separate from those host contract checks.
+The integrated source passed 88 host tests. All 13 integration output captures
+also match the controlled candidate's captures. Across all supported modes,
+21 complete output captures (956 recorded arrays), 36 primary stage traces
+and two additional cards match before/after. The full IDENTICAL suites pass.
 
-Large timing gates are native complete calls, not kernel-only measurements:
-GP prediction from a preconstructed 20,000-row factor (1.6 GB), and kNN
-classification at 400k rows / 4k queries / 32 features, k=10/15 and both
-weight policies. Each uses warmup plus five alternating old/new pairs and
-complete result-bit comparisons. A baseline range above 20% disqualifies the
-timing window. No opponent runs or new opponent ratios are part of this sweep.
-Final timing and comparison results remain pending. Estimator execution on
-Apple and AMD remains RUN OWED; the host helper test is not a substitute.
+The deterministic and FAST kernel-method suites retain one pre-existing
+`POLY_VIA_POW moved NO bit` sabotage failure. Both versions reach their card
+checks and emit matching stage fingerprints before the same failure. The two
+failure markers and original logs are retained; those sabotage suites are not
+reported as passing. No reference tolerance or product arithmetic was loosened.
+
+One early ARIMA trace also contained a nested classical capture's records.
+Its ARIMA prefix already matched the candidate exactly; the combined original
+and the extra suffix are retained, and the split is recorded in trace-repair.json.
+The dedicated classical output captures are compared separately.
+
+## Large measurements
+
+These are native complete calls on RTX 4090, with warmup and five alternating
+old/new timed pairs, and complete selected-output bit comparisons.
+
+GP mean prediction from a synthetic preconstructed 20,000-row / one-feature model,
+four queries, `return_std=False`, carries a 1.6 GB identity factor buffer. The qualified repeat
+used three warmup pairs and took 48 seconds total: median **4.073 s → 1.514 s**
+(**62.8% less time**); minimum **3.924 s → 1.423 s** (2.76× speedup).
+Baseline spread was 5.1%. The first window's 29.8% spread disqualified it and
+is retained. The repeat uses the same two admitted native binaries on a new
+RTX 4090 allocation, with its own paired baseline; absolute timings from the
+two allocations are not combined. A failed clean-node launch lacked the MAX
+runtime libraries; the successful repeat staged their lockfile-pinned ELF closure.
+
+kNN classification used 400k index rows, 4k queries and 32 features; 16 queries
+were exact training matches. All 48 native calls passed complete probability
+and class-order comparisons. Medians:
+
+| k | weights | before (ms) | after (ms) | less time |
+|---|---|---:|---:|---:|
+| 10 | uniform | 43.118 | 42.156 | 2.2% |
+| 10 | distance | 45.506 | 43.705 | 4.0% |
+| 15 | uniform | 46.661 | 44.548 | 4.5% |
+| 15 | distance | 48.896 | 46.537 | 4.8% |
+
+Every timed pair favored the candidate. Baseline spreads were 0.35–3.25%.
+Minimum times, all samples, source/binary hashes and full evidence are in
+[the qualification record](../../bench/results/wp6_wp7_2026-09-10/README.md).
+These classification measurements do not revise the cached bare-search kNN
+opponent ratio. No opponent was timed, so the opponent cache is unchanged.
+Large byte-LM speed and Apple/AMD estimator execution remain RUN OWED; the
+host helper test is not a substitute. All scoped rentals were terminated and
+the provider confirmed their absence.

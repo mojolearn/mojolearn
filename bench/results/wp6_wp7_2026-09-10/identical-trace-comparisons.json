@@ -1,0 +1,62 @@
+[
+  {
+    "trace": "gp.trace",
+    "bytes": 2822,
+    "bits_match": true
+  },
+  {
+    "trace": "svr.trace",
+    "bytes": 51050,
+    "bits_match": true
+  },
+  {
+    "trace": "arima.trace",
+    "bytes": 7743,
+    "bits_match": true
+  },
+  {
+    "trace": "km_check.trace",
+    "bytes": 1201,
+    "bits_match": true
+  },
+  {
+    "trace": "gmm_check.trace",
+    "bytes": 535615,
+    "bits_match": true
+  },
+  {
+    "trace": "resample_check.trace",
+    "bytes": 26546,
+    "bits_match": true
+  },
+  {
+    "trace": "ivf_check.trace",
+    "bytes": 754,
+    "bits_match": true
+  },
+  {
+    "trace": "hw_check.trace",
+    "bytes": 8252,
+    "bits_match": true
+  },
+  {
+    "trace": "trustworthiness_check.trace",
+    "bytes": 1404,
+    "bits_match": true
+  },
+  {
+    "trace": "spectral_check.trace",
+    "bytes": 8712,
+    "bits_match": true
+  },
+  {
+    "trace": "transform_check.trace",
+    "bytes": 1472,
+    "bits_match": true
+  },
+  {
+    "trace": "estimator_check.trace",
+    "bytes": 740,
+    "bits_match": true
+  }
+]

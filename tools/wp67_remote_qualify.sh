@@ -151,7 +151,7 @@ for before in sorted([*(root/'before').rglob('*.bin'), *(root/'before').rglob('*
     rows.append({'surface':str(before.relative_to(root/'before')),'bytes':before.stat().st_size,'bits_match':same})
     assert same, rows[-1]
 (root/'comparisons.json').write_text(json.dumps(rows,indent=2)+'\n')
-print('PASS',len(rows),'complete exported-array captures')
+print('PASS',len(rows),'output captures, stage traces, cards and baseline-failure markers')
 PY
 
 MOJOLEARN_NUMERIC_MODE=identical timeout -k 10 120 "$PY" /root/wp67_gp_predict_bench.py "$OUT/before/identical/gp.so" "$OUT/after/identical/gp.so" "$OUT/gp-large.json" > "$OUT/gp-large.log" 2>&1

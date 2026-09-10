@@ -1,0 +1,29 @@
+{
+  "gp": {
+    "before": {
+      "path": "before/identical/gp.so",
+      "sha256": "b155c4575fa7b0f4cd816af46a34bb9111a3725ab1964afc6cd954e3a2e30694"
+    },
+    "after": {
+      "path": "after/identical/gp.so",
+      "sha256": "5b57c4b2f5a13b70aac32036758689b02098d806ad6cbc8c13b008c8a928f6e4"
+    }
+  },
+  "knn": {
+    "before": {
+      "path": "binaries/base-before.so",
+      "sha256": "0e900b475a0aa6ccdd28492bc96dfa10dda855f4da8b097dd6b019aa74b5fccc"
+    },
+    "after": {
+      "path": "binaries/after-identical/_mojolearn.so",
+      "sha256": "d73332e9c78158ec3d27460a9ad628f2308f14aa6ac0ba76f8db78ab3f414daa"
+    }
+  },
+  "sources": {
+    "baseline": "d330a49d",
+    "initial_candidate": "4b5063e6",
+    "supplemental_knn": "5528df19",
+    "integration": "53fb90b2",
+    "final_product_matches_integration": true
+  }
+}

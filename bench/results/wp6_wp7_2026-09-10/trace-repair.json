@@ -1,0 +1,6 @@
+{
+  "file": "before/identical/arima.trace",
+  "reason": "earlier nested classical harness inherited the ARIMA trace path",
+  "operation": "retained exact ARIMA prefix only after asserting it equals the entire candidate trace; original combined trace and inherited classical suffix remain in qualification archive",
+  "arithmetic_records_changed": false
+}
