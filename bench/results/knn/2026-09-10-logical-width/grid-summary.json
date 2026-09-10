@@ -1,0 +1,114 @@
+[
+  {
+    "index": "100k",
+    "queries": 32,
+    "k": 10,
+    "request_ms": 0.528449,
+    "device_ms": 0.261905
+  },
+  {
+    "index": "100k",
+    "queries": 128,
+    "k": 10,
+    "request_ms": 0.657263,
+    "device_ms": 0.388264
+  },
+  {
+    "index": "100k",
+    "queries": 1000,
+    "k": 10,
+    "request_ms": 2.535083,
+    "device_ms": 2.243266
+  },
+  {
+    "index": "100k",
+    "queries": 4000,
+    "k": 10,
+    "request_ms": 9.090659,
+    "device_ms": 8.710754
+  },
+  {
+    "index": "400k",
+    "queries": 32,
+    "k": 10,
+    "request_ms": 1.959117,
+    "device_ms": 1.00001
+  },
+  {
+    "index": "400k",
+    "queries": 128,
+    "k": 10,
+    "request_ms": 2.47649,
+    "device_ms": 1.520632
+  },
+  {
+    "index": "400k",
+    "queries": 1000,
+    "k": 10,
+    "request_ms": 9.829928,
+    "device_ms": 8.847194
+  },
+  {
+    "index": "400k",
+    "queries": 4000,
+    "k": 10,
+    "request_ms": 35.485847,
+    "device_ms": 34.402008
+  },
+  {
+    "index": "100k",
+    "queries": 32,
+    "k": 15,
+    "request_ms": 0.57073,
+    "device_ms": 0.304366
+  },
+  {
+    "index": "100k",
+    "queries": 128,
+    "k": 15,
+    "request_ms": 0.702833,
+    "device_ms": 0.431367
+  },
+  {
+    "index": "100k",
+    "queries": 1000,
+    "k": 15,
+    "request_ms": 2.891548,
+    "device_ms": 2.582888
+  },
+  {
+    "index": "100k",
+    "queries": 4000,
+    "k": 15,
+    "request_ms": 10.514537,
+    "device_ms": 10.077413
+  },
+  {
+    "index": "400k",
+    "queries": 32,
+    "k": 15,
+    "request_ms": 2.124183,
+    "device_ms": 1.168373
+  },
+  {
+    "index": "400k",
+    "queries": 128,
+    "k": 15,
+    "request_ms": 2.651689,
+    "device_ms": 1.688311
+  },
+  {
+    "index": "400k",
+    "queries": 1000,
+    "k": 15,
+    "request_ms": 11.216025,
+    "device_ms": 10.203313
+  },
+  {
+    "index": "400k",
+    "queries": 4000,
+    "k": 15,
+    "request_ms": 40.955534,
+    "device_ms": 39.814222
+  }
+]

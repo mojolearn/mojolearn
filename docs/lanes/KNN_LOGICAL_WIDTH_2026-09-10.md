@@ -1,90 +1,87 @@
-# kNN logical reduction width prerequisite
+# Exact kNN logical widths, RDNA compilation and distance reuse
 
-Source starts at2419895f; initial candidate d827ea24; corrected source5b552e26. Only the IDENTICAL kNN selector
-calls the extracted shuffle primitive. Its native-width dispatch and integer
-comparison order are unchanged. No floating reduction, numerical floor,
-FAST/DETERMINISTIC path, or tree source is changed.
+Final source c03bbcfc, based on2419895f. kNN native subgroup minimum now
+has an explicit compile-time width. NVIDIA IDENTICAL distance tiles reuse
+index loads across eight query rows instead of four, preserving every cell's
+ascending feature/FMA chain. Apple and other columns retain four rows.
+The ROWS4 diagnostic flag restores NVIDIA's prior distance tile.
+No floating reduction order, identity floor, tree source, FAST or DETERMINISTIC
+path was changed.
 
-`neighbors/checks/lane_minimum.mojo` defines UInt64 minimum for compile-time
-logical widths that are positive powers of two and divide the block size.
-The shuffle implementation is valid only when the logical width divides a
-known native width. The generic implementation uses shared memory otherwise,
-including when physical subgroup width is compiler-selected. It requires all
-block threads to participate and includes a final barrier before scratch reuse.
-Integer minimum is associative, commutative and idempotent; the schedule may
-change without changing composite-key ordering, ties, NaN payload ordering,
-or selected distance bits. This argument does not permit reordering Float32
-sums, and the helper deliberately offers no floating-sum overload.
+## Exact logical reduction
 
-The qualification driver checks every output lane for widths1,2,4,8,16,32,
-64,128 in both admitted-native and forced-shared schedules. Two consecutive
-calls use differing high-word patterns, low-word ties and high-bit values,
-with a serial full-group UInt64 oracle. On Apple32, width64/128 exercises
-shared-memory grouping across native SIMD groups; it does not validate an
-AMD64 device or establish fourth-device identity.
+`neighbors/checks/lane_minimum.mojo` reduces UInt64 composite keys in logical
+groups whose widths are positive powers of two dividing the block size.
+Shuffle is admitted only when a known physical subgroup width is divisible
+by the logical width. Otherwise shared memory and block barriers implement
+the same exact minimum. All block threads must participate. A final barrier
+protects scratch reuse between successive calls.
+Integer minimum is associative, commutative and idempotent. This permits
+changing its tree while retaining signed-zero/NaN key ordering and ties;
+it does not justify reordering floating-point sums.
 
-Repository column audit at2419895f:
+The native gate checks widths1,2,4,8,16,32,64,128, all lanes, two successive
+calls, high-word ties and high-bit values against an independent serial
+UInt64 oracle. Apple and NVIDIA each pass16cases/8192cells. On32-lane
+hardware,64/128-wide logical groups use shared memory across physical groups.
+Existing36 long-selector cases pass on both devices. Alternating H100 prices
+show the extraction alone is neutral: k10 request39.309916 ->39.314031ms;
+k15 44.817819 ->44.801711ms, with reverse order agreeing.
 
-| Declared column | Lane declaration | Detection / existing kNN route |
+## Declared policy versus actual backend
+
+| Column | Lane declaration | Final selection and evidence |
 |---|---:|---|
-| Apple | fixed32 | default fallback; native shuffle |
-| NVIDIA | fixed32 | detected; native shuffle |
-| AMD/CDNA | fixed64 | all detected AMD maps here; native shuffle |
-| AMD/RDNA | fixed32 | explicit column override only; native shuffle |
-| Qualcomm | variable floor8 | explicit simulation override; shared selector tree |
-| Intel | variable floor8 | explicit simulation override; shared selector tree |
-| spec baseline | variable floor1 | explicit simulation override; shared selector tree |
+| Apple | fixed32 | detected/fallback; native gate executed |
+| NVIDIA | fixed32 | detected; native gate executed |
+| AMD/CDNA | fixed64 | generic AMD detector after RDNA; device run owed |
+| AMD/RDNA | fixed32 | architecture-specific detector; native-target compile passed |
+| Qualcomm | variable floor8 | explicit policy override only; Apple shared simulation passed |
+| Intel | variable floor8 | explicit policy override only; Apple shared simulation passed |
+| spec baseline | variable floor1 | explicit policy override only; Apple shared simulation passed |
 
-These are source declarations, not evidence that a compiler/backend/device
-is available. In particular, an AMD device detection flag does not by itself
-establish a64-lane wavefront; RDNA admission still requires selecting its
-separate column and executing the relevant device gates. Intel/Qualcomm floor
-values cannot substitute for actual subgroup-width knowledge.
+TARGET_COLUMN and DETECTED_COLUMN check has_amd_rdna_gpu_accelerator before
+generic AMD. The installed Apple compiler imports that detector successfully.
+Actual RDNA cross-compilation passes for gfx1100 and gfx1201 with an assertion
+requiring TARGET_COLUMN=RDNA and not simulated. The production long-selector
+caller also compiles for gfx1100. These binaries were never executed: physical
+RDNA numerical identity, collectives and timing are RUN OWED.
 
-No performance claim is attached to the extraction. Existing opponent prices
-are reused unchanged. A new device must pass native-width collectives, full
-selector ordering (including ties and NaNs), exact distance seams, public
-output hashes and its own numerical-floor gates before an identity claim.
-Root owns Apple build/test execution; non-Apple hardware execution is RUN OWED.
-
-Explicit override flags now include MOJOLEARN_COLUMN_QUALCOMM,
-MOJOLEARN_COLUMN_INTEL and MOJOLEARN_COLUMN_SPEC_BASELINE. These change only
-the declared policy; backend detection and column_is_buildable are unchanged.
-The qualification driver prints simulated status and declared buildability.
-Every simulated column forces the shared reduction path, even when its
-claimed native width is fixed. Spec-baseline uses its declared128-thread
-maximum (4096 checked cells), while other arms use256 (8192 cells).
-
-Installed package inspection: the Apple Pixi environment ships compiled
-std.mojoc and max.mojoc, with CUDA/ROCm wrapper packages (_cublas,_cudnn,
-_cufft,_rocblas,_miopen); no readable backend source was present at
-lib/mojo. This inventory cannot establish emit/link/runtime support for a
-fourth physical backend. Explicit-policy execution on Metal is only policy
-and portable-kernel evidence, never Intel/Qualcomm/RDNA device admission.
-
-Apple execution results: native16cases8192cells PASS; explicit spec-baseline
-simulation16cases4096cells PASS; Intel,Qualcomm,RDNA simulations each16cases
-8192cells PASS. Existing36 long-selector cases PASS. These simulations run
-on Apple and force shared memory; none grants fourth-physical-device status.
-Logs are compressed under bench/results/knn/2026-09-10-logical-width/.
-
-RDNA backend follow-up: installed Apple compiler imports
-`has_amd_rdna_gpu_accelerator` successfully and returns False on Apple.
-TARGET_COLUMN and DETECTED_COLUMN now check this detector before generic AMD,
-so an actual RDNA target receives its32-lane column rather than CDNA64.
-Explicit simulation still differs from automatic target detection.
 The [official requirements](https://mojolang.org/docs/requirements/) list
-RDNA gfx1100 and gfx1201 as known-compatible targets; the
+RDNA gfx1100/gfx1201 as known-compatible targets; the
 [detector reference](https://mojolang.org/docs/std/sys/info/has_amd_rdna_gpu_accelerator/)
-documents the architecture-specific predicate. Actual cross-target compile
-results are recorded separately from physical-device execution, which is owed.
+documents the architecture-specific predicate. Installed compiled packages
+alone cannot establish emit/link/runtime support for Intel or Qualcomm.
+Their explicit defines change declared policy, not the detected backend or
+column_is_buildable. Simulated columns always use shared reduction, avoiding
+accidental64-lane shuffles on a32-lane host. Spec-baseline's declared128-thread
+limit is retained: its simulation checks4096cells; the other simulations8192.
+These Apple policy simulations do not admit another physical device.
 
-Bounded performance follow-up: the previous H100 request39.31ms versus
-device38.23ms leaves only1.08ms of host/transfer overhead. Earlier specialized
-phase logs at400k/4000/k10 show distance about19.3ms, selector9.1ms and
-merge0.86ms (112,112,96 launches respectively); those older phase figures
-predate the latest flush improvement and do not substitute for a new profile.
-A single opt-in NVIDIA RT_ROWS8 probe therefore doubles query reuse of each
-index load while keeping RT_COLS4 and each cell's ascending feature chain.
-Larger register pressure may offset the load savings; measurement decides.
-No redux, decoded winner, or Apple chunk4 experiment is reintroduced.
+## Measured NVIDIA distance reuse
+
+H10080GBHBM3, driver580.126.09, Mojo1.0.0(ed45d567), IDENTICAL dyadic-v1;
+two warmups, seven rounds, exclusive GPU timing. At400k index rows/4000
+queries/32features, k10 request39.31 ->35.46ms (~9.8% less), device38.23
+->34.38; k15 request44.80 ->40.93 (~8.6% less), device43.66 ->39.79.
+Phase instrumentation shows distance25.13 ->21.23ms while selection stays
+13.45 ->13.42 and merge about0.8ms. Timers add synchronization, so phase
+numbers are diagnostic rather than uninstrumented prices.
+
+All16 public-grid fingerprints match the archived corrected baseline;
+six paired d8/d32/d128 andq32/q1000 fixtures also match. The exact396584x3
+FMA oracle and24 full distance-layout fixtures pass for the eight-row tile.
+Small-feature performance is a measured tradeoff: d8/q32 is flat, d8/q1000
+is about0.9% slower in both measurement orders. d32/q1000 is about8% faster,
+d128/q1000 about15%, and d128/q32 about5%. No universal speedup is claimed.
+
+The existing opponent table receives updated16 IDENTICAL prices through
+`bench/results/knn/2026-09-10-logical-width/opponent-table.patch`. Its archived
+cuML tuple is reused unchanged; opponent admission checks indices, not bitwise
+cuML distances. No opponent or fourth-device benchmark was invented.
+Final default-without-ROWS8-flag verification is queued separately; the probe
+and default resolve to the same eight-row NVIDIA implementation.
+
+Evidence: `bench/results/knn/2026-09-10-logical-width/`, including commands,
+compressed build/gate/pricing logs, rejected initial compile error, metadata
+and grid summary. No GPU binaries or generated17MB oracle fixture are committed.
