@@ -1,0 +1,6 @@
+PASS WP8 uint8 elements 1
+PASS WP8 uint8 elements 15
+PASS WP8 uint8 elements 16
+PASS WP8 uint8 elements 17
+PASS WP8 uint8 elements 65
+PASS WP8 int32 elements 31

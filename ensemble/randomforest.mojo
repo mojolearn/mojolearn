@@ -34,6 +34,9 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree,
 )
+from extratrees.impl.decisiontree.batched_levelalgo.builder import (
+    row_ids_tiled_sequence_kernel,
+)
 from core.device_liveness import assert_device_alive
 from core.launch_log import log_launch
 from ensemble.instruments import FitInstruments
@@ -1326,6 +1329,7 @@ def compute_oob_score[
     n_rows: Int,
     n_cols: Int,
     row_major: Bool,
+    host_x_addr: Int = 0,
 ) raises where O.DataT == DType.float32:
     """`RandomForestClassifier/Regressor._compute_oob_score`,
     `randomforest_common.pyx:695-753`.
@@ -1380,22 +1384,35 @@ def compute_oob_score[
 
     # X, row-major, because `predict_one` walks a row (`:366` does the
     # same pointer arithmetic). Training may have been column-major.
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_cols)
-    log_launch("xfer_oob_x")
-    ctx.enqueue_copy(dst_buf=hx, src_buf=x)
+    # DEVIATION 2484: callers that still own training X may lend it until
+    # this synchronous call returns. Native callers retain the download arm.
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](
+        n_rows * n_cols if host_x_addr == 0 else 0
+    )
+    if host_x_addr == 0:
+        log_launch("xfer_oob_x")
+        ctx.enqueue_copy(dst_buf=hx, src_buf=x)
 
     var hy = ctx.enqueue_create_host_buffer[O.LabelT](n_rows)
     log_launch("xfer_oob_y")
     ctx.enqueue_copy(dst_buf=hy, src_buf=y)
     ctx.synchronize()
 
-    var rows = List[Scalar[O.DataT]]()
+    var source = MutPointer[Float32, MutUntrackedOrigin](
+        unsafe_from_address=host_x_addr
+    )
+    if host_x_addr == 0:
+        source = hx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var rows = List[Scalar[O.DataT]](capacity=n_rows * n_cols)
     for r in range(n_rows):
         for c in range(n_cols):
             var src = r * n_cols + c if row_major else c * n_rows + r
-            rows.append(
-                rebind[Scalar[O.DataT]](hx.unsafe_ptr().unsafe_load(src))
-            )
+            var value = source.unsafe_load(src)
+            # The device training matrix was flushed in-place before bins.
+            # Mirror that seam on borrowed original X, without mutating it.
+            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+                value = ftz(value)
+            rows.append(rebind[Scalar[O.DataT]](value))
 
     # `:711-712`
     var oob_predictions = List[Float64]()
@@ -2175,18 +2192,18 @@ struct RowSampler(Movable):
             )
             ctx.synchronize()
             return
-        # `:155-157` -- `thrust::sequence`, the identity. This is the arm
-        # `bootstrap=False` takes, and it is the only one that runs today.
+        # DEVIATION 2484: `:155-157` thrust::sequence, reusing ET's device
+        # fill. Consumers use this queue, so no host staging or wait is needed.
+        # Weighted arms above retain their original sampling and synchronization.
         self.n_selected = self.n_sampled_rows
-        var p = self.h_rows.unsafe_ptr()
-        for i in range(self.n_sampled_rows):
-            p.unsafe_store(i, Int32(i))
-        log_launch("xfer_sampled_rows")
-        ctx.enqueue_copy(
-            dst_buf=self.selected_rows_[slot],
-            src_ptr=self.h_rows.unsafe_ptr(),
+        log_launch("sampled_rows_sequence")
+        ctx.enqueue_function[row_ids_tiled_sequence_kernel](
+            self.selected_rows_[slot].unsafe_ptr(),
+            Int32(self.n_sampled_rows),
+            Int32(self.n_rows),
+            grid_dim=_ceildiv(self.n_sampled_rows, 256),
+            block_dim=256,
         )
-        ctx.synchronize()
 
     @always_inline
     def rows_ptr(
@@ -2294,6 +2311,7 @@ def fit_forest[
     sample_weight_host: List[Float32] = List[Float32](),
     row_major: Bool = False,
     oob_score: Bool = False,
+    host_x_addr: Int = 0,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
@@ -2781,7 +2799,7 @@ def fit_forest[
     if oob_score:
         t_stage = instr.times.start()
         compute_oob_score[O, oob_sabotage](
-            ctx, forest, sampler, x, y, n_rows, n_cols, row_major
+            ctx, forest, sampler, x, y, n_rows, n_cols, row_major, host_x_addr
         )
         instr.times.stop(ctx, "oob", t_stage)
 

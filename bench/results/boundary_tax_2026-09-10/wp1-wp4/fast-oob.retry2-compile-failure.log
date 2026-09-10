@@ -1,0 +1,4 @@
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/oob_check.mojo:486:30: error: 'UInt32' value has no attribute 'bitcast'
+                x.append(bits.bitcast[DType.float32]())
+                         ~~~~^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

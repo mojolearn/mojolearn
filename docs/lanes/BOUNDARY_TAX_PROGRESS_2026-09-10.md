@@ -59,8 +59,14 @@ optimization gate. NVIDIA/AMD attribution remains owed. No competitor ratio is i
   is a follow-on after the host export protocol qualifies.
 - WP3: the borrowed-pointer, reusable-I/O path is already the default. Added
   routing and native List/into comparisons; see corrected brief.
-- WP4: device identity-row fill and borrowed-X OOB path in progress, including
-  IDENTICAL FTZ compatibility checks.
+- WP4: device identity-row fill and optional borrowed-X OOB path pass native
+  checks in FAST, DETERMINISTIC and IDENTICAL on Metal. Both input layouts,
+  signed zero/subnormal inputs, row-count tails and full forest/OOB fingerprints
+  are covered. IDENTICAL borrowed reads retain the device FTZ convention.
+  Existing native callers may omit the address and keep the download path;
+  WP1 wires the binding's caller-owned address. Weighted sampling is unchanged.
+  Large RF OOB-on/off timing and NVIDIA/AMD execution remain owed; commands
+  and source/artifact hashes are in the WP1/WP4 evidence directory.
 - WP5: eight-slot flat-input cindex staging implemented, retaining eval/predict
   NaN refusal. FAST/DETERMINISTIC/IDENTICAL per-cell oracle and columns-twin
   gates pass at rows/features 1/19, 257/35, 8193/67, with ring wraps, skipped

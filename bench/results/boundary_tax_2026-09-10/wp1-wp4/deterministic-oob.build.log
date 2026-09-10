@@ -1,0 +1,49 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/oob_check.mojo:42:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/fingerprint_probe.mojo:46:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/randomforest.mojo:42:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/instruments.mojo:46:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/oob_check.mojo:42:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/fingerprint_probe.mojo:46:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/randomforest.mojo:42:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/instruments.mojo:46:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/oob_check.mojo:42:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/fingerprint_probe.mojo:46:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/randomforest.mojo:42:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/instruments.mojo:46:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/oob_check.mojo:42:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/fingerprint_probe.mojo:46:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/randomforest.mojo:42:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/instruments.mojo:46:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/oob_check.mojo:42:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/fingerprint_probe.mojo:46:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/randomforest.mojo:42:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/instruments.mojo:46:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Included from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/checks/oob_check.mojo:49:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/ensemble/decisiontree/batched_levelalgo/objectives.mojo:345:29: warning: unreachable code after compile-time assertion failure
+        return Scalar[dtype](0)
+                            ^

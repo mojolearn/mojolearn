@@ -38,6 +38,8 @@ So no arm here checks only that a score came back.
 """
 
 from max.gpu.host import DeviceContext
+from std.memory import bitcast
+from ensemble.checks.fingerprint_probe import _fingerprint
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
     ClassificationBin,
@@ -240,6 +242,8 @@ def _fit_cls[
     n_classes: Int,
     mut p: RF_params,
     oob: Bool,
+    borrowed: Bool = False,
+    row_major: Bool = False,
 ) raises -> RandomForestMetaData[DT, CLS_LT]:
     var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
     for i in range(n_rows * n_cols):
@@ -263,6 +267,8 @@ def _fit_cls[
         n_classes,
         p,
         oob_score=oob,
+        row_major=row_major,
+        host_x_addr=Int(hx.unsafe_ptr()) if borrowed else 0,
     )
     _ = dx^
     _ = dy^
@@ -448,6 +454,51 @@ def arm_e_guards(ctx: DeviceContext) raises -> Int:
     return wrong
 
 
+
+def arm_f_boundary_reuse(ctx: DeviceContext) raises -> Int:
+    """DEVIATION 2484: exact identity rows and OOB source equivalence."""
+    var wrong = 0
+    for shape_id in range(3):
+        var n = 1 if shape_id == 0 else (257 if shape_id == 1 else 1031)
+        var sampler = RowSampler(ctx, False, UInt64(17), n, n, False, 0)
+        var host = ctx.enqueue_create_host_buffer[DType.int32](n)
+        for tree in range(3):
+            sampler.sample(ctx, Int32(tree))
+            ctx.enqueue_copy(dst_buf=host, src_buf=sampler.selected_rows_[0])
+            ctx.synchronize()
+            for i in range(n):
+                if host.unsafe_ptr().unsafe_load(i) != Int32(i):
+                    wrong += 1
+        _ = sampler^
+        _ = host^
+    var n = 64
+    for layout in range(2):
+        var row_major = layout == 1
+        var x = List[Float32](capacity=n * 2)
+        var y = List[Int32](capacity=n)
+        for i in range(n * 2):
+            var r = i // 2 if row_major else i % n
+            var c = i % 2 if row_major else i // n
+            if c == 0:
+                x.append(Float32(r % 7))
+            else:
+                # Include signed zeros and subnormals in the borrowed source.
+                var bits = UInt32(r % 2) | (UInt32(r % 3 == 0) << 31)
+                x.append(bitcast[DType.float32](bits))
+        for r in range(n):
+            y.append(Int32((r * 7 + r // 3) % 2))
+        var p = _params(5, True, GINI)
+        var q = _params(5, True, GINI)
+        var downloaded = _fit_cls(ctx, x, y, n, 2, 2, p, True,
+                                  row_major=row_major)
+        var borrowed = _fit_cls(ctx, x, y, n, 2, 2, q, True,
+                                borrowed=True, row_major=row_major)
+        if _fingerprint(downloaded) != _fingerprint(borrowed):
+            wrong += 1
+    print("ARM F -- device identity and borrowed/download OOB mismatches", wrong)
+    return wrong
+
+
 def main() raises:
     print("oob_check: out-of-bag masks and scoring")
     var ctx = DeviceContext()
@@ -457,6 +508,7 @@ def main() raises:
     fails += arm_c_analytic_scores(ctx)
     fails += arm_d_sabotage_the_inversion(ctx)
     fails += arm_e_guards(ctx)
+    fails += arm_f_boundary_reuse(ctx)
     if fails == 0:
         print()
         print("oob_check: ALL OK")

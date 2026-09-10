@@ -1,0 +1,50 @@
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:14:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        src.unsafe_ptr()[i] = Scalar[dt](i * 19 + 7)
+        ~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:15:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        shadow.unsafe_ptr()[i] = Scalar[dt](0)
+        ~~~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:20:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if output.unsafe_ptr()[i] != src.unsafe_ptr()[i]:
+           ~~~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:20:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if output.unsafe_ptr()[i] != src.unsafe_ptr()[i]:
+                                     ~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:28:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if output.unsafe_ptr()[i] != Scalar[dt](0):
+           ~~~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:32:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        src.unsafe_ptr()[changed] += Scalar[dt](1)
+        ~~~~~~~~~~~~~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:37:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if output.unsafe_ptr()[i] != src.unsafe_ptr()[i]:
+               ~~~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:37:58: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if output.unsafe_ptr()[i] != src.unsafe_ptr()[i]:
+                                         ~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:4:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2787:24: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var sb = sp.bitcast[UInt8]()
+                     ~~^~~~~~~~
+                        unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:4:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2788:24: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var hb = hp.bitcast[UInt8]()
+                     ~~^~~~~~~~
+                        unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/checks/stage_upload_bytes_check.mojo:4:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2808:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=hp, src=sp, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here

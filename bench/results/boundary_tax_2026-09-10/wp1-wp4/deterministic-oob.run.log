@@ -1,0 +1,35 @@
+oob_check: out-of-bag masks and scoring
+ARM A -- the mask, cell by cell, against a replayed draw
+    tree 0 : drew 126 distinct rows of 200 | mask cells wrong 0
+    tree 1 : drew 127 distinct rows of 200 | mask cells wrong 0
+    tree 2 : drew 134 distinct rows of 200 | mask cells wrong 0
+    tree 3 : drew 130 distinct rows of 200 | mask cells wrong 0
+  arm A OK: every cell of every tree's mask matches the draw
+
+ARM B -- the OOB count is an identity on the masks
+     444 of 1200 (row, tree) pairs are out of bag; 11 rows are in every tree's bag
+  arm B OK: counts recomputed from the masks are consistent
+
+ARM C -- an analytic score, both estimator types
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+    classification: has_oob True oob_score_ 1.0 | decision function length 600
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+    regression:     has_oob True oob_score_ 1.0 | prediction length 300
+  arm C OK: exactly 1.0 for both, and the right field filled
+
+ARM D -- sabotage the mask inversion
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+    honest (out of bag) score 0.35904255319148937 | sabotaged (in bag) score 0.78
+  arm D OK: dropping the `~` reports a BETTER number, which is the direction that makes it dangerous
+
+ARM E -- the guards
+    oob_score=True with bootstrap=False refused: True
+    a fit that did not ask for OOB reports has_oob: False
+  arm E OK: refused without bootstrap, silent when not asked
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+WARN: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+ARM F -- device identity and borrowed/download OOB mismatches 0
+
+oob_check: ALL OK

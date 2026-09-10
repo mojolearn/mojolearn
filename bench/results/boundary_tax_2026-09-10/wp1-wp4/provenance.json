@@ -1,0 +1,21 @@
+{
+  "source_sha256": {
+    "ensemble/randomforest.mojo": "0273e67249483b5b071e04388bae7891ec419fcf2e21b2dfbb6a3cb8fd15cd07",
+    "ensemble/checks/oob_check.mojo": "bd9ad9eed9cd88a5a9baab54f97c917cb44591c5fd24f53a55346bcfaf0f2615",
+    "extratrees/estimator.mojo": "874ccf7879fc1fd4c9e03a9525bf22e2d7219a62c8a4302d637bcedc741364f8",
+    "extratrees/impl/randomforest/randomforest.mojo": "ad247dc747f29d73f3aa49138568933dc8f83c3da56aa399ddabca285e27bf5d",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo": "883edcde5f1f52438d463464535083222994f47e4922679d58730d73df3a6e16",
+    "extratrees/checks/borrowed_upload_check.mojo": "aaaea8b86272062cb3031339598e7e81b4a79e12e5f12ad88dcf540e86a5ed7b"
+  },
+  "binaries": {
+    "/tmp/mojolearn-wp1-wp4-fast-oob": "608432491eb09b4f1d4ea3359de8cb4df2bcda9e8dfc6ff0071eac15500cdb95",
+    "/tmp/mojolearn-wp1-wp4-fast-borrowed_upload": "d89240143f8d20505c53f1b111be33f60a4c418417867d8c203cbf9096ec24db",
+    "/tmp/mojolearn-wp1-wp4-identical-oob": "f9420c9249929aad17cc34b0e93ad19636f81aca7800837ed71fe15c529b48db",
+    "/tmp/mojolearn-wp1-wp4-identical-borrowed_upload": "87230ec93c66d9dcbc58211d1a80465420d98a75c3ce9450742da7665d4f8cb6",
+    "/tmp/mojolearn-wp1-wp4-deterministic-oob": "66001280ace3995d15129b5ece2bce859aba566ad35baa6322b0545c0a27a347",
+    "/tmp/mojolearn-wp1-wp4-deterministic-borrowed_upload": "51a69dd7bddb374e9a672b5a22e740cc4ed7d8935e1b89488429cd20c9022d6e"
+  },
+  "commands": "pixi run mojo build -I . -D MOJOLEARN_NUMERIC_{FAST|IDENTICAL|DETERMINISTIC}=1 <source> -o <binary>; <binary>",
+  "serialization": "nice -n 19 tools/with_build_lock.sh /tmp/mojolearn-wp1-wp4-checks.sh",
+  "platform": "local Apple Metal; no cross-vendor or timing claim"
+}
