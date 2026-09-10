@@ -1,14 +1,16 @@
 # Portable primitive inventory, 2026-09-10
 
 This is a read-only source inventory at base `1b3f53d6` plus UMAP seam change
-`163aaf81`; it does not certify execution paths merely by counting names.
+`163aaf81` and primitive-gate revision `20061ad5`; it does not certify
+execution paths merely by counting names.
 No tree implementation or tests were changed. The companion JSON retains
 file/line/source for each detected call. Detection strips Mojo docstrings,
 comments and string literals, includes named `external_call` targets, and
 excludes function declarations. Library helpers under `checks/` are identified
 explicitly rather than assuming that directory contains only test code.
 Counts are lexical call sites, not dynamic invocation counts or an exhaustive
-compiler call graph.
+compiler call graph. Reproduce with `python3 tools/audit_portable_primitive_calls.py
+--output /tmp/primitive-inventory.json` from the recorded source.
 
 | Standalone primitive | Executable calls | Other mentions | Interpretation |
 |---|---:|---:|---|
