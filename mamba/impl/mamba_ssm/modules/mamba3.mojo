@@ -72,7 +72,6 @@ in `mamba/checks/mamba3_check.mojo`.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
-from std.memory import bitcast
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -337,25 +336,6 @@ def allocate_inference_cache(
     return Mamba3DeviceState(ctx, batch_size, dims)
 
 
-def _m3_stage_buffer(
-    ctx: DeviceContext, n: Int, uninitialized: Bool,
-) raises -> DeviceBuffer[DType.float32]:
-    """Allocate a definitely-overwritten stage, keeping zero-init the default.
-
-    The opt-in caller owns the scratch through the completed block. A poison
-    build replaces its initial contents with a quiet NaN so an accidental
-    read-before-write is observable in the full native and public gates.
-    """
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        if uninitialized:
-            var dev = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-            comptime if is_defined["MOJOLEARN_MAMBA3_POISON_SCRATCH"]():
-                dev.enqueue_fill(bitcast[DType.float32](UInt32(0x7FC01234)))
-                ctx.synchronize()
-            return dev^
-    return mamba_zeros(ctx, n)
-
-
 struct Mamba3DeviceStages(Movable):
     """Every recorded stage of one block call plus the working buffers.
     Token stages are [M = B*l, ...] over the NEW tokens; working buffers
@@ -410,7 +390,6 @@ struct Mamba3DeviceStages(Movable):
         l: Int,
         q0: Int,
         dims: Mamba3Dims,
-        uninitialized_scratch: Bool = False,
     ) raises:
         self.b = b
         self.l = l
@@ -428,41 +407,39 @@ struct Mamba3DeviceStages(Movable):
         comptime p_dim = M3_HEADDIM
         comptime n_state = M3_D_STATE
         comptime r_ang = M3_NUM_ROPE_ANGLES
-        # Only full-write stages use scratch allocation. Working arrays with
-        # split buffered/new-token producers retain their original zeros.
-        self.norm_sumsq = _m3_stage_buffer(ctx, m, uninitialized_scratch)
-        self.norm_out = _m3_stage_buffer(ctx, m * dm, uninitialized_scratch)
-        self.in_proj = _m3_stage_buffer(ctx, m * dip, uninitialized_scratch)
-        self.a_out = _m3_stage_buffer(ctx, m * nh, uninitialized_scratch)
-        self.dt_out = _m3_stage_buffer(ctx, m * nh, uninitialized_scratch)
+        self.norm_sumsq = mamba_zeros(ctx, m)
+        self.norm_out = mamba_zeros(ctx, m * dm)
+        self.in_proj = mamba_zeros(ctx, m * dip)
+        self.a_out = mamba_zeros(ctx, m * nh)
+        self.dt_out = mamba_zeros(ctx, m * nh)
         self.adt_work = mamba_zeros(ctx, b * t * nh)
         self.sig_work = mamba_zeros(ctx, b * t * nh)
         self.dt_work = mamba_zeros(ctx, b * t * nh)
-        self.gamma_work = _m3_stage_buffer(ctx, b * t * nh, uninitialized_scratch)
-        self.betap_work = _m3_stage_buffer(ctx, b * t * nh, uninitialized_scratch)
-        self.scale_work = _m3_stage_buffer(ctx, b * t * nh, uninitialized_scratch)
-        self.bcnorm_b = _m3_stage_buffer(ctx, m * n_state, uninitialized_scratch)
-        self.bcnorm_c = _m3_stage_buffer(ctx, m * n_state, uninitialized_scratch)
-        self.theta_out = _m3_stage_buffer(ctx, m * nh * r_ang, uninitialized_scratch)
+        self.gamma_work = mamba_zeros(ctx, b * t * nh)
+        self.betap_work = mamba_zeros(ctx, b * t * nh)
+        self.scale_work = mamba_zeros(ctx, b * t * nh)
+        self.bcnorm_b = mamba_zeros(ctx, m * n_state)
+        self.bcnorm_c = mamba_zeros(ctx, m * n_state)
+        self.theta_out = mamba_zeros(ctx, m * nh * r_ang)
         self.rotq_work = mamba_zeros(ctx, b * t * nh * n_state)
         self.rotk_work = mamba_zeros(ctx, b * t * nh * n_state)
-        self.qkdot = _m3_stage_buffer(ctx, m * nh, uninitialized_scratch)
-        self.kscale_work = _m3_stage_buffer(ctx, b * t * nh * n_state, uninitialized_scratch)
+        self.qkdot = mamba_zeros(ctx, m * nh)
+        self.kscale_work = mamba_zeros(ctx, b * t * nh * n_state)
         self.v_work = mamba_zeros(ctx, b * t * nh * p_dim)
-        self.dacs = _m3_stage_buffer(ctx, b * nh * nc * qv, uninitialized_scratch)
-        self.seg_l = _m3_stage_buffer(ctx, b * nc * nh * qv * qv, uninitialized_scratch)
-        self.qk_s = _m3_stage_buffer(ctx, b * nc * nh * qv * qv, uninitialized_scratch)
-        self.pass_states = _m3_stage_buffer(ctx, b * nc * nh * p_dim * n_state, uninitialized_scratch)
-        self.yintra = _m3_stage_buffer(ctx, m * nh * p_dim, uninitialized_scratch)
-        self.ystate = _m3_stage_buffer(ctx, m * nh * p_dim, uninitialized_scratch)
-        self.skip_out = _m3_stage_buffer(ctx, m * nh * p_dim, uninitialized_scratch)
-        self.gate_out = _m3_stage_buffer(ctx, m * nh * p_dim, uninitialized_scratch)
-        self.out_proj = _m3_stage_buffer(ctx, m * dm, uninitialized_scratch)
-        self.residual_out = _m3_stage_buffer(ctx, m * dm, uninitialized_scratch)
-        self.h_last = _m3_stage_buffer(ctx, b * nh * p_dim * n_state, uninitialized_scratch)
-        self.k_last = _m3_stage_buffer(ctx, b * nh * n_state, uninitialized_scratch)
-        self.v_last = _m3_stage_buffer(ctx, b * nh * p_dim, uninitialized_scratch)
-        self.theta_last = _m3_stage_buffer(ctx, b * nh * r_ang, uninitialized_scratch)
+        self.dacs = mamba_zeros(ctx, b * nh * nc * qv)
+        self.seg_l = mamba_zeros(ctx, b * nc * nh * qv * qv)
+        self.qk_s = mamba_zeros(ctx, b * nc * nh * qv * qv)
+        self.pass_states = mamba_zeros(ctx, b * nc * nh * p_dim * n_state)
+        self.yintra = mamba_zeros(ctx, m * nh * p_dim)
+        self.ystate = mamba_zeros(ctx, m * nh * p_dim)
+        self.skip_out = mamba_zeros(ctx, m * nh * p_dim)
+        self.gate_out = mamba_zeros(ctx, m * nh * p_dim)
+        self.out_proj = mamba_zeros(ctx, m * dm)
+        self.residual_out = mamba_zeros(ctx, m * dm)
+        self.h_last = mamba_zeros(ctx, b * nh * p_dim * n_state)
+        self.k_last = mamba_zeros(ctx, b * nh * n_state)
+        self.v_last = mamba_zeros(ctx, b * nh * p_dim)
+        self.theta_last = mamba_zeros(ctx, b * nh * r_ang)
 
 
 # ===========================================================================
