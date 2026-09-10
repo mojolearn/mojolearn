@@ -15,11 +15,11 @@ if "$out/embedding-sort-negative" > "$out/negative.log" 2>&1; then
   echo 'FAIL: reverse-tie device sort negative control passed' >&2
   exit 1
 fi
-if ! rg -q 'sabotage= SORT_NEGATIVE_CONTROL' "$out/negative.log"; then
+if ! grep -q 'sabotage= SORT_NEGATIVE_CONTROL' "$out/negative.log"; then
   echo 'FAIL: device negative control was not registered' >&2
   exit 1
 fi
-if ! rg -q 'PLAN_SORT edge metadata mismatch' "$out/negative.log"; then
+if ! grep -q 'PLAN_SORT edge metadata mismatch' "$out/negative.log"; then
   echo 'FAIL: negative control failed for an unrelated reason' >&2
   exit 1
 fi
