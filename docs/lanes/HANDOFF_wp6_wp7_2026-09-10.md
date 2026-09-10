@@ -58,12 +58,16 @@ Transformer's tests must export `Array` before NumPy dtype/view operations and
 restore cache buffers through supported assignment. Reference tolerances are
 unchanged. Missing corpus files and the `einops` oracle dependency were supplied.
 
-The unchanged baseline times out on a second Byte-LM native call on this
-rental, including a stateless-only process. Stack diagnostics locate it inside
+The unchanged baseline times out when a process creates a new trainer context
+after a stateless Byte-LM call. Stack diagnostics locate it inside the next
 `byte_lm_run_configured`/`byte_lm_session_run`; it is not a measured copy-sweep
-regression. One training or evaluation call per fresh process is captured for
-both lifetime modes. This does not qualify repeated-call training on NVIDIA.
-The failed multi-call runs are retained separately from passing captures.
+regression. A resident-only process passed two training steps and evaluation.
+Both that sequence and separate training/evaluation calls for each lifetime
+mode are captured. The failed mixed/stateless sequences are retained separately
+from passing captures. The cause of the context-recreation timeout remains open.
+
+The rebased branch passed 84 byte-LM host tests. Native arithmetic qualification
+is separate from those host contract checks.
 
 Large timing gates are native complete calls, not kernel-only measurements:
 GP prediction from a preconstructed 20,000-row factor (1.6 GB), and kNN

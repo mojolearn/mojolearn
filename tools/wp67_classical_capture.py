@@ -51,7 +51,7 @@ def main():
     save('mae',ml.metrics.mean_absolute_error(x[:,0],x[:,1]))
     save('rmse',ml.metrics.root_mean_squared_error(x[:,0],x[:,1]))
     save('f1',ml.metrics.f1_score(y,pred,average='macro'))
-    save('matmul',linalg.matmul(x[:8],x[:5],transpose_b=True))
+    save('matmul',linalg.matmul(x[:8],x[:5],transpose_b=True,identical=os.environ.get('MOJOLEARN_NUMERIC_MODE')=='identical'))
     if os.environ.get('MOJOLEARN_NUMERIC_MODE')=='identical':
         save('cross_entropy',training.cross_entropy(x[:4],np.array([0,1,2,0],np.int32)))
     model=ml.AgglomerativeClustering(n_clusters=3).fit(x)

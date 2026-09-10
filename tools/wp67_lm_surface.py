@@ -12,7 +12,7 @@ ids=rng.integers(0,shape.vocab_size,(shape.batch,shape.length+1),dtype=np.int32)
 resident=os.environ.get('WP67_LM_RESIDENT','0')=='1'
 with_trainer=LanguageModelTrainer(weights,shape=shape,resident=resident,data_schedule={'dataset':'wp67-gate'})
 try:
-    for step in range(1 if os.environ.get("WP67_LM_ACTION", "train")=="train" else 0):
+    for step in range(int(os.environ.get("WP67_LM_STEPS", "1")) if os.environ.get("WP67_LM_ACTION", "train")!="eval" else 0):
         print('training',resident,step,flush=True)
         result=with_trainer.train_step(ids)
         assert result['step']==step+1 and np.isfinite(result['loss'])
@@ -20,7 +20,7 @@ try:
             value=np.asarray(with_trainer.state_dict()[key])
             assert np.isfinite(value).all()
         assert np.isfinite(np.asarray(result['flat_gradients'])).all()
-    if os.environ.get('WP67_LM_ACTION')=='eval':
+    if os.environ.get('WP67_LM_ACTION') in ('eval','train_eval'):
         print('evaluating',resident,flush=True)
         before={key:value.tobytes() for key,value in with_trainer.state_dict().items() if hasattr(value,'tobytes')}
         assert np.isfinite(with_trainer.evaluate(ids))

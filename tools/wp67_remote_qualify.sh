@@ -68,21 +68,29 @@ PY
             timeout -k 10 300 sh "$script" > "$DIR/build-$binding.log" 2>&1
         done
         export PYTHONPATH=/root/mojolearn/python
+        skip_surfaces=0
+        if [ "$arm" = after ] && [ "$mode" = identical ] && [ -f "$OUT/after-identical-surfaces.exit" ] && [ "$(cat "$OUT/after-identical-surfaces.exit")" = 0 ]; then skip_surfaces=1; fi
         for surface in gp svr mamba mamba1_backward mamba23_backward transformer arima; do
+            [ "$skip_surfaces" = 0 ] || continue
             case "$surface" in mamba|mamba1_backward|mamba23_backward|transformer) [ "$mode" = identical ] || continue ;; esac
             printf '%s %s surface %s\n' "$arm" "$mode" "$surface"
             MOJOLEARN_IDENTITY_TRACE="$DIR/$surface.trace" timeout -k 10 180 "$PY" \
                 /root/wp67_surface_capture.py "python/mojolearn/tests/test_${surface}_surface.py" \
                 "$DIR/$surface.bin" > "$DIR/surface-$surface.log" 2>&1
         done
-        timeout -k 10 90 "$PY" /root/wp67_classical_capture.py "$DIR/classical.bin" > "$DIR/classical.log" 2>&1
-        if [ "$mode" = identical ]; then
+        if [ "$skip_surfaces" = 0 ]; then
+            timeout -k 10 90 "$PY" /root/wp67_classical_capture.py "$DIR/classical.bin" > "$DIR/classical.log" 2>&1
+        fi
+        if [ "$mode" = identical ] && [ "$skip_surfaces" = 0 ]; then
             for resident in 0 1; do
               for action in train eval; do
                 WP67_LM_ACTION=$action WP67_LM_RESIDENT=$resident timeout -k 10 90 "$PY" /root/wp67_surface_capture.py /root/wp67_lm_surface.py \
                     "$DIR/byte_lm-$resident-$action.bin" > "$DIR/surface-byte_lm-$resident-$action.log" 2>&1
               done
             done
+        fi
+        if [ "$mode" = identical ] && [ "$skip_surfaces" = 0 ]; then
+            WP67_LM_ACTION=train_eval WP67_LM_STEPS=2 WP67_LM_RESIDENT=1 timeout -k 5 45 "$PY" /root/wp67_surface_capture.py /root/wp67_lm_surface.py "$DIR/resident-multi.bin" > "$DIR/resident-multi.log" 2>&1
         fi
         mode_define=-D\ MOJOLEARN_NUMERIC_IDENTICAL=1
         [ "$mode" != deterministic ] || mode_define=-D\ MOJOLEARN_NUMERIC_DETERMINISTIC=1
