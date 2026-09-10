@@ -132,6 +132,8 @@ rc 134), an open defect. Build:
 `bash bindings/build_mamba.sh` (per tier via MOJOLEARN_NUMERIC_MODE).
 """
 
+# DEVIATION 2486: shared byte-preserving host copies.
+from bindings.hostptr import f32_ptr, read_f32, copy_f32
 from std.memory import memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
@@ -208,27 +210,15 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float32 buffer address")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f32_ptr(addr)
 
 
 def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
-    """The first `n` float32 of a borrowed NumPy buffer, as a host list.
-    A COPY, deliberately: the device helpers below take host lists, and
-    the borrow ends when this returns, so no pointer is retained."""
-    var p = _f32_ptr(addr)
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(p.unsafe_load(i))
-    return out^
+    return read_f32(addr, max(0, n))
 
 
 def _write_f32(addr: Int, values: List[Float32]) raises:
-    """A host list into a borrowed NumPy buffer, element for element."""
-    var p = _f32_ptr(addr)
-    for i in range(len(values)):
-        p.unsafe_store(i, values[i])
+    copy_f32(values.unsafe_ptr(), _f32_ptr(addr), len(values))
 
 
 comptime M3_DIRECT_TRANSFER = M3_BULK_TRANSFER and not is_defined["MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER"]()
@@ -238,11 +228,7 @@ def _m3_read_f32(addr: Int, n: Int) raises -> List[Float32]:
     comptime if not M3_BULK_TRANSFER:
         return _read_f32(addr, n)
     else:
-        var p = _f32_ptr(addr)
-        var out = List[Float32](length=n, fill=Float32(0.0))
-        if n > 0:
-            memcpy(dest=out.unsafe_ptr(), src=p, count=n)
-        return out^
+        return read_f32(addr, n)
 
 
 def _m3_write_f32(addr: Int, values: List[Float32]) raises:
