@@ -1,0 +1,136 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_yintra_tile_check.mojo:6:
+/Users/andrewhendel/CascadeProjects/mojolearn/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:28:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_yintra_tile_check.mojo:6:
+/Users/andrewhendel/CascadeProjects/mojolearn/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:51:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_yintra_tile_check.mojo:7:
+/Users/andrewhendel/CascadeProjects/mojolearn/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1310:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sm[row * 64 + jj] = coefficient
+        ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_yintra_tile_check.mojo:7:
+/Users/andrewhendel/CascadeProjects/mojolearn/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1319:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sv[ix] = value
+        ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_yintra_tile_check.mojo:7:
+/Users/andrewhendel/CascadeProjects/mojolearn/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1324:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sm[row * 64 + j], sv[j * 32 + pp], acc))
+                                    ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_yintra_tile_check.mojo:7:
+/Users/andrewhendel/CascadeProjects/mojolearn/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1324:57: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sm[row * 64 + j], sv[j * 32 + pp], acc))
+                                                      ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_yintra_tile_check.mojo:41:9: warning: ref 'i' was never used, remove it?
+    for i in range(count + 17): initial.append(poison)
+        ^
+M3_YINTRA_TILE_CASE_PASS 1 0 32 False 384
+M3_YINTRA_TILE_CASE_PASS 1 0 32 True 384
+M3_YINTRA_TILE_CASE_PASS 8 0 32 False 3072
+M3_YINTRA_TILE_CASE_PASS 8 0 32 True 3072
+M3_YINTRA_TILE_CASE_PASS 9 0 32 False 3456
+M3_YINTRA_TILE_CASE_PASS 9 0 32 True 3456
+M3_YINTRA_TILE_CASE_PASS 64 0 32 False 24576
+M3_YINTRA_TILE_CASE_PASS 64 0 32 True 24576
+M3_YINTRA_TILE_CASE_PASS 65 0 32 False 24960
+M3_YINTRA_TILE_CASE_PASS 65 0 32 True 24960
+M3_YINTRA_TILE_CASE_PASS 1 7 32 False 384
+M3_YINTRA_TILE_CASE_PASS 1 7 32 True 384
+M3_YINTRA_TILE_CASE_PASS 8 7 32 False 3072
+M3_YINTRA_TILE_CASE_PASS 8 7 32 True 3072
+M3_YINTRA_TILE_CASE_PASS 9 7 32 False 3456
+M3_YINTRA_TILE_CASE_PASS 9 7 32 True 3456
+M3_YINTRA_TILE_CASE_PASS 64 7 32 False 24576
+M3_YINTRA_TILE_CASE_PASS 64 7 32 True 24576
+M3_YINTRA_TILE_CASE_PASS 65 7 32 False 24960
+M3_YINTRA_TILE_CASE_PASS 65 7 32 True 24960
+M3_YINTRA_TILE_CASE_PASS 1 31 32 False 384
+M3_YINTRA_TILE_CASE_PASS 1 31 32 True 384
+M3_YINTRA_TILE_CASE_PASS 8 31 32 False 3072
+M3_YINTRA_TILE_CASE_PASS 8 31 32 True 3072
+M3_YINTRA_TILE_CASE_PASS 9 31 32 False 3456
+M3_YINTRA_TILE_CASE_PASS 9 31 32 True 3456
+M3_YINTRA_TILE_CASE_PASS 64 31 32 False 24576
+M3_YINTRA_TILE_CASE_PASS 64 31 32 True 24576
+M3_YINTRA_TILE_CASE_PASS 65 31 32 False 24960
+M3_YINTRA_TILE_CASE_PASS 65 31 32 True 24960
+M3_YINTRA_TILE_CASE_PASS 1 63 32 False 384
+M3_YINTRA_TILE_CASE_PASS 1 63 32 True 384
+M3_YINTRA_TILE_CASE_PASS 8 63 32 False 3072
+M3_YINTRA_TILE_CASE_PASS 8 63 32 True 3072
+M3_YINTRA_TILE_CASE_PASS 9 63 32 False 3456
+M3_YINTRA_TILE_CASE_PASS 9 63 32 True 3456
+M3_YINTRA_TILE_CASE_PASS 64 63 32 False 24576
+M3_YINTRA_TILE_CASE_PASS 64 63 32 True 24576
+M3_YINTRA_TILE_CASE_PASS 65 63 32 False 24960
+M3_YINTRA_TILE_CASE_PASS 65 63 32 True 24960
+M3_YINTRA_TILE_CASE_PASS 1 64 32 False 384
+M3_YINTRA_TILE_CASE_PASS 1 64 32 True 384
+M3_YINTRA_TILE_CASE_PASS 8 64 32 False 3072
+M3_YINTRA_TILE_CASE_PASS 8 64 32 True 3072
+M3_YINTRA_TILE_CASE_PASS 9 64 32 False 3456
+M3_YINTRA_TILE_CASE_PASS 9 64 32 True 3456
+M3_YINTRA_TILE_CASE_PASS 64 64 32 False 24576
+M3_YINTRA_TILE_CASE_PASS 64 64 32 True 24576
+M3_YINTRA_TILE_CASE_PASS 65 64 32 False 24960
+M3_YINTRA_TILE_CASE_PASS 65 64 32 True 24960
+M3_YINTRA_TILE_CASE_PASS 1 0 64 False 384
+M3_YINTRA_TILE_CASE_PASS 1 0 64 True 384
+M3_YINTRA_TILE_CASE_PASS 8 0 64 False 3072
+M3_YINTRA_TILE_CASE_PASS 8 0 64 True 3072
+M3_YINTRA_TILE_CASE_PASS 9 0 64 False 3456
+M3_YINTRA_TILE_CASE_PASS 9 0 64 True 3456
+M3_YINTRA_TILE_CASE_PASS 64 0 64 False 24576
+M3_YINTRA_TILE_CASE_PASS 64 0 64 True 24576
+M3_YINTRA_TILE_CASE_PASS 65 0 64 False 24960
+M3_YINTRA_TILE_CASE_PASS 65 0 64 True 24960
+M3_YINTRA_TILE_CASE_PASS 1 7 64 False 384
+M3_YINTRA_TILE_CASE_PASS 1 7 64 True 384
+M3_YINTRA_TILE_CASE_PASS 8 7 64 False 3072
+M3_YINTRA_TILE_CASE_PASS 8 7 64 True 3072
+M3_YINTRA_TILE_CASE_PASS 9 7 64 False 3456
+M3_YINTRA_TILE_CASE_PASS 9 7 64 True 3456
+M3_YINTRA_TILE_CASE_PASS 64 7 64 False 24576
+M3_YINTRA_TILE_CASE_PASS 64 7 64 True 24576
+M3_YINTRA_TILE_CASE_PASS 65 7 64 False 24960
+M3_YINTRA_TILE_CASE_PASS 65 7 64 True 24960
+M3_YINTRA_TILE_CASE_PASS 1 31 64 False 384
+M3_YINTRA_TILE_CASE_PASS 1 31 64 True 384
+M3_YINTRA_TILE_CASE_PASS 8 31 64 False 3072
+M3_YINTRA_TILE_CASE_PASS 8 31 64 True 3072
+M3_YINTRA_TILE_CASE_PASS 9 31 64 False 3456
+M3_YINTRA_TILE_CASE_PASS 9 31 64 True 3456
+M3_YINTRA_TILE_CASE_PASS 64 31 64 False 24576
+M3_YINTRA_TILE_CASE_PASS 64 31 64 True 24576
+M3_YINTRA_TILE_CASE_PASS 65 31 64 False 24960
+M3_YINTRA_TILE_CASE_PASS 65 31 64 True 24960
+M3_YINTRA_TILE_CASE_PASS 1 63 64 False 384
+M3_YINTRA_TILE_CASE_PASS 1 63 64 True 384
+M3_YINTRA_TILE_CASE_PASS 8 63 64 False 3072
+M3_YINTRA_TILE_CASE_PASS 8 63 64 True 3072
+M3_YINTRA_TILE_CASE_PASS 9 63 64 False 3456
+M3_YINTRA_TILE_CASE_PASS 9 63 64 True 3456
+M3_YINTRA_TILE_CASE_PASS 64 63 64 False 24576
+M3_YINTRA_TILE_CASE_PASS 64 63 64 True 24576
+M3_YINTRA_TILE_CASE_PASS 65 63 64 False 24960
+M3_YINTRA_TILE_CASE_PASS 65 63 64 True 24960
+M3_YINTRA_TILE_CASE_PASS 1 64 64 False 384
+M3_YINTRA_TILE_CASE_PASS 1 64 64 True 384
+M3_YINTRA_TILE_CASE_PASS 8 64 64 False 3072
+M3_YINTRA_TILE_CASE_PASS 8 64 64 True 3072
+M3_YINTRA_TILE_CASE_PASS 9 64 64 False 3456
+M3_YINTRA_TILE_CASE_PASS 9 64 64 True 3456
+M3_YINTRA_TILE_CASE_PASS 64 64 64 False 24576
+M3_YINTRA_TILE_CASE_PASS 64 64 64 True 24576
+M3_YINTRA_TILE_CASE_PASS 65 64 64 False 24960
+M3_YINTRA_TILE_CASE_PASS 65 64 64 True 24960
+M3_YINTRA_TILE_PASS 1128960 output cells plus guarded suffixes

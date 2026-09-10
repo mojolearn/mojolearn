@@ -367,18 +367,30 @@ explicit when quoting the ratio. This is the FP32 reference scan.
 
 | shape | torch FP32 ms | numerical admission | IDENTICAL public ms Sep10 | ratio |
 |---|---:|---|---:|---:|
-| lane.b2_l4_d32 | 1.477005 | PASS | 0.984050 | 0.67x |
-| narrow.b8_l4096_d512 | 16.396241 | PASS | 65.868374 | 4.02x |
-| wide.b8_l1024_d2048 | 19.383267 | PASS | 120.395977 | 6.21x |
+| lane.b2_l4_d32 | 1.477005 | PASS | 1.219134 | 0.83x |
+| narrow.b8_l4096_d512 | 16.396241 | PASS | 55.910172 | 3.41x |
+| wide.b8_l1024_d2048 | 19.383267 | PASS | 101.634823 | 5.24x |
 
-Latest Sep10 public medians use the guarded NVIDIA increment tile on large
-calls, plus the existing fresh-prefill/caller-copy path. Five timed rounds,
-same H100 model/driver, and matching full output SHA. Source, runtime and
-samples: `bench/results/mamba3/2026-09-10-increment-tile/`. Final default
-source `ba4e3257` (lane `eded801f`) passes 39,087,232 output/report cells and 102 public checks.
-Same-pod baseline -> final: narrow72.118117 ->65.868374ms; wide126.097558
-->120.395977ms. Initial forced-tile samples also improve (66.936124 and
-122.015735ms). Small calls and Apple retain the previous increment default.
+Latest Sep10 public medians use the guarded NVIDIA increment and yintra
+tiles, plus the existing fresh-prefill/caller-copy path. Final yintra source
+`28a32835`, five timed rounds after one logged warmup. The final reverse-order
+same-pod controls are 59.503218 -> 55.910172 ms narrow and
+105.693202 -> 101.634823 ms wide. The initial order also improves:
+60.212171 -> 56.820129 ms and 106.248042 -> 102.802685 ms.
+All three complete output hashes are unchanged; native and public exact gates
+pass. Apple and tiny calls retain the previous yintra default.
+
+This is a NEW physical H100 80GB HBM3, driver 580.126.09, GPU UUID
+GPU-27c60f95-99ff-5839-38e2-a46406c86af6. Ratios above reuse the archived
+numerically admitted Torch reference, with its original resident-device scope;
+they are cached-reference ratios, not a newly paired opponent run.
+Do not attribute changes from the preceding pod's absolute timings entirely
+to this optimization. Prior increment-only medians were 65.868374/120.395977;
+the current optimization's before/after denominators are the same-pod controls
+above. Source/runtime/CPU metadata and every sample are in
+`bench/results/identity_continuation_2026-09-10/final-performance/`;
+first-order evidence is in `bench/results/mamba3/2026-09-10-yintra-tile/`.
+
 The earlier Sep10 measurements remain archived in
 `bench/results/mamba3/2026-09-10-fresh/`; do not use their different physical
 pod as this optimization's before/after control.
@@ -459,3 +471,33 @@ baseline was noisier. Apple paired samples show a consistent small-HD64 win
 and variable HD128 timing. Evidence, raw samples and source hashes:
 `bench/results/transformer_transfer_2026-09-10/`. No qualified Torch ratio
 may be inferred from these own-versus-own measurements.
+
+### H100 stateless transformer and identity continuation (September 10)
+
+Own public IDENTICAL medians below use the original seed-7 large fixtures on
+H100 80GB HBM3, driver 580.126.09, GPU UUID
+GPU-27c60f95-99ff-5839-38e2-a46406c86af6. Mojo 1.0.0 (ed45d567),
+Python 3.11.10/NumPy 1.26.3; one logged warmup and seven timed rounds.
+The final flag-absent NVIDIA default omits only the cache that a stateless
+caller discards. Host input/weight transfers, refusal checks, device work and
+host output remain inside the call. Explicit-state/backward behavior is unchanged.
+
+| shape | baseline first ms | forced fresh first ms | baseline reverse ms | final default reverse ms |
+|---|---:|---:|---:|---:|
+| narrow.b8_l4096_d512 |211.354129|204.134570|210.893420|204.793565|
+| wide.b8_l1024_d2048 |212.392121|187.488862|214.515634|188.905248|
+
+The reverse order confirms 2.9%/11.9% less request time. Source `f02511bd`;
+Apple retains its previous default because local timing evidence was mixed.
+All 82 array hashes and both complete large output SHA256s are unchanged,
+including comparison with the earlier caller-transfer artifact. Torch's
+original numerical admission still fails: **no qualified opponent ratio**.
+No opponent was retimed in this pass. Initial and final evidence:
+`bench/results/transformer_fresh_2026-09-10/` and
+`bench/results/identity_continuation_2026-09-10/final-performance/`.
+
+IVF k/probe extensions, fused CDNA logical groups, wide full PCA, and UMAP
+portable host math were correctness/capability work, not new opponent timing
+rows. Their executable gates and limitations are recorded in
+`docs/lanes/HANDOFF_identity_continuation_2026-09-10.md`. Existing cuML/cuBLAS
+prices and comparison qualifications remain unchanged.
