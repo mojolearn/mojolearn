@@ -158,6 +158,7 @@ from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
     mamba_upload,
 )
+from mamba.impl.mamba_ssm.modules.mamba_simple import mamba_step
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
     M2_D_CONV,
@@ -247,7 +248,7 @@ def mamba_vendor_binding() raises -> PythonObject:
 # ===========================================================================
 
 
-def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False) raises:
     """The GIL-free half of `mamba1_forward_binding`: everything after
     the `PythonObject`s have been read. Builds the host weights, uploads
     the caller's state, runs THE certified entry point once, and writes
@@ -289,9 +290,12 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
     var dx = mamba_upload(ctx, _read_f32(a[0], b * l * dm))
 
     var trace = IdentityTrace.disabled()
-    mamba_block_forward(
-        ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
-    )
+    if decode:
+        mamba_step(ctx, dstages, dstate, dw, dx, b, trace, String("py"))
+    else:
+        mamba_block_forward(
+            ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
+        )
 
     # The block output is the residual stage (contract section 2's
     # `hidden = residual + mixer(norm(residual))`), and the state buffers
@@ -461,7 +465,7 @@ def mamba1_decode_step_binding(
     var b = Int(py=params[0])
     var dm = Int(py=params[1])
     with GILReleased(Python()):
-        _mamba1_run(a, b, 1, dm)
+        _mamba1_run(a, b, 1, dm, True)
     return PythonObject(0)
 
 

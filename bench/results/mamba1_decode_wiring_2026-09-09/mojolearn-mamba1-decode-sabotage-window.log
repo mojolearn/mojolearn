@@ -1,0 +1,39 @@
+mamba decode step (mamba_simple.py:208-266, e9594ce); gate D: decode == prefill, bitwise, per token; build mode IDENTICAL
+SABOTAGE: the state carry cut -- every token starts from the zero cache. Gate D MUST fail (from token 1 on).
+   base_b1_l1_d8 B = 1 L = 1 d_model = 8 -> 0 mismatching cells of 1098 compared
+    MISMATCH conv.out [tok 1] b0 cell 0 decode 0x3d5b9778 prefill 0x3d6d87e9
+    MISMATCH conv.out [tok 1] b0 cell 1 decode 0x3e171745 prefill 0x3e2a03c8
+    MISMATCH conv.out [tok 1] b0 cell 2 decode 0x3dfdfa6a prefill 0x3df9ed31
+    MISMATCH conv.out [tok 1] b0 cell 3 decode 0x3d208edb prefill 0x3d966ce9
+   base_b2_l4_d8 B = 2 L = 4 d_model = 8 -> 2182 mismatching cells of 4944 compared
+    MISMATCH conv.out [tok 1] b0 cell 0 decode 0xbe1f130e prefill 0xbe26d5a7
+    MISMATCH conv.out [tok 1] b0 cell 1 decode 0xbdf3cbf8 prefill 0xbdf6c76d
+    MISMATCH conv.out [tok 1] b0 cell 2 decode 0xbbfd9637 prefill 0xbd72bfc3
+    MISMATCH conv.out [tok 1] b0 cell 3 decode 0xbd95671d prefill 0xbdced0c4
+   base_b3_l16_d8 B = 3 L = 16 d_model = 8 -> 9069 mismatching cells of 23904 compared
+    MISMATCH conv.out [tok 1] b0 cell 0 decode 0x3e8188aa prefill 0x3e26bd7d
+    MISMATCH conv.out [tok 1] b0 cell 1 decode 0xbd683aa2 prefill 0xbd758774
+    MISMATCH conv.out [tok 1] b0 cell 2 decode 0x3dab4bd2 prefill 0x3d37a9f1
+    MISMATCH conv.out [tok 1] b0 cell 3 decode 0xbd439317 prefill 0x3d1d1cc8
+   base_b3_l4_d16 B = 3 L = 4 d_model = 16 -> 6249 mismatching cells of 14424 compared
+    MISMATCH conv.out [tok 1] b0 cell 0 decode 0x3e543e1c prefill 0x3d9f2488
+    MISMATCH conv.out [tok 1] b0 cell 1 decode 0xbdd4314a prefill 0xbd52872f
+    MISMATCH conv.out [tok 1] b0 cell 2 decode 0x3d864f1e prefill 0x3e56b14f
+    MISMATCH conv.out [tok 1] b0 cell 3 decode 0xbda4076f prefill 0xbd0e3d85
+   adv_softplus_guard_b2_l8_d8 B = 2 L = 8 d_model = 8 -> 3470 mismatching cells of 8608 compared
+    MISMATCH conv.out [tok 1] b0 cell 0 decode 0x3d8c1f7d prefill 0x3e722092
+    MISMATCH conv.out [tok 1] b0 cell 1 decode 0x3c693c14 prefill 0x3dce8242
+    MISMATCH conv.out [tok 1] b0 cell 2 decode 0xbcfdf1d2 prefill 0xbd806fdd
+    MISMATCH conv.out [tok 1] b0 cell 3 decode 0xbda1cc50 prefill 0xbd9c5d42
+   adv_a_near_zero_b3_l8_d8 B = 3 L = 8 d_model = 8 -> 5205 mismatching cells of 12912 compared
+    MISMATCH scan.y [tok 1] b0 cell 0 decode 0xb3dba579 prefill 0xb3ca0506
+    MISMATCH scan.y [tok 1] b0 cell 1 decode 0xb6d5ec4a prefill 0xb7035ddb
+    MISMATCH scan.y [tok 1] b0 cell 2 decode 0xb4ac5167 prefill 0xb5110ee8
+    MISMATCH scan.y [tok 1] b0 cell 3 decode 0xb56486b8 prefill 0xb5ad7171
+   adv_signed_zeros_b2_l8_d8 B = 2 L = 8 d_model = 8 -> 2948 mismatching cells of 8608 compared
+    MISMATCH conv.out [tok 1] b0 cell 0 decode 0x39fa1fb5 prefill 0x3e065ed3
+    MISMATCH conv.out [tok 1] b0 cell 1 decode 0xbe0b79b4 prefill 0xbe8ccf8c
+    MISMATCH conv.out [tok 1] b0 cell 2 decode 0xbc856373 prefill 0x3dbeeff9
+    MISMATCH conv.out [tok 1] b0 cell 3 decode 0xbd4d2b84 prefill 0xbd8d7d67
+   adv_gate_saturation_b1_l8_d16 B = 1 L = 8 d_model = 16 -> 3149 mismatching cells of 8336 compared
+SABOTAGE ARM FAILS AS REQUIRED ON EVERY CASE IT CAN MOVE: 32272 mismatching cells. The undone clause is load bearing.

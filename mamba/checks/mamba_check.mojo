@@ -173,9 +173,8 @@ failure:
   than passing it (`[[verify-reach-not-output]]`).
 
 * **(d), decode == prefill AT THE COMPOSITION POINT.** Gate D is green for
-  `mamba_simple.mojo` in isolation; this is the same claim for
-  `mamba_block_forward`, which is a different thing and is what the card is
-  made of. A length-L sequence is run once as a prefill and then one token at
+  the host reference; the device gate calls `mamba_simple.mamba_step`,
+  the public decode route, against `mamba_block_forward` prefill. A length-L sequence is run once as a prefill and then one token at
   a time through the SAME entry point with the state carried, and every token
   of every stage is compared. PASS on 2,152 cells at d_model = 8 and 4,168 at
   d_model = 16. This is the clause DEVIATION 721's bias seed exists to make
@@ -459,6 +458,7 @@ from mamba.checks.mamba_fixture import (
 from mamba.checks.mamba_oracle import MambaState, MambaStages, mamba_block_oracle
 from mamba.checks.mamba_backward_oracle import mamba_block_backward_oracle
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from mamba.impl.mamba_ssm.modules.mamba_simple import allocate_inference_cache, mamba_step
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     BLOCK_ANY_SABOTAGE,
     MambaDeviceStages,
@@ -730,6 +730,7 @@ def run_step(
     dims: MambaDims,
     mut trace: IdentityTrace,
     prefix: String,
+    decode: Bool = False,
 ) raises -> List[List[Float32]]:
     """One block call against a CALLER-OWNED state, so the caller can carry
     it from one call to the next. That is the whole of the decode path:
@@ -737,7 +738,10 @@ def run_step(
     with the conv window and the SSM state carried."""
     var dstages = MambaDeviceStages(ctx, b, l, dims)
     var dx = mamba_upload(ctx, x)
-    mamba_block_forward(ctx, dstages, dstate, dw, dx, b, l, trace, prefix)
+    if decode:
+        mamba_step(ctx, dstages, dstate, dw, dx, b, trace, prefix)
+    else:
+        mamba_block_forward(ctx, dstages, dstate, dw, dx, b, l, trace, prefix)
     var out = device_dump(ctx, dstages, b, l, dims)
     _ = dstages^
     _ = dx^
@@ -1202,9 +1206,8 @@ def clause_d(
     dims: MambaDims,
 ) raises:
     """Contract section 8 clause (d), AT THE COMPOSITION POINT. Gate D is
-    green for `mamba_simple.mojo` in isolation; this is the same claim for
-    `mamba_block_forward`, which is a different thing and is what the block's
-    card is made of.
+    checked through `mamba_simple.mamba_step`, the device entry used by
+    the public decode binding, against `mamba_block_forward` prefill.
 
     This clause is what DEVIATION 721 exists to make true BY CONSTRUCTION.
     `Mamba.step` sums the conv taps and adds the bias afterwards, while the
@@ -1237,14 +1240,14 @@ def clause_d(
     var pre = run_step(ctx, dw1, st1, x, 1, l, dims, off1, "prefill")
 
     var dw2 = MambaDeviceWeights(ctx, w)
-    var st2 = MambaDeviceState(ctx, 1, dims)
+    var st2 = allocate_inference_cache(ctx, 1, dims)
     var steps = List[List[List[Float32]]]()
     for t in range(l):
         var xt = List[Float32]()
         for j in range(dm):
             xt.append(x[t * dm + j])
         var off2 = IdentityTrace.disabled()
-        steps.append(run_step(ctx, dw2, st2, xt, 1, 1, dims, off2, "decode"))
+        steps.append(run_step(ctx, dw2, st2, xt, 1, 1, dims, off2, "decode", True))
 
     # ---- the control: misaligned tokens MUST differ ----------------------
     var control = 0
