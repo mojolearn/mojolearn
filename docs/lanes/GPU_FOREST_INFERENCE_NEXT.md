@@ -48,13 +48,62 @@ Read source: `upstream/cuml-v26.08.00`, pin `265b9da6`.
   GPU inference path. Do not label a GPU translation of this fallback as a
   literal nvForest port or infer identical association to nvForest.
 
-The local upstream inventory contains cuML but no standalone nvForest checkout.
-Before claiming incumbent GPU-dispatch parity, acquire/read the exact nvForest
-version resolved by cuML26.08, including Treelite import, node layout, traversal,
-leaf-vector handling and reduction kernels. This audit did not read those absent
-kernels. A standalone flat-array GPU translation preserving our existing output
-contract is a separately documented implementation choice, not a vendor primitive
-substitution justified by missing source.
+## Resolved nvForest source and actual GPU algorithm
+
+Public source acquisition succeeded on 2026-09-10:
+`git ls-remote https://github.com/rapidsai/nvforest.git refs/tags/v26.08.00*`,
+then a shallow clone of `v26.08.00` into
+`/Users/andrewhendel/CascadeProjects/upstream/nvforest-v26.08.00`.
+The annotated tag object is `cb8704b7baa5a3a9b1137e7233af9067c38ff4fc`;
+the peeled source commit is
+`cef3a50da0f74b0015876b9d6d424c86141898dc`.
+This release corresponds to the installed `nvforest-cu12 26.8.0` and
+`libnvforest 26.8.0` versions reported by the active leg. cuML's
+`dependencies.yaml:990–1006,1086–1102` specifies **26.8.*** package ranges, not
+an exact source SHA. The release tag is therefore an explicit source pin matching
+the package version, not proof that wheel bytes were built from that SHA;
+retain wheel/build metadata separately if exact artifact provenance is required.
+
+The following paths are relative to that pinned nvForest checkout:
+
+* `python/nvforest/nvforest/_forest_inference.py:316–323` returns
+  `self.forest.predict` for classifier probabilities. The detailed wrapper
+  `detail/forest_inference.pyx:363–375` validates shape and resolves chunk size;
+  its implementation at `:222–237` converts to C-order CuPy input and allocates
+  device output before entering native prediction. This is the actual GPU path.
+* `cpp/include/nvforest/treelite_importer.hpp:151–164,307–323` imports vector
+  leaves, average factors and postprocessing. For ordinary averaged RF vector
+  leaves the average factor is number of trees. Import selects node-layout
+  specialization; the Python default is depth-first (`_forest_inference.py:264`),
+  while breadth-first and layered layouts are supported. This is a packed node
+  representation with root/child offsets and separate vector-leaf storage,
+  not a direct use of our current struct-of-arrays format.
+* `detail/integration/treelite.hpp:56–60,104–121` maps inclusive comparisons and
+  child orientation. `detail/decision_forest_builder.hpp:162–176` converts an
+  inclusive threshold with `nextafter(threshold,+infinity)`;
+  `detail/evaluate_tree.hpp:35–65` then uses `<` and child offsets, with missing
+  value/default-child handling. Copying `<` onto our unconverted thresholds
+  would break equality routing. An initial direct-flat-array implementation
+  must retain our `<=`, or port conversion and prove its edge cases.
+* `detail/infer.hpp:52–158` specializes vector-leaf and categorical variants.
+  `detail/infer/gpu.cuh:103–179` chooses block size and chunking from device
+  shared-memory/occupancy limits. It initially considers one row and selects
+  32 rows when the residency heuristic permits, reducing chunk size as needed.
+  Input/output workspaces can fall back from shared to global memory.
+* `detail/infer_kernel/gpu.cuh:97–175` parallelizes **row × tree** tasks inside
+  each block: `row=task_index % chunk_size`, `tree=task_index / chunk_size`.
+  Each thread accumulates its strided tree subset into a per-row/output
+  **grove** workspace. Vector leaves are accumulated component by component.
+  `:178–204` reduces groves using warp shuffles with offsets 16,8,4,2,1, then
+  applies postprocessing. `detail/postprocessor.hpp:52–74` divides by the
+  average factor before bias/other configured transformations.
+
+Consequently nvForest's production summation is not the legacy host left-fold
+through trees. Its association depends on task assignment, grove count and
+chunk/block choices. A literal copy can be a legitimate FAST candidate, but
+cannot be assumed to preserve our current IDENTICAL tree accumulation or
+cross-vendor bits. Fixed chunking alone does not recover the original fold.
+This is now a source-supported design constraint, not a missing-source blocker.
 
 ## Shared implementation seam and arithmetic constraints
 
@@ -89,9 +138,14 @@ cancellation cases. Training-mode contracts are not evidence for inference bits.
 
 ## Bounded implementation and evidence sequence
 
-1. Read pinned nvForest implementation first, then document whether the initial
-   flat-array route is a translation of that dispatch or an explicit bounded
-   alternative preserving our legacy association.
+1. Use the resolved nvForest source above for packed traversal, shared-input
+   caching and vector-leaf layout decisions. Explicitly choose an IDENTICAL
+   arithmetic deviation: retain the legacy sequential tree fold rather than
+   copying nvForest's grove/shuffle reduction. The first bounded GPU slice can
+   parallelize rows while preserving that fold. A later per-tree-output kernel
+   plus ordered fold is possible but adds rows×trees×outputs scratch; do not
+   silently introduce that memory cost. FAST may separately port the production
+   grove reduction after its own quality and timing gates.
 2. Add one shared GPU flat-forest kernel plus a synchronous upload/download helper,
    with RF/ET thin wrappers. Start Float32 binary probabilities and scalar
    regression, finite input, valid acyclic flat forests. Validate offsets, feature
@@ -113,6 +167,6 @@ cancellation cases. Training-mode contracts are not evidence for inference bits.
    The first implementation may upload per call and must include that cost in
    public timing. Do not hide setup cost by timing a private resident-buffer API.
 
-No product code or builds changed for this document. The RF/ET shared inference
-opportunity is concrete; its speed and cross-vendor numerical qualification
+No product code or builds changed for this document. Public upstream source was acquired and read; no native compilation or GPU job
+was performed. The RF/ET shared inference opportunity is concrete; its speed and cross-vendor numerical qualification
 remain open work.
