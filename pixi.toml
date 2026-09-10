@@ -39,6 +39,23 @@ max = ">=26.5.0,<27"
 probe = "mojo run -I . probe_main.mojo"
 
 # ---------------------------------------------------------------------------
+# DOC GATES. Neither needs a GPU and both run in about a second, so there is
+# no reason for a restated fact to rot between releases.
+#
+# `check-docs` settles the two classes a machine can settle without guessing
+# at meaning: a `pixi run -e` naming an environment pixi.toml never defines,
+# and a backticked path that is not on disk.
+#
+# `check-docs-facts` settles a third: the handful of facts with exactly ONE
+# source of truth in the tree that then get RESTATED in prose, in an install
+# command and in a badge. The version, the default numeric mode and the DOI.
+# `--write` repairs the marked spans; the pins and the prose are edits a
+# person makes. Run it at Freeze, step 1 of docs/RELEASE_CHECKLIST.md.
+check-docs = "python3 tools/check_docs_reference_reality.py"
+check-docs-facts = "python3 tools/docs_facts.py --check"
+write-docs-facts = "python3 tools/docs_facts.py --write"
+
+# ---------------------------------------------------------------------------
 # THE FAST SPEED LANE (bench/speed/README.md). Ours against the vendor's own
 # library, on the vendor's own silicon, in FAST mode.
 #
@@ -684,6 +701,8 @@ check-portable-translog = "mojo run -I . checks/portable_translog_check.mojo"
 check-portable-sqrtcos = "mojo run -I . checks/portable_sqrtcos_check.mojo"
 # host-only: portable_log64 (Cephes double log) against the host libm, 2 ulp, + its own hash
 check-portable-log64 = "mojo run -I . checks/portable_log64_check.mojo"
+# host-only: portable_log2_64, hashed full-range admission and exact powers
+check-portable-log2-64 = "mojo run -I . checks/portable_log2_64_check.mojo"
 
 # IDENTITY_PATHS row 49 (DEVIATION 740): DIVISION characterized per class
 # on this backend -- 2^20 hashed (a, b) pairs in 13 classes (normals, each
