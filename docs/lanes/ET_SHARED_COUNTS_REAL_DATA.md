@@ -3,7 +3,8 @@
 `extratrees/bench/shared_score_ab.py` retains the small synthetic diagnostic and
 adds public-fit measurements on the shared HIGGS/covertype loaders. This is an
 ET-versus-ET optimization comparison; cuML RandomForest is not a matched ET
-competitor. No H100 speed claim or default change follows from this harness.
+competitor. The measured H100 case below supports a bounded result, not a
+general NVIDIA speed claim or default change.
 
 Stage data before opening the timing window. The driver uses
 `tools/speed_gbdt_arm.py:load_dataset`, including its unchanged splits/caps and
@@ -111,3 +112,50 @@ benchmark lock. Ensure the existing device is otherwise idle and retain the
 rental owner's deadline; this driver neither provisions hardware nor manages
 leases. Never use the synthetic diagnostic alone to justify a production
 optimization/default change.
+
+
+## Measured H100 result — 2026-09-10
+
+The full covertype run used one NVIDIA H100 80GB HBM3, driver 580.126.09,
+with **522,911 training rows × 54 features**, 58,101 held-out rows and seven
+classes. Both arms used IDENTICAL, 100 trees, depth 16, Gini,
+`max_features='sqrt'`, no bootstrap and seed `0xACC2021`. The artifacts reported
+compiled mode 1 and vendor `cuda`; the baseline reported shared-count mask 0,
+and the candidate mask 15. Configuration, artifact hashes and the idle-device
+snapshot are retained in the [run configuration](../../bench/results/tree_tuning_h100_2026-09-10/tuning/et-covtype/config.json).
+
+| Measurement | Private-count baseline | Shared-count candidate |
+| --- | ---: | ---: |
+| Median full public fit | 6024.075 ms | 5556.022 ms |
+| Minimum / maximum | 5832.275 / 6168.594 ms | 5539.458 / 5776.787 ms |
+| Max/min sample spread | 1.0577 | 1.0428 |
+| Pass-median drift | 1.0499 | 1.0102 |
+| Measured samples | 6 | 6 |
+
+This is **7.77% lower median fit time**, or a **1.0842× baseline/candidate
+rate ratio**, for this configuration. ABBA order used one warmup plus three
+measured fits in each pass. Both arms met the harness's sample-count, spread
+and drift thresholds. [Raw samples and summary](../../bench/results/tree_tuning_h100_2026-09-10/tuning/et-covtype/timing.json)
+are retained; no projection or profiling time was subtracted from fit.
+
+Across **all 16 fits**, including four warmups, complete exported model hashes
+and probability hashes over **every training and test row** matched exactly
+within and between arms. Test accuracy was 0.6694204919020327 for both arms.
+This establishes an optimization **within IDENTICAL**: changing integer-count
+storage improved this fit without changing its result. It does not establish
+that IDENTICAL mode itself causes acceleration or compare IDENTICAL against
+another numeric mode.
+
+The [reduced real-data smoke](../../bench/results/tree_tuning_h100_2026-09-10/tuning/et-smoke/timing.json)
+also preserved model and full-prediction hashes across eight fits. Its two
+measured samples per arm do not satisfy the timing qualification threshold;
+its ratio is not performance evidence.
+
+**No NVIDIA default is promoted.** This is one device and one full real
+multiclass dataset, without a class-count/depth/large-memory workload grid.
+The shared size heuristic labels covertype small because it is below one
+million training rows and below 256 MiB of input. That reminder remains
+visible: full covertype is a useful seven-class companion workload, not a
+substitute for million-row and high-memory-pressure runs. Additional large
+binary and multiclass cells, repeated devices/windows and supported numeric
+modes are needed before broadening the opt-in policy.
