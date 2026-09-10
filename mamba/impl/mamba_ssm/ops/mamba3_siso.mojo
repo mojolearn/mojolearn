@@ -921,10 +921,10 @@ def m3_state_increment_kernel(
         var ksv = Float32(0.0)
         if c0 + j < t_work:
             var e = decay.unsafe_load(dbase + j)
-            vsv = ftz(pinned_mul(
-                ftz(v_work.unsafe_load(((bb * t_work + c0 + j) * nh + hh) * p_dim + p)), e,
-            ))
-            ksv = ftz(kscale_work.unsafe_load(((bb * t_work + c0 + j) * nh + hh) * n_state + n))
+            vsv = m3_fold_step(
+                v_work.unsafe_load(((bb * t_work + c0 + j) * nh + hh) * p_dim + p), e, Float32(-0.0),
+            )
+            ksv = kscale_work.unsafe_load(((bb * t_work + c0 + j) * nh + hh) * n_state + n)
         # Include all padded +0.0 terms, exactly as in the serial kernel.
         acc = m3_fold_step(vsv, ksv, acc)
     increments.unsafe_store(cell, acc)
@@ -1138,19 +1138,10 @@ def m3_yintra_kernel(
     for jj in range(qv):
         var m_ij = Float32(0.0)
         if jj < ii:
-            m_ij = ftz(
-                pinned_mul(
-                    ftz(qk_s.unsafe_load(sbase + jj)),
-                    ftz(seg_l.unsafe_load(sbase + jj)),
-                )
-            )
+            m_ij = m3_fold_step(qk_s.unsafe_load(sbase + jj), seg_l.unsafe_load(sbase + jj), Float32(-0.0))
         var xv = Float32(0.0)
         if c * qv + jj < t_work:
-            xv = ftz(
-                v_work.unsafe_load(
-                    ((bb * t_work + c * qv + jj) * nh + hh) * p_dim + p
-                )
-            )
+            xv = v_work.unsafe_load(((bb * t_work + c * qv + jj) * nh + hh) * p_dim + p)
         acc = m3_fold_step(m_ij, xv, acc)
     yintra.unsafe_store(cell, ftz(acc))
 
