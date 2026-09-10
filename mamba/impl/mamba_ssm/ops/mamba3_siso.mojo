@@ -100,6 +100,7 @@ commands live in `mamba/checks/mamba3_check.mojo`'s header.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -124,6 +125,14 @@ from mamba.checks.mamba3_fixture import (
     M3_PI,
     M3_TWO_PI,
 )
+
+
+def m3_phase_tick(ctx: DeviceContext, mut tick: Int, name: String) raises:
+    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("M3_PHASE", name, Float64(now - tick) / 1e6)
+        tick = now
 
 
 def pinned_mul(a: Float32, b: Float32) -> Float32:
@@ -1440,6 +1449,7 @@ def m3_siso_forward(
     832(i)); `theta_state` advances through the new tokens; `h_last` /
     `k_last` / `v_last` / `theta_last` are the reports. SYNCHRONIZES
     before returning."""
+    var phase_tick = Int(perf_counter_ns())
     var t_work = q0 + l
     var qv = m3_q_eff()
     var nc = m3_n_chunks(t_work)
@@ -1463,6 +1473,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * l * nh), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_pre_kernel"))
     ctx.enqueue_function[m3_scale_kernel](
         gamma_work.unsafe_ptr(),
         betap_work.unsafe_ptr(),
@@ -1475,6 +1486,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * t_work * nh), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_scale_kernel"))
     comptime if M3_PARALLEL_ANGLE_INCREMENT:
         ctx.enqueue_function[m3_angle_increment_kernel](
             theta_out.unsafe_ptr(), in_proj.unsafe_ptr(), dt_work.unsafe_ptr(),
@@ -1482,6 +1494,7 @@ def m3_siso_forward(
             grid_dim=(_grid(b * l * nh * r_ang), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
+        m3_phase_tick(ctx, phase_tick, String("m3_angle_increment_kernel"))
     ctx.enqueue_function[m3_angle_kernel](
         theta_out.unsafe_ptr(),
         theta_state.unsafe_ptr(),
@@ -1497,6 +1510,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * nh * r_ang), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_angle_kernel"))
     ctx.enqueue_function[m3_rot_kernel](
         rotq_work.unsafe_ptr(),
         rotk_work.unsafe_ptr(),
@@ -1512,6 +1526,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * l * nh * (n_state // 2)), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_rot_kernel"))
     ctx.enqueue_function[m3_qkdot_kernel](
         qkdot.unsafe_ptr(),
         bcb.unsafe_ptr(),
@@ -1526,6 +1541,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * l * nh), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_qkdot_kernel"))
     ctx.enqueue_function[m3_kscale_kernel](
         kscale_work.unsafe_ptr(),
         rotk_work.unsafe_ptr(),
@@ -1535,6 +1551,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * t_work * nh * n_state), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_kscale_kernel"))
     ctx.enqueue_function[m3_dacs_kernel](
         dacs.unsafe_ptr(),
         adt_work.unsafe_ptr(),
@@ -1546,6 +1563,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * nh * nc), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_dacs_kernel"))
     ctx.enqueue_function[m3_seg_l_kernel](
         seg_l.unsafe_ptr(),
         adt_work.unsafe_ptr(),
@@ -1557,6 +1575,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * nc * nh * qv), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_seg_l_kernel"))
     if apply_resume:
         ctx.enqueue_function[m3_resume_kernel](
             h_state.unsafe_ptr(),
@@ -1570,6 +1589,7 @@ def m3_siso_forward(
             grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
+        m3_phase_tick(ctx, phase_tick, String("m3_resume_kernel"))
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or M3_LEGACY_STATEPASS:
         ctx.enqueue_function[m3_statepass_kernel](
             pass_states.unsafe_ptr(),
@@ -1586,6 +1606,7 @@ def m3_siso_forward(
             grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
+        m3_phase_tick(ctx, phase_tick, String("m3_statepass_kernel"))
     else:
         # qk_s has B*C*H*Q*Q cells; Q>=32, so Q+1 decay entries fit.
         # Its lifetime as decay scratch ends before the QK kernel below.
@@ -1594,6 +1615,7 @@ def m3_siso_forward(
             grid_dim=(_grid(b * nh * nc * (qv + 1)), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
+        m3_phase_tick(ctx, phase_tick, String("m3_state_decay_kernel"))
         ctx.enqueue_function[m3_state_increment_kernel](
             pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
             v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
@@ -1601,12 +1623,14 @@ def m3_siso_forward(
             grid_dim=(_grid(b * nc * nh * p_dim * n_state), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
+        m3_phase_tick(ctx, phase_tick, String("m3_state_increment_kernel"))
         ctx.enqueue_function[m3_state_scan_kernel](
             pass_states.unsafe_ptr(), h_last.unsafe_ptr(), h_state.unsafe_ptr(),
             qk_s.unsafe_ptr(), Int32(b), Int32(nh), Int32(nc), Int32(qv),
             grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
+        m3_phase_tick(ctx, phase_tick, String("m3_state_scan_kernel"))
     ctx.enqueue_function[m3_qk_s_kernel](
         qk_s.unsafe_ptr(),
         rotq_work.unsafe_ptr(),
@@ -1619,6 +1643,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * nc * nh * qv * qv), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_qk_s_kernel"))
     ctx.enqueue_function[m3_yintra_kernel](
         yintra.unsafe_ptr(),
         qk_s.unsafe_ptr(),
@@ -1633,6 +1658,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * l * nh * p_dim), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_yintra_kernel"))
     ctx.enqueue_function[m3_ystate_kernel](
         ystate.unsafe_ptr(),
         rotq_work.unsafe_ptr(),
@@ -1647,6 +1673,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * l * nh * p_dim), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_ystate_kernel"))
     ctx.enqueue_function[m3_skip_gate_kernel](
         skip_out.unsafe_ptr(),
         gate_out.unsafe_ptr(),
@@ -1673,6 +1700,7 @@ def m3_siso_forward(
         grid_dim=(_grid(b * l * nh * p_dim), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_skip_gate_kernel"))
     ctx.enqueue_function[m3_reports_kernel](
         k_last.unsafe_ptr(),
         v_last.unsafe_ptr(),
@@ -1684,4 +1712,5 @@ def m3_siso_forward(
         grid_dim=(_grid(b * nh * (n_state + p_dim)), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    m3_phase_tick(ctx, phase_tick, String("m3_reports_kernel"))
     ctx.synchronize()

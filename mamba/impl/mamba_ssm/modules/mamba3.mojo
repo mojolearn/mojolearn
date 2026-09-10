@@ -72,6 +72,7 @@ in `mamba/checks/mamba3_check.mojo`.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
+from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mamba.impl.mamba_ssm.modules.mamba3_transfer import m3_upload as mamba_upload, m3_download as mamba_download
@@ -116,6 +117,7 @@ from mamba.checks.mamba3_fixture import (
 from mamba.impl.mamba_ssm.ops.mamba3_siso import (
     MAMBA3_TPB,
     SISO3_ANY_SABOTAGE,
+    m3_phase_tick,
     m3_mod_2pi,
     m3_n_chunks,
     m3_q_eff,
@@ -1146,7 +1148,9 @@ def mamba3_block_forward(
             "mamba3_block_forward: the weights' d_model is not the stages'"
         )
 
+    var phase_tick = Int(perf_counter_ns())
     mamba3_refuse_bad_inputs(ctx, w, x, state, b, l)
+    m3_phase_tick(ctx, phase_tick, String("block.refusal"))
 
     var dims = stages.dims.copy()
     var dm = dims.d_model
@@ -1170,11 +1174,13 @@ def mamba3_block_forward(
     )
     ctx.synchronize()
 
+    m3_phase_tick(ctx, phase_tick, String("block.norm"))
     # ---- S4: in_proj (mamba3.py:176), gemm v1 OP_NT, k = d_model.
     identical_gemm[False](
         ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
     )
 
+    m3_phase_tick(ctx, phase_tick, String("block.in_proj"))
     # ---- S5 + S6.
     ctx.enqueue_function[m3_a_dt_kernel](
         stages.a_out.unsafe_ptr(),
@@ -1249,6 +1255,7 @@ def mamba3_block_forward(
     )
     ctx.synchronize()
 
+    m3_phase_tick(ctx, phase_tick, String("block.assembly"))
     # THE REQUIRED-RED ARM (DEVIATION 831): the upstream step's own
     # per-token recurrence replaces the resumption for the new token --
     # AND IT ENGAGES ONLY AT l == 1 (the mamba2 lesson: an armed decode
@@ -1404,12 +1411,14 @@ def mamba3_block_forward(
         ctx.synchronize()
         state.buf_len = r
 
+    m3_phase_tick(ctx, phase_tick, String("block.core_and_buffer"))
     # ---- S4: out_proj (mamba3.py:277), gemm v1 OP_NT, k = d_inner. The
     #      gate output IS the [M, d_inner] row (d = h*P + p, a copy).
     identical_gemm[False](
         ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
     )
 
+    m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
     # ---- S23: residual (block.py:52/:67), the REUSED Mamba-1 kernel.
     ctx.enqueue_function[residual_add_kernel](
         stages.residual_out.unsafe_ptr(),
