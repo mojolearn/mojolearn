@@ -64,6 +64,7 @@ from metrics.estimator import (
     kl_divergence_host,
     mutual_info_score_host,
     r2_score_host,
+    regression_error_host,
     rand_score_host,
     silhouette_host,
     trustworthiness_host,
@@ -339,6 +340,22 @@ def r2_score_binding(
     with GILReleased(Python()):
         out = r2_score_host(y, yh, n)
     return PythonObject(Float64(out))
+
+
+
+def regression_error_binding[absolute: Bool = False, root: Bool = False](
+    y_true_addr: PythonObject, y_pred_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    # params[0] = n; finite 1-D Float32, unweighted. Entire reduction is GPU.
+    _want(String("regression_error"), params, 1)
+    var n = Int(py=params[0])
+    var y = _load_f32(Int(py=y_true_addr), n)
+    var prediction = _load_f32(Int(py=y_pred_addr), n)
+    var result = Float32(0.0)
+    with GILReleased(Python()):
+        result = regression_error_host[absolute, root](y, prediction, n)
+    return PythonObject(Float64(result))
+
 
 
 def kl_divergence_binding(
@@ -728,6 +745,10 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         m.def_function[completeness_score_binding]("completeness_score")
         m.def_function[v_measure_score_binding]("v_measure_score")
         m.def_function[r2_score_binding]("r2_score")
+        m.def_function[regression_error_binding[False, False]]("mean_squared_error")
+        m.def_function[regression_error_binding[True, False]]("mean_absolute_error")
+        m.def_function[regression_error_binding[False, True]]("root_mean_squared_error")
+        m.def_function[umap_numeric_mode_binding]("metrics_numeric_mode")
         m.def_function[kl_divergence_binding]("kl_divergence")
         m.def_function[silhouette_binding]("silhouette")
         m.def_function[trustworthiness_binding]("trustworthiness")

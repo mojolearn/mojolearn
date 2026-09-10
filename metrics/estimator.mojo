@@ -40,6 +40,8 @@ arithmetic: nothing here computes, it only moves bytes and forwards.
 """
 
 from max.gpu.host import DeviceContext
+from std.math import isfinite
+from metrics.impl.metrics.regression_errors import regression_error
 
 from metrics.checks.device_io import download_f32, upload_f32, upload_i32
 from metrics.impl.metrics.accuracy_score import accuracy_score_py
@@ -432,3 +434,21 @@ def trustworthiness_host(
     return trustworthiness_score(
         ctx, x, x_embedded, n, m, d, n_neighbors, batch_size
     )
+
+
+def regression_error_host[absolute: Bool = False, root: Bool = False](
+    y_true: List[Float32], y_pred: List[Float32], n: Int
+) raises -> Float32:
+    """Validate/upload only; residuals, reduction and epilogue run on GPU."""
+    _check_float_pair(y_true, y_pred, n)
+    for i in range(n):
+        if not isfinite(y_true[i]) or not isfinite(y_pred[i]):
+            raise Error("regression_error: inputs must be finite Float32")
+    var ctx = DeviceContext()
+    var y = upload_f32(ctx, y_true)
+    var prediction = upload_f32(ctx, y_pred)
+    var result = regression_error[absolute, root](ctx, y, prediction, n)
+    _ = y^
+    _ = prediction^
+    _ = ctx^
+    return result

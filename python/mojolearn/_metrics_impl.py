@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Scoring functions backed by the ported cuML `cpp/src/metrics/` kernels.
+"""GPU scoring functions, including cuML ports and native regression errors.
 
 **metrics IS NOT AN ESTIMATOR.** It is a set of scoring functions, so this
 module is shaped like `sklearn.metrics` -- plain functions, no class, no
@@ -8,9 +8,10 @@ module is shaped like `sklearn.metrics` -- plain functions, no class, no
 same house rule the estimator classes follow. A parameter the kernel does
 not carry is refused BY NAME with a reason, never accepted and ignored.
 
-WHERE THE NAMES AND THE DEFAULTS COME FROM. The function names and argument
-names are scikit-learn's, because that is what a caller types. **The
-DEFAULTS and the SEMANTICS are cuML's**, from the pinned `v26.08.00`
+WHERE THE NAMES AND THE DEFAULTS COME FROM. Function and argument names
+follow scikit-learn. New regression-error
+functions document their bounded Float32 contract below. For the original
+ports, **the defaults and semantics are cuML's**, from the pinned `v26.08.00`
 checkout, and where the two libraries differ the difference is written on
 the function. Three of those differences matter:
 
@@ -20,14 +21,14 @@ the function. Three of those differences matter:
   * `kl_divergence` does NOT normalize `P` and `Q`, exactly as cuML's
     `cuml.metrics.kl_divergence` does not.
 
-WHAT THIS LANE IS CERTIFIED TO BE. The metrics kernels are bit-identical
+HISTORICAL QUALIFICATION (excludes the new MSE/MAE/RMSE kernels).
+The original metrics kernels are bit-identical
 across Apple M4, NVIDIA H100 and AMD MI325X, measured at leg 11
 (`archive/evidence/E3_RESULTS.md` round 11, commit 144aa5b, `tools/e3_round_judge.sh`
 section 7, 34 card stages, both boxes) under `MOJOLEARN_NUMERIC_MODE=
 identical`. That result is for the 34-stage card of that commit; the card
 has since grown to 61 stages and the three-vendor leg on the GROWN card is
-OWED (`metrics/README.md` Status). **The FAST arm, which is the default,
-makes no cross-vendor claim at all** -- the FAST cards differ between
+OWED (`metrics/README.md` Status). **The FAST arm makes no cross-vendor claim at all** -- the FAST cards differ between
 vendors and that is recorded, not a defect.
 
 ONE CAVEAT ABOUT THAT EVIDENCE, since it is checkable and worth checking.
@@ -55,11 +56,7 @@ reachable from Python. They are gated where they live, in
 `silhouette_check.mojo`.
 """
 
-import importlib.machinery
-import importlib.util
 import math
-import os
-import sys
 
 import numpy as np
 
@@ -75,6 +72,9 @@ __all__ = [
     "homogeneity_score",
     "kl_divergence",
     "mutual_info_score",
+    "mean_squared_error",
+    "mean_absolute_error",
+    "root_mean_squared_error",
     "r2_score",
     "rand_score",
     "silhouette_samples",
@@ -87,50 +87,27 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Loading the binding, mode-aware.
 # ---------------------------------------------------------------------------
-# `_backend.select()` installs the identical binaries under the canonical
-# module names for the FIVE extensions it knows about, and `_mojolearn_metrics`
-# is not one of them -- `_backend._MODULES` is a convergence point this lane
-# does not own. So a plain `from . import _mojolearn_metrics` under
-# MOJOLEARN_NUMERIC_MODE=identical would load the FAST binary under the
-# identical name, which is a MISLABELLED MEASUREMENT and exactly the failure
-# `_backend.py` exists to prevent. This loader mirrors that module's rule
-# without editing it: identical mode loads `identical/_mojolearn_metrics.so`
-# explicitly and RAISES BY NAME if it is not built. It never falls back.
-#
-# THE OPERATOR SHOULD DELETE THIS AND ADD `_mojolearn_metrics` TO
-# `_backend._MODULES` AND `_backend._build_script` INSTEAD; this is a
-# stand-in, not a second mechanism, and two mechanisms for one decision is
-# how they drift.
-_BINDING = None
-
-
-def _get_binding():
-    global _BINDING
-    if _BINDING is not None:
-        return _BINDING
-    mode = _backend.requested_mode()
-    pkg_name = __name__.rsplit(".", 1)[0]
-    full = f"{pkg_name}._mojolearn_metrics"
-    if mode == "fast":
-        from . import _mojolearn_metrics as mod
-    else:
-        # The directory comes from `_backend.tier_dir`, which folds in the
-        # vendor axis (python/mojolearn/<vendor>/<tier>/ on the Linux wheel).
-        path = os.path.join(_backend.tier_dir(mode), "_mojolearn_metrics.so")
-        if not os.path.exists(path):
-            raise ImportError(
-                f"mojolearn: MOJOLEARN_NUMERIC_MODE={mode} but "
-                f"{path} is not built; build it with\n    "
-                f"MOJOLEARN_NUMERIC_MODE={mode} bash "
-                "bindings/build_metrics.sh"
+# All metric calls share the estimator loader. Resolve the current default at
+# call time; an explicit mode selects its own compiled artifact without changing
+# the process default. The backend checks vendor provenance and never falls back.
+def _get_binding(numeric_mode=None):
+    if numeric_mode is not None and (
+        not isinstance(numeric_mode, str)
+        or numeric_mode.strip().lower() not in ("fast", "deterministic", "identical")
+    ):
+        raise ValueError("numeric_mode must be 'fast', 'deterministic' or 'identical'")
+    expected = (numeric_mode or _backend.default_mode()).strip().lower()
+    mod = _backend.binding("_mojolearn_metrics", expected)
+    read_mode = getattr(mod, "metrics_numeric_mode", None)
+    if read_mode is None:
+        read_mode = getattr(mod, "umap_numeric_mode", None)
+    if read_mode is not None:
+        actual = {0: "fast", 1: "identical", 2: "deterministic"}.get(read_mode())
+        if actual != expected:
+            raise RuntimeError(
+                f"mojolearn metrics: requested {expected}, binary reports {actual}; rebuild it"
             )
-        loader = importlib.machinery.ExtensionFileLoader(full, path)
-        spec = importlib.util.spec_from_loader(full, loader, origin=path)
-        mod = importlib.util.module_from_spec(spec)
-        loader.exec_module(mod)
-        sys.modules[full] = mod
-    _BINDING = mod
-    return _BINDING
+    return mod
 
 
 # ---------------------------------------------------------------------------
@@ -243,8 +220,12 @@ def _prepare_cluster_labels(labels_true, labels_pred):
 # ===========================================================================
 
 
-def accuracy_score(y_true, y_pred, *, normalize=True, sample_weight=None):
+def accuracy_score(
+    y_true, y_pred, *, normalize=True, sample_weight=None, numeric_mode=None
+):
     """The fraction of positions where two label arrays agree.
+
+    numeric_mode selects a compiled tier; None uses the current library default.
 
     Backed by `ML::Metrics::accuracy_score_py` (cuML `accuracy_score.cu`):
     one fused subtract-and-count with an INTEGER atomic, so the count is
@@ -285,7 +266,7 @@ def accuracy_score(y_true, y_pred, *, normalize=True, sample_weight=None):
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::accuracy_score_binding.
     # n
     return float(
-        _get_binding().accuracy_score(
+        _get_binding(numeric_mode).accuracy_score(
             _addr_ro(yt), _addr_ro(yp), [int(yt.shape[0])]
         )
     )
@@ -514,8 +495,11 @@ def r2_score(
     sample_weight=None,
     multioutput="uniform_average",
     force_finite=True,
+    numeric_mode=None,
 ):
     """The coefficient of determination, float32.
+
+    numeric_mode selects a compiled tier; None uses the current library default.
 
     Backed by `ML::Metrics::r2_score_py`, the float overload (DEVIATIONS
     653 and 657). The three sums (`y_bar`, `sse`, `ssto`) are folded by a
@@ -570,7 +554,80 @@ def r2_score(
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::r2_score_binding.
     # n
     return float(
-        _get_binding().r2_score(_addr_ro(y), _addr_ro(yh), [int(y.shape[0])])
+        _get_binding(numeric_mode).r2_score(_addr_ro(y), _addr_ro(yh), [int(y.shape[0])])
+    )
+
+
+def _as_regression_f32_1d(x, name):
+    a = np.asarray(x)
+    if a.dtype != np.dtype("float32"):
+        raise TypeError(
+            f"mojolearn regression metrics: {name} must have dtype float32, "
+            f"got {a.dtype}; cast explicitly before scoring"
+        )
+    return _as_f32_1d(a, name)
+
+
+def _regression_error(name, y_true, y_pred, sample_weight, multioutput, numeric_mode):
+    if sample_weight is not None:
+        raise NotImplementedError(f"mojolearn {name}: sample_weight is not supported yet")
+    if not isinstance(multioutput, str) or multioutput != "uniform_average":
+        raise NotImplementedError(
+            f"mojolearn {name}: multioutput={multioutput!r} is not supported; "
+            "only single-output uniform_average is implemented"
+        )
+    yt, yp = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_regression_f32_1d)
+    return float(getattr(_get_binding(numeric_mode), name)(
+        _addr_ro(yt), _addr_ro(yp), [int(yt.size)]
+    ))
+
+
+def mean_squared_error(
+    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
+):
+    """Mean squared residual, computed and reduced on the GPU in Float32.
+
+    Inputs must be finite, nonempty Float32 arrays of equal length, shaped
+    (n,) or (n, 1). Other dtypes require an explicit cast. Weights and multiple
+    outputs are not supported yet. The result is a Python float containing
+    the Float32 scalar. Residuals, squares and the sum can overflow to +inf;
+    this implementation does not use a wider or scaled accumulator.
+
+    numeric_mode selects the compiled tier per call; None uses the current
+    library default. IDENTICAL pins the reduction schedule and flushes
+    subnormal arithmetic. New error metrics have local Metal qualification;
+    cross-vendor qualification remains pending.
+    """
+    return _regression_error(
+        "mean_squared_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
+    )
+
+
+def mean_absolute_error(
+    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
+):
+    """Mean absolute residual on the GPU in Float32.
+
+    Uses the input, mode and overflow contract of mean_squared_error, with
+    absolute residuals instead of squares. Weights/multiple outputs are
+    unsupported; numeric_mode=None resolves the current library default.
+    """
+    return _regression_error(
+        "mean_absolute_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
+    )
+
+
+def root_mean_squared_error(
+    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
+):
+    """GPU Float32 square root of mean_squared_error's GPU result.
+
+    Uses mean_squared_error's input, mode and overflow contract. The square
+    root also runs on the GPU. Squaring can overflow even when the exact
+    RMSE would fit in Float32; no scaled sum-of-squares algorithm is claimed.
+    """
+    return _regression_error(
+        "root_mean_squared_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
     )
 
 
@@ -816,22 +873,9 @@ def trustworthiness(
 # ===========================================================================
 
 _NOT_PORTED = {
-    "mean_absolute_error": (
-        "RAFT's regression_metrics (scores.cuh) is NOT PORTED "
-        "(metrics/NOT_IMPLEMENTED.tsv); it was not in this lane's brief"
-    ),
-    "mean_squared_error": (
-        "RAFT's regression_metrics (scores.cuh) is NOT PORTED "
-        "(metrics/NOT_IMPLEMENTED.tsv); it was not in this lane's brief"
-    ),
-    "root_mean_squared_error": (
-        "RAFT's regression_metrics (scores.cuh) is NOT PORTED "
-        "(metrics/NOT_IMPLEMENTED.tsv)"
-    ),
     "median_absolute_error": (
-        "RAFT's regression_metrics (scores.cuh) is NOT PORTED, and the "
-        "median arm would additionally need a radix sort this repository "
-        "does not have on device (metrics/NOT_IMPLEMENTED.tsv)"
+        "a GPU selection/ordering path with a validated median contract "
+        "is not implemented for regression targets yet"
     ),
     "pairwise_distances": (
         "cuML's pairwise_distance.cu is a front-end over cuVS distances; "
@@ -839,32 +883,17 @@ _NOT_PORTED = {
         "(neighbors/checks/pinned_distance_tile.mojo), and it is not a "
         "metric of a model (metrics/NOT_IMPLEMENTED.tsv)"
     ),
-    "confusion_matrix": (
-        "the CONTINGENCY matrix is ported and is what the label metrics "
-        "consume (metrics/impl/stats/detail/contingency_matrix.mojo), but "
-        "it has no entry of its own; cuML's confusion_matrix.py is pure "
-        "cupy on the host and is not a kernel this lane ported"
-    ),
-    "normalized_mutual_info_score": (
-        "no C++ entry in cuML's cpp/src/metrics/ and no RAFT header; it "
-        "would be a host formula over the ported mutual_info_score and "
-        "entropy, which belongs to whoever wants to gate it"
-    ),
-    "adjusted_mutual_info_score": (
-        "same as normalized_mutual_info_score, plus an expected-MI term "
-        "that nothing here computes"
-    ),
-    "fowlkes_mallows_score": "no C++ entry in cuML's cpp/src/metrics/",
-    "roc_auc_score": (
-        "cuML has one in Python (_ranking.py) computed with cupy on the "
-        "host; there is no kernel in cpp/src/metrics/ for this lane to port"
-    ),
-    "log_loss": (
-        "cuML has one in Python (_classification.py) computed with cupy; no "
-        "kernel in cpp/src/metrics/"
-    ),
-    "precision_recall_curve": "cuML's is Python/cupy; no kernel to port",
-    "hinge_loss": "cuML's is Python/cupy; no kernel to port",
+    "confusion_matrix": "planned GPU API; existing contingency primitives need label/output contracts",
+    "normalized_mutual_info_score": "normalization conventions and public validation are not implemented",
+    "adjusted_mutual_info_score": "expected mutual information and its public contract are not implemented",
+    "fowlkes_mallows_score": "public score and normalization checks are not implemented",
+    "roc_auc_score": "planned stable score ordering, tie grouping and GPU prefix counts",
+    "log_loss": "planned clipped-probability GPU reduction and label validation",
+    "precision_recall_curve": "planned shared ordered-count primitive and curve endpoint contract",
+    "precision_score": "planned confusion counts and averaging/zero-division contract",
+    "recall_score": "planned confusion counts and averaging/zero-division contract",
+    "f1_score": "planned confusion counts and averaging/zero-division contract",
+    "hinge_loss": "GPU margin reduction and its public label contract are not implemented",
 }
 
 
@@ -872,7 +901,6 @@ def __getattr__(name):
     if name in _NOT_PORTED:
         raise AttributeError(
             f"mojolearn.metrics.{name} does not exist: {_NOT_PORTED[name]}. "
-            "Binding it anyway would put an ungated host formula behind a "
-            "GPU metric's name."
+            "See docs/lanes/GPU_PIPELINE_PLAN.md for implementation scope."
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

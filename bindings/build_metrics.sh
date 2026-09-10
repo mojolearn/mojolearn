@@ -271,7 +271,7 @@ fi
 # Kept small -- 96 rows -- because this runs on every build and the GPU is
 # shared. The spectral fit is the expensive one (a thick-restart Lanczos with
 # max_iterations = 10n).
-MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
+MOJOLEARN_SMOKE_SO="$out" "${MOJOLEARN_PYTHON:-python3}" - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()
 pkg = os.path.join(tmp, "mojolearn")
@@ -299,6 +299,13 @@ M.accuracy_score(lt, lp)                       # group A, integer atomics
 M.adjusted_rand_score(lt, lp)                  # group A, ARI's own matrix
 M.mutual_info_score(lt, lp)                    # group A, contingency + host
 M.r2_score(y, yhat)                            # group B, the pinned sum tree
+# A1 public GPU error reductions: distinct hand-computed values catch aliases.
+a = np.array([1., -2., 3., -4.], dtype=np.float32)
+b = np.zeros(4, dtype=np.float32)
+assert M.mean_squared_error(a, b) == 7.5
+assert M.mean_absolute_error(a, b) == 2.5
+assert abs(M.root_mean_squared_error(a, b) - np.sqrt(7.5)) < 1e-6
+
 M.kl_divergence(np.abs(y) + 1e-3, np.abs(yhat) + 1e-3)   # group B
 M.silhouette_score(X, lt)                      # group C, the batched path
 M.silhouette_samples(X, lt)                    # group C, per-sample

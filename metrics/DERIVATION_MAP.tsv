@@ -56,3 +56,5 @@ checks/fixtures.mojo	none	mojo-only	hashed, skewed, non-uniform fixtures; plante
 checks/device_io.mojo	none	mojo-only	host<->device copies for the checks
 checks/label_metrics_check.mojo	none	mojo-only	Group A gates; two sabotages recorded in its header and the README
 checks/regression_metrics_check.mojo	none	mojo-only	Group B gates: oracle bitwise, FTZ-visible fixture, launch invariance (8 launches), KL branches; sabotages (d)(e)(f) in the README
+impl/metrics/regression_errors.mojo	sklearn.metrics mean_squared_error/mean_absolute_error/root_mean_squared_error definitions; existing metrics pinned_sum schedule	mojo-only	A1 finite1D Float32 unweighted residual/absolute/squared error, fixed256-slot chunks and GPU ascending final fold; GPU division and IDENTICAL portable sqrt. No CPU metric reduction. Float32 overflow yields positive infinity. Independent Float64 and fixed-tree checks.
+checks/regression_errors_check.mojo	none	mojo-only	A1 independent Float64 oracle, separately spelled fixed tree, repeated/alternate launch geometry, ragged tail, residual/sum overflow, operand/result FTZ and validation gates.
