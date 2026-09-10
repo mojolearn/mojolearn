@@ -730,9 +730,25 @@ def main(out=sys.stdout):
                    "split == whole: the key ring", assert_bits)
     # Round trip: the snapshot taken between the two calls resumes to the
     # same bytes as the state that was never copied.
+    #
+    # THE SNAPSHOT IS INSTALLED BY REBINDING, NOT BY `k_cache[:] = ...`.
+    # `mojolearn.Array` has no `__setitem__` and that is deliberate:
+    # NUMPY_FREE_CONTRACT.md lists the public surface and says "and nothing
+    # else", with `__getitem__` on the list and no mutating counterpart. This
+    # line read `st_rt.k_cache[:] = snap_k` from the numpy-free migration
+    # until 2026-09-10 and had raised `TypeError: 'Array' object does not
+    # support item assignment` on every run since, which is how it went
+    # unnoticed: the file dies here before it reports anything.
+    #
+    # Rebinding is the supported route and it is what a caller restoring a
+    # checkpoint actually does. `_state_buf` takes ANY writable float32
+    # buffer of the right shape (DEVIATION 2412) and hands the kernel that
+    # object's own address, and `Array.copy()` returns owned, writable
+    # storage -- so the kernel updates the snapshot in place exactly as it
+    # would have updated the allocated buffer.
     st_rt = blk_w.allocate_state(BATCH, W_L)
-    st_rt.k_cache[:] = snap_k
-    st_rt.v_cache[:] = snap_v
+    st_rt.k_cache = snap_k
+    st_rt.v_cache = snap_v
     st_rt.cached_tokens = snap_n
     y_rt = blk_w.forward(xw[:, cut:, :], st_rt)
     rep.bits_equal(arm, y_rt, y_tail,
@@ -791,8 +807,14 @@ def main(out=sys.stdout):
                       "window %d: the gradient dict carries x and the nine "
                       "weights" % win)
             for name in ("x",) + TransformerBlock._W_NAMES:
-                rep.check(arm, got[name].shape == want[name].shape
-                          and got[name].dtype == np.float32,
+                # `np.asarray` FIRST: the gradients come back as
+                # `mojolearn.Array`, whose `dtype` is the typestr `'<f4'`, so
+                # `got[name].dtype == np.float32` was False for every
+                # gradient and this check reported a failure it did not have.
+                # The conversion is zero-copy through `__array_interface__`.
+                _g = np.asarray(got[name])
+                rep.check(arm, _g.shape == np.asarray(want[name]).shape
+                          and _g.dtype == np.float32,
                           "window %d: %s gradient has its argument's shape, "
                           "float32" % (win, name))
                 rep.close(arm, got[name], want[name],
@@ -800,8 +822,11 @@ def main(out=sys.stdout):
                           "(rtol 1e-4, atol 1e-5)" % (win, name),
                           rtol=1e-4, atol=1e-5)
             got2 = blk_g.backward(xg, dyg)
-            same = all(np.array_equal(got[n].view(np.uint32),
-                                      got2[n].view(np.uint32))
+            # `Array` has no `.view()` (NUMPY_FREE_CONTRACT.md: "Public
+            # surface, and nothing else"), so the reinterpret goes through a
+            # zero-copy `np.asarray` the way `bits_equal` above already does.
+            same = all(np.array_equal(np.asarray(got[n]).view(np.uint32),
+                                      np.asarray(got2[n]).view(np.uint32))
                        for n in got)
             rep.check(arm, same,
                       "window %d: two backward calls are byte-identical on "

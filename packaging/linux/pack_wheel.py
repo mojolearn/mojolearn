@@ -97,10 +97,33 @@ EXT_NAMES = (
     "_mojolearn", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_rf",
     "_mojolearn_trees", "_mojolearn_svm", "_mojolearn_solver",
     "_mojolearn_metrics", "_mojolearn_preprocessing", "_mojolearn_tsa", "_mojolearn_linalg",
-    "_mojolearn_arima", "_mojolearn_training", "_mojolearn_gp",
-    "_mojolearn_mamba", "_mojolearn_transformer",
+    "_mojolearn_arima", "_mojolearn_gp",
+)
+#: THE NEURAL LANES BUILD IDENTICAL ONLY (2026-09-10). They are held apart
+#: from EXT_NAMES rather than removed: the exactness checks below compare the
+#: files ON DISK against the expected set BOTH WAYS, so a name that is in no
+#: list at all is neither required in identical nor refused in fast, which is
+#: the miss the header above is about. `tier_names()` is the one place that
+#: decides, and it is the same shape `build_sets.sh` uses.
+NEURAL_NAMES = (
+    "_mojolearn_training", "_mojolearn_mamba", "_mojolearn_transformer",
 )
 TIERS = ("fast", "deterministic", "identical")
+
+
+def tier_names(tier, include_byte_lm=False):
+    """Every extension expected in `tier`, in pack order.
+
+    The neural lanes and the optional byte LM exist in `identical` alone; a
+    lower tier carries neither. A set on disk that does not match this
+    EXACTLY is refused, in both directions.
+    """
+    names = EXT_NAMES
+    if tier == "identical":
+        names = names + NEURAL_NAMES
+        if include_byte_lm:
+            names = names + ("_mojolearn_byte_lm",)
+    return names
 ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
 PYPI_LIMIT = 100 * 1024 * 1024
 LINUX_VENDORS = ("cuda", "hip")
@@ -176,8 +199,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                     if n.startswith(f'mojolearn/{key[0]}/{key[1]}/')}
         required = {f'mojolearn/{key[0]}/{key[1]}/' +
                     ('' if mode == 'fast' else mode + '/') + name + '.so'
-                    for mode in TIERS for name in (*EXT_NAMES, *(
-                        ('_mojolearn_byte_lm',) if mode == 'identical' else ()))}
+                    for mode in TIERS for name in tier_names(mode, True)}
         if key in proofs or proof['extensions'] != expected or set(expected) != required:
             raise SystemExit('Duplicate, stale or incomplete architecture proof')
         inventory = proof['source_inventory']
@@ -208,9 +230,10 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                 source_commit=next(iter(commits)), source_inventory=inventories[0],
                 sets={'/'.join(k): proofs[k] for k in sorted(proofs)},
                 extensions=payload,
-                optional_native={'_mojolearn_byte_lm': {
+                optional_native={n: {
                     'included': True, 'supported_modes': ['identical'],
-                    'unsupported_modes': ['fast', 'deterministic']}},
+                    'unsupported_modes': ['fast', 'deterministic']}
+                    for n in ('_mojolearn_byte_lm',) + NEURAL_NAMES},
                 qualification='Build and file provenance only; installed runtime and numerical checks required',
                 runtime_coverage={ '/'.join(k): 'PENDING_INSTALLED_ARTIFACT' for k in sorted(proofs)})
 
@@ -291,8 +314,8 @@ def load_set(path, include_byte_lm=False):
                 f"pack_wheel: {adir}/arch_readback.txt says {sorted(said_arch)}, "
                 f"directory says {arch}; refusing to pack a mislabeled set")
         if include_byte_lm:
-            expected_rows = {(tier, name) for tier in TIERS for name in
-                             EXT_NAMES + (('_mojolearn_byte_lm',) if tier == 'identical' else ())}
+            expected_rows = {(tier, name) for tier in TIERS
+                             for name in tier_names(tier, True)}
             for witness, expected_value in (('readback.txt', vendor), ('arch_readback.txt', arch)):
                 rows = [line.split() for line in (adir / witness).read_text().splitlines()]
                 if (len(rows) != len(expected_rows) or any(len(row) != 3 for row in rows)
@@ -302,8 +325,7 @@ def load_set(path, include_byte_lm=False):
         files = {}
         for tier in TIERS:
             d = adir if tier == "fast" else adir / tier
-            names = EXT_NAMES + (('_mojolearn_byte_lm',)
-                                 if include_byte_lm and tier == 'identical' else ())
+            names = tier_names(tier, include_byte_lm)
             actual = {p.name for p in d.glob('_mojolearn*.so')}
             if actual != {n + '.so' for n in names}:
                 raise SystemExit(f'pack_wheel: undeclared or missing native payload in {d}: {sorted(actual)}')

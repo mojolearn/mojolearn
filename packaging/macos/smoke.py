@@ -194,27 +194,24 @@ gpp = gpm.predict(gpx)
 assert gpp.shape == (16,), gpp.shape
 assert np.isfinite(gpp).all(), gpp
 
-from mojolearn import _training_impl as _T             # _mojolearn_training
-_ce = _T.cross_entropy(
-    rng.standard_normal((4, 3)).astype(np.float32),
-    np.array([0, 1, 2, 0], dtype=np.int32),
-)
-assert np.isfinite(_ce) and _ce > 0.0, _ce
-
-# _mojolearn_mamba and _mojolearn_transformer, THE FOURTEENTH AND FIFTEENTH
-# (2026-09-01 and 2026-09-02). They shipped in the wheel and NOTHING here
-# launched them, which is the same two names, and the same class of miss,
-# that left pack_wheel.py's own list at thirteen and the 0.4.0 Linux wheel
-# carrying `_mamba_impl.py` and `_transformer_impl.py` with no `.so` behind
-# either. A binding no gate launches is untested shipped surface: it imports
-# cleanly and dies at its first kernel launch, which is exactly the
-# MACOSX_DEPLOYMENT_TARGET failure this project has already shipped once.
+# THE NEURAL BINDINGS ARE IDENTICAL-ONLY (2026-09-10), so BOTH ARMS are
+# asserted here rather than the calls being skipped outside the identical
+# tier -- the same rule, and for the same reason, as the `_mojolearn_linalg`
+# block below. `_mojolearn_training`, `_mojolearn_mamba` and
+# `_mojolearn_transformer` build in `identical` alone: their fused kernels are
+# gated on the identical contract, so the lower tiers ran the unfused path and
+# were slower than the default while promising less.
 #
-# Neither takes a trivial constructor -- both want a full weight dict -- so
-# these build the SMALLEST fixture that reaches a launch, on the same
-# principle as every arm above. d_model 32 is the smallest that keeps
-# Mamba-1's derived shapes whole (dt_rank = ceil(32/16) = 2, d_inner =
-# expand * 32) and gives the transformer four heads of eight.
+# A SKIP HERE WOULD LEAVE THE REFUSAL ITSELF UNGATED, which is the failure
+# mode this file has already shipped once: a binding no gate launches is
+# untested shipped surface. Under `identical` these must LAUNCH; under `fast`
+# and `deterministic` they must RAISE, and one that answers is the failure --
+# that would mean a lower-tier neural binary got back into the wheel.
+_neural_mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast")
+
+from mojolearn import _training_impl as _T             # _mojolearn_training
+from mojolearn import _mamba_impl as _M                # _mojolearn_mamba
+
 _dm = 32
 _mrng = np.random.default_rng(20260903)
 
@@ -223,36 +220,73 @@ def _w(*shape):
     return (_mrng.standard_normal(shape) * 0.02).astype(np.float32)
 
 
-from mojolearn import _mamba_impl as _M                # _mojolearn_mamba
+# The SMALLEST fixture that reaches a launch, on the same principle as every
+# arm above. d_model 32 is the smallest that keeps Mamba-1's derived shapes
+# whole (dt_rank = ceil(32/16) = 2, d_inner = expand * 32) and gives the
+# transformer four heads of eight.
 _di = _M._M1_EXPAND * _dm
 _r = int(math.ceil(_dm / 16.0))
 _ds, _dc = 16, 4
-_m1 = mojolearn.Mamba1Block({
-    "norm.weight": np.ones(_dm, dtype=np.float32),
-    "in_proj.weight": _w(2 * _di, _dm),
-    "conv1d.weight": _w(_di, 1, _dc), "conv1d.bias": _w(_di),
-    "x_proj.weight": _w(_r + 2 * _ds, _di),
-    "dt_proj.weight": _w(_di, _r), "dt_proj.bias": _w(_di),
-    "A_log": np.abs(_w(_di, _ds)) + 0.5, "D": _w(_di),
-    "out_proj.weight": _w(_dm, _di),
-})
-_mx = _mrng.standard_normal((1, 4, _dm)).astype(np.float32)
-_mout = np.asarray(_m1.forward(_mx))
-assert _mout.shape == (1, 4, _dm), _mout.shape
-assert np.all(np.isfinite(_mout)), "Mamba1Block returned non-finite cells"
+_nh, _hd, _ff = 4, 8, 64
 
-_nh, _hd, _ff = 4, 8, 64                              # _mojolearn_transformer
-_tb = mojolearn.TransformerBlock({
-    "input_layernorm.weight": np.ones(_dm, dtype=np.float32),
-    "post_attention_layernorm.weight": np.ones(_dm, dtype=np.float32),
-    "q_proj.weight": _w(_nh * _hd, _dm), "k_proj.weight": _w(_nh * _hd, _dm),
-    "v_proj.weight": _w(_nh * _hd, _dm), "o_proj.weight": _w(_dm, _nh * _hd),
-    "gate_proj.weight": _w(_ff, _dm), "up_proj.weight": _w(_ff, _dm),
-    "down_proj.weight": _w(_dm, _ff),
-}, n_heads=_nh, head_dim=_hd)
-_tout = np.asarray(_tb.forward(_mrng.standard_normal((1, 4, _dm)).astype(np.float32)))
-assert _tout.shape == (1, 4, _dm), _tout.shape
-assert np.all(np.isfinite(_tout)), "TransformerBlock returned non-finite cells"
+
+def _launch_neural():
+    """Every neural binding, through one kernel launch each."""
+    _ce = _T.cross_entropy(
+        rng.standard_normal((4, 3)).astype(np.float32),
+        np.array([0, 1, 2, 0], dtype=np.int32),
+    )
+    assert np.isfinite(_ce) and _ce > 0.0, _ce
+
+    _m1 = mojolearn.Mamba1Block({
+        "norm.weight": np.ones(_dm, dtype=np.float32),
+        "in_proj.weight": _w(2 * _di, _dm),
+        "conv1d.weight": _w(_di, 1, _dc), "conv1d.bias": _w(_di),
+        "x_proj.weight": _w(_r + 2 * _ds, _di),
+        "dt_proj.weight": _w(_di, _r), "dt_proj.bias": _w(_di),
+        "A_log": np.abs(_w(_di, _ds)) + 0.5, "D": _w(_di),
+        "out_proj.weight": _w(_dm, _di),
+    })
+    _mx = _mrng.standard_normal((1, 4, _dm)).astype(np.float32)
+    _mout = np.asarray(_m1.forward(_mx))
+    assert _mout.shape == (1, 4, _dm), _mout.shape
+    assert np.all(np.isfinite(_mout)), "Mamba1Block returned non-finite cells"
+
+    _tb = mojolearn.TransformerBlock({
+        "input_layernorm.weight": np.ones(_dm, dtype=np.float32),
+        "post_attention_layernorm.weight": np.ones(_dm, dtype=np.float32),
+        "q_proj.weight": _w(_nh * _hd, _dm), "k_proj.weight": _w(_nh * _hd, _dm),
+        "v_proj.weight": _w(_nh * _hd, _dm), "o_proj.weight": _w(_dm, _nh * _hd),
+        "gate_proj.weight": _w(_ff, _dm), "up_proj.weight": _w(_ff, _dm),
+        "down_proj.weight": _w(_dm, _ff),
+    }, n_heads=_nh, head_dim=_hd)
+    _tout = np.asarray(_tb.forward(
+        _mrng.standard_normal((1, 4, _dm)).astype(np.float32)))
+    assert _tout.shape == (1, 4, _dm), _tout.shape
+    assert np.all(np.isfinite(_tout)), "TransformerBlock returned non-finite cells"
+
+
+if _neural_mode == "identical":
+    _launch_neural()
+else:
+    # A BARE `except` HERE WOULD PASS THE GATE ON ANY FAILURE, including a
+    # real bug that has nothing to do with tiers. The refusal has to be
+    # identified by what it says, not merely by having been raised.
+    try:
+        _launch_neural()
+    except Exception as _exc:
+        _why = str(_exc)
+        if "identical" not in _why.lower():
+            raise AssertionError(
+                f"the neural bindings failed on the {_neural_mode} tier, but "
+                f"not with the identical-only refusal; this is a different "
+                f"fault and it is being reported rather than passed: {_why}"
+            ) from _exc
+    else:
+        raise AssertionError(
+            f"the neural bindings ANSWERED on the {_neural_mode} tier, where "
+            f"they must refuse: transformer, mamba and training build "
+            f"identical only, and a {_neural_mode} binary must not exist")
 
 # _mojolearn_linalg IS IDENTITY-ONLY BY DESIGN, so BOTH ARMS are asserted
 # here rather than the call being skipped outside the identical tier.

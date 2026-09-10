@@ -111,6 +111,23 @@ ALL_BINDINGS = (
     "_mojolearn_mamba", "_mojolearn_transformer",
 )
 
+#: THE NEURAL LANES BUILD IDENTICAL ONLY (2026-09-10). They stay in
+#: `ALL_BINDINGS` above ON PURPOSE. Deleting a name from that tuple is exactly
+#: the miss this file's header is about: a name absent from the list is never
+#: looked for and never missed, which is how the 0.4.0 Linux wheel shipped
+#: `_mamba_impl.py` with no `.so` behind it.
+#:
+#: So the test is INVERTED for these names below rather than skipped, the way
+#: `DESIGNED_REFUSALS` inverts it for lanes. Under `identical` they must load
+#: and read back the vendor. Under `fast` and `deterministic` they must RAISE,
+#: and one that LOADS is the failure -- that would mean a lower-tier neural
+#: binary got back into the wheel, which is the whole thing this split
+#: removed.
+IDENTICAL_ONLY_BINDINGS = frozenset({
+    "_mojolearn_transformer", "_mojolearn_mamba",
+    "_mojolearn_training", "_mojolearn_byte_lm",
+})
+
 
 #: Lines MAX appends to a message that carry no cause. A message made only
 #: of these is a message with its cause thrown away.
@@ -196,10 +213,20 @@ def main():
     if os.environ.get("MOJOLEARN_PACKAGE_BYTE_LM", "0") == "1" and mode == "identical":
         names_to_load += ("_mojolearn_byte_lm",)
     for name in names_to_load:
+        must_refuse = name in IDENTICAL_ONLY_BINDINGS and mode != "identical"
         try:
             per[name] = _backend.read_vendor(_backend.binding(name))
         except Exception as exc:
             per[name] = f"REFUSED {type(exc).__name__}: {exc}"[:200]
+        if must_refuse:
+            # A LOADED binary here is the failure. It would mean a lower-tier
+            # neural .so is back in the wheel.
+            if not per[name].startswith("REFUSED"):
+                failures.append(
+                    f"{name}: LOADED under mode={mode}, where it must refuse; "
+                    f"this lane builds identical only and a {mode} binary "
+                    f"must not exist (read-back {per[name]!r})")
+            continue
         if per[name] != a.vendor:
             failures.append(f"{name}: read-back = {per[name]!r}")
     report["vendor_per_binding"] = per
