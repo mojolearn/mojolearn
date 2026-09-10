@@ -67,6 +67,7 @@ struct PreparedNumericDataset(Movable):
         bootstrap_type: Int = -1,
         bootstrap_param: Float32 = Float32(1),
         min_child_hessian: Float64 = -1.0,
+        feature_fraction: Float64 = 1.0,
     ) raises -> TrainedModel:
         """Fresh RMSE/Logloss/CrossEntropy model using the frozen pool.
 
@@ -135,6 +136,7 @@ struct PreparedNumericDataset(Movable):
             min_data_in_leaf=min_data_in_leaf,
             min_split_gain=min_split_gain,
             min_child_hessian=min_child_hessian,
+            feature_fraction=feature_fraction,
         )
         var flags = List[Bool]()
         for _ in range(self.n_features):

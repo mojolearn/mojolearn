@@ -327,6 +327,11 @@ class GradientBoosting(NumericModeMixin):
         `use_pointwise_searcher=True` (that is the doc-parallel OBLIVIOUS
         searcher). Their `Region` policy is not ported and is refused by
         name. DEVIATION 259.
+    feature_fraction : float, default 1.0
+        Per-tree numeric feature subsampling in (0, 1]. A deterministic
+        subset of nonconstant features is chosen for each tree and shared
+        by its split searches. The default preserves existing model bits
+        and ABI layout. Values below one refuse categorical/one-hot/CTR paths.
     min_child_hessian : float or None, default None
         Minimum weighted Hessian sum in each candidate child, before split
         selection. Requires Depthwise/Lossguide, NewtonL2/NewtonCosine and
@@ -553,6 +558,7 @@ class GradientBoosting(NumericModeMixin):
         min_data_in_leaf=1,
         min_split_gain=None,
         min_child_hessian=None,
+        feature_fraction=1.0,
     ):
         if loss not in LOSSES:
             raise ValueError(
@@ -596,6 +602,25 @@ class GradientBoosting(NumericModeMixin):
             raise ValueError(
                 f"mojolearn: grow_policy must be one of {GROW_POLICIES}, "
                 f"got {grow_policy!r}"
+            )
+        valid_fraction_type = (
+            not isinstance(feature_fraction, (bool, np.bool_))
+            and isinstance(feature_fraction, (int, float, np.integer, np.floating))
+        )
+        try:
+            parsed_fraction = float(feature_fraction) if valid_fraction_type else float("nan")
+        except (ValueError, TypeError, OverflowError):
+            parsed_fraction = float("nan")
+        if not np.isfinite(parsed_fraction) or not 0.0 < parsed_fraction <= 1.0:
+            raise ValueError("mojolearn: feature_fraction must be finite and in (0, 1]")
+        feature_fraction = parsed_fraction
+        if feature_fraction < 1.0 and any(
+            values is not None and np.asarray(values).size > 0
+            for values in (cat_features, one_hot_features)
+        ):
+            raise NotImplementedError(
+                "mojolearn: feature_fraction < 1 requires numeric features; "
+                "categorical, one-hot and CTR features are unsupported"
             )
         if min_split_gain is not None:
             valid_type = (not isinstance(min_split_gain, (bool, np.bool_))
@@ -827,6 +852,7 @@ class GradientBoosting(NumericModeMixin):
         self.min_data_in_leaf = int(min_data_in_leaf)
         self.min_split_gain = None if min_split_gain is None else float(min_split_gain)
         self.min_child_hessian = min_child_hessian
+        self.feature_fraction = feature_fraction
 
         self.model_ = None
         self.loss_curve_ = None
@@ -848,11 +874,9 @@ class GradientBoosting(NumericModeMixin):
     #
     # SLOTS 0..34 ARE FIXED AND SLOT 34 IS A COUNT: everything after it is
     # the class-weight tail, and the binding checks the length against it
-    # rather than trusting it. min_split_gain is an optional tail AFTER the
-    # counted weights, preserving default calls. Other new fixed options go
-    # BEFORE the count and bump
-    # the binding's three length numbers with it (slots 31-33 landed that
-    # way 2026-08-23, DEVIATION 259).
+    # rather than trusting it. Optional ordered tails AFTER the counted
+    # weights are min_split_gain, min_child_hessian, then feature_fraction.
+    # Trailing defaults are omitted, preserving all existing caller layouts.
     def _params(self, n_rows, n_features, n_flags, n_weights=0,
                 n_eval_rows=0):
         def f(v):
@@ -864,6 +888,17 @@ class GradientBoosting(NumericModeMixin):
             -1 if method is None else _LEAF_ESTIMATION_NAMES[method]
         )
         iters = self.leaf_estimation_iterations
+        tail = []
+        fraction = getattr(self, "feature_fraction", 1.0)
+        if fraction != 1.0:
+            tail = [(-1.0 if self.min_split_gain is None else float(self.min_split_gain)),
+                    (-1.0 if self.min_child_hessian is None else float(self.min_child_hessian)),
+                    float(fraction)]
+        elif self.min_child_hessian is not None:
+            tail = [(-1.0 if self.min_split_gain is None else float(self.min_split_gain)),
+                    float(self.min_child_hessian)]
+        elif self.min_split_gain is not None:
+            tail = [float(self.min_split_gain)]
         return [
             n_rows,                                     # 0
             n_features,                                 # 1
@@ -914,9 +949,7 @@ class GradientBoosting(NumericModeMixin):
             # to round.
             *cw,
             # Optional ABI tail preserves the old layout for default fits.
-            *([(-1.0 if self.min_split_gain is None else float(self.min_split_gain)), float(self.min_child_hessian)]
-              if self.min_child_hessian is not None else
-              ([] if self.min_split_gain is None else [float(self.min_split_gain)])),
+            *tail,
         ]
 
     def _flags(self, n_features):

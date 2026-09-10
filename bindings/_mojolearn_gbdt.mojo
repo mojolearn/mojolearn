@@ -217,8 +217,9 @@ def gbdt_fit_binding(
         33  min_data_in_leaf
         34  n_class_weights  (0 means none)
 
-    An optional final min_split_gain Float64 follows the counted weights.
-    Omitting it disables the extra non-symmetric growth guard.
+    Optional Float64 tails after counted weights are min_split_gain,
+    min_child_hessian, then feature_fraction. Missing guards default to -1
+    and missing feature_fraction defaults to 1, preserving existing layouts.
 
     AND THEN `n_class_weights` MORE VALUES, the class weights themselves,
     at `params[35 .. 35 + n_class_weights)`. They ride in this list rather
@@ -269,9 +270,9 @@ def gbdt_fit_binding(
             + String(n_class_weights)
         )
     var fixed_and_weights = 35 + n_class_weights
-    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2:
+    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3:
         raise Error(
-            "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain then min_child_hessian values ("
+            "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction values ("
             + String(35 + n_class_weights)
             + ") values, got "
             + String(len(params))
@@ -326,8 +327,12 @@ def gbdt_fit_binding(
         min_split_gain = Float64(py=params[fixed_and_weights])
 
     var min_child_hessian = Float64(-1)
-    if len(params) == fixed_and_weights + 2:
+    if len(params) >= fixed_and_weights + 2:
         min_child_hessian = Float64(py=params[fixed_and_weights + 1])
+
+    var feature_fraction = Float64(1)
+    if len(params) == fixed_and_weights + 3:
+        feature_fraction = Float64(py=params[fixed_and_weights + 2])
 
     var fp = GbdtFitParams(
         Int(py=params[4]),
@@ -366,6 +371,7 @@ def gbdt_fit_binding(
         Int(py=params[33]),
         min_split_gain,
         min_child_hessian,
+        feature_fraction,
     )
     var n_eval_rows = Int(py=params[20])
 

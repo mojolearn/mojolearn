@@ -113,6 +113,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_MODE,
 )
 from gbdt.data.permutation import TRandom
+from gbdt.gpu_data.feature_sampling import check_feature_fraction, sample_tree_folds, project_tree_columns
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     compute_bins_for_model,
     partition_from_bins,
@@ -960,6 +961,7 @@ def fit_with_test(
     min_data_in_leaf: Int = 1,
     min_split_gain: Float64 = -1,
     min_child_hessian: Float64 = -1.0,
+    feature_fraction: Float64 = 1.0,
 ) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -1015,6 +1017,11 @@ def fit_with_test(
     # MultiClass, 1 for everything else. The cursor carries this many
     # planes and the stats carry one more -- their `statCount` is
     # `1 + point.GetColumnCount()` (`pointwise_target_impl.h:186`).
+    check_feature_fraction(feature_fraction)
+    if feature_fraction < 1:
+        for flag in one_hot:
+            if flag:
+                raise Error("feature_fraction<1 supports numeric features only")
     var approx_dim = 1
     if objective == OBJECTIVE_MULTICLASS:
         if num_classes < 2:
@@ -1396,6 +1403,10 @@ def fit_with_test(
     # tree records share one seq space.
     var stage_times = StageTimes()
 
+    # Independent portable stream; does not consume bootstrap/noise RNG draws.
+    var feature_random = Optional[TRandom]()
+    if feature_fraction < 1:
+        feature_random = TRandom(random_seed ^ UInt64(0x4645415455524553))
     for iteration in range(n_estimators):
         # ---- which permutation the STRUCTURE is searched on ----------
         #
@@ -1432,6 +1443,30 @@ def fit_with_test(
             cindex.copy() if learn_p == est_p
             else perm_cindexes[learn_p].copy()
         )
+        var tree_folds = List[Int]()
+        var tree_layout = Optional[CompressedIndexLayout]()
+        var tree_cindex = lc.copy()
+        if feature_fraction < 1:
+            tree_folds = sample_tree_folds(
+                fold_counts, feature_fraction, feature_random.value(),
+            )
+            tree_layout = build_layout(tree_folds, one_hot)
+            tree_cindex = project_tree_columns(
+                ctx, lc, n_rows, layout_for_test, tree_layout.value(),
+            )
+            # Existing workspace keys encode shape, not the sampled feature IDs.
+            # Drain and retire their cached descriptors before a new tree mask.
+            ctx.synchronize()
+            ws.clear()
+            dws.clear()
+            pw_pool.clear()
+            var selected_ids = List[Int32]()
+            for f in range(len(tree_folds)):
+                if tree_folds[f] > 0:
+                    selected_ids.append(Int32(f))
+            trace.record_list_i32(
+                _tree_tag(iteration) + ".sampled_features", selected_ids,
+            )
         var lcur = cursors[learn_p].copy()
         # `TTargetAtPointTrait::Create(learnTarget, cursor)` (`:353`).
         # The gradients are taken AT THE CURRENT PREDICTIONS, which is the
@@ -1734,8 +1769,8 @@ def fit_with_test(
             # have been a vendor/arm fork hiding a race.
             # ============================================================
             var tree = fit_non_symmetric_tree[HIST2_SMEM_MODE](
-                ctx, n_rows, fold_counts, opts,
-                lc, stats, row_index,
+                ctx, n_rows, tree_folds if feature_fraction < 1 else fold_counts, opts,
+                tree_cindex, stats, row_index,
                 wmag, gmag,
                 ws, dws, trace,
                 one_hot=one_hot,
@@ -1843,7 +1878,9 @@ def fit_with_test(
 
             var planes = split_stat_planes(ctx, stats, n_rows)
             splits = fit_oblivious_tree_structure_traced(
-                ctx, layout_for_test, n_rows, max_depth, lc,
+                ctx,
+                tree_layout.value().copy() if feature_fraction < 1 else layout_for_test.copy(),
+                n_rows, max_depth, tree_cindex,
                 planes[0], planes[1],
                 est_sm if est_sm > 0 else 1,
                 scale,
@@ -1884,8 +1921,8 @@ def fit_with_test(
                 )
         else:
             sizes = run_tree_layout_traced(
-                ctx, n_rows, fold_counts, max_depth,
-                lc, stats, row_index, lcur,
+                ctx, n_rows, tree_folds if feature_fraction < 1 else fold_counts, max_depth,
+                tree_cindex, stats, row_index, lcur,
                 Float32(0.0), Float32(0.0),
                 splits, leaf_values, leaf_offsets, ws,
                 trace, stage_times, _tree_tag(iteration),
@@ -2432,7 +2469,9 @@ def fit(
     random_strength: Float32 = Float32(0.0),
     # forwarded; resolved by the caller (see `fit_with_test`'s docstring
     # on this parameter)
-    boost_from_average: Bool = False,) raises -> List[Float64]:
+    boost_from_average: Bool = False,
+    feature_fraction: Float64 = 1.0,
+) raises -> List[Float64]:
     """`fit_with_test` with no held-out set and no detector.
 
     THIS WRAPPER EXISTS SO NINE CALL SITES DID NOT HAVE TO CHANGE when the
@@ -2441,6 +2480,7 @@ def fit(
     """
     var trace = IdentityTrace()
     var r = fit_with_test(
+        feature_fraction=feature_fraction,
         model=model,
         ctx=ctx,
         trace=trace,

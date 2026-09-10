@@ -68,6 +68,7 @@ from gbdt.gpu_util.kernel.radix_sort import DeviceFloatSorter
 from std.memory import memcpy
 from max.algorithm import sync_parallelize
 from gbdt.data.permutation import TRandom
+from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -521,6 +522,7 @@ def train(
     min_data_in_leaf: Int = 1,
     min_split_gain: Float64 = -1.0,
     min_child_hessian: Float64 = -1.0,
+    feature_fraction: Float64 = 1.0,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -691,6 +693,14 @@ def train(
     """
     # ---- the grow policy, resolved and refused BY NAME where theirs is ----
     var policy = grow_policy_from_name(grow_policy)
+    check_feature_fraction(feature_fraction)
+    if feature_fraction < 1:
+        for flag in cat_features:
+            if flag:
+                raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
+        for flag in one_hot:
+            if flag:
+                raise Error("feature_fraction<1 supports numeric features only; one_hot input refused")
     _ = child_hessian_threshold(min_child_hessian, policy, score_function)
     if not isfinite(min_split_gain) or (min_split_gain < 0 and min_split_gain != -1):
         raise Error("min_split_gain must be -1 (disabled) or finite and nonnegative")
@@ -1473,6 +1483,7 @@ def train(
         min_data_in_leaf=min_data_in_leaf,
         min_split_gain=min_split_gain,
         min_child_hessian=min_child_hessian,
+        feature_fraction=feature_fraction,
     )
     var losses = fit_result.learn_losses.copy()
     var t_losses = fit_result.test_losses.copy()
