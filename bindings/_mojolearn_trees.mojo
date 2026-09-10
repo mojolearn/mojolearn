@@ -64,6 +64,7 @@ from extratrees.impl.randomforest.randomforest import Forest, forest_vote
 
 # DEVIATION 2482: fit/export ownership is separate from inference residency.
 from std.ffi import _Global
+from std.sys.compile import is_defined
 from forest_export_binding import (
     ForestExportRegistry, validate_forest_export_destinations,
     copy_forest_export_leaves,
@@ -573,6 +574,12 @@ def trees_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def trees_stage_copy_policy_binding() raises -> PythonObject:
+    comptime if is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"]():
+        return PythonObject("scalar_reference")
+    return PythonObject("vector_bytes")
+
+
 def trees_numeric_mode_binding() raises -> PythonObject:
     """Compiled numeric tier, independent of the package directory label."""
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
@@ -589,6 +596,7 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_trees")
         m.def_function[trees_vendor_binding]("trees_vendor")
         m.def_function[trees_numeric_mode_binding]("trees_numeric_mode")
+        m.def_function[trees_stage_copy_policy_binding]("trees_stage_copy_policy")
         m.def_function[trees_shared_counts_mask_binding]("trees_shared_counts_mask")
         m.def_function[et_classifier_fit_binding[False]]("et_classifier_fit")
         m.def_function[et_classifier_fit_binding[True]]("et_classifier_fit_export")

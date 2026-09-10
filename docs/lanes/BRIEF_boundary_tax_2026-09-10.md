@@ -10,8 +10,8 @@ WP6/WP7 belong to a separate lane.
 
 ## The claim this lane tests
 
-Every estimator pays a fixed cost per call that has nothing to do with its
-kernels: moving X, y and the model across the three boundaries Python -> Mojo
+Every estimator pays boundary costs per call that scale with input and model
+size: moving X, y and the model across the three boundaries Python -> Mojo
 host -> pinned host memory -> device, and back. That cost is paid by scalar
 loops, staging copies, and per-element Python object construction. None of it
 is in the paper's speed numbers as a mechanism, but all of it is in the
@@ -56,12 +56,12 @@ Measured facts that motivate the lane, in the order they were found:
    converters from DEVIATION 2470 to 2472 are now on the ExtraTrees fit path.
    The Python side of the boundary is settled; this lane is the Mojo side.
 
-What this lane is NOT: it does not touch a kernel, the identity tax, or the
-launch count per tree. Those are where the paper's ratios live and they are
-unchanged by anything here. A win here is per-call fixed cost, which matters
-most for medium data, repeated fits (cross-validation, grid search), and
-predict-heavy workloads, and shows up as a few to fifteen percent of a large
-single fit.
+This lane preserves split-search algorithms and numeric reduction schedules.
+It changes host staging, upload scheduling and, in WP4, reuses a device row-fill
+kernel. Therefore launch/synchronization counts can change. Benefits must be
+measured at large-data scale and on repeated fits/predictions; the historical
+profile does not put an upper bound on current-source savings. See the
+implementation progress document for isolated measurements.
 
 ## The four moves
 

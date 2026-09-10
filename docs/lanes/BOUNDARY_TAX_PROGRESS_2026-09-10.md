@@ -96,7 +96,37 @@ optimization gate. NVIDIA/AMD attribution remains owed. No competitor ratio is i
   [WP5 evidence](../../bench/results/boundary_tax_2026-09-10/wp5/README.md).
   NVIDIA/AMD correctness and large narrow/wide NVIDIA timing remain owed;
   these small correctness fixtures establish no speed gain.
-- WP8: vectorized full-capacity byte comparison and memcpy candidate prepared.
-  Scattered-byte, vector-boundary, scalar-tail and actual skip checks pass on
-  Metal FAST. Same-process large-fit scalar-reference/candidate timing remains
-  required before committing the candidate default.
+- WP8: vectorized full-capacity byte comparison and memcpy is the measured
+  default. HIGGS 1M × 28, 100 trees, depth 16, FAST Metal: whole-fit minima
+  32.650s scalar-reference versus 11.439s vector (2.854×, 65.0% less time).
+  Five alternating measured pairs after one warm-up per arm; baseline endpoint
+  spread 1.84%, all twelve forests have the same 1,823,474-node model hash.
+  Both arms already use WP1/WP2, isolating WP8. Byte/tail/skip gates pass;
+  the final RF/ET identity matrix has 108 stable cells/216 fits across all
+  three modes, zero moves/refusals. This is one Mac FAST result, not NVIDIA
+  or AMD timing, not an IDENTICAL speed measurement, and not a competitor
+  ratio. The scalar compile selector remains a diagnostic reference only.
+
+## Remaining follow-ons and qualification
+
+WP0, WP1a, WP2a, WP3, WP4, WP5 and WP8 have landed or completed their local
+gates. WP6/WP7 remain owned elsewhere; incoming commits from that lane are
+integrated without taking over their work.
+
+- WP1b direct Float64 transpose into pinned storage: the production-helper
+  staging probe saves 4.85ms at 1M × 28 (valid window). The 2M × 20 window
+  was rejected for noise; both byte oracles pass. Keep current staging until
+  a full-fit/repeated-fit measurement justifies another input ABI path.
+  Probe/evidence: `bench/boundary/float64_pinned_transpose.mojo` and `wp1b/`.
+- WP2b device-resident handoff needs actual device model construction/retention.
+  Fit currently returns host tree structures; eagerly uploading them at fit
+  end merely moves first-predict cost into fit. Do not claim that as removal
+  of a transfer. The existing resident predictor already reuses its snapshot
+  and I/O buffers across subsequent calls.
+- NVIDIA IDENTICAL and AMD execution/timing remain owed for these changes.
+  Run the retained native/public/fingerprint gates on each vendor, then large
+  same-process A/B whole-fit/repeated-fit tests. RF's nonbootstrap row fill,
+  OOB-on/off fits, and GBDT narrow/wide inputs need their own timing; no
+  training-speed number is claimed for them here.
+- Build and qualify fresh installed wheels before publishing. NumPy-free
+  metadata and source tests do not certify the installed CUDA/HIP/Metal sets.

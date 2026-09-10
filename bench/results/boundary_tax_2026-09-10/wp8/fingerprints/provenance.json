@@ -1,0 +1,14 @@
+{
+  "binding_sha256": {
+    "python/mojolearn/_mojolearn_rf.so": "1faaab126e252c426d32f058753de6a9227192a5b74a1cd8fe4ca66eb42cdc80",
+    "python/mojolearn/_mojolearn_trees.so": "2f35726547f23f5dd57a864ed9db81559e989d7c8e38abd81982f291dee19334",
+    "python/mojolearn/deterministic/_mojolearn_rf.so": "1c864860b3706c1dbef487be412eb20189a7edfd30b6bdab0c3787900dcf78bd",
+    "python/mojolearn/deterministic/_mojolearn_trees.so": "c2132427d4791c4865e65e1bf76888899475814510bcac9fed234fabf2fcb6b3",
+    "python/mojolearn/identical/_mojolearn_rf.so": "7e3a7a0153554e22981966b7a5046d90f06238af770464566653f46c35ca90b5",
+    "python/mojolearn/identical/_mojolearn_trees.so": "4a8861350dd04500a9dfe6b1a1166ac4c2915581159201302233af28506e823e"
+  },
+  "harness_sha256": "7e983b0113f62191f9e17014bbe37459e7c90a8cb9e13d944e7f51a2806a10ef",
+  "python": "/tmp/mojolearn-release-080/tests-env/bin/python",
+  "command": "nice -n 19 tools/with_build_lock.sh <python> /tmp/mojolearn-boundary-identity-matrix.py",
+  "mode_command": "MOJOLEARN_NUMERIC_MODE=<mode> PYTHONPATH=python <python> tools/identity_break.py --lanes rf-clf,rf-reg,et-clf,et-reg --repeats 2 --vendor metal --verbose --json <mode>.json [--allow-fast for FAST]"
+}

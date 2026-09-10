@@ -1,0 +1,32 @@
+{
+  "fast": {
+    "exit_code": 0,
+    "complete": true,
+    "cells": 36,
+    "fixtures": 9,
+    "verdicts": {
+      "STABLE": 36
+    },
+    "successful_fit_repeats": 72
+  },
+  "deterministic": {
+    "exit_code": 0,
+    "complete": true,
+    "cells": 36,
+    "fixtures": 9,
+    "verdicts": {
+      "STABLE": 36
+    },
+    "successful_fit_repeats": 72
+  },
+  "identical": {
+    "exit_code": 0,
+    "complete": true,
+    "cells": 36,
+    "fixtures": 9,
+    "verdicts": {
+      "STABLE": 36
+    },
+    "successful_fit_repeats": 72
+  }
+}

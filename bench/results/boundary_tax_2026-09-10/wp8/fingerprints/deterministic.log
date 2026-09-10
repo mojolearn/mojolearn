@@ -1,0 +1,12 @@
+COMPILED_RF 2 metal
+COMPILED_ET 2 metal
+# identity_break  mode=deterministic  2026-09-10 15:51:40  macOS-26.5.2-arm64-arm-64bit-Mach-O
+| lane             | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| rf-clf           | bffd9e22f7936f12 | f69fb78c32827c41 | 521fbcf08d68a5bd | bc538487074ad10c | 88ed31b7f4d77072 | b9c56acc3d78e224 | c5cdc20d6257828f | b32edad54396d0f7 | c17d0509b895ccb7 |
+| rf-reg           | f032017cfd1c73dd | ec6e7b28cd0d16a9 | c755113ac878c8b9 | 8d9b05172d7a3777 | ad12b54984871f40 | feed3869ba06eaf7 | 55f5becd2a3a172c | 33f207a8fab32866 | cd81c456c75aaaf0 |
+| et-clf           | c586b27a3b049614 | 604f59c7a4203eeb | eb7aaadcd0843a6d | ee8b318d6bf698b2 | b40377fb35e52909 | b40377fb35e52909 | a24dcc8a93f699ff | 1da918353bb9f10e | e1409786c462d97b |
+| et-reg           | 754d8c127ecfc04d | e7072e1c8fe0083c | 4e0a0d9a4670ed5f | b745e53515f59cac | 19a23f6fea44befd | 19a23f6fea44befd | 9a63fea590f79a67 | c9fe7c90673c2661 | 3fd3dff94cc79fc2 |
+
+cells=36 stable=36 moved=0 refused=0
+wrote bench/results/boundary_tax_2026-09-10/wp8/fingerprints/deterministic.json

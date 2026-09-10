@@ -2776,14 +2776,36 @@ def _stage_upload_if_changed[
             if payload_slot:
                 return
         var same = True
-        for i in range(n):
-            if hp.unsafe_load(i) != sp.unsafe_load(i):
-                same = False
-                break
+        # DEVIATION 2488: full-capacity byte equality, 16 bytes at a time.
+        # The retained scalar build arm isolates this one mechanism in A/B.
+        comptime if is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"]():
+            for i in range(n):
+                if hp.unsafe_load(i) != sp.unsafe_load(i):
+                    same = False
+                    break
+        else:
+            var sb = sp.bitcast[UInt8]()
+            var hb = hp.bitcast[UInt8]()
+            var count = n * size_of[Scalar[dt]]()
+            var i = 0
+            while i + 16 <= count:
+                if hb.unsafe_load[width=16](i) != sb.unsafe_load[width=16](i):
+                    same = False
+                    break
+                i += 16
+            if same:
+                while i < count:
+                    if hb.unsafe_load(i) != sb.unsafe_load(i):
+                        same = False
+                        break
+                    i += 1
         if same:
             return
-    for i in range(n):
-        hp.unsafe_store(i, sp.unsafe_load(i))
+    comptime if is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"]():
+        for i in range(n):
+            hp.unsafe_store(i, sp.unsafe_load(i))
+    else:
+        memcpy(dest=hp, src=sp, count=n)
     ctx.enqueue_copy(dst_buf=dst, src_ptr=src.unsafe_ptr())
 
 
