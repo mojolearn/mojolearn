@@ -1,0 +1,85 @@
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:104:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:104:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:104:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:103:
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/checks/trsm.mojo:73:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/checks/chol_sabotage.mojo:209:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:103:
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/checks/trsm.mojo:73:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/checks/chol_sabotage.mojo:232:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:103:
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/checks/trsm.mojo:73:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/checks/chol_sabotage.mojo:239:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:104:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:104:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:97:
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/estimator.mojo:48:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/checks/potrf.mojo:664:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:97:
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/estimator.mojo:48:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/checks/potrf.mojo:680:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:109:
+Imported from ./gaussian_process/estimator.mojo:97:
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/estimator.mojo:48:
+/private/tmp/mojolearn-rename-lane-audit-20260910/./cholesky/checks/potrf.mojo:684:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:419:16: warning: assignment to 'info' was never used; assign to '_' instead?
+    var info = 0
+               ^
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/_mojolearn_gp.mojo:583:21: warning: assignment to 'n_clamped' was never used; assign to '_' instead?
+    var n_clamped = 0
+                    ^
+Terminated: 15
+{"guard": "macos-root-user-tiny-v1", "reason": "compressed memory grew by more than 256 MiB", "error": null, "returncode": 143, "thread_limit": 2, "cpu_affinity": null, "cpu_enforcement": "sampled, not hard affinity", "gpu_memory_accounting": "system unified-memory reserve/pressure; no per-process Metal VRAM counter", "initial_memory": {"total_bytes": 17179869184, "conservative_reserve_bytes": 309542912, "pressure_level": 1, "swap_used_bytes": 6094848000, "compressed_bytes": 5727141888}, "samples": [{"elapsed_seconds": 0.02664637501584366, "rss_bytes": 3571712, "sampled_cpu_cores": 0.0, "total_bytes": 17179869184, "conservative_reserve_bytes": 299778048, "pressure_level": 1, "swap_used_bytes": 6094848000, "compressed_bytes": 5727141888}, {"elapsed_seconds": 2.0536291250027716, "rss_bytes": 438763520, "sampled_cpu_cores": 0.8633521918286111, "total_bytes": 17179869184, "conservative_reserve_bytes": 119078912, "pressure_level": 1, "swap_used_bytes": 6094848000, "compressed_bytes": 5811044352}, {"elapsed_seconds": 4.082282832998317, "rss_bytes": 561790976, "sampled_cpu_cores": 1.1041805662402975, "total_bytes": 17179869184, "conservative_reserve_bytes": 122912768, "pressure_level": 1, "swap_used_bytes": 6094848000, "compressed_bytes": 5892784128}, {"elapsed_seconds": 6.107777833007276, "rss_bytes": 857194496, "sampled_cpu_cores": 1.5255530129604529, "total_bytes": 17179869184, "conservative_reserve_bytes": 175833088, "pressure_level": 1, "swap_used_bytes": 6094848000, "compressed_bytes": 6153093120}], "cleanup": {"verified": true, "quarantined": false, "errors": ["PermissionError(1, 'Operation not permitted')"]}, "policy_limits": {"deadline_seconds": 180, "rss_bytes": 4294967296, "entry_reserve_bytes": 0, "runtime_reserve_bytes": 0, "normal_pressure_level": 1, "swap_growth_bytes": 134217728, "compressed_growth_bytes": 268435456, "sampled_cpu_limit": 3, "cpu_grace_seconds": 4, "sample_interval_seconds": 2.0}, "watchdog_expired": false, "watchdog_errors": [], "descendant_accounting": "observed ancestry and PGID, ps start-time identities; sampling gaps remain"}
