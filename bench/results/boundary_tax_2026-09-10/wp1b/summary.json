@@ -1,0 +1,22 @@
+[
+  {
+    "rows": 1000000,
+    "features": 28,
+    "direct_min_ms": 12.358,
+    "baseline_min_ms": 17.208,
+    "baseline_max_min_ratio": 1.1150627615062763,
+    "baseline_last_first_ratio": 0.9002825154337134,
+    "valid": true,
+    "gate": "conservative full baseline spread <=20%"
+  },
+  {
+    "rows": 2000000,
+    "features": 20,
+    "direct_min_ms": 16.052,
+    "baseline_min_ms": 20.993,
+    "baseline_max_min_ratio": 1.293383508788644,
+    "baseline_last_first_ratio": 1.141703809603902,
+    "valid": false,
+    "gate": "conservative full baseline spread <=20%"
+  }
+]

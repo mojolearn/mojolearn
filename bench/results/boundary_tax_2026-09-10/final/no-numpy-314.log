@@ -1,0 +1,4 @@
+WARN: The number of bins, `n_bins` is greater than the number of samples used for training. Changing `n_bins` to number of training samples.
+WARN: The number of bins, `n_bins` is greater than the number of samples used for training. Changing `n_bins` to number of training samples.
+WARN: The number of bins, `n_bins` is greater than the number of samples used for training. Changing `n_bins` to number of training samples.
+{"numpy_loaded": false, "scope": "GPU correctness smoke, not timing", "package_file": "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/__init__.py", "results": [{"estimator": "RandomForestClassifier", "shape": [16], "score": 0.5625}, {"estimator": "ExtraTreesClassifier", "shape": [16], "score": 0.625}, {"estimator": "StandardScaler", "shape": [16, 2]}, {"estimator": "MinMaxScaler", "shape": [16, 2]}, {"operation": "cross_val_score", "scores": [0.5, 0.375]}]}

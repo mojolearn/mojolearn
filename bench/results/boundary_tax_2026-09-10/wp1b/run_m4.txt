@@ -1,0 +1,15 @@
+WP1b actual helper _mojolearn._tiled_transpose_to_f32 tiles128x64
+WP1b rows 1000000 features 28 rep 0 warmup True direct_pinned_ms 40.797 malloc_then_simd_pinned_ms 43.689 bits_exact True
+WP1b rows 1000000 features 28 rep 1 warmup False direct_pinned_ms 13.557 malloc_then_simd_pinned_ms 19.114 bits_exact True
+WP1b rows 1000000 features 28 rep 2 warmup False direct_pinned_ms 12.948 malloc_then_simd_pinned_ms 18.377 bits_exact True
+WP1b rows 1000000 features 28 rep 3 warmup False direct_pinned_ms 13.192 malloc_then_simd_pinned_ms 19.188 bits_exact True
+WP1b rows 1000000 features 28 rep 4 warmup False direct_pinned_ms 12.358 malloc_then_simd_pinned_ms 18.01 bits_exact True
+WP1b rows 1000000 features 28 rep 5 warmup False direct_pinned_ms 12.618 malloc_then_simd_pinned_ms 17.208 bits_exact True
+WP1b summary rows 1000000 features 28 direct_min_ms 12.358 baseline_min_ms 17.208 baseline_endpoint_ratio 0.9002825154337134 scope host_staging_only_no_DMA_or_fit
+WP1b rows 2000000 features 20 rep 0 warmup True direct_pinned_ms 28.892 malloc_then_simd_pinned_ms 63.981 bits_exact True
+WP1b rows 2000000 features 20 rep 1 warmup False direct_pinned_ms 16.052 malloc_then_simd_pinned_ms 23.782 bits_exact True
+WP1b rows 2000000 features 20 rep 2 warmup False direct_pinned_ms 17.31 malloc_then_simd_pinned_ms 20.993 bits_exact True
+WP1b rows 2000000 features 20 rep 3 warmup False direct_pinned_ms 16.738 malloc_then_simd_pinned_ms 21.004 bits_exact True
+WP1b rows 2000000 features 20 rep 4 warmup False direct_pinned_ms 16.206 malloc_then_simd_pinned_ms 21.004 bits_exact True
+WP1b rows 2000000 features 20 rep 5 warmup False direct_pinned_ms 24.28 malloc_then_simd_pinned_ms 27.152 bits_exact True
+WP1b summary rows 2000000 features 20 direct_min_ms 16.052 baseline_min_ms 20.993 baseline_endpoint_ratio 1.141703809603902 scope host_staging_only_no_DMA_or_fit

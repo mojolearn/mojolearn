@@ -130,3 +130,16 @@ integrated without taking over their work.
   training-speed number is claimed for them here.
 - Build and qualify fresh installed wheels before publishing. NumPy-free
   metadata and source tests do not certify the installed CUDA/HIP/Metal sets.
+
+## Final source integration checks
+
+After integrating the other lane's native nonzero helper, rebuilt the base
+extension in all three modes. Its 29 native nonzero checks pass per mode,
+with no missing-native skips. The complete source Python suite passes
+995 tests and 89 subtests; 53 optional/inapplicable checks are skipped.
+The NumPy-blocked real GPU RF/ET/scaler/scoring/CV smoke passes on CPython
+3.10 and 3.14 with caller-buffer export now selected by default. The macOS
+release-harness tests pass all ten checks. These are source checks, not a
+fresh installed-wheel qualification. Logs are in `final/` beside the WP
+evidence. There are zero required Python runtime distributions; build tools,
+native runtime libraries and GPU drivers remain necessary.
