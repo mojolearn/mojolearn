@@ -120,7 +120,10 @@ same count for noise variance. n_components cannot exceed that count.
 
 The new wide Jacobi route uses 64 sweeps and relative tolerance 1e-6;
 the inherited 1e-7 can cycle on roundoff-sized rank-deficient columns.
-A local large-theta rotation avoids overflowing theta squared. Tall and
+A local large-theta rotation avoids overflowing theta squared. Columns
+whose pinned squared norms flush to zero are treated as zero in the relative
+rotation test as well as in singular-value extraction; rotating against
+zero norms made rank-deficient columns cycle on H100. Tall and
 legacy numeric-mode behavior retain the original rotation, budget and
 threshold. Nonconvergence is still refused. Single-panel Q reconstruction
 and square caller buffers are capacity/performance limitations, not a
@@ -129,7 +132,8 @@ TSQR speed claim. Gates: decomposition/checks/svd_wide_check.mojo.
 WHAT THIS ARM DOES NOT INHERIT FROM THE COVARIANCE ARM: the
 `n_features > 128 under NUMERIC_IDENTICAL` refusal. That limit is the pinned
 split-K Gram kernel's capacity (IDENTITY_PATHS row 27) and this arm never
-builds a Gram. UNRUN on any column and recorded as OWED rather than claimed;
+builds a Gram. Tall feature counts above 128 remain RUN OWED; the standard
+tall suite and wide 129-feature gate ran on Apple and NVIDIA (September 10);
 `one-box-verdict-is-not-three` applies to a capability claim as much as to a
 speed one.
 """
@@ -258,7 +262,13 @@ def one_sided_jacobi_svd_kernel[wide_rotation: Bool = False](
                 var np_ = ftz(identical_sqrt(app))
                 var nq_ = ftz(identical_sqrt(aqq))
                 var thresh = ftz(tol_in * ftz(np_ * nq_))
-                if abs(apq) > thresh:
+                var rotate = abs(apq) > thresh
+                comptime if wide_rotation:
+                    # The declared FTZ squared-norm arithmetic represents
+                    # these columns as zero. A nonzero cross product cannot
+                    # define a relative angle against a zero norm.
+                    rotate = rotate and np_ != Float32(0.0) and nq_ != Float32(0.0)
+                if rotate:
                     rots += 1
                     if tid == 0:
                         var cs = jacobi_rotation_cs(app, aqq, apq)
