@@ -1,0 +1,29 @@
+{
+  "policy": "tools/hooks/pre-commit excludes tarballs and shipped binaries from bench/results; archives retained outside repository, readable source snapshots and hashes committed.",
+  "archives": [
+    {
+      "name": "baseline-artifacts.tar.gz",
+      "sha256": "3c6f442caa1cd3b917d1aa4484278940cd64913798cf0010989306273b1bb248",
+      "bytes": 767696,
+      "local_evidence_path": "/Users/andrewhendel/CascadeProjects/mojolearn-evidence/forest-groves-2026-09-10/baseline-artifacts.tar.gz"
+    },
+    {
+      "name": "final-artifacts.tar.gz",
+      "sha256": "d28fb583dd88077b323027ff7c04b168c9557b827dbeff452c33226c22c28072",
+      "bytes": 793522,
+      "local_evidence_path": "/Users/andrewhendel/CascadeProjects/mojolearn-evidence/forest-groves-2026-09-10/final-artifacts.tar.gz"
+    },
+    {
+      "name": "forest-borrowed-overlay.tar.gz",
+      "sha256": "2572f20dbe14188bcc1b081d024e6b5145c865b40e4a1dbd4410b7d7118160a3",
+      "bytes": 24548,
+      "local_evidence_path": "/Users/andrewhendel/CascadeProjects/mojolearn-evidence/forest-groves-2026-09-10/forest-borrowed-overlay.tar.gz"
+    },
+    {
+      "name": "forest-resident-overlay.tar.gz",
+      "sha256": "6ac0ebaa4a12ceb29fd823b3d77d84b7f2031c9c20c3ecb050f06623e1a665ad",
+      "bytes": 47674,
+      "local_evidence_path": "/Users/andrewhendel/CascadeProjects/mojolearn-evidence/forest-groves-2026-09-10/forest-resident-overlay.tar.gz"
+    }
+  ]
+}

@@ -419,7 +419,6 @@ def load_year(size, rows_cap=None):
     `year.pkl`. Their pickle carries their `Data` and `LearningTask` classes,
     so unpickling it would make this file depend on their checkout being
     importable, which on a fresh pod it is not."""
-    import pandas as pd
 
     folder = os.path.join(data_root(), "year")
     zip_path = os.path.join(folder, "YearPredictionMSD.txt.zip")
@@ -458,6 +457,7 @@ def load_year(size, rows_cap=None):
                 "`python tools/speed_gbdt_arm.py --download year` first "
                 "(211 MB), OUTSIDE the timed run." % zip_path
             )
+        import pandas as pd
         frame = pd.read_csv(zip_path, header=None)
         x = frame.iloc[:, 1:].to_numpy(dtype=np.float32)
         y = frame.iloc[:, 0].to_numpy(dtype=np.float32)

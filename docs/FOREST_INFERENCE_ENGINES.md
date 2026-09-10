@@ -50,7 +50,11 @@ non-finite inputs/results and malformed tree graphs are refused. Host code
 validates and stages arrays; traversal and prediction arithmetic run on the GPU.
 On the first `parallel_groves` prediction, the estimator validates and uploads
 an owned model snapshot. Later predictions reuse its device buffers and context;
-input upload and output readback still occur each call. The five private model
+input upload and output readback still occur each call. The native boundary
+borrows the contiguous host input and fresh output arrays for that synchronous
+call, avoiding intermediate input/output Lists and the extra pinned output
+staging buffer. Input finiteness is checked before launch; output finiteness is
+checked after readback. Failed public calls never return the output array. The five private model
 arrays become immutable host snapshots at preparation, so previously retained
 mutable aliases cannot silently change device predictions. Replacing a private
 model array causes preparation of a new snapshot. Refitting or `set_params`
@@ -58,12 +62,25 @@ releases the old cache. Pickling excludes device handles and rebuilds on demand.
 Native registry operations currently retain the Python GIL, serializing calls
 through that boundary; concurrent calls and borrowed GPU inputs remain work.
 
-A compile-time `MOJOLEARN_FOREST_VECTOR_GROVES` candidate reuses each tree
-traversal across 2–8 output components, following nvForest's vector-leaf loop.
-It preserves every per-output addition and uses the same fixed reduction graph.
-`MOJOLEARN_FOREST_SCALAR_GROVES` forces the scalar-output reference. Outputs
-above eight retain that reference. Selection remains experimental pending
-large-data timing; this is not another public inference algorithm.
+Within `parallel_groves`, vector-leaf traversal reuse is now the default for
+2–8 outputs, following nvForest's vector-leaf loop. It preserves every
+per-output addition and the same fixed reduction graph. The compile-time
+`MOJOLEARN_FOREST_SCALAR_GROVES` switch forces the scalar-output reference;
+outputs one and above eight retain that fallback. No enable flag is required.
+This is an implementation choice inside the existing opt-in GPU engine, not
+another public inference algorithm or a change to the `sequential` default.
+
+The promotion follows exact scalar/vector output checks and stable large
+resident-kernel measurements: Apple M4 FAST improved the two-output fixture;
+H100 IDENTICAL improved both two- and seven-output fixtures. All 1,440
+handcrafted IDENTICAL output-bit records match across CUDA scalar/vector and
+Metal vector routes. These are bounded synthetic resident-kernel results;
+the [vector-kernel report](lanes/FOREST_VECTOR_GROVES.md) gives their limits.
+Separate eight-call throughput blocks on H100 validated the full public ET
+path on HIGGS and Year, with identical outputs across transient, resident and
+borrowed-buffer paths. RF and several single-call measurements remained noisy;
+there is no qualified RF/cuML parity claim. See the
+[full campaign evidence](../bench/results/forest_groves_2026-09-10/README.md).
 
 GPU-engine archives use a separate `*-parallel-groves-1` format and retain the
 numeric mode. Current loaders restore the selected engine; older loaders reject

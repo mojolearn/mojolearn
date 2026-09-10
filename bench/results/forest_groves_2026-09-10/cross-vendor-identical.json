@@ -1,0 +1,36 @@
+{
+  "scope": "Handcrafted fixed-grove fixtures; CUDA and Metal IDENTICAL, including final default. HIP and broader model qualification pending.",
+  "matched": true,
+  "records": {
+    "cuda_scalar": {
+      "path": "cuda/grove-scalar.run.log",
+      "bit_record_count": 1440,
+      "sha256": "2a1e2a95b976b05652f57f65f620dd4d1d561c4e6265454292be9173627593be"
+    },
+    "cuda_vector": {
+      "path": "cuda/grove-vector.run.log",
+      "bit_record_count": 1440,
+      "sha256": "2a1e2a95b976b05652f57f65f620dd4d1d561c4e6265454292be9173627593be"
+    },
+    "cuda_default": {
+      "path": "cuda/grove-default.run.log",
+      "bit_record_count": 1440,
+      "sha256": "2a1e2a95b976b05652f57f65f620dd4d1d561c4e6265454292be9173627593be"
+    },
+    "metal_vector": {
+      "path": "metal/identical-vector.log",
+      "bit_record_count": 1440,
+      "sha256": "2a1e2a95b976b05652f57f65f620dd4d1d561c4e6265454292be9173627593be"
+    },
+    "metal_default": {
+      "path": "metal/identical-default-final.log",
+      "bit_record_count": 1440,
+      "sha256": "2a1e2a95b976b05652f57f65f620dd4d1d561c4e6265454292be9173627593be"
+    },
+    "metal_force_scalar": {
+      "path": "metal/identical-force-scalar-final.log",
+      "bit_record_count": 1440,
+      "sha256": "2a1e2a95b976b05652f57f65f620dd4d1d561c4e6265454292be9173627593be"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+2751 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3aea00000000, nodemask=2)
+numeric_mode IDENTICAL
+vendor cuda
+dimensions 1000000 28 100 16 2 nodes 13107100 array_bytes_estimate 780284808
+fixture_validation_upload_ms 1347.860975
+warmup_ms 0 scalar 26.783251
+warmup_ms 0 vector 25.669823
+fingerprint 0 8937473431910161251
+warmup_ms 1 vector 25.307561
+warmup_ms 1 scalar 26.520717
+fingerprint 1 8937473431910161251
+kernel_ms 2 scalar 26.515095
+kernel_ms 2 vector 25.635134
+fingerprint 2 8937473431910161251
+kernel_ms 3 vector 25.40884
+kernel_ms 3 scalar 26.531437
+fingerprint 3 8937473431910161251
+kernel_ms 4 scalar 26.557088
+kernel_ms 4 vector 25.571099
+fingerprint 4 8937473431910161251
+kernel_ms 5 vector 25.340809
+kernel_ms 5 scalar 26.512002
+fingerprint 5 8937473431910161251
+kernel_ms 6 scalar 26.528963
+kernel_ms 6 vector 25.578607
+fingerprint 6 8937473431910161251
+kernel_ms 7 vector 25.556749
+kernel_ms 7 scalar 26.490349
+fingerprint 7 8937473431910161251
+PASS resident scalar/vector exact output bits

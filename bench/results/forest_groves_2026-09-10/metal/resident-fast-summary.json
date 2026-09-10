@@ -1,0 +1,86 @@
+[
+  {
+    "outputs": 2,
+    "rows": 1000000,
+    "trees": 100,
+    "depth": 16,
+    "features": 28,
+    "numeric_mode": "fast",
+    "vendor": "metal",
+    "timing_scope": "resident kernel enqueue + context drain; excludes upload/readback",
+    "arms": {
+      "scalar": {
+        "samples_ms": [
+          1984.596,
+          1968.727,
+          1974.685,
+          1958.348,
+          1930.016,
+          1970.836
+        ],
+        "median_ms": 1969.7815,
+        "spread_ratio": 1.0282795583041797
+      },
+      "vector": {
+        "samples_ms": [
+          1530.803,
+          1538.075,
+          1551.074,
+          1544.236,
+          1532.846,
+          1537.195
+        ],
+        "median_ms": 1537.635,
+        "spread_ratio": 1.0132420696849953
+      }
+    },
+    "device": "Apple M4",
+    "gate": "both arms at least 6 measured samples and max/min sample spread <= 1.10",
+    "timing_stable": true,
+    "observed_speedup": 1.2810462170801264,
+    "observed_percent_lower": 21.938803872409206,
+    "qualified_speedup": 1.2810462170801264
+  },
+  {
+    "outputs": 7,
+    "rows": 1000000,
+    "trees": 100,
+    "depth": 16,
+    "features": 28,
+    "numeric_mode": "fast",
+    "vendor": "metal",
+    "timing_scope": "resident kernel enqueue + context drain; excludes upload/readback",
+    "arms": {
+      "scalar": {
+        "samples_ms": [
+          3983.557,
+          4237.359,
+          4389.204,
+          4367.301,
+          4356.585,
+          4374.638
+        ],
+        "median_ms": 4361.943,
+        "spread_ratio": 1.101830349107594
+      },
+      "vector": {
+        "samples_ms": [
+          1902.087,
+          1868.035,
+          1930.912,
+          1934.579,
+          1926.77,
+          1924.988
+        ],
+        "median_ms": 1925.879,
+        "spread_ratio": 1.0356224588939713
+      }
+    },
+    "device": "Apple M4",
+    "gate": "both arms at least 6 measured samples and max/min sample spread <= 1.10",
+    "timing_stable": false,
+    "observed_speedup": 2.264910204639025,
+    "observed_percent_lower": 55.84813923519862,
+    "qualified_speedup": null
+  }
+]

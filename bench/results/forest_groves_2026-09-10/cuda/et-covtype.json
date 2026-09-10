@@ -1,0 +1,310 @@
+{
+  "complete": true,
+  "records": [
+    {
+      "arm": "parallel_groves_transient",
+      "round": 0,
+      "warmup": true,
+      "ms": 57.44458734989166,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 0,
+      "warmup": true,
+      "ms": 61.93275563418865,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 0,
+      "warmup": true,
+      "ms": 3.9713233709335327,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 1,
+      "warmup": false,
+      "ms": 38.59718330204487,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 1,
+      "warmup": false,
+      "ms": 6.654543802142143,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 1,
+      "warmup": false,
+      "ms": 3.577813506126404,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 2,
+      "warmup": false,
+      "ms": 6.42496719956398,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 2,
+      "warmup": false,
+      "ms": 3.4357868134975433,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 2,
+      "warmup": false,
+      "ms": 33.998092636466026,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 3,
+      "warmup": false,
+      "ms": 3.715524449944496,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 3,
+      "warmup": false,
+      "ms": 32.88455121219158,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 3,
+      "warmup": false,
+      "ms": 74.47490841150284,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 4,
+      "warmup": false,
+      "ms": 41.27969034016132,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 4,
+      "warmup": false,
+      "ms": 7.122533395886421,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 4,
+      "warmup": false,
+      "ms": 3.5417526960372925,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 5,
+      "warmup": false,
+      "ms": 6.342878565192223,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 5,
+      "warmup": false,
+      "ms": 3.372998908162117,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 5,
+      "warmup": false,
+      "ms": 42.31139272451401,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 6,
+      "warmup": false,
+      "ms": 3.512101247906685,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 6,
+      "warmup": false,
+      "ms": 33.07389281690121,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 6,
+      "warmup": false,
+      "ms": 6.548821926116943,
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    }
+  ],
+  "staged_records": [
+    {
+      "arm": "parallel_groves_transient",
+      "round": 0,
+      "dispatch_ms": 32.36372768878937,
+      "instrumented_public_ms": 32.75102376937866,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.38729608058929443
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 0,
+      "dispatch_ms": 6.317028775811195,
+      "instrumented_public_ms": 6.6454969346523285,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.3284681588411331
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 0,
+      "dispatch_ms": 3.1830910593271255,
+      "instrumented_public_ms": 3.4762825816869736,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.293191522359848
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 1,
+      "dispatch_ms": 3.077717497944832,
+      "instrumented_public_ms": 3.3407602459192276,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.26304274797439575
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 1,
+      "dispatch_ms": 6.1846766620874405,
+      "instrumented_public_ms": 6.503334268927574,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.31865760684013367
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 1,
+      "dispatch_ms": 32.387735322117805,
+      "instrumented_public_ms": 32.786643132567406,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.3989078104496002
+    }
+  ],
+  "lane": "et",
+  "dataset": "covtype-522911x54",
+  "task": "multiclass",
+  "response_method": "predict_proba",
+  "rows_fit": 522911,
+  "rows_predict": 58101,
+  "features": 54,
+  "outputs": 7,
+  "numeric_mode": "identical",
+  "vendor": "cuda",
+  "binding": {
+    "requested": "identical",
+    "resolved": "identical",
+    "compiled": "identical",
+    "vendor": "cuda",
+    "path": "/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so"
+  },
+  "config": {
+    "seed": 7,
+    "n_estimators": 100,
+    "max_depth": 16,
+    "n_bins": 128,
+    "min_samples_leaf": 1,
+    "min_samples_split": 2,
+    "min_impurity_decrease": 0.0,
+    "bootstrap": false
+  },
+  "versions": {
+    "numpy": "2.4.6",
+    "cuml-cu12": "26.8.0"
+  },
+  "compiled_vector_groves": true,
+  "borrowed_buffers": true,
+  "first_call_contract": "round0 includes lazy preparation for each engine; measured repeats may reuse resident state",
+  "trees": 100,
+  "nodes": 927052,
+  "host_model_bytes": 37082484,
+  "host_predict_input_bytes": 12549816,
+  "model_sha256": "6cd039b17007ce1a93a4f5a6aae31e7f147ae40c22923b61c4ea034eff8da168",
+  "data_sha256": "fc3772fb139b88f7bed659adbabdd468fc455fb3d7b43eeed0e9b700d3e3d51e",
+  "binding_sha256": "280eea9616a58f5ab4a11767159af76b2586378ab14e1ce85801d63f7147fb18",
+  "source_sha256": {
+    "/root/mojolearn/bench/speed/forest_inference_ab.py": "b518fec59d31fc849649f1020922b2d5937e9622b5670edbb58556c9502a8f35",
+    "/root/mojolearn/bench/speed/forest_speed_arm.py": "132244ebcd85a44cbcc015125fabf1f6b60eefa5d311303da23f136ba8881c42",
+    "/root/mojolearn/tools/speed_gbdt_arm.py": "6be6436d95ecbb0e260d1d0c021a3313193b4cc007635fe81aaca30ab41e66a3",
+    "core/forest_inference.mojo": "d44b606e8f8d26810470f8556fb3980014bb9c78178e8509971acc672ca819b2",
+    "core/forest_inference_model.mojo": "a7cd8abee517bc1a094f6a9507df70c688a3ca9c146742399e3f71baaf24f0bb",
+    "bindings/forest_inference_binding.mojo": "13db00d5b52d7e659bb37818dea8518ba47df36dc91abe43c20b28b7141c268e",
+    "bindings/_mojolearn_rf.mojo": "a7cc5f9331a6d8f862c837c6aad578a22ef2647c662e2f60fdfc7b9593985407",
+    "bindings/_mojolearn_trees.mojo": "49c9b46204335d28b1452b410676b73fc6df181aa3daa7d2b9440746176a4009",
+    "python/mojolearn/_forest_protocol.py": "9d2f5ed9d17e9611beb1e110da0255ff0b22a887b74f95112386ab76c7064507",
+    "python/mojolearn/randomforest.py": "12d44982cb6153b30c263ff592d16785a8aedd4594fe07c4d26f80de03ce1373",
+    "python/mojolearn/extratrees.py": "bb4b450a1e978a85741653f3d3468c305dfff59482f8bf62ac863dc9f6dea15a"
+  },
+  "source_commit": null,
+  "preparation_fit_ms": 6857.478292658925,
+  "rtol": 2e-06,
+  "atol": 2e-06,
+  "contract": "primary public calls include host packing, native staging/transfers and host output; fit excluded; same MojoLearn forest, transient public dispatch overridden to stateless GPU ABI; resident/transient groves must match bits; optional sequential reference may differ in association; optional cuML context has a separately trained cached GPU model",
+  "stages_contract": "separate instrumented public calls, no kernel-only timing; dispatch includes cache lookup, native validation, allocation, transfer, traversal and output; ET input checking is included in Python remainder",
+  "memory_contract": "reported byte counts are host arrays, not peak device/host memory; collect telemetry separately",
+  "summary": {
+    "parallel_groves_transient": {
+      "samples_ms": [
+        38.59718330204487,
+        33.998092636466026,
+        32.88455121219158,
+        41.27969034016132,
+        42.31139272451401,
+        33.07389281690121
+      ],
+      "median_ms": 36.29763796925545,
+      "spread": 1.2866647457492906,
+      "stable": false
+    },
+    "parallel_groves_resident": {
+      "samples_ms": [
+        6.654543802142143,
+        6.42496719956398,
+        74.47490841150284,
+        7.122533395886421,
+        6.342878565192223,
+        6.548821926116943
+      ],
+      "median_ms": 6.601682864129543,
+      "spread": 11.74149995874087,
+      "stable": false
+    },
+    "parallel_groves_borrowed": {
+      "samples_ms": [
+        3.577813506126404,
+        3.4357868134975433,
+        3.715524449944496,
+        3.5417526960372925,
+        3.372998908162117,
+        3.512101247906685
+      ],
+      "median_ms": 3.5269269719719887,
+      "spread": 1.1015492596079774,
+      "stable": false
+    }
+  },
+  "timing_stable": false,
+  "repeated_engine_hashes": {
+    "parallel_groves_transient": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2",
+    "parallel_groves_resident": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2",
+    "parallel_groves_borrowed": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+  }
+}

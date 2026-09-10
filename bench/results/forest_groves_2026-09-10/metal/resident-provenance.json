@@ -1,0 +1,24 @@
+{
+  "source_sha256": {
+    "core/forest_inference_model.mojo": "c736697139b97899b1b54ae5b5286f1fd29874b4dcb026c37c6d2469ca515c8b",
+    "core/forest_inference.mojo": "d44b606e8f8d26810470f8556fb3980014bb9c78178e8509971acc672ca819b2",
+    "bindings/forest_inference_binding.mojo": "38878253f567b3f7cf0a15b86d9d7dbd61b972da2aa0dae844365a21b690dc96",
+    "bindings/_mojolearn_rf.mojo": "f18b47d3e4a2bbfef045852bd50281cbfeb8c97bdc5c5a212613ac8b6ccc8646",
+    "bindings/_mojolearn_trees.mojo": "369f23a930fa37535a018e2b060216321cb51e74a144522cb776cb13b41d3de2",
+    "checks/forest_inference_model.mojo": "5f0a5ad12c9c2806ddb3a5ed11104705b2168fa3b84c4d1e0649f4f1a9099c8c"
+  },
+  "binary_sha256": {
+    "python/mojolearn/_mojolearn_rf.so": "5167c9610d5ea70616b6dce71ba423c5766d22d541da33866959e83ec5cc4df4",
+    "python/mojolearn/_mojolearn_trees.so": "ff01393849005b5e1f75297f1ce95edc658bfb0c3be7991fd4912889a92c9dbd",
+    "/tmp/resident_model_check_final": "0f5608ad64e4bccfebb0342f5a4aaed7d0cbdf506bcee9c3e6e4173b75b584bd"
+  },
+  "toolchain": "Mojo 1.0.0 (ed45d567)",
+  "bindings_defines": [
+    "MOJOLEARN_FOREST_VECTOR_GROVES=1",
+    "numeric_mode=fast"
+  ],
+  "native_check_defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+  ],
+  "scope": "Metal native lifecycle and FAST binding compilation; public gate owned by root; no NVIDIA resident validation in this record"
+}
