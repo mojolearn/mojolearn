@@ -52,8 +52,17 @@ calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast
+from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for
+from neighbors.checks.zero_fma_boundary import repair_zero_fma
 
-from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_mul_add,
+    identical_sqrt,
+)
 
 
 comptime PINNED_TILE_TPB = 256
@@ -140,6 +149,31 @@ comptime RT_COLS = 4
 comptime RT_TPB = 128
 comptime RT_TILE_COLS = RT_TPB * RT_COLS
 
+@always_inline
+def _rt_load(x: Float32) -> Float32:
+    return ftz(x)
+
+
+@always_inline
+def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """Round the FMA before flushing its output; operands are already flushed.
+
+    NVIDIA fma.rn.ftz.f32 is NOT equivalent at the smallest-normal rounding
+    boundary: 0x3f7fffff * 0x00800000 + 0 returns zero there, while the
+    required rounded FMA is 0x00800000. Keep the software FTZ seam.
+    """
+    var result = ftz(identical_mul_add(a, b, acc))
+    comptime if knn_distance_zero_fma_repair_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
+        if (bitcast[DType.uint32](result) & 0x7fffffff) == 0:
+            # Normal Float32 accumulators are multiples of 2**-149. If the
+            # product's lowest possible bit is also at least 2**-149, no
+            # exact subnormal result can round up to the smallest normal.
+            var a_exp = bitcast[DType.uint32](a) & 0x7f800000
+            var b_exp = bitcast[DType.uint32](b) & 0x7f800000
+            if a_exp + b_exp < UInt32(151 << 23):
+                return repair_zero_fma(a, b, acc, result)
+    return result
+
 
 def pinned_distance_register_tile_kernel(
     z: MutPointer[Float32, MutAnyOrigin],
@@ -181,13 +215,11 @@ def pinned_distance_register_tile_kernel(
     for f in range(d):
         var yv = SIMD[DType.float32, RT_COLS](0.0)
         comptime for c in range(RT_COLS):
-            yv[c] = ftz(yt.unsafe_load(f * y_stride + Int(cols_idx[c])))
+            yv[c] = _rt_load(yt.unsafe_load(f * y_stride + Int(cols_idx[c])))
         comptime for r in range(RT_ROWS):
-            var qv = ftz(q.unsafe_load(Int(rows_idx[r]) * d + f))
+            var qv = _rt_load(q.unsafe_load(Int(rows_idx[r]) * d + f))
             comptime for c in range(RT_COLS):
-                acc[r * RT_COLS + c] = ftz(
-                    identical_mul_add(qv, yv[c], acc[r * RT_COLS + c])
-                )
+                acc[r * RT_COLS + c] = _rt_step(qv, yv[c], acc[r * RT_COLS + c])
 
     comptime for r in range(RT_ROWS):
         var row = row0 + r

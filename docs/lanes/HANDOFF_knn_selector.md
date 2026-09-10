@@ -1,11 +1,11 @@
 # kNN selector lane — September 9, 2026 continuation
 
 This supersedes the earlier unfinished selector handoff. Final safe source
-is `729ffa55`; the root integrated earlier selector commits and receives the
-hardware-FTZ removal separately. Keep the root GEMM/attention matrix hunks.
+is `28273628` with strict actual-arm gate `fa3a1cf7`; NVIDIA prices were
+measured at `729ffa55` and the subsequent repair changes only Apple dispatch. Keep the root GEMM/attention matrix hunks.
 
 See `bench/results/knn/2026-09-09-selector-resume/README.md` for provenance,
-full evidence map, exact prices, and the important Apple boundary limitation.
+full evidence map, exact prices, and the measured cost of the Apple repair.
 
 Accepted: butterfly selection, eight-load scan with ordered insertion,
 NVIDIA constant-k=10/15 specialization. Rejected and removed: partitioned
@@ -31,15 +31,29 @@ identity4/4, knn_main26, six kNN card stages, UMAP186/690 stage cells,
 20k embedding12938647291752780014, and default/notile400k/1000/k15.
 Root owns compressed Apple evidence from `/tmp/mojolearn-knn-final-apple`.
 
-NEW Apple boundary gate FAILS (preexisting FMA issue):
-`neighbors/checks/knn_distance_fma_boundary_check.mojo` row0, got0 versus
-expected8388608. Do not describe all correctness as green. NVIDIA safe
-software arithmetic passes this boundary. Final safe NVIDIA four-arm layout,
-5440 adversarial cells in each arm, identity/main/card, and UMAP stage/20k
-gates also pass. The layout ran separately after a restart correctly refused
-to overwrite an interrupted evidence directory; this orchestration failure
-is preserved alongside the successful fresh `layout-safe` evidence. Any exact Apple repair needs a
-fresh boundary/adversarial oracle gate before adoption; scope to kNN only.
+The new Apple boundary gate initially FAILED (preexisting FMA issue):
+row0 gave0 versus expected8388608. The original failure is preserved.
+The accepted Apple-only cold integer repair now passes the hardcoded8 and
+strict396584-triple oracle. The strict production oracle also passed on H100
+before that root-owned rental was terminated. NVIDIA arithmetic is unchanged.
+
+Apple cost is explicit:400k/1000/k15, three timed rounds, request median
+183.256 ms repair-disabled versus254.752 ms default (+39.0%); device168.122
+versus238.294 (+41.7%). The original inline repair was rejected at13.3x cost.
+The cold helper uses @no_inline and skips repair when ae+be>=151 proves the
+exact product/accumulator lattice cannot round a subnormal up to minnormal.
+The default retains this correctness repair. The opt-out flag is
+MOJOLEARN_KNN_IDENTICAL_NO_ZERO_FMA_REPAIR, for reproducing the old price arm.
+
+Final safe NVIDIA four-arm layout,5440 adversarial cells in each arm,
+identity/main/card, and UMAP stage/20k gates pass. Layout ran separately after
+a restart correctly refused to overwrite an interrupted evidence directory;
+that orchestration failure is preserved alongside the successful fresh
+`layout-safe` results. Root's final cold-helper Apple four-arm raw
+hashes,24 distance fixtures, identity4/main26/card6, and UMAP186/690+20k
+bundle all pass. Root owns the compressed archive under
+`bench/results/knn/2026-09-09-selector-final/apple-cold-final` and the
+three-round price under `apple-cold-price`.
 
 ## Reproduce
 
@@ -63,5 +77,10 @@ python tools/identity_trace_diff.py bench/results/e1/2026-08-28_122543-runpod-nv
 
 ## RUN OWED
 
-Apple exact-boundary fix and gate remain owed. Ordinary Apple gates above
-were run by root, not by this lane. No FAST, DETERMINISTIC, or tree work.
+No kNN lane gate remains owed. Final Apple ordinary fixtures, strict
+boundary/oracle and price passed. Other Apple FMA consumers outside this
+kNN register seam remain open and were not changed. This lane ran no Mac
+builds/tests; root ran them. No FAST, DETERMINISTIC, or tree work.
+
+All lane evidence was fetched. Own L40S almtzr6iqth0k9 was terminated and
+verified DELETE204 / GET404 on September9 at22:21 EDT. No kNN rental remains.

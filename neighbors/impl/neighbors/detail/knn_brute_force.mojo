@@ -68,6 +68,7 @@ merge (`knn_merge_parts`). See `neighbors/NOT_IMPLEMENTED.tsv`.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
+from std.time import perf_counter_ns
 
 from core.expand_distances import expand_distances_kernel
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
@@ -134,6 +135,14 @@ comptime KNN_REGISTER_TILE_IDENTICAL = knn_distance_register_tile_for[
 comptime KNN_INDEX_TILE_IDENTICAL = knn_index_tile_columns_for[
     TARGET_COLUMN, IDENTICAL_BUILD
 ]()
+# PER-LAUNCH-CLASS HOST TIMERS, 2026-09-09 (lane/knn-selector). Off unless
+# `-D MOJOLEARN_KNN_PHASE_TIMERS=1`: then the tiled arm synchronizes after
+# every launch class (transpose, distance tile, selection, partial merge)
+# and prints one `KNN_PHASE_TIMERS` line per request with the milliseconds
+# and launch count of each class. The synchronizations serialize the queue,
+# so a timed request is slower than an untimed one; the split, not the sum,
+# is the measurement. Never on in a shipped build.
+comptime KNN_PHASE_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
 
 
 def identical_index_tile(n_index: Int) -> Int:
@@ -411,12 +420,19 @@ def tiled_brute_force_knn(
         if (resolved == DIST_L2_EXPANDED or resolved == DIST_L2_SQRT_EXPANDED) and n_queries > 0 and n_index > 0 and n_features > 0 and n_index <= 2147483647 and n_features <= 2147483647:
             var transposed = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
             try:
+                var t_transpose = perf_counter_ns()
                 ctx.enqueue_function[transpose_kernel](
                     transposed.unsafe_ptr(), index.unsafe_ptr(), Int32(n_index), Int32(n_features),
                     grid_dim=((n_features + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
                               min((n_index + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ), 1),
                     block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
                 )
+                comptime if KNN_PHASE_TIMERS:
+                    ctx.synchronize()
+                    print(
+                        "KNN_PHASE_TIMERS", "transpose_ms",
+                        Float64(perf_counter_ns() - t_transpose) / 1000000.0,
+                    )
                 var transposed_ptr = Optional(transposed.unsafe_ptr())
                 _tiled_brute_force_knn_impl(
                     ctx, queries, query_norm, index, index_norm, dist_tile, buf_val, buf_idx,
@@ -535,6 +551,16 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     var part_dist = ctx.enqueue_create_buffer[DType.float32](part_cells)
     var part_idx = ctx.enqueue_create_buffer[DType.uint32](part_cells)
 
+    var ns_distance = 0
+    var ns_select = 0
+    var ns_merge = 0
+    var n_distance = 0
+    var n_select = 0
+    var n_merge = 0
+    var t_class = 0
+    comptime if KNN_PHASE_TIMERS:
+        ctx.synchronize()
+
     var q = 0
     while q < n_queries:
         var rows = min(query_tile, n_queries - q)
@@ -560,6 +586,8 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                 sel_dist = part_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
                 sel_idx = part_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
+            comptime if KNN_PHASE_TIMERS:
+                t_class = perf_counter_ns()
             if not metric_uses_norms(mtr):
                 # THEIR `else` AT `:224`: the op did the whole cell, there is
                 # no epilogue and no norm. One kernel, both modes.
@@ -715,6 +743,11 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                         block_dim=(256, 1, 1),
                     )
 
+            comptime if KNN_PHASE_TIMERS:
+                ctx.synchronize()
+                ns_distance += perf_counter_ns() - t_class
+                n_distance += 1
+                t_class = perf_counter_ns()
             # THE SELECTION. Three implementations, and which one runs is a
             # parameter or a kernel-matrix row, never a preference.
             #
@@ -816,6 +849,11 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                                 grid_dim=(rows, 1, 1),
                                 block_dim=(SELECT_BLOCK, 1, 1),
                             )
+                    comptime if KNN_PHASE_TIMERS:
+                        ctx.synchronize()
+                        ns_select += perf_counter_ns() - t_class
+                        n_select += 1
+                        t_class = perf_counter_ns()
                     if not first:
                         partial_topk_merge_launch(
                             ctx,
@@ -829,6 +867,10 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                             part_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
                             rows, k, c, True,
                         )
+                        comptime if KNN_PHASE_TIMERS:
+                            ctx.synchronize()
+                            ns_merge += perf_counter_ns() - t_class
+                            n_merge += 1
                 else:
                     # DEVIATION 1922 (kernel-matrix row `knn_warpsort_select_for`):
                     # RAFT's OWN `select_k` dispatch sends `2 < k <= 256` to the
@@ -884,6 +926,16 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
             c += cols
         q += rows
     ctx.synchronize()
+    comptime if KNN_PHASE_TIMERS:
+        print(
+            "KNN_PHASE_TIMERS", "distance_ms", Float64(ns_distance) / 1000000.0,
+            "select_ms", Float64(ns_select) / 1000000.0,
+            "merge_ms", Float64(ns_merge) / 1000000.0,
+            "distance_launches", n_distance, "select_launches", n_select,
+            "merge_launches", n_merge, "query_tile", query_tile,
+            "index_tile", index_tile, "n_queries", n_queries, "n_index", n_index,
+            "k", k,
+        )
     _ = part_dist^
     _ = part_idx^
 

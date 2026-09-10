@@ -34,6 +34,7 @@ from neighbors.impl.neighbors.detail.knn_brute_force import (
     EXPERIMENTAL_SMALLK_IDENTICAL,
     KNN_INDEX_TILE_IDENTICAL,
     KNN_METHOD_AUTO,
+    KNN_PHASE_TIMERS,
     KNN_REGISTER_TILE_IDENTICAL,
     METRIC_FROM_IS_SQRT,
     brute_force_knn_impl,
@@ -161,6 +162,15 @@ def main() raises:
             var begin = perf_counter_ns()
             compute_norms_for_metric(ctx, d_index, d_index_norm, n_index, d, mtr)
             compute_norms_for_metric(ctx, d_queries, d_query_norm, n_queries, d, mtr)
+            comptime if KNN_PHASE_TIMERS:
+                # `-D MOJOLEARN_KNN_PHASE_TIMERS=1`: the norms are the one
+                # launch class outside `tiled_brute_force_knn`, so they are
+                # timed here; the tiled arm prints the other classes itself.
+                ctx.synchronize()
+                print(
+                    "KNN_PHASE_TIMERS", "norms_ms",
+                    Float64(perf_counter_ns() - begin) / 1000000.0,
+                )
             brute_force_knn_impl(
                 ctx, d_queries, d_query_norm, d_index, d_index_norm, d_dist_tile,
                 d_buf_val, d_buf_idx, d_out_dist, d_out_idx, d_out_i32,

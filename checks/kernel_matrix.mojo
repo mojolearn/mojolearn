@@ -865,6 +865,31 @@ def knn_distance_register_tile_for[column: Int, identical: Bool]() -> Bool:
     return knn_transposed_index_for[column, identical]()
 
 
+def knn_selector_specialize_common_for[column: Int, identical: Bool]() -> Bool:
+    """Compile-time k=10/15 removes dynamic insertion guards and threshold
+    selection. NVIDIA 400k/4000q/k10: selector 20.3 -> 9.1 ms on the L40S
+    (2026-09-09 selector resume). The same integer composite-key scan and
+    block minimum are retained. Other columns can force the specialization
+    for qualification; the generic capacity buckets remain the A/B arm.
+    """
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_GENERIC_K"]():
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SPECIALIZE_COMMON"]():
+        return True
+    return column == COLUMN_NVIDIA
+
+
+def knn_selector_shuffle_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (2026-09-09, lane/knn-selector): whether the IDENTICAL small-k selector (`select_smallk_identical_candidate.mojo::smallk_bucket_kernel`) takes each rank's block minimum through a lane-group butterfly (`shuffle_xor` over `column_lane_width` lanes, one shared slot per lane group, ONE barrier per rank, double-buffered slots) instead of the eight-level shared-memory tree (eleven barriers per rank). The reduced value is a UInt64 composite key and the fold is an integer minimum, which is associative, commutative and idempotent, so the winner is the same key under any tree and the bits are equal by construction; the gate is the four-arm dispatch check. Every column with a fixed lane width (`column_lane_width_is_fixed`) takes the butterfly; the Qualcomm and Intel columns, whose lane width the vendor's compiler chooses per kernel, keep the tree. `-D MOJOLEARN_KNN_IDENTICAL_TREE_SELECT=1` forces the tree on every column."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_TREE_SELECT"]():
+        return False
+    return column_lane_width_is_fixed(column)
+
+
 def umap_device_optimizer_for[column: Int, identical: Bool]() -> Bool:
     """ROUTING row (2026-09-09, lane/umap-optimizer): whether the IDENTICAL UMAP layout optimizer runs on the device (`umap/optimizer_identical_device.mojo`: one thread per vertex, one epoch snapshot, each vertex's update a fixed-order fold over its CSR row, negatives from Philox keyed by (seed, epoch, edge, slot), no atomics, no launch-geometry dependence) instead of the serial host loop (`umap/optimizer.mojo::optimize_layout_identical`, `umap/sparse_optimizer.mojo::optimize_sparse_layout_identical`). The two produce DIFFERENT bits (Jacobi versus Gauss-Seidel order); the device path is the IDENTICAL contract on every column and is gated against itself across launch widths and GPUs, not against the host loop. `-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1` restores the host loop on every column (the pre-2026-09-09 cards). FAST and DETERMINISTIC never enter this row."""
     comptime if not identical:
@@ -896,3 +921,16 @@ def gemm_wide_split_for[column: Int]() -> Bool:
     every column's all-plan correctness gate still exercises the new tile.
     """
     return column == COLUMN_NVIDIA
+
+
+def knn_distance_zero_fma_repair_for[column: Int, identical: Bool]() -> Bool:
+    """Repair Apple's pre-round FMA underflow only at the kNN register seam.
+
+    The integer slow path runs only for a zero result and restores a rounded
+    smallest-normal result when required. NVIDIA already uses round-then-FTZ.
+    The exact integer oracle checks 396584 actual/simulated-underflow triples.
+    The disable flag retains an explicit Apple before/after performance arm.
+    """
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_ZERO_FMA_REPAIR"]():
+        return False
+    return identical and column == COLUMN_APPLE

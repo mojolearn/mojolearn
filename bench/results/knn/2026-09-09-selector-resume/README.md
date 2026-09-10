@@ -1,6 +1,7 @@
 # IDENTICAL kNN selector, September 9 continuation
 
-Final safe source: `729ffa55` on `lane/knn-selector`. No FAST, DETERMINISTIC,
+Safe NVIDIA price source: `729ffa55` on `lane/knn-selector`. Final Apple
+repair source: `28273628` (with strict actual-arm gate `fa3a1cf7`). No FAST, DETERMINISTIC,
 or tree code changes. Final NVIDIA code retains the software round-then-FTZ
 FMA seam. Hardware FTZ FMA timings are rejected evidence, never final prices.
 
@@ -52,7 +53,7 @@ does not match the pinned opponent tuple. CUDA 13 bundled ptxas failed on
 the older driver; system `/usr/local/cuda/bin/ptxas` was used at BOTH build
 and runtime. Runtime-only override is insufficient for already-built images.
 
-## Numeric rejection and Apple limitation
+## Numeric rejection and scoped Apple repair
 
 The proposed NVIDIA hardware `fma.rn.ftz.f32` optimization was rejected after
 an adversarial Mamba gate found `0x3f7fffff * 0x00800000 + 0` gives zero,
@@ -61,12 +62,40 @@ from kNN production and its matrix row in `729ffa55`; all final prices above
 were rebuilt without it. Other usual fixtures passing is not evidence that
 this arithmetic substitution was sound.
 
-The new independent eight-triple distance boundary gate also exposes a
-PREEXISTING Apple Metal FMA issue: the old software seam returns zero on
-that same triple. The ordinary Apple fixtures pass, but the new boundary
-gate does not. An exact kNN-only integer correction is under investigation;
-there is no claim of universal Apple/NVIDIA FMA equality. No global numerics
-or tree arithmetic was changed to mask this finding.
+The new independent eight-triple distance boundary gate also exposed a
+PREEXISTING Apple Metal FMA issue: the old software seam returned zero on
+that same triple. The initial failure is retained in root's Apple evidence.
+
+The accepted repair is limited to Apple's IDENTICAL kNN register-distance
+`_rt_step`. It uses an exact integer comparison only for zero results whose
+operand exponents permit a rounding-boundary error. The UInt64 helper is
+`@no_inline` to contain register pressure. The strict production FMA oracle
+passed396,584 triples on Apple and H100; the final cold guard also passed the
+strict Apple oracle, the hardcoded8 cases, and the request/reference hash.
+NVIDIA production arithmetic and all NVIDIA prices above are unchanged.
+
+This correctness repair has a measured Apple cost. Same Mac, 400k index,
+1000 queries, 32 features, k15, three timed rounds per arm:
+
+| Apple request/device | Repair disabled ms | Accepted cold repair ms |
+|---|---:|---:|
+| request median | 183.256 | 254.752 |
+| device median | 168.122 | 238.294 |
+
+Request latency increases39.0% (device41.7%). This is accepted explicitly to
+honor the FMA rounding contract. The earlier fully inlined version was
+rejected:183.970 →2448.000 ms request (13.3x),168.016 →2417.113 ms device.
+`MOJOLEARN_KNN_IDENTICAL_NO_ZERO_FMA_REPAIR` reproduces the old Apple arm for
+A/B measurement; default Apple uses the correct cold repair.
+
+See `zero-fma-prototype/README.md` for the interval derivation and generated
+fixture hash. This is a scoped repair, not a claim that global numerics or
+all other Apple FMA consumers have been repaired. No tree arithmetic changed.
+Final cold-helper Apple gates also pass: four143628-cell raw hashes,
+24 distance fixtures, identity4/main26/card6, UMAP186/690 cells and20k
+embedding12938647291752780014. Root archives these and the cold-repair price
+under `bench/results/knn/2026-09-09-selector-final/apple-cold-final` and
+`apple-cold-price`. No kNN lane gate remains owed.
 
 ## Evidence directories
 

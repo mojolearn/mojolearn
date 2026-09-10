@@ -25,8 +25,14 @@ run() {
 }
 : > "$OUT/status.tsv"
 arms=(baseline selector transpose both)
+drivers=(check price)
+if [[ ${MOJOLEARN_KNN_CHECKS_ONLY:-0} == 1 ]]; then drivers=(check); fi
 for arm in "${arms[@]}"; do
     flags=(-D MOJOLEARN_NUMERIC_IDENTICAL=1)
+    if [[ -n ${MOJOLEARN_KNN_DEFINES:-} ]]; then
+        read -r -a extra_flags <<< "$MOJOLEARN_KNN_DEFINES"
+        flags+=("${extra_flags[@]}")
+    fi
     # Since 2026-09-09 the two rows are kernel-matrix defaults (on for
     # NVIDIA/AMD, off for Apple), so every arm names BOTH rows explicitly
     # and the same four binaries mean the same thing on every column.
@@ -38,20 +44,21 @@ for arm in "${arms[@]}"; do
         transpose|both) flags+=(-D MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL=1);;
         *) flags+=(-D MOJOLEARN_KNN_IDENTICAL_LEGACY_LAYOUT=1);;
     esac
-    for driver in check price; do
+    for driver in "${drivers[@]}"; do
         run "build-$driver-$arm" pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-4}" -I . \
             "${flags[@]}" "bench/knn_layout_dispatch_$driver.mojo" -o "$OUT/$driver-$arm"
     done
     run "check-$arm" "$OUT/check-$arm"
 done
 sha256sum "$OUT"/check-baseline "$OUT"/check-selector "$OUT"/check-transpose "$OUT"/check-both \
-    "$OUT"/price-baseline "$OUT"/price-selector "$OUT"/price-transpose "$OUT"/price-both \
     bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo \
     bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo \
     bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo \
     neighbors/impl/neighbors/detail/knn_brute_force.mojo \
     neighbors/checks/transposed_index_distance_candidate.mojo \
     neighbors/checks/select_smallk_identical_candidate.mojo > "$OUT/SHA256SUMS"
+if [[ ${MOJOLEARN_KNN_CHECKS_ONLY:-0} != 1 ]]; then
+sha256sum "$OUT"/price-baseline "$OUT"/price-selector "$OUT"/price-transpose "$OUT"/price-both >> "$OUT/SHA256SUMS"
 for queries in 32 128 1000; do
     for round in 0 1 2 3 4 5 6 7 8; do
         for offset in 0 1 2 3; do
@@ -60,5 +67,8 @@ for queries in 32 128 1000; do
         done
     done
 done
-for arm in "${arms[@]}"; do rm "$OUT/check-$arm" "$OUT/price-$arm"; done
+fi
+for arm in "${arms[@]}"; do
+    for driver in "${drivers[@]}"; do rm "$OUT/$driver-$arm"; done
+done
 printf 'COMPLETE\n' > "$OUT/completion.txt"

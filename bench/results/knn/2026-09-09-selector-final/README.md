@@ -1,0 +1,9 @@
+# Final integrated kNN checks
+
+NVIDIA selector changes reduce the H100 400k-index/4000-query/k10 request from66.536 to40.665ms. The stored matching-model/driver cuML reference is10.225ms:6.51x→3.98x. Final safe full-pipeline L40S UMAP1M elapsed is57.034→48.377seconds, with identical embedding fingerprint; one cold round per arm. Detailed NVIDIA evidence is in ../2026-09-09-selector-resume/.
+
+The Apple integer rounding repair fixes the literal smallest-normal regression while preserving the ordinary outputs. The initially inlined repair passed all tests but cost2448ms versus183.970ms and was rejected. The retained helper is out of line and called only when a zero result's operand exponents can require repair. It costs254.752 versus183.256ms (+39.0% request, three rounds); NVIDIA arithmetic and timing are unchanged by this Apple-only dispatch. This cost is retained explicitly for correct IDENTICAL results.
+
+Final validation: production8-case boundary and396584 independent integer-oracle triples passed; four143628-cell layout hashes equal the stored SHA; 24distance fixtures,4identity checks,26main checks,6-stage reference card,186/690UMAP stage cells and20k embedding fingerprint all passed. The final cold-helper full gates are in apple-cold-final/, exact-oracle and pricing logs in apple-cold-price/. The strict production396584 oracle also passed on H100 (h100/knn-final-boundary.log). Its later cold helper dispatch applies only to Apple. Earlier baseline failure and rejected inline implementation are retained in apple/ and apple-repair/.
+
+The generated sixteen-megabyte oracle fixture is deliberately excluded. Regenerate it with `python3 tools/knn_zero_fma_oracle.py`; source and fixture digest are retained in the lane evidence. Other Apple FMA consumers are outside this scoped repair, so this is not a universal numerical audit closure. All owned rentals were terminated and absence verified.

@@ -1,0 +1,4 @@
+DISTANCE_FMA_BOUNDARY_FAIL 0 0 8388608
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: distance FMA violated round-then-flush contract
+/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

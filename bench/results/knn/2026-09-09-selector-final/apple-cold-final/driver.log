@@ -1,0 +1,5 @@
+check-baseline.log PASS 143628 49c0f02513c2722db1855acd01d6d02941ccd29f4fb1b27d59a533db6b7350ce
+check-both.log PASS 143628 49c0f02513c2722db1855acd01d6d02941ccd29f4fb1b27d59a533db6b7350ce
+check-selector.log PASS 143628 49c0f02513c2722db1855acd01d6d02941ccd29f4fb1b27d59a533db6b7350ce
+check-transpose.log PASS 143628 49c0f02513c2722db1855acd01d6d02941ccd29f4fb1b27d59a533db6b7350ce
+Final cold-helper kNN Apple gates PASS
