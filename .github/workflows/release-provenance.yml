@@ -102,6 +102,7 @@ jobs:
     # gates but hit upload-artifact's five-minute chunk-progress timeout.
     timeout-minutes: 90
     env:
+      MOJOLEARN_PACKAGE_BYTE_LM: '1'
       ACTIONS_ARTIFACT_UPLOAD_CONCURRENCY: '1'
       ACTIONS_ARTIFACT_UPLOAD_TIMEOUT_MS: '1200000'
     permissions:

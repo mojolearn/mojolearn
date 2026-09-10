@@ -122,7 +122,7 @@ def test_shared_loader_resolves_live_default_and_explicit_mode(monkeypatch):
 
     def load(mode):
         loaded.append(mode)
-        return SimpleNamespace(_mojolearn_metrics=bindings[mode])
+        return SimpleNamespace(mode=mode, _mojolearn_metrics=bindings[mode])
 
     monkeypatch.setattr(_backend, "load_set", load)
     x = np.ones(2, dtype=np.float32)

@@ -76,7 +76,7 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     # fast set fails here rather than on a user's machine.
     okmode=1
     if [ "${MOJOLEARN_PACKAGE_BYTE_LM:-0}" = 1 ]; then
-        # Native availability witness only; no byte-LM model/learning claim.
+        # Availability plus bounded generalized/resident native execution.
         if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=identical \
                 "$tmp/venv/bin/python" - <<'PYBYTE'
 import pathlib, sys
@@ -93,6 +93,10 @@ print('Byte LM IDENTICAL-only native available; numerical training qualification
 PYBYTE
         ); then :; else
             echo "FAIL $py: installed byte LM native availability"; okmode=0
+        fi
+        if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=identical \
+                "$tmp/venv/bin/python" "$here/packaging/language_model_smoke.py"); then :; else
+            echo "FAIL $py: installed generalized/resident language model"; okmode=0
         fi
     fi
     # The same tier list the wheel was built with, so a deliberately two-tier
