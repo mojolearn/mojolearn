@@ -44,6 +44,8 @@ forcing the first `k` levels onto named binary features
 reads as supported.
 """
 
+from std.math import isfinite
+
 from gbdt.options.catboost_options import (
     GROW_DEPTHWISE,
     GROW_LOSSGUIDE,
@@ -103,6 +105,14 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
     against a double and an integer field would quietly change which side of
     a fractional bound a leaf falls on."""
 
+    var min_split_gain: Float64
+    """Optional minimum selected-score improvement. -1 disables the guard.
+
+    A MojoLearn GPU growth control, not a CatBoost option. Units follow the
+    selected score function (including its feature weights and score noise),
+    not an interchangeable XGBoost gamma or loss reduction.
+    """
+
     var random_strength: Float32
     """`RandomStrength`, default 0, already multiplied. Zero is their off
     switch."""
@@ -123,6 +133,7 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
         self.model_size_reg = Float32(0.5)
         self.policy = GROW_SYMMETRIC
         self.min_leaf_size = Float64(1.0)
+        self.min_split_gain = Float64(-1)
         self.random_strength = Float32(0.0)
         self.feature_weights = List[Float32]()
 
@@ -136,6 +147,11 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
         depthwise lane is the first caller that can reach a policy this
         struct does not implement.
         """
+        if (not isfinite(self.min_split_gain)
+            or (self.min_split_gain < 0 and self.min_split_gain != -1)):
+            raise Error("min_split_gain must be -1 (disabled) or finite nonnegative")
+        if self.min_split_gain >= 0 and self.policy == GROW_SYMMETRIC:
+            raise Error("min_split_gain is only supported for Depthwise and Lossguide")
         # SymmetricTree, Depthwise and Lossguide each have a searcher in
         # this directory; `EGrowPolicy::Region` has none and no lane.
         #

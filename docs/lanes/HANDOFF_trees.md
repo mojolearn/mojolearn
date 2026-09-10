@@ -1,5 +1,7 @@
 # Trees lane handoff (branch `lane/trees-identical`, 2026-09-09)
 
+Current scope and persistent project decisions: [TREE_GROWTH_SCOPE.md](TREE_GROWTH_SCOPE.md).
+
 Symmetric GBDT (CatBoost mirror), RF (cuML mirror), ET. Our IDENTICAL arm
 against each opponent's FAST arm on NVIDIA. Wind-down ordered by the
 orchestrator before tasks 4 and 5 were measured on the H100; everything

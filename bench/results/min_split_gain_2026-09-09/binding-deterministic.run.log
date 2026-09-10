@@ -1,0 +1,11 @@
+deterministic Depthwise min_split_gain None leaves 4
+deterministic Depthwise min_split_gain 0.0 leaves 4
+deterministic Depthwise min_split_gain 1.999 leaves 4
+deterministic Depthwise min_split_gain 2.0 leaves 2
+deterministic Depthwise min_split_gain 1024.0 leaves 1
+deterministic Lossguide min_split_gain None leaves 4
+deterministic Lossguide min_split_gain 0.0 leaves 4
+deterministic Lossguide min_split_gain 1.999 leaves 4
+deterministic Lossguide min_split_gain 2.0 leaves 2
+deterministic Lossguide min_split_gain 1024.0 leaves 1
+MIN SPLIT GAIN PUBLIC BINDING GREEN deterministic

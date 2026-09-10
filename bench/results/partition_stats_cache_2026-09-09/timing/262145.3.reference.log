@@ -1,0 +1,18 @@
+numeric_mode IDENTICAL
+incremental False rows 262145
+fingerprint 16681997496708802746
+warmup_ms 270.446
+fingerprint 16681997496708802746
+warmup_ms 264.824
+fingerprint 16681997496708802746
+warmup_ms 263.499
+fingerprint 16681997496708802746
+warmup_ms 266.403
+fingerprint 16681997496708802746
+warmup_ms 263.913
+fingerprint 16681997496708802746
+fit_ms 263.941
+fingerprint 16681997496708802746
+fit_ms 259.91
+fingerprint 16681997496708802746
+fit_ms 259.442

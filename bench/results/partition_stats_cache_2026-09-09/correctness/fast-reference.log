@@ -1,0 +1,61 @@
+numeric_mode FAST
+part_stats_work 1 4096 1 4096
+fingerprint mixed Depthwise 1 6260307467671347892
+part_stats_work 2 4096 1 4096
+fingerprint mixed Lossguide 1 6260307467671347892
+part_stats_work 1 4096 1 4096
+fingerprint mixed Depthwise 4 1329419990773702296
+part_stats_work 2 4096 1 4096
+fingerprint mixed Lossguide 4 13007076652134545432
+part_stats_work 1 4096 1 4096
+fingerprint mixed Depthwise 7 1329419990773702296
+part_stats_work 2 4096 1 4096
+fingerprint mixed Lossguide 7 13633358756748496078
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+fingerprint boosted Depthwise RMSE 0 18401940099965225839
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+fingerprint boosted Depthwise RMSE 1 18401940099965225839
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+fingerprint boosted Depthwise Logloss 0 14834047380314585009
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+part_stats_work 1 4099 1 4099
+fingerprint boosted Depthwise Logloss 1 14834047380314585009
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+fingerprint boosted Lossguide RMSE 0 11324934996739492632
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+fingerprint boosted Lossguide RMSE 1 11324934996739492632
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+fingerprint boosted Lossguide Logloss 0 16826302306445831453
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+part_stats_work 2 4099 1 4099
+fingerprint boosted Lossguide Logloss 1 16826302306445831453

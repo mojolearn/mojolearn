@@ -1,0 +1,4 @@
+PASS identical: 14 model fingerprints; partition row visits 2483868 -> 1025791
+PASS deterministic: 14 model fingerprints; partition row visits 188536 -> 188536
+PASS fast: 14 model fingerprints; partition row visits 188536 -> 188536
+PASS negative control: missing right-child invalidation moves model bits

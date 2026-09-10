@@ -1,0 +1,4 @@
+PASS fast: 72 full comparisons, owned snapshot, invalid bootstrap
+FAST repeated fits median ms 153.567 -> 145.992; 1.052x; preparation excluded
+PASS identical: 72 full comparisons, owned snapshot, invalid bootstrap
+PASS deterministic: 72 full comparisons, owned snapshot, invalid bootstrap

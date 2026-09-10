@@ -1,0 +1,10 @@
+numeric_mode FAST
+ridx True rows 65537 cols 8 depth 6 trees 12 borders 15 loss Logloss
+device Apple M4
+fingerprint 0 10509418320199209404
+fingerprint 1 10509418320199209404
+fit_ms 145.206
+fingerprint 2 10509418320199209404
+fit_ms 145.406
+fingerprint 3 10509418320199209404
+fit_ms 152.916

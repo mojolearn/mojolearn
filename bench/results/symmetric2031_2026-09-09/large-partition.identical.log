@@ -1,0 +1,5 @@
+numeric_mode IDENTICAL device Apple M4
+single_pass_reached False max_leaf_rows 1000003
+PASS stable partition pattern 0
+PASS stable partition pattern 1
+PASS stable partition pattern 2

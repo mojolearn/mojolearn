@@ -518,6 +518,7 @@ def train(
     grow_policy: String = String("SymmetricTree"),
     max_leaves: Int = -1,
     min_data_in_leaf: Int = 1,
+    min_split_gain: Float64 = -1.0,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -688,6 +689,10 @@ def train(
     """
     # ---- the grow policy, resolved and refused BY NAME where theirs is ----
     var policy = grow_policy_from_name(grow_policy)
+    if not isfinite(min_split_gain) or (min_split_gain < 0 and min_split_gain != -1):
+        raise Error("min_split_gain must be -1 (disabled) or finite and nonnegative")
+    if policy == GROW_SYMMETRIC and min_split_gain >= 0:
+        raise Error("min_split_gain requires Depthwise or Lossguide")
     if policy == GROW_SYMMETRIC and min_data_in_leaf != 1:
         raise Error(
             "min_data_in_leaf=" + String(min_data_in_leaf) + " does nothing"
@@ -1036,316 +1041,14 @@ def train(
     for k in range(len(dep_col_index)):
         dep_ordinal_of_column[dep_col_index[k]] = k
 
-    var borders = List[List[Float32]]()
-    var fold_counts = List[Int]()
-    # their ComputeBorders' device RadixSort, scratch hoisted once for
-    # every float column below (see DeviceFloatSorter's docstring for the
-    # churn crash that makes the hoist load-bearing)
-    # THEIR CPU QUANTIZER'S SUBSAMPLE, adopted for the user-facing path.
-    #
-    # CORRECTED 2026-08-22, DEVIATION 135. The three sentences that stood
-    # here cited `GetSampleSizeForBorderSelectionType`
-    # (`private/libs/quantization/utils.h:132-136`) and `SampleArray`
-    # (`utils.cpp:14-24`) -- a REAL pair of functions ON THE WRONG CODE
-    # PATH. `SampleArray` is reached from `NCB::BuildBorders`, which in
-    # this tree is called only by a unit test and by the GPU CTR border
-    # builder. The TRAINING pipeline goes
-    # `GetSubsetForBuildBorders` (`libs/data/quantization.cpp:118-141`)
-    # -> `GetArraySubsetForBuildBorders` (`utils.cpp:25-51`), and it
-    # differs from that helper in all three of the ways that matter:
-    #
-    #   size          `TQuantizationOptions::MaxSubsetSizeForBuild
-    #                 BordersAlgorithms = 200000` (`libs/data/
-    #                 quantization.h:37`), not the helper's 100000
-    #                 DEFAULT ARGUMENT, which the pipeline overrides.
-    #   replacement   `SampleIndices` (`libs/helpers/sample.h:20-43`),
-    #                 "Sample k element indices without repetition".
-    #                 `SampleArray` draws WITH replacement.
-    #   sharing       ONE subset for the whole dataset, built once at
-    #                 `quantization.cpp:127` and reused by every float
-    #                 column. Ours drew a fresh sample per feature.
-    #
-    # The old draw was therefore a different estimator of the border set
-    # than CatBoost's on any pool above the cap: 100k with replacement
-    # covers ~63.2% of distinct rows, 200k without replacement covers
-    # exactly 200k. `border_build_max_samples = 0` still restores the
-    # full-data GPU-pipeline behavior (`ComputeBorders`,
-    # `gpu_binarization_helpers.cpp:10-16`, which full-sorts).
-    #
-    # NOT REACHED BY `bench/interleaved`, which quantizes with CATBOOST'S
-    # OWN quantizer and hands both arms the same pre-binned uint8
-    # (`tools/interleaved_prep.py:1-10`). This is the user-facing
-    # `train()`/estimator path and the end-to-end arm, not the
-    # standing benchmark numbers.
-    var border_sample_n = n_rows
-    if border_build_max_samples > 0 and border_build_max_samples < n_rows:
-        border_sample_n = border_build_max_samples
-
-    # phase-A/B scratch: which columns are float, and one flat buffer
-    # holding every sorted float column back to back
-    var n_float_prescan = 0
-    var float_idx = List[Int]()
-    for f in range(n_columns):
-        if not column_one_hot[f] and column_ctr_grid[f] < 0:
-            float_idx.append(f)
-            n_float_prescan += 1
-    var float_cols = List[Int]()
-    # only the full-data path stages sorted columns here; the sampled path's
-    # phase B reads `predrawn` directly
-    var sorted_flat = List[Float32]()
-    if border_sample_n == n_rows:
-        sorted_flat.resize(n_float_prescan * border_sample_n, Float32(0.0))
-
-    # PHASE 0, sampling only. ONE index subset for the whole dataset,
-    # drawn WITHOUT REPLACEMENT, then every float column gathers through
-    # it -- their `GetSubsetForBuildBorders`
-    # (`libs/data/quantization.cpp:118-141`), which builds
-    # `subsetIndexing` ONCE and hands the same one to every feature. The
-    # per-column GATHER stays parallel (it is `n_float * 200k` loads);
-    # only the DRAW is serial, because it is one draw now and not one
-    # per feature. Per-slot error flags re-raised after the join.
-    var predrawn = List[Float32]()
-    if border_sample_n < n_rows and n_float_prescan > 0:
-        predrawn.resize(n_float_prescan * border_sample_n, Float32(0.0))
-        var pd = predrawn.unsafe_ptr()
-        var fi = float_idx.unsafe_ptr()
-        var colp = columns.unsafe_ptr()
-        var sn = border_sample_n
-        var nrr = n_rows
-        var sd0 = random_seed
-        var flags = List[Int]()
-        flags.resize(n_float_prescan, 0)
-        var flg = flags.unsafe_ptr()
-
-        var sample_idx = sample_indices_for_borders(nrr, sn, sd0)
-        var sidx = sample_idx.unsafe_ptr()
-
-        def _draw_task(
-            k: Int
-        ) {imm pd, imm fi, imm colp, imm sn, imm nrr, imm sidx, imm flg}:
-            var fcol = fi.unsafe_load(k)
-            var src = (colp + fcol)[].unsafe_ptr()
-            for i in range(sn):
-                pd.unsafe_store(
-                    k * sn + i,
-                    src.unsafe_load(Int(sidx.unsafe_load(i))),
-                )
-            var has_nan = False
-            for r in range(nrr):
-                var v = src.unsafe_load(r)
-                if v != v:
-                    has_nan = True
-                    break
-            if has_nan:
-                var sample_has = False
-                for i in range(sn):
-                    var v2 = pd.unsafe_load(k * sn + i)
-                    if v2 != v2:
-                        sample_has = True
-                        break
-                if not sample_has:
-                    pd.unsafe_store(k * sn, Float32(0.0) / Float32(0.0))
-                flg.unsafe_store(k, 1)
-
-        sync_parallelize(_draw_task, n_float_prescan)
-        _ = flags^
-        _ = sample_idx^
-    var border_sorter = DeviceFloatSorter(
-        ctx, n_rows if border_sample_n == n_rows else 1
+    var grid = _quantize_training_columns(
+        ctx, columns, column_one_hot, column_ctr_grid,
+        dep_ordinal_of_column, dep_by_perm, ctr_grids, n_rows,
+        border_count, border_build_max_samples, random_seed, nan_mode,
     )
-    # their `TFloatFeature::NanValueTreatment`, one per COLUMN. One-hot and
-    # CTR columns stay `AsIs`: a one-hot column holds dense codes and a CTR
-    # column holds a computed statistic, and a NaN in either is a caller
-    # error rather than a value to bin.
-    var nan_mode_opt = nan_mode_from_name(nan_mode)
-    var column_nan_treatment = List[Int]()
-    for _ in range(n_columns):
-        column_nan_treatment.append(NAN_TREATMENT_AS_IS)
-    for f in range(n_columns):
-        var flagged = column_one_hot[f]
-        if flagged:
-            var maxc = 0
-            for r in range(n_rows):
-                var c = Int(columns[f][r])
-                if c > maxc:
-                    maxc = c
-            if maxc > 254:
-                raise Error("one-hot feature " + String(f)
-                            + " has more than 255 categories")
-            # synthetic integer 'borders' 0.5, 1.5, ... so the SAME
-            # quantize kernel maps code k to bin k
-            var bs = List[Float32]()
-            for c in range(maxc):
-                bs.append(Float32(c) + Float32(0.5))
-            fold_counts.append(len(bs) + 1 if len(bs) > 0 else 0)
-            borders.append(bs^)
-        elif column_ctr_grid[f] >= 0 and dep_ordinal_of_column[f] >= 0:
-            # A PERMUTATION-DEPENDENT CTR COLUMN TAKES PERMUTATION 0'S
-            # BORDERS, and every other permutation is binarized against
-            # them. That is `TGpuBordersBuilder::GetOrComputeBorders`
-            # (`gpu_binarization_helpers.cpp:31-54`) caching by FEATURE ID
-            # in the features manager, hit by whichever permutation was
-            # written first -- and their loop starts at 0
-            # (`doc_parallel_dataset_builder.cpp:250`). The grid is a
-            # property of the feature, not of the permutation.
-            var bs = compute_ctr_borders(
-                dep_by_perm[0][dep_ordinal_of_column[f]],
-                ctr_grids[column_ctr_grid[f]],
-            )
-            fold_counts.append(len(bs))
-            borders.append(bs^)
-        elif column_ctr_grid[f] >= 0:
-            # A CTR column takes its OWN grid, not the numeric one:
-            # `GetOrComputeBorders(featureId, binarizationDescription, ...)`
-            # in `batch_binarized_ctr_calcer.cpp:57-63`, with the
-            # description coming from the ctr config
-            # (`CreateDefaultCounter` -> MinEntropy 15 for FeatureFreq,
-            # the two-argument TCtrDescription constructor -> Uniform 15
-            # for Borders). Reading `border_count` here instead would be
-            # the numeric GreedyLogSum grid on a CTR column, which is what
-            # `tools/ctr_prep.py` used to do.
-            var bs = compute_ctr_borders(columns[f], ctr_grids[
-                column_ctr_grid[f]
-            ])
-            fold_counts.append(len(bs))
-            borders.append(bs^)
-        else:
-            # `CalcQuantization` (`libs/data/quantization.cpp:300-346`):
-            # the column decides its own NaN mode, and a column that has
-            # NaNs spends ONE of `border_count` on the sentinel.
-            #
-            # SORTED ON THE DEVICE FIRST, which is their own GPU
-            # pipeline's design (`ComputeBorders`,
-            # `gpu_binarization_helpers.cpp:10-16`: RadixSort on the
-            # device, grid builder on the sorted readback). Measured
-            # 2026-08-21 (PREP_BILL results): the host sort inside
-            # `best_split` was 34 of 45.9 ms per 400k column, 74% of the
-            # whole 24-second preparation bill at 400k x 500; on
-            # presorted input the same call is 11.8 ms. The sorted
-            # multiset is identical, so every border -- and the fit's
-            # mse -- is bit-for-bit unchanged, which the quantize-cost
-            # probe's recorded mse gates.
-            # PHASE A OF THE SPLIT BORDER BUILD: the device pipeline
-            # sorts this column (the previous float column's prefetch
-            # already enqueued it; the next one is enqueued before the
-            # host copy below, so the device stays busy), and the DP is
-            # DEFERRED to phase B, which runs every float column's grid
-            # builder in parallel on the host -- their per-feature
-            # executor design (`calcBordersAndNanMode` on
-            # `NPar::LocalExecutor`), with the device never touched
-            # inside the parallel region (the sync_parallelize deadlock
-            # rule mojotrees recorded).
-            if border_sample_n == n_rows:
-                # full-data path only: their GPU ComputeBorders device
-                # RadixSort. The SAMPLED path skips the device entirely --
-                # the subsample is their CPU quantizer's design, and their
-                # CPU DP (`calcBordersAndNanMode`) sorts on the host inside
-                # `BestSplit`; at 100k samples the device sort is
-                # launch-floor-bound (measured 1.8 s for 500 columns) while
-                # the host sort rides inside phase B's parallel region.
-                if not border_sorter.has_pending:
-                    border_sorter.begin(ctx, columns[f].copy())
-                var col = border_sorter.finish(ctx)
-                var g = f + 1
-                while g < n_columns:
-                    if not column_one_hot[g] and column_ctr_grid[g] < 0:
-                        border_sorter.begin(ctx, columns[g].copy())
-                        break
-                    g += 1
-                var slot = len(float_cols)
-                var sfp = sorted_flat.unsafe_ptr()
-                var cp2 = col.unsafe_ptr()
-                for r in range(border_sample_n):
-                    sfp.unsafe_store(
-                        slot * border_sample_n + r, cp2.unsafe_load(r)
-                    )
-                _ = col^
-            float_cols.append(f)
-            fold_counts.append(0)  # placeholder, phase B fills it
-            borders.append(List[Float32]())  # placeholder
-
-    # one-hot features occupy folds+? -- for ordered features CatBoost's
-    # fold count IS the border count; a one-hot feature has k categories
-    # = k bins reached by k-1 synthetic borders, and its fold count must
-    # cover bin k-1 for the equality candidates, hence len+1 above.
-
-    # PHASE B: every float column's calc_quantization in parallel, disjoint
-    # flat output slots, errors carried out through a per-slot flag and
-    # re-raised after the join.
-    var n_float = len(float_cols)
-    if n_float > 0:
-        var out_cap = border_count + 1
-        var out_borders = List[Float32](capacity=n_float * out_cap)
-        out_borders.resize(n_float * out_cap, Float32(0.0))
-        var out_counts = List[Int](capacity=n_float)
-        out_counts.resize(n_float, 0)
-        var out_modes = List[Int](capacity=n_float)
-        out_modes.resize(n_float, -1)
-        # full path: device-sorted columns; sampled path: the raw parallel
-        # draws (calc_quantization's BestSplit filters NaNs and sorts on the
-        # host itself -- same multiset, bit-identical borders)
-        var sfp2 = sorted_flat.unsafe_ptr()
-        if border_sample_n < n_rows:
-            sfp2 = rebind[type_of(sfp2)](predrawn.unsafe_ptr())
-        var obp = out_borders.unsafe_ptr()
-        var ocp = out_counts.unsafe_ptr()
-        var omp = out_modes.unsafe_ptr()
-        var nr2 = border_sample_n
-        var bc2 = border_count
-        var nm2 = nan_mode_opt
-        var cap2 = out_cap
-
-        def _dp_task(
-            k: Int
-        ) {imm sfp2, imm obp, imm ocp, imm omp, imm nr2, imm bc2, imm nm2, imm cap2}:
-            try:
-                var col2 = List[Float32]()
-                col2.resize(nr2, Float32(0.0))
-                memcpy(dest=col2.unsafe_ptr(), src=sfp2 + k * nr2, count=nr2)
-                var q2 = calc_quantization(col2^, bc2, nm2)
-                var nb = len(q2[0])
-                if nb > cap2:
-                    ocp.unsafe_store(k, -2)
-                    return
-                for j in range(nb):
-                    obp.unsafe_store(k * cap2 + j, q2[0][j])
-                ocp.unsafe_store(k, nb)
-                omp.unsafe_store(k, q2[1])
-            except:
-                ocp.unsafe_store(k, -1)
-
-        sync_parallelize(_dp_task, n_float)
-        # ==================== THE STEP-33 RACE, FOUND =====================
-        # The plane the tasks read must outlive the JOIN, not its last
-        # textual use: `sfp2 = predrawn.unsafe_ptr()` above was
-        # `predrawn`'s last use, so Mojo freed the whole drawn-sample
-        # plane BEFORE the pool ran -- and each task's own `col2`
-        # allocation (border_sample_n floats) could land inside the freed
-        # pages and OVERWRITE them under a sibling task's read. Thread
-        # scheduling decides who reads garbage: nondeterministic on a
-        # QUIET box, dependent on allocator size classes (which is why
-        # 8.8M-row fits diverged where 2M-row fits never did), and the
-        # fork lands in the BORDERS, which is why divergent models differ
-        # from tree 0 with coherent-but-wrong AUCs. Full record:
-        # PREP_BILL_2026-08-22 steps 33-34.
-        _ = sorted_flat^
-        _ = predrawn^
-        # ==================================================================
-
-        for k in range(n_float):
-            var nb = out_counts[k]
-            if nb < 0:
-                raise Error(
-                    "parallel border build failed on float column "
-                    + String(float_cols[k])
-                )
-            var f2 = float_cols[k]
-            var bs2 = List[Float32](capacity=nb)
-            for j in range(nb):
-                bs2.append(out_borders[k * out_cap + j])
-            column_nan_treatment[f2] = nan_value_treatment(out_modes[k])
-            fold_counts[f2] = nb
-            borders[f2] = bs2^
+    var borders = grid[0].copy()
+    var fold_counts = grid[1].copy()
+    var column_nan_treatment = grid[2].copy()
 
     # the fit's identity trace begins HERE so the border records and the
     # tree records share one seq space (a second IdentityTrace() later
@@ -1764,6 +1467,7 @@ def train(
         grow_policy=policy,
         max_leaves=max_leaves,
         min_data_in_leaf=min_data_in_leaf,
+        min_split_gain=min_split_gain,
     )
     var losses = fit_result.learn_losses.copy()
     var t_losses = fit_result.test_losses.copy()
@@ -1807,6 +1511,340 @@ def train(
         ctr_tables^,
         TTensorCtrRegistry(len(fold_counts)),
     )
+
+
+def _quantize_training_columns(
+    ctx: DeviceContext,
+    columns: List[List[Float32]],
+    column_one_hot: List[Bool],
+    column_ctr_grid: List[Int],
+    dep_ordinal_of_column: List[Int],
+    dep_by_perm: List[List[List[Float32]]],
+    ctr_grids: List[TBinarizationOptions],
+    n_rows: Int,
+    border_count: Int,
+    border_build_max_samples: Int,
+    random_seed: UInt64,
+    nan_mode: String,
+) raises -> Tuple[List[List[Float32]], List[Int], List[Int]]:
+    """Shared grid builder for ordinary training and reusable numeric pools.
+
+    Keep sampling, sorting, NaN treatment and reduction order identical to
+    the ordinary training path. Prepared pools freeze this result explicitly.
+    """
+    var n_columns = len(columns)
+    var borders = List[List[Float32]]()
+    var fold_counts = List[Int]()
+    # their ComputeBorders' device RadixSort, scratch hoisted once for
+    # every float column below (see DeviceFloatSorter's docstring for the
+    # churn crash that makes the hoist load-bearing)
+    # THEIR CPU QUANTIZER'S SUBSAMPLE, adopted for the user-facing path.
+    #
+    # CORRECTED 2026-08-22, DEVIATION 135. The three sentences that stood
+    # here cited `GetSampleSizeForBorderSelectionType`
+    # (`private/libs/quantization/utils.h:132-136`) and `SampleArray`
+    # (`utils.cpp:14-24`) -- a REAL pair of functions ON THE WRONG CODE
+    # PATH. `SampleArray` is reached from `NCB::BuildBorders`, which in
+    # this tree is called only by a unit test and by the GPU CTR border
+    # builder. The TRAINING pipeline goes
+    # `GetSubsetForBuildBorders` (`libs/data/quantization.cpp:118-141`)
+    # -> `GetArraySubsetForBuildBorders` (`utils.cpp:25-51`), and it
+    # differs from that helper in all three of the ways that matter:
+    #
+    #   size          `TQuantizationOptions::MaxSubsetSizeForBuild
+    #                 BordersAlgorithms = 200000` (`libs/data/
+    #                 quantization.h:37`), not the helper's 100000
+    #                 DEFAULT ARGUMENT, which the pipeline overrides.
+    #   replacement   `SampleIndices` (`libs/helpers/sample.h:20-43`),
+    #                 "Sample k element indices without repetition".
+    #                 `SampleArray` draws WITH replacement.
+    #   sharing       ONE subset for the whole dataset, built once at
+    #                 `quantization.cpp:127` and reused by every float
+    #                 column. Ours drew a fresh sample per feature.
+    #
+    # The old draw was therefore a different estimator of the border set
+    # than CatBoost's on any pool above the cap: 100k with replacement
+    # covers ~63.2% of distinct rows, 200k without replacement covers
+    # exactly 200k. `border_build_max_samples = 0` still restores the
+    # full-data GPU-pipeline behavior (`ComputeBorders`,
+    # `gpu_binarization_helpers.cpp:10-16`, which full-sorts).
+    #
+    # NOT REACHED BY `bench/interleaved`, which quantizes with CATBOOST'S
+    # OWN quantizer and hands both arms the same pre-binned uint8
+    # (`tools/interleaved_prep.py:1-10`). This is the user-facing
+    # `train()`/estimator path and the end-to-end arm, not the
+    # standing benchmark numbers.
+    var border_sample_n = n_rows
+    if border_build_max_samples > 0 and border_build_max_samples < n_rows:
+        border_sample_n = border_build_max_samples
+
+    # phase-A/B scratch: which columns are float, and one flat buffer
+    # holding every sorted float column back to back
+    var n_float_prescan = 0
+    var float_idx = List[Int]()
+    for f in range(n_columns):
+        if not column_one_hot[f] and column_ctr_grid[f] < 0:
+            float_idx.append(f)
+            n_float_prescan += 1
+    var float_cols = List[Int]()
+    # only the full-data path stages sorted columns here; the sampled path's
+    # phase B reads `predrawn` directly
+    var sorted_flat = List[Float32]()
+    if border_sample_n == n_rows:
+        sorted_flat.resize(n_float_prescan * border_sample_n, Float32(0.0))
+
+    # PHASE 0, sampling only. ONE index subset for the whole dataset,
+    # drawn WITHOUT REPLACEMENT, then every float column gathers through
+    # it -- their `GetSubsetForBuildBorders`
+    # (`libs/data/quantization.cpp:118-141`), which builds
+    # `subsetIndexing` ONCE and hands the same one to every feature. The
+    # per-column GATHER stays parallel (it is `n_float * 200k` loads);
+    # only the DRAW is serial, because it is one draw now and not one
+    # per feature. Per-slot error flags re-raised after the join.
+    var predrawn = List[Float32]()
+    if border_sample_n < n_rows and n_float_prescan > 0:
+        predrawn.resize(n_float_prescan * border_sample_n, Float32(0.0))
+        var pd = predrawn.unsafe_ptr()
+        var fi = float_idx.unsafe_ptr()
+        var colp = columns.unsafe_ptr()
+        var sn = border_sample_n
+        var nrr = n_rows
+        var sd0 = random_seed
+        var flags = List[Int]()
+        flags.resize(n_float_prescan, 0)
+        var flg = flags.unsafe_ptr()
+
+        var sample_idx = sample_indices_for_borders(nrr, sn, sd0)
+        var sidx = sample_idx.unsafe_ptr()
+
+        def _draw_task(
+            k: Int
+        ) {imm pd, imm fi, imm colp, imm sn, imm nrr, imm sidx, imm flg}:
+            var fcol = fi.unsafe_load(k)
+            var src = (colp + fcol)[].unsafe_ptr()
+            for i in range(sn):
+                pd.unsafe_store(
+                    k * sn + i,
+                    src.unsafe_load(Int(sidx.unsafe_load(i))),
+                )
+            var has_nan = False
+            for r in range(nrr):
+                var v = src.unsafe_load(r)
+                if v != v:
+                    has_nan = True
+                    break
+            if has_nan:
+                var sample_has = False
+                for i in range(sn):
+                    var v2 = pd.unsafe_load(k * sn + i)
+                    if v2 != v2:
+                        sample_has = True
+                        break
+                if not sample_has:
+                    pd.unsafe_store(k * sn, Float32(0.0) / Float32(0.0))
+                flg.unsafe_store(k, 1)
+
+        sync_parallelize(_draw_task, n_float_prescan)
+        _ = flags^
+        _ = sample_idx^
+    var border_sorter = DeviceFloatSorter(
+        ctx, n_rows if border_sample_n == n_rows else 1
+    )
+    # their `TFloatFeature::NanValueTreatment`, one per COLUMN. One-hot and
+    # CTR columns stay `AsIs`: a one-hot column holds dense codes and a CTR
+    # column holds a computed statistic, and a NaN in either is a caller
+    # error rather than a value to bin.
+    var nan_mode_opt = nan_mode_from_name(nan_mode)
+    var column_nan_treatment = List[Int]()
+    for _ in range(n_columns):
+        column_nan_treatment.append(NAN_TREATMENT_AS_IS)
+    for f in range(n_columns):
+        var flagged = column_one_hot[f]
+        if flagged:
+            var maxc = 0
+            for r in range(n_rows):
+                var c = Int(columns[f][r])
+                if c > maxc:
+                    maxc = c
+            if maxc > 254:
+                raise Error("one-hot feature " + String(f)
+                            + " has more than 255 categories")
+            # synthetic integer 'borders' 0.5, 1.5, ... so the SAME
+            # quantize kernel maps code k to bin k
+            var bs = List[Float32]()
+            for c in range(maxc):
+                bs.append(Float32(c) + Float32(0.5))
+            fold_counts.append(len(bs) + 1 if len(bs) > 0 else 0)
+            borders.append(bs^)
+        elif column_ctr_grid[f] >= 0 and dep_ordinal_of_column[f] >= 0:
+            # A PERMUTATION-DEPENDENT CTR COLUMN TAKES PERMUTATION 0'S
+            # BORDERS, and every other permutation is binarized against
+            # them. That is `TGpuBordersBuilder::GetOrComputeBorders`
+            # (`gpu_binarization_helpers.cpp:31-54`) caching by FEATURE ID
+            # in the features manager, hit by whichever permutation was
+            # written first -- and their loop starts at 0
+            # (`doc_parallel_dataset_builder.cpp:250`). The grid is a
+            # property of the feature, not of the permutation.
+            var bs = compute_ctr_borders(
+                dep_by_perm[0][dep_ordinal_of_column[f]],
+                ctr_grids[column_ctr_grid[f]],
+            )
+            fold_counts.append(len(bs))
+            borders.append(bs^)
+        elif column_ctr_grid[f] >= 0:
+            # A CTR column takes its OWN grid, not the numeric one:
+            # `GetOrComputeBorders(featureId, binarizationDescription, ...)`
+            # in `batch_binarized_ctr_calcer.cpp:57-63`, with the
+            # description coming from the ctr config
+            # (`CreateDefaultCounter` -> MinEntropy 15 for FeatureFreq,
+            # the two-argument TCtrDescription constructor -> Uniform 15
+            # for Borders). Reading `border_count` here instead would be
+            # the numeric GreedyLogSum grid on a CTR column, which is what
+            # `tools/ctr_prep.py` used to do.
+            var bs = compute_ctr_borders(columns[f], ctr_grids[
+                column_ctr_grid[f]
+            ])
+            fold_counts.append(len(bs))
+            borders.append(bs^)
+        else:
+            # `CalcQuantization` (`libs/data/quantization.cpp:300-346`):
+            # the column decides its own NaN mode, and a column that has
+            # NaNs spends ONE of `border_count` on the sentinel.
+            #
+            # SORTED ON THE DEVICE FIRST, which is their own GPU
+            # pipeline's design (`ComputeBorders`,
+            # `gpu_binarization_helpers.cpp:10-16`: RadixSort on the
+            # device, grid builder on the sorted readback). Measured
+            # 2026-08-21 (PREP_BILL results): the host sort inside
+            # `best_split` was 34 of 45.9 ms per 400k column, 74% of the
+            # whole 24-second preparation bill at 400k x 500; on
+            # presorted input the same call is 11.8 ms. The sorted
+            # multiset is identical, so every border -- and the fit's
+            # mse -- is bit-for-bit unchanged, which the quantize-cost
+            # probe's recorded mse gates.
+            # PHASE A OF THE SPLIT BORDER BUILD: the device pipeline
+            # sorts this column (the previous float column's prefetch
+            # already enqueued it; the next one is enqueued before the
+            # host copy below, so the device stays busy), and the DP is
+            # DEFERRED to phase B, which runs every float column's grid
+            # builder in parallel on the host -- their per-feature
+            # executor design (`calcBordersAndNanMode` on
+            # `NPar::LocalExecutor`), with the device never touched
+            # inside the parallel region (the sync_parallelize deadlock
+            # rule mojotrees recorded).
+            if border_sample_n == n_rows:
+                # full-data path only: their GPU ComputeBorders device
+                # RadixSort. The SAMPLED path skips the device entirely --
+                # the subsample is their CPU quantizer's design, and their
+                # CPU DP (`calcBordersAndNanMode`) sorts on the host inside
+                # `BestSplit`; at 100k samples the device sort is
+                # launch-floor-bound (measured 1.8 s for 500 columns) while
+                # the host sort rides inside phase B's parallel region.
+                if not border_sorter.has_pending:
+                    border_sorter.begin(ctx, columns[f].copy())
+                var col = border_sorter.finish(ctx)
+                var g = f + 1
+                while g < n_columns:
+                    if not column_one_hot[g] and column_ctr_grid[g] < 0:
+                        border_sorter.begin(ctx, columns[g].copy())
+                        break
+                    g += 1
+                var slot = len(float_cols)
+                var sfp = sorted_flat.unsafe_ptr()
+                var cp2 = col.unsafe_ptr()
+                for r in range(border_sample_n):
+                    sfp.unsafe_store(
+                        slot * border_sample_n + r, cp2.unsafe_load(r)
+                    )
+                _ = col^
+            float_cols.append(f)
+            fold_counts.append(0)  # placeholder, phase B fills it
+            borders.append(List[Float32]())  # placeholder
+
+    # one-hot features occupy folds+? -- for ordered features CatBoost's
+    # fold count IS the border count; a one-hot feature has k categories
+    # = k bins reached by k-1 synthetic borders, and its fold count must
+    # cover bin k-1 for the equality candidates, hence len+1 above.
+
+    # PHASE B: every float column's calc_quantization in parallel, disjoint
+    # flat output slots, errors carried out through a per-slot flag and
+    # re-raised after the join.
+    var n_float = len(float_cols)
+    if n_float > 0:
+        var out_cap = border_count + 1
+        var out_borders = List[Float32](capacity=n_float * out_cap)
+        out_borders.resize(n_float * out_cap, Float32(0.0))
+        var out_counts = List[Int](capacity=n_float)
+        out_counts.resize(n_float, 0)
+        var out_modes = List[Int](capacity=n_float)
+        out_modes.resize(n_float, -1)
+        # full path: device-sorted columns; sampled path: the raw parallel
+        # draws (calc_quantization's BestSplit filters NaNs and sorts on the
+        # host itself -- same multiset, bit-identical borders)
+        var sfp2 = sorted_flat.unsafe_ptr()
+        if border_sample_n < n_rows:
+            sfp2 = rebind[type_of(sfp2)](predrawn.unsafe_ptr())
+        var obp = out_borders.unsafe_ptr()
+        var ocp = out_counts.unsafe_ptr()
+        var omp = out_modes.unsafe_ptr()
+        var nr2 = border_sample_n
+        var bc2 = border_count
+        var nm2 = nan_mode_opt
+        var cap2 = out_cap
+
+        def _dp_task(
+            k: Int
+        ) {imm sfp2, imm obp, imm ocp, imm omp, imm nr2, imm bc2, imm nm2, imm cap2}:
+            try:
+                var col2 = List[Float32]()
+                col2.resize(nr2, Float32(0.0))
+                memcpy(dest=col2.unsafe_ptr(), src=sfp2 + k * nr2, count=nr2)
+                var q2 = calc_quantization(col2^, bc2, nm2)
+                var nb = len(q2[0])
+                if nb > cap2:
+                    ocp.unsafe_store(k, -2)
+                    return
+                for j in range(nb):
+                    obp.unsafe_store(k * cap2 + j, q2[0][j])
+                ocp.unsafe_store(k, nb)
+                omp.unsafe_store(k, q2[1])
+            except:
+                ocp.unsafe_store(k, -1)
+
+        sync_parallelize(_dp_task, n_float)
+        # ==================== THE STEP-33 RACE, FOUND =====================
+        # The plane the tasks read must outlive the JOIN, not its last
+        # textual use: `sfp2 = predrawn.unsafe_ptr()` above was
+        # `predrawn`'s last use, so Mojo freed the whole drawn-sample
+        # plane BEFORE the pool ran -- and each task's own `col2`
+        # allocation (border_sample_n floats) could land inside the freed
+        # pages and OVERWRITE them under a sibling task's read. Thread
+        # scheduling decides who reads garbage: nondeterministic on a
+        # QUIET box, dependent on allocator size classes (which is why
+        # 8.8M-row fits diverged where 2M-row fits never did), and the
+        # fork lands in the BORDERS, which is why divergent models differ
+        # from tree 0 with coherent-but-wrong AUCs. Full record:
+        # PREP_BILL_2026-08-22 steps 33-34.
+        _ = sorted_flat^
+        _ = predrawn^
+        # ==================================================================
+
+        for k in range(n_float):
+            var nb = out_counts[k]
+            if nb < 0:
+                raise Error(
+                    "parallel border build failed on float column "
+                    + String(float_cols[k])
+                )
+            var f2 = float_cols[k]
+            var bs2 = List[Float32](capacity=nb)
+            for j in range(nb):
+                bs2.append(out_borders[k * out_cap + j])
+            column_nan_treatment[f2] = nan_value_treatment(out_modes[k])
+            fold_counts[f2] = nb
+            borders[f2] = bs2^
+
+    return (borders^, fold_counts^, column_nan_treatment^)
 
 
 def train_ordered_rmse(

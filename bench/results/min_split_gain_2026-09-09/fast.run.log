@@ -1,0 +1,14 @@
+numeric_mode FAST
+Depthwise threshold -1.0 leaves 4 expected 4
+Depthwise threshold 0.0 leaves 4 expected 4
+Depthwise threshold 1.999 leaves 4 expected 4
+Depthwise threshold 2.0 leaves 2 expected 2
+Depthwise threshold 1023.999 leaves 2 expected 2
+Depthwise threshold 1024.0 leaves 1 expected 1
+Lossguide threshold -1.0 leaves 4 expected 4
+Lossguide threshold 0.0 leaves 4 expected 4
+Lossguide threshold 1.999 leaves 4 expected 4
+Lossguide threshold 2.0 leaves 2 expected 2
+Lossguide threshold 1023.999 leaves 2 expected 2
+Lossguide threshold 1024.0 leaves 1 expected 1
+MIN SPLIT GAIN GREEN

@@ -1,0 +1,11 @@
+identical Depthwise min_split_gain None leaves 4
+identical Depthwise min_split_gain 0.0 leaves 4
+identical Depthwise min_split_gain 1.999 leaves 4
+identical Depthwise min_split_gain 2.0 leaves 2
+identical Depthwise min_split_gain 1024.0 leaves 1
+identical Lossguide min_split_gain None leaves 4
+identical Lossguide min_split_gain 0.0 leaves 4
+identical Lossguide min_split_gain 1.999 leaves 4
+identical Lossguide min_split_gain 2.0 leaves 2
+identical Lossguide min_split_gain 1024.0 leaves 1
+MIN SPLIT GAIN PUBLIC BINDING GREEN identical

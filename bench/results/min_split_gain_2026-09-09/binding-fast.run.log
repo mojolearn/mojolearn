@@ -1,0 +1,11 @@
+fast Depthwise min_split_gain None leaves 4
+fast Depthwise min_split_gain 0.0 leaves 4
+fast Depthwise min_split_gain 1.999 leaves 4
+fast Depthwise min_split_gain 2.0 leaves 2
+fast Depthwise min_split_gain 1024.0 leaves 1
+fast Lossguide min_split_gain None leaves 4
+fast Lossguide min_split_gain 0.0 leaves 4
+fast Lossguide min_split_gain 1.999 leaves 4
+fast Lossguide min_split_gain 2.0 leaves 2
+fast Lossguide min_split_gain 1024.0 leaves 1
+MIN SPLIT GAIN PUBLIC BINDING GREEN fast

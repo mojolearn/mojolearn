@@ -957,6 +957,7 @@ def fit_with_test(
     grow_policy: Int = GROW_SYMMETRIC,
     max_leaves: Int = -1,
     min_data_in_leaf: Int = 1,
+    min_split_gain: Float64 = -1,
 ) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -1030,6 +1031,10 @@ def fit_with_test(
         approx_dim = num_classes
     var stat_count = 1 + approx_dim
 
+    if not isfinite(min_split_gain) or (min_split_gain < 0 and min_split_gain != -1):
+        raise Error("min_split_gain must be -1 (disabled) or finite nonnegative")
+    if min_split_gain >= 0 and grow_policy == GROW_SYMMETRIC:
+        raise Error("min_split_gain requires Depthwise or Lossguide")
     # ---- the non-symmetric policies' own refusals (DEVIATION 259) ----
     var non_symmetric = grow_policy != GROW_SYMMETRIC
     if non_symmetric:
@@ -1669,6 +1674,7 @@ def fit_with_test(
             opts.l2_reg = l2_leaf_reg
             opts.score_function = score_function
             opts.min_leaf_size = Float64(min_data_in_leaf)
+            opts.min_split_gain = min_split_gain
             # `options.RandomStrength *= randomStrengthMult`
             # (`greedy_subsets_searcher.h:76`), the same multiply the
             # greedy oblivious arm receives below

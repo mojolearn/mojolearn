@@ -45,6 +45,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
     leaf_winner_fold_kernel,
 )
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     copy_histograms_kernel,
     copy_histograms_vec4_kernel,
@@ -117,18 +118,27 @@ from gbdt.options.catboost_options import (
 
 
 # ============================ DEVIATION 1901 ============================
-# THE ONE MODE TEST THIS DRIVER'S FAST SPLIT-COST ARMS HANG ON. Under
-# `NUMERIC_IDENTICAL` every branch keyed on this constant compiles the code
-# path that shipped before DEVIATIONS 1901/1903 and 1904's wiring landed,
-# character for character in what it executes -- the merge gate
-# byte-compares the IDENTICAL column against main, and that comparison must
-# pass by construction, not by argument. FAST makes no bit promise, and it
-# is the arm the H100 speed rows measure; the per-deviation blocks below say
-# what each FAST branch buys and what it re-associates. (DEVIATION 1904's
-# FAST arm re-associates NOTHING -- its fold is the host fold transcribed --
-# but it keys on the same constant because IDENTICAL's contract is the code
-# path, not just the bits.)
+# The mode test for the existing split-cost arms. IDENTICAL retains the
+# pinned reduction and host winner fold; FAST/DETERMINISTIC use the existing
+# propagation/copy/fold optimizations below. The separate unchanged-leaf
+# cache reduces repeated work without changing any leaf's arithmetic.
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+
+# Cache unchanged partitions under IDENTICAL without propagating histogram
+# sums (which would change rounding). CatBoost updates only split children
+# in TSplitPointsKernel (split_properties_helper.cpp:918-936); this port keeps
+# its existing two-phase pinned reduction for each changed child instead.
+# A split permutes only its own disjoint range. Every other leaf therefore
+# keeps the same stats bytes, offset, length and per-leaf reduction result.
+# Both kernels address results through the explicit leaf-id list; changing
+# grid.y does not change the x-stripe or floating-point fold for any leaf.
+# FULL_PARTITION_STATS restores the previous all-leaf sweep for A/B checks.
+comptime INCREMENTAL_PART_STATS = (
+    SPLIT_COST_IDENTICAL
+    and not is_defined["MOJOLEARN_GBDT_FULL_PARTITION_STATS"]()
+)
+comptime REPORT_PART_STATS_WORK = is_defined["MOJOLEARN_GBDT_PART_STATS_WORK"]()
+
 # DEVIATION 1902: whether the non-symmetric drivers move ONLY the row
 # index at a split, leaving the stat planes stationary in document order
 # for the life of the fit. The row is False under IDENTICAL on every
@@ -774,13 +784,13 @@ def fit_non_symmetric_tree[
     THE PARTITION STATS ARE RECOMPUTED, NOT UPDATED IN THE SPLIT.
     Their `TSplitPointsKernel` updates `subsets->PartitionStats` inside the
     split ("Update part stats", `split_properties_helper.cpp:918`), so their
-    `ComputeOptimalSplits` finds them already correct. This port has never
-    ported that half -- `run_tree_layout` calls `compute_partition_stats`
-    at the top of every level instead -- and this lane does the same rather
-    than growing a second mechanism. The cost is one extra reduction per
-    level; the numbers are identical because it is the same reduction over
-    the same rows with the same pinned chunk count (`IDENTITY_PATHS.md`
-    row 7).
+    `ComputeOptimalSplits` finds them already correct. FAST/DETERMINISTIC
+    propagate child statistics from the winning histogram. IDENTICAL now
+    recomputes changed children with the established pinned fold and caches
+    unchanged leaves. MOJOLEARN_GBDT_FULL_PARTITION_STATS restores the former
+    all-leaf sweep. Both IDENTICAL schedules use the same rows, stripe width,
+    and floating-point reduction for each changed leaf (`IDENTITY_PATHS.md`
+    row 7); neither substitutes histogram-derived sums.
     ===============================================
     """
     if options.policy != GROW_DEPTHWISE and options.policy != GROW_LOSSGUIDE:
@@ -1084,6 +1094,12 @@ def fit_non_symmetric_tree[
     # list exists and every compute slot is zeroed exactly as before.
     var hist_slot_dirty = List[Bool]()
     hist_slot_dirty.append(False)
+
+    var part_stats_dirty = List[Bool]()
+    comptime if INCREMENTAL_PART_STATS:
+        part_stats_dirty.append(True)  # the root has no cached reduction
+    var part_stats_rows_reduced = Int64(0)
+    var part_stats_leaves_reduced = Int64(0)
 
     var emit_digests = trace.enabled
     var hist_live_stride = stat_count * hist_cells_per_leaf
@@ -1525,9 +1541,9 @@ def fit_non_symmetric_tree[
         var visit = select_leaves_to_visit(leaves)
         if len(visit) > 0:
             # ============================ DEVIATION 1901 ============================
-            # THE PER-LEVEL ALL-ROWS SWEEP IS THE IDENTICAL COLUMN'S ONLY.
-            # DEVIATION 352's `compute_partition_stats` over `d_all_ids`
-            # reads EVERY leaf's rows on EVERY level -- O(max_leaves x
+            # IDENTICAL keeps the pinned reduction, now caching unchanged
+            # leaves. MOJOLEARN_GBDT_FULL_PARTITION_STATS restores the old
+            # DEVIATION 352 sweep, which reads EVERY leaf on EVERY level -- O(max_leaves x
             # n_rows x stat_count) per tree, and Lossguide runs
             # `max_leaves - 1` sequential levels, so at 1M rows x 64 leaves
             # x 2 stats that is ~128M row-stat reads per tree of pure
@@ -1555,18 +1571,29 @@ def fit_non_symmetric_tree[
                 # ...)` (`:443`) over leaves `[0, leafCount)`. See DEVIATION
                 # 352.
                 stage_times.begin(ctx)
+                var reduce_count = 0
                 for i in range(len(leaves)):
-                    h_all_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
-                # DEVIATION 261: its own staging pair
-                ctx.enqueue_copy(
-                    dst_buf=d_all_ids, src_ptr=h_all_ids.unsafe_ptr()
-                )
-                compute_partition_stats(
-                    ctx, len(leaves), n_rows, stat_count, n_rows,
-                    d_all_ids, p_off, p_sz, stats, stat_partials, part_stats,
-                    sm_count=sm_count,
-                )
-                mgr.stream_kernel()
+                    comptime if INCREMENTAL_PART_STATS:
+                        if not part_stats_dirty[i]:
+                            continue
+                        part_stats_dirty[i] = False
+                    h_all_ids.unsafe_ptr().unsafe_store(reduce_count, UInt32(i))
+                    reduce_count += 1
+                    comptime if REPORT_PART_STATS_WORK:
+                        part_stats_rows_reduced += Int64(leaves[i].size)
+                        part_stats_leaves_reduced += 1
+                # DEVIATION 261: its own staging pair. Preserve each leaf's
+                # x-stripe and reduction; only the list/grid.y gets smaller.
+                if reduce_count > 0:
+                    ctx.enqueue_copy(
+                        dst_buf=d_all_ids, src_ptr=h_all_ids.unsafe_ptr()
+                    )
+                    compute_partition_stats(
+                        ctx, reduce_count, n_rows, stat_count, n_rows,
+                        d_all_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                        sm_count=sm_count,
+                    )
+                    mgr.stream_kernel()
                 stage_times.end(ctx, "partstats")
             trace.record_device(
                 ctx, d_tag + "partstats", part_stats,
@@ -1953,6 +1980,17 @@ def fit_non_symmetric_tree[
         else:
             to_split = select_leaves_to_split(leaves)
 
+        # Opt-in split-gain threshold. Default -1 preserves each policy's
+        # original selection, including Lossguide's non-improving splits.
+        # Stored Gain is the negated improvement; equality does not split.
+        if options.min_split_gain >= Float64(0):
+            var accepted = List[Int]()
+            for leaf_id in to_split:
+                if Float64(-leaves[leaf_id].best_split.gain) > options.min_split_gain:
+                    accepted.append(leaf_id)
+            to_split = accepted^
+            trace.record_list_i32(d_tag + "split.accepted", _as_i32(to_split))
+
         if len(to_split) > 0:
             # --- MakeSplit's multi-leaf arm, `split_properties_helper
             # .cpp:845-950`. `leftId = leavesToSplit[i]` keeps the parent's
@@ -2075,6 +2113,13 @@ def fit_non_symmetric_tree[
                 var right = split_leaf(parent, split, SPLIT_VALUE_ONE)
                 leaves[left_id] = left^
                 leaves.append(right^)
+                comptime if INCREMENTAL_PART_STATS:
+                    part_stats_dirty[left_id] = True
+                    # Negative-control build proves that both children must
+                    # invalidate the cache; never set in a shipping build.
+                    part_stats_dirty.append(
+                        not is_defined["MOJOLEARN_GBDT_SAB_SKIP_RIGHT_PART_STATS"]()
+                    )
                 # the sibling key: both children's parent is the id the
                 # left child kept.
                 parent_of[left_id] = left_id
@@ -2437,6 +2482,9 @@ def fit_non_symmetric_tree[
         trace.record_list_i32(
             tag_prefix + "model.leaves", _one_i32(model.bin_count())
         )
+    comptime if REPORT_PART_STATS_WORK:
+        print("part_stats_work", options.policy, n_rows,
+              part_stats_leaves_reduced, part_stats_rows_reduced)
     return model^
 
 

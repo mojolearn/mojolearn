@@ -327,6 +327,15 @@ class GradientBoosting(NumericModeMixin):
         `use_pointwise_searcher=True` (that is the doc-parallel OBLIVIOUS
         searcher). Their `Region` policy is not ported and is refused by
         name. DEVIATION 259.
+    min_split_gain : float or None, default None
+        Optional strict lower bound on a split's improvement in the selected
+        score function, for Depthwise and Lossguide only. None preserves
+        CatBoost's existing growth behavior, including Lossguide's ability
+        to split without positive gain. Zero requires positive improvement;
+        equality is rejected. Units depend on score_function, feature weights
+        and score noise; this is not numerically interchangeable with XGBoost
+        gamma or LightGBM min_gain_to_split. Enabled values must be finite
+        and nonnegative.
     max_leaves : int, optional
         CatBoost's `max_leaves`, the Lossguide leaf budget. Their default
         is 31 (`oblivious_tree_options.cpp:24`) and their cap is 65536
@@ -537,6 +546,7 @@ class GradientBoosting(NumericModeMixin):
         grow_policy="SymmetricTree",
         max_leaves=None,
         min_data_in_leaf=1,
+        min_split_gain=None,
     ):
         if loss not in LOSSES:
             raise ValueError(
@@ -581,6 +591,18 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: grow_policy must be one of {GROW_POLICIES}, "
                 f"got {grow_policy!r}"
             )
+        if min_split_gain is not None:
+            valid_type = (not isinstance(min_split_gain, (bool, np.bool_))
+                          and isinstance(min_split_gain, (int, float, np.integer, np.floating)))
+            try:
+                parsed_gain = float(min_split_gain) if valid_type else float("nan")
+            except (ValueError, TypeError, OverflowError):
+                parsed_gain = float("nan")
+            if not np.isfinite(parsed_gain) or parsed_gain < 0:
+                raise ValueError("mojolearn: min_split_gain must be finite and nonnegative or None")
+            if grow_policy == "SymmetricTree":
+                raise ValueError("mojolearn: min_split_gain is only supported for Depthwise and Lossguide")
+            min_split_gain = parsed_gain
         non_symmetric = grow_policy != "SymmetricTree"
         if non_symmetric and loss not in _NON_SYMMETRIC_LOSSES:
             # their `TGpuTrainerFactory::Has` failing: no
@@ -781,6 +803,7 @@ class GradientBoosting(NumericModeMixin):
         self.grow_policy = grow_policy
         self.max_leaves = None if max_leaves is None else int(max_leaves)
         self.min_data_in_leaf = int(min_data_in_leaf)
+        self.min_split_gain = None if min_split_gain is None else float(min_split_gain)
 
         self.model_ = None
         self.loss_curve_ = None
@@ -802,7 +825,9 @@ class GradientBoosting(NumericModeMixin):
     #
     # SLOTS 0..34 ARE FIXED AND SLOT 34 IS A COUNT: everything after it is
     # the class-weight tail, and the binding checks the length against it
-    # rather than trusting it. A new option goes BEFORE the count and bumps
+    # rather than trusting it. min_split_gain is an optional tail AFTER the
+    # counted weights, preserving default calls. Other new fixed options go
+    # BEFORE the count and bump
     # the binding's three length numbers with it (slots 31-33 landed that
     # way 2026-08-23, DEVIATION 259).
     def _params(self, n_rows, n_features, n_flags, n_weights=0,
@@ -865,6 +890,8 @@ class GradientBoosting(NumericModeMixin):
             # would not, and a class weight is the caller's number, not ours
             # to round.
             *cw,
+            # Optional ABI tail preserves the old layout for default fits.
+            *([] if self.min_split_gain is None else [float(self.min_split_gain)]),
         ]
 
     def _flags(self, n_features):

@@ -190,6 +190,9 @@ def gbdt_fit_binding(
         33  min_data_in_leaf
         34  n_class_weights  (0 means none)
 
+    An optional final min_split_gain Float64 follows the counted weights.
+    Omitting it disables the extra non-symmetric growth guard.
+
     AND THEN `n_class_weights` MORE VALUES, the class weights themselves,
     at `params[35 .. 35 + n_class_weights)`. They ride in this list rather
     than at a seventh buffer address for two reasons. The arity: this
@@ -238,9 +241,10 @@ def gbdt_fit_binding(
             "gbdt_fit: n_class_weights must not be negative, got "
             + String(n_class_weights)
         )
-    if len(params) != 35 + n_class_weights:
+    var fixed_and_weights = 35 + n_class_weights
+    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1:
         raise Error(
-            "gbdt_fit: params must hold 35 + n_class_weights ("
+            "gbdt_fit: params must hold 35 + n_class_weights, optionally one min_split_gain value ("
             + String(35 + n_class_weights)
             + ") values, got "
             + String(len(params))
@@ -287,6 +291,13 @@ def gbdt_fit_binding(
             " (Depthwise) or 2 (Lossguide), got " + String(grow_code)
         )
 
+    # Backward-compatible optional tail after the counted class weights.
+    # The default Python wrapper emits no tail, so old callers retain their
+    # exact slot layout. An old extension rejects the new longer request.
+    var min_split_gain = Float64(-1)
+    if len(params) == fixed_and_weights + 1:
+        min_split_gain = Float64(py=params[fixed_and_weights])
+
     var fp = GbdtFitParams(
         Int(py=params[4]),
         Int(py=params[5]),
@@ -322,6 +333,7 @@ def gbdt_fit_binding(
         grow_name,
         Int(py=params[32]),
         Int(py=params[33]),
+        min_split_gain,
     )
     var n_eval_rows = Int(py=params[20])
 
