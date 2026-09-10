@@ -21,7 +21,7 @@ passed; other hosts remain RUN OWED. This is correctness evidence, not a
 performance measurement or estimator surface gate.
 
 ```
-nice -n 19 pixi run mojo -I . bindings/checks/hostptr_check.mojo
+nice -n 19 pixi run mojo -I . checks/hostptr_check.mojo
 ```
 
 ## GP candidate, not activated
@@ -84,3 +84,9 @@ retaining pointer lifetimes is mandatory. Mixture's E-step precision inputs,
 spectral's host-only sum-scale staging, kNN classification's returned index
 buffers, and HDBSCAN's pre-download synchronizations still need their own
 fingerprint gates. No WP7 deletion is qualified by the host helper check.
+
+Integration correction: the hostptr gate now lives under root `checks/`. A
+`bindings/checks/` directory shadows the product `checks` imports when the
+binding builds use `-I . -I bindings`; this blocked ET/RF extension builds.
+The helper and gate behavior are unchanged. Retained run logs keep their
+original executed paths.
