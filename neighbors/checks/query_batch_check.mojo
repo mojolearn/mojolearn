@@ -47,6 +47,16 @@ def main() raises:
         raise Error("default query batch unexpectedly shrank")
     if plan_query_tile(400000, 32, DEFAULT_QUERY_TILE) != 32:
         raise Error("query clamp changed")
+    # Host-only policy checks: no large allocation. Above the measured
+    # bound, the candidate must retain every old default shrink and floor.
+    if plan_query_tile(400001, 4000, DEFAULT_QUERY_TILE) != 256:
+        raise Error("unmeasured index escaped the historical batch cap")
+    if plan_query_tile(1000000, 4000, DEFAULT_QUERY_TILE) != 128:
+        raise Error("million-row index changed historical batch shrink")
+    if plan_query_tile(100000000, 4000, DEFAULT_QUERY_TILE) != 32:
+        raise Error("large-index historical floor changed")
+    if plan_query_tile(100000000, 1, DEFAULT_QUERY_TILE) != 1:
+        raise Error("large-index query clamp changed")
     _case(513, 513, 17, 10)
     _case(65537, 513, 8, 15)
     print("QUERY BATCH PASS", "enabled", QUERY_TILE_512_CANDIDATE, "cases", 2)

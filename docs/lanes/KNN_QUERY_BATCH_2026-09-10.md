@@ -43,3 +43,20 @@ and device regions. Its full-word dump is compared at five shapes in forward
 and reversed order, five samples per phase per pass. No opponent rerun is
 needed. Any accepted timing must reuse the existing matched opponent tuple
 and retain raw samples and full-output equality evidence.
+
+The candidate is now bounded to at most 400,000 index rows for its accurate
+width budget. Above that bound, the historical full-index estimate applies.
+Since 400001*512*4 exceeds 768 MiB, the first halving necessarily reaches
+256, after which the baseline default's shrink/floor/clamp is identical.
+Host-only planner assertions cover the boundary, one million and 100 million
+index rows, and a one-query clamp without allocating those fixtures.
+
+For accepted IDENTICAL k<=1024 and index<=400000, all known query-batch
+scratch at batch512 is bounded by 548,012,032 bytes (about 522.6 MiB):
+`512*(4*65536 + 16*max(400000//8,1024) + 8*1024)`. This includes distance,
+both fallback radix buffers, and the partial distance/index pair. Fixed-size
+index/query/norm/output and transposed-index allocations do not grow with
+batch size. This is not a new total-memory guarantee; beyond this measured
+scope the existing planner's minimum32 behavior is preserved verbatim.
+If timing wins, production default admission should additionally require
+NVIDIA IDENTICAL; portable Apple opt-in remains qualification only.

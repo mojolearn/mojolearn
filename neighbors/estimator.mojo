@@ -263,9 +263,12 @@ def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int) -> Int:
 
     var per_row_bytes = n_index * 4
     comptime if QUERY_TILE_512_CANDIDATE:
-        # The IDENTICAL path allocates this many distance columns, not the
-        # whole index. Keep the historical cap in the baseline arm.
-        per_row_bytes = identical_index_tile(n_index) * 4
+        # Limit the new budgeting rule to the largest measured index. For
+        # n_index > 400000 the historical estimate necessarily halves 512
+        # to 256 (already >768MiB), then follows the exact old default path.
+        # This prevents larger radix scratch on unmeasured large indices.
+        if n_index <= 400000:
+            per_row_bytes = identical_index_tile(n_index) * 4
     if per_row_bytes > 0:
         while (
             tile > MIN_QUERY_TILE
