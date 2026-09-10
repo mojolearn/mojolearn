@@ -200,16 +200,17 @@ def _write_f32(addr: Int, values: List[Float32]) raises:
 def _upload_addr(
     ctx: DeviceContext, addr: Int, n: Int
 ) raises -> DeviceBuffer[DType.float32]:
-    """A borrowed NumPy buffer straight onto the device through ONE pinned
-    staging buffer: `memcpy` into it, one `enqueue_copy` out of it. The
-    same bits `_upload(ctx, _read_f32(addr, n))` produced, without the
-    list."""
+    """Copy a live caller buffer, synchronizing before its borrow ends.
+
+    IDENTICAL uses DeviceContext's ordinary host-pointer transfer directly.
+    Other modes and the diagnostic legacy flag retain pinned staging.
+    """
     var p = _f32_ptr(addr)
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TRANSFORMER_CALLER_TRANSFER"]():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"]():
         if n > 0:
             ctx.enqueue_copy(dst_buf=dev, src_ptr=p)
             ctx.synchronize()
@@ -227,11 +228,13 @@ def _upload_addr(
 def _download_addr(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, addr: Int
 ) raises:
-    """The first `n` elements of a device buffer into a borrowed NumPy
-    buffer: one `enqueue_copy` into a pinned staging buffer, one `memcpy`
-    out of it."""
+    """Copy the first `n` elements into a live caller buffer.
+
+    The synchronized IDENTICAL path avoids a pinned staging allocation and
+    its memcpy. Caller arrays remain owned by the Python frame throughout.
+    """
     var p = _f32_ptr(addr)
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TRANSFORMER_CALLER_TRANSFER"]():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"]():
         if n == len(buf):
             ctx.enqueue_copy(dst_ptr=p, src_buf=buf)
         else:
