@@ -162,11 +162,9 @@ from neighbors.impl.neighbors.detail.knn_brute_force import KNN_METHOD_TILED
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 comptime N_ROWS = 320
-"""Larger than `SELECT_BLOCK` ON PURPOSE, so `check_ivf_refusals` can ask
-for `k = SELECT_BLOCK + 1` and reach the SELECTOR'S refusal rather than the
-candidate-count one that would fire first on a smaller index. A refusal
-check that reaches a different refusal than the one it names is a check
-about the wrong sentence."""
+"""Larger than SELECT_BLOCK so k257 reaches selection after candidate-count
+validation. IDENTICAL now admits it; the other modes retain the256 cap.
+The separate ivf_large_k_check uses1057 rows to qualify1024 and its bound."""
 
 comptime N_QUERIES = 24
 comptime DIM = 6

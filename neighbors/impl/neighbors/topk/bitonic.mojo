@@ -98,6 +98,9 @@ directions for a NaN, so a NaN compares as equal-to-everything and its final
 position is unspecified. Callers feed distances, which are non-NaN.
 """
 
+# In IDENTICAL CDNA, "warp" in this module's network/layout contract means
+# an aligned logical32 group, not the physical64-lane wave. Communication
+# wrappers preserve that scope; all other modes keep their previous calls.
 from std.bit import log2_floor
 from neighbors.impl.neighbors.topk.logical_warp32 import queue_lane_id, queue_shuffle_xor
 

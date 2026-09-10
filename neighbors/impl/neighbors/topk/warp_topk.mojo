@@ -86,6 +86,9 @@ candidate the caller adds may sort after it. A candidate with key `+inf`
 would violate that and could be displaced by a sentinel.
 """
 
+# In IDENTICAL CDNA, "warp" in this module's network/layout contract means
+# an aligned logical32 group, not the physical64-lane wave. Communication
+# wrappers preserve that scope; all other modes keep their previous calls.
 from neighbors.impl.neighbors.topk.logical_warp32 import queue_lane_id, queue_any, queue_broadcast
 
 from neighbors.impl.neighbors.topk.bitonic import (
