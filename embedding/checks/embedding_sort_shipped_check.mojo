@@ -2,6 +2,7 @@
 """REMOTE GPU ONLY: contract 11.2 shipped shape, ~4.4 GB live device buffers."""
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
+from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from embedding.checks.embedding_identical import identical_embedding_backward_into, EMB_TPB
 from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
@@ -50,8 +51,11 @@ def main() raises:
     var perm = ctx.enqueue_create_buffer[DType.int32](T)
     var errors = ctx.enqueue_create_buffer[DType.int32](CHECKS)
     ctx.enqueue_function[fill_dy](dy.unsafe_ptr(), grid_dim=((T * D + 255) // 256, 1, 1), block_dim=(256, 1, 1))
+    ctx.synchronize()
+    var baseline_started = perf_counter_ns()
     identical_embedding_backward_into(ctx, baseline, dy, ids, counts, begin, perm, T, cfg, PLAN_SCAN, EMB_TPB)
     ctx.synchronize()
+    print("shipped diagnostic plan=0 threads=", EMB_TPB, "single_call_ms=", Float64(perf_counter_ns() - baseline_started) / 1e6)
     var ref_counts = _download_i32(ctx, counts, V)
     var ref_begin = _download_i32(ctx, begin, V + 1)
     var used = Int(ref_begin[V])
@@ -59,7 +63,10 @@ def main() raises:
     var geometries: List[Int] = [32, 96, 160]
     for plan in range(2):
         for g in range(len(geometries)):
+            var started = perf_counter_ns()
             identical_embedding_backward_into(ctx, candidate, dy, ids, counts, begin, perm, T, cfg, plan, geometries[g])
+            ctx.synchronize()
+            print("shipped diagnostic plan=", plan, "threads=", geometries[g], "single_call_ms=", Float64(perf_counter_ns() - started) / 1e6)
             ctx.enqueue_function[compare_bits](baseline.unsafe_ptr(), candidate.unsafe_ptr(), errors.unsafe_ptr(), grid_dim=((CHECKS + 127) // 128, 1, 1), block_dim=(128, 1, 1))
             ctx.synchronize()
             var failures = _download_i32(ctx, errors, CHECKS)
