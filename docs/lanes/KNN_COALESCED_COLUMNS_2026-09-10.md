@@ -46,3 +46,26 @@ raw distance word outside timing. `cmp` requires all those bytes equal across
 arms. Public gate comparisons likewise include every emitted cell. Reuse
 existing matched opponent rows only if this candidate is accepted; do not
 promote a component timing to an end-to-end or cross-hardware claim.
+
+Independent address review: in a partial final block, slot zero is the minimum
+column owned by a lane, so the early return cannot discard a later valid slot.
+For each valid local column `j`, lane=`j % 128`, slot=`j // 128` is its unique
+writer. Out-of-range loads clamp to the last column but stores recompute the
+original column, preventing duplicate tail writes. There are no barriers or
+warp collectives in this kernel that would be invalidated by partial exits.
+
+At scalar instruction level, a full aligned warp requests four 32-byte sectors
+for one candidate column slot versus sixteen for the old stride-four slot.
+Across all four old slots those sectors overlap, so this is not a claim of
+four times less DRAM traffic. Adjacent old columns may also be combined into
+vector loads/stores by the compiler. No PTX/SASS inspection was performed;
+compiled transaction behavior remains a hypothesis until disassembly or
+profiling confirms it. The candidate also changes short-row utilization:
+width65 activates 65 lanes rather than 17, with more discarded clamped chains.
+That makes the short/tail controls necessary even if large requests improve.
+
+`tools/knn_coalesced_columns_summary.py` validates both passes, all five shapes,
+raw timing sample counts, device/request checks, component/public evidence,
+and the full index/distance dumps. It emits raw-backed JSON with pooled
+medians and per-pass samples. A pooled result should be read together with
+both execution orders rather than treated as controlled statistical evidence.
