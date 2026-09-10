@@ -928,6 +928,62 @@ def m3_state_increment_kernel(
         acc = ftz(identical_mul_add(vsv, ksv, acc))
     increments.unsafe_store(cell, acc)
 
+# Eight P rows by 32 N columns. Shared memory carries only independently
+# rounded operands; each thread retains all Q products in their original order.
+# Compared with shared-V, K is reused across eight P owners and decayed V
+# across 32 N owners. The final ragged chunk still contributes Q padded terms.
+def m3_state_increment_tiled_kernel(
+    increments: MutPointer[Float32, MutAnyOrigin],
+    kscale_work: MutPointer[Float32, MutAnyOrigin],
+    v_work: MutPointer[Float32, MutAnyOrigin],
+    decay: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, t_in: Int32, nh_in: Int32, nc_in: Int32, q_in: Int32,
+):
+    var sv = stack_allocation[512, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sk = stack_allocation[2048, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var tile = Int(block_idx.x)
+    var nbase = (tile % 4) * 32
+    tile = tile // 4
+    var pbase = (tile % 8) * 8
+    tile = tile // 8
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var tw = Int(t_in)
+    var hh = tile % nh
+    var c = (tile // nh) % nc
+    var bb = tile // (nh * nc)
+    var c0 = c * qv
+    var dbase = ((bb * nh + hh) * nc + c) * (qv + 1)
+    var ix = tid
+    while ix < qv * 8:
+        var j = ix // 8
+        var pp = pbase + ix % 8
+        var v = Float32(0.0)
+        if c0 + j < tw:
+            v = ftz(pinned_mul(ftz(v_work.unsafe_load(((bb * tw + c0 + j) * nh + hh) * M3_HEADDIM + pp)), decay.unsafe_load(dbase + j)))
+        sv[ix] = v
+        ix += 256
+    ix = tid
+    while ix < qv * 32:
+        var j = ix // 32
+        var nn = nbase + ix % 32
+        var k = Float32(0.0)
+        if c0 + j < tw:
+            k = ftz(kscale_work.unsafe_load(((bb * tw + c0 + j) * nh + hh) * M3_D_STATE + nn))
+        sk[ix] = k
+        ix += 256
+    barrier()
+    var pp = tid // 32
+    var nn = tid % 32
+    var acc = Float32(0.0)
+    for j in range(qv):
+        acc = ftz(identical_mul_add(sv[j * 8 + pp], sk[j * 32 + nn], acc))
+    var cell = (((bb * nc + c) * nh + hh) * M3_HEADDIM + pbase + pp) * M3_D_STATE + nbase + nn
+    increments.unsafe_store(cell, acc)
+
+
 def m3_state_increment_shared_v_kernel(
     increments: MutPointer[Float32, MutAnyOrigin],
     kscale_work: MutPointer[Float32, MutAnyOrigin],
@@ -1785,7 +1841,15 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
         m3_phase_tick(ctx, phase_tick, String("m3_state_decay_kernel"))
-        comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V"]() and lib_smem_page_fits_for[TARGET_COLUMN, 512]():
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_TILED_INCREMENT"]() and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+            ctx.enqueue_function[m3_state_increment_tiled_kernel](
+                pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
+                v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
+                Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+                grid_dim=(b * nc * nh * 32, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+        elif not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V"]() and lib_smem_page_fits_for[TARGET_COLUMN, 512]():
             ctx.enqueue_function[m3_state_increment_shared_v_kernel](
                 pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
                 v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
