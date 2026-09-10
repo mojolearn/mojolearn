@@ -117,6 +117,7 @@ def main():
         parameters[arm.name] = (estimator.get_params() if hasattr(estimator, 'get_params')
                                 else config.copy())
     metadata = dict(lane=args.lane, dataset=data.tag, config=config,
+                    dataset_scale=spec.dataset_scale(data),
                     numeric_mode='identical', vendor='cuda', rounds=args.rounds,
                     symmetric_profile=args.symmetric_profile if args.lane == 'gbdt-symmetric' else None,
                     binding=witness,

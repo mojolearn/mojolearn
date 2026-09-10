@@ -17,7 +17,8 @@ def check(rotate, fail_second=False):
     namespace = dict(time=time, device_string=lambda: 'test',
                      per_arm_budget_s=lambda: 60, process_deadline_s=lambda: 60,
                      hash_predictions=lambda _: 'digest',
-                     _check_same_library_agreement=lambda *_: None)
+                     _check_same_library_agreement=lambda *_: None,
+                     emit_scale_reminder=lambda *_: None)
     for name in ('emit_header', 'emit_warmup', 'emit_round', 'emit_acc'):
         namespace[name] = lambda *args: None
     namespace['emit_refused'] = lambda *args: refusals.append(args)
