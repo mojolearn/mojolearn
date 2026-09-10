@@ -961,8 +961,11 @@ def knn_distance_hardware_flush_for[column: Int, identical: Bool]() -> Bool:
 
 @always_inline
 def knn_distance_rows_for[column: Int, identical: Bool]() -> Int:
-    """Opt-in NVIDIA eight-query register tile; each cell keeps its FMA chain."""
-    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_ROWS8"]():
-        if identical and column == COLUMN_NVIDIA:
-            return 8
-    return 4
+    """Measured NVIDIA eight-query register tile; each cell keeps its FMA chain.
+
+    The32/128-feature cases improve; the8-feature coverage is flat to0.9%
+    slower. Other columns retain four query rows per thread.
+    """
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_ROWS4"]():
+        return 4
+    return 8 if identical and column == COLUMN_NVIDIA else 4
