@@ -73,3 +73,24 @@ quantization and leaf-estimation work are profiling candidates. Source inspectio
 alone cannot assign the observed timing difference to any of them. Collect
 stage timings or device traces before proposing a causal explanation or a
 performance-driven default change.
+
+## Runtime option compatibility audit
+
+No concrete IDENTICAL-only conflict was found for `random_strength` or
+`use_pointwise_searcher`. The score-noise reduction in
+`gbdt/methods/random_score_helper.mojo::std_dev_blocks` pins its virtual SM count
+to 32 under IDENTICAL, so physical device size does not change that reduction's
+partitioning. Pointwise histogram dispatch also reads the numeric mode. This
+source audit does not qualify every option combination across devices.
+
+The shared Python constructor/fit parameter guard rejects nonfinite, negative
+or non-Float32-representable random strength, nonzero noise with L2/NewtonL2,
+and pointwise search with a non-symmetric growth policy. These restrictions
+apply in every mode and are checked again after direct attribute mutation.
+Portable seeded randomness remains supported; different seeds are not an
+identity failure. Defaults remain noise zero and greedy subsets search.
+
+Focused host guard tests plus existing feature-fraction/Hessian API regressions
+passed 152 checks, with two optional sklearn checks skipped in the test
+environment. No native build, GPU fit or quality experiment was performed for
+this validation change.
