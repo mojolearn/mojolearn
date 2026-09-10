@@ -73,12 +73,13 @@ esac
 TAG=rel061
 REMOTE_PY=/usr/bin/python3                 # the image's stdlib 3.12 (tools/do_byte_lm_setup.sh)
 REMOTE_OUT=/root/rel061-build; REMOTE_LOG=/root/rel061-build.log
-OUT="$REPO/bench/results/releases/2026-09-08-linux-0.7.0/hip-gfx942"
+RELEASE_ROOT="${MOJOLEARN_RELEASE_RESULTS_ROOT:-$REPO/bench/results/releases/2026-09-08-linux-0.7.0}"
+OUT="$RELEASE_ROOT/$LEG_VENDOR-$LEG_ARCH"
 # DEVIATION 2294: a qualification is not a build proof and must not land where
 # one lives; the packer reads that path and would find a directory of the
 # wrong shape. Its own destination, stamped, so two qualification runs of the
 # same wheel do not overwrite each other either.
-[ "$LEG_MODE" = qualify ] && OUT="$REPO/bench/results/releases/2026-09-08-linux-0.7.0/qualification/$LEG_VENDOR-$LEG_ARCH-$(date -u +%Y%m%dT%H%M%SZ)"
+[ "$LEG_MODE" = qualify ] && OUT="$RELEASE_ROOT/qualification/$LEG_VENDOR-$LEG_ARCH-$(date -u +%Y%m%dT%H%M%SZ)"
 STATE="$OUT/leg.txt"
 TMPD="$(mktemp -d "${TMPDIR:-/tmp}/rel061.XXXXXX")"
 
