@@ -120,6 +120,8 @@ MOJOLEARN_NUMERIC_MODE); gate:
 `cd python && python3 -m mojolearn.tests.test_transformer_surface`.
 """
 
+# DEVIATION 2486: shared byte-preserving host copies.
+from bindings.hostptr import f32_ptr, read_f32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -173,29 +175,15 @@ from transformer.checks.transformer_backward import (
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float32 buffer address")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f32_ptr(addr)
 
 
 def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
-    """The first `n` float32 of a borrowed NumPy buffer, as a host list.
-    A COPY, deliberately: the device helpers below take host lists, and
-    the borrow ends when this returns, so no pointer is retained. ONE
-    `memcpy` (2026-09-09): the element loop it replaces was 16.7 M
-    appends per activation at the Samba shape."""
-    var p = _f32_ptr(addr)
-    var out = List[Float32](length=n, fill=Float32(0.0))
-    if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=p, count=n)
-    return out^
+    return read_f32(addr, n)
 
 
 def _write_f32(addr: Int, values: List[Float32]) raises:
-    """A host list into a borrowed NumPy buffer, one `memcpy`."""
-    var p = _f32_ptr(addr)
-    if len(values) > 0:
-        memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
+    copy_f32(values.unsafe_ptr(), _f32_ptr(addr), len(values))
 
 
 def _upload_addr(
