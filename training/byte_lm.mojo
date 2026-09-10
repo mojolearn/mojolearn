@@ -191,7 +191,7 @@ def _byte_validate_allocations(config: ByteConfig) raises:
 
 
 struct ByteBuffers(Movable):
-    """Configured buffers; flat arrays are authoritative, weights are views."""
+    """Configured buffers; flat arrays are authoritative, weights are copies."""
     var config: ByteConfig
     var n_total: Int
     var offsets: List[Int]

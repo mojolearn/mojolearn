@@ -70,3 +70,6 @@ Next: resident Python/native training session, reduced stage materialization,
 memory-efficient attention/loss, then a large pilot with complete step timing.
 GEMM and attention still need large-shape tuning; Transformer opponent admission
 is still unqualified. The small surface suite does not change that status.
+
+Continuation: HANDOFF_lm_capacity_2026-09-10.md records current opponent gaps
+and a live large-shape allocation blocker, with a reproducible host inventory.
