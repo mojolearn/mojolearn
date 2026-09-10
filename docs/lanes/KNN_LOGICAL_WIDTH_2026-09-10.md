@@ -67,3 +67,14 @@ simulation16cases4096cells PASS; Intel,Qualcomm,RDNA simulations each16cases
 8192cells PASS. Existing36 long-selector cases PASS. These simulations run
 on Apple and force shared memory; none grants fourth-physical-device status.
 Logs are compressed under bench/results/knn/2026-09-10-logical-width/.
+
+RDNA backend follow-up: installed Apple compiler imports
+`has_amd_rdna_gpu_accelerator` successfully and returns False on Apple.
+TARGET_COLUMN and DETECTED_COLUMN now check this detector before generic AMD,
+so an actual RDNA target receives its32-lane column rather than CDNA64.
+Explicit simulation still differs from automatic target detection.
+The [official requirements](https://mojolang.org/docs/requirements/) list
+RDNA gfx1100 and gfx1201 as known-compatible targets; the
+[detector reference](https://mojolang.org/docs/std/sys/info/has_amd_rdna_gpu_accelerator/)
+documents the architecture-specific predicate. Actual cross-target compile
+results are recorded separately from physical-device execution, which is owed.

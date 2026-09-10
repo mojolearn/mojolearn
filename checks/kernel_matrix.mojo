@@ -5,6 +5,7 @@
 from std.sys.compile import is_defined
 from std.sys.info import (
     has_amd_gpu_accelerator,
+    has_amd_rdna_gpu_accelerator,
     has_nvidia_gpu_accelerator,
 )
 
@@ -353,6 +354,7 @@ comptime TARGET_COLUMN = (
     COLUMN_QUALCOMM if is_defined["MOJOLEARN_COLUMN_QUALCOMM"]() else
     COLUMN_INTEL if is_defined["MOJOLEARN_COLUMN_INTEL"]() else
     COLUMN_SPEC_BASELINE if is_defined["MOJOLEARN_COLUMN_SPEC_BASELINE"]() else
+    COLUMN_AMD_RDNA if has_amd_rdna_gpu_accelerator() else
     COLUMN_AMD if has_amd_gpu_accelerator() else
     COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
     COLUMN_APPLE
@@ -360,6 +362,7 @@ comptime TARGET_COLUMN = (
 
 
 comptime DETECTED_COLUMN = (
+    COLUMN_AMD_RDNA if has_amd_rdna_gpu_accelerator() else
     COLUMN_AMD if has_amd_gpu_accelerator() else
     COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
     COLUMN_APPLE
