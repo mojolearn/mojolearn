@@ -44,7 +44,24 @@ def stage_errors(model32, model64, x, b, length, emit):
     local_o = torch.nn.functional.linear(context, model64.W['o_proj.weight'])
     record('local_same_input_fp64.attention_o_proj', o32, local_o)
     record('propagated_input_error_fp64.attention_o_proj', local_o, o64)
-    del q, k, v, context, local_o
+    # Split the attention discrepancy further, still reusing the original
+    # project/attention implementations and holding each FP32 input fixed.
+    q32, k32, v32 = model32.project(norm132, b, length)
+    for label, actual, reference in (('q_project_rope', q32, q),
+                                     ('k_project_rope', k32, k),
+                                     ('v_project', v32, v)):
+        record('local_same_input_fp64.' + label,
+               actual.transpose(1, 2), reference.transpose(1, 2))
+    context32 = model32.attention_eager(q32, k32, v32, b, length)
+    context_same = model64.attention_eager(q32.double(), k32.double(),
+                                         v32.double(), b, length)
+    record('local_same_input_fp64.attention_core', context32, context_same)
+    record('propagated_input_error_fp64.attention_core', context_same, context)
+    local_projection = torch.nn.functional.linear(context32.double(),
+                                                  model64.W['o_proj.weight'])
+    record('local_same_input_fp64.o_proj', o32, local_projection)
+    del q, k, v, q32, k32, v32, context, context32, context_same
+    del local_projection, local_o
     residual32 = x + o32
     record('local_same_input_fp64.residual1_add', residual32,
            x.double() + o32.double())
