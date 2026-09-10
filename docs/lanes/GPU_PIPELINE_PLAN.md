@@ -12,7 +12,9 @@ label, averaging and device qualification scope. Bounded [GPU log loss](GPU_LOG_
 is now implemented with build/smoke validation only; broader numerical
 qualification remains pending. Bounded [binary ROC-AUC and precision-recall
 curves](GPU_RANKING_METRICS.md) are the implemented A3 scoring slice, with
-local build/smoke validation only. The remaining phases follow. A complete cross-vendor
+local build/smoke validation only. C1 now adds bounded
+[GPU MinMaxScaler](GPU_MINMAX_SCALER.md); StandardScaler is next. The
+remaining phases follow. A complete cross-vendor
 pipeline has not been qualified. Metrics and estimator compatibility take priority over
 the longer-tail tree features.
 
@@ -140,9 +142,13 @@ learned attributes, response methods and metadata routing matter. Qualify an
 explicit sklearn version range. Start with serial search; GPU process/thread
 concurrency and per-worker context ownership are separate work.
 
-## Next implementation slice: GPU scalers
+## GPU scalers: MinMaxScaler implemented, StandardScaler next
 
-Start C1 with dense finite Float32 `MinMaxScaler`, then `StandardScaler`.
+C1 starts with the implemented dense finite Float32
+[MinMaxScaler](GPU_MINMAX_SCALER.md), with copied transforms/inverse transforms
+and a bounded transformer protocol. Local build/smoke checks are the scope
+of this turn; broader numerical/cross-device qualification remains pending.
+StandardScaler is next.
 Use sklearn `preprocessing/_data.py` (`partial_fit`, `transform`,
 `inverse_transform`, `_handle_zeros_in_scale`, `_is_constant_feature`) and
 `utils/extmath.py::_incremental_mean_and_var` as behavior references; inspect
@@ -157,13 +163,12 @@ the cancellation-prone difference of squared moments. sklearn's Float64
 accumulation and near-constant detection need an explicit documented
 counterpart; a Float32 exact-zero shortcut is not equivalent.
 
-The first public contract should own learned statistics, return copied
-transforms, preserve numeric mode and support inverse transforms and a
-transformer-specific clone/get/set/tags protocol. Reuse forest parameter
-registration ideas, not forest scoring or forest fitted-state detection.
-Define feature ranges, clipping, constant columns, subnormal/signed-zero
-behavior and overflow handling. Weights, sparse inputs, NaNs and incremental
-`partial_fit` can follow separately. Scaling remains optional for trees.
+The MinMaxScaler contract owns learned statistics, returns copied transforms,
+preserves numeric mode and supports inverse transforms plus a bounded
+transformer-specific clone/get/set/tags protocol. Its feature ranges, clipping,
+constant-feature policy and overflow refusals are documented in the feature
+contract. Weights, sparse inputs, NaNs and incremental `partial_fit` remain
+separate work. Scaling remains optional for trees.
 
 ## The first end-to-end IDENTICAL claim
 
@@ -214,6 +219,7 @@ Do not claim arbitrary sklearn pipelines are identical, or that no competitor
 can offer a similar guarantee. Publish the precise certified workflow and
 its intermediate evidence instead. This plan remains the implementation and qualification queue. A1 unweighted
 Float32 errors, A2 unweighted confusion/PRF, bounded log loss, A3 binary
-ROC-AUC/PR curves and B1 forest compatibility are implemented slices; log
+ROC-AUC/PR curves, B1 forest compatibility and bounded C1 MinMaxScaler
+are implemented slices; log
 loss and A3 have only build/smoke validation;
 weights, multiple outputs and broader protocol support remain pending.

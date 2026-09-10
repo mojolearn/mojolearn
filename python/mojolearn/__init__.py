@@ -61,6 +61,8 @@ from .decomposition import PCA, TruncatedSVD
 from .density import DBSCAN, KernelDensity
 from .ensemble import ExperimentalTwoLevelFeatureFreq, GradientBoosting, OrderedRMSE
 from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
+from . import preprocessing
+from .preprocessing import MinMaxScaler
 from .linear_model import LinearRegression, LogisticRegression, Ridge
 from .neighbors import (
     KNeighborsClassifier,
@@ -201,6 +203,8 @@ from ._transformer_impl import TransformerBlock, TransformerState
 from ._samba_impl import SambaConfig, SambaStack
 
 __all__ = [
+    "preprocessing",
+    "MinMaxScaler",
     "SGD",
     "Adam",
     "AdamW",

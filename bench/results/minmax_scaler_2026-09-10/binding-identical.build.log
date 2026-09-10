@@ -1,0 +1,4 @@
+ld: warning: passed two min versions (26.0, 11.0) for platform macOS. Using 11.0.
+ld: warning: object file (/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojo_archive-3a5ce6c.a) was built for newer 'macOS' version (26.0) than being linked (11.0)
+PASS preprocessing native ABI fit/transform/inverse 1 metal
+built python/mojolearn/identical/_mojolearn_preprocessing.so
