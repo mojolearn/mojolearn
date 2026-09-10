@@ -130,6 +130,7 @@ from std.memory import memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
+from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -779,7 +780,10 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
             "transformer_numeric_mode"
         )
         m.def_function[transformer_forward_binding]("transformer_forward")
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]():
+        # NVIDIA's full public A/B gate admits discarded-cache prefill.
+        # Apple retains its prior default until separately priced; the explicit
+        # force flag remains available for its completed arithmetic gate.
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or (TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]())):
             m.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
         m.def_function[transformer_decode_step_binding](
             "transformer_decode_step"

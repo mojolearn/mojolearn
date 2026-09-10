@@ -19,7 +19,7 @@ sha256sum bindings/_mojolearn_transformer.mojo tools/transformer_transfer_check.
 cp bench/results/mamba3/2026-09-09-statepass/reproduction/seq_py_speed_arm.py bench/speed/
 cp bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py tools/
 for arm in baseline fresh; do
- extra=()
+ extra=(-D MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL=1)
  if [ "$arm" = fresh ]; then extra=(-D MOJOLEARN_TRANSFORMER_FRESH_PREFILL=1); fi
  mojo build -j 2 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 "${extra[@]}" -I . -I bindings bindings/_mojolearn_transformer.mojo -o "$out/$arm.so" > "$out/build-$arm.log" 2>&1
  cp "$out/$arm.so" python/mojolearn/identical/_mojolearn_transformer.so
