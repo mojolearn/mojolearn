@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost-compatible depthwise tree growth: every live leaf selects and applies its own split."""
 
+from gbdt.options.child_hessian import child_hessian_threshold
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.fixed_point import choose_scale
@@ -802,6 +803,7 @@ def fit_non_symmetric_tree[
     var lossguide = options.policy == GROW_LOSSGUIDE
     options.check()
 
+    var min_child_hessian = child_hessian_threshold(options.min_child_hessian, options.policy, options.score_function)
     var stat_count = 1 + approx_dim
     var max_leaves = options.max_leaves
     var max_depth = options.max_depth
@@ -1671,6 +1673,7 @@ def fit_non_symmetric_tree[
                         level_seed,
                         region_score.unsafe_ptr(),
                         region_bin.unsafe_ptr(),
+                        min_child_hessian,
                         grid_dim=(argmax_blocks, rows, 1),
                         block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
                     )
@@ -1693,6 +1696,7 @@ def fit_non_symmetric_tree[
                         level_seed,
                         region_score.unsafe_ptr(),
                         region_bin.unsafe_ptr(),
+                        min_child_hessian,
                         grid_dim=(argmax_blocks, rows, 1),
                         block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
                     )
@@ -1720,6 +1724,7 @@ def fit_non_symmetric_tree[
                     level_seed,
                     region_score.unsafe_ptr(),
                     region_bin.unsafe_ptr(),
+                    min_child_hessian,
                     grid_dim=(argmax_blocks, len(visit), 1),
                     block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
                 )
@@ -1743,6 +1748,7 @@ def fit_non_symmetric_tree[
                     level_seed,
                     region_score.unsafe_ptr(),
                     region_bin.unsafe_ptr(),
+                    min_child_hessian,
                     grid_dim=(argmax_blocks, len(visit), 1),
                     block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
                 )
@@ -1938,6 +1944,15 @@ def fit_non_symmetric_tree[
                     # fold makes, from record word [4]
                     best_cells[visit[i]] = best_cell
                 stage_times.end(ctx, "score.hostreduce")
+
+            # Rejected leaves cannot become eligible later in this tree.
+            # In Lossguide, leaving them undefined and nonterminal would
+            # revisit them alongside the next two children and violate the
+            # scorer's at-most-two-leaves invariant.
+            if options.min_child_hessian >= 0:
+                for i in range(len(visit)):
+                    if not leaves[visit[i]].best_split.defined:
+                        leaves[visit[i]].is_terminal = True
 
             # THE WINNERS, which is the last host state before the split
             # chain. A divergence that first appears here and not in

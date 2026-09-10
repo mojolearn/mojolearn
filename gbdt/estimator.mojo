@@ -329,6 +329,8 @@ struct GbdtFitParams(Copyable, Movable):
     var min_data_in_leaf: Int
     #: -1 disabled; otherwise minimum non-symmetric selected-score improvement.
     var min_split_gain: Float64
+    #: -1 disabled; minimum weighted scalar Hessian under Newton scores.
+    var min_child_hessian: Float64
 
 
 def default_gbdt_fit_params() -> GbdtFitParams:
@@ -364,7 +366,7 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         -1,
         List[Float32](),
         # grow_policy SymmetricTree, max_leaves unset, min_data_in_leaf 1
-        String("SymmetricTree"), -1, 1, Float64(-1),
+        String("SymmetricTree"), -1, 1, Float64(-1), Float64(-1),
     )
 
 
@@ -538,6 +540,7 @@ def gbdt_fit(
         max_leaves=params.max_leaves,
         min_data_in_leaf=params.min_data_in_leaf,
         min_split_gain=params.min_split_gain,
+        min_child_hessian=params.min_child_hessian,
     )
     var learn_losses = tm.losses.copy()
     var test_losses = tm.test_losses.copy()

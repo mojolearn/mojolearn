@@ -327,6 +327,11 @@ class GradientBoosting(NumericModeMixin):
         `use_pointwise_searcher=True` (that is the doc-parallel OBLIVIOUS
         searcher). Their `Region` policy is not ported and is refused by
         name. DEVIATION 259.
+    min_child_hessian : float or None, default None
+        Minimum weighted Hessian sum in each candidate child, before split
+        selection. Requires Depthwise/Lossguide, NewtonL2/NewtonCosine and
+        RMSE/Logloss/CrossEntropy. Includes training and bootstrap weights;
+        equality is allowed. None preserves existing growth.
     min_split_gain : float or None, default None
         Optional strict lower bound on a split's improvement in the selected
         score function, for Depthwise and Lossguide only. None preserves
@@ -547,6 +552,7 @@ class GradientBoosting(NumericModeMixin):
         max_leaves=None,
         min_data_in_leaf=1,
         min_split_gain=None,
+        min_child_hessian=None,
     ):
         if loss not in LOSSES:
             raise ValueError(
@@ -688,6 +694,22 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: score_function must be one of "
                 f"{SCORE_FUNCTIONS}, got {score_function!r}"
             )
+        if min_child_hessian is not None:
+            valid_type = (not isinstance(min_child_hessian, (bool, np.bool_))
+                          and isinstance(min_child_hessian, (int, float, np.integer, np.floating)))
+            try:
+                parsed_hessian = float(min_child_hessian) if valid_type else float("nan")
+            except (ValueError, TypeError, OverflowError):
+                parsed_hessian = float("nan")
+            if not np.isfinite(parsed_hessian) or not 0 <= parsed_hessian <= float(np.finfo(np.float32).max):
+                raise ValueError("mojolearn: min_child_hessian must be finite nonnegative and <= Float32.MAX_FINITE or None")
+            if grow_policy == "SymmetricTree":
+                raise ValueError("mojolearn: min_child_hessian requires Depthwise or Lossguide")
+            if score_function not in ("NewtonL2", "NewtonCosine"):
+                raise ValueError("mojolearn: min_child_hessian requires NewtonL2 or NewtonCosine")
+            if loss not in ("RMSE", "Logloss", "CrossEntropy"):
+                raise ValueError("mojolearn: min_child_hessian supports RMSE, Logloss and CrossEntropy only")
+            min_child_hessian = parsed_hessian
         if nan_mode not in NAN_MODES:
             raise ValueError(
                 f"mojolearn: nan_mode must be one of {NAN_MODES}, got "
@@ -804,6 +826,7 @@ class GradientBoosting(NumericModeMixin):
         self.max_leaves = None if max_leaves is None else int(max_leaves)
         self.min_data_in_leaf = int(min_data_in_leaf)
         self.min_split_gain = None if min_split_gain is None else float(min_split_gain)
+        self.min_child_hessian = min_child_hessian
 
         self.model_ = None
         self.loss_curve_ = None
@@ -891,7 +914,9 @@ class GradientBoosting(NumericModeMixin):
             # to round.
             *cw,
             # Optional ABI tail preserves the old layout for default fits.
-            *([] if self.min_split_gain is None else [float(self.min_split_gain)]),
+            *([(-1.0 if self.min_split_gain is None else float(self.min_split_gain)), float(self.min_child_hessian)]
+              if self.min_child_hessian is not None else
+              ([] if self.min_split_gain is None else [float(self.min_split_gain)])),
         ]
 
     def _flags(self, n_features):

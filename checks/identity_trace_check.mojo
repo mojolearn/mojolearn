@@ -173,6 +173,7 @@ def run_pipeline(
         UInt64(0),
         d_score.unsafe_ptr(),
         d_bin.unsafe_ptr(),
+        Float32(-1),
         grid_dim=(grid_x, 2, 1),
         block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
     )

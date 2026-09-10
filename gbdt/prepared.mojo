@@ -8,6 +8,7 @@ changes training randomness, not the pool's already chosen borders. This is
 an explicit dataset, not an implicit cache keyed by a mutable caller pointer.
 Categorical CTRs, evaluation pools and Python handles are not exposed here.
 """
+from gbdt.options.child_hessian import child_hessian_threshold, check_child_hessian_objective
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.math import isfinite
 from core.identity_trace import IdentityTrace
@@ -65,6 +66,7 @@ struct PreparedNumericDataset(Movable):
         leaf_estimation_method: Int = -1,
         bootstrap_type: Int = -1,
         bootstrap_param: Float32 = Float32(1),
+        min_child_hessian: Float64 = -1.0,
     ) raises -> TrainedModel:
         """Fresh RMSE/Logloss/CrossEntropy model using the frozen pool.
 
@@ -108,7 +110,9 @@ struct PreparedNumericDataset(Movable):
             raise Error("min_split_gain must be -1 or finite and nonnegative")
         if policy == GROW_SYMMETRIC and min_split_gain >= 0:
             raise Error("min_split_gain requires Depthwise or Lossguide")
+        _ = child_hessian_threshold(min_child_hessian, policy, score_function)
         var desc = make_loss_description(loss)
+        check_child_hessian_objective(min_child_hessian, desc.loss_function)
         var estimation = set_leaves_estimation_default(
             desc, method_override=leaf_estimation_method,
             iterations_override=leaf_estimation_iterations,
@@ -130,6 +134,7 @@ struct PreparedNumericDataset(Movable):
             grow_policy=policy, max_leaves=max_leaves,
             min_data_in_leaf=min_data_in_leaf,
             min_split_gain=min_split_gain,
+            min_child_hessian=min_child_hessian,
         )
         var flags = List[Bool]()
         for _ in range(self.n_features):

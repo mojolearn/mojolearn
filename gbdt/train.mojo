@@ -17,6 +17,7 @@ did not subsample, and `binarization_check` holds the border parity on
 the oracle fixture.
 """
 
+from gbdt.options.child_hessian import child_hessian_threshold, check_child_hessian_objective
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import IdentityTrace
@@ -519,6 +520,7 @@ def train(
     max_leaves: Int = -1,
     min_data_in_leaf: Int = 1,
     min_split_gain: Float64 = -1.0,
+    min_child_hessian: Float64 = -1.0,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -689,6 +691,7 @@ def train(
     """
     # ---- the grow policy, resolved and refused BY NAME where theirs is ----
     var policy = grow_policy_from_name(grow_policy)
+    _ = child_hessian_threshold(min_child_hessian, policy, score_function)
     if not isfinite(min_split_gain) or (min_split_gain < 0 and min_split_gain != -1):
         raise Error("min_split_gain must be -1 (disabled) or finite and nonnegative")
     if policy == GROW_SYMMETRIC and min_split_gain >= 0:
@@ -1194,6 +1197,7 @@ def train(
         border=loss_border,
     )
     var objective = loss_desc.loss_function
+    check_child_hessian_objective(min_child_hessian, objective)
 
     # ---- `AdjustBoostFromAverageDefaultValue` (`options_helper.cpp`),
     # ported 2026-08-22. Their rule, verbatim: if the option is SET,
@@ -1468,6 +1472,7 @@ def train(
         max_leaves=max_leaves,
         min_data_in_leaf=min_data_in_leaf,
         min_split_gain=min_split_gain,
+        min_child_hessian=min_child_hessian,
     )
     var losses = fit_result.learn_losses.copy()
     var t_losses = fit_result.test_losses.copy()

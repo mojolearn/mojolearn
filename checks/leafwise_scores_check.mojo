@@ -313,6 +313,7 @@ def run_device[
     part_id: Int,
     second_part_id: Int,
     argmax_blocks: Int,
+    min_child_hessian: Float32 = -1,
 ) raises -> List[Tuple[Float32, Int]]:
     """One launch. Returns one `(gain, bin)` per block ROW, already reduced
     across the row's argmax blocks the way their host does
@@ -372,6 +373,7 @@ def run_device[
         UInt64(0),
         d_score.unsafe_ptr(),
         d_bin.unsafe_ptr(),
+        min_child_hessian,
         grid_dim=(argmax_blocks, n_rows, 1),
         block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
     )

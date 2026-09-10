@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost-compatible boosting loop: derive gradients from the current cursor, fit a tree, estimate leaves, and update predictions."""
 
+from gbdt.options.child_hessian import child_hessian_threshold, check_child_hessian_objective
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
@@ -958,6 +959,7 @@ def fit_with_test(
     max_leaves: Int = -1,
     min_data_in_leaf: Int = 1,
     min_split_gain: Float64 = -1,
+    min_child_hessian: Float64 = -1.0,
 ) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -1031,6 +1033,8 @@ def fit_with_test(
         approx_dim = num_classes
     var stat_count = 1 + approx_dim
 
+    _ = child_hessian_threshold(min_child_hessian, grow_policy, score_function)
+    check_child_hessian_objective(min_child_hessian, objective)
     if not isfinite(min_split_gain) or (min_split_gain < 0 and min_split_gain != -1):
         raise Error("min_split_gain must be -1 (disabled) or finite nonnegative")
     if min_split_gain >= 0 and grow_policy == GROW_SYMMETRIC:
@@ -1675,6 +1679,7 @@ def fit_with_test(
             opts.score_function = score_function
             opts.min_leaf_size = Float64(min_data_in_leaf)
             opts.min_split_gain = min_split_gain
+            opts.min_child_hessian = min_child_hessian
             # `options.RandomStrength *= randomStrengthMult`
             # (`greedy_subsets_searcher.h:76`), the same multiply the
             # greedy oblivious arm receives below

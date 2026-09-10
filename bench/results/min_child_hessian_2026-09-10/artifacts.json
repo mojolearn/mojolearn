@@ -1,0 +1,38 @@
+[
+  {
+    "mode": "fast",
+    "path": "build/min_child_hessian/fast",
+    "bytes": 5963656,
+    "sha256": "1d34c15f697cabc213bc5a226d0e32ea81ec4c843fdeeb79338c214b873358a7"
+  },
+  {
+    "mode": "fast",
+    "path": "python/mojolearn/_mojolearn_gbdt.so",
+    "bytes": 6218544,
+    "sha256": "e6100822c90a5f87925062910dd24a6011920dcc33999f22e26364c1501a1df3"
+  },
+  {
+    "mode": "deterministic",
+    "path": "build/min_child_hessian/deterministic",
+    "bytes": 5963616,
+    "sha256": "67f5a4630976c1e5621c2964405042a561aae4987ab923c0ca1aaa4f92e1c452"
+  },
+  {
+    "mode": "deterministic",
+    "path": "python/mojolearn/deterministic/_mojolearn_gbdt.so",
+    "bytes": 6218496,
+    "sha256": "676c91330e422d4a3e5953b372c2ee6d0c82030a4d6828027841227912fbe382"
+  },
+  {
+    "mode": "identical",
+    "path": "build/min_child_hessian/identical",
+    "bytes": 5737640,
+    "sha256": "bdcd8eb2e872b7699dd69a66cf2592d6f384c4781d00aca3ddba868c9b5e243a"
+  },
+  {
+    "mode": "identical",
+    "path": "python/mojolearn/identical/_mojolearn_gbdt.so",
+    "bytes": 5992528,
+    "sha256": "49a73a546e7060bf871b4d64c6ce9a3d8ac4bd343959c0f30173c0c8f5a92b7a"
+  }
+]

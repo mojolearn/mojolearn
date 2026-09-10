@@ -1,0 +1,155 @@
+numeric_mode DETERMINISTIC
+TINY BOUNDS GREEN
+CANDIDATE BOUNDS GREEN
+-- G1: bit-exact against the host walk --
+  cosine shapes: 36 -> fused 6 / naive 0 / tie (blind) 30 / neither 0
+  ok   L2 bit-identical at 18 shapes; cosine argmax stable
+
+-- G2: the two block rows score DIFFERENT leaves --
+  ok   row 0 = leaf 1, row 1 = leaf 4
+  ok   swapping the two scalar ids exchanges the two rows
+  ok   equal ids -> one block row (their :570)
+
+-- G3: toZeroPartSplit gives a gain of EXACTLY zero --
+  ok   reached once, and its gain is bitwise +0.0
+
+-- G4: every candidate skipped -> the POISON record --
+  ok   no record survived the host reduce, as their host requires
+
+-- G5: an exact tie goes to the SMALLER bin-feature id --
+  ok   bin 5 wins over bin 19 at all five grid widths
+
+leafwise scores check: PASS
+FIT Depthwise RMSE 2 -1.0 actual 4 expected 4
+FIT Depthwise RMSE 2 -1.0 4
+FIT Depthwise RMSE 2 0.0 actual 4 expected 4
+FIT Depthwise RMSE 2 0.0 4
+FIT Depthwise RMSE 2 64.0 actual 4 expected 4
+FIT Depthwise RMSE 2 64.0 4
+FIT Depthwise RMSE 2 64.000000001 actual 2 expected 2
+FIT Depthwise RMSE 2 64.000000001 2
+FIT Depthwise RMSE 2 128.000000001 actual 1 expected 1
+FIT Depthwise RMSE 2 128.000000001 1
+FIT Depthwise Logloss 2 -1.0 actual 4 expected 4
+FIT Depthwise Logloss 2 -1.0 4
+FIT Depthwise Logloss 2 0.0 actual 4 expected 4
+FIT Depthwise Logloss 2 0.0 4
+FIT Depthwise Logloss 2 32.0 actual 4 expected 4
+FIT Depthwise Logloss 2 32.0 4
+FIT Depthwise Logloss 2 32.000000001 actual 2 expected 2
+FIT Depthwise Logloss 2 32.000000001 2
+FIT Depthwise Logloss 2 64.000000001 actual 1 expected 1
+FIT Depthwise Logloss 2 64.000000001 1
+FIT Depthwise CrossEntropy 2 -1.0 actual 4 expected 4
+FIT Depthwise CrossEntropy 2 -1.0 4
+FIT Depthwise CrossEntropy 2 0.0 actual 4 expected 4
+FIT Depthwise CrossEntropy 2 0.0 4
+FIT Depthwise CrossEntropy 2 32.0 actual 4 expected 4
+FIT Depthwise CrossEntropy 2 32.0 4
+FIT Depthwise CrossEntropy 2 32.000000001 actual 2 expected 2
+FIT Depthwise CrossEntropy 2 32.000000001 2
+FIT Depthwise CrossEntropy 2 64.000000001 actual 1 expected 1
+FIT Depthwise CrossEntropy 2 64.000000001 1
+FIT Depthwise RMSE 3 -1.0 actual 4 expected 4
+FIT Depthwise RMSE 3 -1.0 4
+FIT Depthwise RMSE 3 0.0 actual 4 expected 4
+FIT Depthwise RMSE 3 0.0 4
+FIT Depthwise RMSE 3 64.0 actual 4 expected 4
+FIT Depthwise RMSE 3 64.0 4
+FIT Depthwise RMSE 3 64.000000001 actual 2 expected 2
+FIT Depthwise RMSE 3 64.000000001 2
+FIT Depthwise RMSE 3 128.000000001 actual 1 expected 1
+FIT Depthwise RMSE 3 128.000000001 1
+FIT Depthwise Logloss 3 -1.0 actual 4 expected 4
+FIT Depthwise Logloss 3 -1.0 4
+FIT Depthwise Logloss 3 0.0 actual 4 expected 4
+FIT Depthwise Logloss 3 0.0 4
+FIT Depthwise Logloss 3 32.0 actual 4 expected 4
+FIT Depthwise Logloss 3 32.0 4
+FIT Depthwise Logloss 3 32.000000001 actual 2 expected 2
+FIT Depthwise Logloss 3 32.000000001 2
+FIT Depthwise Logloss 3 64.000000001 actual 1 expected 1
+FIT Depthwise Logloss 3 64.000000001 1
+FIT Depthwise CrossEntropy 3 -1.0 actual 4 expected 4
+FIT Depthwise CrossEntropy 3 -1.0 4
+FIT Depthwise CrossEntropy 3 0.0 actual 4 expected 4
+FIT Depthwise CrossEntropy 3 0.0 4
+FIT Depthwise CrossEntropy 3 32.0 actual 4 expected 4
+FIT Depthwise CrossEntropy 3 32.0 4
+FIT Depthwise CrossEntropy 3 32.000000001 actual 2 expected 2
+FIT Depthwise CrossEntropy 3 32.000000001 2
+FIT Depthwise CrossEntropy 3 64.000000001 actual 1 expected 1
+FIT Depthwise CrossEntropy 3 64.000000001 1
+FIT Depthwise RMSE 2 -0.0 actual 4 expected 4
+FIT Depthwise RMSE 2 -0.0 4
+PREPARED SIBLING GREEN Depthwise
+Depthwise threshold -1.0 leaves 4 expected 4
+Depthwise threshold 2.0 leaves 2 expected 2
+Depthwise threshold 1024.0 leaves 1 expected 1
+FIT Lossguide RMSE 2 -1.0 actual 4 expected 4
+FIT Lossguide RMSE 2 -1.0 4
+FIT Lossguide RMSE 2 0.0 actual 4 expected 4
+FIT Lossguide RMSE 2 0.0 4
+FIT Lossguide RMSE 2 64.0 actual 4 expected 4
+FIT Lossguide RMSE 2 64.0 4
+FIT Lossguide RMSE 2 64.000000001 actual 2 expected 2
+FIT Lossguide RMSE 2 64.000000001 2
+FIT Lossguide RMSE 2 128.000000001 actual 1 expected 1
+FIT Lossguide RMSE 2 128.000000001 1
+FIT Lossguide Logloss 2 -1.0 actual 4 expected 4
+FIT Lossguide Logloss 2 -1.0 4
+FIT Lossguide Logloss 2 0.0 actual 4 expected 4
+FIT Lossguide Logloss 2 0.0 4
+FIT Lossguide Logloss 2 32.0 actual 4 expected 4
+FIT Lossguide Logloss 2 32.0 4
+FIT Lossguide Logloss 2 32.000000001 actual 2 expected 2
+FIT Lossguide Logloss 2 32.000000001 2
+FIT Lossguide Logloss 2 64.000000001 actual 1 expected 1
+FIT Lossguide Logloss 2 64.000000001 1
+FIT Lossguide CrossEntropy 2 -1.0 actual 4 expected 4
+FIT Lossguide CrossEntropy 2 -1.0 4
+FIT Lossguide CrossEntropy 2 0.0 actual 4 expected 4
+FIT Lossguide CrossEntropy 2 0.0 4
+FIT Lossguide CrossEntropy 2 32.0 actual 4 expected 4
+FIT Lossguide CrossEntropy 2 32.0 4
+FIT Lossguide CrossEntropy 2 32.000000001 actual 2 expected 2
+FIT Lossguide CrossEntropy 2 32.000000001 2
+FIT Lossguide CrossEntropy 2 64.000000001 actual 1 expected 1
+FIT Lossguide CrossEntropy 2 64.000000001 1
+FIT Lossguide RMSE 3 -1.0 actual 4 expected 4
+FIT Lossguide RMSE 3 -1.0 4
+FIT Lossguide RMSE 3 0.0 actual 4 expected 4
+FIT Lossguide RMSE 3 0.0 4
+FIT Lossguide RMSE 3 64.0 actual 4 expected 4
+FIT Lossguide RMSE 3 64.0 4
+FIT Lossguide RMSE 3 64.000000001 actual 2 expected 2
+FIT Lossguide RMSE 3 64.000000001 2
+FIT Lossguide RMSE 3 128.000000001 actual 1 expected 1
+FIT Lossguide RMSE 3 128.000000001 1
+FIT Lossguide Logloss 3 -1.0 actual 4 expected 4
+FIT Lossguide Logloss 3 -1.0 4
+FIT Lossguide Logloss 3 0.0 actual 4 expected 4
+FIT Lossguide Logloss 3 0.0 4
+FIT Lossguide Logloss 3 32.0 actual 4 expected 4
+FIT Lossguide Logloss 3 32.0 4
+FIT Lossguide Logloss 3 32.000000001 actual 2 expected 2
+FIT Lossguide Logloss 3 32.000000001 2
+FIT Lossguide Logloss 3 64.000000001 actual 1 expected 1
+FIT Lossguide Logloss 3 64.000000001 1
+FIT Lossguide CrossEntropy 3 -1.0 actual 4 expected 4
+FIT Lossguide CrossEntropy 3 -1.0 4
+FIT Lossguide CrossEntropy 3 0.0 actual 4 expected 4
+FIT Lossguide CrossEntropy 3 0.0 4
+FIT Lossguide CrossEntropy 3 32.0 actual 4 expected 4
+FIT Lossguide CrossEntropy 3 32.0 4
+FIT Lossguide CrossEntropy 3 32.000000001 actual 2 expected 2
+FIT Lossguide CrossEntropy 3 32.000000001 2
+FIT Lossguide CrossEntropy 3 64.000000001 actual 1 expected 1
+FIT Lossguide CrossEntropy 3 64.000000001 1
+FIT Lossguide RMSE 2 -0.0 actual 4 expected 4
+FIT Lossguide RMSE 2 -0.0 4
+PREPARED SIBLING GREEN Lossguide
+Lossguide threshold -1.0 leaves 4 expected 4
+Lossguide threshold 2.0 leaves 2 expected 2
+Lossguide threshold 1024.0 leaves 1 expected 1
+MIN CHILD HESSIAN GREEN

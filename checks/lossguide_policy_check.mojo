@@ -246,7 +246,7 @@ def check_sign_convention(ctx: DeviceContext) raises -> Int:
         d_fw.unsafe_ptr(), d_hist.unsafe_ptr(), d_ps.unsafe_ptr(),
         Int32(STAT_COUNT), Int32(0), Int32(2), Int32(0),
         Float32(1.5), Float32(0.0), UInt64(0),
-        d_score.unsafe_ptr(), d_bin.unsafe_ptr(),
+        d_score.unsafe_ptr(), d_bin.unsafe_ptr(), Float32(-1),
         grid_dim=(argmax_blocks, 2, 1),
         block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
     )

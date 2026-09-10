@@ -7,7 +7,7 @@ from std.gpu.intrinsics import ldg
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.memory import stack_allocation
+from std.memory import stack_allocation, bitcast
 
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
 from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
@@ -30,6 +30,16 @@ from gbdt.options.catboost_options import (
 comptime SCORE_BLOCK_SIZE = 128
 
 comptime FLOAT32_MAX = Float32(3.4028234663852886e38)
+
+
+@always_inline
+def child_hessian_below(mass: Float32, threshold: Float32) -> Bool:
+    """Compare nonnegative score-plane masses without subnormal FTZ.
+
+    Sign clearing canonicalizes both signed zeros. The caller must clamp
+    masses nonnegative and validate the enabled threshold before this call.
+    """
+    return (bitcast[DType.uint32](mass) & UInt32(0x7FFFFFFF)) < (bitcast[DType.uint32](threshold) & UInt32(0x7FFFFFFF))
 
 
 @always_inline
@@ -350,6 +360,7 @@ def _leafwise_scan_part[
     global_seed: UInt64,
     mut best_gain: Float32,
     mut best_bin: UInt32,
+    min_child_hessian: Float32 = -1.0,
 ):
     """One leaf's candidate scan -- `compute_scores.cu:406-472`, both copies."""
     comptime cosine = (
@@ -387,6 +398,18 @@ def _leafwise_scan_part[
             ldg(histograms + (leaf_base + bin_feature_id)), Float32(0.0)
         )
         var weight_right = ftz(max(part_weight - weight_left, Float32(0.0)))
+
+        # Plane0 is a weighted Hessian only on validated Newton callers.
+        # Reject BEFORE scoring/argmax: the runner-up may remain legal.
+        # Nonnegative Float32 bit patterns are ordered numerically. Compare
+        # as integers so a subnormal threshold is not flushed by a device
+        # floating comparison; clear signed zero on the clamped masses.
+        if min_child_hessian >= 0 and (
+            child_hessian_below(weight_left, min_child_hessian)
+            or child_hessian_below(weight_right, min_child_hessian)
+        ):
+            offset += block_size * Int(grid_dim.x)
+            continue
 
         var to_zero_part_split = (
             weight_left < Float32(1e-20) or weight_right < Float32(1e-20)
@@ -546,6 +569,7 @@ def compute_optimal_split_kernel[
     global_seed: UInt64,
     out_score: MutPointer[Float32, MutAnyOrigin],
     out_bin: MutPointer[UInt32, MutAnyOrigin],
+    min_child_hessian: Float32 = -1.0,
 ):
     """`ComputeOptimalSplit` (`compute_scores.cu:393-475`) -- LOSSGUIDE."""
     var this_part_id = Int(part_id_in)
@@ -573,6 +597,7 @@ def compute_optimal_split_kernel[
         global_seed,
         best_gain,
         best_bin,
+        min_child_hessian,
     )
 
     _leafwise_argmax_write[LEAFWISE_SCORE_BLOCK_SIZE](
@@ -603,6 +628,7 @@ def compute_optimal_splits_region_kernel[
     global_seed: UInt64,
     out_score: MutPointer[Float32, MutAnyOrigin],
     out_bin: MutPointer[UInt32, MutAnyOrigin],
+    min_child_hessian: Float32 = -1.0,
 ):
     """`ComputeOptimalSplitsRegion` (`compute_scores.cu:303-385`) -- DEPTHWISE."""
     var this_part_id = Int(part_ids.unsafe_load(Int(block_idx.y)))
@@ -628,6 +654,7 @@ def compute_optimal_splits_region_kernel[
         global_seed,
         best_gain,
         best_bin,
+        min_child_hessian,
     )
 
     _leafwise_argmax_write[LEAFWISE_SCORE_BLOCK_SIZE](
