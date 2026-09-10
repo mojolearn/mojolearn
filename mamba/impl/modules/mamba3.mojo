@@ -87,8 +87,6 @@ from gemm.checks.gemm_identical import identical_gemm
 from gemm.checks.gemm_oracle import OP_NT
 
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_IDENTICAL,
     ftz,
     identical_clamp,
     identical_div,
@@ -449,32 +447,23 @@ struct Mamba3DeviceStages(Movable):
 
 
 def m3_dt_softplus(x: Float32) -> Float32:
-    """S6 softplus with a stable small-dt path for every unpinned tier.
+    """S6 softplus. IDENTICAL is the only tier this lane builds.
 
-    Negative dt biases make exp(x) small. Rounding exp(x) + 1 before log
-    discards significant dt bits, which accumulate in S10's rotary angle
-    and can exceed the key-state tolerance after cancellation in rotation.
-    Retain the vendor exp, but evaluate log1p directly in float32.
+    THIS HELPER USED TO CARRY A SECOND SPELLING FOR THE UNPINNED TIERS and
+    the history is worth keeping, because it is the clearest single argument
+    against the lower tiers existing here at all. Negative dt biases make
+    exp(x) small; rounding exp(x) + 1 before log discards dt bits that
+    accumulate in S10's rotary angle, so FAST evaluated `portable_log1pf(exp(x))`
+    instead. DEVIATION 2300 (2026-09-09) then found the gate was FAST-only, so
+    DETERMINISTIC fell through to the unpinned `log(exp(x) + 1)` arm and failed
+    `k_last` against ref64 at flat index 151 with excess 3.980e-07, bit-identically
+    on an L40S and an H100, while FAST and IDENTICAL both passed. That was a bug
+    that could only exist in a tier nobody had a reason to run.
 
-    DEVIATION 2300 (2026-09-09). The repair above was gated on FAST alone,
-    so DETERMINISTIC fell through to `identical_softplus`'s unpinned arm,
-    `log(exp(x) + 1)`, the very cancellation this helper exists to avoid.
-    The installed 0.7.0 qualification showed it: mamba/deterministic failed
-    `k_last` against ref64 at flat index 151 with the SAME excess
-    (3.980e-07) the FAST column showed before its repair, bit-identically
-    on an L40S and an H100, while FAST and IDENTICAL passed. The gate is
-    now "not IDENTICAL": FAST and DETERMINISTIC share the stable spelling,
-    IDENTICAL keeps its portable arithmetic verbatim (its bits do not move;
-    the cross-vendor contract is untouched). DETERMINISTIC promises same
-    box, same build, same bits, which this keeps; it carries no bit promise
-    across versions, so its dt bits moving here is within contract.
+    The mamba lane is IDENTICAL-only as of 2026-09-10, so the second spelling
+    is gone and this is the portable arithmetic verbatim. IDENTICAL's bits do
+    not move; the cross-vendor contract is untouched.
     """
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        from std.math import exp
-
-        if x <= Float32(20.0):
-            return portable_log1pf(exp(x))
-        return x
     return identical_softplus(x)
 
 
@@ -1062,7 +1051,7 @@ def _record_work_slice(
     """Record rows [q0, q0+l) of a [B, T, width] working buffer as the
     [M, width] card stage. Disabled tracing must not download and repack
     a buffer that record_list_f32 immediately discards."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_TRACE_SLICES"]():
+    comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_TRACE_SLICES"]():
         if not trace.enabled:
             return
     var t_work = q0 + l

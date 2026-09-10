@@ -2,10 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """GPU machine learning in Mojo with explicit numerical contracts.
 
-The same source tree targets Apple Metal, NVIDIA CUDA, and AMD HIP. Public
-estimators offer ``fast``, ``deterministic``, and ``identical`` modes; the
-last promises cross-vendor bit identity only for configurations certified in
-the project's support matrix. A GPU is required and there is no CPU fallback.
+The same source tree targets Apple Metal, NVIDIA CUDA, and AMD HIP.
+``identical`` is the default mode and promises cross-vendor bit identity for
+configurations certified in the project's support matrix. A GPU is required
+and there is no CPU fallback.
+
+The tree and classical estimators additionally offer ``fast`` and
+``deterministic``. THE NEURAL SURFACE DOES NOT: ``TransformerBlock``, the
+Mamba blocks, the training ops and the byte LM build ``identical`` only,
+because their fused kernels are gated on the identical contract and the lower
+tiers ran the unfused path -- slower than the default, promising less. Asking
+for one raises. See ``_backend._IDENTICAL_ONLY``.
 
 The API uses familiar scikit-learn shapes but is not a drop-in replacement.
 Defaults may follow the mirrored GPU implementation, and unsupported behavior
@@ -19,7 +26,10 @@ from ._version import __version__
 # MOJOLEARN_NUMERIC_MODE picks one of THREE tiers, each keeping the one
 # below it: `fast` (explicit opt-in, no promise), `deterministic` (same bits
 # run to run on ONE device) and `identical` (the default; also the same bits across
-# Metal, CUDA and HIP). Each upper tier loads its own binary set from
+# Metal, CUDA and HIP). NOT EVERY LANE OFFERS ALL THREE -- the neural
+# bindings are identical-only (`_backend._IDENTICAL_ONLY`), and asking them
+# for a lower tier raises rather than quietly resolving to something else.
+# Each upper tier loads its own binary set from
 # python/mojolearn/<tier>/*.so under the canonical names; see
 # _backend.py, whose allow-list refused `deterministic` outright until
 # 2026-08-29 and so made a tier that existed in the compiler
@@ -38,7 +48,9 @@ numeric_mode = _backend.numeric_mode
 #:
 #: All three tiers ship in ONE wheel and can be loaded into ONE process at
 #: once -- measured on 2026-08-29 by calling all three interleaved and
-#: checking each returned its own arithmetic. See `_backend.load_set`.
+#: checking each returned its own arithmetic. See `_backend.load_set`. The
+#: process default still applies to the lanes that HAVE the tier; a neural
+#: estimator under a `fast` default raises rather than silently upgrading.
 set_numeric_mode = _backend.set_default_mode
 
 #: WHICH GPU API THE LOADED BINARIES WERE COMPILED FOR: 'metal', 'cuda' or

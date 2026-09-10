@@ -72,8 +72,6 @@ from checks.kernel_matrix import (
     lib_smem_page_fits_for,
 )
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_exp,
@@ -105,10 +103,8 @@ comptime REGIME_BOUND: Float64 = 1267650600228229401496703205376.0
 `2^102`, where `x + (-FLT_MAX)` is still exactly `-FLT_MAX` (the spacing of
 Float32 at `FLT_MAX` is `2^104`)."""
 
-comptime FUSED_HW_FTZ_FMA = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and lib_hardware_ftz_fma_for[TARGET_COLUMN]()
-)
+comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
+"""The tier term is gone: this lane builds IDENTICAL only (2026-09-10)."""
 
 
 def _fused_page_bytes(hd: Int) -> Int:

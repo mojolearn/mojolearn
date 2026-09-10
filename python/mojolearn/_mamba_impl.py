@@ -64,11 +64,16 @@ the block output, the backward's gradients, the report stages -- is a
 pieces are updated IN PLACE through their own addresses, exactly as
 before, whatever object the caller allocated them as.
 
-THE NUMERIC TIER IS THE LOADED BINARY'S, SELECTED AT BUILD TIME.
-`numeric_mode=` selects fast, deterministic (repeatability on one device),
-or identical (cross-vendor identity within the certified profile and
-fixtures). `_extension()` checks the binary's compile-time mode against
-the requested tier.
+THIS LANE IS IDENTICAL-ONLY (2026-09-10). It used to build all three
+tiers. It never should have: the fused kernels in `mamba/impl/ops/` and
+`mamba/impl/modules/` were gated on `GLOBAL_NUMERIC_MODE ==
+NUMERIC_IDENTICAL`, so a FAST or DETERMINISTIC build fell back to the
+unfused arms and the legacy host copies and ran SLOWER than the default
+while promising less. DEVIATION 2300 is what that cost: a `k_last`
+failure against ref64 that existed ONLY in the deterministic tier, found
+in a shipped 0.7.0 qualification. `numeric_mode=` now accepts
+'identical' or nothing; anything else raises. `_extension()` still checks
+the binary's compile-time mode against the requested tier.
 
 EVIDENCE SNAPSHOT. Native certificates, public API checks and installed-wheel
 qualification are separate. Historical Apple/NVIDIA/AMD native comparisons

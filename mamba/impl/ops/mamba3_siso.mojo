@@ -110,8 +110,6 @@ from max.gpu.sync import barrier
 from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN, column_max_block_size, lib_smem_page_fits_for
 
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_exp,
@@ -378,7 +376,7 @@ def m3_angle_rate(raw: Float32) -> Float32:
     return ftz(pinned_mul(identical_tanh(ftz(raw)), M3_PI))
 
 
-comptime M3_PARALLEL_ANGLE_INCREMENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT"]()
+comptime M3_PARALLEL_ANGLE_INCREMENT = not is_defined["MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT"]()
 
 
 def m3_angle_increment_kernel(
@@ -1877,7 +1875,7 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
         m3_phase_tick(ctx, phase_tick, String("m3_resume_kernel"))
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or M3_LEGACY_STATEPASS:
+    comptime if M3_LEGACY_STATEPASS:
         ctx.enqueue_function[m3_statepass_kernel](
             pass_states.unsafe_ptr(),
             h_last.unsafe_ptr(),
@@ -1908,7 +1906,7 @@ def m3_siso_forward(
         # is an occupancy guard, not a measured optimum across intermediate sizes.
         # Apple retains its prior default until separately performance-validated.
         var use_increment_tile = False
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+        comptime if column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
             comptime if is_defined["MOJOLEARN_MAMBA3_TILED_INCREMENT"]():
                 use_increment_tile = True
             elif TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE"]():
@@ -1945,7 +1943,7 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
         m3_phase_tick(ctx, phase_tick, String("m3_state_scan_kernel"))
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_QKS"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
+    comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_QKS"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
         ctx.enqueue_function[m3_qk_s_tiled_kernel](
             qk_s.unsafe_ptr(),
             rotq_work.unsafe_ptr(),
@@ -1975,7 +1973,7 @@ def m3_siso_forward(
     # Keep tiny and unpriced columns on their existing launch. The group
     # threshold supplies ample tile work; it is not an intermediate-size tune.
     var use_yintra_tile = False
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+    comptime if column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
         comptime if is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]():
             use_yintra_tile = True
         elif TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_MAMBA3_LEGACY_YINTRA"]():
@@ -2003,7 +2001,7 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
     m3_phase_tick(ctx, phase_tick, String("m3_yintra_kernel"))
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_YSTATE"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
+    comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_YSTATE"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
         ctx.enqueue_function[m3_ystate_tiled_kernel](
             ystate.unsafe_ptr(),
             rotq_work.unsafe_ptr(),

@@ -64,7 +64,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext
 
@@ -642,6 +642,21 @@ def neural_rng_binding(
 
 @export
 def PyInit__mojolearn_training() abi("C") -> PythonObject:
+    # IDENTICAL-ONLY (2026-09-10). The FAST and DETERMINISTIC builds of this
+    # lane were never a faster path: every fused kernel here is gated on
+    # `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`, so the lower tiers fell back
+    # to the unfused arms and ran SLOWER than the default. They are no longer
+    # built (bindings/build_training.sh refuses) and the lane no longer carries
+    # the fallbacks. Refuse to exist rather than answer under a tier label
+    # whose arithmetic is gone.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        abort(
+            String(
+                "_mojolearn_training: refusing to initialize -- this lane supports only"
+                " the IDENTICAL tier. Rebuild with"
+                " MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_training.sh"
+            )
+        )
     try:
         var m = PythonModuleBuilder("_mojolearn_training")
         m.def_function[training_vendor_binding]("training_vendor")

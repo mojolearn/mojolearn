@@ -83,8 +83,19 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # and would roughly double its binding-build time. A leg that spends its
 # lease compiling and comes home with an empty lanes/ has bought nothing at
 # all. Add a binding there only when a phase actually imports it.
-BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh build_gp.sh build_mamba.sh build_transformer.sh"
-EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training _mojolearn_gp _mojolearn_mamba _mojolearn_transformer"
+BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh"
+EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp"
+
+# THE NEURAL LANES ARE IDENTICAL-ONLY (2026-09-10) and so are held apart from
+# the two lists above, built and gated for the identical tier alone the way
+# the byte LM already was. Every fused kernel in transformer/ and mamba/ is
+# gated on `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`, so the FAST and
+# DETERMINISTIC builds fell back to the UNFUSED arms and ran slower than the
+# default while promising less; `bindings/build_{training,mamba,transformer}.sh`
+# now exit 2 for any other tier. This removes six .so files from every macOS
+# wheel (three bindings x two retired tiers) that no caller should have used.
+NEURAL_SCRIPTS="build_training.sh build_mamba.sh build_transformer.sh"
+NEURAL_NAMES="_mojolearn_training _mojolearn_mamba _mojolearn_transformer"
 PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
 case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
 unset MOJOLEARN_BYTE_LM_OUTDIR
@@ -164,6 +175,12 @@ for mode in $MODES; do
         echo "== $script ($mode)"
         MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=1 ./bindings/$script
     done
+    if [ "$mode" = identical ]; then
+        for script in $NEURAL_SCRIPTS; do
+            echo "== $script ($mode, identical-only lane)"
+            MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=1 ./bindings/$script
+        done
+    fi
     if [ "$PACKAGE_BYTE_LM" = 1 ] && [ "$mode" = identical ]; then
         MOJOLEARN_NUMERIC_MODE=identical bash ./bindings/build_byte_lm.sh
     fi
@@ -188,6 +205,10 @@ for n in $EXT_NAMES; do
         fi
     done
 done
+# The identical-only lanes are gated in ONE tier, whatever MODES says.
+case " $MODES " in *" identical "*)
+    for n in $NEURAL_NAMES; do ALL_SOS="$ALL_SOS $PKG/identical/$n.so"; done ;;
+esac
 if [ "$PACKAGE_BYTE_LM" = 1 ]; then
     ALL_SOS="$ALL_SOS $PKG/identical/_mojolearn_byte_lm.so"
     pixi run -e pkg python - "$PKG/identical/_mojolearn_byte_lm.so" <<'PYBYTE'

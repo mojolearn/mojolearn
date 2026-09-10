@@ -36,7 +36,7 @@ max = ">=26.5.0,<27"
 # Explicit direct/packed resident GPU correctness arms, FAST and IDENTICAL.
 check-forest-resident-layouts = "bash tools/check_forest_resident_layouts.sh"
 # Host-only runtime byte-model shape/registry checks; no GPU import or context.
-check-byte-lm-config = "mojo run -j 2 -I . training/checks/byte_lm_config_check.mojo"
+check-byte-lm-config = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/byte_lm_config_check.mojo"
 
 # The whole correctness suite, end to end, on the GPU. This is the one command
 # that answers "does it still work". It builds and runs; there is no separate
@@ -1100,10 +1100,10 @@ check-gbdt-feature-fraction = "sh tools/check_gbdt_feature_fraction.sh"
 check-metrics-silhouette = "mojo run -I . metrics/checks/silhouette_check.mojo"
 check-metrics-trust = "mojo run -I . metrics/checks/trustworthiness_check.mojo"
 check-holtwinters = "mojo run -I . holtwinters/checks/hw_check.mojo"
-check-mamba-decode = "mojo run -I . mamba/checks/mamba_decode_check.mojo"
-check-mamba-block = "mojo run -I . mamba/checks/mamba_check.mojo"
-check-mamba2-block = "mojo run -I . mamba/checks/mamba2_check.mojo"
-check-mamba3-block = "mojo run -I . mamba/checks/mamba3_check.mojo"
+check-mamba-decode = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_decode_check.mojo"
+check-mamba-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_check.mojo"
+check-mamba2-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba2_check.mojo"
+check-mamba3-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba3_check.mojo"
 # COMPILE ONLY, and the name says so. Builds the mamba backward's routing
 # layer AND, since 2026-09-03, its two kernel files
 # (mamba/impl/ops/selective_scan_backward.mojo and
@@ -1138,11 +1138,11 @@ check-mamba3-block = "mojo run -I . mamba/checks/mamba3_check.mojo"
 #             MOJOLEARN_MAMBA_SABOTAGE_BWD_INNER_FROM_NRM
 # The two ATOMIC arms REFUSE BY NAME at their launcher on a kernel_matrix
 # column with no float atomicAdd; they compile everywhere.
-build-mamba-backward-probe = "mojo build -I . mamba/checks/mamba_backward_compile_probe.mojo -o /tmp/mojolearn_mb_probe"
+build-mamba-backward-probe = "mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_backward_compile_probe.mojo -o /tmp/mojolearn_mb_probe"
 # Mamba-2 prefill backward dump. The default is the short smoke fixture; use
 # the dedicated L257 gate below for a non-vacuous cross-chunk recurrence.
-dump-mamba2-backward-tail = "work=/tmp/mojolearn-mamba2-mojo-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; MOJOLEARN_MAMBA_GRAD_DUMP=$work mojo run -I . mamba/checks/mamba2_backward_tail_dump.mojo"
-build-mamba2-ssd-backward-probe = "mojo build -I . mamba/checks/mamba2_ssd_backward_compile_probe.mojo -o /tmp/mojolearn_m2_ssd_bwd_probe"
+dump-mamba2-backward-tail = "work=/tmp/mojolearn-mamba2-mojo-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; MOJOLEARN_MAMBA_GRAD_DUMP=$work mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba2_backward_tail_dump.mojo"
+build-mamba2-ssd-backward-probe = "mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba2_ssd_backward_compile_probe.mojo -o /tmp/mojolearn_m2_ssd_bwd_probe"
 
 # BLOCK-LEVEL BATCH INVARIANCE (checks/batch_invariance_check.mojo). The
 # lift of `IDENTICAL_FP32_CONTRACT.md` section 6.1 -- "Why `L` may not depend
@@ -1194,12 +1194,12 @@ check-batch-invariance = "mojo run -I . batch_invariance_main.mojo"
 # only by someone who already knew the path. A gate that cannot be named is a
 # gate that does not get run, and these two are what the batch-invariance
 # work above leans on.
-check-transformer = "mojo run -I . transformer/checks/transformer_check.mojo"
-check-transformer-backward = "mojo run -I . transformer/checks/transformer_backward_check.mojo"
+check-transformer = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_check.mojo"
+check-transformer-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_backward_check.mojo"
 # The fused attention path (transformer/impl/.../fused_attention.mojo) against
 # the eager stage kernels, bit for bit, at shapes the fixture gate does not
 # reach, plus its two refusals (the regime bound and the -0.0 corner).
-check-transformer-fused = "mojo run -I . transformer/checks/transformer_fused_check.mojo"
+check-transformer-fused = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_fused_check.mojo"
 # Independent CPU float64 references for Transformer backward, cross-entropy,
 # SGD/AdamW, and embedding gradients. Run in the skgpu environment because
 # PyTorch is intentionally not a core dependency. The generated NPZ is an
@@ -1222,9 +1222,9 @@ independent-gradient-oracles = "python tools/independent_gradient_oracles.py"
 #     pixi run check-train-checkpoint
 # **A leg that writes the file and never has it compared against another
 # VENDOR'S is not a result.**
-check-train-step = "mojo run -I . training/checks/train_step_check.mojo"
-check-train-loop = "mojo run -I . training/checks/train_loop.mojo"
-check-train-checkpoint = "mojo run -I . training/checks/checkpoint_check.mojo"
+check-train-step = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/train_step_check.mojo"
+check-train-loop = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/train_loop.mojo"
+check-train-checkpoint = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/checkpoint_check.mojo"
 # The INDEPENDENT cross-check: torch float64 per-stage reference, the only
 # comparison in this lane whose other side is not our own code. TWO STEPS --
 # the dump is produced by the gate above, then compared:

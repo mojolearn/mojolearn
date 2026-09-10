@@ -140,9 +140,16 @@ optimization gaps in the current kernels. The numbers are in the accompanying
 paper; the raw records behind them live under `bench/results/`.
 
 **`identical` is the default**, in the published <!--fact:published_version-->0.7.0<!--/fact--> wheels and in this
-source. You opt out of it, not into it, by setting
-`MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment before
-import, or by calling `mojolearn.set_numeric_mode(...)` in code.
+source. For the tree and classical estimators you opt out of it, not into it,
+by setting `MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment
+before import, or by calling `mojolearn.set_numeric_mode(...)` in code.
+
+**The neural surface has no lower tiers.** `TransformerBlock`, the Mamba
+blocks, the training ops and the byte LM build `identical` only. Their fused
+kernels are gated on the identical contract, so the lower tiers ran the
+unfused path and were slower than the default while promising less; asking
+one for `fast` or `deterministic` raises rather than resolving to something
+weaker.
 Certification stays configuration-specific, so the default does not certify
 every feature, and a
 configuration that cannot meet the contract raises a named error rather than
