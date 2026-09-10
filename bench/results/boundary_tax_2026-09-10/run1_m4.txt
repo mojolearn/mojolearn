@@ -1,0 +1,7 @@
+# hostpass: Apple M4, Mojo 1.0.0 (ed45d567), main 690b178b, nice -n 19, 2026-09-10
+# build: pixi run mojo build -O3 -I . -I bindings -o hostpass bench/results/boundary_tax_2026-09-10/hostpass.mojo
+# rep 0 is the cold sample; read rows 1-3.
+rep 0 A list_append 30.509 B pinned_store 93.557 B2 simd_pinned 9.325 B3 scalar_plain 22.869 C dma 33.051 | D fused_cast_into_pinned 25.027 dma 4.876 ms
+rep 1 A list_append 9.472 B pinned_store 87.121 B2 simd_pinned 3.597 B3 scalar_plain 21.84 C dma 5.209 | D fused_cast_into_pinned 5.738 dma 5.12 ms
+rep 2 A list_append 9.353 B pinned_store 69.327 B2 simd_pinned 3.847 B3 scalar_plain 21.933 C dma 4.396 | D fused_cast_into_pinned 6.014 dma 4.675 ms
+rep 3 A list_append 9.203 B pinned_store 69.372 B2 simd_pinned 3.596 B3 scalar_plain 21.878 C dma 4.937 | D fused_cast_into_pinned 5.891 dma 3.872 ms
