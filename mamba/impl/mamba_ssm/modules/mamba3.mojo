@@ -1086,7 +1086,11 @@ def _record_work_slice(
     width: Int,
 ) raises:
     """Record rows [q0, q0+l) of a [B, T, width] working buffer as the
-    [M, width] card stage."""
+    [M, width] card stage. Disabled tracing must not download and repack
+    a buffer that record_list_f32 immediately discards."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_TRACE_SLICES"]():
+        if not trace.enabled:
+            return
     var t_work = q0 + l
     var whole = mamba_download(ctx, buf, b * t_work * width)
     var out = List[Float32]()
