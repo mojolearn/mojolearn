@@ -106,3 +106,30 @@ sm_90a). The current 128×128 KS16 specialization has 40960 shared bytes and a
 and stores plus `fma.rn.f32`/`mul.rn.ftz.f32`. These are static intermediate-code
 facts, not SASS register/spill counts or achieved occupancy. Physical NVIDIA
 measurement is still owed. The transpose plan shares that same specialization.
+
+## Resource-capture continuation
+
+`tools/gemm_cuda_resources.py` now captures offline assembler statistics,
+cuobjdump resource usage and SASS, tool versions/hashes, exact commands and
+artifact hashes. It uses the PTX's target rather than substituting another
+architecture, refuses an existing output directory and preserves incomplete
+failure evidence. Run on a compatible CUDA toolkit host (no GPU required):
+
+```sh
+python3 tools/gemm_cuda_resources.py \
+  bench/results/gemm_swizzle_2026-09-10/h100-current-128.ptx.gz \
+  /tmp/gemm-h100-resources
+```
+
+Tool flags follow NVIDIA's [binary utilities documentation](https://docs.nvidia.com/cuda/cuda-binary-utilities/)
+and [assembler options](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-compiler-driver-nvcc/contents.html).
+Offline assembly is toolkit-specific; equivalence to the runtime driver's JIT
+is not established. Resource counts do not measure achieved occupancy.
+
+Validation: retained PTX target/hash/entry checks; malformed PTX, missing tool,
+and output overwrite rejection; mocked successful subprocess orchestration
+and timeout partial-log preservation; Python compilation. Actual CUDA assembly
+has **not run**. This Mac has no ptxas, and the RunPod REST pod-list request
+returned HTTP 403 during this continuation. No rental was created. H100
+register/spill results, profiler evidence and large paired timings remain owed.
+No kernel arithmetic, dispatch gate, or opponent measurement changed.
