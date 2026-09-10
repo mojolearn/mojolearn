@@ -108,16 +108,19 @@ parity. Existing M4 checks do not qualify new features on CUDA/HIP.
 
 ## Implementation order and concrete ownership
 
-Yes: implement the useful gaps, in bounded slices. Retain current defaults and
-models when a new option is disabled. Priorities below describe the next
-feature sequence; they do not suspend already queued performance/pipeline work.
+NVIDIA IDENTICAL performance against GPU competitors is the immediate priority
+for every tree learner; FAST tree performance targets the MacBook. Use large
+real datasets with stable whole-fit timing, quality and memory measurements.
+Small tests establish correctness, not a speed default. No CPU training arm is
+planned. Retain disabled-option default models while implementing these bounded
+feature slices alongside the measurement work.
 
 | Order / ID | Deliverable and how | Source / dependency / acceptance |
 | --- | --- | --- |
-| 1 / F2a | Numeric GBDT per-tree feature fraction, then F2b node/level sampling. Filter actual histogram/candidate work; keep original feature IDs in models. | Mirror LightGBM `ColSampler` and its CUDA consumer, audited below. Thread configuration through native train/prepared, binding ABI, legacy estimator and adapters. Freeze sample count, eligible-feature order and RNG; default-one byte equivalence plus selected-feature witnesses in all modes. |
-| 2 / F3 | Path-aware interaction masks, initially numeric Depthwise/Lossguide. | Reuse F2 candidate-mask plumbing, but separate sampling from allowed features. Choose one upstream's overlap semantics. Exhaustive tiny-path oracle, invalid IDs, serialization; define symmetric shared-depth behavior separately. |
+| Completed / F2a | Numeric per-tree feature fraction and reusable projection buffers are implemented in native train/prepared, binding, legacy estimator and adapters. | Portable TRandom mapping is an explicit deviation from LightGBM RNG. Default-one fingerprints and selected-feature witnesses are separate from large-data timing and cross-device qualification; see [contract](GBDT_FEATURE_FRACTION.md). |
+| 1 / F8 then F6 | Optional strict minimum child counts, followed by learned missing routing for numeric Depthwise/Lossguide. | Current min_data_in_leaf stops parent leaves; it does not require both children to meet the bound. Extend candidate eligibility, then compare both missing-statistics assignments before selecting a winner. Persist route bits through model IO and inference; preserve existing Min/Max defaults. |
+| 2 / F3 then F2b | Path-aware interaction masks, initially numeric Depthwise/Lossguide; then node/level sampling with explicit mask intersection. | Reuse F2 candidate-mask plumbing, but separate sampling from allowed features. Choose one upstream's overlap semantics. Exhaustive tiny-path oracle, invalid IDs, serialization; define symmetric shared-depth behavior separately. |
 | 3 / F5 then F4 | Coherent L1/bounded leaf updates, followed by monotonic descendant bounds. | Pin XGBoost implementation first; modify both split scoring and final/iterative leaf estimation. Start scalar RMSE/Logloss. Closed-form optimum and monotonic prediction checks; split filtering alone cannot guarantee monotonicity. |
-| 4 / F8 then F6 | Optional strict child counts, then learned missing direction. | Extend candidate eligibility; add missing-statistics alternatives, deterministic route ties, serialized route and inference support. Preserve CatBoost defaults. |
 | Parallel foundation / P6 | Python prepared data and owned reusable workspace. | Extend existing Mojo prepared implementation, not a second trainer. Training-fold-only quantization, lifetime/refit identity and actual repeated-fit time. |
 | Next / C1 then C2/C3 | Stable category schema/unseen handling; general combinations; broader Ordered boosting. | CatBoost mapping/table and permutation-state algorithms. Persist dictionaries/tables, prove train/eval separation; arbitrary-depth combinations are not a wrapper-only change. |
 | Next / F7 | Multiclass Depthwise/Lossguide and public multiclass adapters. | Explicit classwise versus vector-leaf design; loss, dimensions, score and inference together. An extension beyond the audited CatBoost GPU non-symmetric registry. |
@@ -126,7 +129,7 @@ feature sequence; they do not suspend already queued performance/pipeline work.
 | Later / F9 | Feature weights, fixed splits and feature-use penalties. | Distinguish score multipliers from sampling weights and penalties; pin the chosen upstream dispatch. |
 | Deferred / F10, R2–R3, C4, S1–S2 | Linear leaves; objective-by-objective multi-target/survival/uncertainty; DART/GOSS; text/embeddings; sparse; distributed. | Separate designs and workload justification. Keep these visible without labeling general CPU support as a GPU port obligation. |
 
-### First source-ready slice: column sampling
+### Implemented per-tree sampling and remaining node sampling
 
 Local LightGBM pin `3d1cf3011adfed7209ba54bfeb05e8b2309040e4` was inspected:
 [`col_sampler.hpp`](https://github.com/microsoft/LightGBM/blob/3d1cf3011adfed7209ba54bfeb05e8b2309040e4/src/treelearner/col_sampler.hpp)
@@ -136,15 +139,16 @@ The actual
 [CUDA tree learner](https://github.com/microsoft/LightGBM/blob/3d1cf3011adfed7209ba54bfeb05e8b2309040e4/src/treelearner/cuda/cuda_single_gpu_tree_learner.cpp)
 lines 153–154 reset/pass the per-tree mask and 618–621 obtain node masks.
 This establishes a real GPU-path reference, including permitted host metadata
-work. The existing Mojo feature enumeration and histogram layout still need
-an insertion-point audit before implementation. Do not merely zero the winning
-score after all histograms were built and claim a training speedup.
+work. The implemented Mojo path selects original numeric feature IDs, projects
+compressed bins and excludes unselected fold counts before tree search. Remaining
+node/level sampling needs a new mask lifetime and shared-depth policy; simply
+zeroing a winning score after histogram construction is not evidence of avoided
+histogram work.
 
-RNG translation must be declared: reproduce the reference integer sampler and
-its draw schedule, or explicitly document our different portable seeded mapping.
-Neither choice promises same-seed models across libraries. Start with numeric
-features; category expansions require an explicit original-feature selection
-contract. Sampling is a learning change; measure quality as well as speed.
+The implemented sampler documents its portable TRandom/partial Fisher–Yates
+mapping in `gbdt/gpu_data/feature_sampling.mojo`; it does not promise same-seed
+models across libraries. It is numeric-only when enabled. Category expansions
+still require an explicit original-feature selection contract. Sampling is a learning change; measure quality as well as speed.
 
 ### Interaction constraints are not interchangeable
 

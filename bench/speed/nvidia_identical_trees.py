@@ -51,6 +51,8 @@ def main():
                         default='matched-no-noise',
                         help='matched-no-noise sets CatBoost random_strength=0, matching ours; '
                              'native-defaults retains the historical mismatch')
+    parser.add_argument('--nvtx', action='store_true',
+                        help='diagnostic NVTX fit ranges for Nsight Systems; rerun without profiling for timing claims')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if args.rounds < 1 or args.rows < 1:
@@ -63,6 +65,15 @@ def main():
         parser.error("leave MOJOLEARN_SPEED_FORTRAN unset: this run includes host packing")
     import cupy
     cupy.cuda.runtime.deviceSynchronize()  # Fail if no real CUDA runtime.
+    @contextlib.contextmanager
+    def fit_range(arm_name, round_index):
+        cupy.cuda.nvtx.RangePush(
+            "mojolearn-fit/%s/%s/round-%d" % (args.lane, arm_name, round_index))
+        try:
+            yield
+        finally:
+            cupy.cuda.nvtx.RangePop()
+
     spec = forest.spec
     data = spec.load_dataset(args.dataset, args.size, args.rows)
     config = spec.lane_config(args.lane, args.size)
@@ -119,6 +130,11 @@ def main():
     metadata = dict(lane=args.lane, dataset=data.tag, config=config,
                     dataset_scale=spec.dataset_scale(data),
                     numeric_mode='identical', vendor='cuda', rounds=args.rounds,
+                    diagnostic_nvtx=args.nvtx,
+                    cpu_affinity=sorted(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else None,
+                    thread_environment={key: os.environ.get(key) for key in
+                        ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS',
+                         'CUDA_VISIBLE_DEVICES')},
                     symmetric_profile=args.symmetric_profile if args.lane == 'gbdt-symmetric' else None,
                     binding=witness,
                     binding_sha256=hashlib.sha256(Path(witness['path']).read_bytes()).hexdigest(),
@@ -133,7 +149,8 @@ def main():
                     arm_parameters=parameters)
     capture = Tee()
     with contextlib.redirect_stdout(capture):
-        spec.run(args.lane, arms, data, args.rounds, args.size, rotate_order=True)
+        spec.run(args.lane, arms, data, args.rounds, args.size, rotate_order=True,
+                 fit_context=fit_range if args.nvtx else None)
     log = capture.getvalue()
     samples = {}
     predictions = {}

@@ -12,9 +12,9 @@ node = next(n for n in ast.parse(source.read_text()).body
             if isinstance(n, ast.FunctionDef) and n.name == 'run')
 
 
-def check(rotate, fail_second=False):
-    visits, refusals = [], []
-    namespace = dict(time=time, device_string=lambda: 'test',
+def check(rotate, fail_second=False, profile=True):
+    visits, refusals, ranges, active = [], [], [], []
+    namespace = dict(time=time, contextlib=contextlib, device_string=lambda: 'test',
                      per_arm_budget_s=lambda: 60, process_deadline_s=lambda: 60,
                      hash_predictions=lambda _: 'digest',
                      _check_same_library_agreement=lambda *_: None,
@@ -29,17 +29,38 @@ def check(rotate, fail_second=False):
         counts[name] = 0
 
         def fit(model, data, name=name):
+            assert active == ([name] if profile else []), active
             counts[name] += 1
             visits.append(name)
             if fail_second and name == 'b' and counts[name] == 2:
                 raise RuntimeError('planted fit failure')
 
+        def score(*_):
+            assert not active, 'scoring must remain outside fit ranges'
+            return [('quality', 1., [1.])]
+
         arms.append(SimpleNamespace(name=name, library=name, make=object,
                                     fit=fit, sync=lambda: None,
-                                    score=lambda *_: [('quality', 1., [1.])]))
+                                    score=score))
+    @contextlib.contextmanager
+    def fit_context(name, round_index):
+        assert not active
+        active.append(name)
+        ranges.append((name, round_index))
+        try:
+            yield
+        finally:
+            active.pop()
+
     with contextlib.redirect_stdout(io.StringIO()):
         live = namespace['run']('rf', arms, SimpleNamespace(tag='test'), 3,
-                                'smoke', rotate_order=rotate)
+                                'smoke', rotate_order=rotate, fit_context=fit_context if profile else None)
+    assert not active, 'failed fits must close their profiling range'
+    if profile:
+        assert [name for name, _ in ranges] == visits
+        assert ranges[:3] == [('a', 0), ('b', 0), ('c', 0)]
+    else:
+        assert not ranges
     if fail_second:
         assert visits == list('abc' + 'abc' + 'ca' + 'ac'), visits
         assert [a.name for a in live] == ['a', 'c']
@@ -49,6 +70,8 @@ def check(rotate, fail_second=False):
         assert not refusals
 
 
+check(False, profile=False)
+check(True, profile=False)
 check(False)
 check(True)
 check(True, fail_second=True)
