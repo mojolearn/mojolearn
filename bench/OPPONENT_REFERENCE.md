@@ -98,7 +98,7 @@ kNN and UMAP, cuML 26.08.00, cupy 14.2.0, CUDA runtime 12.9, 2026-09-09,
 worktree branch lane/knn-identical,
 `bench/results/knn/2026-09-09-h100-identical-defaults/ref/summary.json` and
 `umap/` (7 rounds). "request" includes host transfers, "device" excludes
-them. k 15 rows are within 2% of k 10 (full table in the handoff).
+them. k=10 and k=15 are separate rows; do not substitute one for the other.
 
 | index | queries | k | cuML brute NearestNeighbors request | device |
 |---:|---:|---:|---:|---:|
@@ -110,6 +110,20 @@ them. k 15 rows are within 2% of k 10 (full table in the handoff).
 | 400k x 32 | 128 | 10 | 1.531 | 1.159 |
 | 400k x 32 | 1000 | 10 | 4.101 | 3.659 |
 | 400k x 32 | 4000 | 10 | 10.225 | 9.632 |
+| 100k x 32 | 32 | 15 | 1.113 | 0.675 |
+| 100k x 32 | 128 | 15 | 0.922 | 0.470 |
+| 100k x 32 | 1000 | 15 | 1.617 | 1.111 |
+| 100k x 32 | 4000 | 15 | 3.571 | 2.957 |
+| 400k x 32 | 32 | 15 | 1.573 | 1.241 |
+| 400k x 32 | 128 | 15 | 1.532 | 1.197 |
+| 400k x 32 | 1000 | 15 | 4.183 | 3.750 |
+| 400k x 32 | 4000 | 15 | 10.817 | 9.756 |
+
+The k=15 rows were backfilled from the same archived JSON on 2026-09-10,
+without new opponent runs. All rows use dyadic-v1, two warmups and seven
+timed rounds. Admission compares neighbour indices; it does not assert
+bitwise equality of cuML distances. Request includes host transfers and
+device excludes them, as specified in `tools/knn_cuml_reference.py`.
 
 | UMAP (32 features, 15 neighbors, 2 components, 200 epochs) | cuML UMAP ms |
 |---|---:|
@@ -305,3 +319,63 @@ rounds: **35.9 ms forward; 114.3 ms forward+backward**.
 
 Source: `bench/results/attnlane_regblock_2026-09-09/jobs/torch_reference.log`;
 GPU/version records and the full harness are in the same directory.
+
+
+## H100 Mamba-3 reference scan, driver 580.126.09 (September 7 archive)
+
+Transcribed 2026-09-10 without rerunning the opponent. Torch 2.4.1+cu124,
+CUDA 12.4, eager FP32, TF32 off, deterministic algorithms off. The shipped
+seed-7 public fixture uses state size 128, head dimension 64, expansion 2,
+and chunk size 64. Five untimed warmups plus one logged warmup, then
+five timed rounds; median milliseconds.
+Timing scope is the existing torch reference arm in
+the September 7 `tools/speed_torch_seq.py` snapshot; compare only with the corresponding
+public `bench/speed/seq_py_speed_arm.py` shape from the sibling
+`mojolearn-grid` checkout and document the host/device scope of
+both arms. This is a reference scan, not the BF16 Mamba-3 Triton kernel.
+
+| shape | torch FP32 ms | numerical admission |
+|---|---:|---|
+| lane.b2_l4_d32 | 1.477005 | PASS |
+| narrow.b8_l4096_d512 | 16.396241 | PASS |
+| wide.b8_l1024_d2048 | 19.383267 | PASS |
+
+Source directory:
+`bench/results/mamba3/2026-09-09-statepass/opponent-admission/`.
+`seq.mamba3.torch.log` contains every sample and original output gates
+(rtol 0.0005, atol 0.00001); `september7-gpu.txt` identifies the GPU/driver;
+`september7-source_sha256.txt` pins source provenance. The original run
+omitted `--mojo-log`; `input-admission.json` closes that missing witness
+check by read-only replay of all 30 input tensors. It does not retime torch.
+
+## L40S transformer end-to-end, driver 580.159.03 (September 9 archive)
+
+Transcribed 2026-09-10 without rerunning. Torch 2.4.1+cu124, CUDA 12.4,
+eager FP32, TF32 off, shipped seed-7 public shapes, head dimension 128.
+Five untimed warmups plus one logged warmup, then five rounds. These
+measurements are retained to avoid
+repeating a known failed comparison; **neither row qualifies a speed ratio**.
+
+| shape | torch FP32 ms | numerical admission |
+|---|---:|---|
+| narrow.b8_l4096_d512 | 63.849 | FAIL, max absolute difference 0.0138197 |
+| wide.b8_l1024_d2048 | 43.787 | FAIL, max absolute difference 0.0278463 |
+
+Source: `bench/results/transformer_e2e_2026-09-09/torch_fp32.log`, harness
+`grid_torch.py` and `attn_grid_torch.sh` in the same directory. All 20 input
+witnesses passed. The original tolerance was rtol 0.0005, atol 0.00001.
+A numerical-only investigation can reuse these logs; a changed comparator
+needs its own provenance and admission, and must not inherit these timings.
+
+### Reuse and admission details for future rows
+
+Before timing an opponent, search this table and its referenced raw logs.
+Backfill an existing missing row before considering a new run. Match GPU,
+driver, library/CUDA pins, fixture or input witness, shape, parameters,
+precision switches, and timing scope (including transfer policy). A
+shape-only match is a timing context, not an admitted identical-input ratio.
+Record the command/harness revision, warmup count, every timed sample,
+median, input/output admission result and source log with every new row.
+Keep failed admission and failed runs visible and explicitly unqualified.
+Correctness-only opponent runs need no fresh timing; if the comparator or
+fixture changes, create a new row rather than overwriting its history.
