@@ -78,7 +78,6 @@ from core.row_norms import NORM_TPB, row_norm_kernel
 from checks.kernel_matrix import (
     K_LIB_SELECT_WARPSORT,
     TARGET_COLUMN,
-    COLUMN_NVIDIA,
     knn_auto_follows_their_dispatch_for,
     knn_distance_register_tile_for,
     knn_distance_metadata_for,
@@ -552,19 +551,9 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
         )
     var tiled_index = index_tile < n_index
     var part_cells = query_tile * k if tiled_index else 1
-    # RAFT linalg/detail/contractions.cuh:193-219 loads vectors. Our pinned
-    # arithmetic keeps its ascending chain; only the index transport changes.
-    # Large same-process public requests save 3.1-3.6%, all output bits equal:
-    # bench/results/knn_vector_request_2026-09-10. Other shapes need their own
-    # request evidence before promotion. Per-partition alignment is checked below.
-    var use_vector = TARGET_COLUMN == COLUMN_NVIDIA and n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15) and mtr == DIST_L2_SQRT_EXPANDED
-    comptime if is_defined["MOJOLEARN_KNN_VECTOR_REQUEST_CHECK"]():
-        # Named same-process check exercises scalar, vector and actual default.
-        var vector_override = String(getenv("MOJOLEARN_KNN_VECTOR_TRIAL"))
-        if vector_override == "0" or vector_override == "1":
-            use_vector = vector_override == "1"
     # Promotion uses the two actual large Apple targets, not the small controls.
     # Broader shapes retain current preflight pending their own request evidence.
+    var vector_trial = String(getenv("MOJOLEARN_KNN_VECTOR_TRIAL")) == "1"
     var use_metadata = KNN_PREFLIGHT_METADATA
     comptime if KNN_PREFLIGHT_METADATA_DEFAULT:
         use_metadata = use_metadata or (use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and mtr == DIST_L2_SQRT_EXPANDED and n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15))
@@ -748,10 +737,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                                             block_dim=(RT_TPB, 1, 1),
                                         )
                                 else:
-                                    # DeviceBuffer base is aligned. Full stride and sub-buffer
-                                    # offset must preserve 16-byte alignment; complete groups
-                                    # prevent a clamped final column from being over-read.
-                                    if use_vector and n_index % 4 == 0 and c % 4 == 0 and cols % 4 == 0:
+                                    if vector_trial and n_index % 4 == 0 and c % 4 == 0 and cols % 4 == 0:
                                         ctx.enqueue_function[pinned_distance_register_tile_kernel[False, True]](
                                             dist_tile.unsafe_ptr(),
                                             queries.unsafe_ptr().unsafe_offset(q * n_features),

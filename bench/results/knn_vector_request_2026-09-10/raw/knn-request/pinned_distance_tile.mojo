@@ -186,9 +186,9 @@ def _rt_dot_tile[REPAIR: Bool, VECTOR: Bool = False](
     var acc = SIMD[DType.float32, RT_ROWS * RT_COLS](0.0)
     for f in range(d):
         var yv = SIMD[DType.float32, RT_COLS](0.0)
-        # Vector transport only; feature and FMA order are unchanged.
+        # Experimental transport only; feature and FMA order are unchanged.
         # RAFT linalg/detail/contractions.cuh:193-219 uses vector global loads.
-        # Caller admits aligned full groups; this tile has a different layout.
+        # This identical tile has a different layout and retains scalar edge loads.
         comptime if VECTOR:
             var raw = yt.unsafe_load[width=4, alignment=16](f * y_stride + Int(cols_idx[0]))
             comptime for c in range(RT_COLS):
@@ -293,12 +293,7 @@ def pinned_distance_register_tile_kernel[METADATA: Bool, VECTOR: Bool = False](
     is_sqrt_in: Int32,
 ):
     """`z[i][j] = ||q_i||^2 + ||y_j||^2 - 2 q_i . y_j`, clamped at zero,
-    RT_ROWS * RT_COLS cells per thread, one ascending serial chain per cell.
-
-    VECTOR requires a 16-byte-aligned yt base, y_stride divisible by four,
-    and n_cols divisible by four. Dispatch retains scalar loads otherwise.
-    Query rows may be ragged: existing row clamping and stores handle them.
-    """
+    RT_ROWS * RT_COLS cells per thread, one ascending serial chain per cell."""
     var n_rows = Int(n_rows_in)
     var n_cols = Int(n_cols_in)
     var y_stride = Int(y_stride_in)

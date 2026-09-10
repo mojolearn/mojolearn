@@ -8,7 +8,7 @@ are separate. Trees remain outside this lane.
 | Area | Latest usable evidence | Remaining work |
 |---|---|---|
 | Apple kNN, measured 400k/4k/d32 k10/k15 | Actual scoped default saves 15.7–25.0% request time in both orders; all outputs match | Expand scope only with additional large evidence; late-window drift is retained |
-| NVIDIA kNN, 400k index / 4k queries / d32 | 27.526 ms k10 and 31.861 ms k15; 2.69x / 2.95x cached cuML | Tune NVIDIA distance/selection costs; Apple metadata does not change this ratio |
+| NVIDIA kNN, 400k index / 4k queries / d32 | 26.662 ms k10 and 31.126 ms k15; 2.61x / 2.88x cached cuML; aligned loads save 3.1–3.6% | Tune selection; widen vector scope only after additional large runs |
 | H100 dense GEMM, actual Llama t512 | Accepted staging 4.07–4.52x cached FP32 cuBLAS; 9.73–11.28 useful TFLOP/s | Current offline cubin is limited to one block/SM; scalar shared-read trial rejected |
 | L40S attention, original HD64 window fixture | Corrected-seam forward 140.3 ms / fwd+bwd 493.7 ms; 3.91x / 4.32x cached SDPA | Backward and operand reuse remain targets; reference is the same model/driver tuple on an earlier physical pod |
 | Mamba3, original large grid | Latest two diagnostic processes: narrow visit medians 52.9–58.4 ms, wide 92.0–94.9 ms | Not ordinary prices; historical slow regime did not recur, cause unresolved |
@@ -62,11 +62,19 @@ index stride 65,536; the complete target request uses stride 400,000. Both arms 
 process; full output checks and deliberate candidate sabotage establish reach.
 This is a component candidate, not a promoted default or request-speed claim.
 
-Next: integrate the candidate into a same-process complete-request experiment
-at 400k/4k/d32 k10/k15. Production alignment admission must cover full-index
-stride, sub-buffer offset, and final index/query partitions. Preserve scalar
-fallbacks and qualify other large shapes before widening scope. Selection
-is almost as expensive as distance at k15 and remains a separate target.
+Complete-request follow-up: `bench/results/knn_vector_request_2026-09-10`
+qualifies that candidate at 400k/4k/d32 k10/k15. Two alternating-arm windows
+save **3.1–3.6% request time**, about 1 ms, with every selected distance bit
+and index matching. Large ragged controls pass; deliberate vector corruption
+fails the public output check. The measured NVIDIA scope now uses aligned
+loads by default, with full-stride, partition-offset and partition-width
+alignment admission and scalar fallback. Three-arm checks include the actual
+default; a separate build without the test override matches all scalar output
+bytes. The earlier 6.33% tile gain is not a 6.33% request gain.
+
+Next: selection tuning, still nearly as expensive as distance at k15; expand
+vector scope only with further large request evidence. GEMM register pressure,
+attention reuse/backward, and Transformer numerical admission remain open.
 
 The H100 rental for this continuation was terminated and verified gone.
 GEMM, attention, Mamba and Transformer status above is unchanged; no new

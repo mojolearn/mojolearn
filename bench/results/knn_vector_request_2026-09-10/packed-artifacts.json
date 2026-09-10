@@ -1,0 +1,42 @@
+[
+  {
+    "path": "raw/knn-request/default",
+    "sha256": "974af74723fbd5b1c39de7cbd2787a60e51f19f1a04315fdc94e4117467582ea",
+    "packed": "raw/knn-request/default.gz"
+  },
+  {
+    "path": "raw/knn-request/default-k10.bin",
+    "sha256": "c8af7c3d3137e6ea26159ee6c2282137c734af2cb707c1669c3be74dabb020a2",
+    "packed": "raw/knn-request/default-k10.bin.gz"
+  },
+  {
+    "path": "raw/knn-request/default-k15.bin",
+    "sha256": "bfb848a13019378f930b4c9948b9f98a7d2cf3110be586b16e8a776b354340c3",
+    "packed": "raw/knn-request/default-k15.bin.gz"
+  },
+  {
+    "path": "raw/knn-request/final-check",
+    "sha256": "d08ce6dbcf37c00555dd8cb71cba7bd2dccab455f272fadaaea3dd8d784c7ff6",
+    "packed": "raw/knn-request/final-check.gz"
+  },
+  {
+    "path": "raw/knn-request/sabotage",
+    "sha256": "c423065ac2cfdd5c965693d65ed5fe72b8efe60d83d6f6bf50d5b3173895a306",
+    "packed": "raw/knn-request/sabotage.gz"
+  },
+  {
+    "path": "raw/knn-request/scalar-k10.bin",
+    "sha256": "c8af7c3d3137e6ea26159ee6c2282137c734af2cb707c1669c3be74dabb020a2",
+    "packed": "raw/knn-request/scalar-k10.bin.gz"
+  },
+  {
+    "path": "raw/knn-request/scalar-k15.bin",
+    "sha256": "bfb848a13019378f930b4c9948b9f98a7d2cf3110be586b16e8a776b354340c3",
+    "packed": "raw/knn-request/scalar-k15.bin.gz"
+  },
+  {
+    "path": "raw/knn-request/trial",
+    "sha256": "6534aa57ff8255616eea352f30d87a28790d4db7ff355d52e1cc700c8f2b8960",
+    "packed": "raw/knn-request/trial.gz"
+  }
+]

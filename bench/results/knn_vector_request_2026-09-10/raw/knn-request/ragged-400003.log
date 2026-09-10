@@ -1,0 +1,21 @@
+1130 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38c6c0000000, nodemask=2)
+KNN_REF_HEADER mode IDENTICAL column nvidia index 400003 queries 4001 features 32 k 15 rounds 7 fixture dyadic-v1 selector 1 transpose 1 register_tile 1 metadata_forced 0 metadata_default_capable 0 index_tile 65536
+KNN_REF_WARMUP request 0 arm 0 34.598585
+KNN_REF_WARMUP request 0 arm 1 33.829373
+KNN_REF_WARMUP request 1 arm 1 33.833756
+KNN_REF_WARMUP request 1 arm 0 33.874598
+KNN_REF_ROUND request 1 arm 0 33.842208
+KNN_REF_ROUND request 1 arm 1 33.805086
+KNN_REF_ROUND request 2 arm 1 33.801569
+KNN_REF_ROUND request 2 arm 0 33.853378
+KNN_REF_ROUND request 3 arm 0 33.858795
+KNN_REF_ROUND request 3 arm 1 33.859601
+KNN_REF_ROUND request 4 arm 1 33.830031
+KNN_REF_ROUND request 4 arm 0 33.782775
+KNN_REF_ROUND request 5 arm 0 33.795686
+KNN_REF_ROUND request 5 arm 1 33.84063
+KNN_REF_ROUND request 6 arm 1 33.850179
+KNN_REF_ROUND request 6 arm 0 33.855477
+KNN_REF_ROUND request 7 arm 0 33.816281
+KNN_REF_ROUND request 7 arm 1 33.811478
+FULL_OUTPUT_BITS_MATCH 60015 per arm per round

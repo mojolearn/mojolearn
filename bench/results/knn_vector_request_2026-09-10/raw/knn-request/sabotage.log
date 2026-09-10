@@ -1,0 +1,6 @@
+1254 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b0740000000, nodemask=2)
+KNN_REF_HEADER mode IDENTICAL column nvidia index 400000 queries 4000 features 32 k 10 rounds 1 fixture dyadic-v1 selector 1 transpose 1 register_tile 1 metadata_forced 0 metadata_default_capable 0 index_tile 65536
+1254 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x318600000000, nodemask=1)
+KNN_REF_WARMUP request 0 arm 0 30.093785
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: knn reference price: request output bytes moved between rounds

@@ -715,3 +715,28 @@ selection and request work. It is not a new opponent tuple, ordinary request
 price, promoted default, or replacement for the qualified 2.69×/2.95× rows.
 No opponent was timed. Exact fixture, source, toolchain, UUID and output
 checks are recorded with the evidence.
+
+
+### Sep10 NVIDIA aligned kNN loads: qualified public requests
+
+Evidence: `bench/results/knn_vector_request_2026-09-10`. H100 80GB HBM3,
+GPU-fcd67bc9-4348-93cc-aba6-22a2076f2fdc, driver 580.126.09, Mojo ed45d567.
+IDENTICAL L2SqrtExpanded, dyadic-v1, 400000 index / 4000 queries / 32 features,
+query batch 512 and index partition 65536. Same-process alternating scalar
+and aligned-load arms, two shape-order windows, 31 samples per arm, save
+3.1–3.6% complete request time. Full selected distances/indices match;
+large ragged controls and candidate sabotage establish correctness and reach.
+The aligned path is now default for this measured NVIDIA scope.
+
+| k | Ordinary final default request ms | Cached cuML request ms | Default / cached |
+|---|---:|---:|---:|
+| 10 | 26.661871 | 10.225 | 2.61x |
+| 15 | 31.126293 | 10.817 | 2.88x |
+
+Final prices use 15 ordinary request samples after two warmups, without the
+compile-time test override. Every output byte also matches the scalar
+three-arm check artifact. Cached cuML entries are unchanged: these are
+same-model/driver/shape/fixture/scope cached-reference ratios from different
+physical rentals, not a fresh paired opponent comparison. No opponent ran
+and no new opponent tuple was introduced. The earlier 6.33% isolated
+component gain does not describe complete requests.

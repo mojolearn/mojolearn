@@ -552,6 +552,8 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
         )
     var tiled_index = index_tile < n_index
     var part_cells = query_tile * k if tiled_index else 1
+    # Promotion uses the two actual large Apple targets, not the small controls.
+    # Broader shapes retain current preflight pending their own request evidence.
     # RAFT linalg/detail/contractions.cuh:193-219 loads vectors. Our pinned
     # arithmetic keeps its ascending chain; only the index transport changes.
     # Large same-process public requests save 3.1-3.6%, all output bits equal:
@@ -563,8 +565,6 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
         var vector_override = String(getenv("MOJOLEARN_KNN_VECTOR_TRIAL"))
         if vector_override == "0" or vector_override == "1":
             use_vector = vector_override == "1"
-    # Promotion uses the two actual large Apple targets, not the small controls.
-    # Broader shapes retain current preflight pending their own request evidence.
     var use_metadata = KNN_PREFLIGHT_METADATA
     comptime if KNN_PREFLIGHT_METADATA_DEFAULT:
         use_metadata = use_metadata or (use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and mtr == DIST_L2_SQRT_EXPANDED and n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15))
