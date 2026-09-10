@@ -1,0 +1,60 @@
+5577 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53adc0000000, nodemask=1)
+Imported from /root/mojolearn/checks/gbdt_cindex_staging_check.mojo:7:
+/root/mojolearn/gbdt/train.mojo:256:43: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var src = x_colmajor.unsafe_ptr() + f * n_rows
+                  ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/checks/gbdt_cindex_staging_check.mojo:7:
+/root/mojolearn/gbdt/train.mojo:270:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=hx, src=src, count=n_rows)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/checks/gbdt_cindex_staging_check.mojo:7:
+/root/mojolearn/gbdt/train.mojo:358:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=hx, src=src, count=n_rows)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/checks/gbdt_cindex_staging_check.mojo:7:
+Imported from /root/mojolearn/gbdt/train.mojo:28:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:124:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    shared_borders[0] = borders.unsafe_load(0)
+    ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gbdt_cindex_staging_check.mojo:7:
+Imported from /root/mojolearn/gbdt/train.mojo:28:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:126:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var borders_count = Int(shared_borders[0])
+                            ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gbdt_cindex_staging_check.mojo:7:
+Imported from /root/mojolearn/gbdt/train.mojo:28:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:129:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        shared_borders[tid] = borders.unsafe_load(tid + 1)
+        ~~~~~~~~~~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gbdt_cindex_staging_check.mojo:7:
+Imported from /root/mojolearn/gbdt/train.mojo:28:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:137:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/gbdt_cindex_staging_check.mojo:7:
+Imported from /root/mojolearn/gbdt/train.mojo:28:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:144:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var border_value = shared_borders[border]
+                           ~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gbdt_cindex_staging_check.mojo:7:
+Imported from /root/mojolearn/gbdt/train.mojo:28:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:146:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/gbdt_cindex_staging_check.mojo:7:
+Imported from /root/mojolearn/gbdt/train.mojo:28:
+/root/mojolearn/gbdt/gpu_data/kernel/binarize.mojo:151:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 

@@ -1,0 +1,75 @@
+ib_exit baseline=0 20:46:34
+ib_diff sep9_h100_baseline vs baseline exit=1 20:46:35
+PHASE_A_DONE 20:46:35
+speed_exit baseline.rf.higgs.r1000000.ours=0 20:50:32
+speed_exit baseline.et.higgs.r1000000.ours=0 20:52:54
+speed_exit baseline.rf.higgs.r2000000.ours=0 20:56:54
+speed_exit baseline.et.higgs.r2000000.ours=0 20:59:28
+speed_exit baseline.rf.higgs.r1000000.stage=0 21:00:46
+PHASE_B_DONE 21:00:46
+build_exit rf2010.rf=0 21:01:14
+939c7e81ffc021c1c7b1ea144a9709123f331a3abe9c31c5a9092de0e63bc1d6  /root/bins/rf2010/_mojolearn_rf.so
+build_exit rf2011.rf=0 21:01:42
+c4da70fbd8c6e38c627edb93441eaf54548fab9b9731fddb28d85ee60a7d5eb1  /root/bins/rf2011/_mojolearn_rf.so
+build_exit rf2012.rf=0 21:02:11
+3639e818c59dc542dc90fd21be96dd64e318bedf261558432e78a6256f06ce8c  /root/bins/rf2012/_mojolearn_rf.so
+ib_exit rf2010=0 21:02:15
+ib_diff baseline vs rf2010 exit=0 21:02:16
+ib_exit rf2011=0 21:02:20
+ib_diff baseline vs rf2011 exit=0 21:02:20
+ib_exit rf2012=0 21:02:24
+ib_diff baseline vs rf2012 exit=0 21:02:25
+speed_exit rf2010.rf.higgs.r1000000.ours=0 21:05:57
+speed_exit rf2011.rf.higgs.r1000000.ours=0 21:09:37
+speed_exit rf2012.rf.higgs.r1000000.ours=0 21:13:14
+speed_exit rf2010.rf.higgs.r2000000.ours=0 21:17:05
+speed_exit rf2011.rf.higgs.r2000000.ours=0 21:20:58
+speed_exit rf2012.rf.higgs.r2000000.ours=0 21:24:48
+PHASE_C_DONE 21:24:48
+gate wp4_oob_check build_exit=0 run_exit=0 21:25:08
+gate wp1_borrowed_upload_check build_exit=0 run_exit=0 21:25:28
+gate wp8_stage_upload_bytes_check build_exit=0 run_exit=0 21:25:32
+gate wp2_forest_export_protocol build_exit=0 run_exit=0 21:25:37
+gate wp2_forest_export_public run_exit=0 21:25:39
+gate wp3_forest_inference_separate build_exit=0 run_exit=0 21:25:47
+gate wp3_forest_inference_packed build_exit=0 run_exit=0 21:25:56
+gate wp5_gbdt_cindex_staging build_exit=0 run_exit=0 21:26:02
+gate wp5_nan_mode_check build_exit=0 run_exit=0 21:27:15
+rfgate_exit src=0 21:27:24
+PHASE_E_DONE 21:27:24
+build_exit fused.gbdt=0 21:28:51
+b58bef012c692a07d1d2e35451f1d497f6090c0cd1ecc6de0896784be6a9b59e  /root/bins/fused/_mojolearn_gbdt.so
+build_exit sp.gbdt=0 21:30:19
+b32e33c96bb6ba536281f95e825083528e7ec4bf31fcde661641f28f57434d1a  /root/bins/sp/_mojolearn_gbdt.so
+build_exit spnf.gbdt=0 21:31:46
+0c188230fb37e8014925cbd8a56591dfedea0e72aabda557b1fe13601bc369ce  /root/bins/spnf/_mojolearn_gbdt.so
+ib_exit fused=0 21:31:52
+ib_diff baseline vs fused exit=0 21:31:53
+ib_exit sp=0 21:31:59
+ib_diff baseline vs sp exit=0 21:31:59
+ib_exit spnf=0 21:32:05
+ib_diff baseline vs spnf exit=0 21:32:06
+speed_exit baseline.gbdt-symmetric.higgs.r1000000.ours=0 21:32:24
+speed_exit fused.gbdt-symmetric.higgs.r1000000.ours=0 21:32:45
+speed_exit sp.gbdt-symmetric.higgs.r1000000.ours=0 21:33:08
+speed_exit spnf.gbdt-symmetric.higgs.r1000000.ours=0 21:33:32
+speed_exit baseline.gbdt-symmetric.higgs.r2000000.ours=0 21:33:52
+speed_exit fused.gbdt-symmetric.higgs.r2000000.ours=0 21:34:10
+speed_exit sp.gbdt-symmetric.higgs.r2000000.ours=0 21:34:29
+speed_exit spnf.gbdt-symmetric.higgs.r2000000.ours=0 21:34:52
+speed_exit baseline.gbdt-symmetric.higgsreg.r1000000.ours=0 21:35:07
+speed_exit sp.gbdt-symmetric.higgsreg.r1000000.ours=0 21:35:23
+PHASE_D_DONE 21:35:23
+BATCHI_DONE 21:35:23
+batchJ start 21:35:39
+2
+build_exit flip2011.rf=0 21:36:09
+2f192eb0f47c42319691e901cb049fd7390f8db5f423422a3611d01ceaddf34b  /root/bins/flip2011/_mojolearn_rf.so
+ib_exit flip2011=0 21:36:13
+ib_diff baseline vs flip2011 exit=0 21:36:13
+ib_diff rf2011 vs flip2011 exit=0 21:36:14
+speed_exit flip2011.rf.higgs.r1000000.ours=0 21:39:49
+speed_exit baseline.rf.higgs.r1000000.ours=0 21:43:26
+rfgate_exit flip2011src=0 21:43:35
+rfgate_exit flip2011optout=0 21:43:44
+BATCHJ_DONE 21:43:44

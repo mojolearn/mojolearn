@@ -1,0 +1,22 @@
+| lane/fixture                 | verdict    | nvidia-NVIDIA_H100_80GB_HBM3 | nvidia-NVIDIA_H100_80GB_HBM3 |
+|------------------------------|------------|------------------|------------------|
+| rf-clf/base                  | IDENTICAL x2 | bffd9e22f7936f12 | bffd9e22f7936f12 |
+| rf-clf/denormal              | IDENTICAL x2 | b9c56acc3d78e224 | b9c56acc3d78e224 |
+| rf-clf/denormal_ftz          | IDENTICAL x2 | b9c56acc3d78e224 | b9c56acc3d78e224 |
+| rf-clf/dupes                 | IDENTICAL x2 | c5cdc20d6257828f | c5cdc20d6257828f |
+| rf-clf/hashed                | IDENTICAL x2 | 521fbcf08d68a5bd | 521fbcf08d68a5bd |
+| rf-clf/negative              | IDENTICAL x2 | c17d0509b895ccb7 | c17d0509b895ccb7 |
+| rf-clf/odd                   | IDENTICAL x2 | b32edad54396d0f7 | b32edad54396d0f7 |
+| rf-clf/ties                  | IDENTICAL x2 | f69fb78c32827c41 | f69fb78c32827c41 |
+| rf-clf/wide                  | IDENTICAL x2 | bc538487074ad10c | bc538487074ad10c |
+| rf-reg/base                  | IDENTICAL x2 | f032017cfd1c73dd | f032017cfd1c73dd |
+| rf-reg/denormal              | IDENTICAL x2 | feed3869ba06eaf7 | feed3869ba06eaf7 |
+| rf-reg/denormal_ftz          | IDENTICAL x2 | feed3869ba06eaf7 | feed3869ba06eaf7 |
+| rf-reg/dupes                 | IDENTICAL x2 | 55f5becd2a3a172c | 55f5becd2a3a172c |
+| rf-reg/hashed                | IDENTICAL x2 | c755113ac878c8b9 | c755113ac878c8b9 |
+| rf-reg/negative              | IDENTICAL x2 | cd81c456c75aaaf0 | cd81c456c75aaaf0 |
+| rf-reg/odd                   | IDENTICAL x2 | 33f207a8fab32866 | 33f207a8fab32866 |
+| rf-reg/ties                  | IDENTICAL x2 | ec6e7b28cd0d16a9 | ec6e7b28cd0d16a9 |
+| rf-reg/wide                  | IDENTICAL x2 | 8d9b05172d7a3777 | 8d9b05172d7a3777 |
+
+summary: IDENTICAL=18

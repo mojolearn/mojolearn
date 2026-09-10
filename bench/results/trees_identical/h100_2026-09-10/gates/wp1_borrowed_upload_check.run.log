@@ -1,0 +1,2 @@
+5042 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x105d80000000, nodemask=1)
+borrowed_upload_check: ALL OK (raw bits, classifier/regressor, bootstrap on/off)
