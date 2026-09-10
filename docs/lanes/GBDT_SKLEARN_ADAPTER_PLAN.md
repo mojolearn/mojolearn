@@ -1,55 +1,128 @@
-# GBDT sklearn adapters: implementation plan
+# GBDT sklearn adapters: bounded implementation and remaining work
 
-Status: source audit and queued work, 2026-09-10. No adapter is implemented
-by this document. The existing `GradientBoosting.predict` returns raw scores;
-preserve that contract and introduce separate classifier/regressor adapters.
+Separate `mojolearn.GradientBoostingClassifier` and
+`GradientBoostingRegressor` adapters cover binary Logloss and scalar RMSE
+respectively. SymmetricTree, Depthwise and Lossguide use the existing GPU
+learner in FAST, DETERMINISTIC and IDENTICAL, subject to the learner's
+objective/score/option restrictions. The legacy `GradientBoosting.predict`
+raw-score contract remains unchanged. Focused local build, GPU and serial sklearn pipeline checks pass;
+no broad sklearn or cross-device pipeline qualification is claimed.
 
-## Source and current boundaries
+With optional sklearn installed:
 
-CatBoost pin `54a8143a`, `catboost/python-package/catboost/core.py`:
-`CatBoostClassifier.predict` at 5587 defaults to Class; classifier `score`
-at 5872 uses accuracy; regressor `score` at 6306 uses R². Mirror these
-public meanings with our existing GPU learner and metrics, not their CPU
-prediction backend. sklearn constructor objects must survive cloning without
-normalization, as already handled for RF/ET in `_forest_protocol.py`.
+```python
+import numpy as np
+from sklearn.pipeline import Pipeline
+from mojolearn import StandardScaler, GradientBoostingClassifier, metrics
 
-The local source audit found these integration requirements:
+X = np.array([[0], [1], [2], [3]], dtype=np.float32)
+y = np.array(["no", "no", "yes", "yes"])
+pipeline = Pipeline([
+    ("scale", StandardScaler(numeric_mode="identical")),
+    ("model", GradientBoostingClassifier(
+        n_estimators=4, max_depth=2, numeric_mode="identical")),
+]).fit(X, y)
+model = pipeline.named_steps["model"]
+labels = pipeline.predict(X)
+loss = metrics.log_loss(
+    y, pipeline.predict_proba(X), labels=model.classes_,
+    numeric_mode="identical",
+)
+```
 
-| Existing surface | Required adapter behavior |
-| --- | --- |
-| `ensemble.py::GradientBoosting` constructor normalizes some options and creates `model_=None` | Preserve raw constructor parameters separately; build a validated internal learner at fit. Test fitted state using a non-None model, not attribute existence. |
-| `predict` returns raw scalar or multiclass margins | Classifier `predict` maps predicted class codes to `classes_`; expose raw scores separately. Regressor prediction must define supported loss/link semantics explicitly. |
-| Labels are currently converted to Float32; multiclass expects dense codes | Encode single-label classes on the host before GPU fitting, preserve original labels, and encode evaluation labels with the fitted training vocabulary. Refuse unknown evaluation labels. |
-| `_mode.py::NumericModeMixin` resolves the live default on each call | Resolve and read back the mode at adapter fit, retain it for prediction/scoring/pickle, and preserve the original constructor value for clone. |
-| `save/load` restores inference state without training constructor parameters | Do not claim old archives can clone/refit. Specify adapter archive metadata and label vocabulary before adding save/load; Python pickle can retain ordinary fitted state. |
-| Binary `predict_proba` returns Float64; FAST/DETERMINISTIC use NumPy exp, IDENTICAL calls a host Mojo loop in `gbdt_sigmoid_binding` | Existing behavior is not a GPU probability-transform path. Add a separate GPU Float32 probability path for the bounded pipeline without silently changing legacy probability bits. |
-| Public GPU `log_loss` accepts Float32 probabilities | Define Float32 probability output and clipping/normalization at the adapter boundary. An implicit dtype mismatch must not surface only inside a scorer. |
-| `MultiClassOneVsAll` probabilities are independent sigmoids | Do not silently renormalize or advertise them as the same multiclass probability contract as softmax. Start with binary Logloss, then qualify softmax separately. |
-| sklearn Pipeline does not automatically transform a raw `eval_set` passed to its final estimator | Document the restriction; do not leak validation data into scaler fitting or claim automatic evaluation-set routing. |
+## Public contract
 
-## Bounded first slice
+These are numeric-feature adapters. They expose an explicit subset of the
+base learner's constructor parameters: tree count/depth/rate and regularization,
+binning, leaf estimation, bootstrap/sampling, overfitting detection,
+score/search controls, class weights and growth constraints. They do not
+accept arbitrary base-learner options. Their fixed losses are not constructor
+parameters; multiclass, other losses, categorical feature APIs and experimental
+GBDT subclasses remain outside this adapter contract. The regressor refuses
+class weights. Classifier class-weight order follows its sorted classes.
 
-1. Add explicit classifier/regressor types with clone/get_params/set_params,
-   optional sklearn tags and fitted hooks. Reuse the forest protocol's raw
-   parameter design, not its forest-specific fitted attributes. Start with
-   RMSE regression and binary Logloss classification, all three growth policies
-   and numeric modes already supported by those losses.
-2. Preserve training labels and fitted mode. Validate replacement configuration
-   before clearing state on `set_params`; clear stale fitted state when a new
-   fit fails. Keep experimental GBDT subclasses outside the adapter contract.
-3. Implement GPU probability/class selection needed by the classifier and use
-   existing mode-aware GPU accuracy/R² for `score`. Retain the current refusal
-   of weighted scoring until the metrics support it, even though training can
-   accept weights. Label encoding/decoding remains host preparation.
-4. Exercise a small serial sklearn Pipeline/GridSearchCV with the GPU scalers,
-   fits and scoring. Compare raw learner predictions before/after wrapping,
-   clone identity, class mapping, failed refits, fitted mode after a process
-   default change, and pickle output bits. No broad sklearn parity claim.
-5. Qualify intermediate statistics, transformed input, model and predictions,
-   probabilities and scores across Metal/CUDA/HIP only when idle devices are
-   authorized. Until then call it an implemented local pipeline, not a
-   cross-vendor qualified end-to-end IDENTICAL pipeline.
+The classifier requires exactly two nonempty, one-dimensional training
+classes of one type: strings or integers, including bools. Host encoding
+preserves original labels, including large integers. sklearn's own scorers
+may reject object-dtype labels needed for arbitrary-size Python integers;
+native label preservation does not imply universal sklearn label compatibility.
+`classes_` is sorted;
+its second entry is positive. `predict` returns original labels,
+`decision_function` returns raw Float32 margins, and `predict_proba` returns
+Float32 columns in `classes_` order. `score` uses GPU accuracy; an unknown
+score-time label of the same type counts as incorrect. Evaluation labels,
+in contrast, must belong to the training vocabulary.
 
-Scaling is optional for decision trees. This integration makes preprocessing
-available and composable; it does not establish a tree-training speed gain.
-No CPU training backend or remote work is part of this plan.
+The regressor requires finite, nonempty, one-dimensional Float32 targets
+for fit, evaluation and scoring. Its predictions are raw Float32 RMSE
+predictions, and `score` uses the GPU Float32 R² metric. Both adapters forward
+training sample weights through the existing learner's supported path;
+weighted scoring is explicitly refused.
+
+`eval_set` accepts one `(X_eval, y_eval)` tuple or a list containing one such
+pair. Evaluation features must already have the same preprocessing as training
+features. sklearn Pipeline does not automatically transform an `eval_set`
+passed to its final estimator; these adapters do not provide that routing or
+fit a scaler on validation data.
+
+## Parameters, fitted state and persistence
+
+Constructor objects are retained for `get_params` and cloning; a validated
+internal learner is built for fit. `set_params` rejects unknown parameters,
+validates replacement configuration through construction and clears fitted
+state on success. Learner checks that depend on training data remain fit-time
+checks. A new failed fit cannot expose the previous fitted model.
+
+The mode resolves at fit, is checked against the native readback and is stored
+as `numeric_mode_`. The internal learner retains it for prediction and scoring
+even if the process default changes. Learned metadata includes `model_`,
+`n_features_in_`, loss curves, best iteration and early-stop state; classifier
+metadata additionally includes `classes_` and `n_classes_`. Fitted detection
+requires an internal non-None model, not merely an attribute named `model_`.
+
+The adapters provide bounded classifier/regressor tags, fitted hooks and
+get/set parameter support. Python pickle retains constructor parameters,
+label vocabulary, fitted mode and learner state. Adapter `save`/`load` are
+explicitly refused: legacy inference-only GBDT archives do not contain the
+adapter vocabulary and constructor configuration. Custom subclass cloning,
+metadata routing and arbitrary sklearn meta-estimators are not qualified by
+this bounded protocol.
+
+## Separate GPU Float32 binary prediction path
+
+`gbdt/binary_prediction.mojo` computes the mode-aware sigmoid p of each
+finite Float32 raw margin and returns `[1 - p, p]`. There is no probability
+clipping; saturation to zero or one is allowed. GPU log loss owns its own
+epsilon clipping. IDENTICAL uses the portable sigmoid with operand/result
+FTZ. The legacy learner's host Float64 probability methods are unchanged.
+
+Class selection uses strict raw margin > 0, matching the default binary
+border in the pinned CatBoost reference. Sign/magnitude bits implement the
+comparison: either signed zero selects class 0, while a positive subnormal
+margin selects class 1. Rounded probabilities can consequently both equal
+0.5 while `predict` selects class 1. Classification is not reconstructed from
+an argmax of rounded probabilities. Native headers identify these policies
+as `BINARY-PRED-1` and `BINARY-PRED-2`.
+
+Postprocessing accepts at most Int32.max finite margins. It uploads host
+margins and returns host arrays; the GPU link does not make prediction a fully
+resident GPU pipeline. Neither that implementation choice nor its mode name
+qualifies final results across devices.
+
+## Provenance and remaining qualification
+
+The inspected [CatBoost pin 54a8143a Python source](https://github.com/catboost/catboost/blob/54a8143a/catboost/python-package/catboost/core.py)
+provides the public meanings: classifier prediction defaults to class labels,
+classifier score is accuracy and regressor score is R². Its
+[binary evaluation source](https://github.com/catboost/catboost/blob/54a8143a/catboost/libs/model/eval_processing.h)
+uses sigmoid probability conversion and a raw-score class border. These are
+behavior references; the new Float32 GPU postprocessing is an independent
+implementation, not a claim of CatBoost numerical parity or a CPU backend.
+
+Local builds and focused GPU/sklearn smoke pass; see the [evidence ledger](../../bench/results/gbdt_adapters_2026-09-10/RESULTS.md), including unresolved CoreAnalytics diagnostics. Broader intermediate-value,
+model/prediction/probability, serialization and cross-device pipeline
+qualification remains separate. Multiclass softmax and independent one-vs-all
+sigmoids need distinct contracts before further adapters are exposed.
+Scaling remains optional for trees; composition with GPU scalers establishes
+no tree-training speed gain. No remote work or cross-device performance claim
+is part of this bounded implementation.

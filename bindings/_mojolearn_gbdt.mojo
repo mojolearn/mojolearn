@@ -52,6 +52,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from gbdt.binary_prediction import binary_prediction_host
 
 from max.gpu.host import DeviceContext
 
@@ -93,6 +94,32 @@ def gbdt_numeric_mode_binding() raises -> PythonObject:
     and should: 2 promises reproducibility on one device and says
     nothing about a second."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
+def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
+    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    # params=[n]; input Float32 margins. Output probabilities n*2 Float32,
+    # or class codes n Int32. Both perform the arithmetic/selection on GPU.
+    if len(params) != 1:
+        raise Error("binary prediction: params must contain n")
+    var n = Int(py=params[0])
+    if n <= 0 or n > 2147483647:
+        raise Error("binary prediction: positive n<=Int32.max required")
+    var rp = _f32_ptr(Int(py=raw_addr))
+    var address = Int(py=out_addr)
+    if address == 0:
+        raise Error("binary prediction: null output")
+    var op = MutPointer[Scalar[dtype], MutUntrackedOrigin](unsafe_from_address=address)
+    var raw = List[Float32]()
+    for i in range(n):
+        raw.append(rp.unsafe_load(i))
+    var count = 2*n if probabilities else n
+    with GILReleased(Python()):
+        var result = binary_prediction_host[probabilities,dtype](raw,n)
+        for i in range(count):
+            op.unsafe_store(i,result[i])
+    return PythonObject(count)
 
 
 def gbdt_sigmoid_binding(
@@ -564,6 +591,8 @@ def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
         m.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         m.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         m.def_function[gbdt_numeric_mode_binding]("gbdt_numeric_mode")
+        m.def_function[gbdt_binary_prediction_binding[True,DType.float32]]("gbdt_binary_probabilities")
+        m.def_function[gbdt_binary_prediction_binding[False,DType.int32]]("gbdt_binary_classes")
         m.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
         return m.finalize()
     except e:

@@ -1,0 +1,9 @@
+PASS GPU Pipeline/GridSearchCV GradientBoostingClassifier fast
+PASS GPU Pipeline/GridSearchCV GradientBoostingRegressor fast
+PASS GPU Pipeline/GridSearchCV GradientBoostingClassifier deterministic
+Context leak detected, CoreAnalytics returned false
+PASS GPU Pipeline/GridSearchCV GradientBoostingRegressor deterministic
+PASS GPU Pipeline/GridSearchCV GradientBoostingClassifier identical
+Context leak detected, CoreAnalytics returned false
+PASS GPU Pipeline/GridSearchCV GradientBoostingRegressor identical
+PASS GBDT adapter sklearn protocol

@@ -1694,3 +1694,7 @@ class OrderedRMSE(GradientBoosting):
         self.loss_curve_ = None
         self.test_loss_curve_ = None
         return self
+
+
+# Separate sklearn prediction contracts; legacy GradientBoosting stays unchanged.
+from ._gbdt_adapters import GradientBoostingClassifier, GradientBoostingRegressor

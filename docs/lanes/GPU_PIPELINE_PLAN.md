@@ -15,7 +15,8 @@ curves](GPU_RANKING_METRICS.md) are the implemented A3 scoring slice, with
 local build/smoke validation only. C1 now adds bounded
 [GPU MinMaxScaler](GPU_MINMAX_SCALER.md) and
 [GPU StandardScaler](GPU_STANDARD_SCALER.md); the
-[B2 GBDT adapter audit](GBDT_SKLEARN_ADAPTER_PLAN.md) is next. The
+[bounded B2 GBDT adapters](GBDT_SKLEARN_ADAPTER_PLAN.md) add RMSE regression
+and binary Logloss classification while preserving legacy raw predictions. The
 remaining phases follow. A complete cross-vendor
 pipeline has not been qualified. Metrics and estimator compatibility take priority over
 the longer-tail tree features.
@@ -79,7 +80,7 @@ messages as each feature lands instead of advertising unimplemented names.
 | A2: classification metrics | Expose integer confusion counts using contingency infrastructure; derive precision/recall/F1 with explicit binary/micro/macro/weighted conventions. Implement clipped-probability log loss using the pinned log path in IDENTICAL. | Label ordering, absent classes, zero division, weights, binary/multiclass and normalization oracles; integer count identity and final scalar bits. |
 | A3: ranking curves | Bounded binary ROC-AUC and PR curves implemented; [contract](GPU_RANKING_METRICS.md). GPU score ordering, grouped ties and prefix counts; weights and multiclass/multilabel remain unsupported. | Local build/smoke only this turn. Full tied-score, row-order, degenerate-class, independent rank/curve, large-input and cross-device qualification remains queued. |
 | B1: sklearn protocol pilot | Start with RF/ET, a shared explicit parameter registry and raw constructor parameter storage. Ensure validated `_cfg` is rebuilt when parameters change; preserve mode in parameter discovery. Add get/set parameters, fitted-state checks, classifier/regressor tags and default accuracy/R² score through mode-aware metrics. Reuse sklearn public protocol where appropriate without requiring its training backend. | `clone` retains every parameter including numeric_mode, does not copy fitted state, nested Pipeline updates change native parameters, invalid combinations still refuse, fit returns self, serial GridSearchCV/refit works. |
-| B2: GBDT classifier/regressor contract | Provide bounded sklearn classifier/regressor adapters around existing GBDT semantics before changing its raw `predict` API. Classification adapters use class predictions/probabilities; regression adapters use numeric predictions. Add accuracy/R² default score using the mode-aware metrics. | sklearn scoring uses the correct response method, labels/classes/tags agree, mode survives cloning/refit/save-load, explicit loss support. Preserve existing raw approximation prediction behavior. |
+| B2: GBDT classifier/regressor contract | Separate bounded RMSE regressor and binary Logloss classifier adapters; existing GPU growth policies/modes, fitted-mode capture, GPU Float32 binary probabilities and accuracy/R² scoring. Legacy raw `predict` remains unchanged. [Contract](GBDT_SKLEARN_ADAPTER_PLAN.md). | Focused local builds, GPU smoke and serial sklearn searches pass; cross-device qualification remains pending. Broader response-method, metadata-routing, archive and cross-device pipeline qualification remain scoped separately. |
 | C1: scalers | Mirror StandardScaler population-variance and MinMaxScaler contracts in Mojo: fixed reduction schedule, defined precision, zero-variance/range handling, then elementwise transform/inverse transform. Own learned statistics and propagate numeric_mode. | Independent moments, constant columns, weights where supported, NaN policy, overflow/cancellation, fit-transform/inverse behavior and round trips; transformed bytes compared across devices. |
 | C2: encoders | Stable LabelEncoder/OrdinalEncoder vocabulary first, then one-hot: category order, unknown-category policy, serialized mappings and bounded dense output; sparse output follows a real sparse contract. Target encoding later with out-of-fold training values, smoothing and explicit leakage prevention. | Train/test category mismatch, deterministic codes, heldout leakage tests, fold ownership and category-map round trips. Do not expose a target encoder that fits on evaluation labels. |
 | D1: splitting and folds | Build train_test_split and KFold on explicit index permutations and a stable integer RNG mapping; add StratifiedKFold with deterministic class allocation/ties. Reuse resample mechanisms where their algorithm and scale fit. | Exact index coverage/disjointness, stable seed vectors, size rounding, class imbalance and tiny classes; publish any RNG difference from sklearn rather than imply same-seed index equality. |
@@ -154,9 +155,10 @@ provide broad numerical or cross-device qualification.
 variance and independent centering/scaling flags. Its
 [local M4 build/smoke evidence](../../bench/results/standard_scaler_2026-09-10/RESULTS.md)
 passes in all modes; unresolved CoreAnalytics diagnostics and broader
-qualification remain documented limits. Next, audit
-[GBDT classifier/regressor adapters](GBDT_SKLEARN_ADAPTER_PLAN.md) before
-broadening estimator protocol claims.
+qualification remain documented limits.
+[GBDT classifier/regressor adapters](GBDT_SKLEARN_ADAPTER_PLAN.md) now cover
+the bounded RMSE/binary Logloss profiles; broader estimator protocol claims
+still require separate qualification.
 Use sklearn `preprocessing/_data.py` (`partial_fit`, `transform`,
 `inverse_transform`, `_handle_zeros_in_scale`, `_is_constant_feature`) and
 `utils/extmath.py::_incremental_mean_and_var` as behavior references; inspect

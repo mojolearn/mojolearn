@@ -1,0 +1,26 @@
+{
+  "base_commit": "ef9ee060fbbbc273f10dfb44ca06b891b7dcd849",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "device": "Apple M4 / Metal",
+  "mojo": "1.0.0 ed45d567",
+  "python": "3.13.15",
+  "numpy": "2.5.2",
+  "sklearn": "1.8.0",
+  "catboost_behavior_reference": "54a8143a",
+  "qualification": "Local focused checks only; no cross-vendor pipeline qualification",
+  "sha256": {
+    "gbdt/binary_prediction.mojo": "c0383d9d38c3100dd3d101e6e0e9290e8ff45d72871d5fc3cd6dbc1ccec8e0fe",
+    "bindings/_mojolearn_gbdt.mojo": "9f7c858fb4870cac93fd69e81f1ca69909daf4e08dde78e7159094ef9bf5fcb0",
+    "checks/numerics.mojo": "3cebd43fa67c9518c1e02f5d79baed5fb97b00ad78275c93ce20b30d7b9d7dc1",
+    "python/mojolearn/_gbdt_adapters.py": "459f878a5b1e55a8fe3a764d874ad05d78a3a44d84dd82b372b67c9fb5afb605",
+    "python/mojolearn/ensemble.py": "8b26ced8524c1fbba19802198cbbafe4ab33038dfe140e4004db788eb4442725",
+    "python/mojolearn/__init__.py": "c698592e7bf454ce36a8d1d29db898497e637fe0abd64839f6c30ae3b995a06f",
+    "checks/gbdt_adapters_smoke.py": "d7ef0ecb319f36609e614f34445e4b075c87be63851a61fe5929237947d0d6e0",
+    "checks/gbdt_adapters_protocol_smoke.py": "72a59c50c84845a32045c2e45a2711c85db999ac224ce49dfaab7f1721e90111",
+    "checks/gbdt_binary_prediction_smoke.py": "56b77178e33709c75a1b0fddd6e70ee6a7e149c7a972cdf99daba45ed03f384a",
+    "tools/check_gbdt_adapters.sh": "73fc5cfb1c79c023793dd20d1978d80b881b8069ca8e6846b180f791513a6f36",
+    "python/mojolearn/_mojolearn_gbdt.so": "7c63fd8828b48925d6cc4f0f6658264e63e91ac57bde8c35c27f27d2fc43d246",
+    "python/mojolearn/deterministic/_mojolearn_gbdt.so": "a63b6a5d67342e331ef3a4eacb391dd7f745642869f01e9cf5768d2337579e77",
+    "python/mojolearn/identical/_mojolearn_gbdt.so": "d3b726183834ab545ce542ae67955819d0c7bf2dbe298befa1acd0e82fa496d6"
+  }
+}
