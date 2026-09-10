@@ -1,0 +1,43 @@
+701 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x195340000000, nodemask=2)
+Imported from /root/mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:6:
+/root/mamba3-next/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:28:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:6:
+/root/mamba3-next/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:51:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/root/mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:966:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sv[ix] = v
+        ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/root/mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:975:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sk[ix] = k
+        ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/root/mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:982:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sv[j * 8 + pp], sk[j * 32 + nn], acc))
+                                    ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/root/mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:982:55: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sv[j * 8 + pp], sk[j * 32 + nn], acc))
+                                                    ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/root/mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1025:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sv[tid] = value
+        ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/root/mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1029:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var vsv = sv[j * 2 + p % 2]
+                  ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
