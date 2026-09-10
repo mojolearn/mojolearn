@@ -1148,7 +1148,9 @@ def mamba3_block_forward(
             "mamba3_block_forward: the weights' d_model is not the stages'"
         )
 
-    var phase_tick = Int(perf_counter_ns())
+    var phase_tick = 0
+    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
+        phase_tick = Int(perf_counter_ns())
     mamba3_refuse_bad_inputs(ctx, w, x, state, b, l)
     m3_phase_tick(ctx, phase_tick, String("block.refusal"))
 

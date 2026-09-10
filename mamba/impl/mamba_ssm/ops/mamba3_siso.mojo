@@ -1449,7 +1449,9 @@ def m3_siso_forward(
     832(i)); `theta_state` advances through the new tokens; `h_last` /
     `k_last` / `v_last` / `theta_last` are the reports. SYNCHRONIZES
     before returning."""
-    var phase_tick = Int(perf_counter_ns())
+    var phase_tick = 0
+    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
+        phase_tick = Int(perf_counter_ns())
     var t_work = q0 + l
     var qv = m3_q_eff()
     var nc = m3_n_chunks(t_work)
