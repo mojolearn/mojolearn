@@ -113,7 +113,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_MODE,
 )
 from gbdt.data.permutation import TRandom
-from gbdt.gpu_data.feature_sampling import check_feature_fraction, sample_tree_folds, project_tree_columns
+from gbdt.gpu_data.feature_sampling import check_feature_fraction, sample_tree_folds, FeatureProjectionWorkspace
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     compute_bins_for_model,
     partition_from_bins,
@@ -1405,8 +1405,10 @@ def fit_with_test(
 
     # Independent portable stream; does not consume bootstrap/noise RNG draws.
     var feature_random = Optional[TRandom]()
+    var feature_projection = Optional[FeatureProjectionWorkspace]()
     if feature_fraction < 1:
         feature_random = TRandom(random_seed ^ UInt64(0x4645415455524553))
+        feature_projection = FeatureProjectionWorkspace(ctx,n_rows,layout_for_test)
     for iteration in range(n_estimators):
         # ---- which permutation the STRUCTURE is searched on ----------
         #
@@ -1451,14 +1453,24 @@ def fit_with_test(
                 fold_counts, feature_fraction, feature_random.value(),
             )
             tree_layout = build_layout(tree_folds, one_hot)
-            tree_cindex = project_tree_columns(
-                ctx, lc, n_rows, layout_for_test, tree_layout.value(),
+            tree_cindex = feature_projection.value().project(
+                ctx, lc, layout_for_test, tree_layout.value(),
             )
-            # Existing workspace keys encode shape, not the sampled feature IDs.
-            # Drain and retire their cached descriptors before a new tree mask.
-            ctx.synchronize()
-            ws.clear()
-            dws.clear()
+            # Projection drains prior tree readers before it rewrites staging.
+            # Refresh metadata while retaining compatible large arenas. The
+            # depthwise pool already refreshes bin-feature tables each tree and
+            # checks its capacities itself; pointwise caching stays conservative.
+            var reused_workspace = False
+            if len(ws) > 0:
+                reused_workspace = ws[0].refresh_sampled_layout(
+                    ctx, tree_layout.value(),
+                )
+                if not reused_workspace:
+                    ws.clear()
+            trace.record_scalar_f32(
+                _tree_tag(iteration) + ".feature_workspace_reused",
+                Float32(1) if reused_workspace else Float32(0),
+            )
             pw_pool.clear()
             var selected_ids = List[Int32]()
             for f in range(len(tree_folds)):

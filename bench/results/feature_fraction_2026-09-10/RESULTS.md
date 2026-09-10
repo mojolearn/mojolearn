@@ -57,3 +57,22 @@ workspaces per sampled tree. Next investigate capacity reuse and original-layout
 mapped histogram access. Packing happens once per sampled tree, not per depth
 or leaf. A shape-aware allocation improvement must preserve the same sampled
 model bits and be compared against this implementation in one process.
+
+## Allocation reuse follow-up
+
+`reuse-native-fast.log` passes the mixed-layout/prepared checks plus repeated
+projection through one workspace (selected → full → selected). An initial
+reuse draft reserved full original-width output; the final version grows to
+maximum observed sampled width instead. `reuse-lazy-native-fast.log` passes
+that final source. `reuse-binding-*.build.log` belongs to the earlier full-width
+reserve draft, not the final lazy-capacity source. Final integrated build/public
+evidence is recorded separately before main promotion.
+
+The new source preserves the sampler and projection kernel, retains compatible
+large search arenas, refreshes all feature metadata through the constructor's
+shared fill routine, and retains the already capacity-keyed depthwise buffers.
+Pointwise caching remains conservative. The per-tree packing pass remains.
+`checks/gbdt_feature_fraction_ab.py` is a same-process, same-sampled-learner
+reference/candidate driver with explicit compiled mode/vendor and binary hashes.
+It does not infer a gain from allocation counts. Dedicated AMD/NVIDIA tests are
+pending an available endpoint or rental budget; the protected pod was not used.

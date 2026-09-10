@@ -46,14 +46,16 @@ split and not merely once when a growth policy is selected. Existing searchers t
 SymmetricTree, Depthwise or Lossguide learner is introduced. Stored model
 feature IDs and the original full training/prediction schema remain unchanged.
 
-Packing is needed because the existing histogram kernels infer feature bit
+Packing in this implementation is needed because the existing histogram kernels infer feature bit
 slots from their layout. Merely hiding candidates cannot safely reinterpret
 the original packed words. This path removes excluded histogram/candidate
-work, but adds per-tree buffer allocation, metadata upload, an integer packing
-kernel and synchronization. Existing search workspace descriptors are keyed
-by shape rather than sampled IDs, so those caches are cleared between sampled
-trees to prevent stale feature mappings. No net throughput improvement has been established;
-reusable packing buffers are a later profiling-driven optimization.
+work, but adds metadata upload, an integer packing kernel and synchronization.
+The initial implementation allocated projection buffers and cleared search
+workspaces per tree. The subsequent reuse change retains projection/staging
+capacity for the fit and refreshes sampled search metadata while retaining
+compatible large arenas. Incompatible block shapes still rebuild; pointwise
+workspace caching remains conservative. No net throughput improvement has been
+established on AMD/NVIDIA.
 
 The Python adapter forwards through the same legacy parameter validator and
 packer. The binding retains all previous parameter layouts. After counted
@@ -87,3 +89,31 @@ would need an explicit source-word map and per-lane active descriptors in both
 direct and gathered histogram paths. That is a candidate optimization, not a
 mathematical requirement to copy data and not something a one-time switch fixes.
 Preserve the sampling contract and compare whole-fit timing before choosing it.
+
+
+## Buffer ownership and performance evidence
+
+The reusable projection buffer grows lazily to the maximum selected column
+count observed during the fit, rather than reserving the original full width.
+A growth allocation may temporarily retain both old and new buffers. It avoids
+repeated allocation at stable capacity; it does not eliminate
+the packing kernel or its bandwidth cost. Before reusing staging/output, the
+same GPU context drains preceding readers. The original compressed index and
+model feature IDs remain unchanged.
+
+Search arena reuse requires matching feature count, histogram cell count and
+per-policy block count, feature count, total folds and maximum folds. One shared
+metadata-fill routine serves construction and refresh; it resets the maps used
+for scoring and splitting. Depthwise caches already refresh their bin-feature
+maps each tree. Non-power-of-two Lossguide budgets may still trigger an existing
+workspace-key rebuild. No claim of universal arena reuse is made.
+
+Use `checks/gbdt_feature_fraction_ab.py` to compare the initial sampled learner
+at `e05e889b` with the reuse candidate, on the same device and toolchain. It
+loads both mode-specific extensions in one process, checks model/prediction
+hashes for every fit, alternates fit order and records both arms' timing spread.
+This isolates a same-learner optimization; full-versus-sampled timing does not.
+
+[Dedicated GPU availability](../../bench/results/tree_gpu_availability_2026-09-10/README.md)
+records why AMD/NVIDIA qualification is pending. The protected training pod
+must not be used for competing measurements.

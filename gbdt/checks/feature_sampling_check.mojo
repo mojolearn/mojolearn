@@ -3,7 +3,7 @@
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from gbdt.data.permutation import TRandom
-from gbdt.gpu_data.feature_sampling import sample_tree_folds, project_tree_columns
+from gbdt.gpu_data.feature_sampling import sample_tree_folds, project_tree_columns, FeatureProjectionWorkspace
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.prepared import prepare_numeric_dataset
 from gbdt.train import train, predict_floats
@@ -47,6 +47,23 @@ def projection(ctx: DeviceContext) raises:
                 var actual = (out[Int(cf.offset)*n+r] >> cf.shift)&cf.mask
                 if actual != expected:
                     raise Error("projection changed original feature's bins")
+    var workspace = FeatureProjectionWorkspace(ctx,n,original)
+    for rep in range(3):
+        var current_folds = selected.copy() if rep != 1 else folds.copy()
+        var current = build_layout(current_folds)
+        var reused = workspace.project(ctx,source,original,current)
+        with reused.map_to_host() as out:
+            for f in range(len(folds)):
+                if current_folds[f] == 0:
+                    continue
+                ref cf = current.features[f]
+                for r in range(n):
+                    var expected = UInt32((r*17+f*7)%(folds[f]+1))
+                    var actual = (out[Int(cf.offset)*n+r] >> cf.shift)&cf.mask
+                    if actual != expected:
+                        raise Error("reused projection changed original bins")
+        _ = reused^
+    _ = workspace^
     _ = result^
     _ = source^
     _ = h^
