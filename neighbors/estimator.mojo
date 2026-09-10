@@ -361,6 +361,34 @@ def knn_search_traced(
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
+    """Host-output search; device-result retention is internal to classification."""
+    var retained = List[DeviceBuffer[DType.uint32]]()
+    return _knn_search_traced_retaining(
+        ctx, trace, retained, False, index_ptr, n_index, queries_ptr,
+        n_queries, n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt,
+        requested_query_tile, knn_method, metric, metric_arg,
+    )
+
+
+def _knn_search_traced_retaining(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut retained_indices: List[DeviceBuffer[DType.uint32]],
+    keep_device_indices: Bool,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    return_sqrt: Bool = True,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    knn_method: Int = KNN_METHOD_AUTO,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+) raises -> Int:
     """Exact k nearest neighbours, index and queries row-major on the host.
 
     THE METRIC, 2026-09-01. `metric` is a cuVS `DistanceType` value and
@@ -608,6 +636,7 @@ def knn_search_traced(
     # (distance, index), a TOTAL order, so the ORDER is reproducible given
     # the set. It cannot repair `archive/plans/UNWIRED.md:371`, which is about WHICH of
     # several equidistant neighbours lands in the set at all.
+    var order_changed = False
     for i in range(n_queries):
         var base = i * k
         for a in range(1, k):
@@ -619,6 +648,7 @@ def knn_search_traced(
                 var ib = hi.unsafe_ptr().unsafe_load(base + b)
                 if db < dv or (db == dv and ib <= iv):
                     break
+                order_changed = True
                 hd.unsafe_ptr().unsafe_store(base + b + 1, db)
                 hi.unsafe_ptr().unsafe_store(base + b + 1, ib)
                 b -= 1
@@ -643,6 +673,15 @@ def knn_search_traced(
         out_dist_ptr.unsafe_store(i, hd.unsafe_ptr().unsafe_load(i))
         out_idx_ptr.unsafe_store(i, hi.unsafe_ptr().unsafe_load(i))
 
+    # DEVIATION 2487: retain the existing sorted device indices. A real
+    # host permutation must be uploaded; an already-sorted result needs no
+    # index H2D copy at all. Host outputs and weighted arithmetic stay intact.
+    if keep_device_indices:
+        if order_changed:
+            ctx.enqueue_copy(dst_buf=out_idx, src_ptr=hi.unsafe_ptr())
+            ctx.synchronize()
+            _ = hi^
+        retained_indices.append(out_idx^)
     return query_tile
 
 
@@ -768,9 +807,12 @@ def knn_classifier_predict(
         )
     # `knn_search_traced` refuses k <= 0, k > n_index and the empty shapes
     # by name; nothing here re-derives those refusals.
-    var used_tile = knn_search_traced(
+    var retained_indices = List[DeviceBuffer[DType.uint32]]()
+    var used_tile = _knn_search_traced_retaining(
         ctx,
         trace,
+        retained_indices,
+        True,
         index_ptr,
         n_index,
         queries_ptr,
@@ -816,14 +858,13 @@ def knn_classifier_predict(
             )
         _ = h_w^
 
-    # The sorted indices go back to the device, where cuML's kernels read
-    # them (`knn_indices` in `class_probs_kernel`).
-    var d_idx = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
+    # Search returned its owned, sorted index buffer. It uploaded a host
+    # permutation only if necessary; reuse the allocation for class_probs.
+    var d_idx = retained_indices.pop()
     var y = List[DeviceBuffer[DType.int32]]()
     for i in range(n_outputs):
         y.append(ctx.enqueue_create_buffer[DType.int32](n_index))
     ctx.synchronize()
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=h_idx.unsafe_ptr())
     for i in range(n_outputs):
         ctx.enqueue_copy(
             dst_buf=y[i], src_ptr=y_ptr.unsafe_offset(i * n_index)
