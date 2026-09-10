@@ -1,0 +1,20 @@
+numeric_mode IDENTICAL
+PASS graph/bounds/nonfinite refusals
+PASS fixture False 1 1
+PASS fixture False 1 2
+PASS fixture True 1 1
+PASS fixture True 1 2
+PASS fixture False 31 1
+PASS fixture False 31 2
+PASS fixture True 31 1
+PASS fixture True 31 2
+PASS fixture False 32 1
+PASS fixture False 32 2
+PASS fixture True 32 1
+PASS fixture True 32 2
+PASS fixture False 33 1
+PASS fixture False 33 2
+PASS fixture True 33 1
+PASS fixture True 33 2
+PASS cancellation: ordered and grove intentionally differ
+PASS shared GPU forest inference prototype

@@ -15,6 +15,10 @@ default**. The claim is proven by stage-level identity cards and separating
 sabotage tests, never inferred from a final-output hash, and it holds only for
 the configurations recorded in [the support matrix](SUPPORT_MATRIX.md).
 
+RF/ET offer `inference_engine="sequential"` (existing host prediction) and
+experimental `inference_engine="parallel_groves"` (shared GPU prediction).
+Both retain GPU training; see the [inference algorithms and numerical contract](docs/FOREST_INFERENCE_ENGINES.md).
+
 ## Training performance priority
 
 Optimize GPU training for **large real datasets**. Training-speed claims and

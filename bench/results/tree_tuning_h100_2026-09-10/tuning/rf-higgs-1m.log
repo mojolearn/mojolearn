@@ -1,0 +1,21 @@
+2406 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x729980000000, nodemask=1)
+2406 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594ac0000000, nodemask=2)
+{"arm": "reference", "phase": "warmup", "round": -1, "fit_ms": 7690.363842993975, "model_sha256": "39751f5eb4c5bfe84110b27cee4f1dabb3dedf878350e444ee3b6cc4e6cbc79a", "prediction_sha256": "3df923d214874476bd504b6294bfff5497a81212587db73ea930d8138fc8b3e9", "scores": {"logloss": 0.5388502423656296, "auc": 0.8099059534448917}}
+2406 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7299c0000000, nodemask=1)
+{"arm": "columns2", "phase": "warmup", "round": -1, "fit_ms": 5795.418821275234, "model_sha256": "39751f5eb4c5bfe84110b27cee4f1dabb3dedf878350e444ee3b6cc4e6cbc79a", "prediction_sha256": "3df923d214874476bd504b6294bfff5497a81212587db73ea930d8138fc8b3e9", "scores": {"logloss": 0.5388502423656296, "auc": 0.8099059534448917}}
+Traceback (most recent call last):
+  File "/root/mojolearn/bench/speed/rf_higgs_columns_ab.py", line 191, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/root/mojolearn/bench/speed/rf_higgs_columns_ab.py", line 165, in main
+    run(v, 'warmup', -1)
+  File "/root/mojolearn/bench/speed/rf_higgs_columns_ab.py", line 146, in run
+    probabilities = arm.full_probabilities(model, data)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/bench/speed/rf_higgs_columns_ab.py", line 64, in full_probabilities
+    return model.predict_proba(current_data._ours_Xtest)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/randomforest.py", line 618, in predict_proba
+    wrote = self._bind("_mojolearn_rf").rf_predict_proba(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

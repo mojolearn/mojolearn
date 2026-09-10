@@ -1,0 +1,32 @@
+[
+  {
+    "source": "build/rf-higgs-columns/columns2/_mojolearn_rf.so",
+    "packed": "artifacts/rf-higgs-columns/columns2/_mojolearn_rf.so.gz",
+    "sha256": "cbda03745c65b5b60ae4b433dd7526996e810ed2042cc5a7dae8d17f05b456eb",
+    "packed_sha256": "528823f8d7311c09ff7ee4872e33b460d79e98f22c3abf09f260b4489e853b43"
+  },
+  {
+    "source": "build/rf-higgs-columns/columns4/_mojolearn_rf.so",
+    "packed": "artifacts/rf-higgs-columns/columns4/_mojolearn_rf.so.gz",
+    "sha256": "910d5425d152b74404e58f480c90830ea8ef7a3435cfc1513250650c8b6cabb0",
+    "packed_sha256": "7d13da90b92a3b7dcba7fd6e1410ed44d3f41bf94a4e3ce715b13a6687bdbb2d"
+  },
+  {
+    "source": "build/rf-higgs-columns/reference/_mojolearn_rf.so",
+    "packed": "artifacts/rf-higgs-columns/reference/_mojolearn_rf.so.gz",
+    "sha256": "f19a443fe7f48967aa7fe61df9a6e5e39d14182809c8c757b1aea38a9610cefc",
+    "packed_sha256": "7096f7c17e1925048920a0986a7a70ef7123f9161b2288e939d87f6f683c9b18"
+  },
+  {
+    "source": "build/et-shared/baseline/_mojolearn_trees.so",
+    "packed": "artifacts/et-shared/baseline/_mojolearn_trees.so.gz",
+    "sha256": "32a89c63c2b78f27daddfa9e26a832e7759a61437e2e6b84e0814e676580b239",
+    "packed_sha256": "b962d0312dde895b11d380557e3095112f093b1a2bd68b24693ea4f059fb92a5"
+  },
+  {
+    "source": "build/et-shared/candidate/_mojolearn_trees.so",
+    "packed": "artifacts/et-shared/candidate/_mojolearn_trees.so.gz",
+    "sha256": "1e5067d43814d975667f39f7e45c2fdfe3b34edf9e81aaf498fdc7404eaa15a8",
+    "packed_sha256": "d40bc48003a4174bf9509b5abad63aef062050570d7d2c4b042c2d5638bba3b2"
+  }
+]

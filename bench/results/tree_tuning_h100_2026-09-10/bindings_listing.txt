@@ -1,0 +1,7 @@
+total 13732
+drwxr-xr-x 2 root root     124 Sep 10 13:18 .
+drwxrwxr-x 5 root root    4096 Sep 10 13:15 ..
+-rwxr-xr-x 1 root root 5117912 Sep 10 13:16 _mojolearn.so
+-rwxr-xr-x 1 root root 6203264 Sep 10 13:18 _mojolearn_gbdt.so
+-rwxr-xr-x 1 root root 1521408 Sep 10 13:18 _mojolearn_rf.so
+-rwxr-xr-x 1 root root 1205072 Sep 10 13:18 _mojolearn_trees.so

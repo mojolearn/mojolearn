@@ -262,7 +262,7 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
                 f"X has {n_features} features, fit saw {self.n_features_in_}"
             )
         out = np.empty(n_rows * self._num_outputs, dtype=np.float32)
-        wrote = self._bind("_mojolearn_trees").et_predict(
+        wrote = self._prediction_function("et_predict")(
             _addr_ro(self._offsets),
             _addr_ro(self._colid),
             _addr_ro(self._quesval),
@@ -283,9 +283,9 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         """Write the fitted forest to `path` as an npz.
 
         The file holds the five prediction arrays exactly as fitted, raw
-        bytes and exact dtypes, so a model saved on one machine and loaded
-        on another predicts the SAME BITS. Floats never pass through
-        decimal text. The bytes of the file itself are a pure function of
+        bytes and exact dtypes. GPU-parallel archives also retain their
+        inference engine and numeric mode in a separately versioned format.
+        Floats never pass through decimal text. The bytes of the file itself are a pure function of
         the model (see `_serialize.write_npz`), so equal models give equal
         file hashes across machines.
         """
@@ -314,6 +314,7 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         }
         if hasattr(self, "classes_"):
             arrays["classes"] = np.asarray(self.classes_)
+        self._archive_inference_metadata(arrays, _MODEL_FORMAT)
         return _serialize.write_npz(path, arrays)
 
     @classmethod
@@ -321,7 +322,7 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         """Load a forest saved by `save`. The result predicts; it does not
         refit. Loading a file saved by the other estimator class raises
         rather than reinterpreting its leaves."""
-        arrays = _serialize.read_npz(path, _MODEL_FORMAT)
+        arrays = _serialize.read_npz(path, (_MODEL_FORMAT, _MODEL_FORMAT + "-parallel-groves-1"))
         saved_as = _serialize.scalar_str(arrays, "estimator")
         if saved_as != cls.__name__:
             raise ValueError(
@@ -330,6 +331,7 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
             )
         obj = cls.__new__(cls)
         obj.device = _serialize.scalar_str(arrays, "device")
+        obj._restore_inference_metadata(arrays, _MODEL_FORMAT)
         obj._offsets = _serialize.exact(arrays, "offsets", np.int32)
         obj._colid = _serialize.exact(arrays, "colid", np.int32)
         obj._quesval = _serialize.exact(arrays, "quesval", np.float32)
@@ -380,6 +382,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         max_samples=None,
         monotonic_cst=None,
         device="gpu",
+        inference_engine="sequential",
     ):
         super().__init__(device)
         _refuse_forest_knobs(n_jobs, verbose)
@@ -435,9 +438,9 @@ class ExtraTreesClassifier(_ExtraTreesBase):
 class ExtraTreesRegressor(_ExtraTreesBase):
     """sklearn's `ExtraTreesRegressor`, honoured or refused by name.
 
-    With `device='gpu'` the leaf values are means of fixed-point quantized
-    labels (deviation 135) and differ from the CPU arm's by at most one
-    quantization step; the tree structure is identical.
+    GPU training produces means of fixed-point quantized labels
+    (deviation 135). Prediction supports the sequential and parallel_groves
+    inference algorithms; there is no CPU training implementation.
     """
 
     def __init__(
@@ -462,6 +465,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         max_samples=None,
         monotonic_cst=None,
         device="gpu",
+        inference_engine="sequential",
     ):
         super().__init__(device)
         _refuse_forest_knobs(n_jobs, verbose)

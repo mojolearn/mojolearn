@@ -30,6 +30,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
+from core.forest_inference import forest_predict_gpu
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
@@ -662,6 +663,99 @@ def rf_predict_reg_binding(
     return PythonObject(wrote)
 
 
+def _rf_predict_gpu_parallel(
+    offsets_addr: PythonObject, colid_addr: PythonObject,
+    quesval_addr: PythonObject, left_child_addr: PythonObject,
+    leaves_addr: PythonObject, x_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Opt-in GPU inference: fixed 32-grove reduction graph.
+
+    Borrowed arrays retain the existing prediction ABI; graph/finite validation
+    and GPU execution are shared by RF/ET in core.forest_inference.
+    """
+    if len(params) != 4:
+        raise Error("GPU parallel prediction expects rows, features, trees, outputs")
+    var rows = Int(py=params[0])
+    var features = Int(py=params[1])
+    var trees = Int(py=params[2])
+    var outputs = Int(py=params[3])
+    if rows < 0 or features < 1 or trees < 1 or outputs < 1:
+        raise Error("GPU parallel prediction dimensions are invalid")
+    if trees >= 2147483647 or rows > 2147483647 // features or rows > 2147483647 // outputs:
+        raise Error("GPU parallel prediction dimensions exceed Int32 indexing")
+    var offsets_p = _i32_ptr(Int(py=offsets_addr))
+    var columns_p = _i32_ptr(Int(py=colid_addr))
+    var thresholds_p = _f32_ptr(Int(py=quesval_addr))
+    var left_p = _i32_ptr(Int(py=left_child_addr))
+    var leaves_p = _f32_ptr(Int(py=leaves_addr))
+    var x_p = _f32_ptr(Int(py=x_addr))
+    var out_p = _f32_ptr(Int(py=out_addr))
+    var nodes = Int(offsets_p[trees])
+    if nodes < 1 or nodes > 2147483647 // outputs:
+        raise Error("GPU parallel prediction node/output count is invalid")
+    with GILReleased(Python()):
+        var offsets = List[Int32](capacity=trees + 1)
+        var columns = List[Int32](capacity=nodes)
+        var thresholds = List[Float32](capacity=nodes)
+        var left = List[Int32](capacity=nodes)
+        var leaves = List[Float32](capacity=nodes * outputs)
+        var x = List[Float32](capacity=rows * features)
+        for i in range(trees + 1):
+            offsets.append(offsets_p[i])
+        for i in range(nodes):
+            columns.append(columns_p[i])
+            thresholds.append(thresholds_p[i])
+            left.append(left_p[i])
+        for i in range(nodes * outputs):
+            leaves.append(leaves_p[i])
+        for i in range(rows * features):
+            x.append(x_p[i])
+        var ctx = DeviceContext()
+        var result = forest_predict_gpu[True, True](
+            ctx, offsets, columns, thresholds, left, leaves, x,
+            rows, features, outputs,
+        )
+        for i in range(rows * outputs):
+            out_p[i] = result[i]
+        _ = result^
+        _ = ctx^
+    return PythonObject(rows)
+
+
+def rf_predict_proba_gpu_parallel_binding(
+    offsets_addr: PythonObject, colid_addr: PythonObject,
+    quesval_addr: PythonObject, left_child_addr: PythonObject,
+    leaves_addr: PythonObject, x_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    if len(params) != 4:
+        raise Error("GPU parallel prediction requires four parameters")
+    var outputs = Int(py=params[3])
+    if outputs < 2:
+        raise Error("GPU parallel prediction output dimension does not match task")
+    return _rf_predict_gpu_parallel(
+        offsets_addr, colid_addr, quesval_addr, left_child_addr,
+        leaves_addr, x_addr, out_addr, params,
+    )
+
+
+def rf_predict_reg_gpu_parallel_binding(
+    offsets_addr: PythonObject, colid_addr: PythonObject,
+    quesval_addr: PythonObject, left_child_addr: PythonObject,
+    leaves_addr: PythonObject, x_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    if len(params) != 4:
+        raise Error("GPU parallel prediction requires four parameters")
+    var outputs = Int(py=params[3])
+    if outputs != 1:
+        raise Error("GPU parallel prediction output dimension does not match task")
+    return _rf_predict_gpu_parallel(
+        offsets_addr, colid_addr, quesval_addr, left_child_addr,
+        leaves_addr, x_addr, out_addr, params,
+    )
+
 def rf_numeric_mode_binding() raises -> PythonObject:
     """Read the numeric policy compiled into this RF binding."""
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
@@ -689,6 +783,8 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_regressor_fit_binding]("rf_regressor_fit")
         m.def_function[rf_predict_proba_binding]("rf_predict_proba")
         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
+        m.def_function[rf_predict_proba_gpu_parallel_binding]("rf_predict_proba_gpu_parallel")
+        m.def_function[rf_predict_reg_gpu_parallel_binding]("rf_predict_reg_gpu_parallel")
         return m.finalize()
     except e:
         abort(String("failed to initialize _mojolearn_rf: ") + String(e))
