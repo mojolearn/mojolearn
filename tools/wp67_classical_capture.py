@@ -25,6 +25,17 @@ def main():
         save(cls.__name__+'.transform',transformed)
         save(cls.__name__+'.inverse',model.inverse_transform(transformed))
     save('kde',ml.KernelDensity(bandwidth=.8).fit(x).score_samples(x[:7]))
+    # Include exact matches (zero-distance weights), nonmatches, both weighting
+    # policies, and a wide/k>64 case exercising the tiled search dispatch.
+    for rows,features,k in ((48,3,5),(96,65,70)):
+        data=rng.normal(size=(rows,features)).astype(np.float32)
+        labels=(np.arange(rows)%3).astype(np.int32)
+        queries=np.concatenate([data[:3],data[3:6]+np.float32(.03125)])
+        for weights in ('uniform','distance'):
+            clf=ml.KNeighborsClassifier(n_neighbors=k,weights=weights).fit(data,labels)
+            save(f'knn.{features}.{k}.{weights}.labels',clf.predict(queries))
+            save(f'knn.{features}.{k}.{weights}.proba',clf.predict_proba(queries))
+
     pred=y.copy();pred[::7]=(pred[::7]+1)%3
     save('accuracy',ml.metrics.accuracy_score(y,pred))
     save('confusion',ml.metrics.confusion_matrix(y,pred))
