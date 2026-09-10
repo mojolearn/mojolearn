@@ -1,0 +1,2 @@
+8631 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x719f40000000, nodemask=1)
+NVIDIA production FMA boundary PASS 262144 triples; attention mismatches 0 GEMM mismatches 0

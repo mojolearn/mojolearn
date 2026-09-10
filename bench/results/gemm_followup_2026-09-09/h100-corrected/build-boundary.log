@@ -1,0 +1,13 @@
+8598 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19ab40000000, nodemask=2)
+Imported from /root/mamba3/transformer/checks/attention_fma_boundary_check.mojo:13:
+/root/mamba3/transformer/impl/transformers/models/llama/modeling_llama.mojo:698:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mamba3/transformer/checks/attention_fma_boundary_check.mojo:13:
+/root/mamba3/transformer/impl/transformers/models/llama/modeling_llama.mojo:723:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
