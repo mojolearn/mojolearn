@@ -53,10 +53,12 @@ A temporary class binding override survives public fit's configuration refresh;
 this driver is single-threaded and restores it after each fit/score call. Fits
 include construction, host packing, upload, the whole forest, and synchronization.
 Model hashing and held-out quality/prediction checks are outside the timer.
-Every fit must produce identical full model arrays and held-out prediction bits
-across all arms. Forward/reverse rounds alternate order; one warmup per arm is
-excluded. Raw `fits.jsonl` is written incrementally, plus a final summary with
-binary/data hashes, quality, medians and per-arm max/min spread. A spread >1.10
+Every fit must produce identical full model arrays and complete native Float32
+two-column held-out probability bits across all arms. The full probability call
+runs outside fit timing, separately from the shared quality scorer. Six balanced
+orders (ABC,CBA,BCA,ACB,CAB,BAC) place each arm twice in every position; shorter
+or incomplete cycles retain an order imbalance. One warmup per arm is excluded. Raw `fits.jsonl` is written incrementally, plus a final summary with
+binary/data/driver hashes, argv, actual order, quality, medians and per-arm max/min spread. A spread >1.10
 marks timing invalid; no performance promotion follows from an invalid run.
 A successful correctness exit does not imply valid performance. No external
 competitor is included: this is internal candidate tuning, not cuML parity.

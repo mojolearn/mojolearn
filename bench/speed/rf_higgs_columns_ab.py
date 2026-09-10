@@ -6,6 +6,7 @@ come from the same source/toolchain, differing only in column-tile definitions.
 Route probes run in separate processes because RF_LAUNCH_LOG is latched.
 """
 import argparse
+from contextlib import contextmanager
 import hashlib
 import importlib.util
 import json
@@ -21,6 +22,23 @@ import forest_speed_arm as forest
 from nvidia_identical_trees import digest_arrays
 
 VARIANTS = ('reference', 'columns2', 'columns4')
+ORDERS = ((0, 1, 2), (2, 1, 0), (1, 2, 0), (0, 2, 1), (2, 0, 1), (1, 0, 2))
+
+
+@contextmanager
+def bound_model(model, module):
+    """Temporary single-threaded routing, restored even after an exception."""
+    cls = type(model)
+    had_own = '_bind' in cls.__dict__
+    old = cls.__dict__.get('_bind')
+    cls._bind = lambda self, name=None: module
+    try:
+        yield
+    finally:
+        if had_own:
+            cls._bind = old
+        else:
+            del cls._bind
 
 
 def load_arm(path, name, config, data):
@@ -32,26 +50,19 @@ def load_arm(path, name, config, data):
     arm = forest.our_rf_arm('rf', config, data)
     original_fit = arm.fit
     def fit(model, current_data):
-        # _refresh_config clears instance attributes, so bind at the class
-        # temporarily for this blocking fit and subsequent scoring.
-        cls = type(model)
-        old = cls._bind
-        cls._bind = lambda self, name=None: module
-        try:
+        # Class override survives public fit's configuration refresh.
+        with bound_model(model, module):
             return original_fit(model, current_data)
-        finally:
-            cls._bind = old
     arm.fit = fit
-    score = arm.score
+    original_score = arm.score
     def score_bound(model, current_data):
-        cls = type(model)
-        old = cls._bind
-        cls._bind = lambda self, name=None: module
-        try:
-            return score(model, current_data)
-        finally:
-            cls._bind = old
+        with bound_model(model, module):
+            return original_score(model, current_data)
     arm.score = score_bound
+    def full_probabilities(model, current_data):
+        with bound_model(model, module):
+            return model.predict_proba(current_data._ours_Xtest)
+    arm.full_probabilities = full_probabilities
     arm.name = name
     return arm
 
@@ -132,9 +143,13 @@ def main():
         model_hash = fingerprint(model)
         scores = arm.score(model, data)
         assert scores and all(np.isfinite(value) for _, value, _ in scores)
-        vectors = [(metric, vector) for metric, _, vector in scores if vector is not None]
-        assert vectors and all(np.isfinite(vector).all() for _, vector in vectors)
-        identity = (model_hash, digest_arrays(vectors))
+        probabilities = arm.full_probabilities(model, data)
+        assert probabilities.dtype == np.float32
+        assert probabilities.shape == (len(data.y_test), 2)
+        assert np.isfinite(probabilities).all()
+        assert (probabilities >= 0).all() and (probabilities <= 1).all()
+        np.testing.assert_allclose(probabilities.sum(axis=1), 1, rtol=0, atol=2e-6)
+        identity = (model_hash, digest_arrays([('predict_proba', probabilities)]))
         if expected is None:
             expected = identity
         assert identity == expected, (phase, name, 'model/prediction mismatch')
@@ -149,13 +164,16 @@ def main():
     for v in VARIANTS:
         run(v, 'warmup', -1)
     for i in range(args.rounds):
-        for v in (VARIANTS if i % 2 == 0 else VARIANTS[::-1]):
-            run(v, 'timed', i)
+        for index in ORDERS[i % len(ORDERS)]:
+            run(VARIANTS[index], 'timed', i)
     samples = {v: [r['fit_ms'] for r in records if r['arm'] == v and r['phase'] == 'timed'] for v in VARIANTS}
     spread = {v: max(values) / min(values) for v, values in samples.items()}
     medians = {v: statistics.median(values) for v, values in samples.items()}
     result = dict(numeric_mode='identical', vendor='cuda', rows=args.rows,
         config=config, records=records, spread=spread, median_ms=medians,
+        orders=[[VARIANTS[j] for j in ORDERS[i % len(ORDERS)]] for i in range(args.rounds)],
+        driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        argv=sys.argv, prediction_contract='complete native Float32 n-by-2 probabilities',
         performance_eligible=performance_eligible,
         timing_valid=performance_eligible and all(value <= 1.10 for value in spread.values()),
         candidate_over_reference={v: medians[v] / medians['reference'] for v in VARIANTS[1:]},
