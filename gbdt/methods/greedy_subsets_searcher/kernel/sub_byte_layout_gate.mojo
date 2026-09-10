@@ -33,12 +33,13 @@ WHAT THAT CLAIM RESTS ON, and it is exactly one property per family:
   UNDER-ALLOCATES BY HALF at 64.
 
 WHY THIS FILE EXISTS AT ALL. Those three properties are defended in the
-kernels by comptime asserts, and a comptime assert that has never been seen
-to fire is a claim, not a gate. Each arm below therefore runs TWICE: once
-with the shipped constants, where it must pass, and once with the constant
-deliberately RE-COUPLED to the hardware lane width of the CDNA column, where
-it must FAIL. If a sabotage arm passes, this file raises. That is the whole
-point of it: the invariant is defended by something that can bite.
+kernels by comptime asserts. This HOST-ARITHMETIC gate checks the associated
+layout invariants twice: once with shipped constants, which must satisfy
+them, and once with the constant deliberately RE-COUPLED to the CDNA hardware
+lane width, which must violate them. A sabotage model satisfying its invariant
+makes this program raise. Expected violations are checked internally; a
+successful run exits zero. This does NOT compile a sabotaged production
+kernel or demonstrate that the production comptime asserts reject a build.
 
 HOW THE SABOTAGE STAYS HONEST. A comptime assert cannot be sabotaged from
 inside a program it would refuse to compile, so each arm carries a MODEL of
@@ -51,13 +52,14 @@ cross-check arm and this file raises on that too.
 WHAT THIS GATE IS NOT. It is arithmetic about a layout; it executes no
 kernel and touches no GPU. It says the layout is self-consistent at any wave
 width. It does NOT say a sub-byte block has produced a correct histogram on
-64-wide hardware, because none ever has -- see DEVIATION 1947's verification
-clause. Both statements are needed and this file makes only the first.
+64-wide hardware. GPU execution requires separate device evidence; this file
+establishes only the host layout invariants.
 
 RUN IT
 
-    pixi run mojo run -I . \\
-      gbdt/methods/greedy_subsets_searcher/kernel/sub_byte_layout_gate.mojo
+    pixi run check-sub-byte-layout
+
+Also included by the standalone `pixi run check-hardware-matrix` task.
 
 It is host arithmetic, so it runs and gates on any box, including a laptop
 with no GPU and including the Apple column that cannot reproduce the defect.

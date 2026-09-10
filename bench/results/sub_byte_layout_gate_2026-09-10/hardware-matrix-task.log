@@ -1,0 +1,20 @@
+✨ Pixi task (check-hardware-matrix in default): mojo run -I . checks/hardware_matrix_check.mojo
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/checks/hardware_matrix_check.mojo:31:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/gbdt/methods/greedy_subsets_searcher/kernel/sub_byte_layout_gate.mojo:90:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/gbdt/methods/greedy_subsets_searcher/kernel/hist_one_byte.mojo:234:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/checks/hardware_matrix_check.mojo:31:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/gbdt/methods/greedy_subsets_searcher/kernel/sub_byte_layout_gate.mojo:95:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_base.mojo:200:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime
+check_hardware_matrix OK: apple column = the old constants bit-for-bit (10 cores, 3072 threads/core, 32 KB wall, occupancy 12); nvidia resolves 108/2048/48KB wall/164K partition -> 8 blocks; amd resolves 110/2048/64K partition -> 3 blocks (LDS term binding); readers (TARGET_GPU_CORES, max_active_blocks_per_core, gram chunk count = 240, gram dispatch, fused_l2_knn_grid) all agree with the table; build column apple; identity floor frozen at profile 1 (32 KB / 32 lanes / block 512): all 6 vendor columns meet it, the portable baseline is REFUSED, apple/nvidia/amd smem modes unchanged by the budget rewrite
+sub_byte_layout_gate: column apple, hardware lanes 32, logical replica lanes 32
+  matrix rows: layout constant 32 on every family, apple builds with sync row 1 (0 = block barrier, 1 = lane sync)
+  half-byte fold stride: shipped 512 keeps 16/16 replicas; re-coupled 1024 keeps 8/16 (must differ)
+  one-byte replica occupancy: shipped 32 gives 0 colliding pairs; re-coupled 64 gives 128 (must be 0 and non-zero)
+  hist_2 shared allocation: needs 8192 slots, shipped gives 8192, re-coupled gives 4096 (shipped must cover, re-coupled must not)
+sub_byte_layout_gate OK: four arms live, three sabotage arms failed as required (DEVIATION 1947)

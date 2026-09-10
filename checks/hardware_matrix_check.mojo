@@ -28,6 +28,7 @@ Three duties, in the order the refactor could have broken them:
    `fused_l2_knn_grid` (the number the k-NN AUTO default flips on).
 """
 
+from gbdt.methods.greedy_subsets_searcher.kernel.sub_byte_layout_gate import check_sub_byte_layout
 from core.gram_splitk import (
     GRAM_OVERSUBSCRIBE,
     GRAM_STAGE_FLOATS,
@@ -498,3 +499,6 @@ def main() raises:
     # registered task, so until now the only way to run it was to run a
     # whole other section's suite.
     check_hardware_matrix()
+    # Standalone matrix task also checks live GBDT layout arithmetic.
+    # This includes three modeled negative controls and launches no GPU work.
+    check_sub_byte_layout()
