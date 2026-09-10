@@ -1,0 +1,1456 @@
+{
+  "environment": {
+    "affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95,
+      96,
+      97,
+      98,
+      99,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      120,
+      121,
+      122,
+      123,
+      124,
+      125,
+      126,
+      127,
+      128,
+      129,
+      130,
+      131,
+      132,
+      133,
+      134,
+      135,
+      136,
+      137,
+      138,
+      139,
+      140,
+      141,
+      142,
+      143,
+      144,
+      145,
+      146,
+      147,
+      148,
+      149,
+      150,
+      151,
+      152,
+      153,
+      154,
+      155,
+      156,
+      157,
+      158,
+      159,
+      160,
+      161,
+      162,
+      163,
+      164,
+      165,
+      166,
+      167,
+      168,
+      169,
+      170,
+      171,
+      172,
+      173,
+      174,
+      175,
+      176,
+      177,
+      178,
+      179,
+      180,
+      181,
+      182,
+      183,
+      184,
+      185,
+      186,
+      187,
+      188,
+      189,
+      190,
+      191,
+      192,
+      193,
+      194,
+      195,
+      196,
+      197,
+      198,
+      199,
+      200,
+      201,
+      202,
+      203,
+      204,
+      205,
+      206,
+      207
+    ],
+    "driver_sha256": "e801edb24f03a58810db67aa27c79f1c4bfd836c3b83c5164379614103113c89",
+    "effective_spec_roots": {
+      "DRIVER_MOJO": "/root/performance/bench/speed/seq_speed_main.mojo",
+      "REPO": "/root/performance"
+    },
+    "executable": "/root/performance/.pixi/envs/default/bin/python",
+    "fixture_spec_path": "/root/performance/bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py",
+    "fixture_spec_sha256": "090c22b8be330863af8d9fcd8d7a7f88b38a255b5e36f13720ce0cd1d053252f",
+    "harness_path": "/root/performance/bench/results/mamba3/2026-09-09-statepass/reproduction/seq_py_speed_arm.py",
+    "harness_sha256": "91296b93b531871990bc01373660b434bb49bef4446faefa7fb17fb35835bd6c",
+    "implementation": "/root/performance/python/mojolearn/_mamba_impl.py",
+    "kind": "environment",
+    "note": "hashing/resource/telemetry are diagnostics outside call timer; no opponent ratio",
+    "numpy": "2.5.2",
+    "order": [
+      "narrow",
+      "wide",
+      "narrow",
+      "tiny",
+      "narrow",
+      "wide"
+    ],
+    "original_spec_roots": {
+      "DRIVER_MOJO": "/root/performance/bench/results/mamba3/2026-09-09-statepass/bench/speed/seq_speed_main.mojo",
+      "REPO": "/root/performance/bench/results/mamba3/2026-09-09-statepass"
+    },
+    "passes": 2,
+    "pid": 1169,
+    "python": "3.14.7 | packaged by conda-forge | (main, Aug 19 2026, 15:32:49) [GCC 15.3.0]",
+    "release_output_before_call": false,
+    "rounds": 8
+  },
+  "fixtures": {
+    "narrow": {
+      "binary": "/root/performance/python/mojolearn/identical/_mojolearn_mamba.so",
+      "binary_sha256": "f6da73c7d378943252e7280d481351b8763657188fc9f08da2c8bdb04bce03dc",
+      "input_address": 134090623807504,
+      "input_mod_2m": 2093072,
+      "input_sha256": "600b44628adc094ec6aec27d7b4416edc0305da6e3e79452fddc78d809243b12",
+      "input_shape": [
+        8,
+        4096,
+        512
+      ],
+      "kind": "fixture",
+      "shape": "narrow",
+      "vendor": "cuda"
+    },
+    "tiny": {
+      "binary": "/root/performance/python/mojolearn/identical/_mojolearn_mamba.so",
+      "binary_sha256": "f6da73c7d378943252e7280d481351b8763657188fc9f08da2c8bdb04bce03dc",
+      "input_address": 97689212639584,
+      "input_mod_2m": 1136992,
+      "input_sha256": "9cb359a2db29ebf4ae23d0ad006d5eacbc076a95894935a601bfaa74a6f4bc67",
+      "input_shape": [
+        2,
+        4,
+        32
+      ],
+      "kind": "fixture",
+      "shape": "tiny",
+      "vendor": "cuda"
+    },
+    "wide": {
+      "binary": "/root/performance/python/mojolearn/identical/_mojolearn_mamba.so",
+      "binary_sha256": "f6da73c7d378943252e7280d481351b8763657188fc9f08da2c8bdb04bce03dc",
+      "input_address": 134081358843920,
+      "input_mod_2m": 249872,
+      "input_sha256": "600b44628adc094ec6aec27d7b4416edc0305da6e3e79452fddc78d809243b12",
+      "input_shape": [
+        8,
+        1024,
+        2048
+      ],
+      "kind": "fixture",
+      "shape": "wide",
+      "vendor": "cuda"
+    }
+  },
+  "instrumented": false,
+  "log": "/root/jobs/mamba-regime-large/shape-order-1.log",
+  "log_sha256": "bddd5d5c5aa837f462358a80d300eef16234f269fca7300686b0f25912497217",
+  "output_hashes": {
+    "narrow": "871e385b8d1f87312114ff970f8b3882d3197095b0cd3b29fdcb8da99a7bc0c3",
+    "tiny": "eae333a1e2c1d7524d374cbf1e2a798a3272d91e8f42252ca82c8c2c4841b42f",
+    "wide": "57c721ca686729bc13ac3a552e19aed4710b3785adb07ce0e7d8458b3b6a1280"
+  },
+  "schema": "mojolearn.mamba3.regime-summary.v1",
+  "scope": "Diagnostic only; cold calls retained, no warmup assumption, opponent ratio, or promotion decision. Nested phase durations must not be summed.",
+  "visits": [
+    {
+      "cpu_ms": [
+        842.492,
+        61.05599999999989,
+        58.63200000000002,
+        58.43600000000026,
+        57.439999999999934,
+        58.58600000000003,
+        56.012000000000064,
+        55.922999999999945
+      ],
+      "elapsed_ms": [
+        848.888997,
+        60.988945,
+        58.542736,
+        58.420392,
+        57.437709,
+        58.563636,
+        56.002043,
+        55.912521
+      ],
+      "first_call_ms": 848.888997,
+      "first_shape_visit": true,
+      "later_calls_median_ms": 58.420392,
+      "phases_ms": {},
+      "position": 0,
+      "predecessor": null,
+      "resource_deltas": [
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 342265,
+          "system_s": 0.791566,
+          "user_s": 0.050925999999999916,
+          "voluntary_switches": 36
+        },
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 1514,
+          "system_s": 0.013962999999999948,
+          "user_s": 0.04709299999999994,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 637,
+          "system_s": 0.010709999999999997,
+          "user_s": 0.04792200000000002,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.012192000000000203,
+          "user_s": 0.04624400000000006,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 552,
+          "system_s": 0.008570999999999884,
+          "user_s": 0.04886900000000005,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 810,
+          "system_s": 0.010745999999999922,
+          "user_s": 0.047840000000000105,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 546,
+          "system_s": 0.009967999999999977,
+          "user_s": 0.046044000000000085,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.010799000000000003,
+          "user_s": 0.04512399999999994,
+          "voluntary_switches": 0
+        }
+      ],
+      "shape": "narrow",
+      "trial": 0
+    },
+    {
+      "cpu_ms": [
+        100.75800000000012,
+        94.53599999999996,
+        94.40099999999974,
+        93.78299999999994,
+        95.39900000000023,
+        92.24499999999969,
+        93.30600000000011,
+        92.95199999999993
+      ],
+      "elapsed_ms": [
+        100.650296,
+        94.449995,
+        94.315487,
+        93.691677,
+        95.488324,
+        92.233391,
+        93.223218,
+        92.871123
+      ],
+      "first_call_ms": 100.650296,
+      "first_shape_visit": true,
+      "later_calls_median_ms": 93.691677,
+      "phases_ms": {},
+      "position": 1,
+      "predecessor": "narrow",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 714,
+          "system_s": 0.010302000000000033,
+          "user_s": 0.09045600000000009,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1575,
+          "system_s": 0.012623999999999969,
+          "user_s": 0.08191199999999998,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.009687999999999697,
+          "user_s": 0.08471300000000004,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1723,
+          "system_s": 0.010862999999999845,
+          "user_s": 0.0829200000000001,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 1222,
+          "system_s": 0.012634000000000034,
+          "user_s": 0.0827650000000002,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.010062000000000015,
+          "user_s": 0.08218299999999967,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.009961000000000109,
+          "user_s": 0.083345,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1105,
+          "system_s": 0.009853000000000112,
+          "user_s": 0.08309899999999981,
+          "voluntary_switches": 1
+        }
+      ],
+      "shape": "wide",
+      "trial": 0
+    },
+    {
+      "cpu_ms": [
+        56.61799999999984,
+        56.563000000000144,
+        54.688999999999766,
+        55.11599999999972,
+        54.549999999999876,
+        52.955000000000084,
+        54.551000000000016,
+        52.93499999999995
+      ],
+      "elapsed_ms": [
+        56.537016,
+        56.481121,
+        54.608555,
+        55.038371,
+        54.470367,
+        52.874341,
+        54.549241,
+        52.923843
+      ],
+      "first_call_ms": 56.537016,
+      "first_shape_visit": false,
+      "later_calls_median_ms": 54.549241,
+      "phases_ms": {},
+      "position": 2,
+      "predecessor": "wide",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1548,
+          "system_s": 0.010081000000000007,
+          "user_s": 0.04653699999999983,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1107,
+          "system_s": 0.012037999999999993,
+          "user_s": 0.04452500000000015,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.00773199999999985,
+          "user_s": 0.046956999999999915,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 1762,
+          "system_s": 0.011672000000000127,
+          "user_s": 0.043443999999999594,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 856,
+          "system_s": 0.011188999999999893,
+          "user_s": 0.04336099999999998,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.009824999999999973,
+          "user_s": 0.04313000000000011,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.011836999999999875,
+          "user_s": 0.04271400000000014,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 34,
+          "system_s": 0.008968000000000087,
+          "user_s": 0.04396699999999987,
+          "voluntary_switches": 0
+        }
+      ],
+      "shape": "narrow",
+      "trial": 0
+    },
+    {
+      "cpu_ms": [
+        1.70300000000001,
+        1.2750000000003592,
+        1.2369999999997106,
+        1.2159999999998838,
+        1.2219999999998343,
+        1.2190000000003032,
+        1.2330000000000396,
+        1.2180000000001634
+      ],
+      "elapsed_ms": [
+        1.694682,
+        1.268331,
+        1.233589,
+        1.213395,
+        1.219199,
+        1.21695,
+        1.230076,
+        1.216419
+      ],
+      "first_call_ms": 1.694682,
+      "first_shape_visit": true,
+      "later_calls_median_ms": 1.219199,
+      "phases_ms": {},
+      "position": 3,
+      "predecessor": "narrow",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 20,
+          "system_s": 2.300000000010627e-05,
+          "user_s": 0.0016799999999999038,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 0.0006019999999999914,
+          "user_s": 0.0006730000000003677,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 8.000000000008001e-05,
+          "user_s": 0.0011569999999996305,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 7.299999999998974e-05,
+          "user_s": 0.001142999999999894,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 0.0,
+          "user_s": 0.0012219999999998343,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 0.0,
+          "user_s": 0.0012190000000003032,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 0.0,
+          "user_s": 0.0012330000000000396,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 0.0,
+          "user_s": 0.0012180000000001634,
+          "voluntary_switches": 0
+        }
+      ],
+      "shape": "tiny",
+      "trial": 0
+    },
+    {
+      "cpu_ms": [
+        52.74199999999985,
+        54.28500000000036,
+        52.6249999999997,
+        53.94600000000005,
+        52.71399999999971,
+        54.03500000000028,
+        52.674000000000106,
+        54.01899999999982
+      ],
+      "elapsed_ms": [
+        52.733472,
+        54.270274,
+        52.614766,
+        53.935737,
+        52.702481,
+        53.950689,
+        52.59042,
+        53.95009
+      ],
+      "first_call_ms": 52.733472,
+      "first_shape_visit": false,
+      "later_calls_median_ms": 53.935737,
+      "phases_ms": {},
+      "position": 4,
+      "predecessor": "tiny",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.008903999999999801,
+          "user_s": 0.043838000000000044,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 595,
+          "system_s": 0.010963000000000056,
+          "user_s": 0.043322000000000305,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.009055999999999953,
+          "user_s": 0.04356899999999975,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.010865000000000125,
+          "user_s": 0.043080999999999925,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.010901999999999967,
+          "user_s": 0.04181199999999974,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.011886000000000063,
+          "user_s": 0.042149000000000214,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.006888000000000005,
+          "user_s": 0.045786000000000104,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.009999999999999787,
+          "user_s": 0.04401900000000003,
+          "voluntary_switches": 1
+        }
+      ],
+      "shape": "narrow",
+      "trial": 0
+    },
+    {
+      "cpu_ms": [
+        93.64199999999978,
+        94.39699999999985,
+        92.39199999999937,
+        94.65100000000027,
+        94.12899999999968,
+        93.14,
+        92.43700000000032,
+        92.63800000000045
+      ],
+      "elapsed_ms": [
+        93.565422,
+        94.3161,
+        92.310493,
+        94.514232,
+        94.047473,
+        93.064027,
+        92.356075,
+        92.539177
+      ],
+      "first_call_ms": 93.565422,
+      "first_shape_visit": false,
+      "later_calls_median_ms": 93.064027,
+      "phases_ms": {},
+      "position": 5,
+      "predecessor": "narrow",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 1315,
+          "system_s": 0.01187399999999994,
+          "user_s": 0.08176799999999984,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 2084,
+          "system_s": 0.011105999999999838,
+          "user_s": 0.083291,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.009802999999999784,
+          "user_s": 0.08258899999999958,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 2247,
+          "system_s": 0.010882000000000058,
+          "user_s": 0.0837690000000002,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1698,
+          "system_s": 0.009023000000000003,
+          "user_s": 0.08510599999999968,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.009024000000000143,
+          "user_s": 0.08411599999999986,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.008983999999999881,
+          "user_s": 0.08345300000000044,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 545,
+          "system_s": 0.00950300000000004,
+          "user_s": 0.0831350000000004,
+          "voluntary_switches": 1
+        }
+      ],
+      "shape": "wide",
+      "trial": 0
+    },
+    {
+      "cpu_ms": [
+        55.09600000000003,
+        56.251999999999526,
+        54.09200000000003,
+        55.587999999999525,
+        54.30499999999982,
+        55.620000000000225,
+        53.95799999999973,
+        55.70300000000006
+      ],
+      "elapsed_ms": [
+        55.116917,
+        56.163668,
+        54.020218,
+        55.507121,
+        54.221777,
+        55.53974,
+        53.875963,
+        55.692594
+      ],
+      "first_call_ms": 55.116917,
+      "first_shape_visit": false,
+      "later_calls_median_ms": 55.507121,
+      "phases_ms": {},
+      "position": 0,
+      "predecessor": "wide",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 1037,
+          "system_s": 0.009022000000000086,
+          "user_s": 0.04607399999999995,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1119,
+          "system_s": 0.009951999999999961,
+          "user_s": 0.046299999999999564,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 67,
+          "system_s": 0.007921999999999985,
+          "user_s": 0.046170000000000044,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.009886000000000061,
+          "user_s": 0.045701999999999465,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 186,
+          "system_s": 0.009077000000000002,
+          "user_s": 0.045227999999999824,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.010896999999999935,
+          "user_s": 0.04472300000000029,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.009247000000000227,
+          "user_s": 0.0447109999999995,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.009823999999999833,
+          "user_s": 0.045879000000000225,
+          "voluntary_switches": 0
+        }
+      ],
+      "shape": "narrow",
+      "trial": 1
+    },
+    {
+      "cpu_ms": [
+        93.29900000000002,
+        96.5570000000009,
+        93.33599999999987,
+        95.30000000000038,
+        92.24900000000002,
+        96.00000000000009,
+        93.78300000000061,
+        94.96400000000006
+      ],
+      "elapsed_ms": [
+        93.215249,
+        96.504552,
+        93.259509,
+        95.218144,
+        92.174207,
+        95.914895,
+        93.677125,
+        94.885077
+      ],
+      "first_call_ms": 93.215249,
+      "first_shape_visit": false,
+      "later_calls_median_ms": 94.885077,
+      "phases_ms": {},
+      "position": 1,
+      "predecessor": "narrow",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 34,
+          "system_s": 0.007808999999999955,
+          "user_s": 0.08549000000000007,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 546,
+          "system_s": 0.010878000000000165,
+          "user_s": 0.08567900000000073,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.011076000000000086,
+          "user_s": 0.08225999999999978,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.01106600000000002,
+          "user_s": 0.08423400000000036,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.011053999999999897,
+          "user_s": 0.08119500000000013,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.01499399999999973,
+          "user_s": 0.08100600000000036,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1799,
+          "system_s": 0.011181000000000108,
+          "user_s": 0.08260200000000051,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 2085,
+          "system_s": 0.01190800000000003,
+          "user_s": 0.08305600000000002,
+          "voluntary_switches": 1
+        }
+      ],
+      "shape": "wide",
+      "trial": 1
+    },
+    {
+      "cpu_ms": [
+        55.168000000000106,
+        56.41199999999991,
+        53.95199999999933,
+        55.5529999999993,
+        53.81900000000073,
+        55.50800000000056,
+        53.75500000000022,
+        55.21399999999987
+      ],
+      "elapsed_ms": [
+        55.086979,
+        56.347707,
+        53.920838,
+        55.517702,
+        53.779855,
+        55.498448,
+        53.746723,
+        55.196783
+      ],
+      "first_call_ms": 55.086979,
+      "first_shape_visit": false,
+      "later_calls_median_ms": 55.196783,
+      "phases_ms": {},
+      "position": 2,
+      "predecessor": "wide",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1037,
+          "system_s": 0.011038000000000103,
+          "user_s": 0.04413,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1081,
+          "system_s": 0.010860000000000092,
+          "user_s": 0.045551999999999815,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.008985999999999716,
+          "user_s": 0.04496599999999962,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.011041000000000079,
+          "user_s": 0.04451199999999922,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.008860000000000312,
+          "user_s": 0.044959000000000415,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.008884000000000114,
+          "user_s": 0.04662400000000044,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.009170999999999818,
+          "user_s": 0.0445840000000004,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 590,
+          "system_s": 0.012983999999999885,
+          "user_s": 0.04222999999999999,
+          "voluntary_switches": 0
+        }
+      ],
+      "shape": "narrow",
+      "trial": 1
+    },
+    {
+      "cpu_ms": [
+        1.3500000000004064,
+        1.2699999999998823,
+        1.2199999999999989,
+        1.2140000000000484,
+        1.2199999999999989,
+        1.2020000000001474,
+        1.2170000000004677,
+        1.2130000000007968
+      ],
+      "elapsed_ms": [
+        1.344215,
+        1.266413,
+        1.21643,
+        1.212755,
+        1.216918,
+        1.199547,
+        1.214108,
+        1.210851
+      ],
+      "first_call_ms": 1.344215,
+      "first_shape_visit": false,
+      "later_calls_median_ms": 1.214108,
+      "phases_ms": {},
+      "position": 3,
+      "predecessor": "narrow",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 61,
+          "system_s": 2.200000000041058e-05,
+          "user_s": 0.0013279999999999959,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1,
+          "system_s": 0.0,
+          "user_s": 0.0012699999999998823,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 0.0,
+          "user_s": 0.0012199999999999989,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 1,
+          "system_s": 0.0,
+          "user_s": 0.0012140000000000484,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 0.0,
+          "user_s": 0.0012199999999999989,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 0.0,
+          "user_s": 0.0012020000000001474,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 0.0,
+          "user_s": 0.0012170000000004677,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 0,
+          "system_s": 0.0,
+          "user_s": 0.0012130000000007968,
+          "voluntary_switches": 0
+        }
+      ],
+      "shape": "tiny",
+      "trial": 1
+    },
+    {
+      "cpu_ms": [
+        53.22899999999908,
+        55.287000000000305,
+        57.52499999999961,
+        56.557999999999886,
+        54.655999999999594,
+        55.4079999999999,
+        53.323000000000235,
+        54.25900000000006
+      ],
+      "elapsed_ms": [
+        53.221867,
+        55.277152,
+        57.512436,
+        56.543919,
+        54.645311,
+        55.352592,
+        53.243789,
+        54.178697
+      ],
+      "first_call_ms": 53.221867,
+      "first_shape_visit": false,
+      "later_calls_median_ms": 55.277152,
+      "phases_ms": {},
+      "position": 4,
+      "predecessor": "tiny",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.009998999999999647,
+          "user_s": 0.043229999999999436,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.013729000000000102,
+          "user_s": 0.041558000000000206,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.012032000000000043,
+          "user_s": 0.04549299999999956,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.00989899999999988,
+          "user_s": 0.046659000000000006,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.010923000000000016,
+          "user_s": 0.04373299999999958,
+          "voluntary_switches": 0
+        },
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.009866999999999848,
+          "user_s": 0.045541000000000054,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.008849000000000107,
+          "user_s": 0.044474000000000125,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.009055000000000035,
+          "user_s": 0.04520400000000002,
+          "voluntary_switches": 1
+        }
+      ],
+      "shape": "narrow",
+      "trial": 1
+    },
+    {
+      "cpu_ms": [
+        92.09099999999948,
+        92.68600000000049,
+        92.27499999999989,
+        93.72099999999995,
+        92.18899999999985,
+        93.01600000000087,
+        92.07600000000049,
+        92.6989999999992
+      ],
+      "elapsed_ms": [
+        92.010388,
+        92.606562,
+        92.196008,
+        93.640235,
+        92.107346,
+        92.943526,
+        91.994526,
+        92.619477
+      ],
+      "first_call_ms": 92.010388,
+      "first_shape_visit": false,
+      "later_calls_median_ms": 92.606562,
+      "phases_ms": {},
+      "position": 5,
+      "predecessor": "narrow",
+      "resource_deltas": [
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 34,
+          "system_s": 0.009920999999999847,
+          "user_s": 0.08216999999999963,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.008142000000000316,
+          "user_s": 0.08454400000000017,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.007966999999999835,
+          "user_s": 0.08430800000000005,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.011147999999999936,
+          "user_s": 0.08257300000000001,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.008939000000000252,
+          "user_s": 0.0832499999999996,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 1,
+          "major_faults": 0,
+          "minor_faults": 546,
+          "system_s": 0.007997000000000032,
+          "user_s": 0.08501900000000084,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 33,
+          "system_s": 0.007009000000000043,
+          "user_s": 0.08506700000000045,
+          "voluntary_switches": 1
+        },
+        {
+          "involuntary_switches": 0,
+          "major_faults": 0,
+          "minor_faults": 544,
+          "system_s": 0.008059999999999956,
+          "user_s": 0.08463899999999924,
+          "voluntary_switches": 1
+        }
+      ],
+      "shape": "wide",
+      "trial": 1
+    }
+  ]
+}

@@ -123,3 +123,17 @@ inconsistent inventory refusal. The retained Metal log's first call is
 385.847 ms and its second is 13.750 ms; these are instrumentation smoke samples,
 not production prices. No new device measurement or kernel/default change was
 made by this continuation. Large H100 diagnosis remains owed.
+
+## Large H100 continuation (supersedes the large-run-owed status above)
+
+The current `b69e8344` CUDA IDENTICAL binding completed two fresh-process,
+96-call shape-order diagnostics on H100; all 192 complete output hashes match
+the retained grid. Evidence and exact limits are in
+`bench/results/mamba_regime_large_2026-09-10/README.md`. After separating the
+first call of each visit, narrow visit medians span 52.939–58.420 ms and wide
+91.988–94.885 ms. The old roughly 229–284 ms steady regime did not reproduce.
+Cold first narrow calls were 2017.427/848.889 ms and remain in the evidence.
+This is progress on large-run diagnosis, not a qualified speedup or opponent
+ratio. The old binding/allocation-lifetime cause remains unresolved. No
+conditional phase/lifetime arm was warranted by these results; no default
+changed and no opponent ran.
