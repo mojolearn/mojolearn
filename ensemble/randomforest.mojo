@@ -2515,7 +2515,7 @@ def fit_forest[
     # `#pragma omp parallel for num_threads(n_streams)` over trees with a
     # stream pool (`randomforest.cuh:336-367`), and their Python default
     # is n_streams=4 (`randomforestclassifier.py:94`). One Metal queue and
-    # one host thread express the same overlap as K-WAY PIPELINING below:
+    # one host thread use K-WAY PIPELINING below to amortize host waits:
     # K trees in flight, each suspended at its doSplit sync points, ONE
     # synchronize per cycle serving all of them. K=1 reproduces the serial
     # loop operation for operation.
@@ -2686,8 +2686,8 @@ def fit_forest[
     # THE CYCLE: one synchronize covers every in-flight tree's enqueued
     # phase; each consume step immediately enqueues that tree's next
     # phase (or its successor tree's first), so the queue is never empty
-    # while work remains. This is their stream pool's overlap, minus the
-    # host threads it never needed.
+    # while work remains. All work is still ordered on ONE GPU queue;
+    # this does not reproduce concurrent execution on cuML's streams.
     var active = len(states)
     while active > 0:
         # DEVIATION 1908 -- every in-flight tree's pending splits
