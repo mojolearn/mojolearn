@@ -2,7 +2,29 @@
 
 # PROFILE `mojolearn.identical.embedding.fp32.v1`
 
-## STATUS
+## PLAN_SORT implementation update (2026-09-10)
+
+`embedding/checks/embedding_sort.mojo` implements the section 6.2 total-key
+plan with device bitonic compare/exchange passes. Each pass owns disjoint
+pairs; stream launch ordering provides global barriers. Padding positions and
+power-of-two slack use the maximum UInt64 sentinel. Integer binary searches
+produce counts and run boundaries, and the low key halves produce ascending
+positions. The existing FP32 fold is shared unchanged between both plans.
+
+The production backward entry accepts `plan=PLAN_SCAN` (the unchanged default)
+and `block_threads=EMB_TPB`. PLAN_SORT uses O(next_power_of_two(T)) UInt64
+scratch and synchronizes before releasing that local allocation; caller output
+owners must still survive the caller's final synchronization. Launch overrides
+are validated against the portable identity floor and target column maximum.
+No dispatch threshold or performance claim is established by this change.
+
+Clause 11(d), enabled with `MOJOLEARN_EMB_CHECK_CLAUSE_D=1`, now runs both
+production plans at 32, 96 and 160 threads for every accepted fixture and
+compares counts, run_begin, used perm and dW bitwise. The independent host key
+check and negative control remain. Device evidence is recorded separately;
+implementation availability is not a claim that all vendors have run the gate.
+
+## Historical status (2026-08-28)
 
 **COMPILED, RUN AND CARDED ON TWO COLUMNS, APPLE AND AMD, 2026-08-28. CLAUSE
 (a) ONLY. NO NVIDIA LEG. NOT ONE SABOTAGE ARM HAS EVER BEEN BUILT.**
@@ -436,11 +458,10 @@ and not a numerical one**, since integer addition is exact and associative, so
 swapping in `gbdt/gpu_util/kernel/scan.mojo`'s parallel scan cannot move a
 bit.
 
-### 6.2 `PLAN_SORT`, NOT WRITTEN, and how a sort would be made deterministic AND stable
+### 6.2 `PLAN_SORT`: deterministic total keys
 
-OWED, and clause (d) cannot run until it exists. What it must satisfy, because
-this is the likeliest place for an embedding identity contract to be quietly
-wrong.
+Implemented by the device total-key network described in the update above.
+The following key and permutation requirements remain normative.
 
 **DEVIATION 1303. The key is a TOTAL ORDER, so stability is MOOT.**
 `key(t) = (UInt64(ids[t]) & 0xFFFFFFFF) << 32 | UInt64(t) & 0xFFFFFFFF`. No two
@@ -490,7 +511,7 @@ that is not in position order, or by an atomic integer rank. Sabotages
 
 Clause (d) of section 11. It is the strongest evidence available that the
 arithmetic does not read the plan, and it is cheap, because `PLAN_SCAN` is
-already the oracle's spelling. **It cannot run until `PLAN_SORT` exists.**
+already the oracle's spelling. The production gate is now available through clause (d).
 
 ---
 ## 7. Invariance, what holds, what does not, and the microbatch finding
@@ -889,7 +910,7 @@ result.**
 - **Not BF16, FP16, FP8, TF32 or any quantization.** Not FP64 on device.
 - **No optimizer, no weight update, no clipping, no loss scaling, no
   distributed all-reduce.**
-- **`PLAN_SORT` IS NOT WRITTEN**, so clause (d) cannot run.
+- **PLAN_SORT performance and additional vendor evidence remain owed.**
 - **No performance number.** Section 10 is derivation.
 - **TWO columns is not a cross-vendor claim, and this lane's two are exactly
   the pair that has fooled this repository before.** Apple and AMD agreed bit
@@ -943,13 +964,9 @@ Cited from elsewhere and never redefined: 621, 1505, 1938.
    only under a clause neither leg ran.
 2. **An NVIDIA leg**, and clauses (b), (c), (e) and (f) on the two existing
    columns.
-3. **`PLAN_SORT` is specified in 6.2 and NOT WRITTEN.** It should be
-   `launch_radix_sort_bins` keyed on the ids with the positions as the
-   payload, plus a run-boundary pass; `svm/checks/device_select.mojo` is the
-   precedent for a lane importing a `gbdt/gpu_util/` primitive, but it needs
-   six scratch buffers and a `REORDER_BLOCK` geometry this lane has not
-   verified against, and writing an unverified device sort would have added a
-   second thing that can be wrong. **Clause (d) cannot run until it exists.**
+3. **PLAN_SORT is implemented.** Clause (d) now exercises both real plans
+   and three launch geometries. Additional vendor evidence and a measured
+   dispatch crossover remain owed; the production default stays PLAN_SCAN.
 4. **A `pixi.toml` task, an `embedding/README.md`, a `DERIVATION_MAP.tsv` and
    a `NOT_IMPLEMENTED.tsv`.** Every other lane carries all four.
 5. **An `IDENTITY_PATHS.md` row**, DEVIATION 1300. It must record exactly what

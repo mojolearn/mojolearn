@@ -2,6 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device embedding of profile `mojolearn.identical.embedding.fp32.v1`. The CALLER owns every buffer -- including `counts`, `run_begin` and `perm` -- and must keep every one of them alive past its own `ctx.synchronize()`."""
 
+from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT, embedding_sort_runs
+
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -150,11 +152,11 @@ def _emb_max_tpb[column: Int]() -> Int:
 comptime EMB_TPB = _emb_max_tpb[TARGET_COLUMN]()
 
 
-def _grid_for(count: Int) -> Int:
+def _grid_for(count: Int, threads: Int = EMB_TPB) -> Int:
     """Blocks for a flat `count`-element launch."""
     if count < 1:
         return 1
-    return (count + EMB_TPB - 1) // EMB_TPB
+    return (count + threads - 1) // threads
 
 
 
@@ -479,8 +481,14 @@ def identical_embedding_backward_into(
     mut perm: DeviceBuffer[DType.int32],
     n_positions: Int,
     cfg: EmbConfig,
+    plan: Int = PLAN_SCAN,
+    block_threads: Int = EMB_TPB,
 ) raises:
     """Seams E0 through E4, enqueued. **`counts`, `run_begin` and `perm` ARE THE CALLER'S** and must be sized with `emb_run_scratch_ints` and kept alive past the caller's own `ctx.synchronize()`."""
+    if plan != PLAN_SCAN and plan != PLAN_SORT:
+        raise Error("embedding: unknown execution plan")
+    if block_threads < 1 or block_threads > IDENTITY_FLOOR_BLOCK or block_threads > column_max_block_size(TARGET_COLUMN):
+        raise Error("embedding: launch threads exceed portable device bounds")
     emb_refuse_device_ids(ctx, ids, n_positions, cfg)
 
     if cfg.vocab < 1 or cfg.width < 1:
@@ -494,8 +502,8 @@ def identical_embedding_backward_into(
         ctx.enqueue_function[emb_seed_kernel](
             dw.unsafe_ptr(),
             Int32(cells),
-            grid_dim=(_grid_for(cells), 1, 1),
-            block_dim=(EMB_TPB, 1, 1),
+            grid_dim=(_grid_for(cells, block_threads), 1, 1),
+            block_dim=(block_threads, 1, 1),
         )
 
     if n_positions < 1:
@@ -504,39 +512,42 @@ def identical_embedding_backward_into(
                 dw.unsafe_ptr(),
                 Int32(cfg.width),
                 Int32(cfg.padding_idx),
-                grid_dim=(_grid_for(cfg.width), 1, 1),
-                block_dim=(EMB_TPB, 1, 1),
+                grid_dim=(_grid_for(cfg.width, block_threads), 1, 1),
+                block_dim=(block_threads, 1, 1),
             )
         return
 
-    ctx.enqueue_function[emb_counts_kernel](
-        counts.unsafe_ptr(),
-        ids.unsafe_ptr(),
-        Int32(n_positions),
-        Int32(cfg.vocab),
-        Int32(cfg.padding_idx),
-        grid_dim=(_grid_for(cfg.vocab), 1, 1),
-        block_dim=(EMB_TPB, 1, 1),
-    )
+    if plan == PLAN_SORT:
+        embedding_sort_runs(ctx, ids, counts, run_begin, perm, n_positions, cfg.vocab, cfg.padding_idx, block_threads)
+    else:
+        ctx.enqueue_function[emb_counts_kernel](
+            counts.unsafe_ptr(),
+            ids.unsafe_ptr(),
+            Int32(n_positions),
+            Int32(cfg.vocab),
+            Int32(cfg.padding_idx),
+            grid_dim=(_grid_for(cfg.vocab, block_threads), 1, 1),
+            block_dim=(block_threads, 1, 1),
+        )
 
-    ctx.enqueue_function[emb_run_begin_kernel](
-        run_begin.unsafe_ptr(),
-        counts.unsafe_ptr(),
-        Int32(cfg.vocab),
-        grid_dim=(1, 1, 1),
-        block_dim=(1, 1, 1),
-    )
+        ctx.enqueue_function[emb_run_begin_kernel](
+            run_begin.unsafe_ptr(),
+            counts.unsafe_ptr(),
+            Int32(cfg.vocab),
+            grid_dim=(1, 1, 1),
+            block_dim=(1, 1, 1),
+        )
 
-    ctx.enqueue_function[emb_perm_kernel](
-        perm.unsafe_ptr(),
-        run_begin.unsafe_ptr(),
-        ids.unsafe_ptr(),
-        Int32(n_positions),
-        Int32(cfg.vocab),
-        Int32(cfg.padding_idx),
-        grid_dim=(_grid_for(cfg.vocab), 1, 1),
-        block_dim=(EMB_TPB, 1, 1),
-    )
+        ctx.enqueue_function[emb_perm_kernel](
+            perm.unsafe_ptr(),
+            run_begin.unsafe_ptr(),
+            ids.unsafe_ptr(),
+            Int32(n_positions),
+            Int32(cfg.vocab),
+            Int32(cfg.padding_idx),
+            grid_dim=(_grid_for(cfg.vocab, block_threads), 1, 1),
+            block_dim=(block_threads, 1, 1),
+        )
 
     ctx.enqueue_function[emb_backward_kernel](
         dw.unsafe_ptr(),
@@ -545,8 +556,8 @@ def identical_embedding_backward_into(
         run_begin.unsafe_ptr(),
         Int32(cfg.vocab),
         Int32(cfg.width),
-        grid_dim=(_grid_for(cells), 1, 1),
-        block_dim=(EMB_TPB, 1, 1),
+        grid_dim=(_grid_for(cells, block_threads), 1, 1),
+        block_dim=(block_threads, 1, 1),
     )
 
     if cfg.has_padding():
@@ -554,6 +565,6 @@ def identical_embedding_backward_into(
             dw.unsafe_ptr(),
             Int32(cfg.width),
             Int32(cfg.padding_idx),
-            grid_dim=(_grid_for(cfg.width), 1, 1),
-            block_dim=(EMB_TPB, 1, 1),
+            grid_dim=(_grid_for(cfg.width, block_threads), 1, 1),
+            block_dim=(block_threads, 1, 1),
         )
