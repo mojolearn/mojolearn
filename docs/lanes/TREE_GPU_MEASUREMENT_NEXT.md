@@ -62,3 +62,37 @@ row order and split ties in either implementation.
 
 Full-feature versus sampled timing is a separate learning tradeoff: include
 heldout quality and tree size. It cannot establish identical-output speedup.
+
+## Focused NVIDIA competitor runner
+
+`bench/speed/nvidia_identical_trees.py` reuses the existing dataset loaders,
+learner configurations, competitor constructors, scoring and timed runner.
+It requires explicit IDENTICAL/CUDA selection and verifies the native mode and
+vendor getters before timing. RF now exports `rf_numeric_mode()`; a directory
+name alone is not compiled-mode evidence.
+
+On a separate, automatically expiring pod, set up with
+`MOJOLEARN_TREES_SKIP_LIGHTGBM_CUDA=1 sh tools/trees_identical_remote.sh` for an
+RF/cuML and symmetric GBDT/CatBoost session. Wait until setup finishes before
+collecting performance samples. Then run under an external timeout:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SPEED_EXPECTED_VENDOR=cuda \
+PYTHONPATH=python timeout -k 15 1260 python3 -u \
+  bench/speed/nvidia_identical_trees.py --lane rf --dataset higgs \
+  --rows 1000000 --rounds 5 --output /root/trees_out/rf_higgs_1m.json
+```
+
+RF includes cuML default streams and a separately named one-stream arm.
+`--lane gbdt-symmetric` selects CatBoost GPU only. `--lane et` records our
+baseline without inventing an equivalent GPU competitor. Missing real datasets
+fail instead of falling back to synthetic data. `--size smoke --dataset synthclf
+--rows 32768 --rounds 1` exercises the runner but provides no performance or
+independent-repeatability conclusion.
+
+The fit timer includes construction, host packing, training and completion;
+scoring/model hashing is outside it. Already-packed input is refused for this
+particular comparison. JSON records native binding/source/data hashes, library
+versions, parameters, raw samples, spread, quality, and repeated model/prediction
+witnesses. Keep the companion stdout logs as well. This is a full-fit baseline,
+not an isolated inference benchmark or cross-vendor identity qualification.
