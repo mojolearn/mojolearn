@@ -69,3 +69,15 @@ raw timing sample counts, device/request checks, component/public evidence,
 and the full index/distance dumps. It emits raw-backed JSON with pooled
 medians and per-pass samples. A pooled result should be read together with
 both execution orders rather than treated as controlled statistical evidence.
+
+## Measured rejection
+
+Apple and H100 gates and all full-output comparisons pass. H100 forward and
+reversed runs show no target win: pooled k10 request29.3911845→29.4241995ms;
+k15 is also slightly slower. The small32-query case costs4.2% more device
+time; the ragged control improves1.9%. This does not justify changing dispatch.
+The prototype is removed from production; its patch and standalone gate/driver
+are archived under `bench/results/staging_performance_2026-09-10/rejected-knn/`.
+The reusable raw-output dump and summary parser remain. Reproduce by applying
+the archived patch and restoring the archived driver/gate at their original
+paths in an isolated checkout. No kNN performance improvement is claimed.

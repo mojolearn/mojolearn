@@ -54,7 +54,6 @@ calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
-from std.sys.compile import is_defined
 from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for, knn_distance_hardware_flush_for, knn_distance_rows_for
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
 
@@ -150,22 +149,6 @@ comptime RT_ROWS = knn_distance_rows_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == N
 comptime RT_COLS = 4
 comptime RT_TPB = 128
 comptime RT_TILE_COLS = RT_TPB * RT_COLS
-# Opt-in address-ownership experiment. Every scalar instruction spans adjacent
-# columns across a warp instead of every fourth column. The same 512 cells
-# belong to the block and each cell retains its ascending feature chain.
-# Portable for qualification; intended throughput target is NVIDIA IDENTICAL.
-comptime RT_COALESCED_COLUMNS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_KNN_IDENTICAL_COALESCED_COLUMNS"]()
-)
-
-
-@always_inline
-def _rt_column(block: Int, lane: Int, slot: Int) -> Int:
-    comptime if RT_COALESCED_COLUMNS:
-        return block * RT_TILE_COLS + lane + slot * RT_TPB
-    return (block * RT_TPB + lane) * RT_COLS + slot
-
 
 @always_inline
 def _rt_load(x: Float32) -> Float32:
@@ -273,7 +256,7 @@ def pinned_distance_register_tile_kernel(
     var n_cols = Int(n_cols_in)
     var y_stride = Int(y_stride_in)
     var d = Int(n_features_in)
-    var col0 = _rt_column(Int(block_idx.x), Int(thread_idx.x), 0)
+    var col0 = (Int(block_idx.x) * RT_TPB + Int(thread_idx.x)) * RT_COLS
     var row0 = Int(block_idx.y) * RT_ROWS
     if col0 >= n_cols or row0 >= n_rows:
         return
@@ -287,7 +270,7 @@ def pinned_distance_register_tile_kernel(
             rr = n_rows - 1
         rows_idx[r] = Int32(rr)
     comptime for c in range(RT_COLS):
-        var cc = _rt_column(Int(block_idx.x), Int(thread_idx.x), c)
+        var cc = col0 + c
         if cc > n_cols - 1:
             cc = n_cols - 1
         cols_idx[c] = Int32(cc)
@@ -299,7 +282,7 @@ def pinned_distance_register_tile_kernel(
         if row < n_rows:
             var qn = ftz(q_norm.unsafe_load(row))
             comptime for c in range(RT_COLS):
-                var col = _rt_column(Int(block_idx.x), Int(thread_idx.x), c)
+                var col = col0 + c
                 if col < n_cols:
                     var dist = ftz(
                         identical_mul_add(
