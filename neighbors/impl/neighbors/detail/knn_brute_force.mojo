@@ -79,6 +79,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     knn_auto_follows_their_dispatch_for,
     knn_distance_register_tile_for,
+    knn_distance_metadata_for,
     knn_index_tile_columns_for,
     knn_smallk_select_for,
     knn_transposed_index_for,
@@ -98,6 +99,7 @@ from neighbors.checks.pinned_distance_tile import (
     RT_TILE_COLS,
     RT_TPB,
     pinned_distance_register_tile_kernel,
+    vector_exponent_minimum_kernel,
     pinned_distance_tile_kernel,
 )
 from neighbors.checks.select_radix_identical import (
@@ -132,6 +134,7 @@ comptime EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL = knn_transposed_index_for[
 comptime KNN_REGISTER_TILE_IDENTICAL = knn_distance_register_tile_for[
     TARGET_COLUMN, IDENTICAL_BUILD
 ]()
+comptime KNN_PREFLIGHT_METADATA = knn_distance_metadata_for[TARGET_COLUMN, IDENTICAL_BUILD]()
 comptime KNN_INDEX_TILE_IDENTICAL = knn_index_tile_columns_for[
     TARGET_COLUMN, IDENTICAL_BUILD
 ]()
@@ -545,8 +548,23 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
         )
     var tiled_index = index_tile < n_index
     var part_cells = query_tile * k if tiled_index else 1
-    var part_dist = ctx.enqueue_create_buffer[DType.float32](part_cells)
+    var metadata_cells = n_queries + n_index if KNN_PREFLIGHT_METADATA else 0
+    var part_dist = ctx.enqueue_create_buffer[DType.float32](part_cells + metadata_cells)
     var part_idx = ctx.enqueue_create_buffer[DType.uint32](part_cells)
+
+    # Metadata is rebuilt for every request, including in-place input mutations.
+    # The existing scratch allocation owns metadata until final synchronize.
+    var q_minima = part_dist.unsafe_ptr().unsafe_offset(part_cells if KNN_PREFLIGHT_METADATA else 0).unsafe_origin_cast[MutAnyOrigin]()
+    var y_minima = part_dist.unsafe_ptr().unsafe_offset(part_cells + n_queries if KNN_PREFLIGHT_METADATA else 0).unsafe_origin_cast[MutAnyOrigin]()
+    comptime if KNN_PREFLIGHT_METADATA:
+        ctx.enqueue_function[vector_exponent_minimum_kernel](
+            queries.unsafe_ptr(), q_minima, Int32(n_queries), Int32(n_features),
+            grid_dim=((n_queries + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+        )
+        ctx.enqueue_function[vector_exponent_minimum_kernel](
+            index.unsafe_ptr(), y_minima, Int32(n_index), Int32(n_features),
+            grid_dim=((n_index + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+        )
 
     var ns_distance = 0
     var ns_select = 0
@@ -671,12 +689,14 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
                         if use_transposed_index:
                             comptime if KNN_REGISTER_TILE_IDENTICAL:
-                                ctx.enqueue_function[pinned_distance_register_tile_kernel](
+                                ctx.enqueue_function[pinned_distance_register_tile_kernel[KNN_PREFLIGHT_METADATA]](
                                     dist_tile.unsafe_ptr(),
                                     queries.unsafe_ptr().unsafe_offset(q * n_features),
                                     transposed_index.value().unsafe_offset(c),
                                     query_norm.unsafe_ptr().unsafe_offset(q),
                                     index_norm.unsafe_ptr().unsafe_offset(c),
+                                    q_minima.unsafe_offset(q if KNN_PREFLIGHT_METADATA else 0),
+                                    y_minima.unsafe_offset(c if KNN_PREFLIGHT_METADATA else 0),
                                     Int32(rows), Int32(cols), Int32(n_index),
                                     Int32(n_features), is_sqrt_arg,
                                     grid_dim=(

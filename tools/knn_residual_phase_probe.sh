@@ -29,6 +29,15 @@ case "$column" in
   nvidia) [[ $(uname -s) == Linux ]]; control=MOJOLEARN_KNN_LEGACY_QUERY_TILE ;;
   *) exit 2 ;;
 esac
+comparison=${MOJOLEARN_KNN_PROBE_COMPARISON:-legacy}
+case "$comparison" in
+  legacy) ;;
+  metadata)
+    [[ "$column" == apple ]] || { echo 'metadata experiment is Apple only' >&2; exit 2; }
+    control=MOJOLEARN_EXPERIMENTAL_KNN_PREFLIGHT_METADATA
+    ;;
+  *) echo 'comparison must be legacy or metadata' >&2; exit 2 ;;
+esac
 [[ "$output" = /* && ! -e "$output" ]]
 mkdir -p "$output"
 mojo --version > "$output/compiler.txt" 2>&1
@@ -41,7 +50,7 @@ if git rev-parse HEAD > "$output/source.txt" 2>/dev/null; then
 else
   cat commit.txt > "$output/source.txt"
 fi
-printf '%s\n' "column=$column" "control=$control" "mode=$mode" "rounds=$rounds" > "$output/experiment.txt"
+printf '%s\n' "column=$column" "comparison=$comparison" "control=$control" "mode=$mode" "rounds=$rounds" > "$output/experiment.txt"
 for arm in default control; do
   flags=(-D MOJOLEARN_NUMERIC_IDENTICAL=1)
   [[ "$mode" != phase ]] || flags+=(-D MOJOLEARN_KNN_PHASE_TIMERS=1)

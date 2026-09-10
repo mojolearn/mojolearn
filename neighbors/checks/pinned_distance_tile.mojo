@@ -230,12 +230,54 @@ def _rt_accumulate_tile(
     return _rt_dot_tile[True](q, yt, rows_idx, cols_idx, d, y_stride)
 
 
-def pinned_distance_register_tile_kernel(
+@always_inline
+def vector_exponent_minimum(
+    values: MutPointer[Float32, MutAnyOrigin], d: Int, stride: Int,
+) -> UInt32:
+    """Minimum nonzero biased exponent; flushed operands cannot need repair."""
+    var minimum = UInt32(255)
+    for f in range(d):
+        var exponent = (bitcast[DType.uint32](values.unsafe_load(f * stride)) >> 23) & 255
+        if exponent != 0 and exponent < minimum:
+            minimum = exponent
+    return minimum
+
+
+def vector_exponent_minimum_kernel(
+    values: MutPointer[Float32, MutAnyOrigin], minima: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32, d_in: Int32,
+):
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row < Int(n_in):
+        minima.unsafe_store(row, Float32(vector_exponent_minimum(values.unsafe_offset(row * Int(d_in)), Int(d_in), 1)))
+
+
+@always_inline
+def _rt_accumulate_metadata_tile(
+    q: MutPointer[Float32, MutAnyOrigin], yt: MutPointer[Float32, MutAnyOrigin],
+    q_minima: MutPointer[Float32, MutAnyOrigin], y_minima: MutPointer[Float32, MutAnyOrigin],
+    rows_idx: SIMD[DType.int32, RT_ROWS], cols_idx: SIMD[DType.int32, RT_COLS],
+    d: Int, y_stride: Int,
+) -> SIMD[DType.float32, RT_ROWS * RT_COLS]:
+    var q_min = UInt32(255)
+    var y_min = UInt32(255)
+    comptime for r in range(RT_ROWS):
+        q_min = min(q_min, UInt32(q_minima.unsafe_load(Int(rows_idx[r]))))
+    comptime for c in range(RT_COLS):
+        y_min = min(y_min, UInt32(y_minima.unsafe_load(Int(cols_idx[c]))))
+    if q_min + y_min >= 151:
+        return _rt_dot_tile[False](q, yt, rows_idx, cols_idx, d, y_stride)
+    return _rt_dot_tile[True](q, yt, rows_idx, cols_idx, d, y_stride)
+
+
+def pinned_distance_register_tile_kernel[METADATA: Bool](
     z: MutPointer[Float32, MutAnyOrigin],
     q: MutPointer[Float32, MutAnyOrigin],
     yt: MutPointer[Float32, MutAnyOrigin],
     q_norm: MutPointer[Float32, MutAnyOrigin],
     y_norm: MutPointer[Float32, MutAnyOrigin],
+    q_minima: MutPointer[Float32, MutAnyOrigin],
+    y_minima: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32,
     n_cols_in: Int32,
     y_stride_in: Int32,
@@ -267,7 +309,10 @@ def pinned_distance_register_tile_kernel(
             cc = n_cols - 1
         cols_idx[c] = Int32(cc)
 
-    acc = _rt_accumulate_tile(q, yt, rows_idx, cols_idx, d, y_stride)
+    comptime if METADATA:
+        acc = _rt_accumulate_metadata_tile(q, yt, q_minima, y_minima, rows_idx, cols_idx, d, y_stride)
+    else:
+        acc = _rt_accumulate_tile(q, yt, rows_idx, cols_idx, d, y_stride)
 
     comptime for r in range(RT_ROWS):
         var row = row0 + r

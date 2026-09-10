@@ -864,7 +864,7 @@ def knn_transposed_index_for[column: Int, identical: Bool]() -> Bool:
 
 
 def knn_distance_register_tile_for[column: Int, identical: Bool]() -> Bool:
-    """SCHEDULING row: whether the transposed IDENTICAL distance tile computes a 4x4 register tile per thread (`pinned_distance_tile.mojo::pinned_distance_register_tile_kernel`) instead of one cell per thread. Every cell's chain is still one ascending serial fma chain over the feature axis (IDENTITY_PATHS row 24), so the bits are equal. Only reachable when `knn_transposed_index_for` is true. `-D MOJOLEARN_KNN_IDENTICAL_SCALAR_TILE=1` keeps one cell per thread."""
+    """SCHEDULING row: whether the transposed IDENTICAL distance tile computes a column-selected register tile per thread (`pinned_distance_tile.mojo::pinned_distance_register_tile_kernel`) instead of one cell per thread. Every cell's chain is still one ascending serial fma chain over the feature axis (IDENTITY_PATHS row 24), so the bits are equal. Only reachable when `knn_transposed_index_for` is true. `-D MOJOLEARN_KNN_IDENTICAL_SCALAR_TILE=1` keeps one cell per thread."""
     comptime if not identical:
         return False
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SCALAR_TILE"]():
@@ -952,6 +952,14 @@ def knn_distance_preflight_for[column: Int, identical: Bool]() -> Bool:
 
 
 @always_inline
+def knn_distance_metadata_for[column: Int, identical: Bool]() -> Bool:
+    """Forced experiment: reuse per-request exponent minima; large pricing owed."""
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_PREFLIGHT_METADATA"]():
+        return knn_distance_preflight_for[column, identical]()
+    return False
+
+
+@always_inline
 def knn_distance_hardware_flush_for[column: Int, identical: Bool]() -> Bool:
     """Fully rounded NVIDIA FMA followed by exact hardware FTZ multiplication."""
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SOFTWARE_FLUSH"]():
@@ -963,7 +971,7 @@ def knn_distance_hardware_flush_for[column: Int, identical: Bool]() -> Bool:
 def knn_distance_rows_for[column: Int, identical: Bool]() -> Int:
     """Measured NVIDIA eight-query register tile; each cell keeps its FMA chain.
 
-    The32/128-feature cases improve; the8-feature coverage is flat to0.9%
+    The 32/128-feature cases improve; the 8-feature coverage is flat to 0.9%
     slower. Other columns retain four query rows per thread.
     """
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_ROWS4"]():
