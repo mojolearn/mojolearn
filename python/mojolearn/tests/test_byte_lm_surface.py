@@ -113,6 +113,15 @@ class FakeByteLM:
 @pytest.fixture
 def host(monkeypatch):
     fake = FakeByteLM()
+    # These wrapper-only tests mock native validation as well as training.
+    # Production requires these helpers; there is no Python fallback.
+    from mojolearn import _buffer
+    for key, scalar in [('all_finite_f32', ctypes.c_float),
+                        ('all_finite_f64', ctypes.c_double)]:
+        def finite(address, count, scalar=scalar):
+            values = np.ctypeslib.as_array((scalar * count).from_address(address))
+            return int(np.isfinite(values).all())
+        monkeypatch.setitem(_buffer._NATIVE, key, finite)
     monkeypatch.setattr(impl._backend, 'default_mode', lambda: 'identical')
     monkeypatch.setattr(impl._backend, 'numeric_mode', lambda: 'identical')
     def binding(name, mode):

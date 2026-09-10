@@ -143,3 +143,9 @@ release-harness tests pass all ten checks. These are source checks, not a
 fresh installed-wheel qualification. Logs are in `final/` beside the WP
 evidence. There are zero required Python runtime distributions; build tools,
 native runtime libraries and GPU drivers remain necessary.
+
+After merging `97d087fc` (required native helpers, no Python fallbacks),
+updated the byte-LM host-only fixture to explicitly mock finiteness helpers
+alongside training. Production behavior is unchanged. The merged source
+suite passes 996 tests and 89 subtests, with 53 skips; the NumPy-blocked
+real GPU pipeline smoke also passes. See `final/post-merge-*.log`.
