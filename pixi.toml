@@ -708,6 +708,9 @@ check-portable-sqrtcos = "mojo run -I . checks/portable_sqrtcos_check.mojo"
 check-portable-log64 = "mojo run -I . checks/portable_log64_check.mojo"
 # host-only: portable_log2_64, hashed full-range admission and exact powers
 check-portable-log2-64 = "mojo run -I . checks/portable_log2_64_check.mojo"
+# IDENTICAL plan and logical-width qualification; outputs stay outside the tree.
+check-embedding-plan-sort = "bash tools/check_embedding_plan_sort.sh /tmp/mojolearn-embedding-plan-sort"
+check-lane-minimum = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/checks/lane_minimum_check.mojo"
 
 # IDENTITY_PATHS row 49 (DEVIATION 740): DIVISION characterized per class
 # on this backend -- 2^20 hashed (a, b) pairs in 13 classes (normals, each
