@@ -104,3 +104,34 @@ particular comparison. JSON records native binding/source/data hashes, library
 versions, parameters, raw samples, spread, quality, and repeated model/prediction
 witnesses. Keep the companion stdout logs as well. This is a full-fit baseline,
 not an isolated inference benchmark or cross-vendor identity qualification.
+
+
+## Diagnose timing variation before another speed claim
+
+The focused runner accepts `--nvtx` to label each constructor/fit/completion
+region as `mojolearn-fit/<lane>/<arm>/round-<n>` (round 0 is warm-up).
+Scoring and full model hashing remain outside these ranges. An exception closes
+the range before the runner records the refusal. This optional instrumentation
+changes no learner dispatch, stream policy, RNG, or product defaults.
+
+On a dedicated NVIDIA device with Nsight Systems installed, run a separate
+**diagnostic** large-data pass, for example:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SPEED_EXPECTED_VENDOR=cuda \
+PYTHONPATH=python timeout -k 15 300 nsys profile --trace=cuda,nvtx,osrt \
+  --force-overwrite=true -o /root/trees_out/symmetric_higgs_trace \
+  python3 -u bench/speed/nvidia_identical_trees.py \
+  --lane gbdt-symmetric --dataset higgs --rows 1000000 --rounds 2 --nvtx \
+  --output /root/trees_out/symmetric_higgs_trace.json
+```
+
+Inspect CPU launch gaps, allocation/transfer time, kernel durations and device
+synchronization inside each arm's ranges. Correlate with clock/power/temperature
+telemetry and CPU/NUMA placement; do not infer a cause from one-second GPU
+utilization alone. The JSON captures CPU affinity and common thread environment
+settings even without profiling. Retain the trace, logs, tool versions and raw
+samples. **Profiled timings are diagnostic:** repeat the matched comparison
+without `nsys` or `--nvtx`, with at least five rounds, for performance acceptance.
+NVTX integration has host control-flow checks; its device trace still needs
+validation on NVIDIA with the profiling tool installed.

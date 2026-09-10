@@ -128,6 +128,7 @@ arms are the point of. Nothing here waits unbounded on anything.
 """
 
 import argparse
+import contextlib
 import hashlib
 import os
 import platform
@@ -1519,11 +1520,14 @@ def emit_scale_reminder(data, stage):
              "Also test representative large datasets (for example HIGGS 1M rows)."))
 
 
-def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False):
+def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False, fit_context=None):
     """One untimed warm-up per arm, then `n_rounds` timed rounds in which
     every surviving arm takes one turn before any arm takes its second.
     Optional rotate_order advances the first arm each round to distribute
     position effects; it does not remove noise or establish timing stability.
+    fit_context optionally returns a context manager for (arm_name, round),
+    with round 0 for warm-up. It surrounds constructor/fit/sync, excluding
+    scoring; entry/exit are outside the timer. Use for diagnostic traces only.
 
     THE ALTERNATION IS THE POINT AND NOT A STYLE CHOICE. A rented box may
     throttle mid-run. Blocks give you the first arm's cold clocks against the
@@ -1551,11 +1555,13 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False):
                                          "warm-up")
             continue
         try:
-            t0 = time.perf_counter()
-            model = arm.make()
-            arm.fit(model, data)
-            arm.sync()
-            ms = (time.perf_counter() - t0) * 1000.0
+            with (fit_context(arm.name, 0) if fit_context is not None
+                  else contextlib.nullcontext()):
+                t0 = time.perf_counter()
+                model = arm.make()
+                arm.fit(model, data)
+                arm.sync()
+                ms = (time.perf_counter() - t0) * 1000.0
         except Exception as exc:                   # noqa: BLE001
             emit_refused(lane, arm.name, "%s during warm-up: %s"
                          % (exc.__class__.__name__,
@@ -1587,11 +1593,13 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False):
                 live.remove(arm)
                 continue
             try:
-                t0 = time.perf_counter()
-                model = arm.make()
-                arm.fit(model, data)
-                arm.sync()
-                ms = (time.perf_counter() - t0) * 1000.0
+                with (fit_context(arm.name, r) if fit_context is not None
+                      else contextlib.nullcontext()):
+                    t0 = time.perf_counter()
+                    model = arm.make()
+                    arm.fit(model, data)
+                    arm.sync()
+                    ms = (time.perf_counter() - t0) * 1000.0
             except Exception as exc:               # noqa: BLE001
                 emit_refused(lane, arm.name, "%s at round %d: %s"
                              % (exc.__class__.__name__, r,
