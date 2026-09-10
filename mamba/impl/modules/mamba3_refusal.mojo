@@ -12,14 +12,13 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from mamba.impl.modules.mamba3_transfer import m3_download
 from mamba.impl.modeling.modeling_mamba import _refuse_nonfinite_named
 
 comptime M3_REFUSAL_THREADS = 256
 comptime M3_REFUSAL_BLOCKS = 128
 comptime M3_REFUSAL_NONE: Int64 = 9223372036854775807
-comptime M3_DEVICE_REFUSAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_REFUSAL"]()
+comptime M3_DEVICE_REFUSAL = not is_defined["MOJOLEARN_MAMBA3_LEGACY_REFUSAL"]()
 
 
 def m3_nonfinite_partial_kernel(

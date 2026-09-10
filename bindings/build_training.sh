@@ -123,27 +123,22 @@ COLUMN_DEFINE=""
 # bits. `python/mojolearn/tests/test_training_surface.py` asserts its bitwise
 # arms only under identical and REPORTS them under fast, and says so in its
 # own banner.
-MODE_DEFINE=""
-OUTDIR="python/mojolearn"
-if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "identical" ]; then
-    MODE_DEFINE="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
-    OUTDIR="python/mojolearn/identical"
-    mkdir -p "$OUTDIR"
-    export MOJOLEARN_SKIP_BUILD_GATE=1
-elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "deterministic" ]; then
-    # The MIDDLE tier: reproducible run to run on ONE device, with no
-    # promise about a second one. It gets its own directory because it
-    # is its own binary -- PIN_DETERMINISM is comptime, so a
-    # deterministic build is different code from both neighbours, not
-    # the identical build with a flag turned down.
-    MODE_DEFINE="-D MOJOLEARN_NUMERIC_DETERMINISTIC=1"
-    OUTDIR="python/mojolearn/deterministic"
-    mkdir -p "$OUTDIR"
-    export MOJOLEARN_SKIP_BUILD_GATE=1
-elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" != "fast" ]; then
-    echo "MOJOLEARN_NUMERIC_MODE must be fast, deterministic or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
+# THIS BINDING IS IDENTICAL-ONLY (2026-09-10). It formerly built in all
+# three tiers; the FAST and DETERMINISTIC binaries were not a faster path,
+# they were the DEGRADED one -- every fused kernel in this lane is gated on
+# `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`, so the lower tiers fell back to
+# the unfused arms and ran SLOWER than the default while promising less.
+# Building and shipping them cost two binaries per GPU arch per platform and
+# served nobody. `bindings/build_byte_lm.sh` has refused the same way since
+# the byte LM landed; this is that rule applied to the rest of the lane.
+MODE_DEFINE="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
+OUTDIR="python/mojolearn/identical"
+if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" != "identical" ]; then
+    echo "$(basename "$0"): this lane supports only MOJOLEARN_NUMERIC_MODE=identical (got '${MOJOLEARN_NUMERIC_MODE}')" >&2
     exit 2
 fi
+mkdir -p "$OUTDIR"
+export MOJOLEARN_SKIP_BUILD_GATE=1
 if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
     COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
 fi

@@ -307,8 +307,6 @@ from transformer.impl.llama.fused_attention import (
     fused_supported_head_dim,
 )
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_IDENTICAL,
     ftz,
     identical_cos,
     identical_div,
@@ -2681,11 +2679,16 @@ def attention_path_choice(plant_at: Int) -> Int:
     """Which attention path THIS call takes, before the data is looked at.
 
     `MOJOLEARN_TRANSFORMER_ATTN_PATH=eager` forces the eager kernels (the
-    A/B arm for timing; also what a FAST or DETERMINISTIC build, a
-    sabotage build and a planted call get unconditionally). `fused` asks
-    for the fused kernels; the default is `auto`, which is `fused`."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        return ATTN_PATH_EAGER
+    A/B arm for timing; also what a sabotage build and a planted call get
+    unconditionally). `fused` asks for the fused kernels; the default is
+    `auto`, which is `fused`.
+
+    THIS FUNCTION USED TO RETURN EAGER FOR A FAST OR DETERMINISTIC BUILD,
+    which is the whole case against those tiers existing in this lane: the
+    fused kernels are gated on IDENTICAL, so the tier sold as "fast" got the
+    UNFUSED path and ran slower than the default while promising less. The
+    transformer lane is IDENTICAL-only as of 2026-09-10 and the branch is
+    gone."""
     comptime if BLOCK_ANY_SABOTAGE:
         return ATTN_PATH_EAGER
     if plant_at != PLANT_AT_NONE:

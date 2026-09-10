@@ -201,6 +201,28 @@ _MODULES = (
     # answering under the right label (DEVIATION 869, the header above).
     "_mojolearn_transformer",
 )
+
+#: THE NEURAL LANES BUILD ONE TIER (2026-09-10). They used to build three.
+#: The FAST and DETERMINISTIC binaries were never a faster path: every fused
+#: kernel in transformer/ and mamba/ is gated on
+#: `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`, so the lower tiers fell back to
+#: the UNFUSED arms and ran slower than the default while promising less.
+#: `training/mlp_ops.mojo` and `training/byte_lm.mojo` had already refused
+#: outright for the same reason, and DEVIATION 2300 is the cost written down:
+#: a `k_last` failure that existed ONLY in the deterministic tier of the mamba
+#: lane, found in a shipped 0.7.0 qualification, in code no user had a reason
+#: to run. Two binaries per GPU arch per platform, to serve nobody.
+#:
+#: `bindings/build_{transformer,mamba,training,byte_lm}.sh` refuse any other
+#: tier, the bindings themselves `abort()` on one, and this set is why the
+#: Python side raises a sentence a caller can act on instead of an ImportError
+#: about a missing `.so`.
+_IDENTICAL_ONLY = frozenset({
+    "_mojolearn_transformer",
+    "_mojolearn_mamba",
+    "_mojolearn_training",
+    "_mojolearn_byte_lm",
+})
 _SELECTED = None
 
 
@@ -765,10 +787,13 @@ def select():
             full = f"{pkg.__name__}.{name}"
             if full in sys.modules:
                 continue
-            module = _MissingUpperTier(
-                full, os.path.join(pkg_dir, name + ".so"),
-                _build_script(name), "fast",
-            )
+            if name in _IDENTICAL_ONLY:
+                module = _IdenticalOnlyTier(full, name, "fast")
+            else:
+                module = _MissingUpperTier(
+                    full, os.path.join(pkg_dir, name + ".so"),
+                    _build_script(name), "fast",
+                )
             sys.modules[full] = module
             setattr(pkg, name, module)
             _MISSING.append(name)
@@ -781,6 +806,11 @@ def select():
     missing = []
     for name in _MODULES:
         full = f"{pkg.__name__}.{name}"
+        if name in _IDENTICAL_ONLY and mode != "identical":
+            module = _IdenticalOnlyTier(full, name, mode)
+            sys.modules[full] = module
+            setattr(pkg, name, module)
+            continue
         path = os.path.join(ident_dir, name + ".so")
         if not os.path.exists(path):
             # NEVER fall back to the FAST binary under an upper-tier name,
@@ -867,6 +897,11 @@ class _ModeSet:
             return self._modules[name]
         except KeyError:
             pass
+        if name in _IDENTICAL_ONLY and self.mode != "identical":
+            raise ImportError(
+                f"mojolearn: {name} has no {self.mode!r} tier; the neural "
+                "lanes build IDENTICAL only. See _IDENTICAL_ONLY."
+            )
         if name in self.missing:
             raise ImportError(
                 f"mojolearn: numeric_mode={self.mode!r} needs "
@@ -898,6 +933,11 @@ def load_set(mode):
     tier_dir_ = tier_dir(mode)
     modules, missing = {}, []
     for name in _MODULES:
+        # An identical-only lane is not "not built yet" in the lower tiers, it
+        # is not offered there. Skipping it keeps `missing` meaning what the
+        # _ModeSet error message says it means.
+        if name in _IDENTICAL_ONLY and mode != "identical":
+            continue
         path = os.path.join(tier_dir_, name + ".so")
         if not os.path.exists(path):
             missing.append(name)
@@ -980,7 +1020,17 @@ def binding(name, mode=None):
     requested = default_mode() if mode is None else mode
     if not isinstance(requested, str) or requested.strip().lower() not in _MODE_CODE:
         raise ValueError("numeric_mode must be fast, deterministic, identical or None")
-    selected = load_set(requested.strip().lower())
+    requested = requested.strip().lower()
+    if name in _IDENTICAL_ONLY and requested != "identical":
+        raise ValueError(
+            f"mojolearn: {name} has no {requested!r} tier. The neural lanes "
+            "(transformer, mamba, training, byte LM) build IDENTICAL only: "
+            "their fused kernels are gated on the identical contract, so the "
+            "lower tiers ran the unfused path and were SLOWER than the default. "
+            "Drop numeric_mode= (identical is the default) or pass "
+            "numeric_mode='identical'."
+        )
+    selected = load_set(requested)
     module = getattr(selected, name)
     # A correctly built GBDT sibling does not establish RF/ET (or any other
     # extension) mode. Check the actual called module, including cached sets.
@@ -1020,6 +1070,32 @@ class _MissingUpperTier(type(sys)):
             f"{self.__missing_path} is not built; build it with\n    "
             f"MOJOLEARN_NUMERIC_MODE={self.__mode} bash "
             f"bindings/{self.__script}"
+        )
+
+
+class _IdenticalOnlyTier(type(sys)):
+    """Stands in for a neural binding under a tier that lane does not offer.
+
+    Distinct from `_MissingUpperTier` on purpose. That one means "build it";
+    this one means "there is nothing to build", and handing an operator
+    `MOJOLEARN_NUMERIC_MODE=fast bash bindings/build_mamba.sh` would send them
+    at a script that now exits 2. See `_IDENTICAL_ONLY`."""
+
+    def __init__(self, full, name, mode):
+        super().__init__(full)
+        self.__name = name
+        self.__mode = mode
+
+    def __getattr__(self, item):
+        if item.startswith("__"):
+            raise AttributeError(item)
+        raise ImportError(
+            f"mojolearn: {self.__name} has no {self.__mode!r} tier. The neural "
+            "lanes (transformer, mamba, training, byte LM) build IDENTICAL "
+            "only: their fused kernels are gated on the identical contract, so "
+            "the lower tiers ran the unfused path and were SLOWER than the "
+            "default. Run with MOJOLEARN_NUMERIC_MODE=identical (the default) "
+            "or pass numeric_mode='identical'."
         )
 
 

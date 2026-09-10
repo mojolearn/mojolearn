@@ -58,8 +58,10 @@ export PYTHONPATH="$PWD/python"
 "$PY" tools/nvidia_serial_guard.py --seconds 240 --rss-gib 12 -- \
   "$PY" mamba/corpus/gen_corpus.py
 
-# Run separately for fast, deterministic, identical, with fresh per-mode logs.
-export MOJOLEARN_NUMERIC_MODE=deterministic
+# HISTORICAL (0.6.1). The mamba lane became IDENTICAL-only on 2026-09-10 and
+# `bindings/build_mamba.sh` now exits 2 for any other tier, so the per-mode
+# sweep below is no longer runnable as written; identical is the only pass.
+export MOJOLEARN_NUMERIC_MODE=identical
 "$PY" tools/nvidia_serial_guard.py --seconds 600 --rss-gib 12 -- \
   bash bindings/build_mamba.sh
 "$PY" tools/nvidia_serial_guard.py --seconds 240 --rss-gib 12 -- \

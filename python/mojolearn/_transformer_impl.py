@@ -72,12 +72,13 @@ as. ONE VISIBLE CHANGE: `TransformerState.keys()` / `.values()` hand
 back a COPY of the packed used region rather than a view into the cache
 (DEVIATION 2413), because the `Array` contract has no strided views.
 
-THE NUMERIC TIER IS THE LOADED BINARY'S, SELECTED AT BUILD TIME OF THE
-.so. `numeric_mode=` on the class (or the process default) picks which
-compiled set answers -- fast (no promise; the lane's own clause (d)
-FAILS under FAST by construction and that is recorded as correct,
-transformer/README.md), deterministic (same bits run to run on one
-device), identical (also the same bits across vendors where the lane's
+THIS LANE IS IDENTICAL-ONLY (2026-09-10). `numeric_mode=` accepts
+'identical' or nothing; anything else raises. It used to build all three
+tiers, and the lane's own record is the argument against that: clause (d)
+FAILED under FAST by construction and this was documented as correct
+(transformer/README.md), while `attention_path_choice` returned the EAGER
+kernels for any build below identical -- so the tier sold as "fast" was
+the unfused, slower one. What remains is identical (also the same bits across vendors where the lane's
 record says so: the FORWARD card is byte-identical on Apple, NVIDIA and
 AMD as of 2026-08-28 -- clauses (b), (c), (e) and the sabotage ladder
 remain OWED there and this class claims nothing wider) -- and

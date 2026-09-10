@@ -7,12 +7,11 @@ numeric modes retain the original helpers. Mamba1/2 imports are unchanged.
 from std.memory import memcpy
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from mamba.impl.modeling.modeling_mamba import (
     mamba_upload, mamba_download,
 )
 
-comptime M3_BULK_TRANSFER = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_HOST_COPY"]()
+comptime M3_BULK_TRANSFER = not is_defined["MOJOLEARN_MAMBA3_LEGACY_HOST_COPY"]()
 
 
 def m3_upload(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:

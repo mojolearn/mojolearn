@@ -125,9 +125,11 @@ absence as an acceptable refusal. Root must run these checks on the new source.
     MOJOLEARN_IDENTITY_TRACE=/tmp/tl.card pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/loss_check.mojo
     MOJOLEARN_IDENTITY_TRACE=/tmp/to.card pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/optimizer_check.mojo
     md5 /tmp/tl.card /tmp/to.card       # want a87615d9..., 97d160b0...
-    # the FAST and DETERMINISTIC builds must still compile:
+    # STALE as of 2026-09-10: the training lane is IDENTICAL-only and
+    # `bindings/build_training.sh` exits 2 for any other tier. The step this
+    # replaced ("the FAST and DETERMINISTIC builds must still compile") no
+    # longer has a subject. The identical build is the whole gate:
     bash bindings/build_training.sh
-    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_training.sh
 
 ## Next commands for a fresh agent, in order
 
