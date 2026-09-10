@@ -1,0 +1,38 @@
+{
+  "binding_file": "/private/tmp/mojolearn-performance-publish-20260910/python/mojolearn/identical/_mojolearn_byte_lm.so",
+  "binding_sha256": "814907c7925dc2eef1f15af12900e138f43712949f978cadf8ecbfe098874f02",
+  "completed_steps": 0,
+  "config": {
+    "beta1": 0.8999999761581421,
+    "beta2": 0.9990000128746033,
+    "dampening": 0.0,
+    "eps": 9.99999993922529e-09,
+    "kind": 2,
+    "lr": 0.0010000000474974513,
+    "max_norm": 0.0,
+    "momentum": 0.0,
+    "nesterov": false,
+    "weight_decay": 0.009999999776482582
+  },
+  "data_schedule": {
+    "kind": "bounded synthetic numerical fixture",
+    "seed": 20260911
+  },
+  "native_numeric_mode": 1,
+  "native_profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+  "native_vendor": "metal",
+  "next_batch_index": 0,
+  "profile": "mojolearn.byte-lm.b3-l7-d24-h3-kv1-hd8-ff40-v256-blocks2.fp32.v2",
+  "qualification": "authored/unqualified",
+  "schema": "small-byte-lm.run-metadata.v1",
+  "source_scope": "available direct source files; binding SHA identifies the compiled artifact",
+  "source_sha256": {
+    "bindings/_mojolearn_byte_lm.mojo": "e18c5b1b09fbc790a7400eea316dbd107176239bd43835526b1095db45f51ef6",
+    "loaded_python_wrapper": "da15aa259d9806b89e0cbf28f1291910b6db14c4072a407f3a33c713d547cbb0",
+    "python/mojolearn/_byte_lm_config.py": "440ca11e33cfed741c8a812a8dac74ad4e938ab8e16f84ed2af5b61d3fbe56b8",
+    "python/mojolearn/_byte_lm_impl.py": "da15aa259d9806b89e0cbf28f1291910b6db14c4072a407f3a33c713d547cbb0",
+    "python/mojolearn/language_model.py": "90a5ab496af2b82ba1dd98e14dc442d4a39b8f1663cd1fe49e411fb886314e3f",
+    "training/byte_lm.mojo": "10db468b9b28971233df0ce5e61a8c6b4db80949e94233a1b4ac8abdf8293910",
+    "training/byte_lm_config.mojo": "a620c17cff6cbe5f96097609105acf774a732b72aa118d342bfbbe5e084d8606"
+  }
+}

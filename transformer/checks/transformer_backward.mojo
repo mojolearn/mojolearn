@@ -110,11 +110,7 @@ def _upload(
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    """The first `n` elements of a device buffer as a host list. NOTHING IN
-    THIS FILE CALLS IT: it is here for the gate file that does not exist
-    yet, which has to read stages back off the device to compare them
-    against the host oracle and to count moved cells for the sabotage arms.
-    If the gate file grows its own, delete this one."""
+    """Read a device span for checks or nonfinite-error classification."""
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
     if n == len(buf):
@@ -2545,6 +2541,29 @@ def llama_decoder_layer_backward(
     mut sin_tab: DeviceBuffer[DType.float32],
     mut x_dev: DeviceBuffer[DType.float32],
     d_out: List[Float32],
+    b: Int, l: Int, pos0: Int,
+    mut trace: IdentityTrace, prefix: String,
+    materialize: Bool = False,
+) raises:
+    """Host-input compatibility entry; device callers share the same backward."""
+    if len(d_out) != b * l * fwd.dims.d_model:
+        raise Error("llama backward: d_out does not match [B, L, d_model]")
+    var d_in = _upload(ctx, d_out)
+    llama_decoder_layer_backward_device(ctx, bst, fwd, w, cos_tab, sin_tab,
+        x_dev, d_in, b, l, pos0, trace, prefix, materialize)
+    ctx.synchronize()
+    _ = d_in^
+
+
+def llama_decoder_layer_backward_device(
+    ctx: DeviceContext,
+    mut bst: LlamaBackwardStages,
+    mut fwd: LlamaDeviceStages,
+    mut w: LlamaDeviceWeights,
+    mut cos_tab: DeviceBuffer[DType.float32],
+    mut sin_tab: DeviceBuffer[DType.float32],
+    mut x_dev: DeviceBuffer[DType.float32],
+    mut d_out: DeviceBuffer[DType.float32],
     b: Int,
     l: Int,
     pos0: Int,
@@ -2645,12 +2664,13 @@ def llama_decoder_layer_backward(
     # **A GRADIENT IS EXACTLY WHERE NaNs APPEAR IN PRACTICE**, which makes
     # this refusal more likely to fire than the forward's and makes the
     # named error worth more.
-    # Uploaded first and scanned ON THE DEVICE (2026-09-09), the same
-    # message at the same flat index as the host walk it replaces.
-    var d_in = _upload(ctx, d_out)
-    var bad = device_first_nonfinite(ctx, d_in, len(d_out))
+    # Scan the caller-owned device gradient; copy only an offending scalar
+    # to classify a rejection. Finite inter-layer gradients never visit host.
+    var bad = device_first_nonfinite(ctx, d_out, len(d_out))
     if bad >= 0:
-        var au = bitcast[DType.uint32](d_out[bad]) & UInt32(0x7FFFFFFF)
+        var bad_view = d_out.create_sub_buffer[DType.float32](bad, 1)
+        var bad_value = _download(ctx, bad_view, 1)
+        var au = bitcast[DType.uint32](bad_value[0]) & UInt32(0x7FFFFFFF)
         if au > UInt32(0x7F800000):
             raise Error(
                 String("llama backward: NaN in d_residual2 at flat index ")
@@ -2673,20 +2693,19 @@ def llama_decoder_layer_backward(
     # =====================================================================
     ctx.enqueue_function[bwd_copy_kernel](
         bst.in_d_residual2.unsafe_ptr(),
-        d_in.unsafe_ptr(),
+        d_out.unsafe_ptr(),
         Int32(m * dm),
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
     ctx.enqueue_function[bwd_copy_kernel](
         bst.d_down_proj_out.unsafe_ptr(),
-        d_in.unsafe_ptr(),
+        d_out.unsafe_ptr(),
         Int32(m * dm),
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
     ctx.synchronize()
-    _ = d_in^
     _rec(ctx, trace, prefix, 0, bst.in_d_residual2, m * dm)
     _rec(ctx, trace, prefix, 1, bst.d_down_proj_out, m * dm)
 

@@ -15,9 +15,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('before', type=Path)
     parser.add_argument('after', type=Path)
+    parser.add_argument('--cases', nargs='+', default=['default', 'alternate_gqa'])
     args = parser.parse_args()
     records = []
-    for case in ('default', 'alternate_gqa'):
+    for case in args.cases:
         for step in range(2):
             name = f'{case}-step{step}.npz'
             paths = [args.before / name, args.after / name]

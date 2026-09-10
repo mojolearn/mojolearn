@@ -46,7 +46,7 @@ from training.checks.optimizer import (
 )
 from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
 from transformer.checks.transformer_backward import (
-    BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward,
+    BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
 from transformer.impl.transformers.models.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
@@ -561,22 +561,33 @@ def _byte_step_admitted(ctx: DeviceContext, mut tr: ByteTrainer,
     identical_gemm_backward_b_into(ctx, tr.buffers.dw_lm, tr.buffers.ce_dlogits,
         tr.forward[config.n_layers - 1].residual2, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
     ctx.synchronize()
-    var layer_gradient = download_f32(ctx, tr.buffers.d_h, M * config.d_model)
+    # Keep inter-layer cotangents on device, as the upstream tensor graph
+    # does (transformers/models/llama/modeling_llama.py:402-412). Each
+    # backward call synchronizes before its borrowed buffers are reinserted.
     for layer in range(config.n_layers - 1, -1, -1):
         var stages = tr.forward.pop(layer)
+        var backward = tr.backward.pop(layer)
         var prefix = String("byte.block") + String(layer) + ".backward"
-        if layer == 0:
-            llama_decoder_layer_backward(ctx, tr.backward[layer], stages, tr.weights[layer],
-                tr.rope.cos, tr.rope.sin, tr.buffers.x, layer_gradient,
+        if layer == config.n_layers - 1:
+            if layer == 0:
+                llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
+                    tr.rope.cos, tr.rope.sin, tr.buffers.x, tr.buffers.d_h,
+                    config.batch, config.length, 0, trace, prefix)
+            else:
+                llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
+                    tr.rope.cos, tr.rope.sin, tr.forward[layer - 1].residual2, tr.buffers.d_h,
+                    config.batch, config.length, 0, trace, prefix)
+        elif layer == 0:
+            llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
+                tr.rope.cos, tr.rope.sin, tr.buffers.x, tr.backward[layer].d_x,
                 config.batch, config.length, 0, trace, prefix)
         else:
-            llama_decoder_layer_backward(ctx, tr.backward[layer], stages, tr.weights[layer],
-                tr.rope.cos, tr.rope.sin, tr.forward[layer - 1].residual2, layer_gradient,
+            llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
+                tr.rope.cos, tr.rope.sin, tr.forward[layer - 1].residual2, tr.backward[layer].d_x,
                 config.batch, config.length, 0, trace, prefix)
         ctx.synchronize()
+        tr.backward.insert(layer, backward^)
         tr.forward.insert(layer, stages^)
-        if layer > 0:
-            layer_gradient = download_f32(ctx, tr.backward[layer].d_x, M * config.d_model)
     identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
         tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
         tr.buffers.emb_perm, M, emb)
@@ -604,7 +615,6 @@ def _byte_step_admitted(ctx: DeviceContext, mut tr: ByteTrainer,
     ctx.synchronize()
     tr.completed_steps = next_step
     # Explicit last uses retain all async operands through completion.
-    _ = layer_gradient
     _ = trace
     return ByteStepCapture(ids.copy(), before_p.copy(), before_m.copy(),
         before_v.copy(), before_flags.copy(), grads^, after_p^, after_m^,

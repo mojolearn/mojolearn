@@ -1,0 +1,118 @@
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:52:
+/tmp/mojolearn-performance-publish-20260910/transformer/impl/transformers/models/llama/modeling_llama.mojo:698:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:16:
+/tmp/mojolearn-performance-publish-20260910/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:16:
+/tmp/mojolearn-performance-publish-20260910/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:16:
+/tmp/mojolearn-performance-publish-20260910/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:39:
+/tmp/mojolearn-performance-publish-20260910/training/checks/loss.mojo:503:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:39:
+/tmp/mojolearn-performance-publish-20260910/training/checks/loss.mojo:508:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:39:
+/tmp/mojolearn-performance-publish-20260910/training/checks/loss.mojo:512:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:39:
+/tmp/mojolearn-performance-publish-20260910/training/checks/loss.mojo:513:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:39:
+/tmp/mojolearn-performance-publish-20260910/training/checks/loss.mojo:515:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:39:
+/tmp/mojolearn-performance-publish-20260910/training/checks/loss.mojo:515:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Imported from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:39:
+/tmp/mojolearn-performance-publish-20260910/training/checks/loss.mojo:518:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:153:30: warning: assignment to 'out_p' was never used; assign to '_' instead?
+    var out_p = List[Float32]()
+                             ^
+/private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:154:30: warning: assignment to 'out_m' was never used; assign to '_' instead?
+    var out_m = List[Float32]()
+                             ^
+/private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:155:30: warning: assignment to 'out_v' was never used; assign to '_' instead?
+    var out_v = List[Float32]()
+                             ^
+/private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:157:31: warning: assignment to 'out_flags' was never used; assign to '_' instead?
+    var out_flags = List[Bool]()
+                              ^
+/private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:158:23: warning: assignment to 'loss' was never used; assign to '_' instead?
+    var loss = Float32(0)
+                      ^
+/private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:159:23: warning: assignment to 'result_step' was never used; assign to '_' instead?
+    var result_step = completed
+                      ^
+Included from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Included from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:44:
+/tmp/mojolearn-performance-publish-20260910/training/checks/optimizer.mojo:560:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Included from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:44:
+/tmp/mojolearn-performance-publish-20260910/training/checks/optimizer.mojo:570:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Included from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:44:
+/tmp/mojolearn-performance-publish-20260910/training/checks/optimizer.mojo:590:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Included from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:44:
+/tmp/mojolearn-performance-publish-20260910/training/checks/optimizer.mojo:591:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Included from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:44:
+/tmp/mojolearn-performance-publish-20260910/training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+Included from /private/tmp/mojolearn-performance-publish-20260910/bindings/_mojolearn_byte_lm.mojo:23:
+Included from /tmp/mojolearn-performance-publish-20260910/training/byte_lm.mojo:49:
+/tmp/mojolearn-performance-publish-20260910/transformer/checks/transformer_backward.mojo:2624:28: warning: assignment to 'cells' was never used; assign to '_' instead?
+    var cells = b * nh * l * s
+                           ^

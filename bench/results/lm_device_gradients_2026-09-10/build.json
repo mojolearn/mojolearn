@@ -1,0 +1,15 @@
+{
+  "base": "a66765f003db519d2095c1a99febc2d9c1fc5b14",
+  "source_sha256": {
+    "training/byte_lm.mojo": "10db468b9b28971233df0ce5e61a8c6b4db80949e94233a1b4ac8abdf8293910",
+    "transformer/checks/transformer_backward.mojo": "2118619927dbc19f4d794e6df7af22bae81a51bf6cd817c1b111b075100e1177",
+    "bindings/_mojolearn_byte_lm.mojo": "e18c5b1b09fbc790a7400eea316dbd107176239bd43835526b1095db45f51ef6",
+    "bindings/_mojolearn_transformer.mojo": "6e4ee7da128d111fa1f2378f7796ecc6831f9d5642c8acef49dfa92652e8c453",
+    "tools/byte_lm_capture_regression.py": "2c5c5be8241a072f9affd0a55272893f789c2ccd21d3588a676bed79e11b8480"
+  },
+  "binary_sha256": {
+    "/tmp/device-gradient-byte-lm.so": "814907c7925dc2eef1f15af12900e138f43712949f978cadf8ecbfe098874f02",
+    "/tmp/device-gradient-transformer.so": "7b20dab99ea5ed46218f8425f5ec93d663d5d9b9b26352e7587d04251dc0a253"
+  },
+  "build": "pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml mojo build -j 2 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_COLUMN_APPLE -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I CHECKOUT -I CHECKOUT/bindings bindings/BINDING.mojo -o OUTPUT"
+}

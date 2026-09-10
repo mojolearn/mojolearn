@@ -73,3 +73,5 @@ Next work toward a practical long run:
 No new performance measurement or opponent timing was made in this change.
 Existing kNN/GEMM/attention performance status remains in PERFORMANCE_STATUS.
 Trees were untouched.
+
+Continuation: [device gradients and branch audit](HANDOFF_lm_device_gradients_2026-09-10.md).
