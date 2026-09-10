@@ -76,6 +76,8 @@ comptime SAB_ACCUM_REFILLS = is_defined[
     "MOJOLEARN_EMB_SABOTAGE_ACCUM_REFILLS"
 ]()
 
+comptime SAB_SORT_NEGATIVE_CONTROL = is_defined["MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL"]()
+
 comptime ANY_EMB_SABOTAGE = (
     SAB_FOLD_DESCENDING
     or SAB_FOLD_BALANCED_TREE
@@ -86,6 +88,7 @@ comptime ANY_EMB_SABOTAGE = (
     or SAB_FOLD_READS_LAUNCH
     or SAB_RANK_BY_ARRIVAL
     or SAB_SORT_TIE_REVERSED
+    or SAB_SORT_NEGATIVE_CONTROL
     or SAB_PAD_ROW_CONTRIBUTES
     or SAB_PAD_ROW_NEG_ZERO
     or SAB_NO_FLUSH_ACC
@@ -116,6 +119,8 @@ def emb_sabotage_name() -> String:
         return String("RANK_BY_ARRIVAL")
     comptime if SAB_SORT_TIE_REVERSED:
         return String("SORT_TIE_REVERSED")
+    comptime if SAB_SORT_NEGATIVE_CONTROL:
+        return String("SORT_NEGATIVE_CONTROL")
     comptime if SAB_PAD_ROW_CONTRIBUTES:
         return String("PAD_ROW_CONTRIBUTES")
     comptime if SAB_PAD_ROW_NEG_ZERO:
