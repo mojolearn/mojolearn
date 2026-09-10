@@ -315,3 +315,34 @@ def test_native_result_owns_fresh_storage(monkeypatch):
     x[:] = 5.0
     assert np.asarray(a).tolist() == np.ones((4, 3)).tolist()
     assert isinstance(a, Array) and a._base is None
+
+
+def test_anon_store_behaves_like_an_array_store(monkeypatch):
+    """On 3.12+ the native converters write into an anonymous mapping. The
+    resulting Array must do everything an array.array-backed one does."""
+    import sys
+    _forced_present(monkeypatch)
+    x = _matrix((300, 7), seed=2471)
+    a, copied = _buffer.as_f32_colmajor(x, name="X")
+    assert copied
+    if sys.version_info >= (3, 12):
+        assert isinstance(a._store, _buffer._AnonStore)
+    want = np.asfortranarray(x, dtype=np.float32)
+    assert a.tobytes() == want.tobytes(order="F")
+    assert np.array_equal(np.asarray(a), want, equal_nan=True)
+    assert np.asarray(a).ctypes.data == a._addr  # zero-copy view
+    c = a.copy()
+    assert c.tobytes() == a.tobytes() and c._addr != a._addr
+    r = a.reshape(-1)  # F -> C copy then flat view
+    assert r.tobytes() == np.ascontiguousarray(want).reshape(-1).tobytes()
+    assert a._flat().tobytes() == want.T.reshape(-1).tobytes()
+    # feeding the Array back in is a zero-copy borrow of the mapping
+    b, copied = _buffer.as_f32_colmajor(a, name="X")
+    assert not copied and b._addr == a._addr
+    # and a C-order request from it goes through the pure reorder
+    d, copied = _buffer.as_f32_c(a, name="X")
+    assert copied and d.tobytes() == np.ascontiguousarray(want).tobytes()
+    # element access and reductions read the right values
+    assert a[2, 3] == float(want[2, 3]) or (math.isnan(a[2, 3]) and math.isnan(want[2, 3]))
+    finite = want[np.isfinite(want)]
+    assert _buffer.all_finite(a) is False  # the edge values include inf/nan

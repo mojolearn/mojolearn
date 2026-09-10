@@ -8,7 +8,9 @@ Three arms per shape, interleaved, at least PAIRS rounds:
 
 Reports the MINIMUM per arm (the least thermally damaged sample), the pair
 count, and the spread between the first and last NumPy sample. A spread
-above 20 percent voids the window; the script says so and exits 3.
+above 20 percent voids the window; the script says so and exits 3. Cases
+under a millisecond (the zero-copy borrow) are exempt: their spread is
+timer noise, not heat.
 
 Run from the repo root with the package on the path and the base binding
 built:
@@ -26,7 +28,7 @@ import numpy as np
 
 from mojolearn import _buffer
 
-PAIRS = 7
+PAIRS = 9
 SHAPES = [(1_000_000, 10), (2_000_000, 20)]
 KEYS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32")
 
@@ -111,10 +113,18 @@ def main():
     print(f"pairs per case: {PAIRS}; minimum of each arm reported (ms)")
     print(f"{'case':<52} {'numpy':>9} {'native':>9} {'python':>10} {'np spread':>10}")
     for label, mins, spread, _ in rows:
-        flag = "  VOID" if spread > 0.20 else ""
-        void |= spread > 0.20
+        # the drift rule is about heat; a case that finishes in under a
+        # millisecond (the zero-copy borrow) reports timer noise, not heat
+        drifted = spread > 0.20 and mins["numpy"] >= 1.0
+        flag = "  VOID" if drifted else ("  (sub-ms, drift rule n/a)" if spread > 0.20 else "")
+        void |= drifted
         print(f"{label:<52} {mins['numpy']:>9.3f} {mins['native']:>9.3f} "
               f"{mins['python']:>10.3f} {spread*100:>9.1f}%{flag}")
+    print("\nall samples (ms), in run order, for every case:")
+    for label, _, _, samples in rows:
+        print(f"  {label}")
+        for arm in ("numpy", "native", "python"):
+            print(f"    {arm:<7} " + " ".join(f"{t:8.3f}" for t in samples[arm]))
     if void:
         print("\nAT LEAST ONE WINDOW VOID: NumPy drifted more than 20% first to "
               "last; the box was heating. Take it again.")
