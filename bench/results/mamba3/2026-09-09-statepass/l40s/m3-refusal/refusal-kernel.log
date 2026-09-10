@@ -1,0 +1,15 @@
+4511 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30bd80000000, nodemask=1)
+Imported from /root/mamba3/mamba/checks/mamba3_refusal_check.mojo:10:
+/root/mamba3/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:28:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mamba3/mamba/checks/mamba3_refusal_check.mojo:10:
+/root/mamba3/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:51:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+4511 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a7940000000, nodemask=2)
+Mamba3 refusal PASS: 153 cases, exact errors, operand bits unchanged, named order

@@ -1,0 +1,2 @@
+mamba3 block gate (IDENTICAL_MAMBA3_CONTRACT.md section 8); profile mojolearn.identical.mamba3.siso.fp32.v1; build mode IDENTICAL
+GATE D (cross) PASS: prefill 60 + decode through 70 == prefill 70, bitwise; the chain crossed the Q = 64 boundary and the sealed buffer folded and refilled

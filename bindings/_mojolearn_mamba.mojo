@@ -132,12 +132,17 @@ rc 134), an open defect. Build:
 `bash bindings/build_mamba.sh` (per tier via MOJOLEARN_NUMERIC_MODE).
 """
 
+from std.memory import memcpy
+from std.time import perf_counter_ns
+from std.sys.compile import is_defined
+from mamba.impl.mamba_ssm.ops.mamba3_siso import m3_phase_tick
+from mamba.impl.mamba_ssm.modules.mamba3_transfer import M3_BULK_TRANSFER, m3_upload, m3_download
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -224,6 +229,66 @@ def _write_f32(addr: Int, values: List[Float32]) raises:
     var p = _f32_ptr(addr)
     for i in range(len(values)):
         p.unsafe_store(i, values[i])
+
+
+comptime M3_DIRECT_TRANSFER = M3_BULK_TRANSFER and not is_defined["MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER"]()
+
+
+def _m3_read_f32(addr: Int, n: Int) raises -> List[Float32]:
+    comptime if not M3_BULK_TRANSFER:
+        return _read_f32(addr, n)
+    else:
+        var p = _f32_ptr(addr)
+        var out = List[Float32](length=n, fill=Float32(0.0))
+        if n > 0:
+            memcpy(dest=out.unsafe_ptr(), src=p, count=n)
+        return out^
+
+
+def _m3_write_f32(addr: Int, values: List[Float32]) raises:
+    comptime if not M3_BULK_TRANSFER:
+        _write_f32(addr, values)
+    else:
+        var p = _f32_ptr(addr)
+        if len(values) > 0:
+            memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
+
+
+def _m3_upload_addr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    comptime if not M3_DIRECT_TRANSFER:
+        return m3_upload(ctx, _m3_read_f32(addr, n))
+    else:
+        var src = _f32_ptr(addr)
+        var count = max(n, 1)
+        var dev = ctx.enqueue_create_buffer[DType.float32](count)
+        var host = ctx.enqueue_create_host_buffer[DType.float32](count)
+        ctx.synchronize()
+        if n > 0:
+            memcpy(dest=host.unsafe_ptr(), src=src, count=n)
+        else:
+            host.unsafe_ptr().unsafe_store(0, Float32(0.0))
+        ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+        ctx.synchronize()
+        _ = host^
+        return dev^
+
+
+def _m3_download_addr(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, addr: Int) raises:
+    comptime if not M3_DIRECT_TRANSFER:
+        _m3_write_f32(addr, m3_download(ctx, buf, n))
+    else:
+        var dst = _f32_ptr(addr)
+        var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+        ctx.synchronize()
+        if n == len(buf):
+            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+        else:
+            var view = buf.create_sub_buffer[DType.float32](0, n)
+            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+        ctx.synchronize()
+        if n > 0:
+            memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
+        _ = host^
 
 
 def mamba_numeric_mode_binding() raises -> PythonObject:
@@ -694,6 +759,36 @@ def mamba2_decode_step_binding(
 # ===========================================================================
 
 
+def _m3_load_weights(ctx: DeviceContext, a: List[Int], dims: Mamba3Dims) raises -> Mamba3DeviceWeights:
+    var dm = dims.d_model
+    var di = dims.d_inner
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    comptime if M3_DIRECT_TRANSFER:
+        var norm_w = _m3_upload_addr(ctx, a[1], dm)
+        var w_in = _m3_upload_addr(ctx, a[2], dip * dm)
+        var dt_bias = _m3_upload_addr(ctx, a[3], nh)
+        var bnorm_w = _m3_upload_addr(ctx, a[4], M3_D_STATE)
+        var cnorm_w = _m3_upload_addr(ctx, a[5], M3_D_STATE)
+        var b_bias = _m3_upload_addr(ctx, a[6], nh * M3_D_STATE)
+        var c_bias = _m3_upload_addr(ctx, a[7], nh * M3_D_STATE)
+        var d_skip = _m3_upload_addr(ctx, a[8], nh)
+        var w_out = _m3_upload_addr(ctx, a[9], dm * di)
+        return Mamba3DeviceWeights(dims, norm_w^, w_in^, dt_bias^, bnorm_w^, cnorm_w^, b_bias^, c_bias^, d_skip^, w_out^)
+    else:
+        var w = Mamba3Weights(dims)
+        w.norm_w = _m3_read_f32(a[1], dm)
+        w.w_in = _m3_read_f32(a[2], dip * dm)
+        w.dt_bias = _m3_read_f32(a[3], nh)
+        w.bnorm_w = _m3_read_f32(a[4], M3_D_STATE)
+        w.cnorm_w = _m3_read_f32(a[5], M3_D_STATE)
+        w.b_bias = _m3_read_f32(a[6], nh * M3_D_STATE)
+        w.c_bias = _m3_read_f32(a[7], nh * M3_D_STATE)
+        w.d_skip = _m3_read_f32(a[8], nh)
+        w.w_out = _m3_read_f32(a[9], dm * di)
+        return Mamba3DeviceWeights(ctx, w)
+
+
 def _mamba3_run(
     a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
 ) raises -> Int:
@@ -723,16 +818,9 @@ def _mamba3_run(
             + "; the two sides of this boundary disagree about the state"
         )
 
-    var w = Mamba3Weights(dims)
-    w.norm_w = _read_f32(a[1], dm)
-    w.w_in = _read_f32(a[2], dip * dm)
-    w.dt_bias = _read_f32(a[3], nh)
-    w.bnorm_w = _read_f32(a[4], M3_D_STATE)
-    w.cnorm_w = _read_f32(a[5], M3_D_STATE)
-    w.b_bias = _read_f32(a[6], nh * M3_D_STATE)
-    w.c_bias = _read_f32(a[7], nh * M3_D_STATE)
-    w.d_skip = _read_f32(a[8], nh)
-    w.w_out = _read_f32(a[9], dm * di)
+    var phase_tick = 0
+    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
+        phase_tick = Int(perf_counter_ns())
 
     var theta_n = b * nh * M3_NUM_ROPE_ANGLES
     var h_n = b * nh * M3_HEADDIM * M3_D_STATE
@@ -741,19 +829,17 @@ def _mamba3_run(
     var v_n = b * nh * M3_HEADDIM
 
     var ctx = DeviceContext()
-    var dw = Mamba3DeviceWeights(ctx, w)
+    m3_phase_tick(ctx, phase_tick, String("surface.weight_lists_and_context"))
+    var dw = _m3_load_weights(ctx, a, dims)
+    m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
     # The caller's ten-piece state over the fresh zeros (DEVIATION 794).
     var dstate = Mamba3DeviceState(ctx, b, dims)
-    dstate.buf_qrot = mamba_upload(
-        ctx, _read_f32(a[12], qrow_n * M3_D_STATE)
-    )
-    dstate.buf_krot = mamba_upload(
-        ctx, _read_f32(a[13], qrow_n * M3_D_STATE)
-    )
-    dstate.buf_v = mamba_upload(ctx, _read_f32(a[14], qrow_n * M3_HEADDIM))
-    dstate.buf_dt = mamba_upload(ctx, _read_f32(a[15], qrow_n))
-    dstate.buf_sig = mamba_upload(ctx, _read_f32(a[16], qrow_n))
-    dstate.buf_adt = mamba_upload(ctx, _read_f32(a[17], qrow_n))
+    dstate.buf_qrot = _m3_upload_addr(ctx, a[12], qrow_n * M3_D_STATE)
+    dstate.buf_krot = _m3_upload_addr(ctx, a[13], qrow_n * M3_D_STATE)
+    dstate.buf_v = _m3_upload_addr(ctx, a[14], qrow_n * M3_HEADDIM)
+    dstate.buf_dt = _m3_upload_addr(ctx, a[15], qrow_n)
+    dstate.buf_sig = _m3_upload_addr(ctx, a[16], qrow_n)
+    dstate.buf_adt = _m3_upload_addr(ctx, a[17], qrow_n)
     dstate.buf_len = q0
     if pend == 1:
         # THROUGH the lane's own helper, AFTER buf_len is set, so its
@@ -761,53 +847,57 @@ def _mamba3_run(
         # the lane's own words (DEVIATION 794).
         dstate.set_input_states(
             ctx,
-            _read_f32(a[10], theta_n),
-            _read_f32(a[11], h_n),
-            _read_f32(a[18], k_n),
-            _read_f32(a[19], v_n),
+            _m3_read_f32(a[10], theta_n),
+            _m3_read_f32(a[11], h_n),
+            _m3_read_f32(a[18], k_n),
+            _m3_read_f32(a[19], v_n),
         )
     else:
-        dstate.theta = mamba_upload(ctx, _read_f32(a[10], theta_n))
-        dstate.h = mamba_upload(ctx, _read_f32(a[11], h_n))
+        dstate.theta = _m3_upload_addr(ctx, a[10], theta_n)
+        dstate.h = _m3_upload_addr(ctx, a[11], h_n)
         # Idle outside a pending continuation, uploaded anyway so the
         # caller's bytes round-trip unchanged (DEVIATION 792's rule).
-        dstate.pend_k = mamba_upload(ctx, _read_f32(a[18], k_n))
-        dstate.pend_v = mamba_upload(ctx, _read_f32(a[19], v_n))
+        dstate.pend_k = _m3_upload_addr(ctx, a[18], k_n)
+        dstate.pend_v = _m3_upload_addr(ctx, a[19], v_n)
+    m3_phase_tick(ctx, phase_tick, String("surface.state_upload"))
     var dstages = Mamba3DeviceStages(ctx, b, l, q0, dims)
-    var dx = mamba_upload(ctx, _read_f32(a[0], b * l * dm))
+    m3_phase_tick(ctx, phase_tick, String("surface.stage_allocations"))
+    var dx = _m3_upload_addr(ctx, a[0], b * l * dm)
 
+    m3_phase_tick(ctx, phase_tick, String("surface.x_upload"))
     var trace = IdentityTrace.disabled()
     mamba3_block_forward(
         ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
     )
 
-    _write_f32(a[20], mamba_download(ctx, dstages.residual_out, b * l * dm))
+    m3_phase_tick(ctx, phase_tick, String("surface.block"))
+    _m3_download_addr(ctx, dstages.residual_out, b * l * dm, a[20])
     # The FOUR reports (contract section 7's ssd.* stages), NOT the
     # resumption state -- DEVIATION 794's last clause.
-    _write_f32(a[21], mamba_download(ctx, dstages.h_last, h_n))
-    _write_f32(a[22], mamba_download(ctx, dstages.k_last, k_n))
-    _write_f32(a[23], mamba_download(ctx, dstages.v_last, v_n))
-    _write_f32(a[24], mamba_download(ctx, dstages.theta_last, theta_n))
-    _write_f32(a[10], mamba_download(ctx, dstate.theta, theta_n))
-    _write_f32(a[11], mamba_download(ctx, dstate.h, h_n))
-    _write_f32(
-        a[12], mamba_download(ctx, dstate.buf_qrot, qrow_n * M3_D_STATE)
-    )
-    _write_f32(
-        a[13], mamba_download(ctx, dstate.buf_krot, qrow_n * M3_D_STATE)
-    )
-    _write_f32(a[14], mamba_download(ctx, dstate.buf_v, qrow_n * M3_HEADDIM))
-    _write_f32(a[15], mamba_download(ctx, dstate.buf_dt, qrow_n))
-    _write_f32(a[16], mamba_download(ctx, dstate.buf_sig, qrow_n))
-    _write_f32(a[17], mamba_download(ctx, dstate.buf_adt, qrow_n))
-    _write_f32(a[18], mamba_download(ctx, dstate.pend_k, k_n))
-    _write_f32(a[19], mamba_download(ctx, dstate.pend_v, v_n))
+    _m3_download_addr(ctx, dstages.h_last, h_n, a[21])
+    _m3_download_addr(ctx, dstages.k_last, k_n, a[22])
+    _m3_download_addr(ctx, dstages.v_last, v_n, a[23])
+    _m3_download_addr(ctx, dstages.theta_last, theta_n, a[24])
+    _m3_download_addr(ctx, dstate.theta, theta_n, a[10])
+    _m3_download_addr(ctx, dstate.h, h_n, a[11])
+    _m3_download_addr(ctx, dstate.buf_qrot, qrow_n * M3_D_STATE, a[12])
+    _m3_download_addr(ctx, dstate.buf_krot, qrow_n * M3_D_STATE, a[13])
+    _m3_download_addr(ctx, dstate.buf_v, qrow_n * M3_HEADDIM, a[14])
+    _m3_download_addr(ctx, dstate.buf_dt, qrow_n, a[15])
+    _m3_download_addr(ctx, dstate.buf_sig, qrow_n, a[16])
+    _m3_download_addr(ctx, dstate.buf_adt, qrow_n, a[17])
+    _m3_download_addr(ctx, dstate.pend_k, k_n, a[18])
+    _m3_download_addr(ctx, dstate.pend_v, v_n, a[19])
+    m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
     var out_len = dstate.buf_len
     _ = dw^
     _ = dstate^
     _ = dstages^
     _ = dx^
+    m3_phase_tick(ctx, phase_tick, String("surface.buffer_destruction"))
     _ = ctx^
+    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
+        print("M3_PHASE", "surface.context_destruction", Float64(Int(perf_counter_ns()) - phase_tick) / 1e6)
     return out_len
 
 
