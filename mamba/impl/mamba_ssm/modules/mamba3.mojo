@@ -76,6 +76,7 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mamba.impl.mamba_ssm.modules.mamba3_transfer import m3_upload as mamba_upload, m3_download as mamba_download
+from mamba.impl.mamba_ssm.modules.mamba3_refusal import m3_refuse_nonfinite_named
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
@@ -125,7 +126,6 @@ from mamba.impl.mamba_ssm.ops.mamba3_siso import (
     siso3_sabotage_name,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
-    _refuse_nonfinite_named,
     mamba_rms_norm,
     mamba_zeros,
     residual_add_kernel,
@@ -992,81 +992,29 @@ def mamba3_refuse_bad_inputs(
     var di = dims.d_inner
     var dip = dims.d_in_proj()
     var nh = dims.nheads
-    _refuse_nonfinite_named("x", mamba_download(ctx, x, b * l * dm))
+    m3_refuse_nonfinite_named(ctx, "x", x, b * l * dm)
     if not w.weights_checked:
-        _refuse_nonfinite_named(
-            "norm.weight", mamba_download(ctx, w.norm_w, dm)
-        )
-        _refuse_nonfinite_named(
-            "in_proj.weight", mamba_download(ctx, w.w_in, dip * dm)
-        )
-        _refuse_nonfinite_named(
-            "dt_bias", mamba_download(ctx, w.dt_bias, nh)
-        )
-        _refuse_nonfinite_named(
-            "B_norm.weight", mamba_download(ctx, w.bnorm_w, M3_D_STATE)
-        )
-        _refuse_nonfinite_named(
-            "C_norm.weight", mamba_download(ctx, w.cnorm_w, M3_D_STATE)
-        )
-        _refuse_nonfinite_named(
-            "B_bias", mamba_download(ctx, w.b_bias, nh * M3_D_STATE)
-        )
-        _refuse_nonfinite_named(
-            "C_bias", mamba_download(ctx, w.c_bias, nh * M3_D_STATE)
-        )
-        _refuse_nonfinite_named("D", mamba_download(ctx, w.d_skip, nh))
-        _refuse_nonfinite_named(
-            "out_proj.weight", mamba_download(ctx, w.w_out, dm * di)
-        )
+        m3_refuse_nonfinite_named(ctx, "norm.weight", w.norm_w, dm)
+        m3_refuse_nonfinite_named(ctx, "in_proj.weight", w.w_in, dip * dm)
+        m3_refuse_nonfinite_named(ctx, "dt_bias", w.dt_bias, nh)
+        m3_refuse_nonfinite_named(ctx, "B_norm.weight", w.bnorm_w, M3_D_STATE)
+        m3_refuse_nonfinite_named(ctx, "C_norm.weight", w.cnorm_w, M3_D_STATE)
+        m3_refuse_nonfinite_named(ctx, "B_bias", w.b_bias, nh * M3_D_STATE)
+        m3_refuse_nonfinite_named(ctx, "C_bias", w.c_bias, nh * M3_D_STATE)
+        m3_refuse_nonfinite_named(ctx, "D", w.d_skip, nh)
+        m3_refuse_nonfinite_named(ctx, "out_proj.weight", w.w_out, dm * di)
         w.weights_checked = True
-    _refuse_nonfinite_named(
-        "state.theta",
-        mamba_download(ctx, state.theta, b * nh * M3_NUM_ROPE_ANGLES),
-    )
-    _refuse_nonfinite_named(
-        "state.h",
-        mamba_download(ctx, state.h, b * nh * M3_HEADDIM * M3_D_STATE),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_qrot",
-        mamba_download(
-            ctx, state.buf_qrot, b * M3_CHUNK_SIZE * nh * M3_D_STATE
-        ),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_krot",
-        mamba_download(
-            ctx, state.buf_krot, b * M3_CHUNK_SIZE * nh * M3_D_STATE
-        ),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_v",
-        mamba_download(
-            ctx, state.buf_v, b * M3_CHUNK_SIZE * nh * M3_HEADDIM
-        ),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_dt",
-        mamba_download(ctx, state.buf_dt, b * M3_CHUNK_SIZE * nh),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_sig",
-        mamba_download(ctx, state.buf_sig, b * M3_CHUNK_SIZE * nh),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_adt",
-        mamba_download(ctx, state.buf_adt, b * M3_CHUNK_SIZE * nh),
-    )
+    m3_refuse_nonfinite_named(ctx, "state.theta", state.theta, b * nh * M3_NUM_ROPE_ANGLES)
+    m3_refuse_nonfinite_named(ctx, "state.h", state.h, b * nh * M3_HEADDIM * M3_D_STATE)
+    m3_refuse_nonfinite_named(ctx, "state.buf_qrot", state.buf_qrot, b * M3_CHUNK_SIZE * nh * M3_D_STATE)
+    m3_refuse_nonfinite_named(ctx, "state.buf_krot", state.buf_krot, b * M3_CHUNK_SIZE * nh * M3_D_STATE)
+    m3_refuse_nonfinite_named(ctx, "state.buf_v", state.buf_v, b * M3_CHUNK_SIZE * nh * M3_HEADDIM)
+    m3_refuse_nonfinite_named(ctx, "state.buf_dt", state.buf_dt, b * M3_CHUNK_SIZE * nh)
+    m3_refuse_nonfinite_named(ctx, "state.buf_sig", state.buf_sig, b * M3_CHUNK_SIZE * nh)
+    m3_refuse_nonfinite_named(ctx, "state.buf_adt", state.buf_adt, b * M3_CHUNK_SIZE * nh)
     if state.pending:
-        _refuse_nonfinite_named(
-            "input_states.k",
-            mamba_download(ctx, state.pend_k, b * nh * M3_D_STATE),
-        )
-        _refuse_nonfinite_named(
-            "input_states.v",
-            mamba_download(ctx, state.pend_v, b * nh * M3_HEADDIM),
-        )
+        m3_refuse_nonfinite_named(ctx, "input_states.k", state.pend_k, b * nh * M3_D_STATE)
+        m3_refuse_nonfinite_named(ctx, "input_states.v", state.pend_v, b * nh * M3_HEADDIM)
 
 
 # ===========================================================================
