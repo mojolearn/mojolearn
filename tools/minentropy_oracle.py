@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CatBoost's OWN MinEntropy borders, dumped as a fixture the port is gated on.
+"""CatBoost's OWN MinEntropy borders, dumped as a fixture the implementation is gated on.
 
     pixi run -e bench python tools/minentropy_oracle.py > bench/minentropy_oracle.txt
 
 WHY THIS EXISTS. `MinEntropy` is the border selection CatBoost's GPU uses for
 FeatureFreq simple CTRs (`CreateDefaultCounter`,
-`catboost_options.cpp:392-415`), and it is NOT the `GreedyLogSum` we ported for
+`catboost_options.cpp:392-415`), and it is NOT the `GreedyLogSum` we implemented for
 numeric features. `gbdt/grid_creator/binarization.best_split_min_entropy` is a
-transliteration of their exact dynamic program, and this file is the only thing
+statement-for-statement match of their exact dynamic program, and this file is the only thing
 that can tell us it is right: everything else we could compare it against is a
 second reading of the same source by the same reader.
 

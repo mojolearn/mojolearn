@@ -2,7 +2,7 @@
 
 GPU batched ARIMA fitting and forecasting, derived from cuML's Kalman-filter implementation.
 
-The supported surface and deliberate refusals are recorded in `DERIVATION_MAP.tsv` and
+The supported surface and deliberate refusals are and
 `NOT_IMPLEMENTED.tsv`. `SEAMS.tsv` identifies boundaries where upstream behavior or numerical
 ordering can diverge. Those machine-readable files and the checks are authoritative; historical
 investigation notes live in Git history.

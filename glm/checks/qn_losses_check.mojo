@@ -4,7 +4,7 @@
 QN_LOSS_SVC_L1, QN_LOSS_SVC_L2, QN_LOSS_SVR_L1, QN_LOSS_SVR_L2): oracle,
 reach, identity.
 
-DEVIATIONS 707-708 (the ports, `glm/impl/glm/qn/glm_linear.mojo`,
+DEVIATIONS 707-708 (the implements, `glm/impl/glm/qn/glm_linear.mojo`,
 `glm_svm.mojo`) and 712-713 (the gates here). See `glm/README.md`, "QN
 losses". Every check runs over ALL SIX losses. The checks:
 
@@ -502,7 +502,7 @@ def check_losses_refuses_by_name() raises:
     if m1.find("min_owlqn") < 0:
         raise Error("l1 did not raise by name; got: " + m1)
     var m2 = _fit_raises(ctx, _params(QN_LOSS_SVR_L2, 1.0, True, True), 1, True)
-    if m2.find("sample_weight is NOT PORTED") < 0:
+    if m2.find("sample_weight is NOT IMPLEMENTED") < 0:
         raise Error("sample_weight did not raise by name; got: " + m2)
     print("check_losses_refuses_by_name OK: each loss with the wrong C (their `invalid C` text), l1 (OWL-QN) and sample_weight RAISE by name")
 
@@ -513,7 +513,7 @@ def check_losses_refuses_by_name() raises:
 
 
 def _host_lz(loss: Int, y: Float32, z: Float32) -> Float32:
-    """The six `Lz`, re-spelled with the same pins as the port."""
+    """The six `Lz`, re-spelled with the same pins as the implementation."""
     if loss == QN_LOSS_SQUARED:
         var diff = ftz(z - y)
         return ftz(ftz(diff * diff) * Float32(0.5))

@@ -7,7 +7,7 @@ Phase 2b of `archive/plans/IDENTICAL_GEMM_PLAN.md`'s lane charter. The contract 
 `gemm/checks/gemm_oracle.mojo::gemm_oracle`, bit for bit, for `OP_NN`,
 `OP_NT` and `OP_TN`.
 
-**NOT A PORT.** RAFT's standalone matrix product is cuBLASLt, a closed
+**NO REFERENCE FILE.** RAFT's standalone matrix product is cuBLASLt, a closed
 library (`gemm_oracle.mojo`'s header carries the citation). What IS mirrored
 is the STRUCTURE: RAFT's `pairwise_distance_base.cuh:139-149` gives one
 thread block the entire `k` range of its output tile and walks `kidx`

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The pieces every IVF index shares: chunk offsets and the two postprocesses.
 
-PORT OF `cuvs/src/neighbors/ivf_common.cuh` (`kOutOfBoundsRecord` :31,
+FOLLOWS `cuvs/src/neighbors/ivf_common.cuh` (`kOutOfBoundsRecord` :31,
 `calc_chunk_indices` :49-77 with its kernel in `ivf_common.cu:22-51`,
 `find_chunk_ix` :94-109, `postprocess_neighbors` :113-165,
 `postprocess_distances` :175-...) at cuVS `6ba2ce2`. Partial, and the
@@ -24,12 +24,12 @@ order". Two things follow, and both are in their file.
     id. That whole path exists because their scan's output is a position
     and the caller wants a row id.
 
-THE FIRST HALF IS PORTED AND THE SECOND HALF IS NOT, **DEVIATION 1790**.
-This port's candidate row is not probe-concatenated: it is the ascending-
+THE FIRST HALF IS IMPLEMENTED AND THE SECOND HALF IS NOT, **DEVIATION 1790**.
+This implementation's candidate row is not probe-concatenated: it is the ascending-
 original-index merge of the probed lists (`ivf/checks/list_layout.mojo`,
 DEVIATION 1786), carried alongside a `cand_orig` array of original row ids.
 So the "turn a position into a row id" step is one array read, and their
-binary search would be a second, slower spelling of a mapping this port
+binary search would be a second, slower spelling of a mapping this implementation
 already holds explicitly. Recorded in `ivf/NOT_IMPLEMENTED.tsv` with this
 sentence.
 
@@ -53,10 +53,10 @@ comptime IVF_OUT_OF_BOUNDS_RECORD: UInt32 = 0xFFFFFFFF
 
 RECORDED AND NOT WRITTEN. `postprocess_neighbors_kernel` stores it wherever
 `find_chunk_ix` returns `n_probes`, which happens when the probed lists
-between them hold fewer than `k` vectors (`:106-108`). This port REFUSES
+between them hold fewer than `k` vectors (`:106-108`). This implementation REFUSES
 that case by name instead (DEVIATION 1794): a caller who gets `k` slots
 back, some of them a sentinel, has to know to test for the sentinel, and
-the ported selector cannot take `k > len` at all -- the same hole
+the implemented selector cannot take `k > len` at all -- the same hole
 `neighbors/impl/neighbors/detail/knn_brute_force.mojo` refuses `k >
 n_index` for, for the same reason, in the same words."""
 
@@ -158,9 +158,9 @@ def postprocess_distances_is_identity(metric: Int) raises -> Bool:
     NOTHING -- `needs_cast` is false, `needs_copy` is false, and the
     `scaling_factor != 1.0` arm is not taken. Their `search_impl` only
     calls it at all on the `!manage_local_topk` path (`:295-298`), which is
-    the `k > warpsort::kMaxCapacity` path this port does not have.
+    the `k > warpsort::kMaxCapacity` path this implementation does not have.
 
-    So on the two metrics this port carries it is the identity, and this
+    So on the two metrics this implementation carries it is the identity, and this
     function says so with the citation rather than a comment nobody
     reads. **DEVIATION 1791.** It raises rather than returning `False` for
     anything else, because a `False` here would be read as "some other arm
@@ -178,5 +178,5 @@ def postprocess_distances_is_identity(metric: Int) raises -> Bool:
     raise Error(
         "postprocess_distances: metric "
         + String(metric)
-        + " is not one this port carries; there is no arm to run."
+        + " is not one this implementation carries; there is no arm to run."
     )

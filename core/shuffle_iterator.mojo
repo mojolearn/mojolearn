@@ -4,9 +4,9 @@
 
 NO CUML FILE MIRRORS THIS. It is CCCL -- NVIDIA's CUDA Core Compute
 Libraries, the home of Thrust, CUB and libcu++ -- which this tree does not
-mirror file for file, the same way `cluster/checks/` holds ported RAFT
+mirror file for file, the same way `cluster/checks/` holds implemented RAFT
 primitives rather than a RAFT directory. CCCL is open source, so it is a
-PORT target and not a substitution target, and every construct below cites
+IMPLEMENTATION target and not a substitution target, and every construct below cites
 the header it was transcribed from.
 
 PIN. CCCL **3.4.3**, commit `9d65c77f9763cfec20452e4071128d3f0bd2625b`,
@@ -50,7 +50,7 @@ silently on somebody's dataset.
 
 ================= DEVIATION BLOCK (whole file) =================
 DEVIATION 121 (CLOSED by this file; it was opened in
-`kernels/builder_kernels.mojo` as "not ported, and open").
+`kernels/builder_kernels.mojo` as "not implemented, and open").
 
 NO ALGORITHMIC DEVIATION. Every constant, every shift width, every
 truncation and the do-while cycle walk are transcribed from CCCL 3.4.3 and
@@ -62,7 +62,7 @@ Three SPELLING notes, none of which change a value:
    Darwin and 64-bit on glibc/x86-64. That selects between Schrage's
    algorithm (`linear_congruential_engine.h:117+`) and the direct
    `(a*x+c)%m` (`:95-103`). Both compute the same integer exactly, so this
-   port uses UInt64 arithmetic and the direct form unconditionally. Held to
+   implementation uses UInt64 arithmetic and the direct form unconditionally. Held to
    both: the oracle was run against an explicitly 64-bit-result-type engine
    as well and produced bit-identical keys and permutations.
 
@@ -141,7 +141,7 @@ def lcg_seed(s: UInt32) -> UInt64:
     THE ZERO CASE IS NOT DECORATION. Seeds 0, 1, 2147483647, 2^31 and
     0xFFFFFFFF all reduce to state 1 and therefore produce the IDENTICAL
     stream -- verified against their compiled header, all giving first draws
-    `48271, 182605794, 1291394886`. A port that skips the `== 0` rescue
+    `48271, 182605794, 1291394886`. An implementation that skips the `== 0` rescue
     produces a degenerate all-zero stream for seed 0 and diverges for the
     others. `fnv1a32_hash` can return 0.
     """
@@ -308,7 +308,7 @@ def shuffled_feature(
     per-`sample_idx` lambda (`builder_kernels.cuh:90-92`), so every one of a
     node's `k` threads redraws all 24 keys and reruns the cycle walk. That
     is redundant work by construction and it is transcribed rather than
-    hoisted -- copy, do not improve. Hoisting it per node would be a
+    hoisted. Hoisting it per node would be a
     deviation with a measurement attached, and no measurement is being taken
     this round.
     """

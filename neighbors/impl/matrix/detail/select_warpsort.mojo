@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Warp-sort top-k, the bitonic WarpSelect family.
 
-PORT OF `raft/matrix/detail/select_warpsort.cuh` at RAFT `9aa17e5`, together
+FOLLOWS `raft/matrix/detail/select_warpsort.cuh` at RAFT `9aa17e5`, together
 with the whole of `raft/util/bitonic_sort.cuh` which it is built on. Partial:
-ONE of the four warp queues is ported, `warp_sort_immediate`. Do not improve.
+ONE of the four warp queues is implemented, `warp_sort_immediate`.
 
 Same rule as its sibling `select_radix.mojo`: this is a RAFT file we READ AND
-TRANSLITERATE, not a RAFT call we stand in for, so it lives in `gbdt/` with
+FOLLOW STATEMENT FOR STATEMENT, not a RAFT call we stand in for, so it lives in `gbdt/` with
 raft as its upstream and carries the attribution duty that follows.
 
 WHY THIS FILE EXISTS AT ALL, AND WHY IT DID NOT UNTIL NOW
@@ -29,9 +29,9 @@ family in RAFT's own learned dispatch, and radix is their fallback for the
 large-k tail. Until this file, this tree ran RAFT's second choice across the
 entire practical range for a reason that turned out to be wrong.
 
-WHAT IS PORTED AND WHAT IS NOT
+WHAT IS IMPLEMENTED AND WHAT IS NOT
 -------------------------------
-PORTED, transliterated:
+IMPLEMENTED, followed statement for statement:
   * `raft/util/bitonic_sort.cuh` in full: `bitonic<Size>::merge_impl` and
     `::sort_impl`, as `bitonic_merge` / `bitonic_sort`.
   * `warp_sort` (the base queue): the constructor, `load_sorted`, `store`,
@@ -43,9 +43,9 @@ PORTED, transliterated:
   * `cub::Traits<float>::TwiddleIn` / `TwiddleOut`, which `block_kernel`
     applies on the way in and out.
 
-NOT PORTED, and each one is a row in `NOT_IMPLEMENTED.tsv`:
+NOT IMPLEMENTED, and each one is a row in `NOT_IMPLEMENTED.tsv`:
   * `warp_sort_filtered`, `warp_sort_distributed`, `warp_sort_distributed_ext`.
-    See "THE ONE CONSTRUCT THAT DOES NOT PORT" below; all three need the same
+    See "THE ONE CONSTRUCT THAT DOES NOT IMPLEMENTATION" below; all three need the same
     missing thing.
   * `calc_launch_parameter`, `launch_setup`, `calc_optimal_params`,
     `warpsort_params_cache`, `LaunchThreshold`. These are the HOST-side
@@ -55,14 +55,14 @@ NOT PORTED, and each one is a row in `NOT_IMPLEMENTED.tsv`:
     The launch geometry is pinned instead; see LAUNCH GEOMETRY below.
   * `select_k` / `select_k_impl` / `select_k_`, the host entry points,
     including the `len_per_thread <= 4` choice between immediate and
-    filtered. With only one queue ported there is nothing to choose.
+    filtered. With only one queue implemented there is nothing to choose.
   * The CSR `RowLayout` (`select::csr_layout`) and the `in_indptr` argument.
     Dense only.
   * The `kMaxGridDimY = 32768` batch chunking loop. It exists because CUDA's
     grid Y dimension is capped at 65535; it is a host-side loop over kernel
     launches and the caller can run it if a batch ever exceeds the cap.
 
-THE ONE CONSTRUCT THAT DOES NOT PORT, EXACTLY
+THE ONE CONSTRUCT THAT DOES NOT IMPLEMENTATION, EXACTLY
 ----------------------------------------------
 `select_warpsort.cuh:327` (and `:452`, `:560`), `set_k_th_`:
 
@@ -78,7 +78,7 @@ intrinsic is load-bearing arithmetic, not a guard.
 Mojo's `shuffle_idx(value, offset)` takes no `width` and this file has no
 evidence about what it does with an out-of-range lane. Reconstructing the
 modulo by hand (`shuffle_idx(v, (k - 1) % warp_width)`) would be a GUESS at
-what CUDA computes, not a transliteration, so it is not done here. That is
+what CUDA computes, not a statement-for-statement match, so it is not done here. That is
 the single reason all three filtered/distributed queues are left out: each
 one calls `set_k_th_` on every buffer flush and none of them is meaningful
 without it.
@@ -87,7 +87,7 @@ without it.
 family that needs nothing but `shuffle_xor` and `lane_id`, which is what
 makes it the natural first target and not merely the easiest.
 
-`shuffle_xor` DOES port with no such doubt, and the reason is worth writing
+`shuffle_xor` DOES implementation with no such doubt, and the reason is worth writing
 down because it looks like the same problem and is not. `bitonic_sort.cuh`
 calls `shfl_xor(key, stride, warp_width)` only with `stride < warp_width`
 (`bitonic_sort.cuh:206`, whose loop starts at `warp_width >> 1`), and the
@@ -125,7 +125,7 @@ Warpsort resolves them through a bitonic network, whose comparison schedule
 is fixed and data-independent, so for a FIXED launch geometry the same input
 gives the same indices every run. That is a strictly stronger determinism
 property than the file this tree currently ships, and it was not the reason
-warpsort was ported.
+warpsort was implemented.
 
 Two things it is NOT. It is not geometry-independent: which of several tied
 elements survives depends on which lane loaded it, so changing
@@ -138,7 +138,7 @@ DEVIATIONS, each one deliberate
 --------------------------------
 1. **Register arrays are `SIMD` values, not arrays.** RAFT holds
    `T val_arr_[kMaxArrLen]` and nvcc keeps it in registers. The obvious Mojo
-   transliteration, `stack_allocation` with no address space, is thread-local
+   statement-for-statement match, `stack_allocation` with no address space, is thread-local
    MEMORY and would spill every element of the queue (`archive/reference/PORTING.md 26`, which
    cost this tree a whole slower-than-naive GEMM). `kMaxArrLen` is a power of
    two by construction, so `SIMD[DType.uint32, arr_len]` is exact.
@@ -175,7 +175,7 @@ DEVIATIONS, each one deliberate
 
 4. **`block_sort` is two free functions, not a class.** RAFT's `block_sort`
    is a template-template wrapper whose entire job is to pick a queue type
-   and forward `add`. With one queue ported there is nothing to pick, and its
+   and forward `add`. With one queue implemented there is nothing to pick, and its
    `init_blockwide(k, nullptr)` for `warp_sort_immediate`
    (`select_warpsort.cuh:613`) is just `{k}`. `done` and `store` are the only
    code in it and they are here verbatim.
@@ -236,7 +236,7 @@ whole grid stride. With the default `block_warps = 8` and any
 kernel writes `batch_size * num_blocks * k` partial results laid out as
 `[batch][block][k]`, and a SECOND launch of this same kernel over that
 buffer with `len = k * num_blocks`, `num_blocks = 1` merges them --
-`select_k_:1106-1120` does exactly that and it is the caller's loop, not ported
+`select_k_:1106-1120` does exactly that and it is the caller's loop, not implemented
 here.
 
 `out_val` is FLOAT and already twiddled back; `out_idx` is UInt32.
@@ -342,7 +342,7 @@ def twiddle_out(bits: UInt32) -> Float32:
 # subwarp, and for `i < j` no `keys[j]` in any thread is smaller than any
 # `keys[i]` in any other thread.
 #
-# `BASE` is this port's addition and carries no meaning of its own: it is
+# `BASE` is this implementation's addition and carries no meaning of its own: it is
 # where their `keys + kSize2` pointer arithmetic went, because a `SIMD`
 # element index has to be comptime and a `SIMD` cannot be offset by a
 # pointer. See DEVIATION 2.

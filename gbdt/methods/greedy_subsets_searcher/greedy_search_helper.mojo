@@ -240,7 +240,7 @@ def compute_target_std_dev(
     row count instead (`random_score_helper.h:14-15`). CatBoost's two arms
     therefore produce DIFFERENT noise magnitudes from the same target
     whenever the weights are not all 1 -- which under Newton, their default
-    leaf estimation, is always. Both are transliterated; see the file
+    leaf estimation, is always. Both are followed statement for statement; see the file
     docstring of `gbdt/methods/random_score_helper.mojo`.
 
     Lane 0 is their `sum`, computed by the kernel and commented out by
@@ -351,7 +351,7 @@ comptime SOAK_134_CONTROL = is_defined["MOJOLEARN_134_CONTROL"]()
 # DEVIATION 2040: cap FAST's histogram replication at the pinned count.
 # **MEASURED 2026-09-03 AND IT MADE NO DIFFERENCE. THE HYPOTHESIS IS DEAD.**
 #
-# The reasoning was: `replication_for` below is a faithful port of CatBoost's
+# The reasoning was: `replication_for` below is a faithful implementation of CatBoost's
 # grid sizing and the formula multiplies the machine's core count, an MI325X
 # reports 304, so at the two levels that touch every row FAST asks for ~8x
 # the replicas IDENTICAL's pinned 32 asks for. That would explain IDENTICAL
@@ -908,7 +908,7 @@ def run_tree(
 ) raises -> List[Int]:
     """`FitImpl`'s loop: grow a whole oblivious tree, level by level.
 
-    PORT OF `structure_searcher_template.h:50-66` driving
+    FOLLOWS `structure_searcher_template.h:50-66` driving
     `greedy_search_helper.cpp`'s two steps. Under `SymmetricTree` one
     iteration is one LEVEL and every leaf of the level takes the SAME split
     (`greedy_search_helper.cpp:422-425`, `numScoreBlocks = 1`).
@@ -951,7 +951,7 @@ def run_tree(
     # (`memory_provider_trait.h:14`), a slab carved into 256-byte-aligned
     # stack slices, so no allocation in a tree reaches the driver.
     #
-    # We do not port that pool. Mojo's `DeviceContext` already is one: it
+    # We do not implementation that pool. Mojo's `DeviceContext` already is one: it
     # owns a "device memory pool" that a stream view shares
     # (`DeviceContext.select_stream`), it holds "cached memory buffers" until
     # the context is destroyed (`DeviceContext.__deinit__`), every allocation
@@ -1778,17 +1778,17 @@ def launch_one_byte[
     runs `stat_count = 2` (`doc_parallel_boosting.mojo:128`), so
     `GetStatCount() <= 2` is always true and CatBoost takes LoadByIndexBins
     at every depth, which is what we run at every depth below the root. The
-    unported policy is one their own dispatch never selects for our
+    unimplemented policy is one their own dispatch never selects for our
     parameters.
 
-    So do not "fix" this by porting GatherBins, and do not read the word
+    So do not "fix" this by implementing GatherBins, and do not read the word
     gather here as evidence that we took their gather path. The `depth == 0`
     shortcut IS ours: at the root the index is the identity, so the
     indirection is provably a no-op and the direct kernel is the same
     arithmetic with one load removed.
 
     THE FAILURE SHAPE THIS WAS CHECKED FOR, because a peer session found it
-    four times in one round: a function of theirs ported faithfully, while
+    four times in one round: a function of theirs implemented faithfully, while
     their dispatch would never send our parameters to it. It compiles, it
     passes, its citations are real, and it is the wrong kernel. Checked here
     on 2026-08-19 and clean. `SortByFlagsInLeaf` was checked the same way,
@@ -1915,7 +1915,7 @@ def launch_hist2_one_byte[
         }
 
     Our boosting path runs `stat_count = 2`, so the even arm is what runs;
-    the odd arm is ported because the ladder is theirs, and the prelude goes
+    the odd arm is implemented because the ladder is theirs, and the prelude goes
     through `launch_one_byte[bits]` with `grid_z_stats = 1`, which is their
     `PASS(Bits, 1)` at the same `bits`.
 
@@ -2021,7 +2021,7 @@ def feature_groups_for(policy: Int, n_features: Int) -> Int:
     and the kernels invert it as
     `maxBlocksPerPart = gridDim.x / featureBlocks`.
 
-    The port launched with grid x = REPLICAS ALONE, dropping the feature-group
+    The implementation launched with grid x = REPLICAS ALONE, dropping the feature-group
     factor. With one group the two agree and everything works, which is every
     check this repository had. With two or more groups
     `maxBlocksPerPart` becomes `1 / 2 == 0` and the kernel divides by zero,
@@ -2045,7 +2045,7 @@ def replication_for(
 ) -> Int:
     """`numBlocks.x *= CeilDivide(maxActiveBlocks, x * y * z)`.
 
-    PORT OF the grid sizing shared by all three histogram kernels
+    FOLLOWS the grid sizing shared by all three histogram kernels
     (`hist_binary.cu:95`, `hist_half_byte.cu:81`, `hist_one_byte.cu:291`):
 
         blocksPerSm     = TArchProps::GetMajorVersion() > 3 ? 2 : 1;
@@ -2111,7 +2111,7 @@ def replication_for(
     # divides `2 * maxActiveBlocks` (`hist_one_byte.cu:356`,
     # `hist_half_byte.cu` and `hist_binary.cu` gather arms alike): an
     # indirected row fetch stalls longer, so it gets twice the blocks to
-    # hide behind. This port used the direct-load number for both arms.
+    # hide behind. This implementation used the direct-load number for both arms.
     if gather:
         max_active_blocks = 2 * max_active_blocks
     var base = groups * n_live * stat_count
@@ -2167,7 +2167,7 @@ def launch_histograms_for_blocks[
     """One histogram launch per policy present, dispatching on the block.
 
     This is `B` histogram kernels of the `3B + 12` census, and it is where
-    the port stops assuming a uniform dataset. Direct loads at depth 0 where
+    the implementation stops assuming a uniform dataset. Direct loads at depth 0 where
     the index is the identity, gather below it, exactly as the binary path
     already does.
 
@@ -2267,7 +2267,7 @@ def launch_histograms_for_blocks[
         # the whole-buffer one; this is now their call.
         #
         # AND IT IS A MEMSET, NOT A KERNEL. Their `ZeroBuffer` is
-        # `cudaMemsetAsync` (`split_properties_helper.cpp:34-38`); this port
+        # `cudaMemsetAsync` (`split_properties_helper.cpp:34-38`); this implementation
         # launched a grid-stride kernel for it, which measured ~1.3 ms per
         # level against `ctx.enqueue_memset`'s 0.2 ms for the same 3.26M
         # cells (64 GB/s). The memset covers the WHOLE scratch rather than
@@ -2471,8 +2471,8 @@ def launch_histograms_for_blocks[
             # count included -- runs the FUSED TWO-STAT `TPointHist2OneByte`
             # family; only 129-255 runs the one-stat `TPointHistOneByte`
             # PASS family. This dispatch routed ALL one-byte shapes through
-            # the PASS family until 2026-08-19, a wrong-kernel-family misport
-            # of exactly the shape ENGINEERING_RULES 0b-i names: the ported
+            # the PASS family until 2026-08-19, a wrong-kernel-family misimplementation
+            # of exactly the shape ENGINEERING_RULES 0b-i names: the implemented
             # kernel was faithful and their dispatch never sends
             # `maxBins <= 128` to it. `checks/hist2_check.mojo` covers
             # both families on the same input and fingerprints WHICH family
@@ -2632,10 +2632,10 @@ def launch_histograms_for_blocks[
         #     if (devCount == 1) { return *this; }
         #
         # (`cuda_lib/cuda_buffer_helpers/reduce_scatter.h:460-462`, inside
-        # `TReducer::operator()`). This port is single device, so the call
+        # `TReducer::operator()`). This implementation is single device, so the call
         # would return immediately and the before-reduce and after-reduce
         # mappings are the same buffer. Multi-device is the point at which
-        # this becomes a real gap, not a no-op, and it is where the port
+        # this becomes a real gap, not a no-op, and it is where the implementation
         # would need `TReducer` from `gpu_lib`.
         # ==================================================================
         if scratch_dead:
@@ -2770,8 +2770,8 @@ struct TTreeWorkspace(Movable):
     `TCudaManager` hands every buffer out of a per-device memory pool
     (`cuda_lib/memory_pool.h`), so `CreateInitialSubsets`
     (`split_properties_helper.cpp:1040-1080`) reuses the same device
-    memory for tree 2 that tree 1 gave back. This port dropped the pool
-    layer (`archive/reference/gbdt/NOT_PORTED.md`) and called
+    memory for tree 2 that tree 1 gave back. This implementation dropped the pool
+    layer (`archive/reference/gbdt/`gbdt/NOT_IMPLEMENTED.tsv``) and called
     `enqueue_create_buffer` directly, which meant a fresh allocation of
     every plane for EVERY tree.
 
@@ -2783,7 +2783,7 @@ struct TTreeWorkspace(Movable):
     not allocation.
 
     This is a POOL OF ONE, which is all a single-device, single-stream
-    port needs: `fit` holds the list across trees, and a tree reuses the
+    implementation needs: `fit` holds the list across trees, and a tree reuses the
     planes when they are big enough and rebuilds them when they are not.
     An empty list means "no pool", which is what every existing caller
     passes and which restores the old allocate-per-call behaviour exactly.
@@ -2818,7 +2818,7 @@ struct TTreeWorkspace(Movable):
     # 100 calls in 126 ms -- the threading note in
     # `gpu_util/partitions_reduce.mojo` and `kernel/split_points.mojo`
     # carry the same price). Their `TArchProps::SMCount()` is a CACHED
-    # static read once at init; this port's drivers were re-querying it
+    # static read once at init; this implementation's drivers were re-querying it
     # ONCE PER TREE. `__init__` already made this exact query for chunk
     # sizing, so the field costs nothing new; a machine constant within a
     # process, so every reader gets the identical integer the per-tree
@@ -4111,7 +4111,7 @@ def run_tree_layout_traced[
     # `Options.RandomStrength` AS THE SEARCHER SEES IT -- already
     # multiplied by the boosting loop's `CalcScoreModelLengthMult`
     # (`greedy_subsets_searcher.h:73-76`). Zero is CatBoost's off switch
-    # and this port's default.
+    # and this implementation's default.
     random_strength: Float32 = Float32(0.0),
     # their `TGpuAwareRandom` for this tree; see DEVIATION 139 at its use.
     random_seed: UInt64 = UInt64(0),
@@ -4830,7 +4830,7 @@ def run_tree_layout_traced[
         # moved the whole array every level regardless of how much was
         # actually splitting, and the scratch was never initialised, so any
         # row not covered by a live leaf was copied back as garbage. That
-        # survived only because this port splits every leaf unconditionally
+        # survived only because this implementation splits every leaf unconditionally
         # and CatBoost does not (`greedy_search_helper.cpp:691-694`).
         #
         # The launch count is data dependent -- 1 on the fast path,
@@ -5005,7 +5005,7 @@ def run_tree_layout_traced[
     # Their host applies these BEFORE each split
     # (`greedy_search_helper.cpp:535-539` the sentinel ENSURE, `:360-364`
     # the `Score < 0` gate -- ours is `best_score > 0`, the sign flipped
-    # as everywhere in this port -- and
+    # as everywhere in this implementation -- and
     # `oblivious_tree_doc_parallel_structure_searcher.cpp:134` the
     # repeat-split stop). The walk applies them in LEVEL ORDER, so the
     # first stop at level k discards levels k.. exactly as their loop

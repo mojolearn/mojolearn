@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One score helper per feature policy, folded into one best split.
 
-PORT OF `catboost/cuda/methods/pointwise_scores_calcer.h` at CatBoost
+FOLLOWS `catboost/cuda/methods/pointwise_scores_calcer.h` at CatBoost
 `54a8143a` -- `TScoreHelper` (which their `histograms_helper.h:353-419`
-defines) and `TScoresCalcerOnCompressedDataSet`. Transliterated. Do not
+defines) and `TScoresCalcerOnCompressedDataSet`. Followed statement for statement. Do not
 improve.
 
 This is the join between everything the pointwise family has built: a

@@ -9,7 +9,7 @@ consults `TCFeature::Mask` or `::Shift` -- it hardcodes the packing:
     half-byte    (bins >> (28 - 4*i)) & 15          i in 0..7
     binary       nibble fid/4, bit (3 - (fid & 3))  fid in 0..31
 
-The greedy-subsets family, which this repository ported first, reads `Mask`
+The greedy-subsets family, which this repository implemented first, reads `Mask`
 and `Shift` per feature and so works with ANY packing. That difference is
 why this check exists: the pointwise family will read whatever bits sit at
 those positions and produce a perfectly well-formed histogram of the wrong

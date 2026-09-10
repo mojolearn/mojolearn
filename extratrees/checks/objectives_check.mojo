@@ -1361,7 +1361,7 @@ def check_entropy_scattered() -> Int:
 
         # sklearn's impurities: -sum p log2(p) per child, in BITS.
         # THIS REFERENCE SAID `nats` AND DIVIDED BY NOTHING UNTIL 2026-09-01,
-        # which is how the port's dropped `/ ln(2)` survived a green check:
+        # which is how the implementation's dropped `/ ln(2)` survived a green check:
         # sklearn's `log` in `_criterion.pyx` is not libm's, it is
         # `sklearn/tree/_utils.pyx:64-65`, `ln(x) / ln(2.0)`. Per term, where
         # their inline `log` puts the division.

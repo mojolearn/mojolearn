@@ -7,7 +7,7 @@
 they take and return `List[Float32]` and a `TrainedModel`, so every existing
 caller is a check or a benchmark that built its own lists in Mojo.
 
-Nothing here is a port. `gbdt/` mirrors CatBoost and is governed by COPY, DO
+Nothing here is an implementation. `gbdt/` mirrors CatBoost and is governed by COPY, DO
 NOT IMPROVE; this file is host-side policy in the same category as
 `checks/`, following `neighbors/estimator.mojo` and `cluster/estimator.mojo`
 -- including their convention that data crosses as raw pointers plus lengths
@@ -45,7 +45,7 @@ THE POLICY CHOICES
    reads before any device work starts, a real cost on the fixed-cost side
    of `ms/tree = a + b*rows`, and it is stated rather than absorbed;
    removing the copy itself means teaching `train` to take pointers, which
-   is a change to a ported file's signature and belongs in its own session.
+   is a change to a implemented file's signature and belongs in its own session.
 
 3. **PREDICTIONS ARE RAW APPROXES FOR EVERY LOSS**, as `train`'s docstring
    says and as their `predict` without a `prediction_type` does. A Logloss
@@ -306,7 +306,7 @@ struct GbdtFitParams(Copyable, Movable):
     #: -1 UNSET meaning `permutation_count - 1`. Only the CTR path reads it.
     var ctr_estimation_permutation_id: Int
     #: their `boost_from_average`, tri-state exactly as `train` takes it:
-    #: -1 is their unset option, resolved by the port of
+    #: -1 is their unset option, resolved by the implementation of
     #: `AdjustBoostFromAverageDefaultValue` inside `train`; 0/1 explicit.
     var boost_from_average: Int
     #: their `class_weights` (`data_processing_options.cpp:52`), EMPTY for
@@ -364,7 +364,7 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         String("Min"), Float32(0.0), False,
         200_000, -1, -1,
         # boost_from_average -1: their unset option, resolved inside
-        # `train` by the AdjustBoostFromAverageDefaultValue port
+        # `train` by the AdjustBoostFromAverageDefaultValue implementation
         -1,
         List[Float32](),
         # grow_policy SymmetricTree, max_leaves unset, min_data_in_leaf 1

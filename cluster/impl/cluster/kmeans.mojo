@@ -2,21 +2,21 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The public surface: fit, predict, fit_predict, cluster_cost.
 
-PORT OF `cuvs/src/cluster/kmeans.cuh` at cuVS `94c2819`. Partial. Do not
+FOLLOWS `cuvs/src/cluster/kmeans.cuh` at cuVS `94c2819`. Partial. Do not
 improve.
 
 Their file is a dispatch layer: it takes mdspans, decides host or device
-residency, picks an index type, and forwards to `detail::`. What is ported is
+residency, picks an index type, and forwards to `detail::`. What is implemented is
 the SHAPE of that surface and the division of labor, not the mdspan
 machinery, which has no counterpart.
 
 The entry points, and which of them exist here:
 
-    fit           PORTED
-    predict       PORTED
-    fit_predict   PORTED (theirs is fit then predict, and so is this)
-    cluster_cost  PORTED
-    transform     NOT PORTED, it materializes the full n x k distance matrix
+    fit           IMPLEMENTED
+    predict       IMPLEMENTED
+    fit_predict   IMPLEMENTED (theirs is fit then predict, and so is this)
+    cluster_cost  IMPLEMENTED
+    transform     NOT IMPLEMENTED, it materializes the full n x k distance matrix
                   and nothing in the fit path calls it
 
 **`fit_predict` deserves one sentence because it looks redundant and is not.**

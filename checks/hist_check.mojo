@@ -3,7 +3,7 @@
 """Does the binary histogram kernel compute the right histogram?
 
 NO CATBOOST COUNTERPART. A correctness check, against a hand-computable
-answer, for the kernel the whole port is built around.
+answer, for the kernel the whole implementation is built around.
 
 `launch_probe` proves the kernel RUNS. This proves it is RIGHT, which is a
 different claim and the one that has never been made about it. The setup is

@@ -234,7 +234,7 @@ def silhouette_score_launch[
             "silhouette_score: metric "
             + String(metric)
             + " is refused; only DistanceType::L2SqrtUnexpanded (5, cuML"
-            " 'euclidean'/'l2') is ported (NOT_IMPLEMENTED.tsv)"
+            " 'euclidean'/'l2') is implemented (NOT_IMPLEMENTED.tsv)"
         )
     if chunk < 1:
         raise Error(

@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Single linkage: connectivities -> sorted MST -> dendrogram -> labels.
 
-PORT OF `cuvs/cpp/src/cluster/detail/single_linkage.cuh`, cuVS `94c2819`:
+FOLLOWS `cuvs/cpp/src/cluster/detail/single_linkage.cuh`, cuVS `94c2819`:
 `build_dist_linkage` (`:139-205`) and `single_linkage` (`:227-269`).
 `build_mr_linkage` (`:50-118`, the mutual-reachability linkage HDBSCAN
-uses) is NOT ported here and is listed in `hierarchy/NOT_IMPLEMENTED.tsv`.
-Transliterated, their order. Do not improve.
+uses) is NOT implemented here and is listed in `hierarchy/NOT_IMPLEMENTED.tsv`.
+Followed statement for statement, their order.
 
 `single_linkage_output` (`cuvs/cluster/agglomerative.hpp`) is the struct of
 out-pointers plus `m`, `n_clusters`, `n_leaves`, `n_connected_components`;

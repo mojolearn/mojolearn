@@ -3,7 +3,7 @@
 """`cub::DeviceSegmentedRadixSort::SortKeys`, the one call in
 `quantiles.cuh` that has no shipped counterpart.
 
-THIS IS NOT A PORT OF A cuML FILE. It is the replacement for a CUB call
+THIS DOES NOT FOLLOW A cuML FILE. It is the replacement for a CUB call
 that `quantiles.cuh:244` and `:258` make, and it is filed under
 `checks/` for exactly that reason: cuML's mirror address for this code
 is CUB's, not theirs.
@@ -16,7 +16,7 @@ Two facts, in this order:
      lane's charter both say the vendor-substitution rule applies only
      where the incumbent calls a CLOSED library -- cuBLAS, cuSOLVER --
      because there is nothing to read. CUB is readable, so the correct
-     move is to port the kernel, not to swap in someone else's sort.
+     move is to implement the kernel, not to swap in someone else's sort.
   2. MAX ships NO device sort and NO device scan (`archive/reference/VENDOR_LIBS.md`,
      re-checked 2026-08-20 by another lane and not re-measured here).
      So there is nothing to swap in even if the rule allowed it.
@@ -24,7 +24,7 @@ Two facts, in this order:
 WHAT IS WRITTEN HERE IS NOT A FRESH DESIGN
 -------------------------------------------
 It is `gbdt/gpu_util/kernel/segmented_sort.mojo` with the value payload
-removed. That file is this repository's port of CatBoost's
+removed. That file is this repository's implementation of CatBoost's
 `NKernel::SegmentedRadixSort`, which is itself a
 `cub::DeviceSegmentedRadixSort::SortPairs` call -- so the construction
 below has already been through this repository's radix-sort check
@@ -45,7 +45,7 @@ not have them:
     (`quantiles.cuh:201-205`) returning `col * sample_count`, so every
     segment has exactly `sample_count` entries and the base is
     arithmetic, not a lookup. Carrying general offset buffers would be
-    porting a shape their dispatch does not take.
+    implementing a shape their dispatch does not take.
 
 THE KEY TRANSFORM IS CUB'S, NOT OURS
 -------------------------------------
@@ -187,7 +187,7 @@ def seg_scan_block_sums_kernel(
     """The serial exclusive scan of one segment's block totals.
 
     One thread per segment. This is the decoupling step CUB does inside
-    its own sort; it has no counterpart to port because it IS the vendor
+    its own sort; it has no counterpart to implement because it IS the vendor
     call. Recorded as a gap, not presented as a choice.
     """
     var seg = Int(block_idx.x)

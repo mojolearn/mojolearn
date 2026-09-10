@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Env-gated per-stage wall timers for the non-symmetric fit loop.
 
-NOT A PORT, and not a benchmark. CatBoost has no equivalent and the bench
+NO REFERENCE FILE, and not a benchmark. CatBoost has no equivalent and the bench
 harness must never read these numbers: attributing wall time to a STAGE on an
 asynchronous queue requires a drain at every stage boundary, which is a
 control-plane change of exactly the kind `archive/reference/HOST_AND_DEVICE.md` is about --

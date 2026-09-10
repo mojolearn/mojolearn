@@ -3,7 +3,7 @@
 """`mamba_ssm/modules/mamba_simple.py::Mamba.step` (:208-253) and
 `::allocate_inference_cache` (:255-266), state-spaces/mamba `e9594ce`.
 
-PORTED. The DECODE half of profile `mojolearn.identical.mamba1.fp32.v1`
+IMPLEMENTED. The DECODE half of profile `mojolearn.identical.mamba1.fp32.v1`
 (`mamba/IDENTICAL_MAMBA_CONTRACT.md`, section 5). One token at a time,
 carrying the two pieces of recurrent state their `step` carries: the conv
 WINDOW (`conv_state`, the last `d_conv = 4` conv inputs, oldest first) and
@@ -25,7 +25,7 @@ That is why upstream's own `step` has two arms at :215 and :238 (the torch
 fallback and the fused CUDA kernel) and this file has one. Those two arms
 do NOT agree bitwise -- the CUDA `selective_state_update` rounds
 `B * (delta * u)` where the torch reference rounds `(delta * B) * u`
-(contract seam S8, `selective_scan_fwd_kernel.cuh:162,222`) -- so a port
+(contract seam S8, `selective_scan_fwd_kernel.cuh:162,222`) -- so an implementation
 that mirrored the branch would mirror a bitwise fork. DEVIATION 732.
 
 ## The four departures from their spelling, numbered
@@ -64,7 +64,7 @@ otherwise). At `l = 1` the two are the same four values in the same order
 -- `[w1, w2, w3, x]` -- because the window carries PRE-conv values, which
 is what makes one spelling able to serve both paths at all. A copy is not
 an arithmetic seam (contract section 4), so this moves no bits; it is
-recorded because it is a visible difference in the port and because the
+recorded because it is a visible difference in the implementation and because the
 identity between them is a claim the gate checks (`conv.window` after every
 step, compared against the prefill card's).
 

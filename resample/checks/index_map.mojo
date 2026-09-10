@@ -11,7 +11,7 @@ got there first, not of what was drawn before it.
 
 NO UPSTREAM. cuML, cuVS and RAFT ship no bootstrap, no permutation test and
 no Monte Carlo integrator, so `ENGINEERING_RULES.md` 0b's settled-answer rule
-governs nothing in this file. What IS ported, and is ported without a change
+governs nothing in this file. What IS implemented, and is implemented without a change
 of any kind, is the GENERATOR underneath it: `core/philox.mojo` holds RAFT's
 `PhiloxGenerator` (cuRAND's `curandStatePhilox4_32_10_t`) and RAFT's Lemire
 range reduction (`custom_next` for `UniformIntDistParams<OutType, uint32_t>`,
@@ -110,7 +110,7 @@ wrong"). It is 16 byte-steps of integer arithmetic on the HOST, once per run;
 the device is handed the finished key as two Int32 halves and never hashes
 anything.
 
-DEVIATION 1692. WE DO NOT PORT RAFT'S LAUNCH GEOMETRY, BECAUSE WE DO NOT HAVE
+DEVIATION 1692. WE DO NOT IMPLEMENTATION RAFT'S LAUNCH GEOMETRY, BECAUSE WE DO NOT HAVE
 ONE. `core/philox.mojo::launch_uniform_int` writes `ptr[i]` as the
 `(i / RNG_STRIDE)`-th draw of subsequence `i mod RNG_STRIDE`, with
 `RNG_STRIDE` frozen at 110592 (DEVIATION 184). That mapping exists to
@@ -337,7 +337,7 @@ def draw_permutation_key(key: UInt64, r: Int, j: Int) -> UInt64:
     """The 64-bit ordering key pooled position `j` carries in replicate `r`.
 
     `philox_next_u64` is RAFT's (`rng_device.cuh:455-463`): the FIRST draw
-    is the LOW word, and a port that swaps them passes every distributional
+    is the LOW word, and an implementation that swaps them passes every distributional
     test and produces a different stream.
 
     SIXTY-FOUR BITS, NOT THIRTY-TWO, and the reason is the tie rule below.

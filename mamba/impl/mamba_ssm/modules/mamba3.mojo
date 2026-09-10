@@ -7,7 +7,7 @@ state-spaces/mamba `e9594ce`; residual/norm wrapper
 `mamba_ssm/modules/block.py::Block.forward` non-fused arm (:51-53, :67 --
 the in-repo citation; HF transformers @ d56c55b has NO mamba3 model) --
 ON THE DEVICE, under profile `mojolearn.identical.mamba3.siso.fp32.v1`
-(`mamba/IDENTICAL_MAMBA3_CONTRACT.md`). **COPY, DO NOT IMPROVE.** Seams
+(`mamba/IDENTICAL_MAMBA3_CONTRACT.md`). Seams
 S1-S6, S21 and S23, composed around the SISO core
 (`mamba/impl/mamba_ssm/ops/mamba3_siso.mojo`, S7-S20 + S22 + reports).
 

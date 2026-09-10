@@ -154,7 +154,7 @@ def prepare_our_inputs(data):
 # --------------------------------------------------------------------------
 
 def our_gbdt_arm(lane, cfg, data):
-    """`mojolearn.GradientBoosting`, the CatBoost GPU tree learner port.
+    """`mojolearn.GradientBoosting`, the CatBoost GPU tree learner implementation.
 
     These explicit controls are shared with the CatBoost arm. Other defaults
     and searcher dispatch can differ; this is not algorithm equivalence:
@@ -205,7 +205,7 @@ def our_gbdt_arm(lane, cfg, data):
 
 
 def our_rf_arm(lane, cfg, data):
-    """`mojolearn.RandomForest*`, the cuML RandomForest port (`ensemble/`).
+    """`mojolearn.RandomForest*`, the cuML RandomForest implementation (`ensemble/`).
 
     `device='gpu'` is explicit and never 'auto', so a run that cannot reach
     the accelerator fails loudly instead of quietly reporting a host number
@@ -242,7 +242,7 @@ def our_rf_arm(lane, cfg, data):
 
 
 def our_et_arm(lane, cfg, data):
-    """`mojolearn.ExtraTrees*`, the cuML-design ExtraTrees port
+    """`mojolearn.ExtraTrees*`, the cuML-design ExtraTrees implementation
     (`extratrees/`).
 
     IT TAKES NO `n_bins`, and that is not an omission on this side. Extremely
@@ -276,7 +276,7 @@ def our_et_arm(lane, cfg, data):
 
 
 def our_iforest_arm(lane, cfg, data):
-    """`mojolearn.IsolationForest`, the cuML IsolationForest port.
+    """`mojolearn.IsolationForest`, the cuML IsolationForest implementation.
 
     WHAT `fit` ACTUALLY DOES HERE, AND IT CHANGES WHAT THIS ROW MEANS
     (DEVIATION 874, restated as DEVIATION 1836 for this harness). The forest

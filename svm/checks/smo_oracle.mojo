@@ -3,8 +3,8 @@
 """The host oracle: the SAME SMO, serial, in Float32 through the identical
 helpers (and in Float64 as a sanity reference).
 
-NOT A PORT. cuML has one GPU backend and checks nothing against a host
-solver. This file exists because the device port claims BIT identity with
+NO REFERENCE FILE. cuML has one GPU backend and checks nothing against a host
+solver. This file exists because the device implementation claims BIT identity with
 something, and that something has to be spelled where a reader can follow
 every rounding: one thread, one loop, ascending, through `ftz`,
 `identical_mul_add`, `identical_exp` and `gemm_oracle_cell` (the normative

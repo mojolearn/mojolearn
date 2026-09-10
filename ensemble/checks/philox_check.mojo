@@ -30,7 +30,7 @@ SIX LAYERS, SEPARATELY COUNTED, so a failure names its layer:
      `Philox_State_Incr_hi` is exercised in both halves.
   2. `raw`    -- 13 consecutive 32-bit draws, which crosses three 4-word Philox
      blocks and so exercises the `STATE == 4 -> bump the counter, re-run the
-     ten rounds` edge twice. A port that emits a block's words in the wrong
+     ten rounds` edge twice. An implementation that emits a block's words in the wrong
      order passes layer 1 and fails here.
   3. `lemire` -- the range reduction ALONE, driven by a scripted draw sequence
      through the same `U32Stream` parameterisation RAFT's own `custom_next`
@@ -52,10 +52,10 @@ SIX LAYERS, SEPARATELY COUNTED, so a failure names its layer:
   6. `e2e`    -- cuML's actual call: their fnv1a32 seed chain, `start = 0`,
      `end = n_rows`, `len = n_sampled_rows`, for several `tree_id`s. Includes
      `n_rows == 1`, where the reduction returns `start` unconditionally and a
-     broken port looks perfect.
+     broken implementation looks perfect.
 
   7. THE KERNEL, ENQUEUED. Everything above runs on the host. A kernel is not
-     ported until it has been enqueued, so the last arm runs
+     implemented until it has been enqueued, so the last arm runs
      `launch_uniform_int` / `launch_uniform_int_ex` on the device over the
      `fill` and `e2e` cases and compares the device's bytes against the same
      oracle rows.
@@ -94,7 +94,7 @@ struct ScriptedGen(Copyable, Movable, U32Stream):
     so substituting the source is their own parameterisation, not a rewrite of
     the function under test -- the loop, the threshold and the rejection test
     compared in layer 3 are the SAME code the kernel runs. Past the end of the
-    list it repeats the last value, which is what makes an over-consuming port
+    list it repeats the last value, which is what makes an over-consuming implementation
     produce a wrong VALUE rather than an out-of-bounds read.
     """
 
@@ -559,7 +559,7 @@ def main() raises:
     # parser and the comparison are wired, since a check that read zero rows
     # would also report zero mismatches.
     #
-    # The break chosen is the single most plausible one in the whole port:
+    # The break chosen is the single most plausible one in the whole implementation:
     # putting the subsequence in the LOW half of the 128-bit counter
     # (`Philox_State_Incr`) instead of the HIGH half
     # (`Philox_State_Incr_hi`), which is what `curand_init` -> `skipahead_
@@ -659,7 +659,7 @@ def main() raises:
         raise Error(
             "philox_check arm 7: nothing was enqueued (" + String(dev_launches)
             + " launches, " + String(dev_via_entry) + " through"
-            " launch_uniform_int); a kernel is not ported until it has run"
+            " launch_uniform_int); a kernel is not implemented until it has run"
         )
     if dev_wrong != 0:
         print("  FIRST FAILURE:", first_fail)

@@ -5,7 +5,7 @@ way, and every one of them has a measured failure behind it.
 
 This file was called `ENGINEERING_RULES.md` until 2026-09-10. It opened on
 2026-08-19 with a bootstrapping charter that said the exercise was to take an
-incumbent library's code and port it to Mojo, and that charter is retired. It
+incumbent library's code and implementation it to Mojo, and that charter is retired. It
 was written the day before the reference checkouts were first cloned, before
 the numeric contract existed, before the Metal backend, and before any of the
 work that the library is actually for. What survives is the discipline. The

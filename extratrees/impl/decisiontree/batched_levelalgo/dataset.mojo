@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The dataset view handed to every kernel.
 
-A PORT of cuML `cpp/src/decisiontree/batched-levelalgo/dataset.h` (43 lines),
+A IMPLEMENTATION of cuML `cpp/src/decisiontree/batched-levelalgo/dataset.h` (43 lines),
 pinned at `00094f7` in `~/CascadeProjects/upstream/cuml`. Field for field,
 their names kept so the two files diff side by side.
 

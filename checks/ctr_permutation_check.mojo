@@ -4,7 +4,7 @@
 
     pixi run check-permutation
 
-`gbdt/data/permutation.mojo` is the port of `TDataPermutation` and of the
+`gbdt/data/permutation.mojo` is the implementation of `TDataPermutation` and of the
 two things under it: `NCatboostCuda::Shuffle` (`cuda/data/data_utils.h:21`)
 and `TRandom` over `TMersenne<ui64>`. It decides what "before" means for
 every `Borders` CTR in the library, so a wrong permutation is not a wrong
@@ -43,7 +43,7 @@ verbatim and which are transcribed.
    `fold_permutation_block` default even though the CTR path never passes
    it. Plus **THE PROPERTIES A CELL COMPARE CANNOT SEE**: every order is a
    bijection, permutation 0 IS the identity, and every other id is NOT --
-   the last one because "we ported the permutation" and "we ported an
+   the last one because "we implemented the permutation" and "we implemented an
    expensive way to write `iota`" look identical from the outside.
 
 4. **THE SEED**, against `1664525 * id + 1013904223 + blockSize`
@@ -429,7 +429,7 @@ def check_permutation() raises:
     _check_seed(failures)
     _check_inverse(failures)
 
-    # The default this port ships. Their `permutation_count` is 4 and their
+    # The default this implementation ships. Their `permutation_count` is 4 and their
     # estimation permutation is `PermutationsCount() - 1`
     # (`doc_parallel_boosting.h:101-103`), so the default CTR estimation
     # order is id 3 and MUST NOT be the identity.

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cuml/cpp/src/glm/preprocess.cuh::{preProcessData, postProcessData}`, the
-UNWEIGHTED arms -- cuML 26.08, pinned in `solver/DERIVATION_MAP.tsv`.
+UNWEIGHTED arms -- cuML 26.08.
 
 This file was written under `solver/impl/glm/` by the cd lane (the glm
-section had `preprocess.cuh` as NOT PORTED; OLS's Python surface centers
+section had `preprocess.cuh` as NOT IMPLEMENTED; OLS's Python surface centers
 on the host instead) and MOVED here 2026-08-23 by the identity lane, per
 the hand-off in `solver/README.md`: it is the same upstream file and this
 is where it belongs. `solver/impl/solver/cd.mojo` is its one caller

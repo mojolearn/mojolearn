@@ -106,7 +106,7 @@ def _mode_name() -> String:
 
 
 def _hash64(i: Int, f: Int) -> UInt64:
-    """A deterministic 64-bit mix. Not a port; the fixture generator."""
+    """A deterministic 64-bit mix. Not an implementation; the fixture generator."""
     var h = UInt64(i) * UInt64(0x9E3779B97F4A7C15) + UInt64(f + 1) * UInt64(
         0xBF58476D1CE4E5B9
     )
@@ -533,7 +533,7 @@ def check_fused_contraction_pin() raises:
                 + " rows disagree with the FUSED oracle. Under IDENTICAL"
                 " every multiply-add on this path goes through"
                 " `identical_mul_add`, which is one rounding by"
-                " construction, so this is a broken pin or a broken port."
+                " construction, so this is a broken pin or a broken implementation."
             )
         if separating == 0:
             print(
@@ -613,7 +613,7 @@ def check_assignment_geometry_invariance() raises:
     `IDENTICAL` buys: it is what the argmin's `(value, key)` total order
     (`raft::argmin_op`, and OURS in the fused arm where theirs compares the
     value only) and the fixed row ownership already bought. A failure here
-    is a defect in the port, not a missing pin.
+    is a defect in the implementation, not a missing pin.
     """
     var ctx = DeviceContext()
     var n = 512

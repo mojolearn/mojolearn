@@ -196,7 +196,7 @@ def main() raises:
     # therefore degenerates to `max <= min` for every feature whose magnitude
     # is above about 2: a column at that scale is "constant" only if it is
     # EXACTLY constant. This is not a quirk of ours; it is what their float32
-    # expression does, and a port that computed it in float64 would call
+    # expression does, and an implementation that computed it in float64 would call
     # columns constant that sklearn splits.
     var band_at_325 = (Float32(3.25) + FEATURE_THRESHOLD) - Float32(3.25)
     assert_equal(

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which histograms to BUILD and which to DERIVE, once per level.
 
-PORT OF `TSplitPropertiesHelper::BuildNecessaryHistograms` in
+FOLLOWS `TSplitPropertiesHelper::BuildNecessaryHistograms` in
 `catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp`
-at CatBoost `54a8143a`. Transliterated. Do not improve.
+at CatBoost `54a8143a`. Followed statement for statement.
 
 This is the decision that halves a level's histogram work, and it is pure
 host-side bookkeeping: no kernel, no device memory, just which leaf ids go
@@ -44,7 +44,7 @@ terminal, neither histogram will ever be read, so neither is built
 (`:1326-1328`). Copied. Dropping it would be correct and would waste a build
 per terminal pair at the last level, which is where the leaves are.
 
-**A second case, and it is the one this port had wrong:** `computeLeaves` is
+**A second case, and it is the one this implementation had wrong:** `computeLeaves` is
 split ONE MORE TIME before anything launches, on `leaf.Size != 0`
 (`:1342-1346`). An empty leaf's histogram is zeros by definition, so CatBoost
 zeroes the slot instead of building it. See `non_zero_leaves` and
@@ -109,7 +109,7 @@ def build_necessary_histograms(leaves: List[LeafRecord]) raises -> LevelPlan:
     """`BuildNecessaryHistograms`'s classification, copied.
 
     ==================== CORRECTED 2026-08-19 ====================
-    The first port had this state machine BACKWARDS, and it was never
+    The first implementation had this state machine BACKWARDS, and it was never
     wired, so nothing caught it. It skipped `PreviousPath` as "needs
     nothing" and paired up `Zeroes` leaves for subtraction. Theirs
     (`:1295-1304`) is the exact opposite:
@@ -184,7 +184,7 @@ def build_necessary_histograms(leaves: List[LeafRecord]) raises -> LevelPlan:
         # `ids` is pushed in ASCENDING leaf index (`:1300`), so `ids[0]` is
         # `i` and `ids[1]` is `sibling`, the strict `<` is on `i`, and ON AN
         # EXACT TIE THE `else` BRANCH FIRES AND `sibling` IS COMPUTED. This
-        # port had it inverted from `409a16c` until 2026-08-21; archive/reference/PORTING.md
+        # implementation had it inverted from `409a16c` until 2026-08-21; archive/reference/PORTING.md
         # 136 has what that cost.
         var small = sibling
         var big = i
@@ -230,7 +230,7 @@ def non_zero_leaves(
 
     Feeding one undifferentiated list to the histogram builder costs a full
     accumulation over every row and every feature to produce a result that
-    was known in advance. At depth 6 this port's own checks report 56 of 64
+    was known in advance. At depth 6 this implementation's own checks report 56 of 64
     leaves non-empty on one fixture and 46 of 64 on another, so that is 8 to
     18 wasted launches per level on the fixtures already in the tree, and
     far more on sparse data.

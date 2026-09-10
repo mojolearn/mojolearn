@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Streams, and the handle a stream is addressed by.
 
-PORT OF `catboost/cuda/cuda_lib/cuda_base.h` at CatBoost `54a8143a`.
-Transliterated where it transliterates. See the DEVIATION BLOCK.
+FOLLOWS `catboost/cuda/cuda_lib/cuda_base.h` at CatBoost `54a8143a`.
+Followed statement for statement where it follow statement for statements. See the DEVIATION BLOCK.
 
 Their `TCudaStreamsProvider` (`cuda_base.h:27-84`) is a free list. A stream
 is handed out by `RequestStream()` (`cuda_base.h:75-83`) and returned to the
@@ -11,20 +11,20 @@ list by `~TCudaStream()` (`cuda_base.h:50-54`), so a tree that requests and
 drops streams every level recycles the same few `cudaStream_t` rather than
 creating them.
 
-NOT ported from `cuda_base.h`, and why:
+NOT implemented from `cuda_base.h`, and why:
 
     TDefaultStreamRef, GetDefaultStream, SetDefaultStream  (cuda_base.h:92-113)
         a thread-local pointer to whichever stream the worker made first.
         We have one worker on the calling thread and a `DEFAULT_STREAM`
         constant, so the indirection has no referent.
     TCudaMemoryAllocation, TMemoryCopier, TMemoryCopyKind  (cuda_base.h:133-238)
-        allocation and copies belong to `DeviceContext` here. See NOT_PORTED.md
+        allocation and copies belong to `DeviceContext` here. See `gbdt/NOT_IMPLEMENTED.tsv`
         and the MEMORY PROVIDER note below, which is the evidence for that
         sentence rather than the assertion of it.
     TCudaDeviceProperties, NCudaHelpers                    (cuda_base.h:262-320)
         their `TResetCommand` handler is the only reader
         (`gpu_single_worker.h:315`), and the memory-provider half of Reset is
-        not ported. See NOT_PORTED.md.
+        not implemented. See `gbdt/NOT_IMPLEMENTED.tsv`.
     CheckLastError                                         (cuda_base.h:244-246)
         called after every worker iteration (`gpu_single_worker.cpp:147`).
         Mojo surfaces device errors by raising from the submitting call, so
@@ -41,7 +41,7 @@ NOT ported from `cuda_base.h`, and why:
 
 =============================== MEMORY PROVIDER ========================
 CHECKED 2026-08-19 against the published MAX docs, because "belongs to
-`DeviceContext`" was an assertion in this file and in `NOT_PORTED.md` and
+`DeviceContext`" was an assertion in this file and in ``gbdt/NOT_IMPLEMENTED.tsv`` and
 this repository has been wrong three times about what Mojo ships.
 
 WHAT THEY HAVE. `memory_provider_trait.h:14` makes
@@ -74,7 +74,7 @@ calls `cudaMemGetInfo`, warns when under 75% of the device is free, and takes
 (`devices_provider.h:47`). The pinned-host pool is a flat
 `PinnedMemorySize = 1024 * MB` (`devices_provider.h:46`).
 
-WHAT MOJO SHIPS, AND WHY THIS IS NOT PORTED. `DeviceContext` already is a
+WHAT MOJO SHIPS, AND WHY THIS IS NOT IMPLEMENTED. `DeviceContext` already is a
 pooling allocator, stated four separate ways in the published docs:
 
     select_stream           the returned view "shares this context's full
@@ -94,11 +94,11 @@ pooling allocator, stated four separate ways in the published docs:
                             NVIDIA, opt in on AMD MI300
 
 The last one is their `MemoryDefragmentation` under another name, and the
-first two are the slab and the free-and-reuse. Porting a stack pool on top of
+first two are the slab and the free-and-reuse. Implementing a stack pool on top of
 it would be a second allocator over a first, and it would still ask
 `enqueue_create_buffer` for its slab. ENGINEERING_RULES `0b-i` keeps exactly one
 substitution alive -- a CLOSED library on their dispatch path -- and the MAX
-memory manager is one: it is the runtime, there is no source here to port.
+memory manager is one: it is the runtime, there is no source here to implement.
 
 TWO THINGS THE DOCS DO NOT SAY, written down rather than assumed. They do not
 describe the Metal backend's memory manager, so the defragmenting behaviour is
@@ -143,7 +143,7 @@ distinct HANDLES that all resolve to that one queue.
 
 That is correct but stricter than CatBoost. Two of their streams may overlap;
 our two handles serialize. Over-ordering never produces a wrong answer, it
-only leaves parallelism on the table, so the port is safe today and gets
+only leaves parallelism on the table, so the implementation is safe today and gets
 faster for free on CUDA and HIP the day `stream()` is implemented, with no
 change to any caller.
 
@@ -171,9 +171,9 @@ cross-stream barriers in that loop are guarded:
 
 and `IsOnlyDefaultStream()` (`split_properties_helper.h:128-130`) is true
 whenever the only stream is stream 0, which here is always. Both barriers are
-unreachable in this port, by their own condition, not by our choice.
+unreachable in this implementation, by their own condition, not by our choice.
 
-What we DO get on Metal, and what the whole port is for, is that ordering
+What we DO get on Metal, and what the whole implementation is for, is that ordering
 WITHIN a stream is free. Measured, 54 launches on a trivial kernel:
 
     sync after each launch    7.7 / 8.9 / 9.8 ms
@@ -194,7 +194,7 @@ struct TCudaStream(Copyable, ImplicitlyCopyable, Movable):
     counterpart on the provider either, because neither holds a
     `DeviceContext` to drain. The drain lives on the worker, as their
     `SyncStream` does (`gpu_single_worker.h:227-229`), and that is the only
-    place in this port that can wait.
+    place in this implementation that can wait.
     """
 
     var id: Int32

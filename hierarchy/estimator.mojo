@@ -10,15 +10,15 @@ a `mojolearn.AgglomerativeClustering().fit(X)` actually runs. The shape is
 `dbscan/estimator.mojo`'s: host pointers in, device buffers owned here for
 exactly one call, results read back, nothing retained.
 
-The ported entry is `hierarchy/impl/hierarchy/linkage.mojo::single_linkage`
+The implemented entry is `hierarchy/impl/hierarchy/linkage.mojo::single_linkage`
 (cuML `cpp/src/hierarchy/linkage.cu`, forwarding to cuVS
 `cluster/detail/single_linkage.cuh` and RAFT's Boruvka MST). The lane's
-README, `DERIVATION_MAP.tsv` and `NOT_IMPLEMENTED.tsv` are the record of what is and is
+README, `NOT_IMPLEMENTED.tsv` are the record of what is and is
 not in it, and this file re-decides none of it.
 
 WHICH TREE THE LINE NUMBERS BELOW COME FROM. cuML `upstream/cuml-v26.08.00`
 (265b9da) and cuVS `upstream/cuvs-v26.08.00` (6ba2ce2), read 2026-08-24.
-`hierarchy/DERIVATION_MAP.tsv` pins cuVS at `94c2819` and RAFT at `661a3b8`,
+The lane elsewhere cites cuVS at `94c2819` and RAFT at `661a3b8`,
 which are the UNTAGGED default-branch checkouts rather than the release
 tags; the code is the same in both trees but the LINE NUMBERS are not, so a
 citation here and one in the lane's own files can disagree by a few dozen
@@ -42,20 +42,20 @@ WHAT OURS DOES: `use_knn` defaults False here and `connectivity` defaults
 `"pairwise"` at the Python surface, because the `Linkage::KNN_GRAPH`
 specialization (`connectivities.cuh:49`), the cross-component fix-up it
 needs (`connect_knn_graph`'s two overloads, `mst.cuh:67` and `:131`) and
-`merge_msts` (`mst.cuh:32`) are rung 2 and NOT PORTED. `use_knn=True` is
+`merge_msts` (`mst.cuh:32`) are rung 2 and NOT IMPLEMENTED. `use_knn=True` is
 not quietly downgraded: it reaches `get_distance_graph`, which REFUSES IT
 BY NAME. So the default here is cuML's C++ default and scikit-learn's dense
 graph, and their Python default is the arm that raises.
 
 Recorded as a deviation rather than left implicit because it is a DEFAULT
 that differs from the upstream estimator this class mirrors, and a caller
-porting a cuML script gets a different graph without asking for one.
+implementing a cuML script gets a different graph without asking for one.
 
 THE PYTHON PATH EMITS NO IDENTITY CARD, AND THAT IS OWED
 --------------------------------------------------------
 `solver/estimator.mojo` hands `cd_fit_traced` a live `IdentityTrace`, so a
 Python coordinate-descent fit writes the same card its Mojo driver does.
-There is no equivalent here: the ported `single_linkage` entry takes no
+There is no equivalent here: the implemented `single_linkage` entry takes no
 trace, and `hierarchy/linkage_main.mojo` builds its eight-stage card by
 RE-RUNNING `pairwise_distances` and `build_sorted_mst` beside the fit. A
 card written from this file would either duplicate that work on every fit
@@ -68,7 +68,7 @@ belongs to the hierarchy lane, not to this surface.
 
 WHAT IS REFUSED, AND WHERE
 --------------------------
-All of it is the ported code's, reached from here: `use_knn=True` (rung 2,
+All of it is the implemented code's, reached from here: `use_knn=True` (rung 2,
 `get_distance_graph`), every metric but L2SqrtExpanded (1) and L2Expanded
 (0) (`pairwise_distances`), `n_rows < 2` and `n_rows > 46340`, `n_clusters
 < 1` and `n_clusters > n_rows` (`single_linkage.cuh`), and the `children` /
@@ -78,7 +78,7 @@ ON THE 46340 BOUND, because the lane's own justification names the wrong
 arm. `hierarchy/NOT_IMPLEMENTED.tsv` and `connectivities.mojo` both say "their
 `int nnz = m * m` (`connectivities.cuh:145`)". In BOTH cuVS trees that
 declaration belongs to the `Linkage::KNN_GRAPH` specialization, which is
-the arm that is NOT ported; the PAIRWISE arm declares `size_t nnz = m * m`
+the arm that is NOT implemented; the PAIRWISE arm declares `size_t nnz = m * m`
 (`connectivities.cuh:191` in the tag, `:197` at `94c2819`). The BOUND still
 stands -- `m` is their `int` `value_idx`, so the product overflows before
 it is widened to `size_t` -- but the citation points at the other
@@ -120,11 +120,11 @@ def linkage_fit_host(
     `linkage.mst.rounds`, an integer stage), `[1]`
     `n_connected_components`.
 
-    `n_connected_components` COMES FROM THE PORT, NOT FROM HERE. `single_
+    `n_connected_components` COMES FROM THE IMPLEMENTATION, NOT FROM HERE. `single_
     linkage.mojo:156` returns the literal 1, mirroring
     `single_linkage.cuh:301`, which is sound on the PAIRWISE arm because
     the graph is complete and Boruvka finishes in one component. It is read
-    back rather than restated in Python so that if the port ever computes it
+    back rather than restated in Python so that if the implementation ever computes it
     the surface follows without an edit.
     """
     if n_rows < 2:

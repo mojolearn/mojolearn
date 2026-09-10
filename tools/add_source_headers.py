@@ -17,14 +17,9 @@ what licence it carries, or that a DOI exists, and neither they nor anyone
 downstream of them has any way to find out. That is how attribution is
 actually lost.
 
-IT CUTS THE OTHER WAY TOO, and that half is an obligation rather than a
-preference. `NOTICE` records that everything under a `impl/` directory
-derives from CatBoost at 54a8143a, or from cuML, cuVS, RAFT or FAISS at
-their pinned commits. A lifted file from `impl/` carried none of that
-either, so it stripped the UPSTREAM attribution that Apache 2.0 section 4
-obliges this project to propagate. A `impl/` file therefore gets a third
-line pointing at its lane's `DERIVATION_MAP.tsv`, where the upstream path and
-the pinned commit are recorded per file.
+Two lines, the same two on every file: the SPDX identifier and Andrew
+Hendel's copyright. Nothing else. Every line of Mojo in this repository was
+written for it, so there is no third line to add and nothing to point at.
 
 Measured before the first run, 2026-08-31: 2 of 982 `.mojo` files and 0 of
 53 `.py` files carried any copyright or SPDX line.
@@ -51,11 +46,6 @@ COPYRIGHT = (
     "# Copyright 2026 Andrew Hendel. Part of mojolearn, "
     "https://doi.org/10.5281/zenodo.22068632"
 )
-DERIVED = (
-    "# Derivative work: the upstream file and its pinned commit are recorded "
-    "in this lane's DERIVATION_MAP.tsv and in this file's own docstring. See NOTICE."
-)
-
 SKIP_DIRS = {
     ".pixi", ".git", "upstream", "node_modules", "__pycache__",
     ".venv", "venv", "dist", "build", ".mojo-cache",
@@ -83,36 +73,10 @@ def wants_header(path):
 # directory gave 191 files (89,766 lines, the most plainly derived code in
 # the repository) NO provenance marker at all while 310 files under
 # `impl/` had one.
-#
-# The line for these is deliberately about the LANE rather than the file.
-# 76 of gbdt's 149 files appear in no derivation map and three say NO
-# CATBOOST COUNTERPART in their own headers, so asserting file by file here
-# would be asserting something unchecked. Pointing at the map and the file's
-# own docstring is true of every file in the lane.
-LANE_UPSTREAM = {
-    "gbdt": (
-        "# This lane MIRRORS CatBoost (pinned commit 54a8143a). Per-file "
-        "provenance is in the root DERIVATION_MAP.tsv, in this file's own "
-        "docstring, and in NOTICE; files with no CatBoost counterpart say so."
-    ),
-    "ensemble": (
-        "# This lane MIRRORS cuML's random forest. Per-file provenance is in "
-        "this file's own docstring and in NOTICE."
-    ),
-}
 
 
 def header_for(path, root):
-    lines = [SPDX, COPYRIGHT]
-    if (os.sep + "derived" + os.sep) in path or (os.sep + "ported" + os.sep) in path:
-        lines.append(DERIVED)
-    else:
-        rel = os.path.relpath(path, root)
-        lane = rel.split(os.sep)[0]
-        # `<lane>/checks/` is the lane's own work, not its mirror.
-        if lane in LANE_UPSTREAM and (os.sep + "original" + os.sep) not in path:
-            lines.append(LANE_UPSTREAM[lane])
-    return "\n".join(lines) + "\n"
+    return "\n".join([SPDX, COPYRIGHT]) + "\n"
 
 
 def process(path, write, root):
@@ -138,7 +102,7 @@ def main():
     check = "--check" in sys.argv
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     added = skipped = 0
-    added_ported = 0
+    added_headers = 0
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for name in filenames:
@@ -149,11 +113,11 @@ def main():
             if what == "add":
                 added += 1
                 if (os.sep + "ported" + os.sep) in p:
-                    added_ported += 1
+                    added_headers += 1
             else:
                 skipped += 1
     verb = "would add" if check else "added"
-    print(f"{verb} a header to {added} files ({added_ported} of them under impl/)")
+    print(f"{verb} a header to {added} files ({added_headers} of them under impl/)")
     print(f"already carried one: {skipped}")
     return 0
 

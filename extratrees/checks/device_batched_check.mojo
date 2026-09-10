@@ -12,7 +12,7 @@ construction to its claim, node for node and leaf bit for leaf bit, and then
 sabotages the two mechanisms that isolate the trees:
 
 * **`FOREST_SAB_SCALAR_TREE`** stages every item in a merged batch with the
-  FIRST item's tree id -- what a port that kept the per-launch scalar would
+  FIRST item's tree id -- what an implementation that kept the per-launch scalar would
   silently do. The batch-first tree keeps its keys; every other tree draws
   the wrong thresholds and must MOVE.
 * **`FOREST_SAB_SHARED_ROW_BASE`** roots every tree's ranges at slot 0, so

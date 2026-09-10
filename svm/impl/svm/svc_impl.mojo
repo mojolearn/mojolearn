@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`svcFit` / `svcPredict`: the C-SVC entry points, dense FP32.
 
-PORT OF `cuml/cpp/src/svm/svc_impl.cuh` + `svc.cu` at cuML v26.08.00:
+FOLLOWS `cuml/cpp/src/svm/svc_impl.cuh` + `svc.cu` at cuML v26.08.00:
 `svcFitX` (dense), `svcPredictX` (dense, dense support), `applyPrediction`,
 `computeBatchDecisionFunction`, and the `SVC` class's `fit` / `predict` /
-`decisionFunction`. NOT ported: `svcFitSparse` / `svcPredictSparse` and the
+`decisionFunction`. NOT implemented: `svcFitSparse` / `svcPredictSparse` and the
 CSR arms, the PRECOMPUTED arm, multiclass (their own `ASSERT(model.n_classes
 == 2, "Only binary classification is implemented at the moment")` is kept
 as a raise), `svmFreeBuffers` (host lists).
@@ -25,7 +25,7 @@ as a raise), `svmFreeBuffers` (host lists).
                                      or `val + b`
 
 The training matrix is ROW-MAJOR here (theirs `layout_f_contiguous`); a
-layout, not an arithmetic, and recorded in DERIVATION_MAP.
+layout, not an arithmetic, and.
 """
 
 from std.builtin.sort import sort

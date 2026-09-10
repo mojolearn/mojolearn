@@ -225,7 +225,7 @@ def main() raises:
     # best leaf, no sign test under Lossguide (archive/research/LOSSGUIDE.md 1) -- so the
     # two trees coincide only when every leaf at every level improves and
     # the depth bound closes both. Printed, not asserted: it is a property
-    # of the fixture, not of the port.
+    # of the fixture, not of the implementation.
     var dw4 = fit_policy(ctx, x, y, "Depthwise", depth=4)
     var lg16 = fit_policy(ctx, x, y, "Lossguide", depth=4, max_leaves=16)
     var p_dw4 = predict_floats(ctx, dw4, x, N_ROWS)

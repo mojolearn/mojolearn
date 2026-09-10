@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A half-open range of objects inside a buffer.
 
-PORT OF `catboost/cuda/cuda_lib/slice.h` at CatBoost `54a8143a`.
-Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/cuda_lib/slice.h` at CatBoost `54a8143a`.
+Followed statement for statement.
 
 `TSlice` is how every read in their level loop names the part it wants.
 `ParallelStripeView(subsets->PartitionsCpu, TSlice(newId, newId + 1))`

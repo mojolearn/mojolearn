@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CatBoost's ACTUAL OUTPUT on a CATEGORICAL fixture, dumped for the port.
+"""CatBoost's ACTUAL OUTPUT on a CATEGORICAL fixture, dumped for the implementation.
 
 WHY THIS IS A SEPARATE FILE FROM `tools/catboost_oracle.py`
 -----------------------------------------------------------
@@ -16,12 +16,12 @@ repository's strongest evidence. Three things kept this out of it:
     compared. That is a whole extra pass over the model, plus its
     verification;
   * a shared script with a mode flag lets a bug in the categorical arm
-    change a numeric fixture. These three files are the reference the port
+    change a numeric fixture. These three files are the reference the implementation
     is held to; they do not share a code path with an experiment.
 
 WHAT CAN BE COMPARED, AND WHAT CANNOT -- READ THIS BEFORE CHANGING A PIN
 ------------------------------------------------------------------------
-This port's categorical support has two arms, and only ONE of them can be
+This implementation's categorical support has two arms, and only ONE of them can be
 put against this oracle at all.
 
 **THE ONE-HOT ARM CAN.** Their dispatch sends a categorical feature whose
@@ -34,12 +34,12 @@ ordering, and their candidate set is the full `bucketCount`
 (`score_calcers.cpp:58-61`: `OneHotFeature` gets `bucketCount` splits where
 an ordered feature gets `bucketCount - 1`, and `split.cpp:110-114` sets
 `bucketCount` to the cat feature's `OnLearnOnly` unique count). That is
-exactly what this port does: `build_layout(fold_counts, one_hot)` gives the
+exactly what this implementation does: `build_layout(fold_counts, one_hot)` gives the
 feature `k` folds and bins `0..k-1`, and the searcher emits
 `BIN_SPLIT_TAKE_BIN`.
 
-**THE CTR ARM CANNOT, AND THE BLOCKER IS NOT IN THIS PORT.** It is that
-CatBoost's CPU learner cannot be configured with the CTR set this port
+**THE CTR ARM CANNOT, AND THE BLOCKER IS NOT IN THIS IMPLEMENTATION.** It is that
+CatBoost's CPU learner cannot be configured with the CTR set this implementation
 mirrors:
 
     IsSupportedCtrType(CPU, ...)   Borders Buckets BinarizedTargetMeanValue
@@ -48,11 +48,11 @@ mirrors:
                                    FeatureFreq
                                    (`private/libs/options/restrictions.h:18-48`)
 
-`TCatFeatureParams.default()` in this port is their GPU `simple_ctr` --
+`TCatFeatureParams.default()` in this implementation is their GPU `simple_ctr` --
 `Borders` with three priors plus `CreateDefaultCounter(SimpleCtr)`, which
 is `FeatureFreq` (`catboost_options.cpp:412-414, 449-452`). **FeatureFreq
 does not exist on CPU.** Asking their CPU learner for it raises. So the
-frequency column this port computes has no counterpart in any CPU model
+frequency column this implementation computes has no counterpart in any CPU model
 that could be dumped here, and the closest CPU type (`Counter`) is a
 different estimator with a different denominator, not a rename.
 
@@ -61,10 +61,10 @@ The `Borders` half is blocked twice over even so: their CPU default
 `features_info.ctrs`), where the GPU sets `MinEntropy 15` for a simple CTR
 and `Median 15` for a tree CTR (`catboost_options.cpp:398-415`), and a CPU
 `Borders` column is an ONLINE ordered statistic over their per-permutation
-fold structure rather than the device pass this port runs. Two different
+fold structure rather than the device pass this implementation runs. Two different
 columns cannot produce comparable bins.
 
-**AND FEATURE COMBINATIONS ARE NOT PORTED AT ALL.**
+**AND FEATURE COMBINATIONS ARE NOT IMPLEMENTED AT ALL.**
 `gbdt/options/catboost_options.mojo`'s `TCatFeatureParams.check()` refuses
 `max_ctr_complexity != 1` by name, where CatBoost's default is 4
 (`cat_feature_options.cpp:231`). That is `archive/reference/PORTING.md` 91 and `archive/plans/NEXT_TWO.md`
@@ -86,7 +86,7 @@ reason and is not restated; what follows is what this fixture adds.
                             columns and nothing here would be comparable.
                             It is a real CatBoost option, not a fixture
                             convenience.
-  max_ctr_complexity 1      Combinations are not ported and this port
+  max_ctr_complexity 1      Combinations are not implemented and this implementation
                             REFUSES the option by name, so leaving
                             CatBoost at its default of 4 would be claiming
                             support this tree does not have. Inert on this
@@ -120,7 +120,7 @@ seeing a result.** For a two-category one-hot feature the candidates
 swapped, and every score calcer in either implementation is symmetric in
 the two children, so the two candidates tie EXACTLY. Which one wins is a
 tie-break, not an algorithmic decision, and CatBoost's enumeration order is
-its perfect-hash order while this port's is dense-code order. A fixture
+its perfect-hash order while this implementation's is dense-code order. A fixture
 built on that would report a divergence that is not one. Anything k >= 3
 has no such degeneracy.
 
@@ -396,7 +396,7 @@ def main() -> int:
     # recovered codes and nothing from CatBoost's evaluator, and require it
     # to reproduce `model.predict`. A wrong bit convention, a wrong code,
     # a wrong leaf order or a wrong border all fail here, on the oracle's
-    # own side, before the port is ever asked a question.
+    # own side, before the implementation is ever asked a question.
     recon = np.full(ROWS, bias, dtype=np.float64)
     for tree in out_trees:
         leaf = np.zeros(ROWS, dtype=np.int64)
@@ -417,7 +417,7 @@ def main() -> int:
         raise SystemExit(
             "the dumped structure does not reproduce CatBoost's own "
             "predictions (worst |delta| %g). The dump is wrong, not the "
-            "port -- do not run the differential against it" % worst
+            "implementation -- do not run the differential against it" % worst
         )
 
     n_one_hot = sum(

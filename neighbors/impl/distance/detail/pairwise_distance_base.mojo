@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`launchConfigGenerator`: the grid shape is COMPUTED, never a constant.
 
-PORT OF `cuvs/cpp/src/distance/detail/pairwise_distance_base.cuh:295-322`
+FOLLOWS `cuvs/cpp/src/distance/detail/pairwise_distance_base.cuh:295-322`
 at cuVS `94c2819`. Partial (the `PairwiseDistances` struct itself is inlined
 into `fused_l2_knn.mojo`; this file is its launch computation). Do not
 improve.

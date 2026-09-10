@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CatBoost's GPU model evaluator, ported: quantize once, then every tree
+"""CatBoost's GPU model evaluator, implemented: quantize once, then every tree
 over cache-resident buckets.
 
-PORT OF `catboost/libs/model/cuda/evaluator.cu` + `.cuh` at CatBoost
-`54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/libs/model/cuda/evaluator.cu` + `.cuh` at CatBoost
+`54a8143a`. Followed statement for statement.
 
 WHY THIS EXISTS BESIDE `predict`. `doc_parallel_boosting.predict` walks the
 TRAINING-side apply (`AddObliviousTreeImpl`), one kernel per tree over the
@@ -15,7 +15,7 @@ CatBoost's own inference path is THIS file: quantize the raw floats ONCE
 into a doc-tiled bucket layout, then evaluate blocks of trees against
 buckets that stay resident in cache -- the traffic no longer multiplies by
 the tree count. That is their design for exactly the problem we measured,
-so it is ported rather than reinvented (vendor rule).
+so it is implemented rather than reinvented (vendor rule).
 
 THE BUCKET LAYOUT (`TCudaQuantizationBucket = uchar4`): docs are tiled in
 groups of 128 = 32 lanes x 4 docs; one packed 4-byte word holds one
@@ -66,7 +66,7 @@ and ours takes it.
 
 DEVIATIONS, all stated:
 * by-value structs -> parallel scalar arrays (as every kernel in this
-  port): repacked bins arrive as `bin_feature_idx` (u32, pre-scaled) +
+  implementation): repacked bins arrive as `bin_feature_idx` (u32, pre-scaled) +
   `bin_feature_val` (u32) + `bin_feature_xor` (u32) arrays; the uchar4 is
   a `UInt32` unpacked by byte shifts.
 * their results pipeline converts to FLOAT64 with model scale/bias
@@ -82,7 +82,7 @@ DEVIATIONS, all stated:
   date. The in-kernel accumulator is `float` on their side too
   (`TCudaEvaluatorLeafType = float`, evaluator.cuh:26).
 * the one atomic is their `TAtomicAdd<float>` on global memory; Metal has
-  global float atomicAdd (measured), so it ports directly. Same
+  global float atomicAdd (measured), so it implements directly. Same
   non-determinism class as their own GPU evaluator.
 
 RESULTS PADDING IS A CONTRACT: the reduce writes every doc slot of a
@@ -469,7 +469,7 @@ from gbdt.models.oblivious_model import (
 
 @fieldwise_init
 struct GpuEvaluatorModel(Movable):
-    """`TGPUModelData`, the members this port reaches: tree geometry,
+    """`TGPUModelData`, the members this implementation reaches: tree geometry,
     repacked splits as two parallel arrays, flat leaves."""
 
     var tree_sizes: DeviceBuffer[DType.uint32]
@@ -515,7 +515,7 @@ def pack_model_for_evaluator(
     that file only in `ProcessResults`, the prediction-type
     post-processing, never in the tree walk.
 
-    So there is no multi-dimensional path of theirs to port here. This
+    So there is no multi-dimensional path of theirs to implement here. This
     refuses where they refuse, with their message, RATHER THAN silently
     predicting the first class's approxes -- which is what a model whose
     `leaf_values` is `n_leaves * dim` would get from a walk that reads

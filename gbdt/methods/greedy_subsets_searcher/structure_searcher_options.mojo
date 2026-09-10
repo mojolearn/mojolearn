@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The eleven knobs the structure searcher reads, and nothing else.
 
-PORT OF `TTreeStructureSearcherOptions` in
+FOLLOWS `TTreeStructureSearcherOptions` in
 `catboost/cuda/methods/greedy_subsets_searcher/structure_searcher_options.h`
-at CatBoost `54a8143a`. Transliterated. Do not improve.
+at CatBoost `54a8143a`. Followed statement for statement.
 
 Theirs is a plain struct with defaults, built once per fit by
 `CreateStructureSearcher` and then read by `TGreedySearchHelper` at every
@@ -27,7 +27,7 @@ where that can be said once:
 
 TWO FIELDS OF THEIRS ARE NOT HERE, both deliberately.
 -----------------------------------------------------
-`BootstrapOptions` (`TBootstrapConfig`) is not a field because in this port
+`BootstrapOptions` (`TBootstrapConfig`) is not a field because in this implementation
 the BOOSTING DRIVER bootstraps and hands the searcher stat planes that are
 already sampled -- their `ComputeTarget` calls `objective.StochasticDer(
 bootstrapConfig, ...)` INSIDE `CreateInitialSubsets`
@@ -39,7 +39,7 @@ would consume it if the split ever moves.
 `FixedBinarySplits` is not here either. It is CatBoost's mechanism for
 forcing the first `k` levels onto named binary features
 (`greedy_search_helper.cpp:394`, `:470`, `:606`) and it is fed only by
-`fixed_binary_splits`, an option this port refuses by name in
+`fixed_binary_splits`, an option this implementation refuses by name in
 `catboost_options.check()`. A refused option must not grow a field that
 reads as supported.
 """
@@ -85,7 +85,7 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
 
     var l2_reg: Float32
     """`L2Reg`, default 3.0. Theirs is `double`; the whole score path in this
-    port is Float32 for the Metal reason recorded in
+    implementation is Float32 for the Metal reason recorded in
     `kernel/compute_scores.mojo`."""
 
     var model_size_reg: Float32
@@ -174,12 +174,12 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
             raise Error(
                 String("grow_policy=")
                 + grow_policy_name(self.policy)
-                + " has no searcher in this port. SymmetricTree is"
+                + " has no searcher in this implementation. SymmetricTree is"
                 " gbdt/methods/greedy_subsets_searcher/"
                 "greedy_search_helper.mojo, Depthwise is"
                 " greedy_search_helper_depthwise.mojo, Lossguide is"
                 " greedy_search_helper_lossguide.mojo; EGrowPolicy::Region"
-                " is unported."
+                " is unimplemented."
             )
         if self.max_depth < 1:
             raise Error(
@@ -203,7 +203,7 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
                 )
         # ============ THE SCORE FUNCTION, REFUSED BY NAME ============
         # Their launcher has a case per calcer and `default: { throw
-        # std::exception(); }` (`compute_scores.cu:509-546`). This port has
+        # std::exception(); }` (`compute_scores.cu:509-546`). This implementation has
         # calcers for two of the five: Cosine/NewtonCosine and L2/NewtonL2.
         #
         # THE DRIVER'S DISPATCH IS AN `if L2 else COSINE`, so SolarL2, SatL2
@@ -222,8 +222,8 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
             raise Error(
                 String("score_function=")
                 + String(self.score_function)
-                + " has no calcer in this port; only Cosine, NewtonCosine,"
-                " L2 and NewtonL2 are ported (SolarL2, SatL2 and LOOL2 are"
+                + " has no calcer in this implementation; only Cosine, NewtonCosine,"
+                " L2 and NewtonL2 are implemented (SolarL2, SatL2 and LOOL2 are"
                 " theirs at compute_scores.cu:509-546 and are not written)"
             )
         if self.min_leaf_size < Float64(0.0):

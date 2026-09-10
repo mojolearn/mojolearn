@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """cuML's HDBSCAN runner: linkage, condense, extract, score, relabel.
 
-PORT OF `cuml-v26.08.00/cpp/src/hdbscan/runner.h` (cuML `265b9da`):
+FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/runner.h` (cuML `265b9da`):
 `build_linkage` (`:54-150`) and `_fit_hdbscan` (`:152-234`).
-Transliterated, their order. Do not improve.
+Followed statement for statement, their order.
 
 WHAT THEIR `build_linkage` DOES THAT OURS DOES NOT, AND WHY. Their
 `:66-113` fills a `mutual_reachability_params` and, inside it, an
@@ -207,7 +207,7 @@ def fit_hdbscan(
 ) raises -> HDBSCANOutput:
     """`runner.h:152-234` `_fit_hdbscan`, with their `build_linkage`
     (`:54-150`) inlined at the point their `:170` calls it -- one Mojo
-    function for their pair, recorded in `hdbscan/DERIVATION_MAP.tsv`.
+    function for their pair.
     """
     # NOT THEIRS, and it is first on purpose. `build_mr_linkage` refuses
     # `n_rows < 2` too, but only after this function has sized `n_edges =
@@ -244,11 +244,11 @@ def fit_hdbscan(
         raise Error(
             "hdbscan.fit_hdbscan: build_algo=" + String(params.build_algo)
             + " refused by name; only BRUTE_FORCE_KNN (0, their default,"
-            " hdbscan.hpp:198) is ported. NN_DESCENT reaches"
+            " hdbscan.hpp:198) is implemented. NN_DESCENT reaches"
             " cuvs::neighbors::all_neighbors::build, an approximate graph"
             " builder that is not in the pinned cuVS checkout and whose"
             " output is not a function of the input alone. To close this"
-            " refusal, port nn_descent in the neighbors lane and pin its"
+            " refusal, implementation nn_descent in the neighbors lane and pin its"
             " initialization"
         )
     if (

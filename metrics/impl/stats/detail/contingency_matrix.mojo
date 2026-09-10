@@ -4,11 +4,11 @@
 
 The INTEGER core of every label metric in Group A: `outMat[(gt - min) *
 width + (pd - min)] += 1` for every sample, by `raft::myAtomicAdd` on an
-`int`. COPY, DO NOT IMPROVE. One kernel per arm of theirs:
+`int`. One kernel per arm of theirs:
 
     devConstructContingencyMatrix       (:32-46)   GLOBAL_ATOMICS
     devConstructContingencyMatrixSmem   (:67-91)   SMEM_ATOMICS
-    contingencyMatrixWSort              (:111-142) SORT_AND_GATOMICS  NOT PORTED
+    contingencyMatrixWSort              (:111-142) SORT_AND_GATOMICS  NOT IMPLEMENTED
 
 INTEGER ATOMICS ARE IDENTITY-SAFE; FLOAT ATOMICS ARE NOT. Integer addition is
 associative and commutative, so a counter that `nSamples` threads increment in
@@ -26,11 +26,11 @@ size. So the SMEM arm is taken when `outDimN <= CMAT_SMEM_MAX_DIM` (a slab
 of `CMAT_SMEM_MAX_DIM^2` ints, 4 KB, under every vendor's floor) and the
 GLOBAL arm otherwise. SORT_AND_GATOMICS exists for a matrix too large for
 L2; its OUTPUT is the same integers the global arm produces (the sort only
-improves locality), so it is not ported and the global arm stands in. All
+improves locality), so it is not implemented and the global arm stands in. All
 three arms write the same matrix, so which one ran is scheduling, not
 numeric, and is not a deviation.
 
-`getInputClassCardinality` (:179-187, `thrust::minmax_element`) is ported
+`getInputClassCardinality` (:179-187, `thrust::minmax_element`) is implemented
 as `min_max_labels_kernel`: an integer `Atomic.min`/`Atomic.max` per
 sample, order-free for the same reason.
 """

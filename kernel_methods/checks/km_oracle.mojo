@@ -326,7 +326,7 @@ struct KmNystroemReference(Movable):
 
 def km_sign_flip_rule_f64(mut v: List[Float64], q: Int):
     """`sign_flip_kernel`'s three clauses (`raft/matrix/detail/math.cuh:367`,
-    ported at `decomposition/impl/linalg/detail/pca.mojo:423`), in float64
+    implemented at `decomposition/impl/linalg/detail/pca.mojo:423`), in float64
     on the host: find the entry of largest ABSOLUTE value in the component,
     break a tie for that magnitude by taking the LOWEST index, and negate the
     whole component if that entry is `< 0.0`.
@@ -334,12 +334,12 @@ def km_sign_flip_rule_f64(mut v: List[Float64], q: Int):
     **THE `< 0.0` IS NOT A SIGN-BIT TEST AND THAT IS THEIR RULE, NOT AN
     APPROXIMATION OF IT.** `-0.0 < 0.0` is FALSE, so a component whose
     largest-magnitude entry is a zero is never flipped and an all-zero
-    component comes back exactly as it arrived. The ported kernel's docstring
+    component comes back exactly as it arrived. The implemented kernel's docstring
     argues that at length and this replay copies the argument rather than
     re-deciding it.
 
     Eigenvector `c` is COLUMN `c`, so entry `f` of component `c` is at
-    `f * q + c` -- the same stride the ported kernel uses, and the only
+    `f * q + c` -- the same stride the implemented kernel uses, and the only
     difference between their column-major layout and ours.
     """
     for c in range(q):

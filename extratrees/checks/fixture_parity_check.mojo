@@ -25,7 +25,7 @@ WHY HEX AND NOT DECIMAL
 `String(Float32)` in this toolchain does not round-trip: 0.46% of float32
 values come back ONE ULP WRONG when parsed, and `String(Float32(1.4e-45))` is
 the string `"0.0"`. A decimal-only dump would therefore let a one-ulp
-disagreement -- exactly the kind a float32-vs-float64 mistake in the Python port
+disagreement -- exactly the kind a float32-vs-float64 mistake in the Python implementation
 produces -- pass as agreement. Every value is printed as `<decimal>/<hexbits>`
 and the READER COMPARES THE HEX. The decimal is for a human reading the diff
 and is not evidence.

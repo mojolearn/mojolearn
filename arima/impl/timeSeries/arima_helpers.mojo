@@ -3,11 +3,11 @@
 """The ARIMA helpers: the reduced polynomials, undifferencing, the batched
 Jones transform with the sigma2 floor.
 
-PORT OF `cuml/cpp/src_prims/timeSeries/arima_helpers.cuh` at cuML 265b9da6
+FOLLOWS `cuml/cpp/src_prims/timeSeries/arima_helpers.cuh` at cuML 265b9da6
 (v26.08.00): `_param_to_poly` (:35-44), `_select_read` (:58-62),
 `_undiff_kernel` (:136-163), `reduced_polynomial` (:183-193),
 `finalize_forecast` (:321-350), `batched_jones_transform` (:358-379).
-`prepare_data` (:209-239) is imported from the tsa lane's port of the same
+`prepare_data` (:209-239) is imported from the tsa lane's implementation of the same
 file; `prepare_future_data` / `_future_diff_kernel` (exog only) are not
 reached (exog refused) and are in `arima/NOT_IMPLEMENTED.tsv`. COPY, DO NOT
 IMPROVE.

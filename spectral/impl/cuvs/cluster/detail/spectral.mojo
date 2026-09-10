@@ -19,7 +19,7 @@ RUNG 2 = RUNG 1 + k-MEANS, and nothing else. The graph overload (`:26-61`):
 (a constant column after the `/ diagonal` scaling when the graph is
 connected): theirs clusters on all `n_components` columns and so do we.
 
-THE k-MEANS IS `cluster/`'s PORTED `fit_predict` (`cluster/impl/cluster/
+THE k-MEANS IS `cluster/`'s IMPLEMENTED `fit_predict` (`cluster/impl/cluster/
 kmeans.mojo`), called with a `KMeansParams` whose `oversampling_factor` is
 `0.0` -- the public host surface `cluster/estimator.mojo::kmeans_fit` does
 not expose that field (it keeps cuVS's default `2.0`, the scalable arm), so
@@ -95,7 +95,7 @@ def fit_predict_graph(
     # embedding_row_major (:47-52): ours is row-major already.
     var n_features = n_out
 
-    # --- kmeans::fit_predict (:54-61), through cluster/'s ported entry, with
+    # --- kmeans::fit_predict (:54-61), through cluster/'s implemented entry, with
     # the device setup `cluster/estimator.mojo::kmeans_fit` performs.
     var h = ctx.enqueue_create_host_buffer[DType.float32](n_samples * n_features)
     ctx.synchronize()

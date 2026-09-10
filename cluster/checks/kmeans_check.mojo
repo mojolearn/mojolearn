@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The first code that LAUNCHES the k-means port, and the sabotage that proves it.
+"""The first code that LAUNCHES the k-means implementation, and the sabotage that proves it.
 
 NO CUVS COUNTERPART. Their tests are gtest fixtures against a CPU reference;
 this is the harness this tree's own rule demands, which is a different thing.
 
-**A kernel is not ported until it has been enqueued** (`archive/reference/PORTING.md 9`).
+**A kernel is not implemented until it has been enqueued** (`archive/reference/PORTING.md 9`).
 Everything under `cluster/` compiled cleanly for two commits while having
 never run, and compiling is not evidence.
 
@@ -648,7 +648,7 @@ def check_kmeans_plus_plus_init() raises:
     var params = KMeansParams.default()
     params.n_clusters = CHECK_CLUSTERS
     params.init = INIT_KMEANS_PLUS_PLUS
-    params.oversampling_factor = 0.0  # classic k-means++, the ported arm
+    params.oversampling_factor = 0.0  # classic k-means++, the implemented arm
     params.metric = METRIC_L2_EXPANDED
     params.n_init = 1
     params.max_iter = 50
@@ -2640,7 +2640,7 @@ def check_scalable_supplement_branch() raises:
     squared, orders above the jitter inertia). Recovery is deliberately NOT
     asserted -- duplicate coverage with the old-centroid empty-cluster rule
     is cuVS's behavior, not a defect. Also held: the fit completes (this
-    exact config raised before the port), labels stay in range, and a
+    exact config raised before the implementation), labels stay in range, and a
     second run reproduces the inertia bitwise.
     """
     var ctx = DeviceContext()

@@ -4,7 +4,7 @@
 path `embedding/IDENTICAL_EMBEDDING_CONTRACT.md` section 11 and OWED item 1
 both name.
 
-NOT A PORT. It runs the device spelling
+NO REFERENCE FILE. It runs the device spelling
 (`embedding/checks/embedding_identical.mojo`) against the host oracle
 (`embedding/checks/embedding_oracle.mojo`) and compares every recorded
 stage BY BITS.

@@ -39,7 +39,7 @@ So in the regime this deviation is about -- all `k` drawn columns
 constant -- sklearn draws on, one at a time, without replacement, and
 stops at the FIRST non-constant feature, having evaluated exactly ONE.
 
-AND THAT MAKES THE RULE CHEAP TO PORT EXACTLY. The remaining features
+AND THAT MAKES THE RULE CHEAP TO IMPLEMENTATION EXACTLY. The remaining features
 are drawn in a uniformly random order, so "the first non-constant one in
 that order" is UNIFORMLY DISTRIBUTED over the node's non-constant
 columns. This module draws that uniform choice directly. It is the same
@@ -49,7 +49,7 @@ instead of a sequential loop no GPU wants to run.
 The columns already drawn need no exclusion: they were all constant, so
 they are not in the set being drawn from.
 
-WHAT IS *NOT* PORTED, AND IT IS NOT NEEDED FOR THIS. sklearn also
+WHAT IS *NOT* IMPLEMENTED, AND IT IS NOT NEEDED FOR THIS. sklearn also
 carries a node's discovered-constant set DOWN to its children through
 `ParentInfo.n_constant_features` (`_splitter.pyx:723-734`), so a child
 never re-tests a feature an ancestor proved constant. That is a
@@ -79,7 +79,7 @@ comptime RESCUE_FEATURE_SALT: UInt32 = 0xFFFFFFFF
 
 `key_for(seed, tree_id, node_id, feature_id)` keys every threshold draw on the
 column it belongs to, so the rescue's choice needs a slot no column can
-occupy. `0xFFFFFFFF` is not a column index on any dataset this port accepts:
+occupy. `0xFFFFFFFF` is not a column index on any dataset this implementation accepts:
 `n_cols` is an `Int32`, so the largest legal column id is `0x7FFFFFFE`. Using
 a real column's slot would tie the choice of column to that column's threshold
 draw, which is a correlation nobody asked for and nobody would find.

@@ -244,7 +244,7 @@ def gbdt_fit_binding(
 
     EVERY `-1` ABOVE IS THEIR `TOption::NotSet()`, not a magic number: the
     loss picks the leaf estimator and its iteration count through
-    `set_leaves_estimation_default`, which is the port of
+    `set_leaves_estimation_default`, which is the implementation of
     `catboost_options.cpp:273-360`. A caller that passes explicit values
     is overriding CatBoost's own defaults and should know it.
     """

@@ -32,7 +32,7 @@ PER CELL and not one of them sums
       are given disjoint magnitudes -- targets in [1, 100], weights in
       [1000, 100000] -- so a parity swap is a cell three orders of magnitude
       out, not a rounding difference. This family's convention is the
-      OPPOSITE of the greedy-subsets family's, so a port that reused the
+      OPPOSITE of the greedy-subsets family's, so an implementation that reused the
       neighbouring file's reading gets exactly this wrong.
   A3  the absent bin contributes NOTHING. Rows are planted at bin == bins in
       each feature in turn.

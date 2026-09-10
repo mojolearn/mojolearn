@@ -1,3 +1,3 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Transliterations of cuML files (COPY, DO NOT IMPROVE)."""
+"""Files that follow the corresponding cuML files statement for statement."""

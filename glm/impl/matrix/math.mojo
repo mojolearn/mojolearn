@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The RAFT matrix primitives `ridgeSolve` and `svdEig` call, one kernel each.
 
-PORT OF `raft/cpp/include/raft/matrix/detail/math.cuh` at RAFT `661a3b8`
+FOLLOWS `raft/cpp/include/raft/matrix/detail/math.cuh` at RAFT `661a3b8`
 (plus `raft/linalg/detail/add.cuh::addScalar`, which lives here rather than
 in a one-function file). Partial: only the entries `cuml/cpp/src/glm/
-ridge.cuh` and `raft/linalg/detail/svd.cuh::svdEig` reach. Do not improve.
+ridge.cuh` and `raft/linalg/detail/svd.cuh::svdEig` reach.
 
-WHY THESE ARE PORTED AND NOT WRITTEN AS "obvious" ONE-LINERS
+WHY THESE ARE IMPLEMENTED AND NOT WRITTEN AS "obvious" ONE-LINERS
 -------------------------------------------------------------
 Every one of them carries a THRESHOLD COMPARISON or a sign rule, and two of
 them are the same name with DIFFERENT semantics selected by a flag:
@@ -239,7 +239,7 @@ def gather_vector_kernel(
 # `lineLen` -- so the run-time behaviour is the `n_rows` one above, which is
 # also the only reading consistent with `sample_weight` being an `n_rows`
 # vector at the call site. Recorded so nobody re-derives it from the
-# forwarder and ports the transpose of this kernel.
+# forwarder and implements the transpose of this kernel.
 #
 # In OUR row-major layout the same cell `(i, j)` is `idx = i * n_cols + j`,
 # so "row `i`" is `idx // n_cols` where the column arm above writes

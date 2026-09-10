@@ -2,20 +2,20 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The row-sampling draws: Bayesian, Bernoulli and Poisson.
 
-PORT OF `BayesianBootstrapImpl` (`catboost/cuda/cuda_util/kernel/
+FOLLOWS `BayesianBootstrapImpl` (`catboost/cuda/cuda_util/kernel/
 bootstrap.cu:35-49`), `UniformBootstrapImpl` (`:51-62`) and
 `PoissonBootstrapImpl` (`:7-19`), and the weight application around them
 (`gpu_data/bootstrap.h`: `BootstrappedWeights` fills ones, `Bootstrap`
 draws, `BootstrapAndFilter` multiplies BOTH the der plane and the weight
 plane by the same draw; Bayesian never produces zero weights, so their
 zero-filter/gather branch is never taken -- `AreZeroWeightsAfterBootstrap`
-is false for it and this port carries none of that machinery).
+is false for it and this implementation carries none of that machinery).
 
 Their GPU oblivious searcher takes Bayesian by default and ASSERTS MVS
 away (`greedy_subsets_searcher/weak_objective_impl.h:30`), so Bayesian is
 the parity target; Bernoulli and Poisson are the two other arms of the
 same `Bootstrap` dispatch (`gpu_data/bootstrap.h:41-92`), and
-`GammaBootstrapImpl` (`:21-33`) is NOT ported because their own
+`GammaBootstrapImpl` (`:21-33`) is NOT implemented because their own
 `BayesianBootstrap` has the only call to it COMMENTED OUT (`:82`).
 
 WHAT BERNOULLI IS, since the name differs from their kernel's:
@@ -44,7 +44,7 @@ der/weight/index columns down to the surviving rows, and return
 `weak_objective_impl.h:30-45`). The searcher then works on a SMALLER row
 set addressed through a non-contiguous index list.
 
-This port multiplies and stops. THE MODEL IS THE SAME MODEL: a row whose
+This implementation multiplies and stops. THE MODEL IS THE SAME MODEL: a row whose
 bootstrap weight is zero contributes `0` to its weight plane and `0` to
 its gradient plane, so it adds nothing to any histogram cell, nothing to
 any leaf sum, and nothing to either fixed-point magnitude (`|0| == 0`, so
@@ -59,7 +59,7 @@ the whole of the difference and it is a real one to close.
 THE ONE PLACE THE ANSWER COULD DIVERGE, and it cannot today: a score-side
 test that counts ROWS rather than summing WEIGHTS would see the filtered
 count on their side and the full count on ours. `min_data_in_leaf` is
-that test, and it is NOT WIRED in this port's searcher -- grep
+that test, and it is NOT WIRED in this implementation's searcher -- grep
 `greedy_search_helper.mojo` for it and there is nothing. **If
 `min_data_in_leaf` is ever wired, this deviation stops being
 output-identical and the filter becomes required.** That sentence is the
@@ -78,7 +78,7 @@ as `mse_kernel`'s magnitude reduce.
 
 The SEED FILL is host-side splitmix64 from the caller's seed where theirs
 is 65536 draws of their host `TRandom::NextUniformL`
-(`gpu_random.cpp:258-267`): their host RNG is not ported, every
+(`gpu_random.cpp:258-267`): their host RNG is not implemented, every
 per-thread DEVICE walk from those seeds is. An exact replay of a specific
 CatBoost-GPU run was never available on this machine to compare against;
 reproducibility of OUR seeded runs is what the fill must provide.

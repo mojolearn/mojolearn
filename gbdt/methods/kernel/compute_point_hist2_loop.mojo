@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost's ONE pointwise histogram loop, written once and shared.
 
-PORT OF `catboost/cuda/methods/kernel/compute_point_hist2_loop.cuh` at
-CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/kernel/compute_point_hist2_loop.cuh` at
+CatBoost `54a8143a`. Followed statement for statement.
 
 This is the spine of the pointwise family (`archive/reference/PORTING.md` 91 B, `archive/plans/NEXT_TWO.md`
 rung 1). Every one of their `pointwise_hist2*` kernels is this loop
@@ -37,7 +37,7 @@ direct-load variant, unlike the greedy-subsets one. The wider variants are
 not a different algorithm: they load the same points in the same per-lane
 order and hand them to `AddPoint2` / `AddPoint4`, which their accumulators
 implement as two or four `AddPoint`s in a fixed order. Vector width is a
-memory-transaction choice, not a numeric one, and this port keeps that true
+memory-transaction choice, not a numeric one, and this implementation keeps that true
 by requiring the same of every accumulator it admits.
 
 THE ALIGNMENT PEEL, WHICH IS THE PART THAT LOOKS LIKE NOISE AND IS NOT
@@ -50,7 +50,7 @@ quantum `Q` of 32, 128 and 128 respectively, and the tail is
 `dsSize & (Q'-1)` for 32, 64 and 128.
 
 **That peel decides WHICH block adds WHICH point, so it is a float summation
-ORDER**, and this port therefore pins its quantum rather than deriving it
+ORDER**, and this implementation therefore pins its quantum rather than deriving it
 from the device (see `ALIGN_LANES`).
 
 GPU-AGNOSTIC

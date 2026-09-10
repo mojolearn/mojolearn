@@ -84,7 +84,7 @@ class NeighborsWeightedLargeK(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "1024"):
             ml.NearestNeighbors(n_neighbors=1025, metric="manhattan").fit(x).kneighbors(q)
 
-    def test_unported_kd_tree_remains_explicit(self):
+    def test_unimplemented_kd_tree_remains_explicit(self):
         with self.assertRaisesRegex(ValueError, "kd_tree"):
             ml.NearestNeighbors(algorithm="kd_tree").fit(np.ones((4, 2), dtype=np.float32))
 

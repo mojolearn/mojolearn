@@ -21,7 +21,7 @@ transcript. Any number in this repository attributed to this lane is a
 fabrication until the orchestrator runs it.
 
 CHECKS
-  check_resample_refusals             every bound and every unported choice
+  check_resample_refusals             every bound and every unimplemented choice
                                       RAISES BY NAME
   check_index_map_is_positional       replicate 7 computed THREE ways: device,
                                       host mirror, and inside a window that
@@ -716,7 +716,7 @@ def _sab_ranks(
 
 
 def check_resample_refusals() raises:
-    """Every bound this lane carries and every choice it does not port,
+    """Every bound this lane carries and every choice it does not implementation,
     refused BY NAME before any launch.
 
     A REFUSAL THAT DOES NOT NAME ITS CLOSURE IS A DEAD END, so each message
@@ -966,7 +966,7 @@ def check_index_map_is_positional() raises:
             + String(a[dac])
             + " vs "
             + String(c[dac])
-            + ". The map is integer arithmetic, so this is a Philox port"
+            + ". The map is integer arithmetic, so this is a Philox implementation"
             " defect and ensemble/bench/philox_oracle.txt is where to take"
             " it."
         )

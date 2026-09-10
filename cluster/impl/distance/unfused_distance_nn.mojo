@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Distance and 1-nearest-neighbor, GEMM first and reduction second.
 
-PORT OF the non-fused arm of `minClusterAndDistanceCompute`,
+FOLLOWS the non-fused arm of `minClusterAndDistanceCompute`,
 `cuvs/src/cluster/detail/kmeans_common.cuh:450-491`, at cuVS `94c2819`.
 (There is no `unfused_distance_nn.cuh` in cuVS.)
-Transliterated. Do not improve.
+Followed statement for statement.
 
 cuVS has two paths to "which centroid is nearest, and how far". The FUSED one
 keeps the distance tile in registers and never writes the `n x k` matrix; the
@@ -16,7 +16,7 @@ is that whole decision, a metric test with no hardware term in it.
 
 k-means's default metric is L2Expanded, so their default fit takes the FUSED
 arm, and so does this tree: `distance/fused_distance_nn/simt_kernel.mojo` is a
-port of their SIMT fused kernel
+implementation of their SIMT fused kernel
 (`src/distance/detail/fused_distance_nn/simt_kernel.cuh`) and it is what
 `min_cluster_and_distance_compute` launches. **This file is the OTHER arm.**
 It is kept reachable so the two can be differentially tested, and because it
@@ -24,9 +24,9 @@ is the arm their dispatch takes for metrics this tree does not yet fit.
 
 (cuVS also has a CUTLASS specialization of the fused arm, under
 `src/distance/detail/fused_distance_nn/`, which is CUDA and has no Metal
-counterpart. Their SIMT kernel is the portable one and is the one ported.)
+counterpart. Their SIMT kernel is the portable one and is the one implemented.)
 
-**What survives the port is the whole reason this is fast**: the expanded
+**What survives the implementation is the whole reason this is fast**: the expanded
 identity `||x-c||^2 = ||x||^2 + ||c||^2 - 2 x.c`. That turns every pairwise
 distance into one matrix product plus two vectors of precomputed norms, which
 is why k-means on a GPU is a GEMM problem and not a distance problem.
@@ -40,7 +40,7 @@ Two consequences of the identity, both of them theirs and both load-bearing:
    the dataset.
 
    DIVERGENCE, NOT FIXED HERE. Their expression has a SECOND factor this
-   port does not have: `!((val * val < get_clamp_precision<DataT, AccT>()) *
+   implementation does not have: `!((val * val < get_clamp_precision<DataT, AccT>()) *
    (regxn[i] == regyn[j]))`, which forces an exact zero when the two norms
    are bit-equal and the residual is below a type-dependent precision floor
    (`l2_exp.cuh:132-134`). It is the self-neighbor case. For k-means it is

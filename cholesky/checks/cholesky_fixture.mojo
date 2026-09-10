@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Six matrices, and every bit of every one of them is accounted for.
 
-NOT A PORT. cuML and cuVS have no Cholesky and therefore no Cholesky
+NO REFERENCE FILE. cuML and cuVS have no Cholesky and therefore no Cholesky
 fixtures; the nearest thing in the checkouts is `cuml/cpp/tests/sg/
 lars_test.cu:110-125`, which factors a small Gram matrix with `cusolverDnpotrf`
 and compares against `updateCholesky` -- an oracle-vs-implementation test with

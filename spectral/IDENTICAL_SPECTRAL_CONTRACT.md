@@ -45,7 +45,7 @@ to.
 | the clustering driver | `cuvs::cluster::spectral::detail::fit_predict`, the graph overload (`:17-62`) and the dataset overload (`:64-80`); `params` at `cuvs/cluster/spectral.hpp:25-43` | same, `cpp/src/cluster/detail/spectral.cuh`, 82 lines |
 | the cuML surface | `cpp/src/spectral/spectral_clustering.cu`, `cpp/src/spectral/spectral_embedding.hpp`, `cpp/include/cuml/cluster/spectral_clustering.hpp`, `cpp/include/cuml/manifold/spectral_embedding.hpp` | rapidsai/cuml `v26.08.00`, `~/CascadeProjects/upstream/cuml-v26.08.00` |
 | every contraction over `n` or `ncv` | profile `mojolearn.identical.gemm.fp32.v1`, IDENTITY_PATHS row 40 | this repository |
-| the k-means at the end of clustering | `cluster/`'s ported `fit_predict`, read and imported, never copied | this repository |
+| the k-means at the end of clustering | `cluster/`'s implemented `fit_predict`, read and imported, never copied | this repository |
 
 Everything numeric that RAFT hands to a closed vendor library (cuSOLVER
 `syevd` through `raft::linalg::eig_dc`, cuSPARSE `SpMV`, cuBLAS `dot`,
@@ -120,7 +120,7 @@ matrix. That is cuSOLVER `syevd`'s convention, which is what
 FIRST `k`, and the `k` returned are themselves ascending. `LM` and `SM`
 are a `thrust::sort` by magnitude followed by a re-sort by algebraic value
 (`:196-243`); cuVS never reaches them and this lane REFUSES THEM BY NAME
-rather than porting a sort whose tie behavior theirs never defined.
+rather than implementing a sort whose tie behavior theirs never defined.
 
 **WHY THE EMBEDDING'S SMALLEST-FIRST ORDER COMES OUT OF `LA`.**
 `create_laplacian` NEGATES every value of `L`
@@ -169,7 +169,7 @@ asserting a convention that does not exist.
 graph with `c` connected components has eigenvalue zero with multiplicity
 `c`, so a `k`-column embedding of a `c`-component graph with `k <= c` is
 entirely inside a degenerate subspace. That is a property of spectral
-embedding and not of this port; it is stated here because the fixtures
+embedding and not of this implementation; it is stated here because the fixtures
 must be read with it in mind.
 
 ## 4. Profile constants
@@ -185,7 +185,7 @@ must be read with it in mind.
 | `ncv` | `min(n - k, max(2k + 1, 20))` | `detail/spectral_embedding.cuh:67`, verbatim, with its `RAFT_EXPECTS` at `:65-66` | mirrored (**C1 STRUCK**) |
 | `max_iterations` | `10 * n_samples` | `detail/spectral_embedding.cuh:64`, verbatim | mirrored (**C2 STRUCK**) |
 | Jacobi sweep cap | `60`, and it RETURNS rather than raising | Numerical Recipes `jacobi` uses `50` and calls `nrerror`. This solver mirrors nothing: it stands where cuSOLVER `syevd` is called | **CHOSEN (C4)** |
-| `ncv` admissibility | `k + 1 < ncv <= n` | `lanczos_types.hpp:50` says `n_components + 1 < ncv < n`, strict at both ends. Unreachable through the ported driver, whose `ncv` is always below `n` | **CHOSEN (C6)**, ours admits `ncv == n` |
+| `ncv` admissibility | `k + 1 < ncv <= n` | `lanczos_types.hpp:50` says `n_components + 1 < ncv < n`, strict at both ends. Unreachable through the implemented driver, whose `ncv` is always below `n` | **CHOSEN (C6)**, ours admits `ncv == n` |
 | launch widths | `LAPLACIAN_TPB = 256`, `LANCZOS_TPB = 256` | `laplacian.cuh:105`, `lanczos.cuh:382` | scheduling, OUTSIDE the profile (C5) |
 
 **C1, C2 AND C3 WERE STRUCK ON 2026-08-23 AND THIS IS THE CORRECTION.**
@@ -225,7 +225,7 @@ RESULT passes `ftz`; a copy is not a seam.
 | L4 | `sqrt` of the degree | `raft::sqrt_op()` (`:269-270`), device `sqrtf` | `ftz(identical_sqrt(d))`, row 10's correctly rounded spelling, NEVER the vendor intrinsic | n/a |
 | L5 | zero to one | `zero_to_one_functor` `x == T(0) ? T(1) : x` (`:24-30`) | `if s == 0.0: s = 1.0`. `-0.0 == 0.0` is true, so a negative zero degree also becomes `1.0`, as theirs | select |
 | L6 | the symmetric scale | `row_scale * value * col_scale` (`diagonal.cuh:209-216`), C++ left to right, TWO products | `t = ftz(row_scale * v)` then `ftz(t * col_scale)`, TWO roundings in that order | **UNFUSED, deliberately**: fusing the pair would be one rounding where theirs has two, and this is the seam a normalization sabotage aims at (section 9) |
-| L7 | `1 / d` | `d[row] == 0 ? 0 : 1 / d[row]` (`diagonal.cuh:209-212`) | `ftz(1.0 / dr)`, a single IEEE division, correctly rounded on normals on every column measured (row 10). The `== 0` arms are unreachable after L5 and are transliterated anyway, not removed | n/a |
+| L7 | `1 / d` | `d[row] == 0 ? 0 : 1 / d[row]` (`diagonal.cuh:209-212`) | `ftz(1.0 / dr)`, a single IEEE division, correctly rounded on normals on every column measured (row 10). The `== 0` arms are unreachable after L5 and are followed statement for statement anyway, not removed | n/a |
 | L8 | set the diagonal to one | `set_diagonal(..., 1.0)` (`laplacian.cuh:276`) | store `1.0` | copy |
 | L9 | negate the Laplacian | `unary_op(x -> -x)` (`spectral_embedding.cu:160-163`) | `-v` | exact |
 | L10 | the kNN symmetrize reducer | `0.5f * (a + b)` (`spectral_embedding.cu:91-93`) | `ftz(0.5 * ftz(a + b))`, TWO roundings in theirs' order | **UNFUSED**, and the multiply by `0.5` is exact anyway |
@@ -243,7 +243,7 @@ RESULT passes `ftz`; a copy is not a seam.
 | K7 | `alpha_i += uu_i` | `raft::linalg::add` of two device scalars (`:371-372`) | `ftz(alpha_i + uu[i])` on the host | UNFUSED add |
 | K8 | the three clamps | `kernel_clamp_down`, `kernel_clamp_down_vector` (`:115-126`) | `if abs(x) < thr: 0.0`. A SELECT, value first, not a `max` or `min`, so ADDENDUM 11's selection hazard has no site. `-0.0` has `fabs == 0 < thr` and becomes `+0.0` | select |
 | K9 | `beta_i` is taken BEFORE `u` is clamped | `:376-380` norm, `:385-386` clamp `u`, `:388-389` clamp `beta` | the same order, exactly | ordering clause |
-| K10 | `v = u / beta_j` | `kernel_normalize` (`:100-113`), with a `beta == 0 -> divide by 1` guard | `ftz(u / (beta_j == 0 ? 1.0 : beta_j))`, the guard transliterated | one IEEE division |
+| K10 | `v = u / beta_j` | `kernel_normalize` (`:100-113`), with a `beta == 0 -> divide by 1` guard | `ftz(u / (beta_j == 0 ? 1.0 : beta_j))`, the guard followed statement for statement | one IEEE division |
 | K11 | `V[0] = v0 / ||v0||` and `V[k] = u / ||u||` | `unary_op(y -> y / *scalar)` (`:445-448`, `:588-592`) | `scale_vector_kernel`: `ftz(src / scalar)` | one IEEE division |
 | K12 | `beta_k = beta[ncv-1] * s` | `axpy(beta_scalar, s, beta_k)` into a ZERO-FILLED `beta_k` (`:517-522`) | `ftz(fma(beta_last, s, +0.0))` | **FUSED**, and the `+0.0` addend is theirs: `beta_k` is `matrix::fill`ed to zero at `:518` and the axpy adds onto it |
 | K13 | `res = ||beta_k||` | `norm<L2Norm>` over `nEigVecs` (`:526-532`) | `gemm_oracle` at `k` terms (always one leaf, `k <= 128`), then `ftz(identical_sqrt(.))` | per gemm v1, then n/a |
@@ -254,7 +254,7 @@ RESULT passes `ftz`; a copy is not a seam.
 ### 5.3 The projected eigenproblem (DEVIATION 771)
 
 `raft::linalg::eig_dc` is cuSOLVER `syevd`, CLOSED, nothing to
-transliterate. It is replaced by
+follow statement for statement. It is replaced by
 `spectral/checks/symmetric_eig_host.mojo::symmetric_eig_host`, a
 Numerical Recipes cyclic Jacobi run ON THE HOST, and **THE HOST IS PART OF
 THE NUMERICAL PLAN HERE**: this is the only dense linear algebra inside
@@ -285,7 +285,7 @@ Every clause here is theirs unless marked. These are the decisions that
   (a) **FULL reorthogonalization at every step**, ONE pass:
       `uu = V[0..i]^T u`, `u -= V uu`, `alpha_i += uu_i`
       (`lanczos.cuh:343-372`). A second Gram-Schmidt pass (the
-      twice-is-enough rule) is NOT in theirs and is NOT ported.
+      twice-is-enough rule) is NOT in theirs and is NOT implemented.
   (b) **The reorthogonalization runs over `V[0..i]`, `i + 1` vectors**,
       the ones written so far, not over all `ncv` (`:346`, `n, i + 1`).
   (c) **THICK RESTART.** The `k` Ritz vectors become `V[0..k)` (`:544-547`
@@ -496,7 +496,7 @@ both `params` struct ranges and are corrected
 `cuvs/cluster/spectral.hpp:25-43`).
 
 Three consequences, all in this lane's favor and one against it:
-  (a) The Laplacian overload question is SETTLED and this lane ported the
+  (a) The Laplacian overload question is SETTLED and this lane implemented the
       right one. `detail/spectral_embedding.cuh:127` and `:219` instantiate
       `create_laplacian<..., raft::device_coo_matrix<...>>` explicitly, and
       26.08 has no `coo_to_csr_matrix` at all. The self-loop rounding

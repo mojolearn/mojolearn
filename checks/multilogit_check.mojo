@@ -7,7 +7,7 @@
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 
 WHAT GATES WHAT. `multilogit_val_and_first_der_kernel` and
-`multilogit_second_der_row_kernel` are the ports of `MultiLogitValAndFirstDerImpl`
+`multilogit_second_der_row_kernel` are the implements of `MultiLogitValAndFirstDerImpl`
 (`multilogit.cu:10-102`) and `MultiLogitSecondDerRowImpl` (`:104-169`). Four
 independent gates, deliberately not four views of one:
 
@@ -532,7 +532,7 @@ def check_search_mode(ctx: DeviceContext, num_classes: Int) raises -> Int:
 
     # DEVIATION 79, MEASURED. The bound is `sum_rows max_k |der_k|`; the
     # TIGHTEST valid per-plane bound is `max_k sum_rows |der_k|`. Their
-    # ratio is exactly the fixed-point resolution this port gives up by
+    # ratio is exactly the fixed-point resolution this implementation gives up by
     # carrying one number instead of `numClasses` reduction lanes. The
     # deviation priced it "loose by at most a factor of numClasses"; this
     # is what it actually costs on a hashed fixture.
@@ -677,7 +677,7 @@ def check_clip_prob_differs(ctx: DeviceContext) raises -> Int:
     At an approx of -40 the true probability is about 4e-18. `ClipProb`
     raises it to 1e-7; `CrossEntropyImpl`'s 1e-40 does not. So the two
     kernels MUST disagree there, and a `der2` of `w*p*(1-p)` differs by
-    ten orders of magnitude. If they agreed, this port would have reused
+    ten orders of magnitude. If they agreed, this implementation would have reused
     the cross-entropy clamp and the equality check above would have hidden
     it -- which is why this anchor is separate from that fixture rather
     than folded into it.

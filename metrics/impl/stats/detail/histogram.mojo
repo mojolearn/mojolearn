@@ -16,7 +16,7 @@ double is exact below 2^53 and is done on the host here, see entropy.mojo.)
 Integer atomics: order-free, identity-safe, no IDENTICAL arm needed
 (contingency_matrix.mojo's header). The `__match_any_sync` lane aggregation
 on sm70+ is a throughput device that lands the same integers and is not
-ported.
+implemented.
 """
 
 from std.atomic import Atomic

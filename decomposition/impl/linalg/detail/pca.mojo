@@ -144,7 +144,7 @@ def sign_flip_kernel(
     v: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
-    """PORT OF `signFlipKernel`, `raft/matrix/detail/math.cuh:367`. `decomposition/checks/pca_check.mojo` holds it to that: the device answer must equal a fold-free host scan BITWISE, and the tie, the zero cases and the NaN case are each planted rather than hoped for."""
+    """FOLLOWS `signFlipKernel`, `raft/matrix/detail/math.cuh:367`. `decomposition/checks/pca_check.mojo` holds it to that: the device answer must equal a fold-free host scan BITWISE, and the tie, the zero cases and the NaN case are each planted rather than hoped for."""
     var n = Int(n_in)
     var col = Int(block_idx.x)
     var tid = Int(thread_idx.x)

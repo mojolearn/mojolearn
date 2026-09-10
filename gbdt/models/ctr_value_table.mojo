@@ -294,7 +294,7 @@ struct TCtrValueTable(Copyable, Movable):
         if self.ctr_type == CTR_BORDERS:
             return self.calc(Float32(0.0), Float32(0.0))
         raise Error(
-            "no apply-time table arithmetic is ported for ctr type "
+            "no apply-time table arithmetic is implemented for ctr type "
             + ctr_type_name(self.ctr_type)
             + "; their provider's other arms read a TCtrMeanHistory blob"
             " (static_ctr_provider.cpp:53-62), which this format does not"
@@ -365,7 +365,7 @@ struct TCtrValueTable(Copyable, Movable):
             )
 
         raise Error(
-            "no apply-time table arithmetic is ported for ctr type "
+            "no apply-time table arithmetic is implemented for ctr type "
             + ctr_type_name(self.ctr_type)
             + "; TCatFeatureParams.check() admits only Borders and"
             " FeatureFreq (catboost_options.mojo), so a table of any other"
@@ -510,7 +510,7 @@ def build_ctr_tables(
             )
         else:
             raise Error(
-                "no apply-time CTR table is ported for ctr type "
+                "no apply-time CTR table is implemented for ctr type "
                 + ctr_type_name(cfg.ctr_type)
                 + "; TCatFeatureParams.check() admits only Borders and"
                 " FeatureFreq, so this config never reached train()"

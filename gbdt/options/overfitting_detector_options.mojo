@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The overfitting detector's options, and the dispatch that picks its type.
 
-PORT OF `catboost/private/libs/options/overfitting_detector_options.{h,cpp}`
-at CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/private/libs/options/overfitting_detector_options.{h,cpp}`
+at CatBoost `54a8143a`. Followed statement for statement.
 
 ## Why a file for three numbers
 
@@ -17,7 +17,7 @@ nothing about the three fields says so. Their `Load` (`:24-32`) reads:
 
 so `od_wait=20` alone is early stopping and `od_pvalue=0.01` alone is a
 DIFFERENT detector, while passing neither trains to `n_estimators` no matter
-what the held-out curve does. A port that defaulted the type to their
+what the held-out curve does. An implementation that defaulted the type to their
 constructor's `IncToDec` (`:10`) and stopped there would stop early on every
 fit that named an eval set -- the constructor default exists to be overwritten
 by `Load`, and reading it as the effective default is reading half the file.

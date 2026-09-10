@@ -14,7 +14,7 @@ comparing different problems and must be thrown away.
 WHAT THIS BASELINE IS. cuML's GPU arm cannot run on Apple silicon, and no
 library ships a GPU random forest for this box, so scikit-learn on the same
 M4 is the strongest thing that actually runs. It is NOT the same algorithm:
-scikit-learn searches exact split thresholds where this port (following
+scikit-learn searches exact split thresholds where this implementation (following
 cuML) bins each feature into at most 128 quantiles. That difference favours
 us on time, which is exactly why accuracy is printed beside every timing.
 

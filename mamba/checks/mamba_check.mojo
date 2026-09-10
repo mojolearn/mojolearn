@@ -3,7 +3,7 @@
 """The gate file of profile `mojolearn.identical.mamba1.fp32.v1`, the path
 `mamba/IDENTICAL_MAMBA_CONTRACT.md` section 8 names.
 
-NOT A PORT. It runs the device block
+NO REFERENCE FILE. It runs the device block
 (`mamba/impl/transformers/models/mamba/modeling_mamba.mojo`) against the
 host oracle (`mamba/checks/mamba_oracle.mojo`) and compares every recorded
 stage BY BITS.

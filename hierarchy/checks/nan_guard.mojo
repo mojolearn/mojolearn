@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The NaN refusal at the distance seam: no computed NaN reaches a stage.
 
-NOT A PORT. cuVS hands whatever `cuvs::distance` wrote straight to the MST
+NO REFERENCE FILE. cuVS hands whatever `cuvs::distance` wrote straight to the MST
 (`connectivities.cuh:157-175`); a NaN distance there is compared by
 `altered_weights` arithmetic that is itself NaN and the solver does what it
 does. This file is what the identity claim needs instead.

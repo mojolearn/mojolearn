@@ -6,9 +6,9 @@ NO UPSTREAM FOR THE ESTIMATORS. cuML ships no `Nystroem` and no `RBFSampler`
 at `265b9da` -- `grep -rn 'Nystroem\\|RBFSampler'` over the whole checkout
 returns nothing -- so scikit-learn's `sklearn/kernel_approximation.py` is the
 SEMANTICS reference and the ORACLE, and nothing in this file is a
-transliteration of a device kernel that exists somewhere.
+statement-for-statement match of a device kernel that exists somewhere.
 
-WHAT **IS** PORTED, AND IS PORTED WITHOUT A CHANGE OF ANY KIND, IS THE
+WHAT **IS** IMPLEMENTED, AND IS IMPLEMENTED WITHOUT A CHANGE OF ANY KIND, IS THE
 GENERATOR AND ITS TRANSFORM:
 
   - `core/philox.mojo` holds RAFT's `PhiloxGenerator` (cuRAND's
@@ -65,7 +65,7 @@ GENERATOR AND ITS TRANSFORM:
 # `numpy.random.RandomState.normal` is the polar (Marsaglia) method over a
 # Mersenne Twister while `numpy.random.Generator.normal` is a 256-level
 # ziggurat over PCG64. Neither is reproducible from a counter-based generator
-# without porting numpy's stream, which is not a thing this repository does
+# without implementing numpy's stream, which is not a thing this repository does
 # for any estimator.
 #
 # So `RBFSampler` is the ONE estimator in this lane whose numbers cannot be

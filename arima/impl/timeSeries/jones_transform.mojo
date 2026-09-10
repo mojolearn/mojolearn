@@ -3,7 +3,7 @@
 """The Jones (1980) transform: unconstrained parameters to a stationary AR /
 invertible MA polynomial, and back.
 
-PORT OF `cuml/cpp/src_prims/timeSeries/jones_transform.cuh` at cuML 265b9da6
+FOLLOWS `cuml/cpp/src_prims/timeSeries/jones_transform.cuh` at cuML 265b9da6
 (v26.08.00): `transform` (:35-67), `invtransform` (:71-91),
 `jones_transform_kernel` (:105-138), `jones_transform` (:156-182). COPY, DO
 NOT IMPROVE. One thread per series; `parameter <= 8` (their local arrays
@@ -215,7 +215,7 @@ def jones_transform(
 
 
 # ---------------------------------------------------------------------------
-# host replay (NOT a port: the oracle, spelled separately over Lists)
+# host replay (NOT an implementation: the oracle, spelled separately over Lists)
 # ---------------------------------------------------------------------------
 
 

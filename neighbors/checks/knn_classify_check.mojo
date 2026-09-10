@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gates for the k-NN CLASSIFIER: `neighbors/estimator.mojo::
-knn_classifier_predict` over the cuML port in `neighbors/impl/knn/knn.mojo`
+knn_classifier_predict` over the cuML implementation in `neighbors/impl/knn/knn.mojo`
 and `neighbors/impl/selection/knn.mojo`.
 
 Six claims, each a named check, each on a HASHED fixture (a uniform or
@@ -9,7 +9,7 @@ ramp fixture hides a permutation -- `uniform-test-data-hides-permutation`):
 
 1. `check_getuniquelabels`: the sorted distinct set of an int32 array with
    negative values, gaps and repeats, and `make_monotonic`'s rank map over
-   it. Pure integer; this is the part of the port that decides what every
+   it. Pure integer; this is the part of the implementation that decides what every
    class index downstream MEANS.
 2. `check_knn_classify_matches_host_transcription`: device `predict` and
    `predict_proba` equal a HOST transcription of cuML's kernels, bit for

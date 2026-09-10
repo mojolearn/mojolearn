@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Estimating one tree's leaves on a dataset it was not grown on.
 
-PORT OF `catboost/cuda/methods/leaves_estimation/doc_parallel_leaves_estimator.{h,cpp}`
+FOLLOWS `catboost/cuda/methods/leaves_estimation/doc_parallel_leaves_estimator.{h,cpp}`
 at CatBoost `54a8143a` -- specifically `CreateDerCalcer` (`:41-56`), the
 half that turns a (structure, dataset, cursor) triple into something the
-oracle can read. Transliterated. Do not improve.
+oracle can read. Followed statement for statement.
 
 ## Why this exists, when `fit` already estimates leaves
 
@@ -30,7 +30,7 @@ permutation's compressed index. That is exactly what their
 
 Their oracle takes `bins` UNSORTED and does its own partitioning inside
 (`TBinOptimizedOracle`'s constructor, off the same `bins` buffer). This
-port's oracle takes rows ALREADY GROUPED BY LEAF plus per-leaf offsets and
+implementation's oracle takes rows ALREADY GROUPED BY LEAF plus per-leaf offsets and
 sizes, because that is the shape the searcher produces and the shape the
 gather kernels were written against. So `partition_from_bins` has to build
 that grouping, and it builds it ON THE HOST. DEVIATION 90.

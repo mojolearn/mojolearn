@@ -57,7 +57,7 @@ Kalman pass that follows it.
 
 DEVIATION 992: `method` CROSSES AS AN INTEGER AND IS REFUSED HERE, NOT IN
 PYTHON. `conditional_sum_of_squares` and `sum_of_squares_kernel`
-(`batched_arima.cu:271-391`) are NOT PORTED and `arima/NOT_IMPLEMENTED.tsv`
+(`batched_arima.cu:271-391`) are NOT IMPLEMENTED and `arima/NOT_IMPLEMENTED.tsv`
 says so, so CSS and CSS-ML have to be refused somewhere. Refusing them in
 the Python wrapper would put the only copy of that policy where no Mojo gate
 can see it and would make the refusal unreachable from any other caller of
@@ -115,22 +115,22 @@ def _refuse_method(method: Int) raises:
     Not by clamping and not by a warning. `arima.pyx:947-950` DOES silently
     force `method` to "ml" when the series has missing values, and that arm
     is not copied: it is a downgrade the caller cannot see, and the missing
-    observation path it belongs to is itself unported."""
+    observation path it belongs to is itself unimplemented."""
     if method == ARIMA_METHOD_MLE:
         return
     if method == ARIMA_METHOD_CSS:
         raise Error(
-            "ARIMA: method='css' is not ported; the conditional sum of"
+            "ARIMA: method='css' is not implemented; the conditional sum of"
             " squares log-likelihood (batched_arima.cu:271-391,"
             " conditional_sum_of_squares and sum_of_squares_kernel) and its"
-            " `truncate` parameter have no port. Only MLE is offered;"
+            " `truncate` parameter have no implementation. Only MLE is offered;"
             " refused by name (arima/NOT_IMPLEMENTED.tsv)"
         )
     if method == ARIMA_METHOD_CSS_ML:
         raise Error(
-            "ARIMA: method='css-ml' is not ported; it starts the maximum"
+            "ARIMA: method='css-ml' is not implemented; it starts the maximum"
             " likelihood fit from the CSS optimum, and the CSS"
-            " log-likelihood (batched_arima.cu:271-391) has no port. Only"
+            " log-likelihood (batched_arima.cu:271-391) has no implementation. Only"
             " MLE is offered; refused by name (arima/NOT_IMPLEMENTED.tsv)"
         )
     raise Error(
@@ -351,7 +351,7 @@ def arima_fit_ptr_host(
 
     THERE IS NO AIC OR BIC HERE. `information_criterion`
     (`batched_arima.cu:592-618`) and its AIC / AICc / BIC arms are NOT
-    PORTED (`arima/NOT_IMPLEMENTED.tsv`). What that routine does beyond the
+    IMPLEMENTED (`arima/NOT_IMPLEMENTED.tsv`). What that routine does beyond the
     log-likelihood is one `raft::stats::information_criterion_batched`
     unary op, `ic_base - 2 * loglike`, and the Python wrapper computes that
     on the host in float64 and says so on the class (DEVIATION 991). A

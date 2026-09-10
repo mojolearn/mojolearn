@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`nan_mode`, and what it means for a feature that has no NaNs.
 
-PORT OF the `NanMode` corner of
+FOLLOWS the `NanMode` corner of
 `catboost/private/libs/options/data_processing_options.{h,cpp}` at CatBoost
-`54a8143a`, plus `ENanMode` (`enums.h:107-111`). Transliterated. Do not
+`54a8143a`, plus `ENanMode` (`enums.h:107-111`). Followed statement for statement. Do not
 improve.
 
 ## The option is a REQUEST, not a fact
@@ -26,7 +26,7 @@ resolution:
     return Forbidden;                                // nothing to treat
 
 So `nan_mode` is PER FEATURE and DATA DEPENDENT, and two columns of one fit
-routinely end up in different modes. A port that carried one mode for the
+routinely end up in different modes. An implementation that carried one mode for the
 whole dataset would spend a border on a NaN bin in every column, including
 the ones with no NaN at all.
 

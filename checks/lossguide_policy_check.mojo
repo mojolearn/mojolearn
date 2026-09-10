@@ -12,7 +12,7 @@ Every claim but S1 is host algebra in milliseconds; the file as a whole is a
 device check and is NOT safe inside another lane's timing window.
 
 WHAT IS UNDER TEST. `find_best_leaf_to_split` and `select_leaves_to_split`
-from `greedy_search_helper_lossguide.mojo`, this repository's port of
+from `greedy_search_helper_lossguide.mojo`, this repository's implementation of
 `greedy_search_helper.cpp:296-324`, plus the two shared predicates the
 Lossguide loop depends on for its termination.
 
@@ -20,7 +20,7 @@ THE GATE THAT MATTERS IS DIFFERENTIAL, not analytic. Every property below is
 stated as *Lossguide against Depthwise on the identical leaf list*, using the
 depthwise lane's own `select_leaves_to_split` as the contrast. That is worth
 more than a transcription check: the two arms are twenty lines apart in
-CatBoost's source and the ways a port goes wrong are exactly the ways one arm
+CatBoost's source and the ways an implementation goes wrong are exactly the ways one arm
 quietly acquires the other's rule.
 
   P1  AT MOST ONE LEAF, ALWAYS. Lossguide splits one leaf per iteration
@@ -45,7 +45,7 @@ quietly acquires the other's rule.
 
   P4  UNDEFINED LEAVES ARE INVISIBLE. `BestSplit.Defined()` guards the
       argmin (`:299`), and a leaf whose scorer wrote the poison record has
-      an undefined split. A port that treated the poison sentinel as a very
+      an undefined split. An implementation that treated the poison sentinel as a very
       good score would split the one leaf that has no usable split at all.
       Includes the all-undefined case, which must select NOTHING rather
       than leaf 0.
@@ -174,7 +174,7 @@ def check_sign_convention(ctx: DeviceContext) raises -> Int:
     caught the defect the rest of it could not.
 
     `find_best_leaf_to_split` was written as an ARGMAX because the score
-    kernel's sign is this port's, flipped from CatBoost's. It is flipped
+    kernel's sign is this implementation's, flipped from CatBoost's. It is flipped
     TWICE: once in the kernel and once again in the host reduce, which
     stores `-our_gain` so that `best_split_properties_less` -- a
     transcription of their `operator<`, lower-is-better, over a default
@@ -393,7 +393,7 @@ def check_lossguide_policy(ctx: DeviceContext) raises:
         )
         failures += 1
     else:
-        # MOVE THE TIE. If the port were keeping the LAST maximum, or the
+        # MOVE THE TIE. If the implementation were keeping the LAST maximum, or the
         # one nearest the end of the scan, the first case could pass by
         # luck; the winner must track the ID.
         var tie_b = List[TLeaf]()
@@ -578,7 +578,7 @@ def check_lossguide_policy(ctx: DeviceContext) raises:
     # (`:511`) would fire.**
     #
     # This is a fragility in CatBoost, recorded rather than repaired: the
-    # port must not "fix" it, and a Mojo caller must raise where theirs
+    # implementation must not "fix" it, and a Mojo caller must raise where theirs
     # raises. It is close to unreachable -- a poison record needs EVERY
     # bin feature marked `SkipInScoreCount`, since a degenerate candidate
     # scores a gain of 0 and still beats the sentinel -- but "close to"

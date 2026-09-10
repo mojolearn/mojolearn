@@ -14,7 +14,7 @@ forest crosses as the arrays `TreeMetaDataNode` already is (deviation 146's
 layout argument): per-node `colid` / `quesval` / `left_child_id`, the flat
 `vector_leaf`, and a `tree_offsets` prefix so tree `t` is the node range
 `[offsets[t], offsets[t+1])`. `et_predict` rebuilds the forest from those
-arrays and calls the PORTED `forest_vote` -- the traversal is
+arrays and calls the IMPLEMENTED `forest_vote` -- the traversal is
 `decisiontree.cuh:394-413` through `flatnode.mojo`, not a reimplementation at
 this boundary. `instance_count` and `best_metric_val` are not carried: the
 traversal never reads either (`flatnode.mojo` says so of `best_metric_val`
@@ -301,7 +301,7 @@ def et_predict_binding(
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """The forest's averaged vote per row, through the PORTED traversal.
+    """The forest's averaged vote per row, through the IMPLEMENTED traversal.
 
     Model arrays are int32/float32 as `_forest_out` laid them out (the
     wrapper converts the lists once and keeps NumPy arrays). `x` here is

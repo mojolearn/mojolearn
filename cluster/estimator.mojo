@@ -17,8 +17,8 @@ repository, for two reasons that are both this file's job to fix:
      existing caller is a check that computed them from a fixture it
      generated itself.
 
-Nothing here is a port. `cluster/impl/` mirrors cuVS and is governed by
-COPY, DO NOT IMPROVE; this file is host-side policy cuVS has no counterpart
+Nothing here is an implementation. `cluster/impl/` mirrors cuVS and is governed by
+This file is host-side policy cuVS has no counterpart
 for, in the same category as `checks/`. It follows
 `neighbors/estimator.mojo`, which is the first file of this kind, including
 its convention that data crosses as raw pointers plus lengths so a CPython
@@ -91,7 +91,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 ----------------------------------------------------------
 
 - `predict` against new data with an already-fitted model. `predict` exists in
-  the ported layer and wants a caller-facing wrapper of its own; it is a
+  the implemented layer and wants a caller-facing wrapper of its own; it is a
   different call and is not wired here.
 - `n_init > 1` and `INIT_ARRAY` are exercised at this boundary since
   2026-08-23 by `tools/e2u_matrix_fit.py` (`kmeans_k8_ninit3`,

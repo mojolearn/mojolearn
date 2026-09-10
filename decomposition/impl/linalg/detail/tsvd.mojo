@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Truncated SVD, which is PCA without the centering.
 
-PORT OF `cuml/cpp/src/tsvd/tsvd.cuh::tsvdFit` at cuML `00094f7`
-(branch-25.08). Partial. Do not improve.
+FOLLOWS `cuml/cpp/src/tsvd/tsvd.cuh::tsvdFit` at cuML `00094f7`
+(branch-25.08). Partial.
 
 The path this file used to cite, `raft/linalg/detail/tsvd.cuh`, does not
 exist and never has. Truncated SVD lives in cuML.
@@ -19,7 +19,7 @@ DIVERGENCE: WHAT `tsvdFit` RETURNS IS TWO ARRAYS, NOT FIVE
 `tsvdFit`'s out-parameters are `components` and `singular_vals` and NOTHING
 else. It does not call `truncCompExpVars`, so it computes no
 `explained_var`, no `explained_var_ratio` and no `noise_vars` -- only
-`pcaFit` does that (`pca.cuh:132`). This port reaches `eig_and_truncate`,
+`pcaFit` does that (`pca.cuh:132`). This implementation reaches `eig_and_truncate`,
 which is the PCA-shaped routine, so it fills all five fields of `PCAResult`
 on the tSVD path too.
 
@@ -37,7 +37,7 @@ read-mostly. See the dispatch-audit lane report.
 
 `tsvdFit` also passes NO `set_neg_zero` to `seqRoot` (`tsvd.cuh:237`), where
 `pcaFit` passes `true` (`pca.cuh:136`) -- so the clamp that turns a negative
-eigenvalue into a zero singular value is a PCA-only step, and this port
+eigenvalue into a zero singular value is a PCA-only step, and this implementation
 performs it on neither.
 
 THE SIGN CONVENTION IS PINNED ONCE, AND NOT IN THIS FILE

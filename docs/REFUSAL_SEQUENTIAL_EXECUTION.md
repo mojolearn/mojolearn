@@ -9,7 +9,7 @@ never run them. Preserve the frozen 0.6.0 release snapshot and staged wheels.
 
 The sibling `mlsys/results/refusal-audit-2026-09-06.json` classifies 27
 historical round-11 refusals: nine intentional, ten implemented elsewhere
-in current source, eight needing ports or capacity changes. Two additional
+in current source, eight needing implements or capacity changes. Two additional
 named CPU ExtraTrees configurations are host/no-card evidence. This is a
 source inventory, not a new 27-case numerical certificate. The matrix is
 round 11, commit `144aa5b`; the audit describes later library source at
@@ -87,12 +87,12 @@ from `tools/e2_matrix_fit.py` / `tools/e2u_matrix_fit.py` and the retained
 In particular the historical OLS wide fixture is 64x100, and the PCA/TSVD
 wide capacity cells are distinct consumers of the shared Gram path.
 
-Then address remaining genuine ports separately: Scott bandwidth host rule
+Then address remaining genuine implements separately: Scott bandwidth host rule
 with an explicit sample/dimension/FP32 policy; shared wide Gram capacity for
 both PCA and TSVD; Manhattan DBSCAN; OWL-QN logistic L1; full SVD; randomized
 SVD with fixed RNG/oversampling/power-iteration state. Each needs its own
 bounded fixture and effective control before a full matrix rerun. k=300 is
-now source-authored capacity work, not a remotely validated closed port.
+now source-authored capacity work, not a remotely validated closed implementation.
 
 Keep all nine intentional refusals named in the audit. Do not alias invalid
 options to supported algorithms, return unconverged DBSCAN labels, synthesize

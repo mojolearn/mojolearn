@@ -111,7 +111,7 @@ def _mode_name() -> String:
 
 
 def _mix(i: Int, f: Int, salt: Int) -> UInt64:
-    """The fixture generator. Not a port, and not a hash anything depends on
+    """The fixture generator. Not an implementation, and not a hash anything depends on
     beyond reproducibility: integer arithmetic, so every backend agrees."""
     var h = UInt64(i + 1) * UInt64(0x9E3779B97F4A7C15) + UInt64(
         f + salt

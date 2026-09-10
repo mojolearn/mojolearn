@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The gate file of profile `mojolearn.identical.mamba3.siso.fp32.v1`
-(`mamba/IDENTICAL_MAMBA3_CONTRACT.md` section 8). NOT A PORT: it runs the
+(`mamba/IDENTICAL_MAMBA3_CONTRACT.md` section 8). NO REFERENCE FILE: it runs the
 device block (`mamba/impl/mamba_ssm/modules/mamba3.mojo` around
 `ops/mamba3_siso.mojo`) against the host oracle
 (`mamba/checks/mamba3_oracle.mojo`) and compares every recorded stage BY

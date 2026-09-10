@@ -15,7 +15,7 @@ So the hash IS their hash, not a description of it.
 
 That matters more here than usual: their `city.h` states outright that it
 is a **CityHash 1.0 implementation whose results are different from the
-mainline version of CityHash**. Google's published test vectors, or a port
+mainline version of CityHash**. Google's published test vectors, or an implementation
 written from Google's current sources, would therefore be checked against
 the wrong function and agree on nothing. There is no third-party oracle;
 their file is the only ground truth.

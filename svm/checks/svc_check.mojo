@@ -3,7 +3,7 @@
 """The SVC gates: oracle properties, device == oracle bitwise, launch
 invariance, and the sabotage hooks.
 
-NOT A PORT. Run with:
+NO REFERENCE FILE. Run with:
 
     pixi run mojo run -I . svm/checks/svc_check.mojo                 # host oracle only
     tools/with_build_lock.sh     pixi run mojo run -I . svm/svc_main.mojo
@@ -734,7 +734,7 @@ def _try_refusal(
 
 
 def check_refusals(ctx: DeviceContext) raises:
-    """Every unported parameter raises BY NAME."""
+    """Every unimplemented parameter raises BY NAME."""
     var fx = fixture_blobs()
     var card = IdentityTrace.disabled()
     var trace = SmoTrace()
@@ -752,7 +752,7 @@ def check_refusals(ctx: DeviceContext) raises:
     # whose subject stops refusing does not fail loudly, it stops being a
     # test, and that is the whole reason the four cases below are separate.
     #
-    # 3 is NU_SVR, which is unported UPSTREAM too and still comes out of the
+    # 3 is NU_SVR, which is unimplemented UPSTREAM too and still comes out of the
     # scope check by name.
     var p2 = SvmParameter.default()
     p2.svmType = 3

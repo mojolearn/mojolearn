@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Host-list surface for the ported metrics: what `bindings/` calls.
+"""Host-list surface for the implemented metrics: what `bindings/` calls.
 
 Shaped like `kde/estimator.mojo`, for the same reason: every entry here
-takes HOST lists, uploads them, runs one ported metric, downloads what the
+takes HOST lists, uploads them, runs one implemented metric, downloads what the
 caller needs and returns. No `DeviceBuffer` and no `DeviceContext` crosses
 this boundary, so the CPython layer above it never has to know either type.
 `metrics/README.md`'s HAND-OFF names the Python surface; this file is the
@@ -20,19 +20,19 @@ anybody could act on. If you want a card, run the driver:
     MOJOLEARN_IDENTITY_TRACE=/tmp/metrics.card \\
         tools/with_identical_mode.sh pixi run mojo run -I . metrics/metrics_main.mojo
 
-The UNTRACED ported entry is therefore what each function below calls, and
+The UNTRACED implemented entry is therefore what each function below calls, and
 `metrics_main.mojo` keeps sole ownership of the traced ones.
 
-WHAT THIS FILE DOES NOT VALIDATE. The ported entries do not scan their
+WHAT THIS FILE DOES NOT VALIDATE. The implemented entries do not scan their
 device inputs, and neither does this file: a NaN in `X` reaches `sil_op` as
 `+0.0` (DEVIATION 656), and a NaN in `y`/`y_hat` makes `r2_score` return the
 canonical NaN `0x7fc00000` (DEVIATION 657). Per `metrics/README.md`'s
 HAND-OFF ask 3, the finiteness checks live in the Python layer, where
 scikit-learn's users expect `check_array` to raise. Everything the KERNELS
-refuse -- an unported silhouette metric, `2 * n_neighbors >= n`,
+refuse -- an unimplemented silhouette metric, `2 * n_neighbors >= n`,
 `n_neighbors + 1 > TRUST_MAX_K`, `n == 0`, `chunk < 1`, a label count
 outside `[2, n_rows - 1]` -- is refused BY NAME below the line, by the
-ported code itself, and this file adds only the length and shape checks
+implemented code itself, and this file adds only the length and shape checks
 that would otherwise read past the end of a list.
 
 DEVIATIONS 890-899 are this surface's. It spends none of them on
@@ -112,7 +112,7 @@ def accuracy_score_host(
     NOTE FOR A READER COMPARING SURFACES: cuML 26.08's own Python
     `accuracy_score` (`python/cuml/cuml/metrics/_classification.py:54`) is
     pure cupy and does not call this kernel at all. This entry is the C++
-    one, which is what `metrics/` ported."""
+    one, which is what `metrics/` implemented."""
     _check_pair(y_true, y_pred, n)
     var ctx = DeviceContext()
     var dt = upload_i32(ctx, y_true)
@@ -246,7 +246,7 @@ def completeness_score_host(
     `homogeneity_score` with the two arrays SWAPPED, so its mutual
     information folds the TRANSPOSED contingency matrix and is the same
     quantity in exact arithmetic but not necessarily the same Float32 bits
-    (`metrics/metrics_main.mojo` records both). Ported as theirs."""
+    (`metrics/metrics_main.mojo` records both). Implemented as theirs."""
     _check_pair(y_true, y_pred, n)
     _check_range(lower, upper)
     var ctx = DeviceContext()
@@ -352,11 +352,11 @@ def silhouette_host(
     coefficients (cuML's `silhouette_samples`); the return is their mean.
 
     `chunk` is cuML's `chunksize`, default 40000. It is VALIDATED (>= 1) and
-    is SCHEDULING ONLY here: this port materializes no distance tile, so
+    is SCHEDULING ONLY here: this implementation materializes no distance tile, so
     there is nothing for it to size, and `check_silhouette_refusals` holds
     chunk 1 / 7 / 40000 to one byte pattern. `metric` is not a parameter of
     this entry at all -- only `L2SqrtUnexpanded` (cuML 'euclidean'/'l2') is
-    ported and the ported kernel refuses any other DistanceType by name, so
+    implemented and the implemented kernel refuses any other DistanceType by name, so
     the Python mirror carries the refusal where the caller can read it."""
     if n_rows <= 0:
         raise Error("silhouette: n_rows must be positive, got " + String(n_rows))
@@ -412,7 +412,7 @@ def trustworthiness_host(
     `n x d`; both stay on the HOST because the embedded k-NN goes through
     `neighbors/estimator.mojo::knn_search`, whose boundary is host pointers.
 
-    Refused by the ported entry, by name: `n_neighbors < 1`,
+    Refused by the implemented entry, by name: `n_neighbors < 1`,
     `2 * n_neighbors >= n` (cuML `trustworthiness.pyx:114`, which keeps the
     closed form's denominator positive so no NaN reaches a recorded value),
     and `n_neighbors + 1 > TRUST_MAX_K`. `batch_size` is VALIDATED (>= 1)

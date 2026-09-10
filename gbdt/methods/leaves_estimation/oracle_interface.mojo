@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What the Newton walker needs from a leaves-estimation oracle.
 
-PORT OF `catboost/cuda/methods/leaves_estimation/oracle_interface.h` at
+FOLLOWS `catboost/cuda/methods/leaves_estimation/oracle_interface.h` at
 CatBoost `54a8143a`, cut to the surface the DIAGONAL pointwise path uses.
-Transliterated where there is code to transliterate; the interface itself
+Followed statement for statement where there is code to follow statement for statement; the interface itself
 is a shape.
 
 WHAT IS DELIBERATELY NOT HERE, so nobody goes looking:
@@ -13,7 +13,7 @@ WHAT IS DELIBERATELY NOT HERE, so nobody goes looking:
   `boostingOptions.Langevin` (posterior sampling) is on
   (`pointwise_oracle.cpp:199-204`), which no configuration this
   repository runs sets. The hook is omitted rather than stubbed; wiring
-  Langevin means porting `AddLangevinNoise` and putting the hook back in
+  Langevin means implementing `AddLangevinNoise` and putting the hook back in
   the walker AT THEIR CALL SITES, one of which noises the GRADIENT twice
   and the Hessian never (`descent_helpers.cpp:190-196`) -- their code,
   their order, not a thing to fix silently.
@@ -62,7 +62,7 @@ trait LeavesEstimationOracle:
         THE WALKER APPLIES IT ON THE WAY OUT, at BOTH of its exits
         (`descent_helpers.cpp:153` and `:204`), so what a caller receives
         is always in the CURSOR's gauge and never in the walker's. This
-        port returned the raw point at first, which for MultiClass is a
+        implementation returned the raw point at first, which for MultiClass is a
         vector one component too wide in a gauge the cursor cannot read.
         """
         ...

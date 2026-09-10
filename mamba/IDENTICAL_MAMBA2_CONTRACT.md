@@ -44,12 +44,12 @@ column says which pin is inherited, seam by seam).
 | the decode step's SEMANTICS | `mamba_ssm/modules/mamba2.py::Mamba2.step` (:278-343, the torch arm :290-296 and :310-322), `::allocate_inference_cache` (:345-355); `ops/triton/selective_state_update.py::selective_state_update_ref` (:224-285). Semantics only — its ROUNDING is the DEVIATION 786 sabotage arm, not the profile | state-spaces/mamba `e9594ce` |
 | the gated RMSNorm | `mamba_ssm/ops/triton/layernorm_gated.py::rms_norm_ref` (:18-39): gate BEFORE norm at `norm_before_gate=False` (:26-27), `1 / torch.sqrt(...)` (:29) | state-spaces/mamba `e9594ce` |
 | the second independent reference | `src/transformers/models/mamba2/modeling_mamba2.py::segment_sum` (:73-90), `::mamba2_chunk_scan` (:254-348), `::MambaRMSNormGated` (:105-120), `::Mamba2RMSNorm` (:591-605), `::Mamba2Block.forward` (:617-631). Cross-reference and corpus source, not normative; where it disagrees with mamba_ssm (its `torch.rsqrt` at :118) the mamba_ssm spelling wins, exactly as mamba1 DEVIATION 741 decided the identical question | huggingface/transformers `d56c55b` |
-| the "what vendors run" column | `mamba_ssm/ops/triton/ssd_combined.py::_mamba_chunk_scan_combined_fwd` (:343-395, the cumsum/bmm/chunk_state/state_passing/chunk_scan sequence) and the surface `mamba_chunk_scan_combined` (:628-648); `ssd_chunk_state.py::chunk_state_ref` (:1094-1122); `ssd_state_passing.py::state_passing_ref` (:327-350) | cited where their rounding DIFFERS from the profile's (DEVIATIONS 785, 786, 789) so a reader porting from the fused chain does not assume agreement |
+| the "what vendors run" column | `mamba_ssm/ops/triton/ssd_combined.py::_mamba_chunk_scan_combined_fwd` (:343-395, the cumsum/bmm/chunk_state/state_passing/chunk_scan sequence) and the surface `mamba_chunk_scan_combined` (:628-648); `ssd_chunk_state.py::chunk_state_ref` (:1094-1122); `ssd_state_passing.py::state_passing_ref` (:327-350) | cited where their rounding DIFFERS from the profile's (DEVIATIONS 785, 786, 789) so a reader implementing from the fused chain does not assume agreement |
 | the projections' arithmetic | profile `mojolearn.identical.gemm.fp32.v1` (`gemm/IDENTICAL_FP32_CONTRACT.md`), entry `core/gemm.mojo::gemm_nt` / `::pinned_gemm_nt_kernel`, oracle `gemm/checks/gemm_oracle.mojo::gemm_oracle_cell` (`oracle_leaf_partial`, `fold_balanced_tree`, `contract_leaf_size`), certified three-vendor (IDENTITY_PATHS row 40) | this repository |
 | the conv, silu, softplus, exp, rsqrt, div seams | mamba1 contract sections 3-4 and `checks/numerics.mojo` (`identical_exp`, `identical_softplus`, `identical_silu`, `identical_rsqrt`, `identical_div`, `identical_mul_add`, `pinned_mul`, `ftz`; IDENTITY_PATHS rows 49-54), certified as row 55 records | this repository, INHERITED |
 
 Checkouts live in `/Users/andrewhendel/CascadeProjects/upstream/`. The house
-rule is transliteration: their algorithm, statement by statement; every
+rule is statement-for-statement match: their algorithm, statement by statement; every
 departure is a numbered deviation below, and there are exactly eight.
 
 ## 2. What one block call is
@@ -408,8 +408,7 @@ Nothing above earns a cross-vendor sentence; only the E-series leg does.
 ## 11. Build order for the implementation round
 
 Smallest first, one gate per phase, one compile at a time. Proposed slots
-follow the lane's mirror convention; DERIVATION_MAP.tsv rows land WITH each
-file, not after (the 2026-08-31 lesson).
+follow the lane's naming convention.
 
 1. **Phase 0 — primitives.** `identical_clamp` in `checks/numerics.mojo`
    (identity lane's file; REQUEST it, DEVIATION 788) with its check row.

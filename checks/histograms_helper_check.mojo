@@ -22,7 +22,7 @@ GATES -- each is a distinct TRANSITION, not a distinct assertion:
       This is the only sequence a healthy fit produces.
   F2  a SECOND tree on the same helper. Depth 0 must be full again. Their
       helper is constructed per tree upstream, so this is the transition a
-      port that reuses helpers depends on and theirs never exercises.
+      implementation that reuses helpers depends on and theirs never exercises.
   F3  a SKIPPED level, 0 then 2. Must be full: the counter advanced to 1 and
       the subsets say 2, so they disagree.
   F4  a RE-ENTRY at the same depth, 0 then 0. Must be full, same reason.
@@ -30,7 +30,7 @@ GATES -- each is a distinct TRANSITION, not a distinct assertion:
       `BuildFromScratch = false` sits inside
       `if (DataSet->GetGridSize(Policy))`, so a grid with no features leaves
       the flag set and the next level that does have features rebuilds. A
-      port that cleared it unconditionally would compute a partial pass onto
+      implementation that cleared it unconditionally would compute a partial pass onto
       histograms nothing ever filled.
   F6  the two SIZES are different expressions. The allocation uses
       `MaxDepth` and the view uses `CurrentBit`; at depth 0 of a depth-6

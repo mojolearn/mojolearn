@@ -29,7 +29,7 @@ because the reader is where the two kernels differ and the accumulator is not.
   C4  scalar n=1, scalar n=4 and `uint2` must agree exactly. `uint4` is
       included too even though **CatBoost never selects it for this
       accumulator** -- it has no `AddPoint4` -- so that is a check of this
-      port's filler, not of theirs.
+      implementation's filler, not of theirs.
 
   C5  the 512-thread floor. Not a runtime gate: the accumulator carries a
       `comptime assert` because their `Reduce` folds under

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""One gate over both halves of the pointwise port:
+"""One gate over both halves of the pointwise implementation:
 `gbdt/methods/pointwise_optimization_subsets.mojo` and
 `gbdt/methods/helpers.mojo`.
 
@@ -8,7 +8,7 @@ WHAT IT IS STANDING IN FOR
 ---------------------------
 Neither file has a caller. The searcher above them
 (`oblivious_tree_doc_parallel_structure_searcher.{h,cpp}`) and the
-`pointwise_hist2*` family below them are unported, so `ENGINEERING_RULES.md` rule
+`pointwise_hist2*` family below them are unimplemented, so `ENGINEERING_RULES.md` rule
 3 applies with full force: `build_necessary_histograms` sat in this tree
 "fully written, commented, tested by a probe, and with its state machine
 exactly backwards" because nothing called it. This file is the caller until
@@ -73,9 +73,9 @@ THE FIVE RULES THIS FIXTURE IS BUILT AROUND
 
    Plane 2, `Count`, is gated against the HOST's document count and not
    against the device's own `partitions[2p+1]`, which would be comparing the
-   port to itself. It is gated even though nothing reads it: their scorer
+   implementation to itself. It is gated even though nothing reads it: their scorer
    touches `.Weight`/`.Sum` only (`methods/kernel/pointwise_scores.cu:89`,
-   `:92`, `:260`, `:263`, `:359`, `:362`) and so does the ported one
+   `:92`, `:260`, `:263`, `:359`, `:362`) and so does the implemented one
    (`gbdt/methods/kernel/pointwise_scores.mojo:700-703`, `:884-885`,
    `:1011-1014`). A wrong plane 2 is the cheapest evidence that the record is
    being written at the wrong stride.
@@ -119,7 +119,7 @@ this file prints per level; the numbers are cells, not levels.
 | 4 (re-run) | `GatherTarget` moves 1 column instead of 2 -- on two buffers this is "the second `Gather` call is deleted" | `update_subsets_stats` | RED, and **a different defect than it was on one buffer**: 1992 ORDER + 1-to-8 CONTENT per level, where the merged-buffer form gave 11952 ORDER + 31 CONTENT. Two things the new breakdown shows that the old number could not. (a) `[w 0 t 1992]` -- the damage is entirely in the gradient column and the weight column is untouched, which is what a dropped second call looks like and is NOT what a dropped second plane looked like. (b) 1992, not 2003: the un-gathered buffer comes back all zeros, so the 11 documents whose planted target is exactly 0 MATCH BY ACCIDENT. A boolean "did the gather work" would read those 11 cells as fine; a per-cell count prices them. The stat side moves too, `plane Sum : device 0.0 host 67.0` |
 | 5 (re-run) | `UpdatePartitionDimensions` sized from `max_part_count` instead of `CurrentPartsView` | `update_subsets_stats` | RED: 196 cells, **all of them `tail`**, ORDER 0, everything else 0. Per level 60/56/48/32/0. L4 green because there `current_part_count() == max_part_count`. The count is the same as before the layout move for a reason worth stating: only the PARTITION records are clobbered (2 cells per dead slot), not the stat records, so widening the stat record from 2 to 3 does not widen this number |
 | 6 (re-run) | `UpdatePartitionSizes`'s `i ? bins[i-1] : 0` sentinel changed to `UINT32_MAX` (the value the OFFSETS kernel uses) | `update_partition_sizes_kernel` | RED at **L4 only**: 33 CONTENT (membership 1, size 8, stats 16, count 8). L0-L3 green, because the sentinel is only observable when the first sorted bin is above 0 -- which is exactly why the L4 "ALL RIGHT" arm exists |
-| 7 | every `current_depth + fold_bits` replaced by `current_depth` | `split_subsets`, `current_part_count` | **INERT -- 0 cells moved, and that is a finding, not a failure.** `FoldBits` is 0 on the `TStripeMapping` specialization, so the two spellings are the same number here. Nothing in this file can gate the fold path; only the unported `TMirrorMapping` specialization can, and until it lands the `+ fold_bits` spelling rests on their source (`pointwise_optimization_subsets.cpp:41`, `:46`) and not on a measurement |
+| 7 | every `current_depth + fold_bits` replaced by `current_depth` | `split_subsets`, `current_part_count` | **INERT -- 0 cells moved, and that is a finding, not a failure.** `FoldBits` is 0 on the `TStripeMapping` specialization, so the two spellings are the same number here. Nothing in this file can gate the fold path; only the unimplemented `TMirrorMapping` specialization can, and until it lands the `+ fold_bits` spelling rests on their source (`pointwise_optimization_subsets.cpp:41`, `:46`) and not on a measurement |
 | 8 (re-run) | `UpdatePartitionSizes` launched BEFORE `UpdatePartitionOffsets` | `launch_update_partition_dimensions` | RED at L0: partition 1 comes back as `[1012, +559040740)`. Sizes are a DIFFERENCE against the offsets, so the order is not cosmetic. **`CreateSubsets` at depth 0 stayed green** -- one partition whose offset is already 0 -- another branch a one-level fixture cannot reach |
 | 9 | `ToSplit`'s categorical clamp "tidied" from `GetBinCount(f)` to `GetBinCount(f) - 1` | `to_split` | RED: `cat arm capped at 15 want 16` |
 | 10 | `operator<` compares `FeatureId`/`BinId` as SIGNED `Int32` | `best_split_properties_less` | RED: an undefined candidate (`FeatureId == -1`) beat a real one on a gain tie, both argument orders |
@@ -134,7 +134,7 @@ this file prints per level; the numbers are cells, not levels.
 
 Four of the eighteen moved NOTHING where it mattered. 1 and 8 are inert at
 depth 0; 7 is inert everywhere and says something true about `FoldBits`; **16
-was inert because of a defect in THIS FILE, not in the port.** All four are
+was inert because of a defect in THIS FILE, not in the implementation.** All four are
 recorded rather than dropped. "Reached but inert" is the failure mode this
 repository keeps re-learning, and 16 is its nastier cousin: a gate that reads
 the layout through the library's own names cannot see the layout move.
@@ -553,7 +553,7 @@ def check_bit_helpers() raises:
     if get_even_bits(1 << 16) != 0:
         raise Error(
             "get_even_bits extracted input bit 16; theirs stops at bit 14"
-            " (helpers.h:87) and this port must stop where theirs does"
+            " (helpers.h:87) and this implementation must stop where theirs does"
         )
     if get_odd_bits(1 << 17) != 0:
         raise Error(
@@ -571,7 +571,7 @@ def check_to_split() raises:
 
     The two caps ARE DIFFERENT EXPRESSIONS and the asymmetry is theirs:
     categorical clamps to `GetBinCount(f)`, float clamps to
-    `GetBorders(f).size() - 1`. A port that "tidied" them into one would pass
+    `GetBorders(f).size() - 1`. An implementation that "tidied" them into one would pass
     a check that only ran one arm.
     """
     var wrong = 0
@@ -627,7 +627,7 @@ def check_to_split() raises:
         wrong += 1
         print("      to_split accepted an UNDEFINED TBestSplitProperties")
 
-    # the unported bundle arm raises rather than answering
+    # the unimplemented bundle arm raises rather than answering
     var raised2 = False
     try:
         _ = to_split(Int32(1), Int32(0), True, True, False, Int32(16), Int32(8))
@@ -808,7 +808,7 @@ def check_has_permutation_dependent_split() raises:
 
     THE POINT IS THE NESTING. Their two predicates are nested, not and-ed: a
     feature that is not a CTR is never asked whether it is permutation
-    dependent. The third case below is the one that separates a nested port
+    dependent. The third case below is the one that separates a nested implementation
     from a flattened one -- a plain float column carrying a stale `True` in
     the second list must NOT trip the answer.
     """
@@ -1185,14 +1185,14 @@ def _verify_level(
     # PLANE 2, `TPartitionStatistics::Count`. Their `PartitionUpdateImpl`
     # sets it to `size` whenever `counts == nullptr`, which is always on this
     # path (`pointwise_kernels.h:240`), and NO SCORER READS IT -- theirs
-    # touches `.Weight`/`.Sum` only, and so does the ported one
+    # touches `.Weight`/`.Sum` only, and so does the implemented one
     # (`gbdt/methods/kernel/pointwise_scores.mojo:700-703`). It is gated
     # anyway, for two reasons: an unread plane that holds garbage is a plane
     # that will hold garbage on the day something does read it, and the
     # stride-3 packing is the thing that keeps every OTHER read aligned, so a
     # wrong plane 2 is evidence the record is being written at the wrong
     # stride. Compared against the host's own count, NOT against the device's
-    # own `partitions_size`, which would be comparing the port to itself.
+    # own `partitions_size`, which would be comparing the implementation to itself.
     var count_wrong = 0
     for p in range(part_count):
         var gc = g_stats.unsafe_ptr().unsafe_load(p * 3 + 2)

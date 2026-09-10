@@ -6,7 +6,7 @@
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 
-WHAT IS UNDER TEST. `compute_optimal_split_kernel`, this repository's port of
+WHAT IS UNDER TEST. `compute_optimal_split_kernel`, this repository's implementation of
 `ComputeOptimalSplit` (`compute_scores.cu:393-475`) -- the scorer
 `EGrowPolicy::Lossguide` runs, and the ONLY one of their three that takes its
 leaf ids as scalars rather than out of a buffer.
@@ -44,7 +44,7 @@ THE FIVE, in the order they run:
   G2  THE TWO BLOCK ROWS SCORE DIFFERENT LEAVES, and swapping the two scalar
       part ids must swap the two output records. `blockIdx.y == 0 ? partId :
       maybeSecondPartId` (`:404`) is one line and it is the only line that
-      distinguishes this kernel from the Depthwise one; a port that read
+      distinguishes this kernel from the Depthwise one; an implementation that read
       `partId` unconditionally passes G1 and fails only here. REACH IS PER
       BRANCH.
 
@@ -57,7 +57,7 @@ THE FIVE, in the order they run:
   G4  THE POISON RECORD (`:44-49`). With every bin feature marked
       `SkipInScoreCount`, no candidate is ever considered and the record
       must come back with the `(ui32)-1` feature id. Their host raises on
-      it; a port that clamped to bin 0 would report a split here.
+      it; an implementation that clamped to bin 0 would report a split here.
 
   G5  THE TIE GOES TO THE SMALLER BIN-FEATURE ID (`:30`). Two candidates are
       planted bit-identical, and the winner must be the lower index at every
@@ -68,7 +68,7 @@ WHAT THIS FILE DOES NOT CLAIM. It says nothing about whether the LEAF the
 searcher picks is right (that is `check-lossguide-tree`), nothing about the
 noise term (`score_std_dev` is zero throughout so every expectation is
 exact), and nothing about MultiClass on this path, which the lane does not
-port.
+implementation.
 """
 
 from max.gpu.host import DeviceContext
@@ -217,7 +217,7 @@ def host_add_leaf[
 ):
     """`TCosineScoreCalcer::AddLeaf` (`score_calcers.cuh:152-157`) and
     `TL2ScoreCalcer::AddLeaf` (`:54`). Written from THEIR header, with the
-    one negation this port folds in (module docstring of the kernel file).
+    one negation this implementation folds in (module docstring of the kernel file).
     `Normalize` is false on every path here, as it is at both leafwise call
     sites (`greedy_search_helper.cpp:487`, `:531`)."""
     comptime if score_function == SCORE_FUNCTION_COSINE:

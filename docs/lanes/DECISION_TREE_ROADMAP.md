@@ -26,9 +26,8 @@ not qualify a new path across vendors. Never relax reductions or tie rules to
 obtain a timing win. Integer counts can be reorganized only while preserving
 width, overflow behavior and downstream arithmetic.
 
-Use upstream algorithms as design references, with pinned commits and entries
-in the relevant `DERIVATION_MAP.tsv`. Preserve required license/attribution
-notices for adapted code. Translate the data flow into Mojo GPU kernels and
+Use published algorithms as design references, citing the pinned commit in the
+file where a reader would want it. Translate the data flow into Mojo GPU kernels and
 explicit ownership; copying an option name is not implementing its semantics.
 Backend support in competitors must be checked separately from general APIs.
 
@@ -181,7 +180,7 @@ The next bounded feature sequence is F8 strict child counts, F6 learned missing
 routing, then F3 interaction masks and F2b node/level sampling. Follow with F5
 coherent leaf regularization and F4 monotonic descendant bounds. F7 non-symmetric
 multiclass needs its own objective/dimension/scoring/inference design; it is not
-an omitted wrapper flag or a missing port from the audited CatBoost GPU registry.
+an omitted wrapper flag or a missing implementation from the audited CatBoost GPU registry.
 This sequence does not displace large-real-data NVIDIA IDENTICAL measurements
 for RF, ET and GBDT, or MacBook FAST tree work. Do not add a CPU comparison arm.
 
@@ -277,7 +276,7 @@ before shipping the core GPU growth controls.
   Use as eligibility/sampling reference, not as proof of identical scoring.
 - **XGBoost:** [parameters](https://xgboost.readthedocs.io/en/stable/parameter.html)
   for child Hessian, feature sampling, interactions and bounded updates;
-  pin the implementation revision before a source-derived port.
+  pin the implementation revision before a source-derived implementation.
 - **Existing project scope:** [GPU-only decisions](TREE_GROWTH_SCOPE.md),
   [historical tree handoff](HANDOFF_trees.md),
   [project roadmap](../../ROADMAP.md). Older historical artifact claims retain

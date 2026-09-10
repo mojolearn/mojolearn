@@ -136,7 +136,7 @@ def check_level_plan() raises:
     sibling pairs, plus one leaf whose histogram survives from the parent
     path, plus a terminal pair that must be skipped entirely.
     """
-    # REWRITTEN 2026-08-19. The old fixture was built for the port's
+    # REWRITTEN 2026-08-19. The old fixture was built for the implementation's
     # inverted state machine: it made `Zeroes` leaves pair up and treated
     # `PreviousPath` as no work. Theirs is the opposite
     # (`split_properties_helper.cpp:1295-1304`), so the fixture had to move
@@ -307,7 +307,7 @@ def show_matrix() raises:
             " still transcribes CatBoost's literal `512 * (tid / 32)`"
             " (`point_hist_half_byte_template.cuh:48-52`). Their warp is 32"
             " and ours is not any more, so the private replica stride and the"
-            " sub-copy mask are both wrong. Port `SliceOffset` to the lane"
+            " sub-copy mask are both wrong. Implementation `SliceOffset` to the lane"
             " width before building this column"
         )
     print(

@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The level loop: grow one oblivious tree.
 
-PORT OF `TGreedyTreeLikeStructureSearcher::FitImpl` in
+FOLLOWS `TGreedyTreeLikeStructureSearcher::FitImpl` in
 `catboost/cuda/methods/greedy_subsets_searcher/structure_searcher_template.h`
 and the two calls it makes into `greedy_search_helper.cpp`, at CatBoost
-`54a8143a`. Transliterated. Do not improve.
+`54a8143a`. Followed statement for statement.
 
 Their whole tree is five lines:
 
@@ -31,7 +31,7 @@ the schedule and records what each step needs, and the driver that binds it
 to real memory comes next.
 
 Writing the sequence first is deliberate. The ordering constraint discovered
-while porting `compute_scores` -- that the bin prefix scan must run in its
+while implementing `compute_scores` -- that the bin prefix scan must run in its
 own kernel BEFORE scoring, or the score kernel loses its parallel shape --
 is a property of this file, not of either kernel, and it is the kind of thing
 that gets lost if the loop is written last.
@@ -114,7 +114,7 @@ def plan_level(
     call that wrong: "cub sucks for this, write proper segmented version" and
     "for oblivious trees we have overhead for launching kernel per leaf".
 
-    The port substitutes a batched stable partition, so if it holds up we get
+    The implementation substitutes a batched stable partition, so if it holds up we get
     the 168 without the 255. Worth knowing before comparing this number to a
     profile of real CatBoost, which will show the larger one.
     """

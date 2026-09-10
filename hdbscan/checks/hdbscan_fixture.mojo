@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The planted point sets, and what each one exists to separate.
 
-NOT A PORT. cuML checks HDBSCAN against scikit-learn-contrib in Python on
-`make_blobs` data with a random seed; this tree checks a port against a
+NO REFERENCE FILE. cuML checks HDBSCAN against scikit-learn-contrib in Python on
+`make_blobs` data with a random seed; this tree checks an implementation against a
 host computation that is bit-for-bit predictable, so every fixture has to
 be a PURE FUNCTION of its index -- no RNG, no floating-point host
 arithmetic that a second machine's libm could answer differently, and
@@ -17,7 +17,7 @@ nothing is a fixture whose green line means nothing:
                      The cluster of every row is KNOWN BY CONSTRUCTION
                      (`row % 3`), so the label gate compares against a
                      planted answer and not only against an oracle that
-                     could share a bug with the port.
+                     could share a bug with the implementation.
     HFIX_GRADIENT    a dense core inside a sparse halo, 90 x 2, with the
                      halo's spacing rising with the index. Excess of Mass
                      has a real choice here: the core's stability and the

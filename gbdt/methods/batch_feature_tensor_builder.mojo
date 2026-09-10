@@ -7,7 +7,7 @@ feature.
 MIRRORS `catboost/cuda/data/feature.h:89-188` (`TFeatureTensor`, and the
 `THash` specialisation under it) and
 `catboost/cuda/methods/batch_feature_tensor_builder.{h,cpp}` at CatBoost
-`54a8143a`. Transliterated. Do not improve.
+`54a8143a`. Followed statement for statement.
 
 ## What a tensor is, and why it cannot be a preprocessing pass
 
@@ -26,7 +26,7 @@ Two predicates in `binarizations_manager.h` gate the whole block:
     UseAsBaseTensorForTreeCtr()  tensor.GetComplexity() < MaxTensorComplexity     (:70-72)
 
 and `MaxTensorComplexity` defaults to 4 (`cat_feature_options.cpp:231`).
-**This port pins `max_ctr_complexity` at 1 and
+**This implementation pins `max_ctr_complexity` at 1 and
 `TCatFeatureParams.check()` refuses anything larger, so the first
 predicate is false and NOTHING BELOW RUNS DURING A FIT.** That pin is not
 changed here; see the file's tail comment for what would have to move.
@@ -91,7 +91,7 @@ are not typos:
 
 `VecCityHash` (`libs/helpers/hash.h:6-9`) hashes the RAW BYTES of the
 `ui32` vector -- `CityHash64(data(), 4 * size())` -- so it is
-byte-order-dependent by construction and this port assembles the bytes
+byte-order-dependent by construction and this implementation assembles the bytes
 little-endian, exactly as `gbdt/digest/city.mojo` already documents for
 every other reader of that function. An EMPTY cat vector hashes `k2`
 (`city.cpp:96`), not zero.
@@ -145,7 +145,7 @@ The two inner loops are deliberately NOT merged -- their comment says so
 outright ("do not merge with second part. ctrBinBuilder should be async
 wrt host") -- because the first submits work on `buildStreams` streams and
 the second is what waits on it. Merging them serialises the batch. The
-split is kept here even though this port has one queue, because it is the
+split is kept here even though this implementation has one queue, because it is the
 structure that decides WHICH builder object serves WHICH feature, and that
 mapping is what a visitor sees.
 
@@ -160,7 +160,7 @@ THEIRS: `TFeatureTensor` and `TBinarySplit` are both in
 `ui32`.
 
 OURS: `TBinarySplit` landed earlier in `gbdt/models/oblivious_model.mojo`
-with `Int32` fields, because the model is where this port first needed it.
+with `Int32` fields, because the model is where this implementation first needed it.
 `TFeatureTensor` remains here beside the builder that consumes it; there is
 no second feature-model definition to drift from it.
 
@@ -181,7 +181,7 @@ new slot and hands each `TCtrBinBuilder` its stream id, so the `j` loop
 submits `buildStreams` independent bin builds concurrently.
 
 OURS: there are no streams. `ctx.stream()` raises on Metal (ENGINEERING_RULES
-rule 4) and this port runs one queue, so `builder_streams[j]` holds the
+rule 4) and this implementation runs one queue, so `builder_streams[j]` holds the
 slot index `j` and the batch is built serially. The BATCH WIDTH is kept
 and so is the two-loop structure, because `buildStreams` decides the
 grouping -- how many features share a pass and which builder object each
@@ -661,7 +661,7 @@ def is_tree_ctrs_enabled(
         !DataProviderCatFeatureIdToFeatureManagerId.empty()
         && (CatFeatureOptions.MaxTensorComplexity > 1)
 
-    **This is the switch that keeps the whole block off in this port.**
+    **This is the switch that keeps the whole block off in this implementation.**
     `TCatFeatureParams.check()` pins `max_ctr_complexity` at 1, so the
     second conjunct is false on every fit `train()` can run today.
     """
@@ -691,7 +691,7 @@ trait TFeatureTensorVisitor:
     `std::function<void(const TFeatureTensor&, TCtrBinBuilder&)>`.
 
     Their one implementation wraps `TCtrFromTensorCalcer`
-    (`tree_ctrs.cpp:500-502`), which is NOT ported. A trait stands in for
+    (`tree_ctrs.cpp:500-502`), which is NOT implemented. A trait stands in for
     the `std::function` because rule 4 forbids dynamic trait objects here
     and a compile-time parameter is the same dispatch their template would
     have produced anyway.

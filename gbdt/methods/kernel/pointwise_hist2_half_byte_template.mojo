@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TPointHistHalfByte<BlockSize>`: ONE accumulator, TWO kernels.
 
-PORT OF `catboost/cuda/methods/kernel/pointwise_hist2_half_byte_template.cuh`
-at CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_half_byte_template.cuh`
+at CatBoost `54a8143a`. Followed statement for statement.
 
 This is the pointwise family's small-bin accumulator, and the thing to know
 before reading either kernel that uses it is that **there is only one of it**.
@@ -43,7 +43,7 @@ DEVIATION (archive/reference/PORTING.md 1): CatBoost launches both kernels at `b
 (`pointwise_hist2_binary.cu:142`, `pointwise_hist2_half_byte.cu:142`), which
 at 16 floats per thread is 49,152 bytes against Apple's 32,768. The matrix
 row resolves it to 512 -- exactly 32,768. **Unlike every other block in this
-port, 512 is also a FLOOR**: their `Reduce` folds the warp slices under
+implementation, 512 is also a FLOOR**: their `Reduce` folds the warp slices under
 `if (threadIdx.x < 512)`, so a smaller block leaves the top of the first
 slice unfolded and loses folds with no other symptom. Asserted, not trusted.
 

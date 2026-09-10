@@ -25,9 +25,9 @@ in that order:
     ReorderBins(Bins, Indices, 0, IntLog2(uniqueValues), ...)
     UpdateBordersMask(Bins, CurrentBins, Indices)
 
-## TWO BUILDERS, AND WHICH ONE IS THE PORT
+## TWO BUILDERS, AND WHICH ONE IS THE IMPLEMENTATION
 
-`TCtrBinBuilderGpu` at the bottom of this file IS the port: it runs
+`TCtrBinBuilderGpu` at the bottom of this file IS the implementation: it runs
 `GatherWithMask`, `ReorderBins`, `ComputeCurrentBins` and
 `UpdateBordersMask` on the device, through the kernels their own code
 calls. The `Gpu` suffix is OURS -- CatBoost has one class because it has no
@@ -156,7 +156,7 @@ struct TCtrBinBuilder(Movable):
 
     `TestSlice` is not carried. Their builder appends the test rows after
     the learn rows and offsets their indices (`:44-49`) so that one CTR
-    pass covers both; this port has no test pool in `train()`, and adding
+    pass covers both; this implementation has no test pool in `train()`, and adding
     an always-empty slice would be a field no branch reads.
     """
 
@@ -268,7 +268,7 @@ struct TCtrBinBuilder(Movable):
         mut self, cat_bins: List[UInt32], unique_values: Int
     ) raises:
         """Their `AddCompressedBins` -> `ProceedNewBins` (`:104-110`,
-        `:224-231`), with the decompression step dropped because this port
+        `:224-231`), with the decompression step dropped because this implementation
         holds dense category codes rather than their packed `ui64` blocks.
 
         `unique_values` is their `FeaturesManager.GetBinCount(feature)` and
@@ -409,7 +409,7 @@ struct TCtrBinBuilder(Movable):
 
 
 struct TCtrBinBuilderGpu(Movable):
-    """`TCtrBinBuilder<TMapping>` ON THE DEVICE, which is the port.
+    """`TCtrBinBuilder<TMapping>` ON THE DEVICE, which is the implementation.
 
     Every buffer below is theirs (`ctr_bins_builder.h:253-259`) and every
     launch is theirs. The `Gpu` suffix is ours and exists only because the
@@ -433,7 +433,7 @@ struct TCtrBinBuilderGpu(Movable):
 
     var decompressed_temp_bins: DeviceBuffer[DType.uint32]
     """Their `DecompressedTempBins`. Holds the raw cat bins in ORIGINAL row
-    order (their `Decompress` writes it; this port is handed dense codes and
+    order (their `Decompress` writes it; this implementation is handed dense codes and
     copies them in), and doubles as the radix sort's value ping-pong exactly
     as it does for them -- `:218` passes it as `ReorderBins`' second temp."""
 
@@ -548,7 +548,7 @@ struct TCtrBinBuilderGpu(Movable):
     ) raises:
         """Their `AddCompressedBins` -> `ProceedNewBins` (`:104-110`,
         `:212-222`), with `Decompress` replaced by an upload because this
-        port holds dense category codes rather than their packed `ui64`
+        implementation holds dense category codes rather than their packed `ui64`
         blocks.
 
             ComputeCurrentBins(Indices, Bins, CurrentBins)

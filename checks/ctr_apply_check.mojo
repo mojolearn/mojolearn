@@ -708,7 +708,7 @@ def check_borders_table_arithmetic() raises:
     # ---- AND THE DISPATCH ITSELF HAS TO BE REACHED, which the block above
     # does NOT prove and a sabotage caught.
     #
-    # Every Borders table this port writes carries `CounterDenominator = 0`,
+    # Every Borders table this implementation writes carries `CounterDenominator = 0`,
     # because their `CalcFinalCtrsImpl` never sets it on that arm
     # (`online_ctr.cpp:934-939` sets it on the other two). With the stored
     # denominator at 0, `Calc(0, denominator)` and `Calc(0, 0)` are the SAME

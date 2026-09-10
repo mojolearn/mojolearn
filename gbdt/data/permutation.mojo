@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TDataPermutation`: the learn permutations, and the CTR estimation order.
 
-PORT OF `catboost/cuda/data/permutation.{h,cpp}` at CatBoost `54a8143a`,
+FOLLOWS `catboost/cuda/data/permutation.{h,cpp}` at CatBoost `54a8143a`,
 together with the two things it stands on: `NCatboostCuda::Shuffle`
 (`cuda/data/data_utils.h:21-47`) and the generator that drives it,
 `TRandom` (`libs/helpers/cpu_random.h:6-99`) over `TMersenne<ui64>`
 (`util/random/mersenne64.{h,cpp}`, `util/random/common_ops.h`).
 
-## Why a GBDT port needs a random permutation at all
+## Why a GBDT implementation needs a random permutation at all
 
 CatBoost's `Borders` CTR is an ORDERED TARGET STATISTIC: a row's feature
 value is built from the rows that came BEFORE it, so the value depends
@@ -35,7 +35,7 @@ load: `ShuffleLearnDataIfNeeded` shuffles whenever the data has any
 categorical feature and `has_time` is false
 (`private/libs/algo/preprocess.cpp:161-181`, `:183-199`). That stage is
 CPU-side data preparation and is upstream of everything in `catboost/cuda`,
-so this port does not have it, and a caller here can hand us rows in any
+so this implementation does not have it, and a caller here can hand us rows in any
 order at all -- including sorted by target.
 
 `train()` therefore takes its CTR estimation order from a NON-IDENTITY
@@ -61,16 +61,16 @@ learner never exposes the order -- so the only defence is that every line
 below is theirs, and that `checks/ctr_permutation_check.mojo` gates
 `TMersenne64` against the published MT19937-64 reference stream.
 
-`blockSize` is 1 everywhere this port reaches: the CTR estimation
+`blockSize` is 1 everywhere this implementation reaches: the CTR estimation
 permutations come from `GetPermutation(DataProvider, permutationId)`
 (`doc_parallel_dataset_builder.cpp:48`), whose `blockSize` parameter
 defaults to 1 (`permutation.h:98-104`). The block arm of `Shuffle`
-(`data_utils.h:31-45`) is ported anyway because it is nine lines of their
-file and a hole in a ported function is how a reader learns to distrust the
+(`data_utils.h:31-45`) is implemented anyway because it is nine lines of their
+file and a hole in a implemented function is how a reader learns to distrust the
 whole file.
 
-`FillGroupOrder` and `GenerateQueryDocsOrder` are NOT ported: both require
-`ObjectsGrouping`, and no groupwise loss is ported, so `FillOrder`'s
+`FillGroupOrder` and `GenerateQueryDocsOrder` are NOT implemented: both require
+`ObjectsGrouping`, and no groupwise loss is implemented, so `FillOrder`'s
 group branch (`permutation.cpp:9-11`) is unreachable here.
 """
 
@@ -95,7 +95,7 @@ struct TMersenne64(Movable):
     """`NPrivate::TMersenne64` (`util/random/mersenne64.{h,cpp}`).
 
     Plain MT19937-64. `InitByArray` and the `IInputStream` constructor are
-    not ported: `TRandom` only ever calls the scalar-seed one
+    not implemented: `TRandom` only ever calls the scalar-seed one
     (`cpu_random.h:8-11`).
     """
 
@@ -174,7 +174,7 @@ struct TRandom(Movable):
     """`TRandom` (`catboost/libs/helpers/cpu_random.h:6-99`), the three
     members `Shuffle` uses.
 
-    The gaussian/gamma/beta/poisson block is not ported: none of it is
+    The gaussian/gamma/beta/poisson block is not implemented: none of it is
     reachable from a permutation, and `random_gen.mojo` already carries the
     device-side draws the bootstrap needs.
     """
@@ -289,7 +289,7 @@ struct TDataPermutation(Copyable, Movable):
 
     `DataProvider` becomes a plain document count: the only two things the
     class asks it for are `GetObjectCount()` and the grouping, and the
-    grouping branch is unported (see the file header).
+    grouping branch is unimplemented (see the file header).
     """
 
     var doc_count: Int
@@ -368,7 +368,7 @@ It is NOT reduced to 1 on this path: `UpdateGpuSpecificDefaults` collapses
 it only when the feature manager has no permutation features AND boosting is
 Plain (`cuda/train_lib/train.cpp:102-107`), and a `Borders` CTR is exactly a
 permutation feature. `DataProcessingOptions->HasTimeFlag` also forces 1
-(`catboost_options.cpp:1043-1045`) and this port has no `has_time`.
+(`catboost_options.cpp:1043-1045`) and this implementation has no `has_time`.
 """
 
 
@@ -383,6 +383,6 @@ def ctrs_estimation_permutation(
     Their loop runs this for every `permutationId` in
     `[0, permutation_count)` and writes a SEPARATE set of CTR columns per
     permutation into that permutation's own compressed dataset
-    (`:251-262`). See `archive/reference/PORTING.md` 55 for which one this port keeps.
+    (`:251-262`). See `archive/reference/PORTING.md` 55 for which one this implementation keeps.
     """
     return get_permutation(doc_count, permutation_id, 1)

@@ -120,7 +120,7 @@ comptime N_NODES = 8
 
 # --------------------------------------------------------------------------
 # Hashing. One mixer, used for every planted value, so no two cells agree by
-# construction. Deliberately NOT the hash `random_utils.mojo` ports -- an
+# construction. Deliberately NOT the hash `random_utils.mojo` implements -- an
 # expected value must not come from the code under test.
 # --------------------------------------------------------------------------
 

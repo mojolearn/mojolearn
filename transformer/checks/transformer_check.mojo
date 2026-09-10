@@ -3,7 +3,7 @@
 """The gate file of profile `mojolearn.identical.transformer.fp32.v1`, the
 path `transformer/IDENTICAL_TRANSFORMER_CONTRACT.md` section 10 names.
 
-NOT A PORT. It runs the device block
+NO REFERENCE FILE. It runs the device block
 (`transformer/impl/transformers/models/llama/modeling_llama.mojo`) against
 the host oracle (`transformer/checks/transformer_oracle.mojo`) and
 compares every recorded stage BY BITS.

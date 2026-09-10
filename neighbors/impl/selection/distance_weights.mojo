@@ -11,14 +11,13 @@ cuML REFUSES this parameter. `kneighbors_classifier.pyx:191-193` and
 `kneighbors_regressor.pyx:188-190` both raise "Only uniform weighting
 strategy is supported currently", and `_params_from_cpu` (`:134-135` /
 `:146-147`) raises `UnsupportedOnGPU` at the scikit-learn boundary. There
-is no cuVS kernel, no RAFT primitive and no cuML C++ entry to transliterate.
+is no cuVS kernel, no RAFT primitive and no cuML C++ entry to follow statement for statement.
 `neighbors/NOT_IMPLEMENTED.tsv` carried a row saying exactly that, and the
-row's REASON -- "there is no upstream GPU kernel to port" -- was withdrawn
+row's REASON -- "there is no upstream GPU kernel to implement" -- was withdrawn
 on 2026-09-01: a refusal is legitimate only when the thing is genuinely
 impossible here or when refusing IS the correct behaviour for the input.
-"a prior implementation does not have it" is neither. The row is now a
-DERIVATION_MAP row with `no-upstream` status, which is what it always
-should have been.
+"a prior implementation does not have it" is neither. It has no reference
+file, which is what it always should have been.
 
 WHAT IT IS: scikit-learn's SEMANTICS, not scikit-learn's bits
 --------------------------------------------------------------
@@ -38,7 +37,7 @@ Three sentences, and the third is the one everybody gets wrong. A row that
 contains ANY exact-zero distance is REPLACED WHOLESALE by its infinity
 mask: the exact matches get weight 1.0 and EVERY OTHER NEIGHBOUR IN THAT
 ROW gets 0.0, not merely a smaller weight. Their comment at `:96-98` says
-so. It is a row-level replacement, not a per-element clamp, and a port
+so. It is a row-level replacement, not a per-element clamp, and an implementation
 that only special-cased the zero element itself would agree with sklearn
 on every fixture without a duplicate point and disagree on every fixture
 with one. `check_knn_distance_weights` plants a duplicate for that reason.
@@ -56,7 +55,7 @@ The consumers, also scikit-learn's:
 
 THE UNIFORM ARM IS NOT TOUCHED. `class_probs_kernel` and
 `regress_avg_kernel` in `neighbors/impl/selection/knn.mojo` are cuML's,
-transliterated, and they still run byte for byte when `weights='uniform'`.
+followed statement for statement, and they still run byte for byte when `weights='uniform'`.
 Their `1/k` per slot is PRE-normalized where the weighted kernels here
 accumulate raw and normalize afterwards, which is the difference between
 cuML's formulation and scikit-learn's; making one call the other would
@@ -124,7 +123,7 @@ comptime WEIGHTS_DISTANCE = 1
 
 
 def weights_from_name(name: String) raises -> Int:
-    """`'uniform'` or `'distance'`. A callable is NOT ported and is refused
+    """`'uniform'` or `'distance'`. A callable is NOT implemented and is refused
     by name; sklearn accepts one (`_base.py:116`) and there is no way to
     call a Python function from inside a GPU kernel, which is the one kind
     of reason that still justifies a refusal."""
@@ -134,9 +133,9 @@ def weights_from_name(name: String) raises -> Int:
         return WEIGHTS_DISTANCE
     if name == "callable":
         raise Error(
-            "mojolearn k-NN: weights=<callable> is NOT PORTED; a Python"
+            "mojolearn k-NN: weights=<callable> is NOT IMPLEMENTED; a Python"
             " function cannot run inside a GPU kernel. 'uniform' and"
-            " 'distance' are ported."
+            " 'distance' are implemented."
         )
     raise Error(
         "mojolearn k-NN: weights='" + name + "' is not a weighting; use"
@@ -214,7 +213,7 @@ def host_distance_weights(
                         + String(i)
                         + " slot "
                         + String(j)
-                        + " has a NEGATIVE distance, which no ported metric"
+                        + " has a NEGATIVE distance, which no implemented metric"
                         " can produce; refusing rather than weighting it"
                     )
                 else:
@@ -325,7 +324,7 @@ def weighted_regress_avg_kernel(
     which would be one rounding instead of two. That is deliberate:
     sklearn's expression is `np.sum(_y[neigh_ind] * weights, axis=1)`, a
     materialized product then a sum, and this file's contract is
-    sklearn's SEMANTICS. Pinning it to an fma here would make the ported
+    sklearn's SEMANTICS. Pinning it to an fma here would make the implemented
     arithmetic differ from the reference it is checked against for a
     reason no ledger row asks for. Both operands and the running sum go
     through `ftz`, which is row 10 and is a mode question, not a shape

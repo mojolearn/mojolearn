@@ -14,7 +14,7 @@ compares the trees to each other, pairwise, and requires them to differ.
 **The vote can be the last tree instead of the average.** cuML's `predict`
 (`randomforest.cuh:229-242`) accumulates with `+=` into a buffer whose only
 zeroing is `std::vector`'s constructor one level up, then divides by
-`n_trees`. Deviation 147 ports that under a name that says it accumulates,
+`n_trees`. Deviation 147 implements that under a name that says it accumulates,
 precisely because reaching for a zeroing wrapper here returns the LAST tree's
 leaf vector and is invisible on any fixture where the trees agree. So the vote
 is checked against an independently computed average, per row, per class — on
@@ -22,7 +22,7 @@ a fixture built so the trees do NOT agree.
 
 **The bootstrap can be inert, or not a bootstrap (DEVIATION 460).** Since
 2026-08-23 `row_sample_for` draws cuML's with-replacement sample
-(`randomforest.cuh:64-67`) through the RF lane's Philox port. This file pins
+(`randomforest.cuh:64-67`) through the RF lane's Philox implementation. This file pins
 the per-tree seed chain to hand-computed fnv1a32 values, requires the sample
 to be a with-replacement sample (duplicates, every id in range, `n_sampled`
 long, different per tree, identical per (seed, tree) twice), and requires a

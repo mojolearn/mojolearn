@@ -16,7 +16,7 @@ was not run for the Linux wheel.
   implementations, the same code the device runs under identical mode, so
   every host computes the same bits by construction (DEVIATIONS 2260 to 2266).
   Verified on the M4 and an H100: the CatBoost bias oracle matches to the bit
-  on every ported arm, min-entropy and GreedyLogSum borders match CatBoost on
+  on every implemented arm, min-entropy and GreedyLogSum borders match CatBoost on
   every case, the RF predict check passes in both modes. Fast-mode bits at
   those three sites move; the fast profile carries no bit promise across
   versions.
@@ -36,7 +36,7 @@ was not run for the Linux wheel.
 - Repository size fences: pre-commit and pre-push hooks under tools/hooks
   refuse oversized blobs and wheels, tarballs or fixture dumps under
   bench/results; the incident is recorded in CONTRIBUTING.md.
-- README rewritten around the gap the port fills and the identity contract,
+- README rewritten around the gap the implementation fills and the identity contract,
   with a project-status section.
 - Leg tool: a `checks` family runs named conformance checks on a rented GPU;
   `--allow-concurrent` covers recorded leases; the release-build gate ignores
@@ -108,6 +108,6 @@ was not run for the Linux wheel.
 
 ## Earlier releases
 
-Versions 0.1.0 through 0.3.2 established the Mojo GPU port, derivation/refusal ledgers, identity-card
+Versions 0.1.0 through 0.3.2 established the Mojo GPU implementation, derivation/refusal ledgers, identity-card
 methodology, Python packaging, and the initial Apple/AMD/NVIDIA evidence. Exact changes are preserved
 by Git tags and history rather than duplicated here.

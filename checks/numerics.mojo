@@ -323,7 +323,7 @@ def portable_powf(x: Float32, p: Float32) -> Float32:
 
 
 def portable_exp64(x: Float64) -> Float64:
-    """HOST-ONLY (no float64 on device, `mojolearn-hardware-limits`): `exp` for Float64 as one arithmetic, for the PROBABILITY LINKS -- the sigmoid/softmax CatBoost computes in double (`eval_processing.h:186-226`) and this port's `one_vs_all_probabilities` / `multiclass_probabilities` / the Python wrapper's Logloss sigmoid mirror."""
+    """HOST-ONLY (no float64 on device, `mojolearn-hardware-limits`): `exp` for Float64 as one arithmetic, for the PROBABILITY LINKS -- the sigmoid/softmax CatBoost computes in double (`eval_processing.h:186-226`) and this implementation's `one_vs_all_probabilities` / `multiclass_probabilities` / the Python wrapper's Logloss sigmoid mirror."""
     from std.math import floor, fma
     from std.memory import bitcast
 

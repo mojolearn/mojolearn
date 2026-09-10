@@ -16,7 +16,7 @@ Their split, from `compute_hist_loop_two_stats.cuh`:
 
 so the partition is looked up and the scratch slot is DENSE, and
 `WriteReducesHistogramsImpl` then reads the scratch at `blockIdx.y` and
-writes the flat histogram at `histogramIds[blockIdx.y]`. Our port had the
+writes the flat histogram at `histogramIds[blockIdx.y]`. Our implementation had the
 kernels writing the scratch at the LOOKED-UP id, which only agrees with the
 bridge when the list is the identity.
 

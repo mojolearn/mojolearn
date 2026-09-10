@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host oracle: a SECOND, independent transcription of cuML's
 isolation tree builder and scorer, serial Float32 through the same
-`identical_*` helpers and the same XORWOW port, plus a Float64 score
-reference. NOT A PORT (cuML has no host arm; its CPU story is refusing).
+`identical_*` helpers and the same XORWOW implementation, plus a Float64 score
+reference. NO REFERENCE FILE (cuML has no host arm; its CPU story is refusing).
 
 Why a second transcription rather than calling the device function on
 the host: the device builder's pointer arithmetic (tree offsets, the
-four node arrays, the flat stack) is exactly what a mis-port hides in,
+four node arrays, the flat stack) is exactly what a mis-implementation hides in,
 and a gate that runs the same function twice cannot see it. This file
 is written from `isolation_tree_builder.cuh` again, recursively, over
 `List`s, with the ONE thing that must be shared shared: the RNG

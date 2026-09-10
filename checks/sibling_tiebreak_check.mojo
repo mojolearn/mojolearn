@@ -15,7 +15,7 @@ one (`:861-862`, `:976-977`). So `ids[0]` is the LEFT child, `ids[1]` is the
 RIGHT child, the comparison is a STRICT `<` on the LEFT, and **on an exact
 size tie the `else` branch fires and the RIGHT child is the one computed.**
 
-This port had it inverted from the day the planner was written (`409a16c`,
+This implementation had it inverted from the day the planner was written (`409a16c`,
 2026-08-19, host; carried onto the device by DEVIATION 94 at `2bbe6af`,
 2026-08-21): a tie kept the LEFT child as the computed one. archive/reference/PORTING.md 136.
 
@@ -362,7 +362,7 @@ def measure_subtraction_blast_radius() raises:
     histogram path at a scale the shipped path would choose, then the
     SHIPPED `substract_histograms_kernel` run both ways:
 
-        derived RIGHT = parent - computed LEFT     (what this port did)
+        derived RIGHT = parent - computed LEFT     (what this implementation did)
         derived LEFT  = parent - computed RIGHT    (what CatBoost does)
 
     and each compared BIT FOR BIT against the sibling actually built.

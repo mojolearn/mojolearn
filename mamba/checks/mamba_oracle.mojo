@@ -3,9 +3,9 @@
 """The host Float32 oracle of one Mamba-1 block under profile
 `mojolearn.identical.mamba1.fp32.v1`, and the Float64 tolerance reference.
 
-NOT A PORT -- the reference libraries ship no oracle; the ALGORITHM the
+NO REFERENCE FILE -- the reference libraries ship no oracle; the ALGORITHM the
 oracle spells is theirs, cited seam by seam in
-`mamba/IDENTICAL_MAMBA_CONTRACT.md` and in the ported files. This file is
+`mamba/IDENTICAL_MAMBA_CONTRACT.md` and in the implemented files. This file is
 the contract's arithmetic order written on the CPU through the SAME seams
 (`identical_mul_add`, `ftz`, `identical_exp`, `identical_div`,
 `identical_rsqrt`, `identical_silu`, `identical_softplus`, GEMM v1's

@@ -24,7 +24,7 @@ per predict; an execution-plan detail, cuBLAS reads either layout natively.
 
 `addScalar` is one thread per row; `ftz` on the store under IDENTICAL.
 `linearRegLossGrads` and the penalty gradients in the same file are the SGD
-solver's and are not ported (`solver/NOT_IMPLEMENTED.tsv`).
+solver's and are not implemented (`solver/NOT_IMPLEMENTED.tsv`).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

@@ -179,7 +179,7 @@ def check_tree(max_depth: Int) raises:
     # every leaf comes out with the same distribution, every feature ties on
     # score, the argmax deterministically re-picks the same one, and the tree
     # re-splits on an already-used feature into empty children. That looked
-    # exactly like a porting bug and was a property of the test data.
+    # exactly like a implementing bug and was a property of the test data.
     var seed = 0x2545F491
     for f in range(n_features):
         for r in range(n_rows):
@@ -273,7 +273,7 @@ def check_mixed_tree(max_depth: Int) raises:
 
     Every check before this used 32 uniform binary features, which is one
     policy, one histogram launch and a 64-cell histogram. This is the shape
-    CatBoost is actually built for and the one every kernel in the port was
+    CatBoost is actually built for and the one every kernel in the implementation was
     written to handle.
 
     16 features: 8 binary (1 fold), 4 half-byte (8 folds), 4 one-byte (64

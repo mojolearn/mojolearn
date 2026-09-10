@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The flat tree node, the flat tree, and the host predict traversal.
 
-PORT OF cuML at `00094f7` (`~/CascadeProjects/upstream/cuml`). Transliterated.
-Do not improve.
+FOLLOWS cuML at `00094f7` (`~/CascadeProjects/upstream/cuml`). Followed statement for statement.
 
 | piece                                | cuML file:lines                                     |
 |--------------------------------------|-----------------------------------------------------|
@@ -266,7 +265,7 @@ struct SparseTreeNode[dtype: DType](
 
 
 # ================================ DEVIATION BLOCK ======================
-# 146. `TreeMetaDataNode` IS REDUCED: `train_time` IS NOT PORTED.
+# 146. `TreeMetaDataNode` IS REDUCED: `train_time` IS NOT IMPLEMENTED.
 #
 # **What theirs does.** `decisiontree.hpp:101-109`:
 #
@@ -288,7 +287,7 @@ struct SparseTreeNode[dtype: DType](
 #
 # **Why.** Timing is deferred in this lane by explicit instruction — no
 # benchmark, no timing claim — so a `double` seconds field would be written
-# by nothing and read by nothing, and rule 3 says an unported thing must be
+# by nothing and read by nothing, and rule 3 says an unimplemented thing must be
 # VISIBLE rather than present-but-dead. It is also the only member that
 # could not survive a move to device memory (`gbdt/` has no `float64` on
 # device at all), so a per-tree POD carrying it would have to shed it
@@ -459,7 +458,7 @@ def predict_leaf[
 # The forest path must keep calling the accumulating form or the sum is
 # lost, and that is why it was not simply changed.
 #
-# **Price.** Two names where cuML has one, and a lane that ports
+# **Price.** Two names where cuML has one, and a lane that implements
 # `RandomForest::predict` later must reach for the accumulating one. Stated
 # here so that choice is made on purpose rather than by autocomplete.
 # ======================================================================

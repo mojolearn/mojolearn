@@ -19,7 +19,7 @@ than being spread through the code.
 THE POLICY CHOICES
 ------------------
 
-1. **THE LABEL CONVENTION IS scikit-learn's AND IT COMES FROM THE PORT, NOT
+1. **THE LABEL CONVENTION IS scikit-learn's AND IT COMES FROM THE IMPLEMENTATION, NOT
    FROM HERE.** Noise is `-1` and clusters are exactly `0..n_clusters-1`.
    That is what cuML's `final_relabel` plus `relabelForSkl`
    (`runner.cuh:410-416`) produce and what `dbscan/checks/dbscan_check.mojo`
@@ -27,7 +27,7 @@ THE POLICY CHOICES
    `labels_` against scikit-learn's directly.
 
 2. **`eps_nn_method` DEFAULTS TO `EPS_NN_RBC`, the random ball cover, AND
-   THAT IS THIS PORT'S DEFAULT, NOT cuML's** -- DEVIATION 35 in
+   THAT IS THIS IMPLEMENTATION'S DEFAULT, NOT cuML's** -- DEVIATION 35 in
    `dbscan/impl/dbscan/runner.mojo`: cuML's Python default is
    `algorithm='brute'` and on an int32-label build their dispatch never
    reaches RBC. (This item used to say "cuML's default"; corrected
@@ -73,11 +73,11 @@ THE POLICY CHOICES
    points core. Apple M4 only.
 
 6. **`metric` CARRIES AN L1 ARM AND IT IS ORIGINAL WORK** (added
-   2026-09-01, DEVIATION 27). `metric = DBSCAN_METRIC_L2` is the ported
-   arm. `DBSCAN_METRIC_L1` is not a port of anything: cuML's DBSCAN offers
+   2026-09-01, DEVIATION 27). `metric = DBSCAN_METRIC_L2` is the implemented
+   arm. `DBSCAN_METRIC_L1` is not an implementation of anything: cuML's DBSCAN offers
    euclidean, cosine and precomputed and no Manhattan
    (`dbscan.pyx:110-115`), so there is no upstream eps-neighbourhood kernel
-   to be faithful to and no `DERIVATION_MAP.tsv` row points anywhere for it.
+   to be faithful to and nothing here follows a reference file.
    The per-pair arithmetic IS credited, to RAFT's `l1.cuh:49`. The one thing
    a reader must know before touching it: the L2 arm compares a SQUARED
    distance against `eps * eps`, and an L1 sum has no squared form, so the
@@ -96,7 +96,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 - `metric='cosine'` and `metric='precomputed'`, cuML's other two
   (`dbscan.pyx:110-115`); the Cosine arm is two `matrixVectorOp` passes plus
   `eps2 = 2 * eps` around the same kernel (`algo.cuh:186-223`).
-- `core_sample_indices_`. scikit-learn exposes it; the port does not compute
+- `core_sample_indices_`. scikit-learn exposes it; the implementation does not compute
   it separately (`dbscan.cuh:171-173` notes theirs is not returned either).
 - `eps_nn_method` and `max_iterations` cross the CPython binding since
   2026-08-23 (`bindings/_mojolearn_estimators.mojo`, slots 5 and 6;
@@ -135,7 +135,7 @@ def dbscan_fit(
     means RUN TO THE FIXED POINT, which is cuML's behaviour: their
     `weak_cc_batched` and `MergeLabels` loops are `do { } while (host_m)`
     with no cap at all (`csr.cuh:133`; `csr.mojo`'s own docstring says so).
-    The 200 that `dbscan_fit_impl` still defaults to is THIS PORT's number,
+    The 200 that `dbscan_fit_impl` still defaults to is THIS IMPLEMENTATION's number,
     not theirs, and on a 1,000-point chain at spacing 1/8, eps 3/16,
     min_samples 2 -- a thin trail of points, an ordinary input -- it
     returned SEVEN clusters where the fixed point is ONE (731 passes),

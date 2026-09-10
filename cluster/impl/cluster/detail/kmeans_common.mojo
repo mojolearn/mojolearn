@@ -2,14 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The pieces every k-means path shares: batching, convergence, sampling.
 
-PORT OF `cuvs/src/cluster/detail/kmeans_common.cuh` at cuVS `94c2819`.
-Partial. Do not improve.
+FOLLOWS `cuvs/src/cluster/detail/kmeans_common.cuh` at cuVS `94c2819`.
+Partial.
 
-What is ported here is the part of that file that is DECISION rather than
+What is implemented here is the part of that file that is DECISION rather than
 plumbing. Most of its bulk is RAFT and CUB glue (`cub::DeviceHistogram`,
-`cub::DeviceSelect::If`, `cub::DeviceReduce`, `thrust::for_each_n`); see
-`DERIVATION_MAP.tsv` for which of those became `checks/` files and which are
-simply not ported yet.
+`cub::DeviceSelect::If`, `cub::DeviceReduce`, `thrust::for_each_n`); some of
+those became `checks/` files and the rest are simply not implemented yet.
 
 The decisions that ARE theirs and are copied exactly:
 

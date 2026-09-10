@@ -302,7 +302,7 @@ def kernel_ridge_fit_host(
             " wrong answer with no error. THE CLOSURE IS alpha: raise it."
             " A float32 kernel matrix needs a larger ridge than cuML's"
             " float64 one at the same data (DEVIATION 1661). To close it"
-            " properly, port an SVD-based least-squares arm -- there is one"
+            " properly, implementation an SVD-based least-squares arm -- there is one"
             " at solver/checks/lstsq.mojo -- and gate BOTH sides of the"
             " branch; kernel_methods/NOT_IMPLEMENTED.tsv carries the row"
         )
@@ -925,7 +925,7 @@ def rbf_sampler_fit_host(
     So this signature takes `n_features` rather than `X`, which makes the
     fact visible instead of implied.
 
-    **`gamma="scale"` IS NOT PORTED** and there is nothing to port it into:
+    **`gamma="scale"` IS NOT IMPLEMENTED** and there is nothing to implement it into:
     it is a host reduction over the training data (`X.var()`), it would make
     `fit` data-dependent, and it would put a variance -- a fold -- on the
     identity path in front of every draw. `NOT_IMPLEMENTED.tsv` carries the row; a

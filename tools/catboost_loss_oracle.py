@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CATBOOST'S OWN OUTPUT FOR THE NINE NEWLY PORTED LOSSES.
+"""CATBOOST'S OWN OUTPUT FOR THE NINE NEWLY IMPLEMENTED LOSSES.
 
     pixi run -e bench loss-oracle-gen        # writes bench/oracle_losses.txt
 
 WHY THIS FILE EXISTS
 --------------------
 `tools/catboost_oracle.py` dumps CatBoost's own decisions for ONE objective,
-RMSE. Nine more objectives were ported -- Quantile, MAE, LogLinQuantile,
+RMSE. Nine more objectives were implemented -- Quantile, MAE, LogLinQuantile,
 MAPE, Poisson, Lq, Expectile, Tweedie, Huber -- and every gate on them
 compares our device against a host tally written in this repository or
 against libm. Both are worth having and neither is CatBoost. If we misread
@@ -51,7 +51,7 @@ Every option below is pinned on BOTH arms, and the two that are not simply
                            on candidate scores.
   has_time         True    keeps them from permuting rows.
   boost_from_average / model_shrink_rate  off, both real CatBoost behaviour
-                           this port does not implement; leaving them on
+                           this implementation does not implement; leaving them on
                            would show up as a constant offset in every leaf.
 
   leaf_estimation_method / leaf_estimation_iterations
@@ -61,7 +61,7 @@ Every option below is pinned on BOTH arms, and the two that are not simply
                            (`catboost_options.cpp:31-244`) is keyed on
                            TASK TYPE and Tweedie's entry differs: CPU takes
                            1 Newton iteration, GPU takes 20 (`:221-231`).
-                           Our port takes the GPU number. Comparing a
+                           Our implementation takes the GPU number. Comparing a
                            20-iteration fit against a 1-iteration fit would
                            be a configuration difference reported as a loss
                            defect. The values written here are their CPU

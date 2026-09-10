@@ -9,8 +9,8 @@ was empty and every entry point under `neighbors/` was a `*_main.mojo` driver
 or a `checks/*_check.mojo` verifier. Five algorithms measured, zero
 reachable.
 
-Nothing here is a port. `neighbors/gbdt/` mirrors cuVS and is governed by
-COPY, DO NOT IMPROVE; this file is host-side policy that cuVS does not have a
+Nothing here is an implementation. `neighbors/gbdt/` mirrors cuVS and is governed by
+This file is host-side policy that cuVS does not have a
 counterpart for, in the same category as `checks/`. Every choice it makes
 that a caller could observe is named in THE POLICY CHOICES below rather than
 left implicit.
@@ -65,7 +65,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   L2Expanded, L2SqrtExpanded, CosineExpanded, L1, L2Unexpanded,
   L2SqrtUnexpanded, Linf and LpUnexpanded, and `_METRIC_TABLE` in
   `python/mojolearn/neighbors.py` routes twelve spellings onto them. This
-  bullet said cosine and L1 were "a port, not a flag" and that stopped being
+  bullet said cosine and L1 were "an implementation, not a flag" and that stopped being
   true when the metric lane landed. What is still refused there is the six
   names in cuML's `VALID_METRICS['brute']` that no kernel here computes;
   `NOT_IMPLEMENTED.tsv` lists them.
@@ -79,7 +79,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   the pruning ratio `rbc_knn_search` returns.
 - `KNeighborsClassifier` / `KNeighborsRegressor` EXIST since 2026-08-23:
   `knn_classifier_predict` / `knn_regressor_predict` below, over the cuML
-  port in `neighbors/impl/knn/knn.mojo` and
+  implementation in `neighbors/impl/knn/knn.mojo` and
   `neighbors/impl/selection/knn.mojo`, bound as `_mojolearn.knn_classify`
   / `.knn_regress` and exported as `mojolearn.KNeighborsClassifier` /
   `.KNeighborsRegressor`. This bullet used to name them as absent.
@@ -165,14 +165,14 @@ def knn_metric_from_name(name: String) raises -> Int:
     KDE goes through the first (`kernel_density.py:315`) and k-NN through
     the second, so the two lanes genuinely compute Euclidean by two
     different identities and can differ in the last bits. That is THEIR
-    design and this port keeps it; a single shared table here would have
+    design and this implementation keeps it; a single shared table here would have
     silently corrected one of their call sites.
 
     `lp` is their alias for `minkowski` (`:532`) and `linf`/`taxicab` are
     their aliases too (`:526`, `:534`). Every name in their
     `VALID_METRICS["brute"]` set (`neighbors/__init__.py:27-48`) that this
     tree does not compute is refused BY NAME, so a caller learns it is
-    unported rather than unknown.
+    unimplemented rather than unknown.
     """
     if name == "euclidean" or name == "l2":
         return DIST_L2_SQRT_EXPANDED
@@ -202,8 +202,8 @@ def knn_metric_from_name(name: String) raises -> Int:
         raise Error(
             "mojolearn k-NN: metric='"
             + name
-            + "' is in cuML's VALID_METRICS['brute'] but is NOT PORTED"
-            " (neighbors/NOT_IMPLEMENTED.tsv); ported: euclidean, l2,"
+            + "' is in cuML's VALID_METRICS['brute'] but is NOT IMPLEMENTED"
+            " (neighbors/NOT_IMPLEMENTED.tsv); implemented: euclidean, l2,"
             " sqeuclidean, l1, cityblock, manhattan, taxicab, chebyshev,"
             " linf, cosine, minkowski, lp"
         )
@@ -402,14 +402,14 @@ def knn_search_traced(
         raise Error("knn_search: k must be positive, got " + String(k))
     if k > n_index:
         # `brute_force_knn_impl` refuses this too, for the reason in its
-        # docstring: cuVS's `n < k` fill at `:157-166` is not ported on
+        # docstring: cuVS's `n < k` fill at `:157-166` is not implemented on
         # either arm. Caught here so the message names the caller's numbers.
         raise Error(
             "knn_search: k ("
             + String(k)
             + ") exceeds n_index ("
             + String(n_index)
-            + "); the upstream's short-index fill is not ported"
+            + "); the upstream's short-index fill is not implemented"
         )
 
     # THE METRIC, RESOLVED AND VALIDATED BEFORE ANY ALLOCATION.
@@ -650,7 +650,7 @@ def knn_search_traced(
 # THE k-NN CLASSIFIER AND REGRESSOR, 2026-08-23
 #
 # Host-side composition of TWO things that already exist: `knn_search_traced`
-# above, and the cuML port in `neighbors/impl/knn/knn.mojo` (`ML::knn_classify`,
+# above, and the cuML implementation in `neighbors/impl/knn/knn.mojo` (`ML::knn_classify`,
 # `ML::knn_class_proba`, `ML::knn_regress`). cuML's Python does exactly this
 # composition -- `kneighbors(X, return_distance=False)` then `knn_classify(...)`
 # on the indices (`kneighbors_classifier.pyx:245-285`) -- and the only reason
@@ -658,7 +658,7 @@ def knn_search_traced(
 # the IDENTITY TRACE: one card, one `seq` sequence, so the vote's stages sit
 # after the search's stages in the same file. See `knn_search`'s docstring.
 # THAT IS DEVIATION 544: their Python makes two calls (kneighbors, then
-# knn_classify on the indices it got back); ours makes one, and the ported
+# knn_classify on the indices it got back); ours makes one, and the implemented
 # `ML::` functions return the unique-label sets (theirs return void) so the
 # composition can check them against the wrapper's (policy 7 below).
 #
@@ -678,7 +678,7 @@ def knn_search_traced(
 # 7. THE CLASS SET IS COMPUTED TWICE, ON PURPOSE, AND CHECKED. The wrapper
 #    takes `np.unique` per output for `classes_` (the pyx takes `cp.unique`)
 #    and sizes `predict_proba`'s columns by it; the Mojo side recomputes the
-#    set with the ported `getUniquelabels` (`knn.cu:344`). `knn_classify`
+#    set with the implemented `getUniquelabels` (`knn.cu:344`). `knn_classify`
 #    returns its counts and THIS function raises if they disagree with the
 #    wrapper's, rather than writing past the end of a buffer sized by the
 #    other answer.
@@ -878,7 +878,7 @@ def knn_classifier_predict(
         _ = h^
         _ = labels^
 
-    # The unique sets the port computed, handed out so the wrapper can
+    # The unique sets the implementation computed, handed out so the wrapper can
     # compare them to `classes_` -- the only way a caller can SEE policy
     # 7's agreement rather than trust it.
     var off = 0
@@ -896,11 +896,11 @@ def knn_classifier_predict(
 
 
 def _check_class_counts(got: List[List[Int32]], want: List[Int]) raises:
-    """Policy 7: the port's `getUniquelabels` count against the wrapper's."""
+    """Policy 7: the implementation's `getUniquelabels` count against the wrapper's."""
     for i in range(len(want)):
         if len(got[i]) != want[i]:
             raise Error(
-                "knn_classifier_predict: the ported getUniquelabels found "
+                "knn_classifier_predict: the implemented getUniquelabels found "
                 + String(len(got[i]))
                 + " classes for output "
                 + String(i)
@@ -1206,7 +1206,7 @@ def radius_neighbors_count(
     )
     # DEVIATION 564: refuse a non-metric BEFORE anything is allocated or
     # uploaded. The message names the triangle inequality, because a caller
-    # told only "refused" will reasonably read it as unported work.
+    # told only "refused" will reasonably read it as unimplemented work.
     rbc_validate_metric(metric, metric_arg)
     var n_landmarks = rbc_n_landmarks(n_index)
 

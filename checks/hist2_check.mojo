@@ -5,7 +5,7 @@
 WHAT THIS PROVES. CatBoost's one-byte dispatch sends every `maxBins <= 128`
 shape to the fused two-stat `TPointHist2OneByte` family
 (`hist_one_byte.cu:314-328`) and only 129-255 to the one-stat
-`TPointHistOneByte` PASS family this repository ported first. The two
+`TPointHistOneByte` PASS family this repository implemented first. The two
 families are independent code with different shared-memory layouts, different
 sync disciplines and different reductions, and they must produce THE SAME
 histogram. This check runs both on one dataset PER BIT VARIANT -- bits 5
@@ -563,7 +563,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
     if wrong != 0 or len(cross_dir) != 0:
         raise Error(
             "the hist_2 and PASS one-byte families disagree (or miss the"
-            " host tally) on the DIRECT arm; the two-stat port is wrong"
+            " host tally) on the DIRECT arm; the two-stat implementation is wrong"
         )
 
     # gather arms read the PERMUTED index; direct arms above already ran on
@@ -590,7 +590,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
     if wrong != 0 or len(cross_gat) != 0:
         raise Error(
             "the hist_2 and PASS one-byte families disagree (or miss the"
-            " host tally) on the GATHER arm; the two-stat port is wrong"
+            " host tally) on the GATHER arm; the two-stat implementation is wrong"
         )
     # The permutation must have been load-bearing, or depth 1 was depth 0.
     var perm_moved = diff_cells(d_h2, b_h2, total)

@@ -150,7 +150,7 @@ def sampled_cols_in_round(
     """`builder.cuh:438-440`, the per-round column budget.
 
     The final round is SHORT whenever `n_cols` is not a multiple of the
-    sample size, and their `min` is what makes it so. A port that kept the
+    sample size, and their `min` is what makes it so. An implementation that kept the
     full width on the last round would index past `n_cols`.
     """
     var sample_offset = round * original_n_sampled_cols
@@ -435,7 +435,7 @@ struct SplitSummary[dtype: DType](TrivialRegisterPassable):
     `best_metric_val`, `global_nLeft` and `local_nLeft` (`builder.cuh:95-125`).
     This is that read surface, so the host queue does not have to depend on
     the device-side `Split`'s shared-memory and atomic machinery. `Split` in
-    `split.mojo` remains the ported type; this is the projection of it that
+    `split.mojo` remains the implemented type; this is the projection of it that
     crosses back to the host, and `doSplit` fills it from the `h_splits`
     copy their `raft::update_host` produces (`:479`).
     """
@@ -673,7 +673,7 @@ def compute_shared_memory_config(
            || split_static      > available_smem
            || histogram_dynamic > 16 KiB
 
-    THE ALIGNMENT PADDING IS KEPT even though this port does not need
+    THE ALIGNMENT PADDING IS KEPT even though this implementation does not need
     `alignPointer` (DEVIATION 120): dropping it would shrink
     `histogram_dynamic_smem_size` and could silently move a configuration
     from their global arm to our shared arm. That would be an "improvement"
@@ -732,7 +732,7 @@ def compute_shared_memory_config(
 # loop `#pragma omp parallel for num_threads(n_streams)` with n_streams=4
 # (`randomforest.cuh:336-337`, `randomforestclassifier.py:94`): four host
 # threads, four CUDA streams, four trees in flight. Metal has one queue and
-# this port has one host thread, so the same overlap is expressed as K-WAY
+# this implementation has one host thread, so the same overlap is expressed as K-WAY
 # PIPELINING: each tree's `doSplit` is cut at its two sync points
 # (`builder.cuh:479-481`, `:501-502`), K trees enqueue their next phase,
 # and ONE synchronize serves all of them. No output bit can move: every
@@ -859,7 +859,7 @@ struct SplitStaging(Movable):
     `splits` region, DEVIATION 1908.
 
     cuML's four streams each run their own cheap async `update_host`
-    (`builder.cuh:479`, `:501`); this port's one queue paid a separate
+    (`builder.cuh:479`, `:501`); this implementation's one queue paid a separate
     host-priced transfer PER IN-FLIGHT TREE per cycle instead. With every
     slot's region carved out of this one allocation (512-byte slot
     stride, the arena's own `ALIGN_VALUE`), the forest loop reads all of
@@ -1033,7 +1033,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     # --- DEVIATION 1908's phase-upload staging ---------------------------
     # One pinned span per builder holding a phase's [work items | pad |
     # workload map], sent to the `d_work_items`/`workload_info` arena
-    # stretch as ONE H2D copy (`_enqueue_phase_upload`) where the port
+    # stretch as ONE H2D copy (`_enqueue_phase_upload`) where the implementation
     # used to pay two (their `update_device` pair, `:466` + `:405`).
     # `h_work_items` (a separate pinned staging -- theirs copies from a
     # pageable vector, `:467`, so their arena has none) is SUBSUMED by
@@ -1362,7 +1362,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         pointer carving, not a driver allocation. On Metal a fresh
         `enqueue_create_buffer` per tree pays the driver every time, a
         cost their design never has. Pooling the workspace across trees is
-        their allocator's semantics, ported; the same ruling as gbdt's
+        their allocator's semantics, implemented; the same ruling as gbdt's
         TTreeWorkspace, pool-of-one.
 
         `treeid` is the only constructor input that varies across a
@@ -1929,7 +1929,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
 
         # DEVIATION 1916 -- the fused setup launch: initSplit over the
         # live `n`, the mutex over max_batch_size, the feature sample
-        # over `n * n_sampled_cols`. One op where the port paid three
+        # over `n * n_sampled_cols`. One op where the implementation paid three
         # (two kernels + one memset) per sampling round.
         launch_phase_setup_kernel[Self.O.DataT](
             ctx,
@@ -2360,7 +2360,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         build's sizes filled in.
 
         Theirs is called once per `computeBestSplits` (`:493`). Ours is
-        called once per `train` and threaded down, because in this port it
+        called once per `train` and threaded down, because in this implementation it
         is a pure function of `params`, `num_outputs` and the two `size_of`s
         -- none of which move inside a fit -- and because the one input that
         WOULD have been a device query is a kernel-matrix row here rather

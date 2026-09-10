@@ -57,7 +57,7 @@ constructing a node with a hand-picked `left_child_id` instead of going
 through a factory -- that their compiler rejects and ours does not. The
 accessor surface (`ColumnId`, `QueryValue`, `BestMetric`,
 `LeftChildId`, `RightChildId`, `InstanceCount`, `IsLeaf`) is kept
-complete and is what every consumer in this port uses, so the diff
+complete and is what every consumer in this implementation uses, so the diff
 surface against their tree is unchanged.
 
 (b) THEIRS is `template <typename DataT, typename LabelT, typename
@@ -82,7 +82,7 @@ the way out. `ColumnId()` and `InstanceCount()` return `IdxT`
 (`flatnode.h:41, 46`). Ours does the same: an Int32 field, an Int64
 constructor argument that is narrowed explicitly, Int64 child
 accessors, Int32 column/count accessors.
-PRICE: zero, and keeping it is what has value. A port that "tidied"
+PRICE: zero, and keeping it is what has value. An implementation that "tidied"
 these to one width would hide the fact that `RightChildId()` is
 computed as `int64_t(int) + 1` and therefore cannot wrap where an Int32
 `+ 1` could, and would hide the narrowing a builder passing a >2^31

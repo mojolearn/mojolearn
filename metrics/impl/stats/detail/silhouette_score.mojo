@@ -5,7 +5,7 @@ pieces the BATCHED path reaches -- `SilOp` (:156-169) and `countLabels`
 (:100-136). The unbatched `silhouette_score` driver (:187-308:
 `pairwise_distance` of the whole n x n matrix, `reduce_cols_by_key`,
 `populateAKernel`, `matrixVectorOp(DivOp)`, `reduce(min_op)`) is NOT
-PORTED: cuML's Python surface (`silhouette_score.pyx:_silhouette_coeff`)
+IMPLEMENTED: cuML's Python surface (`silhouette_score.pyx:_silhouette_coeff`)
 always calls the batched entry with `chunksize = 40000` by default, so
 their dispatch never takes it (ENGINEERING_RULES 0b-i). NOT_IMPLEMENTED.tsv.
 

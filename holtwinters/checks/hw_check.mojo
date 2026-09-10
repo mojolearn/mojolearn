@@ -1369,7 +1369,7 @@ def _dec_names(d: Int) -> String:
 #: fits only what is pinned here, it fits what the search finds and says out
 #: loud whether that still matches the pin. Never edit these to make a run
 #: pass; the point of the pair is that a change in WHICH series reaches the
-#: branch is a change in the port, and has to be read before it is recorded.
+#: branch is a change in the implementation, and has to be read before it is recorded.
 # MEASURED 2026-08-24, and the drift detector found it on its FIRST use.
 # THE PIN IS THE IDENTICAL ARM'S WITNESS AND IT CANNOT SERVE BOTH MODES.
 #
@@ -1601,7 +1601,7 @@ def check_hw_decision_branches() raises:
             + " kind " + String(HW_RHO_PIN_KIND) + ", the census now selects salt "
             + String(rho_salt) + " " + rho_kind_str + ". The branch is still"
             " covered, by a DIFFERENT series, and WHICH series reaches a NaN"
-            " route is a fact about the port -- read it before recording it"
+            " route is a fact about the implementation -- read it before recording it"
         )
     print(pin_line)
     var rho_spec = spec_additive() if rho_kind == 0 else spec_multiplicative()

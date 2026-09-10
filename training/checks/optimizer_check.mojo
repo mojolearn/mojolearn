@@ -4,7 +4,7 @@
 file `training/IDENTICAL_OPTIMIZER_CONTRACT.md` section 11 names and
 section 16 item 1 calls **"the largest owed item by a wide margin"**.
 
-NOT A PORT. It runs the device optimizer step
+NO REFERENCE FILE. It runs the device optimizer step
 (`training/checks/optimizer.mojo`) against the host oracle
 (`training/checks/optimizer_oracle.mojo`) and compares every recorded
 stage BY BITS, at every step of a multi-step run.

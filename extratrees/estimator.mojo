@@ -14,11 +14,11 @@ a forest, but its arguments are cuML's: a `DecisionTreeParams` whose
 `max_features` is a RATIO, an `n_trees`, a seed. A caller arriving from
 scikit-learn holds `max_features='sqrt'`, `max_depth=None`,
 `min_weight_fraction_leaf=0.0` and `monotonic_cst=None`, and has no way to know
-which of those this port honours, which it silently ignores, and which do not
+which of those this implementation honours, which it silently ignores, and which do not
 exist. That gap is what DEVIATION 154 recorded as a debt against whoever wrote
 this layer, and this file is that layer.
 
-Nothing here is a port. `impl/` mirrors cuML and is governed by COPY, DO NOT
+Nothing here is an implementation. `impl/` mirrors cuML and is governed by COPY, DO NOT
 IMPROVE; this file is host-side policy neither cuML nor sklearn has a
 counterpart for, in the same category as `checks/`. It follows
 `cluster/estimator.mojo` and `neighbors/estimator.mojo`, which are the first
@@ -27,7 +27,7 @@ files of this kind in the tree.
 THE ONE RULE IT ENFORCES
 ------------------------
 **Every sklearn parameter is either honoured or REFUSED BY NAME.** None is
-accepted and ignored. `gbdt/`'s `check()` refuses every unported CatBoost
+accepted and ignored. `gbdt/`'s `check()` refuses every unimplemented CatBoost
 option the same way and for the same reason: an option that is silently
 dropped is indistinguishable, from the caller's side, from an option that
 works, and the user finds out from a model that is quietly not what they asked
@@ -38,7 +38,7 @@ switch in here, which rule 8 requires of a parameter that selects behaviour.
 
 THE TWO PARAMETERS THAT NEEDED A DECISION
 ------------------------------------------
-1. **`max_depth=None`.** sklearn grows until every leaf is pure. This port has
+1. **`max_depth=None`.** sklearn grows until every leaf is pure. This implementation has
    no unlimited: cuML's own `validity_check` asserts `max_depth >= 0`
    (`decisiontree.cu:29`), and their documented `-1` default cannot survive it.
    Refusing `None` would reject sklearn's own default, and silently capping is
@@ -48,7 +48,7 @@ THE TWO PARAMETERS THAT NEEDED A DECISION
    shallower forest that looks fine.
 2. **`max_features`.** sklearn accepts `'sqrt'`, `'log2'`, `None`, a float
    fraction or an int count, and resolves them to an integer count
-   (`max(1, int(np.sqrt(n_features)))` and friends). This port takes a RATIO,
+   (`max(1, int(np.sqrt(n_features)))` and friends). This implementation takes a RATIO,
    which `n_sampled_cols_for` then truncates back to an integer
    (`builder.cuh:222`). Round-tripping an integer through a ratio and a
    truncation is exactly the kind of arithmetic that lands one short, so the
@@ -223,7 +223,7 @@ def count_to_ratio(count: Int, n_features: Int) -> Float32:
     `max_features=None` path -- the most common configuration there is. The
     clamp is safe because `Int32(1.0 * n) == n` exactly: 1.0 is representable
     and the product is an integer-valued float below 2^24 for any column count
-    this port can hold.
+    this implementation can hold.
     """
     var ratio = (Float32(count) + 0.5) / Float32(n_features)
     return 1.0 if ratio > 1.0 else ratio
@@ -326,39 +326,39 @@ struct ExtraTreesConfig(ImplicitlyCopyable, Movable):
 
 
 def refuse_unported(config: ExtraTreesConfig) raises:
-    """Every sklearn parameter this port does NOT honour, refused BY NAME.
+    """Every sklearn parameter this implementation does NOT honour, refused BY NAME.
 
     Each entry names the deviation or the `NOT_IMPLEMENTED.tsv` row that explains it,
     so a caller gets a reason rather than a wall.
     """
     if config.min_weight_fraction_leaf != 0.0:
         raise Error(
-            "min_weight_fraction_leaf is not ported: it is a fraction of the"
-            " total SAMPLE WEIGHT, and sample_weight is unported (see"
+            "min_weight_fraction_leaf is not implemented: it is a fraction of the"
+            " total SAMPLE WEIGHT, and sample_weight is unimplemented (see"
             " NOT_IMPLEMENTED.tsv and DEVIATION 144, whose exact integer comparison"
             " assumes unweighted counts). Only the default 0.0 is accepted."
         )
     if config.has_monotonic_cst:
         raise Error(
-            "monotonic_cst is not ported: sklearn enforces it as a fourth"
+            "monotonic_cst is not implemented: sklearn enforces it as a fourth"
             " rejection branch in the split search (_splitter.pyx:679-689)"
             " and cuML has no counterpart at all. DEVIATION 154."
         )
     if config.has_class_weight:
         raise Error(
-            "class_weight is not ported: it becomes a per-sample weight, and"
-            " sample_weight is unported. See NOT_IMPLEMENTED.tsv."
+            "class_weight is not implemented: it becomes a per-sample weight, and"
+            " sample_weight is unimplemented. See NOT_IMPLEMENTED.tsv."
         )
     # `bootstrap=True` is HONOURED since DEVIATION 460 (cuML's
     # `get_row_sample` bootstrap arm, `randomforest.cuh:64-67`, through the
-    # RF lane's Philox port). What stays refused is what that arm does not
+    # RF lane's Philox implementation). What stays refused is what that arm does not
     # bring: out-of-bag scoring, and `max_samples` without a bootstrap.
     if config.oob_score:
         raise Error(
-            "oob_score=True is not ported: out-of-bag scoring needs the"
+            "oob_score=True is not implemented: out-of-bag scoring needs the"
             " per-tree bootstrap MASK (cuML RowSampler::store_bootstrap_mask,"
             " randomforest.cuh:170-183), which neither this lane nor"
-            " ensemble/ carries. The bootstrap itself IS ported"
+            " ensemble/ carries. The bootstrap itself IS implemented"
             " (DEVIATION 460); only its complement set is not."
         )
     if config.max_samples != 0 and not config.bootstrap:
@@ -374,14 +374,14 @@ def refuse_unported(config: ExtraTreesConfig) raises:
 
     if config.warm_start:
         raise Error(
-            "warm_start=True is not ported: there is no incremental fit here,"
+            "warm_start=True is not implemented: there is no incremental fit here,"
             " and accepting it would silently refit from scratch."
         )
     if config.ccp_alpha != 0.0:
         raise Error(
-            "ccp_alpha is not ported: cost-complexity pruning is a"
+            "ccp_alpha is not implemented: cost-complexity pruning is a"
             " post-processing pass over a fitted tree that neither cuML nor"
-            " this port implements. Only the default 0.0 is accepted."
+            " this implementation implements. Only the default 0.0 is accepted."
         )
     # `max_leaf_nodes` WAS REFUSED HERE UNTIL 2026-09-01 and is now
     # honoured (DEVIATION 466). The refusal's own reasoning is what retired

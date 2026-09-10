@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Hashed fixtures for the Mamba-1 identity block. NOT A PORT.
+"""Hashed fixtures for the Mamba-1 identity block. NO REFERENCE FILE.
 
 Two generators live here and each exists for a stated reason.
 

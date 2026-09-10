@@ -2,16 +2,16 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MultiClass: the softmax value, its gradient, and one Hessian row.
 
-PORT OF `catboost/cuda/targets/kernel/multilogit.cu` at CatBoost `54a8143a`
+FOLLOWS `catboost/cuda/targets/kernel/multilogit.cu` at CatBoost `54a8143a`
 -- `MultiLogitValAndFirstDerImpl` (`:10-102`), `MultiLogitSecondDerRowImpl`
-(`:104-169`) and their two launchers (`:171-212`). Transliterated. Do not
+(`:104-169`) and their two launchers (`:171-212`). Followed statement for statement. Do not
 improve.
 
-**The MultiLogit pair and the MultiClassOneVsAll pair are ported.** Their
+**The MultiLogit pair and the MultiClassOneVsAll pair are implemented.** Their
 file also holds
 `RMSEWithUncertainty`, `MultiCrossEntropy`, `MultiRMSE` and
 `BuildConfusionMatrixBins`. Each of the others is a different `ELossFunction`
-with its own dispatch, and porting a kernel no caller reaches is the defect
+with its own dispatch, and implementing a kernel no caller reaches is the defect
 ENGINEERING_RULES 3 names. They are listed in `NOT_IMPLEMENTED.tsv` rather than left
 looking absent.
 
@@ -61,7 +61,7 @@ and for the same reason: a float atomic makes the sum depend on block
 arrival order, and the same-seed-twice gate caught two fits differing on it.
 Their `FillBuffer(functionValue, 0.0f, 1, stream)` prologue (`:186-188`),
 which exists only because the atomic accumulates, is not needed and is not
-ported -- each block writes its own slot.
+implemented -- each block writes its own slot.
 
 DEVIATION 72: `ElementsPerThread` is a comptime parameter as theirs is a
 template parameter, and **both of their launchers pass 1** (`:181`, `:205`).
@@ -72,7 +72,7 @@ The unrolled shape is kept rather than collapsed to a scalar because their
 
 DEVIATION 73: `__ldg` is a plain load, and `predictionsAlignSize` /
 `derAlignSize` / `der2AlignSize` are passed as arguments exactly as theirs
-are, so a caller that pads its planes still works. Every caller in this port
+are, so a caller that pads its planes still works. Every caller in this implementation
 passes `size`. Mojo 1.0 ships no non-temporal or read-only-cache load hint;
 the same deviation `transform.mojo` and `fill.mojo` already record.
 
@@ -605,7 +605,7 @@ def launch_multilogit_second_der(
 # =========================================================================
 # MultiClassOneVsAll: `numClasses` INDEPENDENT logistic regressions.
 #
-# PORT OF `MultiClassOneVsAllValAndFirstDerImpl` (`multilogit.cu:613-673`)
+# FOLLOWS `MultiClassOneVsAllValAndFirstDerImpl` (`multilogit.cu:613-673`)
 # and `MultiClassOneVsAllSecondDerImpl` (`:675-704`).
 #
 # WHERE IT DIFFERS FROM MultiClass, and every line of the difference

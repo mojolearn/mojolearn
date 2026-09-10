@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The HALF-BYTE driver: 8 features of up to 16 bins per block.
 
-PORT OF `catboost/cuda/methods/kernel/pointwise_hist2_half_byte.cu` at
-CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_half_byte.cu` at
+CatBoost `54a8143a`. Followed statement for statement.
 
 `ComputeSplitPropertiesHalfByteImpl`. Same accumulator as the binary kernel
 (`TPointHistHalfByte`), same loop choice, and a writeback that reads the

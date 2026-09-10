@@ -46,7 +46,7 @@ Use statuses: `VERIFIED_THREE_VENDOR`, `HISTORICAL_OTHER_SOURCE`,
 `TWO_VENDOR_ONLY`, `FINAL_OUTPUT_ONLY`, `UNRUN`, `DIVERGED`,
 `UNSUPPORTED_CONFIGURATION`, `IMPLEMENTATION_MISSING`.
 Do not turn missing evidence into a green cell. Close each executable gap in a
-new immutable round; an unimplemented feature requires a port before validation.
+new immutable round; an unimplemented feature requires an implementation before validation.
 
 Required coverage includes:
 

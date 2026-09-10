@@ -54,7 +54,7 @@ unchanged. Occupancy/performance has not been measured. This does not relax
 dataset-size, workspace, or index-size checks.
 
 Unchanged refusals include kd_tree/ball_tree, approximate index algorithms,
-callable weights and unported metrics. The existing exact ball-cover index
+callable weights and unimplemented metrics. The existing exact ball-cover index
 and its triangle-inequality metric restrictions remain unchanged.
 
 ## Authored gate and root command

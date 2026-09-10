@@ -32,7 +32,7 @@ prints both numbers so the prediction becomes a measurement. **It is a finding
 to report and price, not a target to tune toward.**
 
 One acknowledged mismatch, stated rather than hidden: sklearn's `max_depth` is
-`None` (unlimited) and this port has no unlimited — cuML's own
+`None` (unlimited) and this implementation has no unlimited — cuML's own
 `validity_check` asserts `max_depth >= 0` (`decisiontree.cu:29`). The depth
 used here is set well above the mean depths sklearn reports on these fixtures
 so that the cap does not bind, and the check asserts it did not bind.
@@ -68,7 +68,7 @@ comptime N_TREES: Int32 = 100
 A different count would compare two different estimators."""
 
 comptime MAX_DEPTH: Int32 = 40
-"""Sklearn's default is `max_depth=None`. This port has no unlimited: cuML's
+"""Sklearn's default is `max_depth=None`. This implementation has no unlimited: cuML's
 `validity_check` asserts `max_depth >= 0` (`decisiontree.cu:29`). 40 is far
 above every mean depth in the reference (the largest is 16.74), and the check
 asserts the cap never binds, so the comparison is against an effectively
@@ -213,7 +213,7 @@ def split_of(
 
 
 def sqrt_ratio(n_cols: Int32) -> Float32:
-    """Sklearn's `max_features='sqrt'` as the ratio this port takes.
+    """Sklearn's `max_features='sqrt'` as the ratio this implementation takes.
 
     `n_sampled_cols_for` computes `Int32(max_features * n_cols)` with
     truncation (`builder.cuh:222`), so the ratio must be nudged above the exact
@@ -476,7 +476,7 @@ def main() raises:
             print("  *", failures[i])
         print("")
         print(
-            "DIAGNOSED, and it is the ported cuML sampler defect: at k = 1"
+            "DIAGNOSED, and it is the implemented cuML sampler defect: at k = 1"
             " column 0 is NEVER drawn, for any n (measured: n=2 -> col0 0 of"
             " 64, n=8 -> col0 0 of 64). separable_gap's separable feature IS"
             " column 0, so the learner can never see it and splits on noise"

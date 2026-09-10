@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The silhouette's pairwise distance, computed where the order is visible.
 
-NOT A PORT, and the twin of `neighbors/checks/pinned_distance_tile.mojo`
+NO REFERENCE FILE, and the twin of `neighbors/checks/pinned_distance_tile.mojo`
 (DEVIATION 505): that tile is the EXPANDED L2 (`||q||^2 + ||y||^2 - 2 q.y`
 from precomputed norms), which is cuVS's `L2Expanded` arm. cuML's
 silhouette takes `DistanceType::L2SqrtUnexpanded` for its default
@@ -21,7 +21,7 @@ called here and its discipline is mirrored instead:
 
 cuVS computes this with its Contractions tile kernel (`l2_unexp_distance`),
 whose inner fold is `acc = fma(diff, diff, acc)` per feature in a tiled
-order that is a function of the tile policy; that kernel is NOT ported
+order that is a function of the tile policy; that kernel is NOT implemented
 (NOT_IMPLEMENTED.tsv) and the one-thread formula stands in under both modes.
 Under FAST the helpers are the naive chain and the stdlib sqrt; under
 IDENTICAL one arithmetic on every vendor.

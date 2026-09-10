@@ -12,7 +12,7 @@ THE MODEL CROSSES AS FLAT ARRAYS, exactly the `_mojolearn_trees` protocol
 (deviation 146's layout argument): per-node `colid` / `quesval` /
 `left_child_id`, the flat `vector_leaf`, and a `tree_offsets` prefix so tree
 `t` is the node range `[offsets[t], offsets[t+1])`. The predict bindings
-rebuild `RandomForestMetaData` from those arrays and call the PORTED
+rebuild `RandomForestMetaData` from those arrays and call the IMPLEMENTED
 `RandomForest.predict` / `predict_proba` (`randomforest.cuh:382-436`), not a
 reimplementation at this boundary. `instance_count` and `best_metric_val`
 are not carried: the traversal reads neither.
@@ -20,7 +20,7 @@ are not carried: the traversal reads neither.
 WHY THIS BINDS `ensemble/` AND NOT `extratrees/impl/randomforest`: the
 extratrees surface refuses `bootstrap=True` by name because ITS copy of the
 row sampler has no caller; `ensemble/` is the dedicated cuML RandomForest
-port and its `fit_forest` IS `RandomForest::fit` (`randomforest.cuh:286-370`)
+implementation and its `fit_forest` IS `RandomForest::fit` (`randomforest.cuh:286-370`)
 with the with-replacement `RowSampler` wired. This extension is that
 sampler's first Python caller.
 """
@@ -112,7 +112,7 @@ names the same order in the same words:
      9  min_samples_split
     10  min_impurity_decrease (float)
     11  bootstrap             (0/1)
-    12  max_samples           (float; ignored and reset to 1.0 by the port
+    12  max_samples           (float; ignored and reset to 1.0 by the implementation
                                when bootstrap is 0, `randomforest.cuh:304`)
     13  seed
     14  n_streams             (cuML's python default is 4; DEVIATION 117)
@@ -293,7 +293,7 @@ def _rf_classifier_fit(
     criterion: PythonObject,
     weights_addr: Int = 0,
 ) raises -> PythonObject:
-    """Fit the cuML-port RandomForest classifier. `x` is COLUMN-major
+    """Fit the cuML-implementation RandomForest classifier. `x` is COLUMN-major
     float32 (n_rows * n_cols, the layout `fit_forest`'s default expects);
     `y` is int32 class CODES in [0, n_classes). See `N_RF_FIT_PARAMS`.
     `criterion` is GINI (0) or ENTROPY (1); anything else is refused by
@@ -414,7 +414,7 @@ def rf_regressor_fit_binding(
     params: PythonObject,
     criterion: PythonObject,
 ) raises -> PythonObject:
-    """Fit the cuML-port RandomForest regressor. Same contract; slot 2
+    """Fit the cuML-implementation RandomForest regressor. Same contract; slot 2
     MUST be 0 and `y` is float32. `criterion` is MSE (2), POISSON (4),
     GAMMA (5) or INVERSE_GAUSSIAN (6); anything else is refused by name
     (DEVIATION 407). The log criteria are DEVIATION 406's: they RUN in
@@ -494,7 +494,7 @@ def _rebuild_trees(
     num_outputs: Int,
 ) raises -> List[TreeMetaDataNode[DT]]:
     """The flat arrays back into `TreeMetaDataNode`'s own layout, so the
-    traversal that runs is the port's. `instance_count` and
+    traversal that runs is the implementation's. `instance_count` and
     `best_metric_val` are zero: the traversal reads neither."""
     var trees = List[TreeMetaDataNode[DT]](capacity=n_trees)
     for t in range(n_trees):
@@ -553,7 +553,7 @@ def rf_predict_proba_binding(
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """Classifier probabilities through the PORTED `predict_proba`
+    """Classifier probabilities through the IMPLEMENTED `predict_proba`
     (`predict` stopped one line early, per its docstring). Model arrays are
     int32/float32 as `_forest_out` laid them out; `x` is ROW-major; `out`
     receives n_rows * num_outputs float32. `params` is `[n_rows, n_cols,
@@ -617,7 +617,7 @@ def rf_predict_reg_binding(
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """Regressor predictions through the PORTED `RandomForest.predict`.
+    """Regressor predictions through the IMPLEMENTED `RandomForest.predict`.
     Same array contract; `out` is n_rows float32; `params` is `[n_rows,
     n_cols, n_trees, 1]`. Returns rows written."""
     if len(params) != 4:

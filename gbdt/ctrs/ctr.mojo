@@ -36,7 +36,7 @@ becomes
   + 1 FeatureFreq column
   = 4 numeric columns
 
-and a port that emits one column per cat feature is not slightly off, it is
+and an implementation that emits one column per cat feature is not slightly off, it is
 missing two thirds of the information their learner splits on. Confirmed
 against CatBoost's own resolved options: a CPU fit's `cat_feature_params`
 prints `priors [[0,1],[0.5,1],[1,1]]` for the Borders description and

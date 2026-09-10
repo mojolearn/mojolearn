@@ -8,7 +8,7 @@ repairs the k-means++ card, see `cluster/impl/cluster/detail/kmeans.mojo`
 the paths `mojolearn.PCA` / `mojolearn.TruncatedSVD` take, and neither left
 a stage card: `decomposition/` has no `IdentityTrace` anywhere below this
 file, so `tools/e2u_matrix_fit.py` could hash the outputs and nothing else.
-The records below are taken AT THIS SURFACE, from the buffers the ported
+The records below are taken AT THIS SURFACE, from the buffers the implemented
 fit hands back:
 
     pca.mean              the column means (`mu`, device)

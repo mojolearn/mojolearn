@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The port against CATBOOST'S OWN OUTPUT, not against a tally we wrote.
+"""The implementation against CATBOOST'S OWN OUTPUT, not against a tally we wrote.
 
 WHY THIS FILE EXISTS
 --------------------
@@ -14,14 +14,14 @@ been worth up to now. It says we agree with us.
 and prints ms/tree. It compares no number at all.
 
 CatBoost 1.2.10 is installed on this machine and has been all along. This file
-reads what it actually DECIDED, from `bench/oracle.txt`, and holds the port to
+reads what it actually DECIDED, from `bench/oracle.txt`, and holds the implementation to
 it. Regenerate with
 
     pixi run -e bench python tools/catboost_oracle.py > bench/oracle.json
 
 THE FIRST THING TO COMPARE IS THE BORDERS, AND IT HAS TO BE
 -----------------------------------------------------------
-A split is reported as a bin index into a compressed index. Two ports that
+A split is reported as a bin index into a compressed index. Two implements that
 binarize differently cannot be compared at all past that point, because bin 7
 of ours and bin 7 of theirs are different thresholds and every later
 disagreement is a consequence rather than a finding. So border parity is not
@@ -37,7 +37,7 @@ WHAT A FAILURE HERE MEANS
 Not that a kernel is wrong. That the quantization our whole compressed index
 is built on does not agree with theirs, which would make every split index in
 every comparison downstream meaningless, and would also mean our accuracy has
-never been comparable to theirs at any point in this port.
+never been comparable to theirs at any point in this implementation.
 
 THE CATEGORICAL FIXTURE, AND WHY IT IS ONE-HOT ONLY
 ----------------------------------------------------
@@ -49,7 +49,7 @@ the three numeric fixtures parse and run exactly as they always did:
 interleaved with `split` in depth order.
 
 It is one-hot only because CatBoost's CPU learner cannot be asked for the
-CTR set this port mirrors. `TCatFeatureParams.default()` here is their GPU
+CTR set this implementation mirrors. `TCatFeatureParams.default()` here is their GPU
 `simple_ctr` -- `Borders` plus `FeatureFreq` -- and
 `IsSupportedCtrType(CPU, FeatureFreq)` is FALSE
 (`private/libs/options/restrictions.h:18-48`). Their GPU arm, which does
@@ -99,7 +99,7 @@ struct Oracle(Movable):
     #: depth order, which is the order an oblivious tree applies them.
     var split_feature: List[List[Int]]
     var split_border: List[List[Float32]]
-    #: The target CatBoost was trained on, so our port trains on the SAME y.
+    #: The target CatBoost was trained on, so our implementation trains on the SAME y.
     var y: List[Float32]
     #: `leaf_values[t]`, in CatBoost's own leaf order.
     var leaf_values: List[List[Float32]]
@@ -308,7 +308,7 @@ def check_border_parity(path: String = String("bench/oracle.txt")) raises:
     if features_wrong != 0:
         raise Error(
             "OUR BINARIZATION DOES NOT AGREE WITH CATBOOST'S. Every split"
-            " index in this port is an index into a compressed index built"
+            " index in this implementation is an index into a compressed index built"
             " from these borders, so until this passes no split and no leaf"
             " value can be compared with theirs, and our accuracy has never"
             " been comparable to theirs either"
@@ -338,7 +338,7 @@ def check_oracle_is_not_degenerate(path: String = String("bench/oracle.txt")) ra
         )
 
     # Their trees must not all be the same split, or split order carries no
-    # information and a port that ignored order would pass.
+    # information and an implementation that ignored order would pass.
     var distinct = 0
     var seen = List[Int]()
     for t in range(o.trees):
@@ -363,7 +363,7 @@ def check_oracle_is_not_degenerate(path: String = String("bench/oracle.txt")) ra
 def print_catboost_structure(path: String = String("bench/oracle.txt")) raises:
     """CatBoost's own trees, so a human can read them beside ours.
 
-    Not an assertion. The assertion that matches structure needs our port fed
+    Not an assertion. The assertion that matches structure needs our implementation fed
     THEIR borders, which is the next step and is not this one; printing them
     is what makes the gap visible instead of theoretical.
     """
@@ -552,7 +552,7 @@ def tree_structure_diff(
     This is the comparison border parity exists to make possible. Both sides
     see the same 4096 x 16 matrix, the same target, the same quantization,
     and the same depth, learning rate and L2. An oblivious tree IS its list
-    of splits, so if the port is faithful the lists match level for level.
+    of splits, so if the implementation is faithful the lists match level for level.
 
     HOW A SPLIT IS COMPARED. CatBoost reports a split as
     (float_feature_index, border VALUE); ours is (feature, bin index) into a
@@ -570,7 +570,7 @@ def tree_structure_diff(
     Every split, every feature, every bin, across twelve trees at depth 4.
     The residual on the loss is float32 against their double and nothing
     else. This is the strongest statement this repository can make about the
-    port and it is the only one not made against a tally written here.
+    implementation and it is the only one not made against a tally written here.
 
     THE FALSE ALARM THAT CAME FIRST, KEPT BECAUSE IT COST HOURS.
 
@@ -578,12 +578,12 @@ def tree_structure_diff(
     DEPTH 0 under their default Cosine while matching their L2 exactly for
     three levels, and the conclusion drawn was that our Cosine calcer was
     silently computing L2. That conclusion was WRONG and the defect was in
-    the ORACLE, not in the port.
+    the ORACLE, not in the implementation.
 
     `tools/catboost_oracle.py` had not set `random_strength`, and CatBoost's
     default is 1.0, not 0. That adds Gaussian noise to every candidate score
     (`score_calcers.cuh:162-166`, with `ScoreStdDev = RandomStrength *
-    ComputeTargetStdDev` at `greedy_search_helper.cpp:385`). Our port refuses
+    ComputeTargetStdDev` at `greedy_search_helper.cpp:385`). Our implementation refuses
     `random_strength` by name, so it computes the noiseless score.
 
     WHY IT LOOKED LIKE A COSINE BUG SPECIFICALLY, which is the part worth
@@ -591,7 +591,7 @@ def tree_structure_diff(
     different scales. On this fixture Cosine's candidates run about 146 with
     gaps of order 1, while L2's run about 21000 with gaps of order 300. The
     same perturbation reorders Cosine's ranking and leaves L2's untouched. So
-    a noiseless port matches their L2 and not their Cosine, and the symptom
+    a noiseless implementation matches their L2 and not their Cosine, and the symptom
     reads exactly like computing the wrong calcer.
 
     Two things were also claimed on that reading and are RETRACTED: that a
@@ -630,7 +630,7 @@ def tree_structure_diff(
 
     THE RULE THIS EARNS. An oracle has a configuration, and every default it
     leaves standing is a claim that we implement that default. Anything the
-    port refuses by name must be turned OFF in the oracle and said out loud,
+    implementation refuses by name must be turned OFF in the oracle and said out loud,
     which is why `bootstrap_type`, `model_shrink_rate`, `boost_from_average`
     and now `random_strength` are all pinned in that file with a reason.
 
@@ -910,9 +910,9 @@ def tree_structure_diff(
             + String(compared)
             + where
             + ". This matched 48 of 48 on 2026-08-19, so a mismatch here is"
-            " a REGRESSION and not a known gap. Before suspecting the port,"
+            " a REGRESSION and not a known gap. Before suspecting the implementation,"
             " check that bench/oracle.txt was generated with every CatBoost"
-            " feature this port refuses turned off, because that mistake has"
+            " feature this implementation refuses turned off, because that mistake has"
             " already produced one convincing false alarm"
         )
     else:

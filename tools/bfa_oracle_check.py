@@ -2,17 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """boost_from_average against CatBoost ITSELF, bit for bit.
 
-The port's whole claim is that `gbdt/metrics/optimal_const_for_loss.mojo`
+The implementation's whole claim is that `gbdt/metrics/optimal_const_for_loss.mojo`
 computes THEIR `CalcOptimumConstApprox` -- so the gate is their own output:
 `model.get_scale_and_bias()[1]` from a real CatBoost fit, compared against
-the bias our python surface reports, on hashed fixtures for every ported
+the bias our python surface reports, on hashed fixtures for every implemented
 arm and for both sides of their data-dependent default.
 
 WHAT EXACTLY IS COMPARED. CatBoost's bias is a float64; ours is a float64
 parsed from the model text's bits half. The demand is `==` on the bits for
 the RMSE arms and for Logloss. (Their pipeline computes the double average
 through a FLOAT return -- `optimal_const_for_loss.h`'s
-`CalculateWeightedTargetAverage` is `inline float` -- and the port carries
+`CalculateWeightedTargetAverage` is `inline float` -- and the implementation carries
 the same truncation, which is what makes bit equality possible at all.)
 
 THE DEFAULT RULE IS GATED TOO: an UNSET option must come out non-zero for
@@ -122,7 +122,7 @@ def main():
 
     if failures:
         raise SystemExit(f"check-bfa-oracle: {failures} case(s) failed")
-    print("  ok   every ported arm matches CatBoost's own bias to the bit,"
+    print("  ok   every implemented arm matches CatBoost's own bias to the bit,"
           " and the default rule matches their adjust list")
 
 

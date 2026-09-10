@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Batched ARIMA on the GPU, backed by the ported cuML batched Kalman filter.
+"""Batched ARIMA on the GPU, backed by the implemented cuML batched Kalman filter.
 
 PRIVATE MODULE. `ARIMA` is re-exported from `mojolearn/__init__.py`.
 
@@ -49,8 +49,8 @@ arguments there and constructor arguments here, for the same reason.
 WHAT IS NOT HERE
 ----------------
 `AutoARIMA`. Its `p / q / P / Q / k` search and its information-criterion
-arms are NOT PORTED (`arima/NOT_IMPLEMENTED.tsv`), and the differencing
-half of that search IS ported and IS reachable, as
+arms are NOT IMPLEMENTED (`arima/NOT_IMPLEMENTED.tsv`), and the differencing
+half of that search IS implemented and IS reachable, as
 `mojolearn.select_d` and `mojolearn.kpss_test`.
 
 CROSS-VENDOR STATUS, STATED PLAINLY BECAUSE IT IS THE LIBRARY'S HEADLINE
@@ -105,7 +105,7 @@ def _series_major(y, name):
     refused BY NAME, with the flat index of the offender, in
     `arima/impl/arima/batched_arima.mojo::_refuse_non_finite`. Checking it
     here as well would make that refusal unreachable from Python and would
-    silently take over a decision the ported code owns.
+    silently take over a decision the implemented code owns.
     """
     a = np.asarray(y)
     if a.ndim == 1:
@@ -135,10 +135,10 @@ def _n_exog(exog):
     number `arima/impl/tsa/arima_common.mojo::validate_order` refuses.
 
     THIS FUNCTION IS NOT A REFUSAL AND MUST NOT BECOME ONE. Exogenous
-    regressors are genuinely unported: `ARIMAParams::beta`, `ARIMAOrder::
+    regressors are genuinely unimplemented: `ARIMAParams::beta`, `ARIMAOrder::
     n_exog`, `d_exog` / `d_exog_fut`, `obs_intercept`, the two
     `cublasgemmStridedBatched` calls at `batched_kalman.cu:930-972` and
-    everything downstream of them have no port at all
+    everything downstream of them have no implementation at all
     (`arima/NOT_IMPLEMENTED.tsv`). So the count is plumbed through as a
     NUMBER and the Mojo validator raises, which keeps that refusal reachable
     from every caller of the lane rather than from this file only. Any
@@ -154,7 +154,7 @@ def _n_exog(exog):
 
 
 class ARIMA(NumericModeMixin):
-    """Batched ARIMA, backed by the ported cuML batched Kalman filter and an
+    """Batched ARIMA, backed by the implemented cuML batched Kalman filter and an
     own-written batched L-BFGS (`arima/`, DEVIATIONS 670 to 687 and 990 to
     993; `arima/README.md`), in statsmodels' constructor shape.
 
@@ -184,7 +184,7 @@ class ARIMA(NumericModeMixin):
                                     max(p + s*P, q + s*Q + 1)` selects
                                     cuML's BLOCK-PER-SERIES Kalman kernel
                                     (`batched_kalman.cu:335-745`), a
-                                    different fold shape and an unported
+                                    different fold shape and an unimplemented
                                     one. This is a bound on the ORDER, so it
                                     fires at fit, before any device work
         r > 5             refused   `validate_order`. `r = max(p + s*P,
@@ -199,14 +199,14 @@ class ARIMA(NumericModeMixin):
                                     't', 'ct' and a polynomial trend
                                     specification are REFUSED BY NAME by
                                     `_arima_impl.py`: a time trend is an
-                                    exogenous column and exog has no port
+                                    exogenous column and exog has no implementation
         method            honored   for 'ml' ONLY. 'css' and 'css-ml' are
                                     REFUSED BY NAME by
                                     `arima/estimator.mojo::_refuse_method`,
                                     not here: the conditional sum of squares
                                     likelihood and its `truncate` parameter
                                     (`batched_arima.cu:271-391`) have no
-                                    port. The string is turned into a code
+                                    implementation. The string is turned into a code
                                     and passed through UNCLAMPED so that
                                     refusal stays reachable (DEVIATION 992)
         maxiter           honored   the L-BFGS iteration cap, cuML's
@@ -216,12 +216,12 @@ class ARIMA(NumericModeMixin):
                                     validate_order`, by name, as
                                     `n_exog != 0`. NOT refused here: this
                                     file COUNTS the columns and hands the
-                                    count over, so the ported refusal is
+                                    count over, so the implemented refusal is
                                     what fires. Exogenous regressors are
-                                    unported end to end, `ARIMAParams` has
+                                    unimplemented end to end, `ARIMAParams` has
                                     no `beta` field anywhere in the lane
         verbose           refused   `_arima_impl.py`, for anything truthy.
-                                    Upstream it selects LOG LINES; this port
+                                    Upstream it selects LOG LINES; this implementation
                                     prints none, so accepting it would be
                                     accepting-and-ignoring
         output_type       refused   `_arima_impl.py`. A cuML-internal
@@ -241,7 +241,7 @@ class ARIMA(NumericModeMixin):
                                     OBSERVATION path (`missing = isnan(yt)`
                                     and the four branches it guards,
                                     `batched_kalman.cu:191-246`) and that
-                                    path is NOT PORTED, so a NaN here is
+                                    path is NOT IMPLEMENTED, so a NaN here is
                                     refused rather than treated as missing
         level             absent    NOT A PARAMETER OF THIS CLASS, so
                                     passing it is a TypeError naming it.
@@ -249,7 +249,7 @@ class ARIMA(NumericModeMixin):
                                     `confidence_intervals` kernel at
                                     `batched_kalman.cu:824-838` and the
                                     `P = T P T' + RR'` propagation beside
-                                    it) are NOT PORTED
+                                    it) are NOT IMPLEMENTED
         simple_           absent    cuML's switch. This lane implements the
           differencing              `True` arm only and does not carry the
                                     other as a switch, so there is no value
@@ -302,7 +302,7 @@ class ARIMA(NumericModeMixin):
 
     DEVIATION 991: `aic_` AND `bic_` ARE COMPUTED ON THE HOST IN FLOAT64 AND
     ARE NOT A DEVICE ANSWER. cuML's `information_criterion`
-    (`batched_arima.cu:592-618`) is NOT PORTED, and what it does beyond the
+    (`batched_arima.cu:592-618`) is NOT IMPLEMENTED, and what it does beyond the
     log-likelihood is one `raft::stats::information_criterion_batched` unary
     op. That formula is transcribed here,
 
@@ -398,10 +398,10 @@ class ARIMA(NumericModeMixin):
             raise NotImplementedError(
                 f"mojolearn ARIMA: trend={trend!r} is refused. A time trend "
                 "is an exogenous regressor, and exogenous regressors are "
-                "unported end to end in this lane: ARIMAParams has no `beta` "
+                "unimplemented end to end in this lane: ARIMAParams has no `beta` "
                 "field, ARIMAOrder.n_exog is refused at any non-zero value, "
                 "and the two cublasgemmStridedBatched calls that apply them "
-                "(batched_kalman.cu:930-972) have no port "
+                "(batched_kalman.cu:930-972) have no implementation "
                 "(arima/NOT_IMPLEMENTED.tsv). This class carries trend=None, "
                 "'n' and 'c'; 'c' is cuML's fit_intercept=True"
             )
@@ -411,14 +411,14 @@ class ARIMA(NumericModeMixin):
                 "carries None (statsmodels' rule: 'c' when d + D == 0, "
                 "otherwise 'n'), 'n' and 'c'. A polynomial trend "
                 "specification is a list of exogenous columns and exog has "
-                "no port (arima/NOT_IMPLEMENTED.tsv)"
+                "no implementation (arima/NOT_IMPLEMENTED.tsv)"
             )
         self.trend = trend
         self.k_ = k
 
         # THE METHOD IS TRANSLATED, NOT JUDGED. Only the spelling is checked
         # here (cuML checks the same three strings at arima.pyx:944-946);
-        # WHICH of them this port carries is `arima/estimator.mojo::
+        # WHICH of them this implementation carries is `arima/estimator.mojo::
         # _refuse_method`'s decision, and the code goes down untouched so
         # that decision stays reachable (DEVIATION 992).
         if not isinstance(method, str):
@@ -427,7 +427,7 @@ class ARIMA(NumericModeMixin):
         if m not in _METHODS:
             raise ValueError(
                 f"mojolearn ARIMA: unknown method {method!r}; cuML's three "
-                f"are {sorted(_METHODS)} and this port offers 'ml'"
+                f"are {sorted(_METHODS)} and this implementation offers 'ml'"
             )
         self.method = m
         maxiter = int(maxiter)
@@ -435,7 +435,7 @@ class ARIMA(NumericModeMixin):
         if verbose:
             raise NotImplementedError(
                 "mojolearn ARIMA: verbose is refused; upstream it selects "
-                "log lines and this port prints none, so honoring it is "
+                "log lines and this implementation prints none, so honoring it is "
                 "impossible and accepting it would be accepting-and-ignoring"
             )
         self.verbose = False
@@ -673,7 +673,7 @@ class ARIMA(NumericModeMixin):
             # bindings/_mojolearn_arima.mojo::arima_forecast_binding.
             # batch_size, n_obs, n_steps, p, d, q, P, D, Q, s, k, n_exog,
             # reserved (MUST BE 0; the slot cuML's `level` would take, and
-            # `level` is NOT PORTED)
+            # `level` is NOT IMPLEMENTED)
             [self.batch_size_, self.n_obs_, steps, p, d, q, P, D, Q, s,
              self.k_, _n_exog(exog), 0],
         )

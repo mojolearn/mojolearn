@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Distance and argmin FUSED, so the distance matrix is never written.
 
-PORT OF `cuvs/src/distance/detail/fused_distance_nn/simt_kernel.cuh` at cuVS
+FOLLOWS `cuvs/src/distance/detail/fused_distance_nn/simt_kernel.cuh` at cuVS
 `94c2819`, built on their `linalg/contractions.cuh` policy and the
 `PairwiseDistances` loop structure of
 `raft/distance/detail/pairwise_distance_base.cuh`. Partial.
-Do not improve.
 
 WHY THIS EXISTS AND THE UNFUSED PATH WAS NOT ENOUGH
 ---------------------------------------------------
@@ -22,7 +21,7 @@ That is the design, not a tuning of it. At k-means' shape, 200,000 rows and
 reads them straight back, every single Lloyd iteration, to extract one
 minimum per row. This kernel does the same arithmetic and moves none of it.
 
-**I ported the unfused arm first and justified it by their own selector
+**I implemented the unfused arm first and justified it by their own selector
 preferring unfused on Blackwell, which is true and was not the point.** The
 fused arm is what runs on the hardware most people have, and its CUTLASS
 version is unportable but THIS one is not: `simt_kernel.cuh` is the SIMT
@@ -53,7 +52,7 @@ float at a time where their `ldg` reads `Veclen` (`raft::TxN_t`, used by
 rows/columns in BLOCKED runs (`tr * AccRowsPerTh + i`) where theirs are
 STRIDED (`accrowid + i * P::AccThRows`, `acccolid + j * P::AccThCols`,
 `contractions.cuh:100-102` and the lds/epilog indexing everywhere). Both of
-those were port errors, not decisions, and both are now theirs.
+those were implementation errors, not decisions, and both are now theirs.
 
 THE LOOP STRUCTURE IS `PairwiseDistances::run()`, SINGLE-BUFFERED
 ------------------------------------------------------------------
@@ -77,7 +76,7 @@ unportable. Keeping them apart is the whole content of this section.
 1. **The intra-warp merge, `simt_kernel.cuh:119-130`.** The `P::AccThCols`
    threads that share a row hold partial `(value, key)` minima, and they are
    combined with `raft::shfl` on the key AND on the value. **That is
-   ported.** It used to be a shared-memory transpose plus a serial 16-way
+   implemented.** It used to be a shared-memory transpose plus a serial 16-way
    scan, justified by a claim that Mojo has no lane primitives. **The claim
    was false** (`archive/reference/PORTING.md` 2): `std.gpu.primitives.warp` has the shuffles,
    and `block.min` was never the answer here because it reduces VALUES ONLY
@@ -130,7 +129,7 @@ unportable. Keeping them apart is the whole content of this section.
    `launchConfigGenerator`, see `min_cluster_distance_compute.mojo` -- so
    every row is owned by exactly one block and there is nothing to
    serialize. Their kernel grid-strides both axes and therefore needs the
-   mutex. This is the `replaced` row in `DERIVATION_MAP.tsv`, and it costs
+   mutex. This is a deliberate replacement, and it costs
    parallelism when `n` is large and `m` is small, which is the opposite of
    every shape in this repository.
 
@@ -151,7 +150,7 @@ both are the naive chain, bit for bit, and the shipped answer does not move.
 What is NOT pinned here, because it does not need to be: the k order
 (ascending inside ascending chunks at every `veclen`), the row ownership
 (`row mod Mblk` at every `grid_y`), and the argmin (a `(value, key)` total
-order in both arms). Those are properties of the port, and
+order in both arms). Those are properties of the implementation, and
 `check_assignment_geometry_invariance` gates them.
 
 One more deliberate difference: when `sqrt` is requested, their epilog takes

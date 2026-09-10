@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Add a grown tree's leaf values to the running predictions.
 
-PORT OF the `AddModelValue` step of
+FOLLOWS the `AddModelValue` step of
 `catboost/cuda/methods/doc_parallel_boosting.h:265` (`AppendModels`), whose
 device side is CatBoost's add-model-value kernel family
 (`catboost/cuda/models/kernel/add_model_value.cu`).
@@ -31,7 +31,7 @@ partition instead of recomputed. It is exact rather than approximate and is
 the same answer their evaluation produces, which `boosting_check` asserts by
 comparing this cursor against `predict`'s rather than assuming it.
 
-`add_bin_values.mojo` beside this file IS the port of `AddObliviousTreeImpl`,
+`add_bin_values.mojo` beside this file IS the implementation of `AddObliviousTreeImpl`,
 so the evaluating form is not missing; what is missing is a test cursor to
 point it at. Recorded so that gap is visible.
 ===================================================
@@ -125,7 +125,7 @@ def add_bin_model_value_kernel(
     i's leaf, no per-leaf grid axis at all.
 
     ================= DEVIATION 210b (scheduling repair) ==============
-    This port's `MoveTo` used to launch `add_model_value_kernel` -- the
+    This implementation's `MoveTo` used to launch `add_model_value_kernel` -- the
     PARTITION-indexed AppendModels-style kernel -- on a grid of
     `ceil(max_leaf/256)` blocks x `bin_count` leaves: every leaf priced
     at the WIDEST leaf's block count, which on a skewed depth-8 higgs
@@ -189,7 +189,7 @@ def fill_bins_from_partition_kernel(
     bins: MutPointer[UInt32, MutAnyOrigin],
 ):
     """The per-row `bins` array `TBinOptimizedOracle` carries (their ctor
-    receives it ready-made from the searcher; this port's searchers hand
+    receives it ready-made from the searcher; this implementation's searchers hand
     over a partition instead, so the bins are read off it ONCE per tree).
     Grid y is the leaf, x strides its rows -- the shape is tolerable here
     because it runs once per tree, not once per Newton evaluation, and

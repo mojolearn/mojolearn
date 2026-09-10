@@ -649,7 +649,7 @@ def _check_permutation_matters(
 
     # SORTED BY TARGET, which is the case the identity order is worst at and
     # the case a caller of this library can hand us at any time: their own
-    # pipeline shuffles the pool at load and this port has no such stage.
+    # pipeline shuffles the pool at load and this implementation has no such stage.
     var y = List[Float32]()
     for r in range(n):
         y.append(Float32(r) / Float32(n))

@@ -84,12 +84,12 @@ derives `global_row` from `sample_idx` alone -- `col` appears only in
 the addressing (`:74-76`) -- so column 7's k-th sample and column 3's
 k-th sample are the SAME ROW of the input. Their docstring says so
 (`:124-126`, "A deterministic global row sample is drawn once with
-replacement and shared across feature columns"). A port that seeded per
+replacement and shared across feature columns"). An implementation that seeded per
 `(col, sample_idx)` would still produce plausible quantiles and would
 not be their function.
 
 ================== DEVIATION BLOCK (whole file) ==================
-DEVIATION 108. THE DISTRIBUTED ARM IS NOT PORTED. Theirs branches on
+DEVIATION 108. THE DISTRIBUTED ARM IS NOT IMPLEMENTED. Theirs branches on
 `raft::resource::comms_initialized(handle)` (`quantiles.cuh:164`) and,
 when true, does an `allgather` of the per-rank row counts (`:177`) and a
 SUM `allreduce` of the sparse sample buffer (`:231-235`). Ours fixes
@@ -106,7 +106,7 @@ RAISES on `comm_size != 1` rather than ignoring them, and why the
 `sample_rank == rank` guard are all still here doing their one-rank
 work: the shape their kernel has is kept, so that adding the two
 collectives later is an addition and not a rewrite. There is no
-counterpart in Mojo/MAX for a device-side NCCL collective to port
+counterpart in Mojo/MAX for a device-side NCCL collective to implement
 against, which is the structural reason this is a DECLINE and not a
 gap in effort.
 
@@ -172,18 +172,18 @@ Mojo's `round` is not documented to be, so the half case is written out
 as `floor(x); if x - floor(x) >= 0.5: +1` on a strictly positive `x`,
 rather than trusting a stdlib rounding mode -- this repository has
 already been bitten once by assuming a Mojo stdlib numeric matched libm
-(`Mojo's log breaks ported tie-breaks`).
+(`Mojo's log breaks implemented tie-breaks`).
 
 DEVIATION 111. `cub::DeviceSegmentedRadixSort::SortKeys`
 (`quantiles.cuh:244`, `:258`) is hand-written as
 `core/segmented_sort.mojo`.
 
 WHAT IT COSTS: CUB is readable, so under rule 0b-i the correct move is to
-port the kernel rather than substitute a vendor primitive -- and there
+implementation the kernel rather than substitute a vendor primitive -- and there
 is no primitive to substitute in any case, since MAX ships no device
 sort (`archive/reference/VENDOR_LIBS.md`, checked 2026-08-20). The implementation is not a
 new design: it is `gbdt/gpu_util/kernel/segmented_sort.mojo`, this
-repository's already-checked port of CatBoost's own
+repository's already-checked implementation of CatBoost's own
 `cub::DeviceSegmentedRadixSort::SortPairs` wrapper, with the value
 payload dropped because their call is `SortKeys`. Sorted ORDER is
 identical to CUB's for every input including `-0.0`/`+0.0` and NaN,
@@ -632,7 +632,7 @@ def compute_quantiles_batched_kernel(
     # col_quantiles + max_n_bins)` then `n_bins[col] = new_last -
     # col_quantiles`. `thrust::seq` is explicit in their source, with
     # the comment "to explicitly disable cuda dynamic parallelism here"
-    # (`:103`), so this IS a sequential loop in one thread and porting
+    # (`:103`), so this IS a sequential loop in one thread and implementing
     # it as a parallel compaction would be inventing.
     #
     # `unique` removes CONSECUTIVE duplicates and keeps the first of each
@@ -743,7 +743,7 @@ def compute_quantiles(
     `DeviceContext`. `oversampling_factor = 4` is the default in their
     signature (`:152`) AND the literal their only caller passes
     (`randomforest.cuh:322`), so it is the same number twice and not a
-    default this port chose.
+    default this implementation chose.
 
     `comm_size` and `rank` are ours, and exist so that DEVIATION 108 is
     a raise rather than a silence.
@@ -763,11 +763,11 @@ def compute_quantiles(
         raise Error("n_cols must be positive")
     if oversampling_factor <= 0:
         raise Error("oversampling_factor must be positive")
-    # DEVIATION 108: the arm that is not ported refuses to be entered.
+    # DEVIATION 108: the arm that is not implemented refuses to be entered.
     if comm_size != 1 or rank != 0:
         raise Error(
             "DEVIATION 108: the distributed arm of computeQuantiles"
-            " (quantiles.cuh:175-182, :227-238) is NOT PORTED; comm_size"
+            " (quantiles.cuh:175-182, :227-238) is NOT IMPLEMENTED; comm_size"
             " must be 1 and rank 0, got comm_size="
             + String(comm_size)
             + " rank="
@@ -903,7 +903,7 @@ def compute_quantiles(
     # a raw pointer is NOT used by that launch -- so every scratch buffer
     # above is dead at the `.unsafe_ptr()` that enqueued it, and the next
     # `enqueue_create_buffer` is free to land on it while the kernel that
-    # reads it is still queued. Measured once already in this port: a
+    # reads it is still queued. Measured once already in this implementation: a
     # kernel read `n_bins` as -8388609, the bit pattern of `Split::Min()`,
     # through a freed quantiles pointer -- AFTER a green run. These
     # keep-alives must stay AFTER the `synchronize()` above; moving them

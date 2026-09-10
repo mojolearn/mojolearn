@@ -26,7 +26,7 @@ sequence a divergence would first show up in:
     chol.factor             the finished L, upper triangle zeroed
     chol.nb                 (nb, n_panels, info) as Int32 -- the NUMERIC
                             parameter that produced everything above it
-    chol.diag               diag(L), through the ported RAFT extractor
+    chol.diag               diag(L), through the implemented RAFT extractor
     chol.logdet             2 * sum log(diag)
     chol.solve.forward      L y = B
     chol.solve.back         L^T x = y

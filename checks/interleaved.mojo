@@ -3,7 +3,7 @@
 """Interleaved arms in one process, because this box drifts.
 
 NO CATBOOST COUNTERPART. It is the measurement discipline from the mojotrees
-repository, brought over because every number this port has produced needed
+repository, brought over because every number this implementation has produced needed
 the same caveat and it is cheaper to fix the harness than to keep repeating
 it.
 
@@ -11,7 +11,7 @@ THE RULE IT ENFORCES
 --------------------
 **Arms run round-robin inside ONE process, and only arms from the same run
 compare.** This machine has been measured drifting two- to threefold between
-thermal windows, and this port has already produced a depth-8 tree at 59.7 ms
+thermal windows, and this implementation has already produced a depth-8 tree at 59.7 ms
 and 44.8 ms for IDENTICAL work an hour apart. Sequential arms in separate
 runs compare nothing, whoever wrote them.
 

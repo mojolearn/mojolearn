@@ -519,7 +519,7 @@ def silhouette_binding(
                         SCHEDULING only -- no distance tile is materialized)
 
     There is no `metric` slot: only `DistanceType::L2SqrtUnexpanded` (cuML
-    'euclidean'/'l2') is ported and the Python wrapper refuses every other
+    'euclidean'/'l2') is implemented and the Python wrapper refuses every other
     name before reaching here.
     """
     _want(String("silhouette"), params, 4)

@@ -1,7 +1,7 @@
 # Cholesky
 
 Dense GPU Cholesky primitives used by statistical estimators. Scope and provenance are recorded in
-`DERIVATION_MAP.tsv` and `NOT_IMPLEMENTED.tsv`.
+`NOT_IMPLEMENTED.tsv`.
 
 ```bash
 pixi run check-cholesky

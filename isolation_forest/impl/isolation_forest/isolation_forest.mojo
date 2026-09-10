@@ -17,7 +17,7 @@ The pair of Thrust transforms (`std::pow(T(2), -path_length / c_n)` and
 `score > threshold ? 1 : -1`) are two one-thread-per-row kernels here
 (`anomaly_score_kernel`, `predict_labels_kernel`), which is what
 `thrust::transform` launches. `get_compact_trees` / Treelite export are
-NOT ported (NOT_IMPLEMENTED.tsv).
+NOT implemented (NOT_IMPLEMENTED.tsv).
 
 ================= DEVIATION BLOCK =================
 DEVIATION 680. NON-FINITE INPUTS ARE REFUSED BY NAME ON THE HOST. Theirs:
@@ -570,7 +570,7 @@ struct IsolationForest(Movable):
         var tables = XorwowDeviceTables(ctx)
 
         # The card's RNG probe: the first 16 draws of tree 0's state, on the
-        # host through the same port (a pure function of (seed, 0)).
+        # host through the same implementation (a pure function of (seed, 0)).
         if trace.enabled:
             var st = curandStateXORWOW.zero()
             curand_init(

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RAFT `cpp/include/raft/stats/detail/scores.cuh` (ebf9268): `r2_score`
 (:46-73) and `accuracy_score` (:84-101). `regression_metrics` (:146-206,
-mean/median absolute error) is NOT ported (NOT_IMPLEMENTED.tsv).
+mean/median absolute error) is NOT implemented (NOT_IMPLEMENTED.tsv).
 
 accuracy_score, THEIRS (:90-100):
 

@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Solve a small symmetric positive-definite system, by Cholesky.
 
-PORT OF `catboost/private/libs/lapack/linear_system.{h,cpp}` at CatBoost
-`54a8143a` -- `SolveLinearSystemCholesky` (`:34-49`). Transliterated. Do not
+FOLLOWS `catboost/private/libs/lapack/linear_system.{h,cpp}` at CatBoost
+`54a8143a` -- `SolveLinearSystemCholesky` (`:34-49`). Followed statement for statement. Do not
 improve.
 
-Its ONE caller in this port's reach is the walker's blocked-Hessian arm,
+Its ONE caller in this implementation's reach is the walker's blocked-Hessian arm,
 `UpdateMoveDirectionBlockedHessian` (`descent_helpers.cpp:91-117`), which
 solves `Hessian * direction = gradient` per LEAF for MultiClass. The matrix
 is `(numClasses - 1) x (numClasses - 1)` -- six by six for a seven-class
@@ -16,13 +16,13 @@ a device kernel.
 `SolveLinearSystem` (`:12-32`), the PACKED-storage sibling that goes through
 `dppsv_`, has no caller here: its users are the pairwise leaves calculation
 (`algo_helpers/pairwise_leaves_calculation.cpp:47`) and a pairwise unit test,
-and the pairwise oracle is not ported. It is in `gbdt/NOT_IMPLEMENTED.tsv`.
+and the pairwise oracle is not implemented. It is in `gbdt/NOT_IMPLEMENTED.tsv`.
 
 # =========================================================================
 # DEVIATION 74: theirs is LAPACK's `dposv_` (`linear_system.cpp:46-47`),
 # reached through the clapack vendored in `contrib/libs/clapack`.
 #
-# clapack is OPEN, so under ENGINEERING_RULES 0b-i it is a port candidate rather
+# clapack is OPEN, so under ENGINEERING_RULES 0b-i it is an candidate to implement rather
 # than a call to make -- the "call the platform's equivalent" exception is
 # for CLOSED libraries (cuBLAS, cuSOLVER) where there is nothing to read.
 # And the shape rules it out anyway: this runs on the HOST, once per leaf,
@@ -44,7 +44,7 @@ and the pairwise oracle is not ported. It is in `gbdt/NOT_IMPLEMENTED.tsv`.
 # positive definite CatBoost does not raise and does not fall back -- it
 # proceeds with `target` still holding the raw GRADIENT, and the walker
 # steps along the gradient instead of the Newton direction for that leaf.
-# This port does the same, and `solve_linear_system_cholesky` returns the
+# This implementation does the same, and `solve_linear_system_cholesky` returns the
 # `info` so a caller that wants to count it can.
 #
 # It is reachable in principle: the multinomial Hessian `diag(p) - p p^T`

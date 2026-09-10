@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The covariance functions of profile `mojolearn.identical.gp.fp32.v1`.
 
-**NOT A PORT, AND THERE IS NOTHING TO PORT.** cuML, cuVS and RAFT implement
+**NO REFERENCE FILE, AND THERE IS NOTHING TO IMPLEMENTATION.** cuML, cuVS and RAFT implement
 no Gaussian process at any of the pinned commits; `gaussian_process/
-DERIVATION_MAP.tsv` carries the grep that establishes it. `ENGINEERING_RULES.md`'s
-COPY DO NOT IMPROVE therefore does not apply here, because there is nothing
-to copy. scikit-learn's `sklearn/gaussian_process/kernels.py` is the
+ `ENGINEERING_RULES.md`
+0b therefore points at nothing here, and every design question in this lane
+was ours to answer. scikit-learn's `sklearn/gaussian_process/kernels.py` is the
 SEMANTICS reference and the ORACLE and is never the design source: it is
 CPU, LAPACK-shaped and float64, and it is cited below line by line so that
 what our parameters MEAN is checkable against a file rather than against a
@@ -389,7 +389,7 @@ def gp_kernel_matern(
             " modified Bessel function of the second kind of real order."
             " There is no kv in this repository, none in MAX, and no"
             " device implementation on any of the three vendors, so"
-            " porting it would mean certifying a NEW transcendental under"
+            " implementing it would mean certifying a NEW transcendental under"
             " IDENTITY_PATHS row 12 before one cell of it could be"
             " trusted. nu = inf is the RBF and is refused here too, so"
             " that a caller who wants it says RBF and gets the kernel"
@@ -456,7 +456,7 @@ def gp_kernel_prod(a: GPKernelSpec, b: GPKernelSpec) raises -> GPKernelSpec:
 
 
 def gp_kernel_from_name(name: String) raises -> Int:
-    """The kernel-name table, and every UNPORTED name refused BY NAME.
+    """The kernel-name table, and every UNIMPLEMENTED name refused BY NAME.
 
     A string entry point so a binding layer, a driver's environment knob and
     an error message all agree about what the names are. Returns a
@@ -482,7 +482,7 @@ def gp_kernel_from_name(name: String) raises -> Int:
             "gp_kernel_from_name: the kernel '"
             + name
             + "' exists in scikit-learn (sklearn/gaussian_process/"
-            "kernels.py) and is NOT ported. gaussian_process/NOT_IMPLEMENTED.tsv"
+            "kernels.py) and is NOT implemented. gaussian_process/NOT_IMPLEMENTED.tsv"
             " carries the row and the reason. This lane implements"
             " ConstantKernel, WhiteKernel, RBF and Matern at nu in"
             " {0.5, 1.5, 2.5}, and sums and products of them. Refused by"
@@ -695,7 +695,7 @@ def gp_kernel_diag(spec: GPKernelSpec) raises -> Float32:
     `n`-vector, and it is computed once on the host and recorded as the card
     stage `gp.kss`. sklearn returns a full vector because a kernel it
     supports and this lane does not (`DotProduct`) has a coordinate-dependent
-    diagonal; when that is ported this function returns a vector and the
+    diagonal; when that is implemented this function returns a vector and the
     stage becomes an array. Named here so the change is a change and not a
     surprise.
 
@@ -758,7 +758,7 @@ def gp_scaled_sqdist(
 
     **The per-feature step is `l2_unexp_core`, IMPORTED rather than
     re-spelled. DEVIATION 1754.** It lives in
-    `kde/impl/distance/distance_ops.mojo`, ported from cuVS
+    `kde/impl/distance/distance_ops.mojo`, implemented from cuVS
     `distance_ops/l2_unexp.cuh:62-63`, and is `diff = ftz(x - y);
     ftz(fma(diff, diff, acc))`. Writing those two lines again here would be
     a second spelling of one arithmetic, which is exactly what

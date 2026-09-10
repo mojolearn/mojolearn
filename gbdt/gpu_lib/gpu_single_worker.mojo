@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device worker: one queue, one dispatch switch, one place that drains.
 
-PORT OF `catboost/cuda/cuda_lib/gpu_single_worker.h` and `.cpp` at CatBoost
-`54a8143a`. Transliterated where it transliterates. See the DEVIATION BLOCK.
+FOLLOWS `catboost/cuda/cuda_lib/gpu_single_worker.h` and `.cpp` at CatBoost
+`54a8143a`. Followed statement for statement where it follow statement for statements. See the DEVIATION BLOCK.
 
 Their `TGpuOneDeviceWorker` is a thread that pulls commands off a queue and
 runs `switch (task->GetCommandType())` (`gpu_single_worker.cpp:69-141`), one
@@ -66,7 +66,7 @@ task object exists here, only `try_proceed_task` changes.
 
 **4. `ObjectsToFree` is always empty.** Their lazy-delete list
 (`gpu_single_worker.h:161`) is fed by the MemoryDeallocation case, which this
-port raises on because buffers belong to `DeviceContext`. The list and the
+implementation raises on because buffers belong to `DeviceContext`. The list and the
 branches that read it (`gpu_single_worker.cpp:83-86`) are transcribed anyway,
 because deleting a branch is how a state machine silently inverts.
 
@@ -74,7 +74,7 @@ Its feeder `TempMemoryAllocatedObjects` (`gpu_single_worker.h:162`), which
 `RunIteration` drains into `ObjectsToFree` at the top of every turn
 (`gpu_single_worker.cpp:55-58`), has no counterpart at all: it is filled only
 by `AllocateTempMemory` (`gpu_single_worker.cpp:10-47`), which is the
-`IMemoryManager` half of `PrepareExec` and belongs to the unported
+`IMemoryManager` half of `PrepareExec` and belongs to the unimplemented
 `tasks_impl/kernel_task.h`. With no producer the drain loop would be a loop
 over nothing, so it is named here instead of written.
 
@@ -228,7 +228,7 @@ struct TGpuOneDeviceWorker(Movable):
     # ---------------------------------------------------------------- drains
 
     def _device_sync(mut self) raises:
-        """The single point where this port waits on the device.
+        """The single point where this implementation waits on the device.
 
         OURS, not theirs: the budget check. Their `SyncStream` is a bare
         `cudaStreamSynchronize`. Every drain in this file funnels through
@@ -242,7 +242,7 @@ struct TGpuOneDeviceWorker(Movable):
                 + " drains against a budget of "
                 + String(self.sync_budget)
                 + ". Every drain past the budget is host round trips the"
-                + " control plane was ported to remove, so this is an error"
+                + " control plane was implemented to remove, so this is an error"
                 + " and not a warning."
             )
         self.sync_count += 1
@@ -305,7 +305,7 @@ struct TGpuOneDeviceWorker(Movable):
         if len(self.objects_to_free) > 0:
             raise Error(
                 "objects_to_free is non-empty, which cannot happen while"
-                " MemoryDeallocation raises. See NOT_PORTED.md."
+                " MemoryDeallocation raises. See `gbdt/NOT_IMPLEMENTED.tsv`."
             )
 
     def wait_submit_and_sync(mut self, skip_default: Bool = False) raises:
@@ -411,7 +411,7 @@ struct TGpuOneDeviceWorker(Movable):
         The `id == 0` refusal is not in their case body; it is
         `CB_ENSURE(streamId != 0)` one level up, in
         `TCudaSingleDevice::FreeStream` (`single_device.h:334-337`), so their
-        `UserFreeStreams` can never hold it. This port has no such level, so
+        `UserFreeStreams` can never hold it. This implementation has no such level, so
         the check sits where the list is read. The value refused is the same.
         """
         self.wait_all_task_to_submit()
@@ -473,8 +473,8 @@ struct TGpuOneDeviceWorker(Movable):
         if command.gpu_memory_part != 0.0 or command.pinned_memory_size != 0:
             raise Error(
                 "Reset with a non-zero memory size has no counterpart in this"
-                " port: memory providers are owned by DeviceContext. See"
-                " NOT_PORTED.md."
+                " implementation: memory providers are owned by DeviceContext. See"
+                " `gbdt/NOT_IMPLEMENTED.tsv`."
             )
 
     def run(mut self, mut command: TCommand) raises -> Bool:
@@ -482,7 +482,7 @@ struct TGpuOneDeviceWorker(Movable):
 
         Same cases, same order. The ones with no single-device meaning raise
         rather than silently doing nothing, because a silent no-op is exactly
-        how `enqueue_copy(dst_buf=, src_ptr=device)` cost this port a day.
+        how `enqueue_copy(dst_buf=, src_ptr=device)` cost this implementation a day.
 
         `command` is `mut` and not `var` for the same reason: their
         RequestStream case WRITES to the command (`gpu_single_worker.cpp:122`,
@@ -505,13 +505,13 @@ struct TGpuOneDeviceWorker(Movable):
         elif type == ECommandType.MemoryAllocation:
             raise Error(
                 "MemoryAllocation is not routed through the worker in this"
-                " port. Buffers are owned by the caller through"
-                " DeviceContext. See NOT_PORTED.md."
+                " implementation. Buffers are owned by the caller through"
+                " DeviceContext. See `gbdt/NOT_IMPLEMENTED.tsv`."
             )
         elif type == ECommandType.MemoryDeallocation:
             raise Error(
                 "MemoryDeallocation is not routed through the worker in this"
-                " port. See NOT_PORTED.md."
+                " implementation. See `gbdt/NOT_IMPLEMENTED.tsv`."
             )
         elif type == ECommandType.WaitSubmit:
             # `gpu_single_worker.cpp:107-109`. Submission only. NOT a drain.
@@ -534,12 +534,12 @@ struct TGpuOneDeviceWorker(Movable):
             # `gpu_single_worker.cpp:139-141` is `Y_UNREACHABLE()`, because a
             # SerializedCommand is deserialised into a real command before the
             # switch (`gpu_single_worker.cpp:65-67`). Deserialisation exists to
-            # receive a command from another host over MPI; this port is
-            # single host. See NOT_PORTED.md.
+            # receive a command from another host over MPI; this implementation is
+            # single host. See `gbdt/NOT_IMPLEMENTED.tsv`.
             raise Error(
                 "SerializedCommand is unreachable: it exists to ship a"
-                " command to another host over MPI, and this port is single"
-                " host. See NOT_PORTED.md."
+                " command to another host over MPI, and this implementation is single"
+                " host. See `gbdt/NOT_IMPLEMENTED.tsv`."
             )
 
         return False

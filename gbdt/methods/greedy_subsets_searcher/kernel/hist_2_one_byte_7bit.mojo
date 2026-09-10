@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The 7-bit specialization of the fused two-stat one-byte accumulator.
 
-PORT OF `hist_2_one_byte_7bit.cu` at CatBoost `54a8143a`,
-`TPointHist2OneByte<7, BlockSize>`. Transliterated. Do not improve.
+FOLLOWS `hist_2_one_byte_7bit.cu` at CatBoost `54a8143a`,
+`TPointHist2OneByte<7, BlockSize>`. Followed statement for statement.
 
 The family CatBoost's one-byte dispatch takes at `64 < maxBins <= 128`
 (`hist_one_byte.cu:320-322`), WHICH INCLUDES THEIR OWN GPU DEFAULT BORDER

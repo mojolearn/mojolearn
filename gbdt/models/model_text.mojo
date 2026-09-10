@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A trained model, written to a file and read back exactly.
 
-NOT A PORT, AND THE ONLY HONEST WAY TO SAY IT. CatBoost serializes a model
+NO REFERENCE FILE, AND THE ONLY HONEST WAY TO SAY IT. CatBoost serializes a model
 with flatbuffers (`catboost/libs/model/flatbuffers/model.fbs`, written by
 `libs/model/model.cpp`) and exports JSON, CoreML, ONNX, PMML, C++ and Python
-from `libs/model/model_export/`. None of that is ported here and none of it
+from `libs/model/model_export/`. None of that is implemented here and none of it
 is mirrored. This file writes a format of our own, and that is DEVIATION 49
 in `archive/reference/PORTING.md` with the reason. What IS taken from them is the CONTENT
 list: an applied model needs the trees, the leaf values in leaf order, and

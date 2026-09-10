@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Assign every sample to its nearest centroid, tiled to bound memory.
 
-PORT OF `minClusterAndDistanceCompute`,
+FOLLOWS `minClusterAndDistanceCompute`,
 `cuvs/src/cluster/detail/kmeans_common.cuh:360-493`, at cuVS `94c2819`.
-Partial. Do not improve. (There is no `minClusterDistanceCompute.cu` in
+Partial. (There is no `minClusterDistanceCompute.cu` in
 cuVS; this function lives in `kmeans_common.cuh`.)
 
 This is the assignment half of Lloyd's algorithm and it is where essentially
@@ -15,7 +15,7 @@ metric test with nothing else in it (`is_fused`, `:378-379`):
     anything else               -> pairwise matrix + reduce  (`:450-491`)
 
 k-means's default metric is L2Expanded, so THEIR DISPATCH TAKES THE FUSED
-ARM, and so does this file. The fused kernel is ported at
+ARM, and so does this file. The fused kernel is implemented at
 `distance/fused_distance_nn/simt_kernel.mojo` and writes no distance tile at
 all. The second arm is kept below only so the two can be diffed; it is not
 the path.
@@ -120,11 +120,11 @@ def _launch_fused[
 ) raises:
     """One policy instantiation of the fused kernel, launched with THEIR grid
     computation: `launchConfigGenerator<P>(m, n, shmemSize, kernel)` at
-    `fused_l2_nn.cuh:135-138`, ported (M4 inputs) in
+    `fused_l2_nn.cuh:135-138`, implemented (M4 inputs) in
     `neighbors/impl/distance/detail/pairwise_distance_base.mojo`.
 
     `grid.x` is PINNED to 1: the cross-block merge (`updateReducedVal`'s
-    mutex) is the `replaced` row in `DERIVATION_MAP.tsv`, so a `grid.x > 1`
+    mutex) is a deliberate replacement, so a `grid.x > 1`
     launch would race the per-row writes. Their generator returns
     `grid.x == 1` anyway whenever the row tiles alone fill the device, which
     is every k-means shape this repo ships; the pin only bites at small `m`,

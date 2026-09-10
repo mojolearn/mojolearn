@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`_solve_cholesky_kernel` and `_safe_solve`: cuML's kernel-ridge solver.
 
-PORT OF `cuml/python/cuml/cuml/kernel_ridge/kernel_ridge.py` at cuML
+FOLLOWS `cuml/python/cuml/cuml/kernel_ridge/kernel_ridge.py` at cuML
 `265b9da` (`upstream/cuml-v26.08.00`), lines 26-88 and 285-349.
 
 **AN UPSTREAM EXISTS FOR KERNEL RIDGE AND IT IS PURE PYTHON.** cuML ships no
 `cpp/src/kernel_ridge/` at this pin; the estimator is a `Base` subclass whose
 `fit` calls `pairwise_kernels` and then a module-level `_solve_cholesky_kernel`
 that reaches `cupyx.lapack.posv` -- cuSOLVER's `potrf` followed by `potrs`.
-So the ALGORITHM is fully readable and is transliterated here line for line;
+So the ALGORITHM is fully readable and is followed statement for statement here line for line;
 only the two library calls underneath it are closed, and
 `archive/reference/VENDOR_LIBS.md`'s surviving exception plus `cholesky/`'s pinned
 `potrf_lower` / `cho_solve` stand in for them. `ENGINEERING_RULES` rule 2 is why
@@ -26,7 +26,7 @@ THEIR SEQUENCE, `kernel_ridge.py:48-72`, transcribed branch for branch:
         sw = cp.sqrt(cp.atleast_1d(sample_weight))
         y = y * sw[:, cp.newaxis]
         K *= cp.outer(sw, sw)
-    if one_alpha:                                  # :65   the arm ported
+    if one_alpha:                                  # :65   the arm implemented
         K.flat[:: n_samples + 1] += alpha[0]       # :67   DEVIATION 1660
         dual_coef = _safe_solve(K, y)              # :69
         if has_sw:
@@ -122,7 +122,7 @@ and `_safe_solve`, `:26-44`:
 # =========================================================================
 
 # =========================================================================
-# DEVIATION 1662 -- THE LEAST-SQUARES FALLBACK IS NOT PORTED; A FAILED
+# DEVIATION 1662 -- THE LEAST-SQUARES FALLBACK IS NOT IMPLEMENTED; A FAILED
 # FACTORIZATION RAISES BY NAME.
 #
 # THEIRS catches `LinAlgError` from `posv`, warns, and returns
@@ -136,9 +136,9 @@ and `_safe_solve`, `:26-44`:
 # for its own reason ("dividing by those returns infinities that look like
 # numbers"), and this file refuses one step earlier so the message can name
 # `alpha` and the kernel. The closure is stated in the error text: raise
-# `alpha`, or port an SVD-based least-squares arm. `solver/checks/
+# `alpha`, or implementation an SVD-based least-squares arm. `solver/checks/
 # lstsq.mojo` has an eigendecomposition-based least squares in this tree, so
-# the port is possible and is NOT done here -- wiring another lane's solver
+# the implementation is possible and is NOT done here -- wiring another lane's solver
 # into this one without a gate that drives BOTH sides of the branch would
 # create exactly the unchecked non-default path `ENGINEERING_RULES` rule 8
 # describes. `kernel_methods/NOT_IMPLEMENTED.tsv` carries the row.

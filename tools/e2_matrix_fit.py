@@ -18,7 +18,7 @@ THREE VERDICTS PER CELL, ALL OF THEM RESULTS:
   identical   -- prediction hash equal AND every card stage equal
   divergent   -- first differing stage named by the card differ
   refused     -- the estimator raised BY NAME (a REFUSE arm, an option the
-                 port does not carry); both machines refusing with the same
+                 implementation does not carry); both machines refusing with the same
                  message is the passing result for that cell
 
 EACH CELL RUNS IN ITS OWN SUBPROCESS. A device fault in one configuration
@@ -517,10 +517,10 @@ def run_cell(name, out_dir):
         msg = f"{type(exc).__name__}: {exc}"
         # a REFUSE arm raising BY NAME is a result; the extratrees and
         # randomforest wrappers raise plain Exception/NotImplementedError
-        # with "is not ported" / "refused" text, the gbdt wrapper raises
+        # with "is not implemented" / "refused" text, the gbdt wrapper raises
         # ValueError/NotImplementedError
         if isinstance(exc, (NotImplementedError, ValueError)) or any(
-                t in str(exc) for t in ("not ported", "refus", "not supported",
+                t in str(exc) for t in ("not implemented", "refus", "not supported",
                                         "not reachable", "does not support")):
             entry["refused"] = msg
         else:  # a real failure, also a result, named

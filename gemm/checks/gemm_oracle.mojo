@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The IDENTICAL FP32 GEMM oracle: the contract, written out, on the host.
 
-**NOT A PORT, and it replaces no upstream call.** RAFT's standalone matrix
+**NO REFERENCE FILE, and it replaces no upstream call.** RAFT's standalone matrix
 product is `raft/linalg/gemm.hpp` -> `detail/cublaslt_wrappers.hpp` ->
 cuBLASLt, a CLOSED library with no source to mirror (`ENGINEERING_RULES.md` 0b-i:
 "where the path their dispatch actually takes calls a CLOSED library we
-cannot read or port -- cuBLAS, cuSOLVER -- call the MAX equivalent, because
-there is nothing to port"). There is therefore no upstream reference
+cannot read or implementation -- cuBLAS, cuSOLVER -- call the MAX equivalent, because
+there is nothing to implement"). There is therefore no upstream reference
 implementation of a matrix product ANYWHERE in cuML, cuVS or RAFT to check
 against, and this file is what stands in for one. The call it replaces, in
 this repository's own terms, is `core/gemm.mojo::gemm_nt` / `gemm_tn` /

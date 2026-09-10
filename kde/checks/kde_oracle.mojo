@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host oracles for KDE: a float32 serial replay and a float64 reference.
 
-NOT A PORT. cuML ships one backend and checks `score_samples` against
+NO REFERENCE FILE. cuML ships one backend and checks `score_samples` against
 scikit-learn to a tolerance (`tests/test_kernel_density.py`); it has no
 bit-level oracle because it needs none. We ship three backends from one
 source, so the device arm is gated BIT FOR BIT under IDENTICAL against the

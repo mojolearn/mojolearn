@@ -5,7 +5,7 @@
 `archive/plans/transformer/IDENTICAL_BACKWARD_PLAN.md` section 6.2 names and section 11
 lists as owed item (2).
 
-NOT A PORT. It runs the device backward
+NO REFERENCE FILE. It runs the device backward
 (`transformer/checks/transformer_backward.mojo`) against the host oracle
 (`transformer/checks/transformer_backward_oracle.mojo`) and compares all
 THIRTY-SEVEN recorded stages BY BITS.

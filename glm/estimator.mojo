@@ -211,7 +211,7 @@ def ols_predict_host(
     # host constant and is the same answer on every host. THE SENTENCE THAT
     # STOOD HERE -- "`ols_fit_host` refuses `fit_intercept`, so on the
     # fitted path it is always exactly 0.0" -- WAS FALSE at the surface
-    # (corrected 2026-08-23, DEVIATION 517): the ported `ols_fit` refuses
+    # (corrected 2026-08-23, DEVIATION 517): the implemented `ols_fit` refuses
     # `fit_intercept`, but `python/mojolearn/linear_model.py` centers X and
     # y ON THE HOST before calling this file and hands a NON-ZERO intercept
     # back in, so `mojolearn.LinearRegression()`'s default takes this
@@ -252,7 +252,7 @@ def ridge_fit_host(
     identity card when `MOJOLEARN_IDENTITY_TRACE` is set (the same shape as
     `ols_fit_host`, DEVIATION 517). `fit_intercept` is the HOST centering
     `python/mojolearn/linear_model.py` does, exactly as for
-    `LinearRegression`; the ported `ridge_fit` sees a centered design and
+    `LinearRegression`; the implemented `ridge_fit` sees a centered design and
     `fit_intercept=False`."""
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var y = ctx.enqueue_create_buffer[DType.float32](n_rows)

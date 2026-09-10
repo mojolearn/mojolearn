@@ -21,10 +21,10 @@ THE REFERENCE DESIGN is the one both source recons converged on:
     907-944`) and gradients NEVER move -- the hist kernel reads
     `cuda_gradients[data_indices_in_leaf[i]]`
     (`cuda_histogram_constructor.cu:53-55`).
-  * CatBoost -- the port's source of truth everywhere else -- moves the
+  * CatBoost -- the implementation's source of truth everywhere else -- moves the
     stat columns too (`TSplitPointsKernel`, `split_points.cpp:64-136`).
     That is the design this deviation leaves, which is why it is a numbered
-    deviation and not a port.
+    deviation and not an implementation.
 
 WHAT THIS COSTS AND BUYS. Deleted per split on the slow arm:
 `2 * ceil(stat_count / 8)` launches and `stat_count * 4` bytes per row of
@@ -34,7 +34,7 @@ SAME index register they already load for the compressed-index gather, so
 no new load stream, but the coalescing changes on the hot kernel. The
 recons' answer is that both competitors eat that gather at every row of
 every histogram and win anyway; the orchestrator's A/B is where that claim
-is priced on this port (see archive/research/LOSSGUIDE.md, DEVIATION 1902 ledger).
+is priced on this implementation (see archive/research/LOSSGUIDE.md, DEVIATION 1902 ledger).
 
 BIT-EXACT BY CONSTRUCTION (the invariant, stated once and relied on by
 every converted reader): let `D` be the stat plane in the order the

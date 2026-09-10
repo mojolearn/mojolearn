@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The FEATURE-PARALLEL oblivious searcher, `SetTarget` arm, one device.
 
-PORT OF `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}` at
+FOLLOWS `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}` at
 CatBoost `54a8143a` -- `TFeatureParallelObliviousTreeSearcher::Fit`
 (`:46-306`), `::CreateSubsets` (`:29-44`) and
 `TSubsetsHelper<NCudaLib::TMirrorMapping>::Split`
-(`pointwise_optimization_subsets.h:74-93`). Transliterated. Do not improve.
+(`pointwise_optimization_subsets.h:74-93`). Followed statement for statement.
 
 RUNG 2. `archive/plans/NEXT_TWO.md` and `archive/reference/PORTING.md` 119 both priced this as "the fold
 layout plus wiring, not a second searcher", on the strength of `archive/reference/PORTING.md`
@@ -53,7 +53,7 @@ KERNELS.** This is the substantive one.
 `docBins` has no counterpart on the doc-parallel path. Filling it is
 `TTreeUpdater::AddSplit` -> `WriteCompressedSplit` ->
 `UpdateBinFromCompressedBits`, which is `gbdt/methods/
-oblivious_tree_bin_builder.mojo` and is ~350 lines of new port including two
+oblivious_tree_bin_builder.mojo` and is ~350 lines of new implementation including two
 kernels and a compression layout. So the feature-parallel arm runs THREE
 kernels per level where the doc-parallel arm runs one, and the difference is
 not a fold count.
@@ -87,7 +87,7 @@ Two reasons, both visible in their tree and neither about splitting:
    (`CreateEmptyTensorTracker`, used at `:144`), and a tree CTR's tensor is
    "the splits already in this tree" -- which is what `BinarySplits` is.
 
-This port returns `docBins` for the same reason (1) exists: it is the
+This implementation returns `docBins` for the same reason (1) exists: it is the
 model's leaf assignment and the identity gate checks it per document.
 
 WHAT IS AND IS NOT HERE
@@ -95,7 +95,7 @@ WHAT IS AND IS NOT HERE
 DEVIATION 120 covers the four things their `Fit` does that this function
 does not: `ComputeWeakTarget`, the bootstrap, the tree-CTR block, and the
 per-level rebuild of `docIndices`. The first two mirror the doc-parallel
-port's DEVIATION 104 exactly and for the same reason -- the boosting loop
+implementation's DEVIATION 104 exactly and for the same reason -- the boosting loop
 owns the gradient path, and forking it is the one thing that must not differ
 between two learners being compared.
 
@@ -153,7 +153,7 @@ def split_subsets_mirror(
     NOT**, and it is the whole of WRONG 2 in the module docstring.
 
     `UpdateBins` here is `NKernel::UpdateFoldBins`
-    (`methods/kernel/pointwise_hist2.cu:16-34`), already ported as
+    (`methods/kernel/pointwise_hist2.cu:16-34`), already implemented as
     `gbdt/methods/pointwise_kernels.update_fold_bins`:
 
         idx = docIndices[i];
@@ -345,7 +345,7 @@ def fit_feature_parallel_oblivious_tree_structure(
     # values, one allocation instead of `MaxDepth` of them.
     #
     # At permutation id 0 with no shuffle the target's indices are the
-    # identity, which is the doc-parallel port's DEVIATION 105 assumption
+    # identity, which is the doc-parallel implementation's DEVIATION 105 assumption
     # holding on this arm too -- and unlike that arm the gather below is
     # still performed rather than collapsed, because `docBins` is indexed by
     # DOCUMENT and the collapse would only be legal for `subsets.Indices`.
@@ -449,7 +449,7 @@ def fit_feature_parallel_oblivious_tree_structure(
         # the split is applied, so the structure never holds a duplicate.
         # Theirs breaks with no leaf estimation at all; the doc-parallel arm
         # estimates leaves first (`..._doc_parallel_...cpp:135`), which is
-        # the DEVIATION 104 half neither port carries.
+        # the DEVIATION 104 half neither implementation carries.
         var seen = False
         for i in range(len(structure)):
             if (
@@ -487,7 +487,7 @@ def fit_feature_parallel_oblivious_tree_structure(
         #  ::Split(target, docBins, observationIndices, &subsets); }`
         # (`:280-287`). The doc-parallel arm adds `|| needLeavesEstimation`
         # to this condition because it estimates leaves from the split it is
-        # about to skip; DEVIATION 104 removed leaves from that port, so the
+        # about to skip; DEVIATION 104 removed leaves from that implementation, so the
         # two conditions coincide.
         if (depth + 1) != max_depth:
             split_subsets_mirror(

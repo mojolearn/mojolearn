@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The CUB / Thrust stand-ins the SVM port needs: flagged compaction, the
+"""The CUB / Thrust stand-ins the SVM implementation needs: flagged compaction, the
 float key twiddle, gathers, fills, and the pinned serial sum.
 
-NOT A PORT of any one file. Each function names the call it stands in for.
+DOES NOT FOLLOW any one file. Each function names the call it stands in for.
 CUB and Thrust are OPEN (ENGINEERING_RULES 0b-i), so these are written out
 rather than substituted by a device-wide MAX primitive; MAX ships no device
 `select`/`partition` anyway (archive/reference/VENDOR_LIBS.md).
@@ -13,7 +13,7 @@ GatherAvailable`, `results.cuh::SelectByCoef` / `SelectUnboundSV` /
 `SelectReduce`, and `thrust::copy_if` in `smosolver.cuh::
 GetNonzeroDeltaAlpha`) is ORDER-PRESERVING: `out[k]` is the k-th flagged
 input in index order. Ours is the three-pass decoupled scan the repository
-already ports for CatBoost's one-bit reorder (`gbdt/gpu_util/kernel/
+already implements for CatBoost's one-bit reorder (`gbdt/gpu_util/kernel/
 reorder_one_bit.mojo`: block scan, block-sums scan, carry) followed by a
 scatter `out[offsets[i]] = in[i]` for flagged `i`. Integer scan and scatter:
 no float arithmetic, so nothing here has a mode and nothing here can move a
@@ -274,7 +274,7 @@ def gather_rows_kernel(
 ):
     """`ML::SVM::extractRows` for a DENSE matrix (`sparse_util.cuh`): row
     `idx[r]` of `x` to row `r` of `out`. Row-major both sides (theirs is
-    column-major; the layout is a port detail recorded in DERIVATION_MAP)."""
+    column-major; the layout is an implementation detail."""
     var k = Int(n_cols_in)
     var total = Int(n_sel_in) * k
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)

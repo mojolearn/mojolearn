@@ -3,14 +3,14 @@
 """The batched small-matrix operations the Kalman filter's initialization
 reaches: Kronecker product, LU inverse, GEMM, the direct Lyapunov solve.
 
-PORT OF `cuml/cpp/src_prims/linalg/batched/matrix.cuh` at cuML 265b9da6
+FOLLOWS `cuml/cpp/src_prims/linalg/batched/matrix.cuh` at cuML 265b9da6
 (v26.08.00), the part `_batched_kalman_filter` reaches for `r <= 5`:
 `kronecker_product_kernel` (:506-526, via `b_kron` :814-842), `Matrix::inv`
 (:380-390), `b_gemm` (:544-596), `_direct_lyapunov_helper` (:1852-1884).
 The `Matrix<T>` class itself (an arena over cuBLAS handles), `b_gels`,
 `b_lagged_mat`, `b_2dcopy`, the Hessenberg/Francis-QR/`trsyl` Schur path
-of `b_lyapunov` (:1899-1948, `r > 5`) are not ported: `r > 5` is refused by
-name (`arima_common.mojo::validate_order`). COPY, DO NOT IMPROVE -- except
+of `b_lyapunov` (:1899-1948, `r > 5`) are not implemented: `r > 5` is refused by
+name (`arima_common.mojo::validate_order`). Followed closely, except
 where theirs is a CLOSED library call, which is the deviation below.
 
 These are written as PER-SERIES device functions over raw pointers (one
@@ -202,7 +202,7 @@ def matvec_serial(
 
 
 # ---------------------------------------------------------------------------
-# host replays over Lists (NOT ports: the oracles; spelled separately so a
+# host replays over Lists (NOT implements: the oracles; spelled separately so a
 # sabotage of the device helper cannot move both)
 # ---------------------------------------------------------------------------
 

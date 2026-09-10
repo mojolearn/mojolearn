@@ -25,7 +25,7 @@ draw from in order, it is a PURE FUNCTION of (seed, treeid, nodeid).
 There is no draw order to reproduce, so nothing here depends on launch
 order, block count, warp width or stream count. This is the reason
 `n_streams` could first be dropped on Metal, and now that DEVIATION 117
-is PORTED it is the reason K trees can be pipelined over one queue
+is IMPLEMENTED it is the reason K trees can be pipelined over one queue
 (`randomforest.mojo`) without touching a single output bit.
 
 A CORRECTION, because the sentence that stood here was FALSE and a
@@ -53,12 +53,12 @@ a time, low half first, and adds the high half ONLY when
 `sizeof(T) > sizeof(uint32_t)`. Their `fnv1a32_hash(seed, treeid,
 nodeid)` therefore hashes `seed` (uint64 -> two rounds) then `treeid`
 (int -> one round) then `nodeid` (uint32 -> one round). The width of
-each argument changes the answer, so this port keeps the widths
+each argument changes the answer, so this implementation keeps the widths
 explicit at each call site rather than promoting everything to 64 bits.
 
 ================= DEVIATION BLOCK (whole file) =================
 DEVIATION 400. THE PER-TREE SEED FOLD DISCARDS THE SEED'S HIGH 32 BITS,
-AND THAT IS A BUG WE FIX RATHER THAN PORT. Their `randomforest.cuh:121`
+AND THAT IS A BUG WE FIX RATHER THAN IMPLEMENTATION. Their `randomforest.cuh:121`
 is `rs = fnv1a32(rs, seed_)` -- `fnv1a32` takes `uint32_t`, `seed_` is
 `uint64_t`, so C++ silently truncates and every pair of seeds that agree
 in their low word grows THE SAME FOREST: `fit(seed=1)` and

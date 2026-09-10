@@ -27,7 +27,7 @@ a kNN connectivity graph first, cuML's `affinity='nearest_neighbors'`) and
 surface, so nothing here reimplements a forward.
 
 **THE IDENTITY CARD IS EMITTED FROM HERE WHEN THE ENVIRONMENT ASKS FOR
-ONE**, unlike `metrics/estimator.mojo`, and for a reason: the ported
+ONE**, unlike `metrics/estimator.mojo`, and for a reason: the implemented
 `fit_predict` takes an `IdentityTrace` as a REQUIRED argument and records
 exactly the stage list `IDENTICAL_SPECTRAL_CONTRACT.md` section 8 freezes.
 So `MOJOLEARN_IDENTITY_TRACE=<path>` around a Python `fit_predict` produces
@@ -210,7 +210,7 @@ def spectral_fit_predict_graph_host(
     n_samples`. It need not be sorted -- `compute_graph_laplacian` sorts it,
     inserts a zero diagonal where a row lacks one, and then refuses a
     repeated `(row, col)` key by name (DEVIATIONS 775/777; RAFT's
-    `coo_reduce_duplicates`, which would SUM them instead, is not ported).
+    `coo_reduce_duplicates`, which would SUM them instead, is not implemented).
     A non-finite or negative value is refused by name by `transform_graph`.
 
     Returns `n_out`, the number of embedding columns."""

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`KernelCache`: the square working-set tile and the batched full tile.
 
-PORT OF `cuml/cpp/src/svm/kernelcache.cuh` at cuML v26.08.00 (`KernelCache`
+FOLLOWS `cuml/cpp/src/svm/kernelcache.cuh` at cuML v26.08.00 (`KernelCache`
 with `InitWorkingSet`, `getKernelIndices`, `getSquareTileWithoutCaching`,
 `InitFullTileBatching`, `getNextBatchKernel`, `selectValueSubset`, the
 `n_rows` batching by `kernel_tile_byte_limit`), on THEIR `cache_size == 0`
@@ -11,7 +11,7 @@ every `if (batch_cache.GetSize() > 0)` is skipped, `ws_idx_mod == ws_idx`,
 `n_cached == 0`, and every column of the full tile is computed. That path
 is a legal value of their parameter and this file is exactly it.
 
-NOT PORTED (svm/NOT_IMPLEMENTED.tsv; svm/README.md "the cache decision"):
+NOT IMPLEMENTED (svm/NOT_IMPLEMENTED.tsv; svm/README.md "the cache decision"):
 `BatchCache` / `raft::cache::Cache` (the 32-way set-associative LRU:
 `get_cache_idx`, `assign_cache_idx`, `rank_set_entries`, `get_vecs`,
 `store_vecs`), `PreparePartitionedIdxOrder`, `GetCacheIdxPartitionedStable`,
@@ -25,7 +25,7 @@ WHY THE CACHE CANNOT MOVE A BIT WHEN IT LANDS: under IDENTICAL every cell
 row fetched from the cache equals the row recomputed; and the two places
 where the cache's PERMUTATION of the working set could reach the arithmetic
 are pinned to the training index instead (DEVIATIONS 633 and 634). So a
-future port of the LRU changes which rows are computed and nothing else.
+future implementation of the LRU changes which rows are computed and nothing else.
 
 LAYOUT: theirs is column-major (`K[i + j * ld]`, `f-contiguous` matrices);
 ours is row-major throughout. The square tile is `[n_ws x n_ws]` with
@@ -103,7 +103,7 @@ struct KernelCache(Movable):
     and `ws_idx_mod_svr` holds the raw indices, which is what addresses
     `alpha` and `f` over `n_train` inside the block solve.
 
-    This port allocates BOTH on every problem type and keeps them equal for
+    This implementation allocates BOTH on every problem type and keeps them equal for
     C_SVC, which costs one `n_ws` int32 buffer and one copy per outer
     iteration (n_ws is at most 1024) and buys one code path. The alternative
     is an accessor returning one of two buffers, which Mojo's ownership does
@@ -218,7 +218,7 @@ struct KernelCache(Movable):
         `if (batch_cache.GetSize() > 0)`, so it exists only to undo the LRU
         cache's reordering. This lane takes the `cache_size == 0` path,
         where that branch is never entered, so the kernel is dead code here
-        rather than an omission. If the LRU is ever ported, it comes back.
+        rather than an omission. If the LRU is ever implemented, it comes back.
         """
         if self.cache_state == CACHE_WS_INITIALIZED:
             raise Error("svm KernelCache: Working set has already been initialized!")

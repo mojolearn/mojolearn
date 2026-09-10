@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""GPU scoring functions, including cuML ports and native regression errors.
+"""GPU scoring functions, including cuML implements and native regression errors.
 
 **metrics IS NOT AN ESTIMATOR.** It is a set of scoring functions, so this
 module is shaped like `sklearn.metrics` -- plain functions, no class, no
@@ -11,7 +11,7 @@ not carry is refused BY NAME with a reason, never accepted and ignored.
 WHERE THE NAMES AND THE DEFAULTS COME FROM. Function and argument names
 follow scikit-learn. New regression-error
 functions document their bounded Float32 contract below. For the original
-ports, **the defaults and semantics are cuML's**, from the pinned `v26.08.00`
+implements, **the defaults and semantics are cuML's**, from the pinned `v26.08.00`
 checkout, and where the two libraries differ the difference is written on
 the function. Three of those differences matter:
 
@@ -139,12 +139,12 @@ def _as_i32_1d(x, name):
     if not np.issubdtype(a.dtype, np.integer):
         raise ValueError(
             f"mojolearn metrics: {name} must be an integer label array, got "
-            f"dtype {a.dtype}; the ported kernels take int32 labels"
+            f"dtype {a.dtype}; the implemented kernels take int32 labels"
         )
     out = np.ascontiguousarray(a, dtype=np.int32)
     if not np.array_equal(out.astype(a.dtype, copy=False), a):
         raise ValueError(
-            f"mojolearn metrics: {name} does not fit in int32; the ported "
+            f"mojolearn metrics: {name} does not fit in int32; the implemented "
             "kernels are the int32 instantiation (the int64 overload of "
             "adjusted_rand_index is the same code at a wider type and is "
             "not instantiated, metrics/NOT_IMPLEMENTED.tsv)"
@@ -164,13 +164,13 @@ def _as_f32_1d(x, name, *, require_finite=True):
         raise ValueError(f"mojolearn metrics: {name} is empty")
     if a.dtype == np.float64:
         # Named rather than silent: cuML has a float64 overload of r2_score,
-        # kl_divergence and silhouette_score and this port does not, because
+        # kl_divergence and silhouette_score and this implementation does not, because
         # Apple's GPU has no float64 (mojolearn-hardware-limits). The cast is
         # the caller's to make, so the precision they run at is the precision
         # they asked for.
         raise TypeError(
             f"mojolearn metrics: {name} is float64; the float64 overloads of "
-            "r2_score, kl_divergence and silhouette_score are NOT ported "
+            "r2_score, kl_divergence and silhouette_score are NOT implemented "
             "(no float64 on this GPU). Cast to float32 yourself so the "
             "precision you run at is the one you chose."
         )
@@ -249,7 +249,7 @@ def accuracy_score(
                                   fraction, and recovering an integer count
                                   from a float32 fraction is a different
                                   computation, not this one.
-        sample_weight   refused   not ported. cuML 26.08's own Python
+        sample_weight   refused   not implemented. cuML 26.08's own Python
                                   `accuracy_score` supports it in pure cupy
                                   and does not call this kernel at all;
                                   weighting here would be a host formula
@@ -260,13 +260,13 @@ def accuracy_score(
     """
     if sample_weight is not None:
         raise NotImplementedError(
-            "mojolearn accuracy_score: sample_weight is not ported "
+            "mojolearn accuracy_score: sample_weight is not implemented "
             "(metrics/impl/stats/detail/scores.mojo has no weighted arm)"
         )
     if not normalize:
         raise NotImplementedError(
             "mojolearn accuracy_score: normalize=False is refused; the "
-            "ported kernel returns the FRACTION of agreeing positions and "
+            "implemented kernel returns the FRACTION of agreeing positions and "
             "the count is not recoverable from it exactly. Use "
             "int((y_true == y_pred).sum()) if you want the count."
         )
@@ -345,7 +345,7 @@ def entropy(clustering, *, base=None):
         base        honored   cuML's `entropy.pyx:72-74` spelling exactly,
                               `math.log(math.exp(S), base)`. Kept as theirs
                               rather than the algebraically equal
-                              `S / math.log(base)`: COPY, DO NOT IMPROVE.
+                              `S / math.log(base)`:
                               None (the default) means nats.
 
     THE HISTOGRAM SPANS `max(labels) - min(labels) + 1` BINS, not the number
@@ -391,7 +391,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
                                  does, and the kernel is handed that range.
         contingency    refused   scikit-learn lets you pass a precomputed
                                  contingency matrix instead of labels; the
-                                 ported entry builds its own on the device
+                                 implemented entry builds its own on the device
                                  and there is no arm that consumes one.
 
     NATS, not bits: RAFT computes it in nats and so does this.
@@ -399,7 +399,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
     if contingency is not None:
         raise NotImplementedError(
             "mojolearn mutual_info_score: contingency= is refused; the "
-            "ported entry builds the contingency matrix on the device "
+            "implemented entry builds the contingency matrix on the device "
             "(metrics/impl/stats/detail/contingency_matrix.mojo) and has "
             "no arm that consumes a precomputed one"
         )
@@ -440,7 +440,7 @@ def completeness_score(labels_true, labels_pred):
     TRANSPOSED contingency matrix, so the host's serial ascending walk
     visits the cells in a different sequence, and the two are the same
     quantity in exact arithmetic and not necessarily the same float32 bits.
-    Ported as theirs, and both folds are stages on the metrics card.
+    Implemented as theirs, and both folds are stages on the metrics card.
 
         labels_true,   honored   int32 labels, same length, remapped onto
         labels_pred              [0, n_classes - 1] as cuML 26.08 does
@@ -481,7 +481,7 @@ def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
 
     THREE SEPARATE DEVICE CALLS, not one fused pass, and therefore three
     device contexts. scikit-learn computes all three from one contingency
-    matrix; the ported C++ has three entries and this calls them. If you
+    matrix; the implemented C++ has three entries and this calls them. If you
     care about the cost, call the one you need.
     """
     return (
@@ -517,13 +517,13 @@ def r2_score(
 
         y_true, y_pred  honored   1-D float32, same length, finite. float64
                                   is REFUSED by name: cuML has a double
-                                  overload and this port does not (no
+                                  overload and this implementation does not (no
                                   float64 on this GPU), so the cast is
                                   yours to make.
         multioutput     refused   anything but 'uniform_average' with 1-D
-                                  input. 2-D targets are not ported; the
+                                  input. 2-D targets are not implemented; the
                                   kernel takes one flat pair of arrays.
-        sample_weight   refused   not ported (RAFT's r2_score has no
+        sample_weight   refused   not implemented (RAFT's r2_score has no
                                   weighted arm).
         force_finite    honored   True only, and it is BAKED IN. `ssto == 0`
                                   returns 1.0 when `sse == 0` and 0.0
@@ -542,18 +542,18 @@ def r2_score(
     """
     if sample_weight is not None:
         raise NotImplementedError(
-            "mojolearn r2_score: sample_weight is not ported "
+            "mojolearn r2_score: sample_weight is not implemented "
             "(metrics/impl/stats/detail/scores.mojo has no weighted arm)"
         )
     if multioutput != "uniform_average":
         raise NotImplementedError(
             f"mojolearn r2_score: multioutput={multioutput!r} is refused; "
-            "the ported kernel takes one flat pair of 1-D arrays and there "
+            "the implemented kernel takes one flat pair of 1-D arrays and there "
             "is no multioutput arm"
         )
     if not force_finite:
         raise NotImplementedError(
-            "mojolearn r2_score: force_finite=False is refused; the ported "
+            "mojolearn r2_score: force_finite=False is refused; the implemented "
             "epilogue bakes in the force_finite=True behavior (DEVIATION "
             "657) so that a constant y cannot put a vendor-specific NaN "
             "payload into a recorded value"
@@ -684,7 +684,7 @@ def _silhouette(X, labels, metric, chunksize, caller):
     if not isinstance(metric, str) or metric.lower() not in _SILHOUETTE_METRICS:
         raise NotImplementedError(
             f"mojolearn {caller}: metric={metric!r} is refused; only "
-            "'euclidean' and 'l2' are ported (they are the same "
+            "'euclidean' and 'l2' are implemented (they are the same "
             "DistanceType::L2SqrtUnexpanded, which is the arm cuML's "
             "silhouette_score.pyx dispatches by default). 'cityblock', "
             "'cosine', 'l1', 'manhattan' and 'sqeuclidean' are other "
@@ -751,7 +751,7 @@ def silhouette_score(
         metric     honored   'euclidean' or 'l2' (the same DistanceType).
                              Every other metric is REFUSED by name.
         chunksize  honored   cuML's chunk, default 40000, validated >= 1.
-                             SCHEDULING ONLY: this port materializes no
+                             SCHEDULING ONLY: this implementation materializes no
                              distance tile, so there is nothing for it to
                              size, and chunk 1 / 7 / 40000 are gated to one
                              byte pattern. It is accepted because cuML's
@@ -835,7 +835,7 @@ def trustworthiness(
     if not isinstance(metric, str) or metric.lower() != "euclidean":
         raise NotImplementedError(
             f"mojolearn trustworthiness: metric={metric!r} is refused; only "
-            "'euclidean' is ported, and cuML's trustworthiness.pyx:86 "
+            "'euclidean' is implemented, and cuML's trustworthiness.pyx:86 "
             "refuses every other name too"
         )
     x, _cx = as_f32_c(X, "X")
@@ -1195,7 +1195,7 @@ def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
 # would leave a caller to discover it as an AttributeError.
 # ===========================================================================
 
-_NOT_PORTED = {
+_UNSUPPORTED = {
     "median_absolute_error": (
         "a GPU selection/ordering path with a validated median contract "
         "is not implemented for regression targets yet"
@@ -1214,9 +1214,9 @@ _NOT_PORTED = {
 
 
 def __getattr__(name):
-    if name in _NOT_PORTED:
+    if name in _UNSUPPORTED:
         raise AttributeError(
-            f"mojolearn.metrics.{name} does not exist: {_NOT_PORTED[name]}. "
+            f"mojolearn.metrics.{name} does not exist: {_UNSUPPORTED[name]}. "
             "See docs/lanes/GPU_PIPELINE_PLAN.md for implementation scope."
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

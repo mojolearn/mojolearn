@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Hashed fixtures for the KDE gates and the card, ASSEMBLED FROM BITS.
 
-NOT A PORT. IDENTITY_PATHS row 32's lesson applies here verbatim: a host
+NO REFERENCE FILE. IDENTITY_PATHS row 32's lesson applies here verbatim: a host
 `target += v * w` chain is a contraction decision, so a fixture built by
 host arithmetic can hand two machines different inputs before the first
 kernel runs. Every value below is a splitmix64 hash turned into a float32

@@ -4,7 +4,7 @@
 `mojolearn.identical.mamba3.siso.fp32.v1`, and the Float64 tolerance
 reference.
 
-NOT A PORT -- the reference library ships no oracle; the ALGORITHM below
+NO REFERENCE FILE -- the reference library ships no oracle; the ALGORITHM below
 is theirs, cited seam by seam in `mamba/IDENTICAL_MAMBA3_CONTRACT.md`
 (normative math `tests/ops/triton/test_mamba3_siso.py::mamba3_siso_fwd_ref`
 :149-340; block order `mamba_ssm/modules/mamba3.py::Mamba3.forward`

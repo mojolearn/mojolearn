@@ -3,9 +3,8 @@
 This is a source/document/artifact audit, **not a new comparison**. No tests,
 models, compilers, validators, measurements, or cloud calls were executed.
 The inventory follows `python/mojolearn/__init__.py`, its exported submodules,
-[SUPPORT_MATRIX](../SUPPORT_MATRIX.md), [IDENTITY_PATHS](../IDENTITY_PATHS.md),
-and [DERIVATION_MAP](../DERIVATION_MAP.tsv). A derivation entry describes source
-implementation, not successful execution. This table covers public families and
+[SUPPORT_MATRIX](../SUPPORT_MATRIX.md) and [IDENTITY_PATHS](../IDENTITY_PATHS.md).
+A source entry describes implementation, not successful execution. This table covers public families and
 their materially distinct paths, not every Cartesian product of parameters.
 
 **No current all-feature, all-three-device certificate was located.** In
@@ -77,8 +76,8 @@ is not established; an explicit **M4** claim needs an additional hardware witnes
 | KNeighborsClassifier uniform / distance | Uniform historical family coverage; distance-vote zero/tie paths not separately qualified here | Duplicate zero-distance neighbors, class ties and predict_proba |
 | KNeighborsRegressor uniform / distance | Same distinction | Duplicate points, nonconstant multi-target values where supported |
 | RadiusNeighbors | Historical family surface; exact radius/boundary scope unresolved | Equal-radius boundary and empty results, all returned arrays |
-| kNN IDENTICAL k257..1024 | New rank-capacity source port; current3way evidence not located | n≥257, k257 then1024, ties spanning capacity; oldk256 control |
-| kNN KD-tree/index algorithms | Refused; do not label brute-force port as index parity | Retain refusal only unless implementation lands |
+| kNN IDENTICAL k257..1024 | New rank-capacity source implementation; current3way evidence not located | n≥257, k257 then1024, ties spanning capacity; oldk256 control |
+| kNN KD-tree/index algorithms | Refused; do not label brute-force implementation as index parity | Retain refusal only unless implementation lands |
 | PCA randomized/truncated path | Historical matrix; current solver-specific shape scope unresolved | Small tall matrix, projected data/variance/singular values |
 | PCA full solver | New native public export; distinct release/source from old refused cell | Small tall fullSVD, meaningful reconstruction and all metadata |
 | PCA whitening | New public/native path; historical PCA certificate insufficient | Nondegenerate scales plus degenerate/rank-deficient behavior |

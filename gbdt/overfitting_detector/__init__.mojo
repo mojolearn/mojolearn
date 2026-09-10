@@ -1,3 +1,3 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Mirrors catboost/libs/overfitting_detector/."""
+"""Named for `catboost/libs/overfitting_detector/`, the CatBoost path it corresponds to."""

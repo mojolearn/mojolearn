@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """k-means hyper-parameters, with cuVS's names and cuVS's defaults.
 
-PORT OF `cuvs::cluster::kmeans::params` (`cpp/include/cuvs/cluster/
-kmeans.hpp:28-121`) at cuVS `94c2819`. Transliterated. Do not improve.
+FOLLOWS `cuvs::cluster::kmeans::params` (`cpp/include/cuvs/cluster/
+kmeans.hpp:28-121`) at cuVS `94c2819`. Followed statement for statement.
 
 Every default here is theirs, including the ones that look arbitrary, for the
 same reason `gbdt/options/catboost_options.mojo` keeps CatBoost's: if a
@@ -32,7 +32,7 @@ comptime INIT_RANDOM = 1
 comptime INIT_ARRAY = 2
 
 
-# `cuvs::distance::DistanceType`, only the members this port implements.
+# `cuvs::distance::DistanceType`, only the members this implementation implements.
 #
 # DEVIATION. cuVS's `kmeans_fit` does NOT restrict the metric: its
 # `RAFT_EXPECTS` block (`detail/kmeans.cuh:825-835`) checks sample_weight,
@@ -40,7 +40,7 @@ comptime INIT_ARRAY = 2
 # else. Any metric with a `pairwise_distance` reaches their unfused arm
 # (`kmeans_common.cuh:450-491`). `validate()` below raises on anything that is
 # not L2Expanded or L2SqrtExpanded because only their FUSED arm
-# (`kmeans_common.cuh:430-449`, `is_fused`) is ported here, and running a
+# (`kmeans_common.cuh:430-449`, `is_fused`) is implemented here, and running a
 # metric through a path that was never written for it is worse than refusing
 # it. The refusal is ours; do not attribute it to them.
 comptime METRIC_L2_EXPANDED = 0

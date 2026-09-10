@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest on the GPU: cuML's forest, and cuML's defaults.
 
-The learner is `ensemble/`: the port of cuML's `ML::RandomForest`
+The learner is `ensemble/`: the implementation of cuML's `ML::RandomForest`
 (`randomforest.cuh`) with its batched-levelalgo tree builder, quantile
 binning, and the with-replacement `RowSampler` -- THIS wrapper is that
 sampler's first Python caller (the `extratrees` surface refuses
@@ -18,7 +18,7 @@ documented on the classes as well:
 * `max_depth` defaults to `None`, UNLIMITED depth -- `None` maps to
   `np.iinfo(np.int32).max` exactly as the pinned cuML marshals it
   (`randomforest_common.pyx:480-481`). That matches both cuML (whose own
-  default changed from 16 to `None` in v26.08.00, the release this port
+  default changed from 16 to `None` in v26.08.00, the release this implementation
   pins) and sklearn. Until 2026-09-01 an unspecified depth meant 16
   here; pass `max_depth=16` to keep that behaviour (DEVIATION 409).
 * splits are searched over at most `n_bins` (default 128) per-feature
@@ -71,7 +71,7 @@ _MODEL_FORMAT = "mojolearn-randomforest-1"
 # citing `randomforestclassifier.pyx` for it.
 # WHY THAT IS WRONG, read out of the pin
 # (`~/CascadeProjects/upstream/cuml-v26.08.00`, 265b9da6): 16 WAS cuML's
-# default, and cuML retired it in THE VERY RELEASE THIS PORT PINS. Both
+# default, and cuML retired it in THE VERY RELEASE THIS IMPLEMENTATION PINS. Both
 # estimators now default to `None` and both say so in their own words --
 # `randomforestclassifier.py:68-74` and `randomforestregressor.py:62-68`
 # read "max_depth : int or None (default = None)" followed by
@@ -148,12 +148,12 @@ _REG_CRITERIA = {
 # (`ensemble/decisiontree/decisiontree.mojo:286-291`, after
 # `decisiontree.cu:28` and `randomforest_common.pyx:147-151`);
 # friedman_mse has no cuML counterpart at all.
-_NOT_PORTED_CRITERIA = {
+_UNSUPPORTED_CRITERIA = {
     "absolute_error": "cuML enumerates MAE (algo_helper.h:14) and refuses"
-                      " it (decisiontree.cu:28); the port keeps that refuse"
+                      " it (decisiontree.cu:28); the implementation keeps that refuse"
                       " at ensemble/decisiontree/decisiontree.mojo:286.",
     "mae": "cuML enumerates MAE (algo_helper.h:14) and refuses it"
-           " (decisiontree.cu:28); the port keeps that refuse at"
+           " (decisiontree.cu:28); the implementation keeps that refuse at"
            " ensemble/decisiontree/decisiontree.mojo:286.",
     "friedman_mse": "no cuML counterpart; RegressionObjectiveFunction"
                     ".GainPerSplit (ensemble/decisiontree/batched_levelalgo"
@@ -203,7 +203,7 @@ _MAX_LEAF_NODES_WHY = (
 
 def _refuse(name, why):
     raise NotImplementedError(
-        f"{name} is not ported: {why} Refused by name rather than accepted"
+        f"{name} is not implemented: {why} Refused by name rather than accepted"
         " and ignored."
     )
 
@@ -213,8 +213,8 @@ def _criterion_code(criterion, table, who):
     refusal by name (DEVIATION 407)."""
     if criterion in table:
         return table[criterion]
-    if criterion in _NOT_PORTED_CRITERIA:
-        _refuse(f"criterion={criterion!r}", _NOT_PORTED_CRITERIA[criterion])
+    if criterion in _UNSUPPORTED_CRITERIA:
+        _refuse(f"criterion={criterion!r}", _UNSUPPORTED_CRITERIA[criterion])
     raise ValueError(
         f"criterion={criterion!r} is not a {who} criterion here; accepted"
         f" are {sorted(table)}"
@@ -363,7 +363,7 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
                     " and accepting it would silently refit from scratch.")
         if ccp_alpha:
             _refuse("ccp_alpha", "cost-complexity pruning is a"
-                    " post-processing pass neither cuML nor this port"
+                    " post-processing pass neither cuML nor this implementation"
                     " implements. Only 0.0 is accepted.")
         if class_weight is not None and not isinstance(class_weight, dict):
             if not isinstance(class_weight, str) or class_weight != "balanced":

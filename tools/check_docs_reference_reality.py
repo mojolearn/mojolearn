@@ -48,7 +48,7 @@ SCAN_EXT = {".md", ".py", ".sh", ".mojo", ".toml"}
 #: it has a directory separator or a known source extension, and no spaces,
 #: glob characters or shell metacharacters. Anything vaguer is prose.
 PATHISH = re.compile(r"^[A-Za-z0-9_./-]+$")
-#: Directory roots that belong to a VENDORED OR PORTED library rather than to
+#: Directory roots that belong to a VENDORED OR IMPLEMENTED library rather than to
 #: this tree. Citing them precisely is what a DEVIATION block is for.
 UPSTREAM_PREFIXES = (
     "catboost/", "upstream/", "cuml/", "raft/", "cuvs/", "src/", "csrc/",
@@ -157,7 +157,7 @@ def main():
             if (ROOT / base).exists():
                 continue
             # UPSTREAM IS CITED ON PURPOSE AND IS NOT CHECKED OUT HERE. This
-            # package ports CatBoost, cuML, cuVS, RAFT, HuggingFace and
+            # package implements CatBoost, cuML, cuVS, RAFT, HuggingFace and
             # mamba_ssm, and naming the exact upstream file is the whole
             # point of a DEVIATION block. Those citations are evidence, not
             # broken links, and a checker that flags them is telling the

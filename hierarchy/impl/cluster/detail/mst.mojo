@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`build_sorted_mst`: the MST, connected, sorted.
 
-PORT OF `cuvs/cpp/src/cluster/detail/mst.cuh`, cuVS `94c2819`:
+FOLLOWS `cuvs/cpp/src/cluster/detail/mst.cuh`, cuVS `94c2819`:
 `build_sorted_mst` (`:276-343`) and the shape of its fix-up loop. The two
 `connect_knn_graph` overloads (`:74-123`, `:139-249`) and `merge_msts`
-(`:39-59`) are NOT ported in this rung: on the PAIRWISE connectivity the
+(`:39-59`) are NOT implemented in this rung: on the PAIRWISE connectivity the
 graph is complete, Boruvka's first call returns one component, and the
 loop body is never entered; a call into it raises by name so that a rung-2
 caller finds the gap loudly. `hierarchy/NOT_IMPLEMENTED.tsv` has the row.
@@ -52,12 +52,12 @@ def get_n_components(
 def connect_knn_graph(
     ctx: DeviceContext, n_components: Int
 ) raises:
-    """`mst.cuh:74-123` / `:139-249`. NOT PORTED (rung 2); raises by name."""
+    """`mst.cuh:74-123` / `:139-249`. NOT IMPLEMENTED (rung 2); raises by name."""
     raise Error(
         "hierarchy.build_sorted_mst: the MST is a forest ("
         + String(n_components)
         + " components) and connect_knn_graph (cross_component_nn, mst.cuh"
-        ":74-123) is not ported in rung 1; on the PAIRWISE connectivity this"
+        ":74-123) is not implemented in rung 1; on the PAIRWISE connectivity this"
         " cannot happen, so a non-finite input row is the likely cause"
     )
 

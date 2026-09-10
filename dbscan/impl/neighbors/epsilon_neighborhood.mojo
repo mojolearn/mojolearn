@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The epsilon neighborhood, FUSED: no distance matrix is ever written.
 
-PORT OF `raft/spatial/knn/detail/epsilon_neighborhood.cuh` at RAFT `661a3b8`
+FOLLOWS `raft/spatial/knn/detail/epsilon_neighborhood.cuh` at RAFT `661a3b8`
 (`EpsUnexpL2SqNeighborhood`, `epsUnexpL2SqNeighKernel`,
 `epsUnexpL2SqNeighborhood`), built on their
-`raft/linalg/detail/contractions.cuh` policy. Do not improve.
+`raft/linalg/detail/contractions.cuh` policy.
 
 This is what `cuml/cpp/src/dbscan/vertexdeg/algo.cuh:229` actually calls for
 the brute-force arm:
@@ -65,7 +65,7 @@ DEVIATION BLOCK 27: THE L1 ARM, AND WHY IT COULD NOT BE A BRANCH ON `eps`
 ORIGINAL WORK. There is no upstream eps-neighborhood kernel to be faithful
 to here: `epsilon_neighborhood.cuh` carries the squared-L2 formulation and
 nothing else, and cuML's DBSCAN surface never offers Manhattan. So this arm
-credits nothing and no `DERIVATION_MAP.tsv` row points anywhere for it. What
+credits nothing and nothing here follows a reference file. What
 IS borrowed, and is cited, is the per-pair arithmetic: RAFT's
 `raft/distance/detail/distance_ops/l1.cuh:49`
 
@@ -104,7 +104,7 @@ WHAT THE L1 ARM DOES NOT CHANGE: the tile geometry, the shared-memory
 staging, the boundary guards, the `adj` write, the Int32 degree count and
 the row reduction below are all shared, ONE copy, compiled twice. The only
 comptime-varying statement in the whole kernel is the accumulate helper
-`_eps_acc`, which is the port of `core()` and nothing else.
+`_eps_acc`, which is the implementation of `core()` and nothing else.
 
 NUMERICS. `acc += abs(diff)` is a PLAIN ADD, not a multiply-add, so
 IDENTITY_PATHS row 9 does not apply to it and `identical_mul_add` must NOT
@@ -192,7 +192,7 @@ from std.memory import stack_allocation
 # `shuffle_xor` group width, deviation 30) must not read that 16 out of a file
 # that is free to retune it.
 #: THE METRIC OF THE EPS NEIGHBORHOOD, as a comptime parameter of the
-#: kernel. See DEVIATION 27. `DBSCAN_METRIC_L2` is the ported arm
+#: kernel. See DEVIATION 27. `DBSCAN_METRIC_L2` is the implemented arm
 #: (`epsilon_neighborhood.cuh`, unexpanded squared L2, threshold squared on
 #: the host); `DBSCAN_METRIC_L1` is original work whose per-pair `core()` is
 #: RAFT's `l1.cuh:49` and whose threshold is NOT squared.
@@ -264,7 +264,7 @@ def _eps_acc[
     `acc += raft::abs(x - y)`, a PLAIN add. Row 9 does not apply and
     `identical_mul_add` must not be wrapped around it. Row 10 does: both the
     difference and the running sum go through `ftz`, because a difference of
-    nearby coordinates is exactly where a denormal appears in this port.
+    nearby coordinates is exactly where a denormal appears in this implementation.
 
     This is the ONLY statement in the kernel below that varies with the
     metric. Everything else -- the tile, the staging, the guards, the `adj`
@@ -295,7 +295,7 @@ def eps_unexp_neigh_kernel[
 ):
     """`epsUnexpL2SqNeighKernel`: `prolog(); loop(); epilog();`.
 
-    `metric` is `DBSCAN_METRIC_L2` (the ported arm) or `DBSCAN_METRIC_L1`
+    `metric` is `DBSCAN_METRIC_L2` (the implemented arm) or `DBSCAN_METRIC_L1`
     (DEVIATION 27, original work). It was called
     `eps_unexp_l2_sq_neigh_kernel` while L2 was the only arm.
 
@@ -410,7 +410,7 @@ def eps_unexp_neigh_kernel[
             # IDENTICAL, the codegen's choice under FAST). On the L1 arm it
             # is a plain add and row 9 does not apply. `diff` is a
             # SUBTRACTION OF NEARBY VALUES on both arms, which is where a
-            # denormal actually appears in this port -- two points a hair
+            # denormal actually appears in this implementation -- two points a hair
             # apart in one feature -- so row 10's flush is not decorative
             # here either. `_eps_acc` is where both arms live; see
             # DEVIATION 27.

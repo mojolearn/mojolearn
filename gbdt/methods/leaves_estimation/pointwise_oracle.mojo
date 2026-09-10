@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TBinOptimizedOracle`: the walker's device-side eyes, per-bin.
 
-PORT OF `catboost/cuda/methods/leaves_estimation/pointwise_oracle.{h,cpp}`
+FOLLOWS `catboost/cuda/methods/leaves_estimation/pointwise_oracle.{h,cpp}`
 at CatBoost `54a8143a`, the rowSize==1 arm -- every single-dim pointwise
-loss. Transliterated. Do not improve.
+loss. Followed statement for statement.
 
 WHAT THE ORACLE HOLDS, in their layout: the target, weights and CURSOR
 COPY gathered into BIN ORDER (docs of leaf 0, then leaf 1, ...), with
@@ -24,7 +24,7 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
                       der2 (`:82-91`), gradient = reduced der, cached
                       Hessian = reduced der2 PLUS LAMBDA (`:86-89`), value
                       read back
-  WriteSecondDer      returns the cache (`:114-117`); this port RAISES if
+  WriteSecondDer      returns the cache (`:114-117`); this implementation RAISES if
                       the cache is empty, because for rowSize==1 their
                       `ApproximateAt` always fills it and an empty cache
                       here means the call order broke
@@ -34,7 +34,7 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
 
 ================= DEVIATION BLOCK =================
 * THE REDUCES RUN IN FLOAT32 where theirs land in `TStripeBuffer<double>`
-  (`:81`, `:85`). This is `compute_partition_stats`'s existing port-wide
+  (`:81`, `:85`). This is `compute_partition_stats`'s existing implementation-wide
   width, not a choice made here; the walker's own arithmetic is Float64
   from the readback on, like theirs from `ReadReduce` on.
 * UNWEIGHTED WeightsCpu COMES FROM THE LEAF SIZES, exactly: their ctor
@@ -855,7 +855,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         `exp(-maxApprox)` instead of a prediction plane
         (`multilogit.cu:157-158`). That branch is not defensive: it is the
         PINNED class's row, and the Hessian is `numClasses x numClasses`
-        even though the cursor has `numClasses - 1` planes. A port that
+        even though the cursor has `numClasses - 1` planes. An implementation that
         stopped the loop at `cursorDim` would build a matrix one row
         short and the Cholesky would solve a different system.
 

@@ -3,7 +3,7 @@
 GPU HDBSCAN derived from cuML, cuVS, and RAFT.
 
 The lane covers the graph, minimum-spanning-tree, hierarchy, condensed-tree, and labeling stages.
-Supported and refused behavior is defined by `DERIVATION_MAP.tsv` and `NOT_IMPLEMENTED.tsv`.
+Supported and refused behavior is defined by `NOT_IMPLEMENTED.tsv`.
 The checks, rather than old investigation prose, define current status.
 
 ## Verify

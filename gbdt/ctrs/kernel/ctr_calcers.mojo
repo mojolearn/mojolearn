@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CTR elementwise kernels.
 
-PORT OF `catboost/cuda/ctrs/kernel/ctr_calcers.cu` at CatBoost `54a8143a`.
-Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/ctrs/kernel/ctr_calcers.cu` at CatBoost `54a8143a`.
+Followed statement for statement.
 
 ## WHY THIS FILE NEEDS NO KERNEL-MATRIX ROW
 
@@ -30,15 +30,15 @@ scoped as independent of the sort/scan lane: the kernels are the easy half,
 and the system around them -- the segmented scan, the sort, the permutation
 -- is the work.
 
-## What is deliberately NOT ported here
+## What is deliberately NOT implemented here
 
 The four groupwise-CTR kernels at the end of their file --
 `ApplyGroupwiseCtrFix`, `MakeGroupStarts`, `FillBinIndices`,
 `CreateFixedIndices` (`ctr_calcers.cu:300-429`). They run only when
 `CtrHistoryUnit == ECtrHistoryUnit::Group`, which `SetCtrDefaults`
 (`catboost_options.cpp:432-436`) sets only for a GROUPWISE loss, and no
-ranking loss is ported. `THistoryBasedCtrCalcer::NeedFixForGroupwiseCtr()`
-is `false` for every configuration this port can reach, so porting them
+ranking loss is implemented. `THistoryBasedCtrCalcer::NeedFixForGroupwiseCtr()`
+is `false` for every configuration this implementation can reach, so implementing them
 would add four kernels no caller reaches -- the exact defect
 `ENGINEERING_RULES.md` rule 3 names.
 
@@ -453,8 +453,8 @@ def merge_bins_kernel(
     How a FEATURE TENSOR (a combination of cat features) gets one bin id:
     the new feature's bin is shifted above the bits the accumulated bins
     already occupy, `shift` being `IntLog2(uniqueValues)` of what came
-    before. Unreached until tree CTRs land -- ported because it is four
-    lines of their file and leaving a hole in a ported file is how a
+    before. Unreached until tree CTRs land -- implemented because it is four
+    lines of their file and leaving a hole in a implemented file is how a
     reader learns to distrust the whole file.
     """
     var size = Int(size_in)

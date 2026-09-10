@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The connectivities graph single linkage hands its MST.
 
-PORT OF `cuvs/cpp/src/cluster/detail/connectivities.cuh`, cuVS `94c2819`,
+FOLLOWS `cuvs/cpp/src/cluster/detail/connectivities.cuh`, cuVS `94c2819`,
 the `Linkage::PAIRWISE` specialization (`:110-204`) and `get_distance_graph`
 (`:222-239`). The `Linkage::KNN_GRAPH` specialization (`:60-108`) is NOT
-ported in this rung and is REFUSED BY NAME below; `hierarchy/NOT_IMPLEMENTED.tsv`.
+implemented in this rung and is REFUSED BY NAME below; `hierarchy/NOT_IMPLEMENTED.tsv`.
 
 THE DISTANCE STEP, AND WHICH ARM. `pairwise_distances` (`:133-176`) calls
 `cuvs::cluster::kmeans::detail::pairwise_distance_kmeans` (`kmeans_common.
@@ -156,7 +156,7 @@ def pairwise_distances(
         raise Error(
             "hierarchy.pairwise_distances: metric=" + String(metric)
             + " refused by name; only L2SqrtExpanded (1, cuML's 'euclidean'/"
-            "'l2') and L2Expanded (0) are ported (pairwise_distance_kmeans"
+            "'l2') and L2Expanded (0) are implemented (pairwise_distance_kmeans"
             " raises on every other metric too, kmeans_common.cuh:320)"
         )
     var nnz = m * m
@@ -283,7 +283,7 @@ def get_distance_graph(
             "'knn', c=" + String(c) + ") refused by name: the knn-graph"
             " connectivity (connectivities.cuh:60-108, knn_graph.cuh) and"
             " the cross-component connection it needs (mst.cuh:75-123,"
-            " cross_component_nn.cuh) are rung 2 and not ported;"
+            " cross_component_nn.cuh) are rung 2 and not implemented;"
             " use connectivity='pairwise'"
         )
     if dist_type != LINKAGE_PAIRWISE:

@@ -4,7 +4,7 @@
 
 This file is injected into a gbm-bench checkout by
 `bench/external/patch_gbm_bench.py`. Each mojolearn arm deliberately mirrors
-the gbm-bench arm of the library it is a port of -- the GBDT arm mirrors
+the gbm-bench arm of the library it is an implementation of -- the GBDT arm mirrors
 `CatAlgorithm`, the forest arm mirrors `SkRandomForestAlgorithm` -- because
 the whole point of running someone else's harness is that our arm is
 configured the way theirs is and not the way we would have chosen. Where a
@@ -13,13 +13,13 @@ parameter has no mojolearn equivalent the difference is recorded in
 
 Arms registered here:
 
-  mojolearn-gbdt-gpu   the CatBoost oblivious-tree port on Metal; the
+  mojolearn-gbdt-gpu   the CatBoost oblivious-tree implementation on Metal; the
                        side-by-side comparator is gbm-bench's own `cat-cpu`
-  mojolearn-et-gpu     the cuML-design ExtraTrees port on Metal; the
+  mojolearn-et-gpu     the cuML-design ExtraTrees implementation on Metal; the
                        side-by-side comparators are `skl-et-cpu` (the
                        algorithm's definition) and `lgbm-et-cpu` (LightGBM's
                        nearest forest)
-  mojolearn-rf-gpu     the cuML RandomForest port on Metal (quantile
+  mojolearn-rf-gpu     the cuML RandomForest implementation on Metal (quantile
                        splits, with-replacement bootstrap); comparators are
                        gbm-bench's own `skrf` and `lgbm-rf-cpu`
   skl-et-cpu           sklearn ExtraTrees, an ADDED arm (gbm-bench ships
@@ -73,7 +73,7 @@ PARITY_NOTES = {
         "fitting something else. The ExtraTrees arm handles multiclass."
     ),
     "boost_from_average": (
-        "PORTED IN THE ENGINE 2026-08-22 (gbdt/metrics/"
+        "IMPLEMENTED IN THE ENGINE 2026-08-22 (gbdt/metrics/"
         "optimal_const_for_loss.mojo; check-bfa-oracle proves the bias "
         "bit-equal to CatBoost's own get_scale_and_bias on every arm). "
         "The arm passes NOTHING: both libraries resolve the same "
@@ -83,7 +83,7 @@ PARITY_NOTES = {
         "shim this arm used to carry is deleted."
     ),
     "rf-quantile-splits": (
-        "mojolearn-rf-gpu is the cuML RandomForest port: splits are "
+        "mojolearn-rf-gpu is the cuML RandomForest implementation: splits are "
         "searched over at most 128 per-feature QUANTILES (cuML's design), "
         "while sklearn's skrf searches exact thresholds. Faster and a "
         "different algorithm; accuracy sits beside the timing so the "
@@ -136,7 +136,7 @@ def _forest_params(args):
 
 
 class MojolearnGbdtGPUAlgorithm(Algorithm):
-    """The CatBoost oblivious-tree port, configured as gbm-bench's
+    """The CatBoost oblivious-tree implementation, configured as gbm-bench's
     CatAlgorithm configures CatBoost."""
 
     def configure(self, data, args):
@@ -187,7 +187,7 @@ class MojolearnGbdtGPUAlgorithm(Algorithm):
 
 
 class MojolearnExtraTreesGPUAlgorithm(Algorithm):
-    """The cuML-design ExtraTrees port, configured as gbm-bench's
+    """The cuML-design ExtraTrees implementation, configured as gbm-bench's
     SkRandomForestAlgorithm configures its forest."""
 
     def _estimator(self, data, params):
@@ -217,7 +217,7 @@ class MojolearnExtraTreesGPUAlgorithm(Algorithm):
 
 
 class MojolearnRandomForestGPUAlgorithm(Algorithm):
-    """The cuML RandomForest port, configured as gbm-bench's own `skrf`
+    """The cuML RandomForest implementation, configured as gbm-bench's own `skrf`
     arm configures its forest (`_forest_params`), with cuML's quantile
     splits -- PARITY_NOTES["rf-quantile-splits"]."""
 

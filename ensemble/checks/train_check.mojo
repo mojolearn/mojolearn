@@ -151,7 +151,7 @@ def _fit(
     params: DecisionTreeParams,
 ) raises -> Fit:
     """Quantize, then build one tree. Column-major input, row_ids = identity
-    (no bootstrap: `RowSampler` is not ported, so this is their
+    (no bootstrap: `RowSampler` is not implemented, so this is their
     `bootstrap=False` shape, `randomforest.cuh:159-160`'s
     `thrust::sequence`)."""
     var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
@@ -354,7 +354,7 @@ def arm_b_depth_two(ctx: DeviceContext) raises -> Int:
     the default `min_impurity_decrease` is 0. So the fit returned a single
     leaf, and it was right: a greedy one-step-lookahead tree cannot split
     XOR at the root, and neither can cuML or sklearn. The fixture, not the
-    port, was the defect.
+    implementation, was the defect.
 
     This one has a first split with real gain and a second that completes
     the separation:

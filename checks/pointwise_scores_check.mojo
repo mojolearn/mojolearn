@@ -5,7 +5,7 @@
 The POINTWISE SCORER: three split kernels, five score calcers, the
 gather-by-leaves transpose, and the partition-statistics reduce. Nothing in
 this repository calls any of it yet (`archive/plans/UNWIRED.md`), so this file is the only
-thing standing between the port and a wrong tree the day it is wired.
+thing standing between the implementation and a wrong tree the day it is wired.
 
 WHY EVERY GATE IS PER CELL AND NEVER A TOTAL
 --------------------------------------------
@@ -70,7 +70,7 @@ GATES
       the seed. The advance is what makes their cosine arm's seed different
       from their L2 arm's.
   L1  the GATHERED-BY-LEAVES loader equals the DIRECT loader, per candidate,
-      EXACTLY. The gathered histogram is produced by the ported
+      EXACTLY. The gathered histogram is produced by the implemented
       `gather_histogram_by_leaves`, so this gates the transpose and the
       loader that reads it as one chain. Both sides of the
       `gatheredByLeaves` switch are named checks (ENGINEERING_RULES 8).
@@ -362,7 +362,7 @@ def _host_score(
     the leaf terms IN THE ORDER the kernel feeds them (left then right, leaf
     by leaf), because float addition is not associative.
 
-    Written from `score_calcers.cuh`, with a RUNTIME switch where the port
+    Written from `score_calcers.cuh`, with a RUNTIME switch where the implementation
     has a comptime one -- a different shape on purpose, so that a
     transcription error is unlikely to be the same transcription error.
     """
@@ -445,7 +445,7 @@ def _host_single_fold(
 ) -> Tuple[Float32, Float32]:
     """`FindOptimalSplitSingleFoldImpl` for ONE candidate, on the host.
 
-    The histogram address is written from the LAYOUT DEFINITION in the port's
+    The histogram address is written from the LAYOUT DEFINITION in the implementation's
     docstring rather than copied from the kernel:
 
         cell (leaf, b, stat) = hist[((leaf * binFeatureCount) + b) * 2 + stat]
@@ -698,7 +698,7 @@ def _sweep(
     ctx.enqueue_copy(dst_buf=d_binw, src_ptr=fx.bin_w.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_parts, src_ptr=fx.parts.unsafe_ptr())
 
-    # the GATHERED arm reads the transposed copy the ported gather makes
+    # the GATHERED arm reads the transposed copy the implemented gather makes
     var d_src = ctx.enqueue_create_buffer[DType.float32](hist_len)
     ctx.enqueue_copy(dst_buf=d_src, src_ptr=fx.hist.unsafe_ptr())
     if gathered:
@@ -911,7 +911,7 @@ def main() raises:
         failures += 1
     else:
         print(
-            "  ok   L1 -- gathered-by-leaves loader over the ported"
+            "  ok   L1 -- gathered-by-leaves loader over the implemented"
             " transpose, 5 calcers x", fx.b_count,
             "candidates; worst relative discrepancy", l1_worst,
         )

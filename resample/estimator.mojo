@@ -396,12 +396,12 @@ def _launch_perm_stat_at[
         raise Error(
             "permutation_test: statistic '"
             + stat_name(stat)
-            + "' is NOT PORTED for the two-sample independent case. The"
-            " ported arms are mean, std and diff_means. An order statistic"
+            + "' is NOT IMPLEMENTED for the two-sample independent case. The"
+            " implemented arms are mean, std and diff_means. An order statistic"
             " would need a per-replicate sort of the permuted group (the"
             " bootstrap's sort path does not apply, because the group"
             " membership changes every replicate); pearson is SciPy's"
-            " permutation_type='pairings', a different null, not ported."
+            " permutation_type='pairings', a different null, not implemented."
         )
     _ = null_dist.unsafe_ptr()
     _ = pooled.unsafe_ptr()
@@ -982,7 +982,7 @@ def permutation_test_host(
     ONE-DIMENSIONAL `x` and `y`; the two-sample independent null pools them
     and re-splits, so a second column would have no meaning under it (a
     paired statistic is SciPy's `permutation_type='pairings'`, which is not
-    ported -- see `resample/NOT_IMPLEMENTED.tsv`).
+    implemented -- see `resample/NOT_IMPLEMENTED.tsv`).
 
     THE NULL IS NEVER EXHAUSTIVE HERE. SciPy switches to enumerating all
     `C(n_x + n_y, n_x)` partitions when `n_resamples >= n_max` and then drops

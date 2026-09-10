@@ -10,7 +10,7 @@ re-typing it: a check that builds its own copy of the thing it checks
 cannot catch the copy drifting, and this repository has been bitten by
 exactly that (DEVIATION 115).
 
-WHY IT EXISTS. Until 2026-08-22 this port drew 100,000 rows per float
+WHY IT EXISTS. Until 2026-08-22 this implementation drew 100,000 rows per float
 column WITH REPLACEMENT and INDEPENDENTLY PER FEATURE, citing
 `GetSampleSizeForBorderSelectionType` and `SampleArray` -- a real pair of
 functions on the wrong code path, reached from `NCB::BuildBorders` rather

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`GatherWithMask` and `ScatterWithMask`: the two masked permutation moves.
 
-PORT OF `catboost/cuda/cuda_util/kernel/transform.cu:214-274` at CatBoost
+FOLLOWS `catboost/cuda/cuda_util/kernel/transform.cu:214-274` at CatBoost
 `54a8143a` -- `GatherWithMaskImpl`/`GatherWithMask` (`:214-233`) and
 `ScatterWithMaskImpl`/`ScatterWithMask` (`:257-276`).
 
@@ -45,9 +45,9 @@ is the same stand-in constant `fill.mojo` uses for `MaxBlockCount()`.
 ## ADDRESS NOTE
 
 Their file is `cuda_util/kernel/transform.cu` and this is the mirror address
-for it. Only the two masked moves are ported -- `Gather`, `Scatter`,
+for it. Only the two masked moves are implemented -- `Gather`, `Scatter`,
 `Reverse`, and the arithmetic transforms in the same file have no caller
-here, and porting a function nothing reaches is the defect
+here, and implementing a function nothing reaches is the defect
 `ENGINEERING_RULES.md` rule 3 names.
 """
 

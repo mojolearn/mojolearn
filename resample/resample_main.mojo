@@ -34,7 +34,7 @@ THE CARD, in the order it is written:
 A cross-vendor run that diverges has an ADDRESS, and each address has a
 cause. `resample.key` is pure integer arithmetic and CANNOT differ -- if it
 does, the two runs were not given the same seed. `resample.index_map` is pure
-integer arithmetic too, so a difference there is a Philox port defect and
+integer arithmetic too, so a difference there is a Philox implementation defect and
 `ensemble/bench/philox_oracle.txt` is where to take it. `resample.theta` is
 the first float stage and is the pinned tree (IDENTITY_PATHS rows 9, 10, 20,
 21). `resample.sorted` is a permutation of `resample.theta`, so a difference

@@ -6,11 +6,11 @@ MIRRORS `catboost/libs/metrics/optimal_const_for_loss.h`. This is what
 `boost_from_average` seeds the cursors with and what the model records as
 its bias (`doc_parallel_boosting.h:174-182`, `:434`).
 
-WHAT IS PORTED AND WHAT IS NOT, by their switch
+WHAT IS IMPLEMENTED AND WHAT IS NOT, by their switch
 (`CalcOneDimensionalOptimumConstApprox`):
 
-    RMSE                 PORTED  (CalculateWeightedTargetAverage)
-    Logloss/CrossEntropy PORTED  (Logit of the weighted average)
+    RMSE                 IMPLEMENTED  (CalculateWeightedTargetAverage)
+    Logloss/CrossEntropy IMPLEMENTED  (Logit of the weighted average)
     Quantile/MAE         NOT YET (CalculateWeightedTargetQuantile needs
                                   CalcSampleQuantile, a weighted-quantile
                                   walk with their delta adjust -- refused
@@ -23,10 +23,10 @@ THE FLOAT32 TRUNCATION IS THEIRS AND IT IS LOAD-BEARING for bit parity:
 (`inline float`, the narrowing at the return). For RMSE that float is the
 answer, widened back to double by the `TMaybe<double>` return; for Logloss
 `const double bestProbability = <that float>` widens BEFORE the Logit. A
-port that kept the average in double end to end would be one ulp off their
+implementation that kept the average in double end to end would be one ulp off their
 bias on real data.
 
-`Logit` is their `math_utils.h` `-log(1 / x - 1)`. HISTORY: the first port
+`Logit` is their `math_utils.h` `-log(1 / x - 1)`. HISTORY: the first implementation
 took `std.math.log`, whose ~5e-8 error re-decides last bits (the
 `checks/pointwise_target_check.mojo` finding); the recorded fix was the
 host libm's `log` through `external_call`. NOW (DEVIATION 2262, 2026-09-08):
@@ -96,9 +96,9 @@ def calc_one_dimensional_optimum_const_approx(
     weights: List[Float32],
     has_weights: Bool,
 ) raises -> Float64:
-    """`NCB::CalcOneDimensionalOptimumConstApprox`'s ported arms.
+    """`NCB::CalcOneDimensionalOptimumConstApprox`'s implemented arms.
 
-    Their unported arms raise BY NAME rather than returning zero: a zero
+    Their unimplemented arms raise BY NAME rather than returning zero: a zero
     from this function is a valid answer (a centered target), so a silent
     fallback would be indistinguishable from arithmetic.
     """
@@ -131,7 +131,7 @@ def calc_one_dimensional_optimum_const_approx(
         # see the module docstring for the ULP consequence.
         return -portable_log64(1.0 / best_probability - 1.0)
     raise Error(
-        "boost_from_average is not ported for this loss yet: only RMSE,"
+        "boost_from_average is not implemented for this loss yet: only RMSE,"
         " Logloss and CrossEntropy have CalcOptimumConstApprox arms here."
         " Their Quantile/MAE arm needs CalcSampleQuantile (a weighted"
         " quantile with a delta adjust) and is refused by name rather than"

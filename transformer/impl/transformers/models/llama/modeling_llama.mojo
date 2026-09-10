@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`transformers/models/llama/modeling_llama.py`: ONE Llama-shaped decoder
 block, on the device, under profile
-`mojolearn.identical.transformer.fp32.v1`. **COPY, DO NOT IMPROVE.**
+`mojolearn.identical.transformer.fp32.v1`.
 
-PORT OF huggingface/transformers at `d56c55b`,
+FOLLOWS huggingface/transformers at `d56c55b`,
 `src/transformers/models/llama/modeling_llama.py`, read on disk at
 `/Users/andrewhendel/CascadeProjects/upstream/transformers/` on 2026-08-24.
 Partial, inference only, eager attention only. What is MIRRORED here, symbol

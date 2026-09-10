@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""cuML `include/cuml/tsa/holtwinters_params.h` (v26.08.00), transliterated.
+"""cuML `include/cuml/tsa/holtwinters_params.h` (v26.08.00), followed statement for statement.
 
 `SeasonalType`, `OptimCriterion`, `OptimParams` and `Norm`, as the ints and
 the struct they are. The defaults `runner.cuh::HoltWintersOptim` fills in

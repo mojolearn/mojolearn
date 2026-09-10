@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The R-SVD's kernels with their decisions BROKEN ON PURPOSE, for the check.
 
-NOT A PORT, NOT REACHED by any driver, by `decomposition/estimator.mojo` or
+NO REFERENCE FILE, NOT REACHED by any driver, by `decomposition/estimator.mojo` or
 by the identity card. One copy of `core/householder_qr.mojo::qr_panel_kernel`
 and one of
 `decomposition/impl/linalg/detail/svd_full.mojo::one_sided_jacobi_svd_kernel`,

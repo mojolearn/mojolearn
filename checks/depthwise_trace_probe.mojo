@@ -8,7 +8,7 @@ NO CATBOOST COUNTERPART: a probe, so `checks/`.
 
 WHAT IT IS FOR. `depthwise_check` claim 6 asks whether two configurations
 build the same model and answers yes or no. When the answer is NO -- and the
-answer WILL be no the first time this port runs on a backend that honours
+answer WILL be no the first time this implementation runs on a backend that honours
 denormals, or fuses differently, or has float threadgroup atomics -- the next
 question is *starting where*, and a model diff cannot answer it. Every stage
 of the fit emits a digest line here; the first line that differs is the

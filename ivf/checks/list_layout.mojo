@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CSR-shaped inverted lists, the index carry, and the probe merge.
 
-NOT A PORT. cuVS lays an IVF-FLAT index out as `n_lists` separately
+NO REFERENCE FILE. cuVS lays an IVF-FLAT index out as `n_lists` separately
 allocated arrays of INTERLEAVED GROUPS (`ivf_flat.hpp:96-115`,
 `ivf_flat_build.cuh:137-146`), because that is the shape
-`ivfflat_interleaved_scan` issues its vectorized loads against. This port
+`ivfflat_interleaved_scan` issues its vectorized loads against. This implementation
 does not run that scan (DEVIATION 1785), so it does not need that layout,
 and it needs a different property that layout does not have.
 
@@ -173,9 +173,9 @@ def build_list_layout(
         var slot = Int(cursor[l])
         cursor[l] = cursor[l] + Int32(1)
         # THE CARRY. `list_index[inlist_id] = source_ix`,
-        # `ivf_flat_build.cuh:135`, with `source_ix = i` because this port
+        # `ivf_flat_build.cuh:135`, with `source_ix = i` because this implementation
         # has no `source_ixs` gather arm (their `gather_src` template
-        # parameter serves `fill_refinement_index`, which is not ported).
+        # parameter serves `fill_refinement_index`, which is not implemented).
         list_indices[slot] = UInt32(i)
         for f in range(dim):
             list_data[slot * dim + f] = x[i * dim + f]

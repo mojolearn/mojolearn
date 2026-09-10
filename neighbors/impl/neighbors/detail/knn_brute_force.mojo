@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Brute-force k-nearest-neighbors: their DISPATCH, and their FALLBACK.
 
-PORT OF `cuvs/src/neighbors/detail/knn_brute_force.cuh` at cuVS `94c2819`:
+FOLLOWS `cuvs/src/neighbors/detail/knn_brute_force.cuh` at cuVS `94c2819`:
 `brute_force_knn_impl`'s dispatch (`:443-447`) and `tiled_brute_force_knn`
-(`:69-340`). Partial. Do not improve.
+(`:69-340`). Partial.
 
 WHAT THEIR DISPATCH DOES, WHICH IS NOT WHAT THIS FILE USED TO SAY
 ------------------------------------------------------------------
@@ -17,14 +17,14 @@ WHAT THEIR DISPATCH DOES, WHICH IS NOT WHAT THIS FILE USED TO SAY
       fusedL2Knn(...);                       // fused_l2_knn.cuh
     } else {
       switch (metric) {
-        case Haversine: haversine_knn(...);  // not ported
+        case Haversine: haversine_knn(...);  // not implemented
         default:        tiled_brute_force_knn(...);
       }
     }
 
 `tiled_brute_force_knn` is the **else**. For k <= 64 on row-major L2 - which
 is every k-NN measurement this repository has ever taken - cuVS runs
-`fusedL2Knn`, and until 2026-08-19 this tree had ported only the fallback and
+`fusedL2Knn`, and until 2026-08-19 this tree had implemented only the fallback and
 compared it against scikit-learn as though it were their algorithm. That is
 now `neighbors/impl/neighbors/detail/fused_l2_knn.mojo`, and
 `brute_force_knn_impl` below is their dispatch rather than a direct call to
@@ -41,25 +41,25 @@ kernel never writes it at all.
 WHAT IS THEIRS ON THIS PATH
 ----------------------------
 - `cuvs::distance::pairwise_distance` at `:172-183` is cuBLAS underneath, and
-  cuBLAS has no source to port, so this calls `linalg.matmul` through
+  cuBLAS has no source to implement, so this calls `linalg.matmul` through
   `core/gemm.mojo::gemm_nt`. That substitution is legitimate HERE and only
   here, because a materialized distance matrix is what their own fallback
   asks for on this path.
 - `cuvs::selection::select_k` at `:265` and `:305`. Their `select_k`
   dispatches (`raft/matrix/detail/select_k-inl.cuh:47-72`) to WARPSORT for
   `2 < k <= 256` and to RADIX only above that, so radix is their second
-  choice across the whole practical range. `select_radix.mojo` is ported and
+  choice across the whole practical range. `select_radix.mojo` is implemented and
   is the selector here; `nn.topk.top_k` stays reachable behind
-  `use_vendor_topk` as a second opinion the ported selector can be checked
+  `use_vendor_topk` as a second opinion the implemented selector can be checked
   against, and `neighbors/checks/knn_check.mojo` runs that comparison.
 - `raft::linalg::rowNorm` at `:110-146` -> `core/row_norms.mojo`, hoisted out
   of the tile loop exactly as their comment at `:107-109` says.
 - The L2 epilogue at `:184-205` is `raft::linalg::map_offset` over their
   `l2_exp_cutlass_op`. That is RAFT's own portable elementwise map, so it is
-  a port and not a substitution: `core/expand_distances.mojo`. It is MISSING
+  an implementation and not a substitution: `core/expand_distances.mojo`. It is MISSING
   one of the op's two clamp clauses; see the lane file.
 
-WHAT IS NOT PORTED
+WHAT IS NOT IMPLEMENTED
 ------------------
 Their `DistanceEpilogue` template, the bitmap/bitset filters at `:229-256`,
 the sparse and non-expanded metrics, `haversine_knn`, and the multi-index
@@ -310,7 +310,7 @@ def _warpsort_select_tile[
     n_index: Int,
     k: Int,
 ) raises:
-    """One query tile's top-k through the ported RAFT warpsort
+    """One query tile's top-k through the implemented RAFT warpsort
     (DEVIATION 1922; `select_warpsort.mojo::warpsort_topk_block_kernel`).
 
     LAUNCH GEOMETRY per that file's module docstring: the SINGLE-PASS form,
@@ -320,7 +320,7 @@ def _warpsort_select_tile[
     `neighbors/checks/warpsort_check.mojo` gates against radix and the
     host oracle. RAFT's `calc_launch_parameter` (`select_k-inl.cuh:1058`)
     would additionally split long rows over several blocks and merge with a
-    second launch (`select_k_:1106-1120`); that caller loop is NOT ported
+    second launch (`select_k_:1106-1120`); that caller loop is NOT implemented
     (declared in the module docstring) and is the open item if one block
     per row underfills a device.
 
@@ -370,7 +370,7 @@ def _radix_select_tile(
     k: Int,
     buf_len: Int,
 ) raises:
-    """One query tile's top-k through the ported RAFT radix selector --
+    """One query tile's top-k through the implemented RAFT radix selector --
     the FAST launch that sat inline in `tiled_brute_force_knn` before
     DEVIATION 1922 gave the selection two call sites. Byte-for-byte the
     same enqueue; hoisted, not changed.
@@ -849,9 +849,9 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
             # THE SELECTION. Three implementations, and which one runs is a
             # parameter or a kernel-matrix row, never a preference.
             #
-            # The ported RAFT radix select is the base default; on the columns
+            # The implemented RAFT radix select is the base default; on the columns
             # `knn_warpsort_select_for` admits (DEVIATION 1922), the FAST
-            # selector for `2 < k <= 256` is the ported RAFT warpsort, which is
+            # selector for `2 < k <= 256` is the implemented RAFT warpsort, which is
             # RAFT's own `select_k` choice for that band. `nn.topk.top_k` is a
             # device-wide call that consumes a materialized matrix, which is
             # exactly what this path already has, so it is a legitimate second
@@ -877,7 +877,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                 comptime if PIN_DETERMINISM:
                     # IDENTITY_PATHS row 11's closure, DEVIATIONS 500/501: the
                     # composite (distance, index) key and the ranked placement.
-                    # The ported selector keeps RAFT's tie handling, which is
+                    # The implemented selector keeps RAFT's tie handling, which is
                     # atomic-ordered by construction; this one has no tie class
                     # and no arrival order in its output.
                     #
@@ -975,7 +975,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     # WARPSORT family and only `k > 256` to radix
                     # (`select_k-inl.cuh:38`), and this tree ran radix alone
                     # across that whole band. On the columns the row admits
-                    # (32-lane FAST), the band takes the ported warpsort in the
+                    # (32-lane FAST), the band takes the implemented warpsort in the
                     # single-pass block form; everything else -- k outside the
                     # band, excluded columns, and BOTH UPPER TIERS, whose
                     # selector is pinned above -- keeps radix byte for byte.
@@ -1038,7 +1038,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     _ = part_idx^
 
 
-#: WHICH SIDE OF `knn_brute_force.cuh:443` THIS PORT TAKES BY DEFAULT.
+#: WHICH SIDE OF `knn_brute_force.cuh:443` THIS IMPLEMENTATION TAKES BY DEFAULT.
 #:
 #: DEVIATION 36 (REVISED 2026-08-19, second measurement round): cuVS sends
 #: `k <= 64` + row-major + L2 to `fusedL2Knn` unconditionally; we send it
@@ -1050,13 +1050,13 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
 #: unasked is decided by their launch computation evaluated on our hardware.
 #:
 #: HISTORY, because this default has now flipped once and the reason matters.
-#: The first port ran the fused kernel at a fixed `grid = (1, ceil(m/16))`
+#: The first implementation ran the fused kernel at a fixed `grid = (1, ceil(m/16))`
 #: (~125 blocks at 2,000 queries, independent of index size) and measured
 #: 0.84x-0.88x against tiled at every index size 20k-400k, both arm orders.
 #: That table set the original DEVIATION 36 default = TILED. It was a
 #: measurement of the WRONG GEOMETRY: the launch computation is part of their
-#: algorithm, and porting its A100 output instead of the computation itself
-#: starved the M4. With `launchConfigGenerator` ported (grid capped at
+#: algorithm, and implementing its A100 output instead of the computation itself
+#: starved the M4. With `launchConfigGenerator` implemented (grid capped at
 #: minGridSize = 120 with a row grid-stride) the same kernel re-measured
 #: 2026-08-19 evening, arms interleaved in the repeat loop, BOTH orders
 #: pooled, n = 6/size, 32 features, k = 10, 2,000 queries:
@@ -1157,10 +1157,10 @@ def brute_force_knn_impl(
 
     **THE METRIC TEST IS NOW A REAL RUNTIME TEST, 2026-09-01.** This
     paragraph used to say "The metric test is not a runtime test here
-    because this port carries only the expanded-L2 arm, so it is satisfied
-    by construction ... If a metric outside that set is ever ported, this
+    because this implementation carries only the expanded-L2 arm, so it is satisfied
+    by construction ... If a metric outside that set is ever implemented, this
     is where it has to become a switch." A metric outside that set IS
-    ported -- `CosineExpanded`, `L1`, `Linf`, `L2SqrtUnexpanded`,
+    implemented -- `CosineExpanded`, `L1`, `Linf`, `L2SqrtUnexpanded`,
     `LpUnexpanded` -- so the sentence is deleted and the switch is written.
     `fused_l2_knn` is entered ONLY for the four members of their set, which
     is exactly their `:444-447`; everything else takes their `else` and
@@ -1172,8 +1172,8 @@ def brute_force_knn_impl(
     up at the very end. Cosine's `1 - dot/(nx*ny)` is monotone in `-dot`
     only for a FIXED pair of norms, and the queue compares across
     different index rows with different `yn`, so the fusion is not merely
-    unported, it is unsound. Their `Haversine` case at `:478-484` is still
-    not ported and is a `NOT_IMPLEMENTED.tsv` row.
+    unimplemented, it is unsound. Their `Haversine` case at `:478-484` is still
+    not implemented and is a `NOT_IMPLEMENTED.tsv` row.
 
     `metric = METRIC_FROM_IS_SQRT` (the default) reproduces the previous
     behaviour exactly: `is_sqrt` picks L2SqrtExpanded or L2Expanded, both
@@ -1181,7 +1181,7 @@ def brute_force_knn_impl(
     bits.
 
     `k > n_index` is refused outright rather than dispatched, because their
-    `n < k` fill at `:157-166` is not ported on either arm and the fallback's
+    `n < k` fill at `:157-166` is not implemented on either arm and the fallback's
     selector cannot take `k > len`. See the raise below.
 
     `query_tile`, `buf_len`, `dist_tile`, `buf_val`, `buf_idx` and
@@ -1200,12 +1200,12 @@ def brute_force_knn_impl(
     `knn_method == KNN_METHOD_FUSED`. Read DEVIATION 36 above the constants
     before changing any of it.
     """
-    # THEIR `n < k` CASE IS NOT PORTED ON EITHER ARM, SO REFUSE IT.
+    # THEIR `n < k` CASE IS NOT IMPLEMENTED ON EITHER ARM, SO REFUSE IT.
     #
     # `knn_brute_force.cuh:157-166` fills the output with
     # `numeric_limits<DistanceT>::lowest()` and, for a signed index type,
     # `-1`, so a row with fewer than k candidates comes back marked. That
-    # fill is not ported. Worse, the selector this path would reach cannot
+    # fill is not implemented. Worse, the selector this path would reach cannot
     # take `k > len` at all: `select_radix.mojo:329` looks for the bucket
     # where `prev_count < current_k <= cur_count`, and when the whole row
     # holds fewer than k elements no bucket ever satisfies it, so `ctr` is
@@ -1213,14 +1213,14 @@ def brute_force_knn_impl(
     # reads a buffer nothing wrote. That is a silent wrong answer, and
     # returning one is worse than refusing.
     #
-    # Read from their file and from ours, NOT measured on hardware. Porting
+    # Read from their file and from ours, NOT measured on hardware. Implementing
     # the fill needs the selection clamped to `min(k, n)` and its packed
     # output scattered back to a stride of `k`, which is the same scatter the
     # two-axis tiling needs; both are in the lane file as one open item.
     if k > n_index:
         raise Error(
             "brute_force_knn_impl: k > n_index. Their `n < k` short-fill at"
-            " knn_brute_force.cuh:157-166 is not ported and the ported radix"
+            " knn_brute_force.cuh:157-166 is not implemented and the implemented radix"
             " selector cannot take k > len; see the lane file."
         )
 

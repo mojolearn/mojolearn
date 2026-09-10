@@ -2,15 +2,15 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`qn_fit`, `qn_fit_x`, `qnFit`, `qn_decision_function`, `qn_predict`.
 
-PORT OF `cuml/cpp/src/glm/qn/qn.cuh` at cuML `00094f7`. Partial: the loss
-switch (`qn_fit_x`, `qn.cuh:121-173`) ports all eight ids -- `QN_LOSS_
+FOLLOWS `cuml/cpp/src/glm/qn/qn.cuh` at cuML `00094f7`. Partial: the loss
+switch (`qn_fit_x`, `qn.cuh:121-173`) implements all eight ids -- `QN_LOSS_
 LOGISTIC`, `QN_LOSS_SOFTMAX` (`glm_softmax.mojo`, the multinomial arm),
 `QN_LOSS_SQUARED` / `QN_LOSS_ABS` (`glm_linear.mojo`), the four SVM losses
 (`glm_svm.mojo`) -- each with their `ASSERT` on `C` and their `n_targets =
 is_classification && C == 2 ? 1 : C`, and RAISES by name on `sample_weight`
 (`add_sample_weights`, the weighted arm of `getLossAndDZ`). `svr_eps` is
 their trailing parameter (default 0). The sparse entries (`qnFitSparse` and
-siblings) and `qn_predict`'s argmax arm are not ported. Do not improve.
+siblings) and `qn_predict`'s argmax arm are not implemented.
 
 WHAT `qn_fit` DOES WITH THE PENALTY, `qn.cuh:53-86`, copied:
 
@@ -104,7 +104,7 @@ def qn_fit_x(
     the three closing card stages (`qn.coef`, `qn.n_iter`, `qn.retcode`)."""
     if has_sample_weight:
         raise Error(
-            "qn: sample_weight is NOT PORTED (GLMBase::add_sample_weights,"
+            "qn: sample_weight is NOT IMPLEMENTED (GLMBase::add_sample_weights,"
             " glm_base.cuh:115-122, and the weighted arm of getLossAndDZ);"
             " refused by name. See glm/NOT_IMPLEMENTED.tsv"
         )

@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`raft::linalg::choleskyRank1Update`, the public entry.
 
-PORT of `raft/linalg/cholesky_r1_update.cuh` at RAFT `ebf9268`
+IMPLEMENTATION of `raft/linalg/cholesky_r1_update.cuh` at RAFT `ebf9268`
 (`upstream/raft-v26.08.00`). Their header is a forwarder to
 `detail/cholesky_r1_update.cuh` plus the long doc comment that is the only
 prose specification of the routine anywhere in the three checkouts; both are
 mirrored, the doc because it states the contract their code assumes and does
-not check. **COPY, DO NOT IMPROVE.**
+not check.
 
 THEIR CONTRACT, in their words (`:18-49`), and what it means here
 -----------------------------------------------------------------
@@ -90,8 +90,7 @@ def chol_rank1_update(
     A forwarder, exactly as theirs is (`:96-110` is a one-line call into
     `detail::choleskyRank1Update`). The reason the forwarder exists in their
     tree is the public/detail split, and the reason it exists here is that
-    `cholesky/DERIVATION_MAP.tsv` maps one of our files to one of theirs and a
-    header with no counterpart would be an unrecorded merge.
+
 
     `eps` semantics are theirs with DEVIATION 1633's two changes; pass any
     negative value for their default "refuse rather than clamp".

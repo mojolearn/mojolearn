@@ -128,7 +128,7 @@ WHAT IS BOUGHT: the regression and weighted paths are order-independent
 and therefore bit-identical across Metal, CUDA and HIP -- a property
 cuML's own `atomicAdd(double*)` does NOT have.
 
---- 101c. `ToReductionBuffer` / `FromReductionBuffer`: NOT PORTED -----
+--- 101c. `ToReductionBuffer` / `FromReductionBuffer`: NOT IMPLEMENTED -----
 `bins.cuh:35-42, 78-86, 120-127, 167-173` exist only to marshal a bin
 through the multi-GPU allreduce (`builder.cuh:553`,
 `builder_kernels.cuh:167-194`), which is out of scope for a
@@ -201,7 +201,7 @@ def _dequantize(raw: Int32, scale: Float32) -> Float32:
 trait Bin(TrivialRegisterPassable):
     """What `objectives.cuh` requires of its `BinT` template parameter.
 
-    NOT A PORT OF A CUML CONSTRUCT -- cuML has no bin concept, it has
+    NO CUML CONSTRUCT TO FOLLOW -- cuML has no bin concept, it has
     `std::conditional_t<weighted_, WeightedX, X>` (`objectives.cuh:26`,
     `:204`) and duck typing. This trait is that duck typing written down;
     see DEVIATION 112b for why the direction is inverted here.

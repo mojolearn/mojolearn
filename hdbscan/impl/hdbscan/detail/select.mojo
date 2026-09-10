@@ -2,18 +2,18 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Cluster selection: Excess of Mass, Leaf, and the negation BFS.
 
-PORT OF `cuml-v26.08.00/cpp/src/hdbscan/detail/select.cuh`
+FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/select.cuh`
 (cuML `265b9da`): `perform_bfs` (`:57-91`), `excess_of_mass` (`:148-252`),
 `leaf` (`:264-286`) and `select_clusters` (`:379-452`), plus
 `detail/kernels/select.cuh::propagate_cluster_negation_kernel`
 (`:24-45`). `cluster_epsilon_search` (`:301-363`) and its kernel
-(`:47-104`) are NOT PORTED and raise by name; `hdbscan/NOT_IMPLEMENTED.tsv` has
+(`:47-104`) are NOT IMPLEMENTED and raise by name; `hdbscan/NOT_IMPLEMENTED.tsv` has
 the row. `Select::parent_csr` (`:103-130`) lives in `detail/utils.mojo`
 beside its twin, which is the one rename this file makes and
-`DERIVATION_MAP.tsv` records it.
+
 
 EXCESS OF MASS IS THE DEFAULT AND IS THE ONE THIS LANE SHIPS
-(`hdbscan.hpp:197`, `cluster_selection_method = EOM`). LEAF is ported too
+(`hdbscan.hpp:197`, `cluster_selection_method = EOM`). LEAF is implemented too
 because it is nine lines of integer work and ENGINEERING_RULES rule 8 is
 explicit that a switch with an unexercised side is an unchecked path:
 `check_hdbscan_selection_leaf` runs it, and the same rule is why
@@ -39,7 +39,7 @@ WHAT THEIRS DOES (`select.cuh:205-233`). A host `for` loop from
 -- so the LOOP is already theirs and already on the host; what is on the
 device is one scalar readback and one `transform_reduce` per node.
 
-WHY IT CANNOT BE PORTED AS-IS. `thrust::transform_reduce` is a device
+WHY IT CANNOT BE IMPLEMENTED AS-IS. `thrust::transform_reduce` is a device
 tree reduction whose shape is the library's, so a cluster with three or
 more children has a summation order nobody in this repository can pin,
 read or check -- IDENTITY_PATHS row 20's class. And the sum decides a
@@ -87,8 +87,8 @@ value it leaves is between one child's size and the sum of all of them.
 (`:225`), so on a fit that sets `max_cluster_size` the race can decide
 whether the ROOT is deselected.
 
-WHY WE DO NOT PORT IT. `[[assume-our-code-is-broken]]` says theirs is
-right about DESIGN and that we fix rather than port their BUGS, numbered
+WHY WE DO NOT IMPLEMENTATION IT. `[[assume-our-code-is-broken]]` says theirs is
+right about DESIGN and that we fix rather than implement their BUGS, numbered
 and checked. The DESIGN is "cluster_sizes[0] is the total size of the
 root's children"; the race is a spelling of it that does not compute it.
 
@@ -134,7 +134,7 @@ def propagate_cluster_negation_kernel(
     is_cluster: MutPointer[Int32, MutAnyOrigin],
     n_clusters_in: Int32,
 ):
-    """`kernels/select.cuh:24-45`, transliterated.
+    """`kernels/select.cuh:24-45`, followed statement for statement.
 
     NO ORDER TO PIN. Every write is a CONSTANT (`false` into `frontier`
     and `is_cluster`, `true` into `next_frontier`), so two threads that
@@ -375,12 +375,12 @@ def leaf(
 
 
 def cluster_epsilon_search(cluster_selection_epsilon: Float32) raises:
-    """`select.cuh:301-363` and `kernels/select.cuh:47-104`. NOT PORTED;
+    """`select.cuh:301-363` and `kernels/select.cuh:47-104`. NOT IMPLEMENTED;
     raises by name."""
     raise Error(
         "hdbscan.cluster_epsilon_search: cluster_selection_epsilon="
         + String(cluster_selection_epsilon)
-        + " refused by name; the epsilon search is NOT PORTED (rung 2)."
+        + " refused by name; the epsilon search is NOT IMPLEMENTED (rung 2)."
         " It re-sorts the cluster tree's parents and lambdas BY CHILD in"
         " place (select.cuh:328-329), then walks each selected cluster"
         " toward the root in a do/while whose index arithmetic depends on"
@@ -388,7 +388,7 @@ def cluster_epsilon_search(cluster_selection_epsilon: Float32) raises:
         " 1` offset), and upstream's own comment at select.cuh:418-419"
         " records a confirmed reference-implementation bug in the"
         " neighbouring LEAF branch (scikit-learn-contrib/hdbscan#476) that"
-        " is commented out rather than fixed. Porting it means deciding"
+        " is commented out rather than fixed. Implementing it means deciding"
         " which of two behaviors is the algorithm, which is a question for"
         " a reading of their tree, not for this rung. Use"
         " cluster_selection_epsilon=0.0, which is their default"

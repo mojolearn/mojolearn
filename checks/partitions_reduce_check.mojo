@@ -230,7 +230,7 @@ def _arm(
     # ---- the partition table, indexed BY LEAF ID ------------------------
     # One host staging buffer per `enqueue_copy`: they are asynchronous, and
     # sharing one across four of them is how `boosting_hist_check` raced its
-    # own fixture for the life of the port.
+    # own fixture for the life of the implementation.
     var h_off = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
     var h_sz = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
     for i in range(max_leaves):

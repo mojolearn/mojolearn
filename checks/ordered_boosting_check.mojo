@@ -154,8 +154,8 @@ def closed_form_fold_rights(n: Int, m0: Int) -> List[Int]:
     series stops at the first `R_k == n`. `check-dynamic-boosting-folds` F3
     derives the same identity; it is repeated here because THIS file's fold
     count, fold bits, partition sizes and total index size are all functions
-    of it, and a gate that took them from the port would be checking the
-    port against itself.
+    of it, and a gate that took them from the implementation would be checking the
+    implementation against itself.
     """
     var out = List[Int]()
     var k = 0
@@ -892,7 +892,7 @@ def main() raises:
     for _ in range(deep_parts * fold_count * hist_line * 2):
         want2.append(Float32(0.0))
     # EVERY SPAN HERE IS HOST-DERIVED. Reading the offsets back out of
-    # `subsets.Partitions` would make the model share the port's answer,
+    # `subsets.Partitions` would make the model share the implementation's answer,
     # and a fold axis that landed in the wrong partition would agree with
     # itself. `host_bin` is the independent model O4 already checked.
     for i in range(n_docs):

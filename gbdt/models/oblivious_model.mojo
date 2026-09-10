@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The trained tree, and the ensemble of them.
 
-PORT OF `catboost/cuda/models/oblivious_model.h` and `additive_model.h` at
-CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/models/oblivious_model.h` and `additive_model.h` at
+CatBoost `54a8143a`. Followed statement for statement.
 
 Their structure is remarkably small:
 
@@ -155,9 +155,9 @@ struct TAdditiveModel(Copyable, Movable):
     Their `SetBias` IS carried (`doc_parallel_boosting.h:434`,
     `modelToExport.SetBias(cursors->StartingPoint)`): `bias` records the
     `CalcOptimumConstApprox` value the cursors were seeded with under
-    `boost_from_average`, ported 2026-08-22. It is Float64 because their
+    `boost_from_average`, implemented 2026-08-22. It is Float64 because their
     `StartingPoint` is `TVector<double>`; one value, not a vector, because
-    every loss `boost_from_average` is ported for is one-dimensional. A
+    every loss `boost_from_average` is implemented for is one-dimensional. A
     model whose cursor started somewhere other than zero and did not say so
     would predict the residual rather than the target, which is why the
     field exists on the model and not only in the fit.
@@ -171,7 +171,7 @@ struct TAdditiveModel(Copyable, Movable):
     #: `std::variant<THolder<TAdditiveModel<TObliviousTreeModel>>,
     #: THolder<TAdditiveModel<TNonSymmetricTree>>>`
     #: (`cuda/train_lib/train.cpp:436-455`) -- so an ensemble is EITHER
-    #: oblivious OR non-symmetric, never both. This port has no templates
+    #: oblivious OR non-symmetric, never both. This implementation has no templates
     #: over the ensemble, so the variant is two lists and the rule that
     #: exactly one of them is ever non-empty, enforced by the two adders
     #: below. `EGrowPolicy::Depthwise` and `Lossguide` both produce

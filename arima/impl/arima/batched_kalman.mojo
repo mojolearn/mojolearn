@@ -3,17 +3,17 @@
 """The batched Kalman filter for ARIMA: state-space matrices, initial state
 and covariance, the per-series filter loop, the log-likelihood, the forecast.
 
-PORT OF `cuml/cpp/src/arima/batched_kalman.cu` at cuML 265b9da6 (v26.08.00):
+FOLLOWS `cuml/cpp/src/arima/batched_kalman.cu` at cuML 265b9da6 (v26.08.00):
 `Mv_l` / `MM_l` / `numerical_stability` (:34-92),
 `batched_kalman_loop_kernel` (:117-333, the `rd <= 8` one-thread-per-series
 kernel their dispatch takes at `:772`), `batched_kalman_loop` (:746-819),
 `_lyapunov_wrapper` (:845-886, the `r <= 5` direct arm),
 `_batched_kalman_filter` (:889-1139), `init_batched_kalman_matrices`
-(:1141-1245), `batched_kalman_filter` (:1248-1303). COPY, DO NOT IMPROVE.
+(:1141-1245), `batched_kalman_filter` (:1248-1303).
 Layout is theirs: series `b` contiguous in `ys`/`pred` (`bid * nobs`),
 `T` at `bid * rd * rd` column-major, `Z`/`R`/`alpha` at `bid * rd`.
 
-NOT PORTED, each refused by name one layer up (`arima_common.mojo::
+NOT IMPLEMENTED, each refused by name one layer up (`arima_common.mojo::
 validate_order`, `batched_arima.mojo`): the `rd > 8` block-per-series
 kernel (`_batched_kalman_device_loop_large_kernel`, `linalg/block.cuh`);
 the `r > 5` Schur Lyapunov arm; exogenous regressors (`d_exog`, `d_beta`,

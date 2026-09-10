@@ -5,7 +5,7 @@
     pixi run check-ctr-train
 
 `checks/ctr_check.mojo` gates the CTR ARITHMETIC. This gates the WIRING,
-which is a different failure: `ENGINEERING_RULES.md` rule 3 -- a ported file
+which is a different failure: `ENGINEERING_RULES.md` rule 3 -- a implemented file
 that no caller reaches is not done -- and this repository has shipped
 fully-written, fully-commented machinery nothing called more than once.
 
@@ -81,7 +81,7 @@ Three refusals, because a refusal nobody runs is an unchecked branch:
 plus a POSITIVE case where a refusal used to stand:
 `TCatFeatureParams.default()`, CatBoost's own GPU `simple_ctr`, which
 includes the three `Borders` descriptions. It used to raise, because the CTR
-estimation permutation was not ported and row order is a different
+estimation permutation was not implemented and row order is a different
 estimator rather than a slower one. The permutation landed 2026-08-21
 (`gbdt/data/permutation.mojo`, `archive/reference/PORTING.md` 55) and the apply-time tables
 after it, so `default()` is now what `train()` FALLS BACK TO and the
@@ -469,7 +469,7 @@ def check_ctr_train() raises:
     #
     # `TCatFeatureParams.default()` used to raise here, because Borders is
     # permutation dependent and the CTR estimation permutation was not
-    # ported. It is ported now (`gbdt/data/permutation.mojo`,
+    # implemented. It is implemented now (`gbdt/data/permutation.mojo`,
     # `archive/reference/PORTING.md` 55), so the same call TRAINS and emits FOUR columns per
     # categorical feature -- three Borders priors and one FeatureFreq --
     # which is CatBoost's own GPU `simple_ctr` default. The values, the

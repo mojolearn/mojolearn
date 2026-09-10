@@ -3,11 +3,11 @@
 """The k-NN classifier's vote and the k-NN regressor's mean, over a finished
 neighbour search.
 
-PORT OF `cuml/cpp/src_prims/selection/knn.cuh` at cuML `00094f7`
+FOLLOWS `cuml/cpp/src_prims/selection/knn.cuh` at cuML `00094f7`
 (branch-25.08): `get_lbls` (`:40`), `class_probs_kernel` (`:52`),
 `class_vote_kernel` (`:74`), `regress_avg_kernel` (`:112`), `class_probs`
-(`:158`), `knn_classify` (`:233`), `knn_regress` (`:310`). Transliterated
-except where a DEVIATION BLOCK says so. Do not improve.
+(`:158`), `knn_classify` (`:233`), `knn_regress` (`:310`). Followed statement for statement
+except where a DEVIATION BLOCK says so.
 
 This is `MLCommon::Selection`. The `ML::` entry points a caller reaches
 (`knn.cu:328-389`, which compute the unique-label sets and then call here)
@@ -240,7 +240,7 @@ def _clf_tag(stage: StringSlice, i: Int, n_outputs: Int) -> String:
 #   above them (`kneighbors_classifier.pyx:191-193`, `kneighbors_regressor
 #   .pyx:188-190`, "Only uniform weighting strategy is supported
 #   currently"), so no C++ entry, no kernel and no template parameter for
-#   it exists anywhere in cuML or cuVS to transliterate.
+#   it exists anywhere in cuML or cuVS to follow statement for statement.
 # OURS: the three functions below take an OPTIONAL per-(query, slot)
 #   weight buffer as trailing defaulted parameters. When `has_weights` is
 #   False -- which is every existing caller, unedited -- the enqueued
@@ -313,7 +313,7 @@ def class_probs(
         #   not (a caller that passed a different `y` than it sized by).
         # REASON: a device write past a buffer is not a wrong answer, it is
         #   a corrupted process, and `neighbors/estimator.mojo` policy 7
-        #   relies on this to check the wrapper's set against the port's.
+        #   relies on this to check the wrapper's set against the implementation's.
         # ------------------------------------------------------------------
         if len(outs[i]) < cur_size:
             raise Error(

@@ -4,17 +4,17 @@
 
 Profile `mojolearn.identical.cholesky.fp32.v1`. `A = L L^T` in place, lower
 triangular, row-major, contiguous. cuSOLVER's `potrf` with `uplo = LOWER`,
-except that there is no cuSOLVER source to transliterate (DEVIATION 1631) so
-nothing here is a port and this file says so rather than citing a line
+except that there is no cuSOLVER source to follow statement for statement (DEVIATION 1631) so
+nothing here is an implementation and this file says so rather than citing a line
 number it cannot have.
 
-**NOT A PORT.** cuML and cuVS do not implement Cholesky. Every Cholesky in
+**NO REFERENCE FILE.** cuML and cuVS do not implement Cholesky. Every Cholesky in
 either library is a cuSOLVER call -- `cuvs/src/neighbors/scann/detail/
 scann_avq.cuh:179-200` (`potrf` then `potrs`) is the only factorization from
 scratch in the two trees, and `cuml/src/solver/lars_impl.cuh:315-320` reaches
 RAFT's rank-one UPDATE, which is itself three cuBLAS calls around a host
 `std::sqrt`. cuSOLVER and cuBLAS are CLOSED; `archive/reference/VENDOR_LIBS.md`'s surviving
-exception says call the platform equivalent because there is nothing to port,
+exception says call the platform equivalent because there is nothing to implement,
 and `IDENTITY_PATHS.md`'s opening rule says a mode has three moves. There is
 no MAX `potrf` to call, so the move here is not REPLACE-with-a-vendor-call
 and it is not REFUSE. It is: write the factorization with every numeric
@@ -22,8 +22,7 @@ decision named, which is what this file is.
 
 The one thing in the RAPIDS trees that IS portable source and IS mirrored is
 `raft/linalg/detail/cholesky_r1_update.cuh`; it lives under
-`cholesky/impl/` and `cholesky/DERIVATION_MAP.tsv` records what it does and
-does not cover.
+`cholesky/impl/`.
 
 # =========================================================================
 # DEVIATION 1630: `NB` IS A NUMERIC PARAMETER, NOT A TUNING KNOB, AND UNDER
@@ -785,11 +784,11 @@ def logdet_kernel(
 ):
     """`2 * sum_j log(diag[j])`, in ONE thread, ascending. DEVIATION 1639.
 
-    `diag` is `diag(L)`, extracted by the ported RAFT kernel
+    `diag` is `diag(L)`, extracted by the implemented RAFT kernel
     (`cholesky/impl/matrix/detail/matrix.mojo::
     copy_vector_from_matrix_diagonal_kernel`) and recorded as the card stage
     `chol.diag` before this runs. Reading the vector rather than striding the
-    matrix is what gives the ported kernel a real caller, and it gives the
+    matrix is what gives the implemented kernel a real caller, and it gives the
     card an intermediate: two columns that disagree here disagree in ONE
     diagonal entry, and a scalar hash cannot say which one.
 

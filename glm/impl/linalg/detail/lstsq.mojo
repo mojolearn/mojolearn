@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Least squares through the normal equations and an eigendecomposition.
 
-PORT OF `raft/linalg/detail/lstsq.cuh::lstsqEig` at RAFT `661a3b8`.
-Transliterated. Do not improve.
+FOLLOWS `raft/linalg/detail/lstsq.cuh::lstsqEig` at RAFT `661a3b8`.
+Followed statement for statement.
 
 This is cuML's OLS solver `algo = 1` (`cuml/cpp/src/glm/ols.cuh:120`). Their
 six steps, copied:
@@ -30,7 +30,7 @@ direction the data barely constrains appears as a near-zero eigenvalue and
 gets DROPPED rather than divided by, which turns the inverse into a
 pseudo-inverse.
 
-Porting their non-default solver is a deliberate choice and it is recorded
+Implementing their non-default solver is a deliberate choice and it is recorded
 in `glm/NOT_IMPLEMENTED.tsv`: it is the one that reuses machinery this repository
 already has, and their SVD route needs a one-sided Jacobi SVD that does not
 exist here yet. The accuracy difference is real and belongs in any
@@ -59,14 +59,14 @@ Gram kernel (`core/gram_splitk.mojo`) — the vendor matmul measured ~25
 GFLOP/s there, one output tile being its only parallelism — and the
 transpose + `linalg.matmul` arm serves larger outputs; `transpose_a` is
 still refused and is not used on either arm. Step 6 called
-`gemv_gpu` or a ported RAFT contraction depending on a `use_vendor_gemv` flag,
+`gemv_gpu` or a implemented RAFT contraction depending on a `use_vendor_gemv` flag,
 and the flag and the contraction are both deleted. What checks the vendor call
 is `check_ols_beats_truth_on_noise`, which recomputes both residuals on the
 host: least squares cannot lose to the planted coefficients on its own sample,
 so a wrong step 6 fails it. A host property is a better witness than a second
 device kernel and costs no code.
 
-THE STREAM OVERLAP IS NOT PORTED
+THE STREAM OVERLAP IS NOT IMPLEMENTED
 --------------------------------
 Theirs computes `A^T A` and `A^T b` on TWO CUDA streams concurrently, with
 events to join them (`lstsq.cuh`, `multAbStream`). Mojo's `DeviceContext`
@@ -77,7 +77,7 @@ free from CUDA and we do not.
 
 WHAT DEVIATION 527 ADDED HERE, AND WHY IT MOVES NO BITS
 -------------------------------------------------------
-This file is `glm/impl/`: COPY, DO NOT IMPROVE, and under `NUMERIC_FAST`
+This file is `glm/impl/`, and under `NUMERIC_FAST`
 the shipped bits must not move at all. Two things were added and neither is
 arithmetic:
 
@@ -376,7 +376,7 @@ def lstsq_eig_traced(
     #     grid-dependency barriers compile out and `pdl_launch_attributes`
     #     returns an empty list. Nothing Apple-specific is being relied on.
     #
-    # THE PORTED CONTRACTION IS GONE. It stood here as a second arm behind
+    # THE IMPLEMENTED CONTRACTION IS GONE. It stood here as a second arm behind
     # `use_vendor_gemv=False`, on the argument that a vendor call needs
     # something to be checked against. The check that matters is
     # `glm/checks/ols_check.mojo::check_ols_beats_truth_on_noise`, which

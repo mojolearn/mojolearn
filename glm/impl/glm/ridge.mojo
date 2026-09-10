@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ridgeFit`: l2-regularized least squares, cuML's `eig` solver.
 
-PORT OF `cuml/cpp/src/glm/ridge.cuh` at cuML `00094f7`: `ridgeSolve`,
-`ridgeEig`, `ridgeFit`. Partial. Do not improve.
+FOLLOWS `cuml/cpp/src/glm/ridge.cuh` at cuML `00094f7`: `ridgeSolve`,
+`ridgeEig`, `ridgeFit`. Partial.
 
 WHAT THEIR `eig` SOLVER ACTUALLY IS, because the name undersells it
 ---------------------------------------------------------------------
@@ -12,7 +12,7 @@ A^T A and reuse lstsqEig", which is what `glm/NOT_IMPLEMENTED.tsv` used to say i
 was ("cheap once wanted"). It is
 
     svdEig(A) -> S, U, V        an SVD through the eigendecomposition of A^T A
-                                (`raft/linalg/detail/svd.cuh`, ported beside
+                                (`raft/linalg/detail/svd.cuh`, implemented beside
                                 this file as `glm/impl/linalg/detail/svd.mojo`)
     ridgeSolve(S, V, U, b, alpha) -> w
 
@@ -34,7 +34,7 @@ in SIX device ops, each a RAFT matrix primitive with its own threshold rule:
 Algebraically `V diag(s/(s^2+a)) S^-1 V^T A^T b = (A^T A + a I)^-1 A^T b`,
 the closed form; the route through U costs an extra `A V` pass (O(n d^2),
 the same order as the Gram) plus `U^T b` (O(n d)), and it is THEIR route, so
-it is the one ported. The shortcut would be a different program with a
+it is the one implemented. The shortcut would be a different program with a
 different rounding at every step and a card nobody could align with theirs.
 
 WHY THE ORDER OF OPS MATTERS FOR THE BITS: `U` is `A V / S` with `|S| <
@@ -46,7 +46,7 @@ records, carried rather than fixed (COPY-DO-NOT-IMPROVE) and gated.
 
 THE DISPATCH, `ridge.cuh:210-218`, copied including its guard:
 
-    if (algo == 0 || n_cols == 1) ridgeSVD      -> svdQR, NOT PORTED, raises by name
+    if (algo == 0 || n_cols == 1) ridgeSVD      -> svdQR, NOT IMPLEMENTED, raises by name
     else if (algo == 1)           ridgeEig      -> this file
     else                          ASSERT(false)
 
@@ -56,7 +56,7 @@ THE DISPATCH, `ridge.cuh:210-218`, copied including its guard:
 Python default IS this arm, and the one-column case is the same refusal
 `LinearRegression` carries (`ridge.pyx:355-359` switches to svd and says so).
 
-NOT PORTED, refused by name: `fit_intercept`/`normalize` at this layer
+NOT IMPLEMENTED, refused by name: `fit_intercept`/`normalize` at this layer
 (`preProcessData`/`postProcessData`, `preprocess.cuh`; the Python surface
 centers on the host exactly as `LinearRegression` does, DEVIATION 517's
 note), `sample_weight` (`ridge.cuh:197-208, 220-231`, a sqrt-scaling and its
@@ -256,7 +256,7 @@ def ridge_fit_traced(
     SVD, `ridge.cuh:166`; the Python door maps `'auto'` to eig, `ridge.pyx:
     304`). Same reasoning as `ols_fit`: defaulting to an arm that always
     raises makes the entry useless, and the Python door is the one a user
-    comes in by. The intercept is `0` on the arm this ports (`ridge.cuh:247`).
+    comes in by. The intercept is `0` on the arm this implements (`ridge.cuh:247`).
     """
     # `ridge.cuh:173-174`
     if n_cols <= 0:
@@ -265,14 +265,14 @@ def ridge_fit_traced(
         raise Error("ridgeFit: number of rows cannot be less than two")
     if fit_intercept:
         raise Error(
-            "ridgeFit: fit_intercept is not ported at this layer. It needs"
+            "ridgeFit: fit_intercept is not implemented at this layer. It needs"
             " preProcessData and postProcessData from cuml glm/preprocess.cuh;"
             " python/mojolearn/linear_model.py centers on the host instead"
             " (DEVIATION 517's note). See glm/NOT_IMPLEMENTED.tsv"
         )
     if normalize:
         raise Error(
-            "ridgeFit: normalize is not ported, and theirs is only reachable"
+            "ridgeFit: normalize is not implemented, and theirs is only reachable"
             " with fit_intercept; see glm/NOT_IMPLEMENTED.tsv"
         )
     if alpha < Float32(0.0):
@@ -290,13 +290,13 @@ def ridge_fit_traced(
         if n_cols == 1:
             raise Error(
                 "ridgeFit: n_cols == 1 selects ridgeSVD (ridge.cuh:210),"
-                " which is NOT PORTED (raft svdQR is cuSOLVER gesvd, no"
+                " which is NOT IMPLEMENTED (raft svdQR is cuSOLVER gesvd, no"
                 " equivalent). cuML's Python layer forces the same switch"
                 " (ridge.pyx:355). See glm/NOT_IMPLEMENTED.tsv"
             )
         raise Error(
             "ridgeFit: algo 0 is ridgeSVD (raft::linalg::svdQR), which is"
-            " NOT PORTED; solver='eig' is the ported arm. See glm/NOT_IMPLEMENTED.tsv"
+            " NOT IMPLEMENTED; solver='eig' is the implemented arm. See glm/NOT_IMPLEMENTED.tsv"
         )
     elif algo == RIDGE_ALGO_EIG:
         ridge_eig_traced(ctx, a, n_rows, n_cols, b, alpha, w, trace)

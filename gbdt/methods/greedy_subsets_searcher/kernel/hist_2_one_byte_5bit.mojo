@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The 5-bit specialization of the fused two-stat one-byte accumulator.
 
-PORT OF `hist_2_one_byte_5bit.cu` at CatBoost `54a8143a`,
-`TPointHist2OneByte<5, BlockSize>`. Transliterated. Do not improve.
+FOLLOWS `hist_2_one_byte_5bit.cu` at CatBoost `54a8143a`,
+`TPointHist2OneByte<5, BlockSize>`. Followed statement for statement.
 
 This is the family CatBoost's own one-byte dispatch takes at
 `maxBins <= 32` (`hist_one_byte.cu:315-316`), NOT the `TPointHistOneByte`
-PASS family this repository ported first. The two differ in everything but
+PASS family this repository implemented first. The two differ in everything but
 the writeback: this one processes TWO stat columns per pass, keys its slot
 parity on the stat, and pays for the second stat with a second warp-local
 sync phase instead of a second launch.

@@ -4,13 +4,12 @@
 `AgglomerativeClustering` (`cuml/cpp/src/hierarchy/linkage.cu` down through
 cuVS's `cluster/detail/*` to RAFT's Boruvka MST).
 
-The port is `hierarchy/` (DEVIATIONS 620-624 and 881); `hierarchy/README.md`,
-`hierarchy/DERIVATION_MAP.tsv` and `hierarchy/NOT_IMPLEMENTED.tsv` are the record.
+The implementation is `hierarchy/` (DEVIATIONS 620-624 and 881); `hierarchy/README.md`,
+`hierarchy/NOT_IMPLEMENTED.tsv` are the record.
 
 Line numbers cited here were read in `upstream/cuml-v26.08.00` (265b9da) and
-`upstream/cuvs-v26.08.00` (6ba2ce2) on 2026-08-24. `hierarchy/DERIVATION_MAP.tsv`
-pins cuVS at `94c2819` and RAFT at `661a3b8`, the UNTAGGED default-branch
-checkouts, whose line numbers for the same code differ by a few dozen lines.
+`upstream/cuvs-v26.08.00` (6ba2ce2) on 2026-08-24. The lane elsewhere cites
+cuVS at `94c2819` and RAFT at `661a3b8`, the UNTAGGED default-branch checkouts, whose line numbers for the same code differ by a few dozen lines.
 
 This class is not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
@@ -28,7 +27,7 @@ DISTANCE_L2_SQRT_EXPANDED = 1
 DISTANCE_COSINE_EXPANDED = 2
 DISTANCE_L1 = 3
 
-# Only the two the port carries. cuML maps "euclidean" and "l2" to
+# Only the two the implementation carries. cuML maps "euclidean" and "l2" to
 # L2SqrtExpanded; nothing in their table maps to L2Expanded, so no name for
 # it is invented here.
 _METRICS = {
@@ -64,14 +63,14 @@ class AgglomerativeClustering:
                       (`agglomerative.pyx:123`), their C++ default is
                       pairwise (`linkage.hpp:43-44`) and scikit-learn's
                       dense tree is pairwise too. DEVIATION 881: the k-NN
-                      graph arm is rung 2 and NOT PORTED, so 'knn' is
+                      graph arm is rung 2 and NOT IMPLEMENTED, so 'knn' is
                       REFUSED BY NAME rather than downgraded. A cuML script
                       moved here therefore gets a DIFFERENT GRAPH unless it
                       passed connectivity explicitly, and that is why the
                       default is called out rather than left implicit.
         linkage       'single' here and in cuML (`agglomerative.pyx:124`);
                       scikit-learn's default is 'ward'. Only single linkage
-                      exists in this port and in cuML, and every other value
+                      exists in this implementation and in cuML, and every other value
                       is refused by name, as cuML does
                       (`agglomerative.pyx:157-158`).
 
@@ -87,7 +86,7 @@ class AgglomerativeClustering:
                                       'l1' / 'cityblock' / 'manhattan' and
                                       'cosine' are REFUSED BY NAME: cuML maps
                                       them to L1 and CosineExpanded, and the
-                                      distance step this port routes through
+                                      distance step this implementation routes through
                                       carries only the expanded-L2 identity.
                                       'precomputed' is refused (this entry
                                       takes points, not a distance matrix).
@@ -112,7 +111,7 @@ class AgglomerativeClustering:
                                       refused it can reach nothing, so any
                                       value but the default 15 raises rather
                                       than being silently dropped.
-        distance_threshold  refused   NOT PORTED. It needs the per-merge
+        distance_threshold  refused   NOT IMPLEMENTED. It needs the per-merge
                                       distances (`out_delta`), which
                                       `build_dendrogram_host` does produce
                                       but `single_linkage` does not hand
@@ -144,19 +143,19 @@ class AgglomerativeClustering:
     rows come from scipy's MST in its own order. The two agree as UNORDERED
     PAIRS when the MST is tie-free and both sorts see the same edge set;
     under ties they need not, because scikit-learn's mergesort on
-    `mst.data` keeps scipy's coo order and this port's sort is the total
+    `mst.data` keeps scipy's coo order and this implementation's sort is the total
     order `(weight_key, min(u,v), max(u,v))` (DEVIATIONS 620 and 621). **Row
     equality with scikit-learn is not claimed.**
 
     `n_leaves_` is `n_rows`. `n_connected_components_` is read back from the
-    port, which returns the literal 1 on this arm (`single_linkage.cuh:301`,
+    implementation, which returns the literal 1 on this arm (`single_linkage.cuh:301`,
     sound because the pairwise graph is complete). `n_boruvka_rounds_` is
     NOT a scikit-learn attribute; it is the identity card's integer stage
     `linkage.mst.rounds`, surfaced because a run that disagrees there
     disagreed about how much work to do.
 
     IDENTITY: `MOJOLEARN_IDENTITY_TRACE` DOES NOTHING ON THIS PATH. The
-    ported `single_linkage` entry takes no trace object, and the certified
+    implemented `single_linkage` entry takes no trace object, and the certified
     eight-stage `linkage.*` card is `hierarchy/linkage_main.mojo`'s, which
     re-runs the distance and MST stages beside the fit to record them. This
     class calls the same entry that driver calls; it does not itself emit a
@@ -193,7 +192,7 @@ class AgglomerativeClustering:
                 "REFUSED BY NAME. The Linkage::KNN_GRAPH specialization "
                 "(connectivities.cuh:49), the cross-component fix-up its "
                 "forest MST needs (connect_knn_graph, mst.cuh:67 and :131) "
-                "and merge_msts are rung 2 and NOT PORTED -- and their host "
+                "and merge_msts are rung 2 and NOT IMPLEMENTED -- and their host "
                 "overload picks a RANDOM vertex per component from "
                 "std::mt19937(std::random_device()), which would have to be "
                 "pinned first. Use connectivity='pairwise' (cuML's C++ "
@@ -203,11 +202,11 @@ class AgglomerativeClustering:
         if metric not in _METRICS:
             raise NotImplementedError(
                 f"mojolearn AgglomerativeClustering: metric={metric!r} is "
-                f"refused by name; only {sorted(_METRICS)} are ported (both "
+                f"refused by name; only {sorted(_METRICS)} are implemented (both "
                 "map to cuML's L2SqrtExpanded). cuML maps 'l1'/'cityblock'/"
                 "'manhattan' to DistanceType.L1 and 'cosine' to "
                 "CosineExpanded (agglomerative.pyx:36-43), and neither "
-                "kernel is in this port; 'precomputed' has no arm at all. "
+                "kernel is in this implementation; 'precomputed' has no arm at all. "
                 "See hierarchy/NOT_IMPLEMENTED.tsv"
             )
         if c != 15:
@@ -234,8 +233,8 @@ class AgglomerativeClustering:
         if distance_threshold is not None:
             raise NotImplementedError(
                 "mojolearn AgglomerativeClustering: distance_threshold is "
-                "NOT PORTED. It needs the per-merge distances (out_delta), "
-                "which build_dendrogram_host produces but the ported "
+                "NOT IMPLEMENTED. It needs the per-merge distances (out_delta), "
+                "which build_dendrogram_host produces but the implemented "
                 "single_linkage entry does not hand back; "
                 "hierarchy/README.md lists it under 'What is left'. Pass "
                 "n_clusters instead"
@@ -243,7 +242,7 @@ class AgglomerativeClustering:
         if compute_distances:
             raise NotImplementedError(
                 "mojolearn AgglomerativeClustering: compute_distances is NOT "
-                "PORTED; distances_ would come from the same out_delta the "
+                "IMPLEMENTED; distances_ would come from the same out_delta the "
                 "entry does not return (hierarchy/README.md)"
             )
         self.n_clusters = n_clusters

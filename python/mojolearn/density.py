@@ -19,7 +19,7 @@ _ALGORITHMS = {
 DBSCAN_METRIC_L2 = 0
 DBSCAN_METRIC_L1 = 1
 
-#: scikit-learn's spellings for the two metrics this port serves, mapped to
+#: scikit-learn's spellings for the two metrics this implementation serves, mapped to
 #: the codes `bindings/_mojolearn_estimators.mojo` slot 7 carries. 'l1',
 #: 'cityblock' and 'manhattan' are one metric under three names in
 #: scikit-learn and in cuML's own pairwise table, and `kde/` already accepts
@@ -44,7 +44,7 @@ _ARM_METRICS = {
 
 
 class DBSCAN(NumericModeMixin):
-    """L2 DBSCAN backed by the ported cuML/RAFT GPU path.
+    """L2 DBSCAN backed by the implemented cuML/RAFT GPU path.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
     because a parameter that is accepted and ignored is a wrong answer
@@ -78,7 +78,7 @@ class DBSCAN(NumericModeMixin):
         metric               honored   'euclidean'/'l2' (default), and
                                        'manhattan'/'l1'/'cityblock' on
                                        algorithm='brute'. The L1 arm is
-                                       ORIGINAL work, not a port: cuML's
+                                       ORIGINAL work, not an implementation: cuML's
                                        DBSCAN offers euclidean, cosine and
                                        precomputed only (dbscan.pyx:110-115).
                                        Its per-pair arithmetic follows RAFT's
@@ -107,7 +107,7 @@ class DBSCAN(NumericModeMixin):
                                        optimization level rather than the
                                        source. Measured on an Apple M4 only;
                                        a three-vendor leg is owed
-        core_sample_indices_ absent    not computed by the port
+        core_sample_indices_ absent    not computed by the implementation
                                        (dbscan.cuh:171-173 notes cuML does
                                        not return theirs either)
 
@@ -189,7 +189,7 @@ class DBSCAN(NumericModeMixin):
             raise ValueError(
                 f"mojolearn DBSCAN: metric={self.metric!r} is refused; it "
                 f"must be one of {sorted(_METRICS)}. 'euclidean'/'l2' is the "
-                "ported cuML arm; 'manhattan'/'l1'/'cityblock' is this "
+                "implemented cuML arm; 'manhattan'/'l1'/'cityblock' is this "
                 "library's own L1 arm (DEVIATION 27, dbscan/impl/neighbors/"
                 "epsilon_neighborhood.mojo). 'cosine' and 'precomputed' are "
                 "cuML's other two (dbscan.pyx:110-115) and are not built "
@@ -288,7 +288,7 @@ class DBSCAN(NumericModeMixin):
 
 
 class KernelDensity(NumericModeMixin):
-    """Kernel density estimation backed by the ported cuML path (`kde/`,
+    """Kernel density estimation backed by the implemented cuML path (`kde/`,
     DEVIATIONS 600-604; kde/README.md), the scikit-learn surface.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter:
@@ -304,7 +304,7 @@ class KernelDensity(NumericModeMixin):
                                  'cosine' -- the host refuses any other BY
                                  NAME. NOTE DEVIATION 602: scikit-learn's
                                  and cuML's cosine normalization is wrong
-                                 for even d (NaN at d = 4); this port's is
+                                 for even d (NaN at d = 4); this implementation's is
                                  the Simpson-verified constant and will
                                  DIFFER from theirs there, on purpose.
         metric         honored   'euclidean'/'l2' (default), 'sqeuclidean',
@@ -494,5 +494,5 @@ class KernelDensity(NumericModeMixin):
 
     def sample(self, n_samples=1, random_state=None):
         raise NotImplementedError(
-            "mojolearn KernelDensity: sample() is not ported (cuML has none)"
+            "mojolearn KernelDensity: sample() is not implemented (cuML has none)"
         )

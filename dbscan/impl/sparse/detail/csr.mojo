@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Weakly connected components by label propagation.
 
-PORT OF `raft/sparse/detail/csr.cuh::weak_cc_label_device` and
-`weak_cc_init_all_kernel` at RAFT `661a3b8`. Transliterated. Do not improve.
+FOLLOWS `raft/sparse/detail/csr.cuh::weak_cc_label_device` and
+`weak_cc_init_all_kernel` at RAFT `661a3b8`. Followed statement for statement.
 
 This is the step that turns DBSCAN's neighbor graph into clusters, and it is
 the only part of DBSCAN that is not distance arithmetic.
@@ -32,7 +32,7 @@ DETERMINISM
 -----------
 The propagation uses `atomicMin`, so the ORDER of updates varies run to run,
 but the fixed point does not: a minimum over a set is the same whatever order
-it is taken in. This is one of the rare places in these ports where an
+it is taken in. This is one of the rare places in these implements where an
 atomic costs nothing in reproducibility, the same situation as the k-means
 assignment argmin and unlike CatBoost's float histogram flush.
 
@@ -42,10 +42,10 @@ a statement about the FIXED POINT, and the loop below only reaches it if it
 is allowed to run until `changed` stays zero. `max_iterations` truncates
 it, and a truncated propagation is a SNAPSHOT of a race: whichever labels
 happened to have propagated by the last pass on this machine. THE CAP IS
-THIS PORT'S, NOT cuML's: the sentence that stood here, "cuML's default
+THIS IMPLEMENTATION'S, NOT cuML's: the sentence that stood here, "cuML's default
 200, `dbscan.mojo:141`", was false -- upstream's loop is `do { } while
 (host_m)` with no cap (`weak_cc_batched`'s docstring below says so), and
-`dbscan_fit_impl`'s 200 is a number this port chose. Measured 2026-08-23
+`dbscan_fit_impl`'s 200 is a number this implementation chose. Measured 2026-08-23
 (DEVIATION 519, `tools/e2u_matrix_fit.py`): a 1,000-point chain needs 731
 passes, and at the 200 cap FAST returned seven clusters for one. The
 caller-facing surface (`dbscan/estimator.mojo`, `mojolearn.DBSCAN`) now
@@ -108,7 +108,7 @@ def weak_cc_label_kernel(
     `global_id = tid + start_vertex_id` indexes `labels` and the core mask,
     which is theirs (`csr.cuh:61-63`) and is what makes the CSR a
     `batch_size x N` slice rather than an `N x N` graph. The first version of
-    this port used `tid` for both and only worked because it was handed one
+    this implementation used `tid` for both and only worked because it was handed one
     global CSR.
 
     Each pass pushes a smaller label to every neighbor it may propagate to,

@@ -1079,7 +1079,7 @@ def warp_check_kernel(
     out_sum.unsafe_store(g, warp_sum(v))
     out_scan.unsafe_store(g, warp_prefix_sum(v))
 
-    # The butterfly min every ported RAFT reducer uses: XOR over the whole
+    # The butterfly min every implemented RAFT reducer uses: XOR over the whole
     # lane group, which is a total-order idempotent fold, so the answer is
     # the group minimum in EVERY lane.
     var m = v
@@ -2179,7 +2179,7 @@ def check_compile_established(mut rows: List[Verdict]) raises:
     rows.append(
         Verdict(
             "nn.softmax.softmax",
-            "(no counterpart in this port)",
+            "(no counterpart in this implementation)",
             V_UNCHECKED,
             (
                 "imports; takes an InputFn closure rather than an input"
@@ -2193,7 +2193,7 @@ def check_compile_established(mut rows: List[Verdict]) raises:
     rows.append(
         Verdict(
             "nn.concat.concat",
-            "(no counterpart in this port)",
+            "(no counterpart in this implementation)",
             V_UNCHECKED,
             (
                 "imports; same reason as softmax. Listed here only because"

@@ -36,7 +36,7 @@ THE 2026-09-01 CHECKS: THE TWO SPECIAL SHAPES AND SAMPLE WEIGHTS
 -----------------------------------------------------------------
 `ols.cuh:112-113`'s two shapes used to REFUSE and the check here used to
 assert the refusal. Both are solved now (DEVIATIONS 550 and 551) and
-`sample_weight` is ported (`ols.cuh:99-110`, `:129-141`), so five checks
+`sample_weight` is implemented (`ols.cuh:99-110`, `:129-141`), so five checks
 were added and every one of them is a PROPERTY that shares no spelling with
 the implementation:
 
@@ -1717,7 +1717,7 @@ def check_ols_single_column_matches_the_closed_form() raises:
     right answer, it IS the right answer. The reason this shape is worth its
     own check is that cuML refuses it (`linear_regression.pyx:390-394`,
     "eig solver does not support training data with 1 column currently") and
-    this port does not: what is being gated is a place where the two
+    this implementation does not: what is being gated is a place where the two
     libraries deliberately differ.
 
     THE NEGATIVE CONTROL is a plausible WRONG closed form -- dividing by
@@ -2046,7 +2046,7 @@ def check_ols_sample_weight_restores_its_operands() raises:
 
     `olsFit` documents that it modifies the caller's weight vector, and it
     undoes the scaling of `A` and `b` after the solve. A Mojo caller passes
-    `DeviceBuffer`s and sees exactly that, so it is ported and gated rather
+    `DeviceBuffer`s and sees exactly that, so it is implemented and gated rather
     than dropped as invisible.
 
     THE NEGATIVE CONTROL is the SCALED design: the check computes what `A`

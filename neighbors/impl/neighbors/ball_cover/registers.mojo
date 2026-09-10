@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The eps-neighborhood query kernels of the random ball cover.
 
-PORT OF `cuvs/src/neighbors/ball_cover/registers.cuh` at cuVS `94c2819`:
+FOLLOWS `cuvs/src/neighbors/ball_cover/registers.cuh` at cuVS `94c2819`:
 `block_rbc_kernel_eps_csr_pass` (`:576`), `block_rbc_kernel_eps_dense`
 (`:458`), `block_rbc_kernel_eps_max_k` (`:859`),
 `block_rbc_kernel_eps_max_k_copy` (`:983`), and both `rbc_eps_pass` host
-drivers (`:1271`, `:1314`). Partial. Do not improve.
+drivers (`:1271`, `:1314`). Partial.
 
 WHY THIS IS THE FILE THAT MATTERS
 ---------------------------------
@@ -111,13 +111,13 @@ adds no launch site and moves no shape, so nothing about this conclusion
 moved. A vendor measurement that wants a different value lands in that row
 first, with this banner's sweep as the bar to clear.
 
-NOT PORTED
+NOT IMPLEMENTED
 ----------
 `block_rbc_kernel_eps_csr_pass_xd` (`:714`), which is this kernel with the
 query row copied into a `local_x_ptr[MAX_COL_Q]` register array and used when
 `index.n == 2 || index.n == 3` (`:1331`). It computes the same numbers; the
 register array needs the dimension at compile time. Recorded in the lane file
-as unported with that reason.
+as unimplemented with that reason.
 """
 
 from std.bit import count_trailing_zeros, pop_count

@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`CondensedHierarchy` and its `condense()`, the compaction and the sort.
 
-PORT OF `cuml-v26.08.00/cpp/src/hdbscan/condensed_hierarchy.cu`
+FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/condensed_hierarchy.cu`
 (cuML `265b9da`): `TupleComp` (`:34-49`), the two constructors this lane
-reaches (`:51-102`) and `condense()` (`:133-187`). Transliterated, their
-order. Do not improve.
+reaches (`:51-102`) and `condense()` (`:133-187`). Followed statement for statement, their
+order.
 
 WHERE IT LIVES. Theirs holds four `rmm::device_uvector`s; ours holds four
 host `List`s. That is not a re-decision of the host/device split (rule 2)

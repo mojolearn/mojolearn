@@ -127,7 +127,7 @@ comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 # Cache unchanged partitions under IDENTICAL without propagating histogram
 # sums (which would change rounding). CatBoost updates only split children
-# in TSplitPointsKernel (split_properties_helper.cpp:918-936); this port keeps
+# in TSplitPointsKernel (split_properties_helper.cpp:918-936); this implementation keeps
 # its existing two-phase pinned reduction for each changed child instead.
 # A split permutes only its own disjoint range. Every other leaf therefore
 # keeps the same stats bytes, offset, length and per-leaf reduction result.
@@ -213,11 +213,11 @@ struct TBinFeatureTable(Copyable, Movable):
         #
         # INERT ON THIS PATH BY CONSTRUCTION -- `resolve_split` derives the
         # bin as `bin_feature - first_fold_index`, which is strictly below
-        # `folds` by definition, so the clamp can never bind. Ported anyway,
+        # `folds` by definition, so the clamp can never bind. Implemented anyway,
         # because "inert by construction" is a claim about a DIFFERENT
         # function, and the day a bin arrives from anywhere but
         # `resolve_split` the clamp is the thing that was supposed to be
-        # here. `helpers.mojo:244-262` is the canonical port and carries the
+        # here. `helpers.mojo:244-262` is the canonical implementation and carries the
         # argument for the two arms' asymmetry.
         var max_bin = Int32(self.folds[bin_feature]) - 1
         if self.one_hot[bin_feature]:
@@ -557,14 +557,14 @@ def select_leaves_to_split(leaves: List[TLeaf]) raises -> List[Int]:
     both fields -- `if (gain < bestScore) { bestScore = gain; bestIndex =
     binFeatureId; bestGain = gain; }` (`compute_scores.cu:380-384`) --
     where the oblivious kernel writes the raw score into `Score` and the
-    gain into `Gain` (`:132-140`). So porting the test as written is right
+    gain into `Gain` (`:132-140`). So implementing the test as written is right
     here and would be WRONG if this branch were ever fed the oblivious
     kernel's records.
 
     ============ WHICH SIGN THIS FIELD IS IN, and it is THEIRS ============
     The KERNEL is sign-flipped (larger gain is better; see
     `kernel/compute_scores.mojo`). `TBestSplitProperties` IS NOT. It is a
-    transliteration of their struct, its defaults are their defaults
+    statement-for-statement match of their struct, its defaults are their defaults
     (`Gain = FLT_MAX` losing every comparison), and the only comparator over
     it -- `best_split_properties_less`, their `operator<` -- is keyed on
     their orientation. So `compute_optimal_splits` NEGATES the kernel's gain
@@ -798,7 +798,7 @@ def fit_non_symmetric_tree[
         raise Error(
             "fit_non_symmetric_tree is EGrowPolicy::Depthwise or Lossguide;"
             " call run_tree_layout for SymmetricTree, and Region is"
-            " unported"
+            " unimplemented"
         )
     var lossguide = options.policy == GROW_LOSSGUIDE
     options.check()
@@ -1246,7 +1246,7 @@ def fit_non_symmetric_tree[
         # parent's slot and the fresh slot arrives zero from a once-per-tree
         # memset (`cuda_data_partition.cu:825-831,895-898`;
         # `cuda_histogram_constructor.cpp:76-80` -- recon_lightgbm_cuda.md,
-        # mechanism a3 / borrow 3). This port's slots are leaf-id-indexed and
+        # mechanism a3 / borrow 3). This implementation's slots are leaf-id-indexed and
         # every kernel from the build to the scorer addresses them by the SAME
         # id it reads the partition with, so a pointer pool proper would touch
         # `greedy_search_helper.mojo`'s launcher and `kernel/compute_scores`
@@ -1626,7 +1626,7 @@ def fit_non_symmetric_tree[
             # an assumption but a CONSEQUENCE of the Lossguide selection:
             # one split makes exactly two leaves without a `BestSplit`, and
             # `SelectLeavesToVisit` returns exactly the leaves that lack
-            # one. Ported as a raise, because the state that breaks it --
+            # one. Implemented as a raise, because the state that breaks it --
             # a leaf left undefined by a poison record -- is reachable and
             # is recorded in `checks/lossguide_policy_check.mojo` P6.
             #
@@ -1788,7 +1788,7 @@ def fit_non_symmetric_tree[
                 #     }
                 #
                 # `operator<` orders by GAIN then FeatureId (as ui32) then BinId
-                # -- `best_split_properties_less`, already ported for the
+                # -- `best_split_properties_less`, already implemented for the
                 # doc-parallel searcher. A SEQUENTIAL fold under a total order,
                 # so the block count cannot move the answer.
                 #
@@ -1825,7 +1825,7 @@ def fit_non_symmetric_tree[
                         var our_gain = h_region_score.unsafe_ptr().unsafe_load(
                             slot
                         )
-                        # THEIR sign, restored for the comparator: this port's
+                        # THEIR sign, restored for the comparator: this implementation's
                         # gain is theirs negated (see `kernel/compute_scores`),
                         # and `best_split_properties_less` is a transcription of
                         # THEIR `operator<`.
@@ -2066,7 +2066,7 @@ def fit_non_symmetric_tree[
                 # .cpp:875`) hands the split kernel a `TCFeature` whose
                 # `Offset` is what `compressedIndex + feature.Offset +
                 # loadIndex` indexes with (`split_points.cu:518`). In THIS
-                # port's layout that is `column * n_rows`, and
+                # implementation's layout that is `column * n_rows`, and
                 # `CompressedIndexLayout.features[f].offset` is the bare
                 # COLUMN. The symmetric arm multiplies at the point it builds
                 # its resolve table (`TTreeWorkspace`'s `bfr_off`,

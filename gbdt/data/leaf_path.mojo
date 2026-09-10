@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The route from the root to one leaf, which is what a non-symmetric tree is.
 
-PORT OF `catboost/cuda/data/leaf_path.h` at CatBoost `54a8143a`.
-Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/data/leaf_path.h` at CatBoost `54a8143a`.
+Followed statement for statement.
 
 An oblivious tree needs no such thing: every leaf of a level shares one split,
 so `TObliviousTreeStructure` is a list of splits and a leaf is an index into
@@ -26,18 +26,18 @@ but a vector of them (`model_builder.cpp:11`).
    make it three. A direction reaching a function here is a plain `Int` in
    their numbering; the names live with the constants.
 
-2. **`GetHash` is NOT PORTED, deliberately.** Theirs is
+2. **`GetHash` is NOT IMPLEMENTED, deliberately.** Theirs is
    `MultiHash(VecCityHash(Splits), VecCityHash(Directions))` and its single
    consumer is `THashMap<TLeafPath, TVector<ui32>> rebuildLeaves`
    (`split_properties_helper.cpp:1293`), a grouping whose RESULT is decided by
    equality, not by the hash. A hash with a different distribution cannot move
-   a bin, a split or a leaf value. Porting Yandex's `MultiHash` to buy a bucket
+   a bin, a split or a leaf value. Implementing Yandex's `MultiHash` to buy a bucket
    order nothing reads would be inventing work. `paths_equal` below is the
    operation that grouping actually needs, and `split_properties_helper.mojo`
    already keys its own pairing on an integer parent id for the same reason.
 
    If a future reader needs a stable hash for a FILE FORMAT, that is a
-   different requirement and must be ported properly at that point.
+   different requirement and must be implemented properly at that point.
 """
 
 from gbdt.models.oblivious_model import TBinarySplit
@@ -48,17 +48,17 @@ from gbdt.models.oblivious_model import TBinarySplit
 #
 # This file carried its own `split_less` / `split_equal` from `e1bfab9`
 # until 2026-08-22. `gbdt/methods/batch_feature_tensor_builder.mojo:389`
-# already had the same two functions, ported from the same
+# already had the same two functions, implemented from the same
 # `feature.h:50-64` -- AND THE TWO DISAGREED.
 #
 # Theirs compares through `_as_u32` because CatBoost's `TBinarySplit`
-# fields are `ui32` and this port's are `Int32`; that is DEVIATION 116, and
+# fields are `ui32` and this implementation's are `Int32`; that is DEVIATION 116, and
 # it is the same argument `helpers.best_split_properties_less` makes about
 # the `(ui32)-1` sentinel -- read signed, an undefined split is the
 # SMALLEST value there is; read unsigned, the largest. The copy deleted
 # here compared `Int32` directly and so sorted the opposite way for any
 # field at or above 2^31. Inert on a leaf path, which never holds an
-# undefined split, and wrong anyway: a second port that silently reverts a
+# undefined split, and wrong anyway: a second implementation that silently reverts a
 # numbered deviation is exactly what the deviation ledger exists to stop.
 #
 # A repo-wide duplication sweep found it, not a gate. Nothing compares two

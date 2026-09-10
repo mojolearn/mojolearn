@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Block-wide argmin / argmax with an EXPLICIT tie-break, no lane primitive.
 
-NOT A PORT. `smoblocksolve.cuh` reduces `KVPair<math_t, int>` with
+NO REFERENCE FILE. `smoblocksolve.cuh` reduces `KVPair<math_t, int>` with
 `cub::BlockReduce<Pair, WSIZE>::Reduce(pair, cuda::minimum{} / maximum{},
 n_ws)`, and `KVPair::operator<` / `operator>` compare `val` ONLY
 (`cpp/src_prims/selection/kselection.cuh:66-79`, both carrying the comment
@@ -47,7 +47,7 @@ thread (theirs broadcasts `u` and `l` through `__shared__`); the trailing
 no FAST arm to preserve, because the library call's tie order is not a
 spelling anyone wrote down.
 
-SABOTAGE ARMS (the foot of this file) are not called by the port; they are
+SABOTAGE ARMS (the foot of this file) are not called by the implementation; they are
 the spellings the row-39 gate must reject.
 """
 
@@ -150,7 +150,7 @@ def pinned_block_argmax[
 
 
 # ---------------------------------------------------------------------------
-# SABOTAGE ARMS (row 39): NOT called by the port. `smoblocksolve.mojo` routes
+# SABOTAGE ARMS (row 39): NOT called by the implementation. `smoblocksolve.mojo` routes
 # `f_max` through one of these under the matching `-D` define so the
 # signed-zero gate can show each spelling FAIL (or be Apple-inert).
 # ---------------------------------------------------------------------------

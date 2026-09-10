@@ -358,10 +358,10 @@ def arima_forecast_binding(
             "arima_forecast: params[12] is reserved and must be 0, got "
             + String(reserved)
             + ". cuML's `level` (confidence intervals) is the parameter this"
-            " slot is held for and it is NOT PORTED"
+            " slot is held for and it is NOT IMPLEMENTED"
             " (arima/NOT_IMPLEMENTED.tsv): the confidence_intervals kernel"
             " at batched_kalman.cu:824-838 and the P = T P T' + RR'"
-            " propagation beside it have no port"
+            " propagation beside it have no implementation"
         )
     var written = 0
     with GILReleased(Python()):

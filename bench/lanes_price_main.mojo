@@ -18,7 +18,7 @@ THE LANES, AND THE ENTRY EACH ROUND CALLS (the same call the lane's own
     kde       kde/kde_main.mojo          `score_samples` on `train_fixture/query_fixture/weight_fixture`
     linkage   hierarchy/linkage_main.mojo `single_linkage` on `FIX_BLOBS_DUPS`
     svm       svm/svc_main.mojo (card)   `_run_device` (svc_fit + two svc_predict) on `F2.xor`
-    metrics   metrics/metrics_main.mojo  every ported metric on the same hashed fixtures
+    metrics   metrics/metrics_main.mojo  every implemented metric on the same hashed fixtures
     gemm      bench/gemm_card_main.mojo  `identical_gemm` on one `bench/gemm_shapes.mojo` row
 
 Every fixture builder is IMPORTED from the lane; none is re-spelled here,
@@ -27,14 +27,14 @@ lane's SIZES (comptime constants inside `metrics_main.mojo`, a file that
 carries a `main`) and the gemm card's bit-assembled `_exact` fill (same
 reason; `bench/gemm_price_main.mojo` made the same choice).
 
-AND SIX MORE LANES, THE ARMS SECTION 7 OF THE PAPER PRICES, ported here on
+AND SIX MORE LANES, THE ARMS SECTION 7 OF THE PAPER PRICES, implemented here on
 2026-09-02 from the two Apple-only mains so the same question can be asked
 on NVIDIA and AMD. Those two mains are driven by
 `tools/price_unsupervised_identity.sh` and `tools/price_linalg_identity.sh`,
 neither of which has any remote-leg wiring, so every number the paper prints
 for them is a ONE-BOX number. This driver is the one
 `tools/diag/identity_cost_leg.sh` rides onto a rented box, which is the
-whole reason for the port:
+whole reason for the implementation:
 
     kmeans    bench/identity_price_main.mojo:92   `kmeans_fit_main`, the Lloyd loop end to end
     knn       bench/identity_price_main.mojo:150  `brute_force_knn_impl`, AUTO by default, TILED on request
@@ -45,7 +45,7 @@ whole reason for the port:
 
 WHY each of those six is worth pricing is argued in the two source files'
 docstrings and is not re-argued here; what each lane function below records
-is where its fixture came from, line by line, so a reader can check the port
+is where its fixture came from, line by line, so a reader can check the implementation
 against the original without leaving the file.
 
 AND THREE TREE LANES, ADDED THE SAME DAY, BECAUSE THERE WERE NONE. The
@@ -78,7 +78,7 @@ were reasoned from one.
 
 They also build their own fixtures rather than importing one. Every fixture
 above is either imported from the lane it prices or transcribed from a price
-main that already existed; there is no tree price main to port, and the tree
+main that already existed; there is no tree price main to implement, and the tree
 benches that do exist read HIGGS or epsilon from `~/.cache/mojolearn`, which
 a rented box has not staged. So all three fixtures are built in the lane out
 of this file's own `_price_u01`, with an axis-aligned label whose reason is
@@ -94,7 +94,7 @@ AVERAGES its three timed reps into a SINGLE printed sample (`:104-117`), so
 its band cannot be read per round at all. Every lane here does what cd and
 kde already do: one untimed warm-up round, then ROUNDS individually timed
 and individually hashed rounds, which is the shape `tools/lanes_price.sh`
-pairs mode against mode and turns into a band. A port that kept its source's
+pairs mode against mode and turns into a band. An implementation that kept its source's
 protocol would produce a row that cannot be read beside the rows above it.
 
 THE SIZE KNOB, AND WHY THE SIX NEW LANES HAVE ONE AND THE SIX OLD ONES DO
@@ -323,7 +323,7 @@ from neighbors.impl.neighbors.detail.knn_brute_force import (
 # ---- gram / nt / gemv (bench/linalg_price_main.mojo's arms) -----------------
 from core.gemm import gemm_nt, gemm_tn, gemv_n
 
-# ---- gbdt / rf / et (the tree families; no price main existed to port) -----
+# ---- gbdt / rf / et (the tree families; no price main existed to implement) -----
 # `DecisionTreeParams` is spelled once under `ensemble/` and once under
 # `extratrees/` and the two are DIFFERENT structs (the extratrees one carries
 # `max_leaf_nodes`, DEVIATION 466, and its `__init__` defaults `max_depth` to
@@ -785,7 +785,7 @@ comptime MET_K_TRUST = 5
 
 
 def run_metrics(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
-    """`metrics/metrics_main.mojo`'s score pass: every ported metric on the
+    """`metrics/metrics_main.mojo`'s score pass: every implemented metric on the
     same hashed fixtures (same builders, same salts: 4099 / 17,18 / 19,20 /
     23 / 29,38), timed as ONE pass because the lane ships them as one card.
     Shipped sizes are the main's; smoke divides the row counts by eight.
@@ -1905,7 +1905,7 @@ def run_et(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
         # against `ensemble/decisiontree/decisiontree.mojo:424`) that happen
         # to agree on their accessors. A shared helper would have to be
         # generic over both, which would assert a relationship between two
-        # ports that this file has no business asserting.
+        # implements that this file has no business asserting.
         #
         # This lane's node type has NO `train_time`, so the rf lane's
         # exclusion has nothing to exclude here; the field list is otherwise

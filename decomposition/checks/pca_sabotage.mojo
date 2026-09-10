@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The whitening rescale with its pins BROKEN ON PURPOSE, for the check.
 
-NOT A PORT, NOT REACHED by any driver, by `decomposition/estimator.mojo` or
+NO REFERENCE FILE, NOT REACHED by any driver, by `decomposition/estimator.mojo` or
 by the identity card. One copy of
 `decomposition/impl/linalg/detail/pca.mojo::whiten_scale_kernel` carrying
 arms that `decomposition/checks/pca_check.mojo` selects through the `arm`

@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`svrFit` / `svrPredict`, the epsilon-SVR entry points, dense FP32.
 
-PORT OF `cuml/cpp/src/svm/svr_impl.cuh` + `svr.cu` at cuML v26.08.00,
-`svrFitX` (dense) and the `SVR` class's `fit`. NOT ported: `svrFitSparse`
+FOLLOWS `cuml/cpp/src/svm/svr_impl.cuh` + `svr.cu` at cuML v26.08.00,
+`svrFitX` (dense) and the `SVR` class's `fit`. NOT implemented: `svrFitSparse`
 and the CSR arms, which this surface has no shape for at all, and the
 PRECOMPUTED kernel and the weighted `InitPenalty` arm behind
 `sample_weight`, which `check_rung1_scope` refuses by name.
@@ -37,7 +37,7 @@ output buffers at `2 * n_rows` would be allocating a second copy of nothing.
 PREDICTION IS `svcPredict` WITH THE CLASS EPILOGUE OFF, and that is
 upstream's arrangement too: `SVR` inherits `SVMBase::predict`, which calls
 `svcPredict(..., predict_class = false)`. There is no second decision
-kernel to port. `svr_predict` below is a named wrapper so a reader of the
+kernel to implement. `svr_predict` below is a named wrapper so a reader of the
 regression path does not have to know that, and so the `predict_class =
 true` arm cannot be reached from a regressor by passing a flag.
 

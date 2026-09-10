@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The one kernel k-means++ needs that is a fusion of two RAFT primitives.
 
-NOT A PORT, but it is a direct translation of two consecutive RAFT calls in
+NO REFERENCE FILE, but it is a direct translation of two consecutive RAFT calls in
 `detail/kmeans.cuh:189-217`:
 
     matrix_vector_op<ALONG_ROWS>(pwd, minClusterDistance, minDistBuf, min_op)
@@ -142,7 +142,7 @@ def adopt_candidate_min_kernel(
 #
 # `detail/kmeans.cuh:189` (`raft::random::discrete`) draws the k-means++
 # candidates ON DEVICE. The first
-# version of this port copied all `n_samples` distances to the host and drew
+# version of this implementation copied all `n_samples` distances to the host and drew
 # there, once per accepted centroid, which is O(rows) host traffic and breaks
 # `archive/reference/HOST_AND_DEVICE.md`'s first rule outright.
 #
@@ -270,9 +270,9 @@ def binary_search_kernel(
     n_in: Int32,
     n_trials_in: Int32,
 ):
-    """`sample_with_replacement_kernel`, transliterated.
+    """`sample_with_replacement_kernel`, followed statement for statement.
 
-    PORT OF `raft/random/detail/rng_device.cuh:697-727`, which is what
+    FOLLOWS `raft/random/detail/rng_device.cuh:697-727`, which is what
     `raft::random::discrete` reaches at `cuvs/.../kmeans.cuh:189`.
 
     **This replaces a DIFFERENT DECOMPOSITION of the same draw**, and the

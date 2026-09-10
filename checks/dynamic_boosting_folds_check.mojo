@@ -6,7 +6,7 @@ HOST ONLY. No GPU, no fixture, no tolerance. `CreateFolds`
 (`catboost/cuda/methods/dynamic_boosting.h:189-223`) is integer arithmetic
 over `sampleCount`, `min_fold_size`, `fold_len_multiplier` and the sample
 grouping, so its answer is a CLOSED FORM and the gate is that closed form,
-written here from the recurrence rather than copied from the port.
+written here from the recurrence rather than copied from the implementation.
 
 Run:
 
@@ -29,8 +29,8 @@ it:
     fold count = the smallest j >= 1 with 2^j * (m0 + 1) - 1 >= n
 
 which is what `closed_form_rights_g2` computes -- a formula in `k`, not a
-replay of their loop. F3 checks the port against it fold for fold, and F4
-pins four series as HAND-COMPUTED LITERALS so that a bug shared by the port
+replay of their loop. F3 checks the implementation against it fold for fold, and F4
+pins four series as HAND-COMPUTED LITERALS so that a bug shared by the implementation
 and the formula still has something to fail against.
 
 WHY THE `+ 1` IS THE WHOLE GAME. Every boundary `CreateFolds` computes goes
@@ -221,7 +221,7 @@ def oracle_rights_ungrouped(
     """The eval right edges for the default grouping, at any `g > 1`.
 
     `floor()` is used explicitly rather than leaning on `Int(Float64)`'s
-    truncation, so the port and the oracle do not share the rounding.
+    truncation, so the implementation and the oracle do not share the rounding.
     """
     var rights = List[Int]()
     var r = m0

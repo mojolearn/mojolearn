@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Gaussian-process kernels with their pins BROKEN ON PURPOSE.
 
-NOT A PORT, NOT REACHED by any driver, by `gaussian_process/estimator.mojo`
+NO REFERENCE FILE, NOT REACHED by any driver, by `gaussian_process/estimator.mojo`
 or by the card. Copies of `gaussian_process/checks/kernels.mojo`'s leaf,
 combine, mean and variance kernels, each carrying arms that
 `gp_check.mojo` selects through the `sabotage` argument threaded down from

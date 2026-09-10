@@ -12,7 +12,7 @@ memory-budget batching, and PCA / truncated SVD / OLS entirely. This driver
 sweeps the PYTHON surface -- `mojolearn.KMeans`, `.NearestNeighbors`,
 `.KNeighborsClassifier`, `.KNeighborsRegressor` (2026-08-23), `.DBSCAN`,
 `.PCA`, `.TruncatedSVD`, `.LinearRegression` -- one subprocess per cell, a `MOJOLEARN_IDENTITY_TRACE` card per cell (every one of the six
-paths traces: k-means and DBSCAN inside the ported fit, k-NN in
+paths traces: k-means and DBSCAN inside the implemented fit, k-NN in
 `neighbors/estimator.mojo`, OLS through `ols_fit_traced` since DEVIATION 517,
 PCA / tSVD at the host surface since DEVIATION 518), and a sha256 over every
 caller-visible output: labels, centroids, inertia, indices, distances,
@@ -24,7 +24,7 @@ divergent-at-stage / refused. A REFUSED cell is a parameter the surface
 refuses BY NAME -- `whiten=True`, `algorithm='kd_tree'`, `k > 256` under
 NUMERIC_IDENTICAL -- and two machines refusing with the same message is
 that cell's passing result. (This sentence named `metric='cosine'` as the
-k-NN example until 2026-09-01, when that metric was ported; DBSCAN still
+k-NN example until 2026-09-01, when that metric was implemented; DBSCAN still
 refuses it, for its own reason, and the k-NN example is now the kd-tree.)
 
 AND A FOURTH THING THIS DRIVER MEASURES THAT E2 DID NOT: REACH. `REACH`
@@ -159,7 +159,7 @@ def make_inputs():
     # THE k-NN CLASSIFIER LABELS (added 2026-08-23, drawn from no rng, so
     # every hash above is untouched): hashed integer classes over the
     # 20,000 index rows, 3-class as {-1, 0, 1} (a NEGATIVE label, so the
-    # class set is not range(n) and the ported monotonic map does work)
+    # class set is not range(n) and the implemented monotonic map does work)
     # and 2-class as {0, 1}. The 2-class set at an EVEN k on the tie
     # fixture is where 2-2 VOTE ties happen and the lowest-class rule is
     # exercised.
@@ -265,7 +265,7 @@ cell("knn_clf_ties", "knn_clf", n_neighbors=4, _y="y_clf2", _X="X_ties",
 cell("knn_reg_k5", "knn_reg", n_neighbors=5)
 cell("knn_reg_k50", "knn_reg", n_neighbors=50)
 # WEIGHTS AND METRICS, 2026-09-01. `knn_clf_weights_distance_refused` was
-# a REFUSED cell here until the metric lane ported `weights='distance'`
+# a REFUSED cell here until the metric lane implemented `weights='distance'`
 # (DEVIATION 556) and the cosine and Minkowski ops. It is renamed rather
 # than deleted so nobody looks for it in an old matrix and concludes it
 # was dropped, and the parameter it named is now an ORDINARY cell whose
@@ -400,7 +400,7 @@ cell("kde_tophat_bw1", "kde", kernel="tophat", bandwidth=1.0)
 cell("kde_l1", "kde", kernel="gaussian", metric="l1", **KDE_BASE)
 cell("kde_sqeuclidean", "kde", kernel="gaussian", metric="sqeuclidean", bandwidth=64.0)
 cell("kde_weighted", "kde", kernel="gaussian", _fit=dict(sample_weight="sw"), **KDE_BASE)
-cell("kde_metric_cosine_refused", "kde", kernel="gaussian", metric="cosine", **KDE_BASE)  # REFUSED (unported metric)
+cell("kde_metric_cosine_refused", "kde", kernel="gaussian", metric="cosine", **KDE_BASE)  # REFUSED (unimplemented metric)
 cell("kde_bw_scott_refused", "kde", kernel="gaussian", bandwidth="scott")  # REFUSED
 
 
@@ -529,7 +529,7 @@ def _is_refusal(exc):
     if isinstance(exc, (NotImplementedError, ValueError)):
         return True
     return any(t in str(exc) for t in (
-        "not ported", "refus", "not supported", "NOT PORTED",
+        "not implemented", "refus", "not supported", "NOT IMPLEMENTED",
         "does not support", "is refused", "cannot"))
 
 
@@ -596,7 +596,7 @@ def run_cell(name, out_dir):
             # into the same card, which the differ refuses (the DEVIATION
             # 518 defect); so the trace is unset for it and only its
             # output hash is recorded. `_predict` raises by name if the
-            # ported class set disagrees with np.unique (estimator policy
+            # implemented class set disagrees with np.unique (estimator policy
             # 7).
             entry["predictions"] = sha256_of(m.predict(Xq))
             os.environ.pop("MOJOLEARN_IDENTITY_TRACE", None)

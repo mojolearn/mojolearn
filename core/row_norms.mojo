@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Squared L2 norm of every row, which the expanded identity needs twice.
 
-NOT A PORT of cuVS. Their call is
+DOES NOT FOLLOW cuVS. Their call is
 `raft::linalg::norm<L2Norm, Apply::ALONG_ROWS>` (`detail/kmeans.cuh:770`,
 `minClusterDistanceCompute.cu:44`), and RAFT is a separate library whose
 primitives this tree does not mirror file for file. Only the CALL SITES and

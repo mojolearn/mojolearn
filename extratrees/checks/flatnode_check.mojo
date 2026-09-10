@@ -25,9 +25,9 @@ eye completes. So:
   same reason: a field-transcription check whose expected value is 0 in every
   cell proves the field exists and nothing else.
 * **Rows are routed by an INDEPENDENT traversal in a different style.**
-  `walk_recursive` is recursive where the port is iterative, tests
-  `x > quesval` for RIGHT where the port tests `x <= quesval` for LEFT, reads
-  the raw fields where the port goes through `ColumnId()`/`LeftChildId()`, and
+  `walk_recursive` is recursive where the implementation is iterative, tests
+  `x > quesval` for RIGHT where the implementation tests `x <= quesval` for LEFT, reads
+  the raw fields where the implementation goes through `ColumnId()`/`LeftChildId()`, and
   computes the right child as `left + 1` itself rather than calling
   `RightChildId()`. It shares no line with the thing it checks.
 * **Comparison is PER ROW and PER NODE**, never a sum. The counters below
@@ -55,7 +55,7 @@ generated rows exactly on a boundary rather than leaving boundaries to the
 hand-written handful.
 
 SABOTAGE (rule 8: a check never seen to fail is not evidence). One per
-MECHANISM, applied to the ported file, run, observed red, restored bit for
+MECHANISM, applied to the implemented file, run, observed red, restored bit for
 bit. MEASURED 2026-08-21, against a clean run of 5706 cells / 0 wrong:
 
 | # | mechanism | sabotage | result |
@@ -100,7 +100,7 @@ comptime N_COLS = 3
 
 
 # ----------------------------------------------------------------------
-# Hashing. Nothing here is a port; it exists so that no two cells in any
+# Hashing. Nothing here is an implementation; it exists so that no two cells in any
 # fixture hold the same number.
 # ----------------------------------------------------------------------
 
@@ -173,7 +173,7 @@ def build_tree(
     num_outputs: Int,
     var vector_leaf: List[Float32],
 ) -> TreeMetaDataNode[F32]:
-    """Nodes are built through the PORTED factories, never through the
+    """Nodes are built through the IMPLEMENTED factories, never through the
     fieldwise constructor, so `CreateSplitNode` / `CreateLeafNode` are on the
     path of every fixture."""
     var nodes = List[SparseTreeNode[F32]]()

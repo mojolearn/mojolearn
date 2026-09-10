@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`coo_sort_by_weight`, from RAFT, with the order made total.
 
-PORT OF `raft/cpp/include/raft/sparse/op/detail/sort.h:94-102`
+FOLLOWS `raft/cpp/include/raft/sparse/op/detail/sort.h:94-102`
 (`coo_sort_by_weight`), RAFT `661a3b8`. The call site is
 `cuvs/cpp/src/cluster/detail/mst.cuh:337-338`, right before the edges are
 copied to the host for `build_dendrogram_host`.

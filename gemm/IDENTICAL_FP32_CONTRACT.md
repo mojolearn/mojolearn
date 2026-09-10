@@ -120,7 +120,7 @@ Deferring it costs nothing and adds nothing later.
 
 The charter forbids replacing a specialized FUSED contraction merely to make
 the API look general, and `ENGINEERING_RULES.md` 0b-i says the same from the
-porting side. Five arms are fused and **none is a candidate for replacement**.
+implementing side. Five arms are fused and **none is a candidate for replacement**.
 
 | arm | file | why routing it through GEMM is wrong |
 |---|---|---|

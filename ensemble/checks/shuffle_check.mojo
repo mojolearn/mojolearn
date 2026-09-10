@@ -26,19 +26,19 @@ THREE LAYERS, SEPARATELY COMPARED, because a single end-to-end number would
 say "wrong" without saying where:
 
   1. `lcg`  -- the raw `minstd_rand` stream, including the five seeds that
-     all collapse to state 1 (0, 1, 2147483647, 2^31, 0xFFFFFFFF). A port
+     all collapse to state 1 (0, 1, 2147483647, 2^31, 0xFFFFFFFF). An implementation
      that skips the `x == 0 -> 1` rescue passes nothing here, which is the
      point.
   2. `keys` -- the 24 Feistel keys. This is the layer the recon named as
      most likely to be plausibly wrong: `uniform_int_distribution<uint32_t>`
-     is two LCG draws, high half first, each rejection-tested. A port that
+     is two LCG draws, high half first, each rejection-tested. An implementation that
      gets the LCG right and this wrong passes layer 1 and fails here.
   3. `perm` -- the permutation itself, at adversarial `n`: exact powers of
      two, one either side of a power of two, everything at or below the
      Feistel's `max(8, bit_width)` floor of 256 (where writing
      `bit_width(n-1)` alone is wrong), and one crossing 2^8.
   4. `e2e`  -- cuML's actual call, seed chain and round loop included, so
-     the port is held at the call site and not only at the primitive.
+     the implementation is held at the call site and not only at the primitive.
 """
 
 from core.shuffle_iterator import (
@@ -62,7 +62,7 @@ from std.sys.info import size_of
 
 comptime ORACLE = "ensemble/bench/shuffle_oracle.txt"
 
-# Sabotage selector. Applied to the PORT's inputs, never to the oracle.
+# Sabotage selector. Applied to the IMPLEMENTATION's inputs, never to the oracle.
 comptime SAB_NONE = 0
 comptime SAB_LCG_SEED_NO_ZERO_RESCUE = 1
 comptime SAB_KEYS_LOW_HALF_FIRST = 2
@@ -284,17 +284,17 @@ def main() raises:
     )
 
     # --- arm 5: THE KERNEL, ENQUEUED ------------------------------------
-    # Everything above runs on the host. A kernel is not ported until it has
+    # Everything above runs on the host. A kernel is not implemented until it has
     # been enqueued, so this arm runs the actual `sample_features_kernel`
     # on the device over a BATCH of nodes and compares its output against
     # the same host-side permutation, per (node, column) cell.
     #
     # The batch is what makes this arm say something the host arms cannot:
-    # `sample_idx / k` and `sample_idx % k` are the only place the port can
+    # `sample_idx / k` and `sample_idx % k` are the only place the implementation can
     # get the node/column decomposition wrong, and a single-node fixture
     # cannot see it. Node TREE indices are deliberately scattered and
     # non-contiguous, because `work_items[node_idx].idx` is a tree index and
-    # a port that used the batch index instead would pass a fixture where
+    # an implementation that used the batch index instead would pass a fixture where
     # the two coincide.
     var ctx = DeviceContext()
     var kn = 7          # columns sampled per node
@@ -381,8 +381,8 @@ def main() raises:
                         + " got " + String(got) + " want " + String(want)
                     )
         # A node's columns must be DISTINCT -- it is a permutation slice,
-        # so sampling is without replacement. A port that returned the same
-        # feature k times would match nothing above, but a port that got the
+        # so sampling is without replacement. An implementation that returned the same
+        # feature k times would match nothing above, but an implementation that got the
         # node/column split wrong could still return k distinct values, so
         # this is checked separately from the value comparison.
         for a in range(kn):

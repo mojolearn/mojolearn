@@ -115,13 +115,13 @@ struct SvcFitOutputs(Copyable, Movable):
 
 
 def _kernel_params(kernel: Int, gamma: Float64) raises -> KernelParams:
-    """`ML::matrix::KernelParams` for the two ported kernels. `degree` and
+    """`ML::matrix::KernelParams` for the two implemented kernels. `degree` and
     `coef0` are their constructor defaults (3 and 0); both are read only by
     POLYNOMIAL and TANH, which `check_rung1_scope` refuses by name, so
     there is no value a caller could pass that would reach a kernel."""
     if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF:
         raise Error(
-            "svm: kernel=" + String(kernel) + " is not ported in rung 1;"
+            "svm: kernel=" + String(kernel) + " is not implemented in rung 1;"
             + " only LINEAR (" + String(KERNEL_LINEAR) + ") and RBF ("
             + String(KERNEL_RBF) + ") are (svm/NOT_IMPLEMENTED.tsv)"
         )
@@ -142,14 +142,14 @@ def svc_fit_host(
 ) raises -> SvcFitOutputs:
     """`SVC(C, kernel, gamma, tol, max_iter, nochange_steps).fit(X, y)`,
     one shot. `x` is ROW-MAJOR `n_rows x n_cols` (theirs is column-major;
-    a layout, not an arithmetic, recorded in `svm/DERIVATION_MAP.tsv`).
+    a layout, not an arithmetic).
 
     `max_outer_iter` is fixed at -1, which is what cuML's own Python layer
     does at `svm_base.pyx:371` -- it is not on their Python surface either,
     and -1 becomes `max(100000, 100 * n_train)` in the solver.
 
     `cache_size` is fixed at 0, the `n_cache_sets == 0` arm, because the
-    `raft::cache` LRU is not ported (DEVIATION 871; `svm/NOT_IMPLEMENTED.tsv`).
+    `raft::cache` LRU is not implemented (DEVIATION 871; `svm/NOT_IMPLEMENTED.tsv`).
     `epsilon` is fixed at 0 and `svmType` at `C_SVC`; both would raise by
     name otherwise, and neither has a value a C-SVC caller could want.
 
@@ -338,8 +338,7 @@ def svr_fit_host(
 ) raises -> SvrFitOutputs:
     """`SVR(C, epsilon, kernel, gamma, tol, max_iter, nochange_steps).fit(X,
     y)`, one shot. `x` is ROW-MAJOR `n_rows x n_cols` (theirs is
-    column-major; a layout, not an arithmetic, recorded in
-    `svm/DERIVATION_MAP.tsv`).
+    column-major; a layout, not an arithmetic).
 
     `targets` are CONTINUOUS VALUES, one per row. Nothing here validates
     them as `+-1` and nothing sorts them into a label pair, because
@@ -375,7 +374,7 @@ def svr_fit_host(
     in the solver, over the DOUBLED `n_train` here.
 
     `cache_size` is fixed at 0, the `n_cache_sets == 0` arm, because the
-    `raft::cache` LRU is not ported (DEVIATION 871;
+    `raft::cache` LRU is not implemented (DEVIATION 871;
     `svm/NOT_IMPLEMENTED.tsv`). `svmType` is fixed at `EPSILON_SVR`.
     `epsilon` is the caller's, unlike the classifier's pair, and it is
     passed through UNCLAMPED so that `check_rung1_scope`'s two refusals, not

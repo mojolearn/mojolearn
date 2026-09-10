@@ -22,7 +22,7 @@ a caveat.
 
 | arm | what | mirrors |
 |---|---|---|
-| `mojolearn-gbdt-gpu` | the CatBoost oblivious-tree port | gbm-bench's `CatAlgorithm` param for param |
+| `mojolearn-gbdt-gpu` | the CatBoost oblivious-tree implementation | gbm-bench's `CatAlgorithm` param for param |
 | `cat-cpu` | gbm-bench's own CatBoost arm | (theirs, untouched) |
 
 **The symmetric-trees pair is CatBoost ONLY (Andrew's standing order,
@@ -30,8 +30,8 @@ a caveat.
 growth algorithm -- so a lgbm arm beside the symmetric pair compares
 different algorithms and is excluded from it. LightGBM remains the
 comparator for the FOREST pairs below.
-| `mojolearn-et-gpu` | the cuML-design ExtraTrees port | `SkRandomForestAlgorithm`'s parameter shape |
-| `mojolearn-rf-gpu` | the cuML RandomForest port (`ensemble/`, quantile splits, with-replacement bootstrap) | `SkRandomForestAlgorithm`'s parameter shape |
+| `mojolearn-et-gpu` | the cuML-design ExtraTrees implementation | `SkRandomForestAlgorithm`'s parameter shape |
+| `mojolearn-rf-gpu` | the cuML RandomForest implementation (`ensemble/`, quantile splits, with-replacement bootstrap) | `SkRandomForestAlgorithm`'s parameter shape |
 | `skrf` | gbm-bench's own sklearn RandomForest arm | (theirs, untouched) |
 | `skl-et-cpu` | sklearn ExtraTrees (ADDED; like-for-like ET comparator) | |
 | `lgbm-et-cpu` | LightGBM `boosting_type='rf'` + `extra_trees=true` (ADDED) | |

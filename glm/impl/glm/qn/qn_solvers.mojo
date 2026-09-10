@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`min_lbfgs`, `update_and_check`, `qn_minimize`: the L-BFGS driver.
 
-PORT OF `cuml/cpp/src/glm/qn/qn_solvers.cuh` at cuML `00094f7`. WHOLE FILE
+FOLLOWS `cuml/cpp/src/glm/qn/qn_solvers.cuh` at cuML `00094f7`. WHOLE FILE
 since 2026-09-01: `min_owlqn` is at the bottom and `qn_minimize` dispatches
 to it on `l1 != 0` exactly as theirs does (DEVIATION 552). `update_pseudo`
-is in `qn_util.mojo`, beside the operator it applies. Do not improve.
+is in `qn_util.mojo`, beside the operator it applies.
 
 THE LOOP, `min_lbfgs` (`qn_solvers.cuh:136-227`), in their order:
 
@@ -23,7 +23,7 @@ THE LOOP, `min_lbfgs` (`qn_solvers.cuh:136-227`), in their order:
         step = 1
     -> OPT_MAX_ITERS_REACHED
 
-Every branch is on a host Float32 the ported reductions produced; see
+Every branch is on a host Float32 the implemented reductions produced; see
 `qn_util.mojo`'s header for why that makes the ITERATION COUNT part of the
 certificate. The card records, per iteration, `qn.iterNNNN.loss`,
 `qn.iterNNNN.grad` and `qn.iterNNNN.ls` (the line-search return code and
@@ -449,7 +449,7 @@ def qn_minimize(
 
     The test is `l1 == 0.0` and it is EXACT, theirs (`:420`). A penalty of
     1e-40 takes the OWL-QN arm, which is what a user asking for l1 means and
-    is not a tolerance this port gets to choose.
+    is not a tolerance this implementation gets to choose.
 
     `pg_limit` is `loss.D * loss.C` (`:447`), the weight block without the
     bias; see `qn_util.mojo::update_pseudo` for why that is where the

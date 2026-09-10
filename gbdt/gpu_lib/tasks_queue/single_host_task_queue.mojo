@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The queue the worker drains.
 
-PORT OF `catboost/cuda/cuda_lib/tasks_queue/single_host_task_queue.h` at
-CatBoost `54a8143a`. Transliterated where it transliterates. See the
+FOLLOWS `catboost/cuda/cuda_lib/tasks_queue/single_host_task_queue.h` at
+CatBoost `54a8143a`. Followed statement for statement where it follow statement for statements. See the
 DEVIATION BLOCK.
 
 Their queue is `NThreading::TOneOneQueue` (`single_host_task_queue.h:13`), a
@@ -13,7 +13,7 @@ consumer can sleep instead of spinning forever. `Wait`
 every 10000 iterations, and only then blocks on the event, because on a busy
 tree the next command is almost always already there.
 
-`Wait` and `EmplaceTask` (`single_host_task_queue.h:54-58`) are not ported.
+`Wait` and `EmplaceTask` (`single_host_task_queue.h:54-58`) are not implemented.
 `Wait` has no referent without a consumer thread: the only caller is their
 worker's idle branch (`gpu_single_worker.cpp:61`), and ours returns instead of
 idling. `EmplaceTask` is `AddTask(MakeHolder<TTask>(args...))`, and our

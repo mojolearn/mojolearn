@@ -354,7 +354,7 @@ def main() raises:
             raise Error(
                 "the INCUMBENT pair disagrees with the host fold on "
                 + String(wrong_base)
-                + " words; the fixture or the port is broken and the"
+                + " words; the fixture or the implementation is broken and the"
                 " fusion comparison below would prove nothing"
             )
         if wrong_fused != 0:

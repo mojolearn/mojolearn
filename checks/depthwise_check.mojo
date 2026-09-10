@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The DEPTHWISE lane's gate: seven claims, one of them the cross-GPU one.
 
-`EGrowPolicy::Depthwise` is a NEW GROWTH POLICY in this port, so almost
+`EGrowPolicy::Depthwise` is a NEW GROWTH POLICY in this implementation, so almost
 everything it exercises is already verified -- the histogram families, the
 scan, the subtraction, the split-points chain, the stable partition, the
 reorder, the partition stats. WHAT IS NOT VERIFIED IS THE SEQUENCE UNDER A
@@ -642,7 +642,7 @@ def apply_bins(
         ref f = lay.features[Int(n.feature_id)]
         # their `feature.Offset` is a COLUMN index into the compressed
         # index and the kernel adds the row; ours is the same column times
-        # the row count, which is how this port lays the index out.
+        # the row count, which is how this implementation lays the index out.
         h_off.unsafe_ptr().unsafe_store(i, UInt32(Int(f.offset) * fx.n_rows))
         h_mask.unsafe_ptr().unsafe_store(i, f.mask)
         h_shift.unsafe_ptr().unsafe_store(i, f.shift)
@@ -855,7 +855,7 @@ def claim_5_min_data_in_leaf(mut fx: Fixture) raises:
     """`min_data_in_leaf` is LIVE here, and its boundary is `<=`.
 
     `IsTerminalLeaf` guards the size test with `Policy != SymmetricTree`
-    (`greedy_search_helper.cpp:685`), so this lane is the first in the port
+    (`greedy_search_helper.cpp:685`), so this lane is the first in the implementation
     where the option decides anything. Two halves:
 
     5a **THE BOUNDARY, tested directly on `is_terminal_leaf`.** Theirs is
@@ -865,7 +865,7 @@ def claim_5_min_data_in_leaf(mut fx: Fixture) raises:
 
         so a leaf of EXACTLY `MinLeafSize` rows is TERMINAL, and
         `min_data_in_leaf = 1` means "a one-row leaf does not split" rather
-        than "a one-row leaf is allowed". A port with `<` passes every
+        than "a one-row leaf is allowed". An implementation with `<` passes every
         end-to-end differential on most fixtures and grows one level too far
         on every branch that reaches the bound.
 

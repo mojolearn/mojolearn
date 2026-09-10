@@ -3,19 +3,17 @@
 """`next_float` and `box_muller_transform`: the two RAFT functions this lane
 needs from `rng_device.cuh` and that `core/philox.mojo` does not carry.
 
-PORT OF `raft/cpp/include/raft/random/detail/rng_device.cuh` at RAFT
+FOLLOWS `raft/cpp/include/raft/random/detail/rng_device.cuh` at RAFT
 `ebf9268` (`upstream/raft-v26.08.00`), lines 481-487 and 133-146.
 
-WHY THIS FILE EXISTS AND IS NOT IN `core/philox.mojo`. That file ports
+WHY THIS FILE EXISTS AND IS NOT IN `core/philox.mojo`. That file implements
 RAFT's `PhiloxGenerator` and its `uniformInt` because those are what cuML's
 Random Forest bootstrap reaches, and it carries `next_u64`, `next_double` and
 `custom_next` for `UniformDistParams<double>`. It does NOT carry the FLOAT32
 `next_float` (`:481-487`) or the normal transform (`:133-146`), because
 nothing in this repository needed a float32 uniform or a Gaussian until now.
 `core/` is not this lane's directory to edit, so the two missing functions are
-ported HERE, beside their caller, and `kernel_methods/DERIVATION_MAP.tsv` records
-this file as a THIRD PARTIAL MIRROR of one upstream header alongside
-`core/philox.mojo` and `resample/checks/index_map.mojo`.
+implemented HERE, beside their caller.mojo` and `resample/checks/index_map.mojo`.
 
 **RECORDED FOR THE ORCHESTRATOR: THE RIGHT LONG-TERM HOME FOR BOTH IS
 `core/philox.mojo`, and moving them there is a one-file change this lane must
@@ -68,7 +66,7 @@ def km_min_unit() -> Float32:
 
 
 def km_unit_float_from(mut gen: PhiloxState) -> Float32:
-    """PORT OF `PhiloxGenerator::next_float`, `rng_device.cuh:481-487`:
+    """FOLLOWS `PhiloxGenerator::next_float`, `rng_device.cuh:481-487`:
 
         uint32_t val = next_u32() >> 8;
         ret = static_cast<float>(val) / float(uint32_t(1) << 24);
@@ -101,7 +99,7 @@ def km_guard_unit(u: Float32) -> Float32:
     a non-finite weight whose feature map is NaN for every row.
 
     A wrong answer with no error is the class `ENGINEERING_RULES 0c` and the
-    standing rule `assume-our-code-is-broken` say to FIX rather than port.
+    standing rule `assume-our-code-is-broken` say to FIX rather than implementation.
     The fix is the smallest one available: `+0.0` becomes `2^-24`, which is
     EXACTLY the smallest positive value the generator can produce, so the
     substituted draw is a value the generator itself produces and the
@@ -121,7 +119,7 @@ def km_guard_unit(u: Float32) -> Float32:
 def km_boxmuller_pair(
     u1: Float32, u2: Float32, sigma: Float32, mu: Float32
 ) -> Tuple[Float32, Float32]:
-    """PORT OF `raft::random::detail::box_muller_transform`
+    """FOLLOWS `raft::random::detail::box_muller_transform`
     (`rng_device.cuh:133-142`), reached through the two-sigma overload at
     `:145-146` with `sigma2 = sigma1` and `mu2 = mu1`:
 

@@ -7,7 +7,7 @@
 Reads `bench/minentropy_oracle.txt`, written by `tools/minentropy_oracle.py`
 from CatBoost itself. This is one of the few checks in this repository that
 compares against CatBoost rather than against a host tally we wrote, which
-matters more here than usual: our MinEntropy is a transliteration of their
+matters more here than usual: our MinEntropy is a statement-for-statement match of their
 exact dynamic program, and a tally would just be the same reading twice.
 
 WHAT IT IS ACTUALLY GATING, beyond "the optimum is right":

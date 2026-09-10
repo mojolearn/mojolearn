@@ -815,7 +815,7 @@ def lane_linkage(rounds, size, smoke):
     X = fx.f32("x", n, d)
     note(lane, arm, "linkage=single connectivity=pairwise metric=euclidean; "
                     "cuML implements single linkage only, which is the arm "
-                    "our single_linkage was ported from")
+                    "our single_linkage was implemented from")
 
     # `metric=` replaced `affinity=` in cuML at some point between the
     # versions this repository has been built against, and which one the pod
@@ -1015,7 +1015,7 @@ def lane_cholesky(rounds, size, smoke):
     # THE OPPONENT IS cuSOLVER AND NOT cuML. RAPIDS exposes no public Cholesky
     # estimator; torch.linalg.cholesky IS cuSOLVER's potrf, and
     # torch.cholesky_solve IS its potrs, which is exactly the pair our
-    # potrf_lower / cho_solve were ported against.
+    # potrf_lower / cho_solve were implemented against.
     note(lane, arm, "torch.linalg.cholesky is cuSOLVER potrf and "
                     "torch.cholesky_solve is potrs; the ridge, the logdet and "
                     "the solve are all inside the clock on both sides")
@@ -1296,7 +1296,7 @@ def lane_kpss(rounds, size, smoke):
     y = fx.f32("y", batch, n_obs)
     shape = "%dx%d" % (batch, n_obs)
 
-    # PREFER cuML'S OWN. `cuml.tsa.stationarity` is where our port came from;
+    # PREFER cuML'S OWN. `cuml.tsa.stationarity` is where our implementation came from;
     # where the installed RAPIDS exposes it, that is the honest opponent and
     # the arm is `cuml-gpu`. Where it does not, statsmodels' single-series
     # KPSS on the CPU is the strongest thing that genuinely runs, and the arm

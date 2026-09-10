@@ -6,7 +6,7 @@ double-counting rule.
     pixi run mojo run -I . ensemble/checks/sample_weight_check.mojo
 
 Three of cuML's four `RowSampler` arms and both WEIGHTED bin types depended
-on `sample_weight`, which this port did not accept. This file covers what is
+on `sample_weight`, which this implementation did not accept. This file covers what is
 now wired, and each arm rests on an ANALYTIC IDENTITY rather than on "it
 trained and looked plausible".
 
@@ -34,13 +34,13 @@ trained and looked plausible".
      calculation only when bootstrapping is not enabled." When bootstrapping
      the weights are ALREADY expressed by drawing rows in proportion to
      them, so passing them to the objective as well would apply them twice.
-     A port that always passed them down would double-count on the DEFAULT
+     An implementation that always passed them down would double-count on the DEFAULT
      path and merely look "differently regularised". Checked in both
-     directions, both now reachable: weighted bootstrap is ported, so
+     directions, both now reachable: weighted bootstrap is implemented, so
      bootstrap+weights runs their `:125-138` arm instead of raising.
 
   D. THE WEIGHTED BINS ARE REACHABLE AND ARE ACTUALLY READ. They have been
-     ported since this morning and no caller could construct one.
+     implemented since this morning and no caller could construct one.
 
 A NOTE ON SCALES, because it decides what a weighted fixture may contain.
 `WeightedClassificationBin.weight` is Int32 FIXED POINT (DEVIATION 101b),
@@ -401,9 +401,9 @@ def arm_c_double_counting(ctx: DeviceContext) raises -> Int:
     hidden. The ON direction needs `bootstrap=True` WITH weights, and their
     own dispatch sends exactly that combination to the WEIGHTED BOOTSTRAP
     arm (`use_weighted_bootstrap() = bootstrap_ && sample_weight_ !=
-    nullptr`, `:214`), which is not ported -- it needs
+    nullptr`, `:214`), which is not implemented -- it needs
     `raft::random::uniform<double>`, declined under DEVIATION 187c. So
-    there is no configuration in this port today that reaches
+    there is no configuration in this implementation today that reaches
     `tree_sample_weight() == nullptr` with weights present. The rule IS
     implemented (`objective_sees_weights = has_sw and not bootstrap` in
     `fit_forest`), and it is UNCHECKED until weighted bootstrap lands.
@@ -434,7 +434,7 @@ def arm_c_double_counting(ctx: DeviceContext) raises -> Int:
             " dataset.sample_weight, so the whole weighted path is inert."
         )
 
-    # THE OTHER DIRECTION, reachable now that weighted bootstrap is ported.
+    # THE OTHER DIRECTION, reachable now that weighted bootstrap is implemented.
     # With bootstrap ON the objective must NOT see the weights
     # (tree_sample_weight() returns nullptr, randomforest.cuh:167) -- the
     # weights are already in the DRAW. So a fit with varied weights and a

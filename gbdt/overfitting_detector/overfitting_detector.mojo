@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """When to stop boosting, decided from a HELD-OUT error curve.
 
-PORT OF `catboost/libs/overfitting_detector/overfitting_detector.{h,cpp}`
-at CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/libs/overfitting_detector/overfitting_detector.{h,cpp}`
+at CatBoost `54a8143a`. Followed statement for statement.
 
 THREE OF THEIR FOUR TYPES ARE HERE and the fourth is not:
 
@@ -12,9 +12,9 @@ THREE OF THEIR FOUR TYPES ARE HERE and the fourth is not:
               decaying estimate of how much the error could still improve
     Iter      `IncToDec` AT THRESHOLD 1.0 -- their own factory says so
               (`:194-197`), and it is not a separate class
-    Wilcoxon  NOT PORTED: `NStatistics::Wilcoxon` is a rank-sum test in
+    Wilcoxon  NOT IMPLEMENTED: `NStatistics::Wilcoxon` is a rank-sum test in
               `library/cpp/statistics`, a dependency outside
-              `catboost/`, and nothing this port runs selects it.
+              `catboost/`, and nothing this implementation runs selects it.
               Listed in `gbdt/NOT_IMPLEMENTED.tsv`.
 
 ## WHY `Iter` IS THE ONE PEOPLE MEAN, and why it is not its own code
@@ -26,13 +26,13 @@ THREE OF THEIR FOUR TYPES ARE HERE and the fourth is not:
 `IsNeedStop()` is `CurrentPValue < Threshold` and `UpdatePValue` returns
 exactly 1.0 while `IterationsFromLocalMax < IterationsWait`. So at
 threshold 1.0 the detector fires on the first iteration after the wait
-expires and never before. Porting it as a second class would have been
+expires and never before. Implementing it as a second class would have been
 inventing a distinction their code does not draw.
 
 ## THE SIGN CONVENTION, which is a real trap
 
 `AddError` negates when `!MaxIsOptimal` (`:130-131`), so everything below
-is written as if LARGER IS BETTER. Every loss this port trains is
+is written as if LARGER IS BETTER. Every loss this implementation trains is
 minimized, so `max_is_optimal` is False and the errors handed in are
 negated on entry. `LocalMax` is therefore the best (smallest) loss seen,
 stored negated. A reader who forgets this will read `LocalMax` as a
@@ -44,7 +44,7 @@ Their constructors take `hasTest` and pass `hasTest ? threshold : 0`
 (`:122-124`), and `IsActive()` is `Threshold > 0`. So a detector built
 without a test set is inert whatever the user asked for. That is not
 politeness: stopping on the LEARN error would stop on a curve that falls
-almost by construction. This port keeps the same gate and
+almost by construction. This implementation keeps the same gate and
 `gbdt/train.mojo` refuses `od_type != None` without held-out rows rather
 than silently never firing.
 """
@@ -72,7 +72,7 @@ def od_type_from_name(name: String) raises -> Int:
         return OD_ITER
     if name == "Wilcoxon":
         raise Error(
-            "od_type=Wilcoxon is NOT PORTED: it needs"
+            "od_type=Wilcoxon is NOT IMPLEMENTED: it needs"
             " NStatistics::Wilcoxon from library/cpp/statistics, outside"
             " catboost/. Use IncToDec (their default) or Iter."
         )

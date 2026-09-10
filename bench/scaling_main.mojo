@@ -112,7 +112,7 @@ def _dbscan_at(ctx: DeviceContext, n: Int) raises:
     # The workspace is allocated INSIDE, and the batch size is chosen from
     # the device's memory, which is `dbscanFitImpl` (`dbscan.cuh:101`). The
     # hand-passed `batch = 2048` that used to be here was a guess this
-    # harness had to make because `compute_batch_size` was not ported.
+    # harness had to make because `compute_batch_size` was not implemented.
     # BOTH ARMS, INTERLEAVED WITHIN THE REPEAT, not one after the other.
     # This box drifts two- to threefold between thermal windows, so running
     # every brute repeat and then every rbc repeat compares thermal states as

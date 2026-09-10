@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The sabotage arms, and the two helpers they corrupt.
 
-NOT A PORT, NOT REACHED by any driver, by `estimator.mojo`, or by
+NO REFERENCE FILE, NOT REACHED by any driver, by `estimator.mojo`, or by
 `hdbscan_main.mojo`: every one of those passes `HDB_SAB_NONE` and the
 arms below are selected only by `hdbscan/checks/hdbscan_check.mojo`.
 The shape is `hierarchy/checks/edge_order.mojo`'s sabotage block and
@@ -12,7 +12,7 @@ that its code runs, not that its gate holds (COMMON_BRIEF rule 6,
 `[[reached-but-inert]]`).
 
 Each arm breaks EXACTLY ONE pin. The arm number is threaded through the
-ported call chain as an `Int32` argument that defaults to `HDB_SAB_NONE`,
+implemented call chain as an `Int32` argument that defaults to `HDB_SAB_NONE`,
 so the production path never reads a sabotage branch it did not take, and
 a reader can grep `sabotage` to find every site.
 

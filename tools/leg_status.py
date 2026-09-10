@@ -84,7 +84,7 @@ all, and it is the reason six gbdt cells on the three-vendor board say
 `unrun`. It has to be louder than the first two, so:
 
     A refusal printed by `arm=ours` is a DEFECT unless its reason is a
-    refusal this library MEANT to make -- an unported option named by name,
+    refusal this library MEANT to make -- an unimplemented option named by name,
     or IDENTICAL declining a shape it cannot pin. "Exception during warm-up"
     is not that.
 
@@ -252,13 +252,13 @@ OURS_BROKE = re.compile(
     r"|assertion failed|panic|failed to build|did not build", re.I)
 
 #: ...and the refusals `arm=ours` is DESIGNED to make. This library refuses
-#: by name on purpose in two places -- an unported option (`glm/NOT_IMPLEMENTED.tsv`
+#: by name on purpose in two places -- an unimplemented option (`glm/NOT_IMPLEMENTED.tsv`
 #: and every `check()` that names its option) and IDENTICAL declining a shape
 #: whose summation order it cannot pin (`gemm_tn`'s row 27 refusal). Those
-#: are the port working, not failing, and they must not be reported as
+#: are the implementation working, not failing, and they must not be reported as
 #: defects or the class stops meaning anything.
 OURS_BY_DESIGN = re.compile(
-    r"NOT PORTED|is not ported|refuses .*by name|UNPORTED"
+    r"NOT IMPLEMENTED|is not implemented|refuses .*by name|UNIMPLEMENTED"
     r"|NUMERIC_IDENTICAL refuses|IDENTITY_PATHS row"
     r"|no algorithm with this id", re.I)
 
@@ -389,7 +389,7 @@ def classify_refusal(kv):
     if arm == "ours":
         if OURS_BY_DESIGN.search(reason):
             return ("REFUSED_POLICY",
-                    "%s: refused by name, which is the port working: %s"
+                    "%s: refused by name, which is the implementation working: %s"
                     % (where, reason[:200]))
         if OURS_BROKE.search(reason):
             return ("OURS_RAISED",

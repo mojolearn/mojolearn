@@ -3,7 +3,7 @@
 """The host oracles for IVF-FLAT: a float32 serial replay and a float64
 reference.
 
-NOT A PORT. cuVS checks IVF-FLAT against a brute force to a RECALL
+NO REFERENCE FILE. cuVS checks IVF-FLAT against a brute force to a RECALL
 threshold (`cpp/tests/neighbors/ann_ivf_flat.cuh`), because recall is what
 an approximate index is for and one backend is all they ship. We ship
 Metal, CUDA and HIP from one source and claim a bit-identical answer, so

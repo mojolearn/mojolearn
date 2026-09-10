@@ -25,7 +25,7 @@ the split is a different file:
 Different histogram layouts (stat-major against stat-minor), different
 collision schemes, different reduce shapes, OPPOSITE SIGN CONVENTIONS
 (`archive/reference/PORTING.md` 94a), a fixed-point accumulator on one side at 8 bits and none
-on the other. Agreement between them is not a tautology; it is two ports of
+on the other. Agreement between them is not a tautology; it is two implements of
 one algorithm arriving at one answer.
 
 ## What agreement does and does not prove

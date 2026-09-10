@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The POINTWISE host launch layer: grids, the multiplier ladder, the fan-out.
 
-PORT OF, in one file because they are one call chain:
+FOLLOWS, in one file because they are one call chain:
 
     `catboost/cuda/methods/pointwise_kernels.{h,cpp}`   the wrapper objects
     `catboost/cuda/methods/kernel/pointwise_hist2.cu`   `UpdateFoldBins`,
@@ -13,7 +13,7 @@ PORT OF, in one file because they are one call chain:
     `pointwise_hist2_half_byte.cu:130-180`              `ComputeHist2HalfByte`
     `gpu_data/folds_histogram.h`                        `TFoldsHistogram`
 
-at CatBoost `54a8143a`. Transliterated. Do not improve.
+at CatBoost `54a8143a`. Followed statement for statement.
 
 WHAT THIS FILE IS. The three drivers in `gbdt/methods/kernel/` know how to
 turn a block into a histogram. Nothing yet decided HOW MANY BLOCKS, which
@@ -149,20 +149,20 @@ OURS:   `compute_hist2(...)`, a function taking the same thirteen values as
 REASON: three of theirs do not exist here and one is deliberate.
 `Y_SAVELOAD_DEFINE` and `REGISTER_KERNEL` serialize a kernel invocation so
 it can be sent to another PROCESS -- CatBoost's multi-host path. There is no
-such path here and porting the table without it would be porting a name.
+such path here and implementing the table without it would be implementing a name.
 `TCudaBufferPtr<T>` carries a pointer and a size; ours are separate
-arguments, the same substitution every ported kernel in this tree already
+arguments, the same substitution every implemented kernel in this tree already
 makes (`archive/reference/PORTING.md` 9). And `NonEmptyDevices()` is the multi-device fan-out,
 which `archive/reference/PORTING.md` 91 A settled: at device count 1 the layouts coincide, and
 one device is what this tree runs.
 
-TWO SMALLER CONSEQUENCES OF THE SAME DECISION, both real ports of theirs:
+TWO SMALLER CONSEQUENCES OF THE SAME DECISION, both real implements of theirs:
 
-  * `TFoldsHistogram` (`gpu_data/folds_histogram.h`) is ported HERE, not in
+  * `TFoldsHistogram` (`gpu_data/folds_histogram.h`) is implemented HERE, not in
     `gbdt/gpu_data/`, because the one-byte fan-out cannot be written without
     it. Keeping the 27-line type beside its only consumer avoids a second
     representation.
-  * `TComputeHist1Kernel` is NOT ported. `pointwise_hist1.cu` is dead in
+  * `TComputeHist1Kernel` is NOT implemented. `pointwise_hist1.cu` is dead in
     the upstream -- registered, wrapped, and called by nothing
     (`archive/reference/PORTING.md` 91 D, `gbdt/NOT_IMPLEMENTED.tsv`).
 
@@ -334,7 +334,7 @@ struct FoldsHistogram(Copyable, Movable):
 def folds_histogram_from_folds(folds: List[UInt32]) -> FoldsHistogram:
     """Bin a feature list by how many BITS its fold count needs.
 
-    NOT a port of a function of theirs -- their histogram is filled while the
+    NOT an implementation of a function of theirs -- their histogram is filled while the
     grid is built (`feature_layout.cpp`), which this lane does not own -- but
     the same tally, and it is what a caller without a built grid needs. The
     rule is `Counts[bits_needed(folds)]`, where `bits_needed(n)` is the
@@ -1038,7 +1038,7 @@ def compute_hist2_binary[
     `IsGridEmpty` comes FIRST and `if (bCount)` second, even though a zero
     `bCount` already makes `numBlocks.x` zero and the second test therefore
     unreachable. Kept in their order: reordering it would be an improvement,
-    and improvements are how a port stops being one.
+    and improvements are how an implementation stops being one.
 
     UNLIKE THE ONE-BYTE LAUNCHER `numBlocks.x` IS COMPUTED ONCE. There is no
     second feature count here because there is no runtime bit-width

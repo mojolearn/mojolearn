@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The k-NEAREST-NEIGHBOUR query over the random ball cover.
 
-PORT OF `cuvs/src/neighbors/ball_cover/ball_cover.cuh::rbc_knn_query`
+FOLLOWS `cuvs/src/neighbors/ball_cover/ball_cover.cuh::rbc_knn_query`
 (`:446-498`), `perform_rbc_query` (`:240-270`) and
 `cuvs/src/neighbors/ball_cover/registers.cuh::block_rbc_kernel_registers`
 (`:305-441`) plus `perform_post_filter_registers` (`:64-121`) and
@@ -117,7 +117,7 @@ reasons, and the first is not a preference.
   * **DETERMINISM.** The merge is a total order over a fixed array, so the
     answer does not depend on which thread saw which candidate.
 
-DEVIATION 559: THE PTOLEMAIC `z` BOUND IS NOT PORTED
+DEVIATION 559: THE PTOLEMAIC `z` BOUND IS NOT IMPLEMENTED
 ------------------------------------------------------
 THEIRS: inside the group walk, `registers.cuh:390-395` computes
 
@@ -293,7 +293,7 @@ it BREAKS at `prune_scale` 0.95 on 1 of 96 query rows. The arm is shown
 capable of failing and the pruning claim is verified on Apple. NO SECOND
 VENDOR HAS RUN IT.
 
-NOT PORTED
+NOT IMPLEMENTED
 ----------
 `rbc_all_knn_query` (`ball_cover.cuh:384-437`), which is this query with
 the index as its own query set and the index built inside the call. It is

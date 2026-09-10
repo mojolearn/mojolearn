@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`cuml/cpp/include/cuml/solvers/params.hpp`, transliterated.
+"""`cuml/cpp/include/cuml/solvers/params.hpp`, followed statement for statement.
 
 Three enums. `cdFit` accepts only `loss_funct::SQRD_LOSS` (`cd.cuh:130`);
 `lr_type` and `penalty` belong to the SGD solver (`sgd.cuh`) and are kept
-here because the header is one file and the port is file for file.
+here because the header is one file and the implementation is file for file.
 """
 
 # enum lr_type { OPTIMAL, CONSTANT, INVSCALING, ADAPTIVE }

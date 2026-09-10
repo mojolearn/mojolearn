@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host symmetric eigensolver that stands where RAFT calls cuSOLVER.
 
-NOT A PORT OF A FILE. `raft/sparse/solver/detail/lanczos.cuh:175`
+NO SINGLE FILE TO FOLLOW. `raft/sparse/solver/detail/lanczos.cuh:175`
 (`lanczos_solve_ritz`) hands the `ncv x ncv` projected matrix to
 `raft::linalg::eig_dc`, which is cuSOLVER `syevd` -- CLOSED, no source to
-transliterate (ENGINEERING_RULES 0b-i's one exception). What it returns is
+follow statement for statement (ENGINEERING_RULES 0b-i's one exception). What it returns is
 eigenvalues ASCENDING and eigenvectors in COLUMNS with a sign the solver
 chose. This file returns the same three things from one host routine whose
 every floating-point operation is spelled through `checks/numerics.mojo`,

@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The binary-feature histogram kernel: 32 features per 4-byte load.
 
-PORT OF `hist_binary.cu` plus the loop it instantiates,
+FOLLOWS `hist_binary.cu` plus the loop it instantiates,
 `compute_hist_loop_one_stat.cuh` (`ALIGN_MEMORY`,
 `TComputeHistogramImpl<FourElements>::Compute`,
 `ComputeSplitPropertiesDirectLoadsImpl`), at CatBoost `54a8143a`.
-Transliterated. Do not improve.
+Followed statement for statement.
 
 **This is the kernel that should matter most on covtype**, where 44 of 54
 columns are 0/1 and route to `BinaryFeatures`. One `UInt32` of the compressed
@@ -187,7 +187,7 @@ def binary_hist_kernel(
     barrier()
     var slice_base = slice_offset(tid)
 
-    # --- AlignMemoryAccess, ported --------------------------------------
+    # --- AlignMemoryAccess, implemented --------------------------------------
     # (`compute_hist_loop_one_stat.cuh:57-105`, the direct overload.)
     #
     # REQUIRED by LOAD_SIZE 4, not an optimization: a partition offset is not
@@ -277,7 +277,7 @@ def binary_hist_kernel(
         # matrix claims one exists. Write that path before flipping the row.
         return
 
-    # This is where the port stops being a transliteration. CatBoost syncs a `tiled_partition<8>`, which is
+    # This is where the implementation stops being a statement-for-statement match. CatBoost syncs a `tiled_partition<8>`, which is
     # WARP-LOCAL, so warps with different iteration counts never wait on each
     # other. Mojo 1.0 has only the threadgroup-wide `barrier()`, and a
     # threadgroup barrier that some warps reach and others skip is undefined
@@ -615,7 +615,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
     var feature_offset = (Int(block_idx.x) // max_blocks_per_part) * 32
     var f_count = min(f_count_in - feature_offset, 32)
 
-    # `cindex += features->CompressedIndexOffset` in theirs; the port takes
+    # `cindex += features->CompressedIndexOffset` in theirs; the implementation takes
     # one feature group, so the offset is the group's column.
     # See the note in the direct variant: this is the policy's column base,
     # not the feature-block stride.
@@ -657,7 +657,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
     barrier()
     var slice_base = slice_offset(tid)
 
-    # --- AlignMemoryAccess (gather), ported
+    # --- AlignMemoryAccess (gather), implemented
     # (`compute_hist_loop_one_stat.cuh:107-157`). Same peel as the direct
     # variant; the difference is only that the bin comes through `indices`.
     #
@@ -764,7 +764,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
         # matrix claims one exists. Write that path before flipping the row.
         return
 
-    # This is where the port stops being a transliteration. CatBoost syncs a `tiled_partition<8>`, which is
+    # This is where the implementation stops being a statement-for-statement match. CatBoost syncs a `tiled_partition<8>`, which is
     # WARP-LOCAL, so warps with different iteration counts never wait on each
     # other. Mojo 1.0 has only the threadgroup-wide `barrier()`, and a
     # threadgroup barrier that some warps reach and others skip is undefined

@@ -264,7 +264,7 @@ def arm_a_epsilon_probe(ctx: DeviceContext) raises -> Int:
     more.
 
     THE FIRST VERSION OF THIS PROBE USED A SINGLE 1e-6 THRESHOLD AND
-    FAILED, AND THE PROBE WAS WRONG, NOT THE PORT. At these magnitudes 1e-6
+    FAILED, AND THE PROBE WAS WRONG, NOT THE IMPLEMENTATION. At these magnitudes 1e-6
     is nowhere near the rounding floor: with 200 rows at label 20, the
     objective terms are of order `(200*20)^2/200 = 8e4`, float32 carries
     about 7 digits, so an absolute error of order 1e-2 in a term becomes a

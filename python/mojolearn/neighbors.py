@@ -86,8 +86,8 @@ _METRIC_TABLE = {
 
 #: Names in cuML's `VALID_METRICS["brute"]` (`neighbors/__init__.py:27-48`)
 #: that this tree does not compute. Refused BY NAME so a caller learns the
-#: metric is UNPORTED rather than unknown.
-_UNPORTED_METRICS = (
+#: metric is UNIMPLEMENTED rather than unknown.
+_UNSUPPORTED_METRICS = (
     "canberra",
     "jensenshannon",
     "correlation",
@@ -116,7 +116,7 @@ def _resolve_weights(cls_name, weights):
         return _WEIGHTS_UNIFORM
     if callable(weights):
         raise ValueError(
-            f"mojolearn {cls_name}: weights=<callable> is NOT PORTED. "
+            f"mojolearn {cls_name}: weights=<callable> is NOT IMPLEMENTED. "
             "scikit-learn calls it on the distance matrix in Python; the "
             "vote here runs in a GPU kernel and there is no portable way "
             "to lift a Python function into one. Use 'uniform' or "
@@ -145,22 +145,22 @@ def _resolve_metric(cls_name, metric, p):
     if not isinstance(metric, str):
         raise ValueError(
             f"mojolearn {cls_name}: metric must be a name, got {metric!r}. "
-            "A callable metric is not ported: it would have to run inside a "
+            "A callable metric is not implemented: it would have to run inside a "
             "GPU kernel."
         )
     key = metric.lower()
     if key in _METRIC_TABLE:
         value = _METRIC_TABLE[key]
-    elif key in _UNPORTED_METRICS:
+    elif key in _UNSUPPORTED_METRICS:
         raise ValueError(
             f"mojolearn {cls_name}: metric={metric!r} is in cuML's "
-            "VALID_METRICS['brute'] but is NOT PORTED "
-            "(neighbors/NOT_IMPLEMENTED.tsv). Ported: "
+            "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
+            "(neighbors/NOT_IMPLEMENTED.tsv). Implemented: "
             + ", ".join(sorted(_METRIC_TABLE))
         )
     else:
         raise ValueError(
-            f"mojolearn {cls_name}: unknown metric {metric!r}. Ported: "
+            f"mojolearn {cls_name}: unknown metric {metric!r}. Implemented: "
             + ", ".join(sorted(_METRIC_TABLE))
         )
 
@@ -250,12 +250,12 @@ def _resolve_rbc_metric(cls_name, metric, p):
             "bounding its ball. A cover built on it would prune away true "
             "neighbours silently rather than return them slowly. Use "
             "NearestNeighbors with algorithm='brute', which needs no "
-            "inequality and honors every ported metric."
+            "inequality and honors every implemented metric."
         )
-    if key in _UNPORTED_METRICS:
+    if key in _UNSUPPORTED_METRICS:
         raise ValueError(
             f"mojolearn {cls_name}: metric={metric!r} is in cuML's "
-            "VALID_METRICS['brute'] but is NOT PORTED "
+            "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
             "(neighbors/NOT_IMPLEMENTED.tsv)"
         )
     if key not in _RBC_METRIC_TABLE:
@@ -303,14 +303,14 @@ class NearestNeighbors(NumericModeMixin):
     `tools/e2u_matrix_fit.py`):
 
         n_neighbors   honored   k. Refused above n_samples_fit (the
-                                upstream's short-index fill is not ported:
+                                upstream's short-index fill is not implemented:
                                 knn_brute_force.mojo) and, UNDER
                                 IDENTICAL/DETERMINISTIC, above 1024 -- the
                                 pinned selector's strided rank pass bounds
                                 its shared staging and quadratic work (
                                 neighbors/checks/select_radix_identical
                                 .mojo). FAST runs k > 256 through the
-                                ported RAFT radix select.
+                                implemented RAFT radix select.
         query_tile    honored   a MEMORY number; the answer does not depend
                                 on it (`check_knn_tiled_is_query_tile_
                                 invariant`), only the workspace does
@@ -325,7 +325,7 @@ class NearestNeighbors(NumericModeMixin):
                                 haversine, braycurtis) is refused BY NAME.
                                 UNTIL 2026-09-01 THIS ROW READ "refused,
                                 anything but Euclidean"; cosine and
-                                Minkowski are ported and the sentence is
+                                Minkowski are implemented and the sentence is
                                 deleted rather than annotated.
         p             honored   Minkowski's exponent, at any finite
                                 positive normal value. Refused at p <= 0,
@@ -401,7 +401,7 @@ class NearestNeighbors(NumericModeMixin):
         """Every refusal is BY NAME with the reason, raised at fit so a
         caller learns before the index is held."""
         # Resolving the metric IS the metric check: it raises by name for
-        # an unported row of cuML's table, for an unknown name, and for a
+        # an unimplemented row of cuML's table, for an unknown name, and for a
         # p that cannot be one arithmetic. One table, one place.
         if self.algorithm == "rbc" and type(self) is not NearestNeighbors:
             # REFUSED RATHER THAN ACCEPTED AND IGNORED, which is the whole
@@ -431,7 +431,7 @@ class NearestNeighbors(NumericModeMixin):
             _resolve_rbc_metric(type(self).__name__, self.metric, self.p)
         elif self.algorithm in ("brute", "auto"):
             # Resolving the metric IS the metric check: it raises by name
-            # for an unported row of cuML's table, for an unknown name, and
+            # for an unimplemented row of cuML's table, for an unknown name, and
             # for a p that cannot be one arithmetic. One table, one place.
             _resolve_metric(type(self).__name__, self.metric, self.p)
         else:
@@ -575,7 +575,7 @@ class KNeighborsClassifier(NearestNeighbors):
         n_neighbors   honored   k, as NearestNeighbors (refused above
                                 n_samples_fit; under NUMERIC_IDENTICAL above
                                 256)
-        weights       honored   'uniform' (cuML's only arm, the ported
+        weights       honored   'uniform' (cuML's only arm, the implemented
                                 `class_probs_kernel`) and 'distance'
                                 (DEVIATION 556, scikit-learn's semantics:
                                 `w = 1/d`, and a row containing an exact
@@ -617,7 +617,7 @@ class KNeighborsClassifier(NearestNeighbors):
     ----------
     classes_ : ndarray, or list of ndarray for a 2-D `y`
         The sorted unique labels per output (`np.unique`, the pyx's
-        `cp.unique`). The Mojo side recomputes the same set with the ported
+        `cp.unique`). The Mojo side recomputes the same set with the implemented
         `getUniquelabels` and `predict` asserts the two agree.
     outputs_2d_ : bool
     """
@@ -728,12 +728,12 @@ class KNeighborsClassifier(NearestNeighbors):
             # metric, metric_arg, weights -- see _dist_triple there.
             self._dist_params(),
         )
-        # POLICY 7: the port's class set against ours, made visible.
+        # POLICY 7: the implementation's class set against ours, made visible.
         got = np.split(uniq, np.cumsum(n_classes)[:-1])
         for i, (a, b) in enumerate(zip(got, self._classes_list)):
             if not np.array_equal(a, b):
                 raise RuntimeError(
-                    f"mojolearn: output {i}: the ported getUniquelabels found "
+                    f"mojolearn: output {i}: the implemented getUniquelabels found "
                     f"classes {a.tolist()[:8]}..., np.unique found "
                     f"{b.tolist()[:8]}...; the two class sets disagree"
                 )

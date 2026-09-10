@@ -89,7 +89,7 @@ def pw_fold_winner_kernel(
     best)`, ties keep the EARLIER policy). The direct fold happens to be
     equivalent here -- a comparator tie implies identical records because
     `Gain` is monotone in `Score` per (feature, bin) and a feature lives in
-    exactly one policy -- but ENGINEERING_RULES 0c says port the branch, not
+    exactly one policy -- but ENGINEERING_RULES 0c says implementation the branch, not
     the reachability argument.
 
     ONE THREAD. The work is at most 32 records; a parallel reduction would
@@ -190,12 +190,12 @@ def pw_pack_winner_kernel(
     winners_scores.unsafe_store(2 * depth + 1, gain)
 
     # NOT DECORATION, AND NOT CURRENTLY RANKING-VISIBLE EITHER: with
-    # `binFeaturesWeights` hard-coded to ones (the port's state), `gain =
+    # `binFeaturesWeights` hard-coded to ones (the implementation's state), `gain =
     # (score - scoreBeforeSplit) * w` shifts every candidate by the same
     # constant and the argmin cannot move -- a sabotage that skips this
     # store passes every fit gate (PREP_BILL step 27). It is carried
     # because THEIRS carries it and becomes load-bearing the moment
-    # per-feature weights are ported; its plumbing is held by the S1
+    # per-feature weights are implemented; its plumbing is held by the S1
     # per-cell gain values (score_before = -3.25 there) and by
     # `checks/pointwise_resolve_check.mojo` reading this word back.
     score_before.unsafe_store(0, score)

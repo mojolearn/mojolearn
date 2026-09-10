@@ -39,7 +39,7 @@ def load(data_dir, name, n_rows, n_features):
     """The same bytes the Mojo arm reads, as a row-major float32 matrix.
 
     The file is COLUMN-major (feature 0's rows, then feature 1's rows), which
-    is what the port's `Dataset` takes. scikit-learn wants (n_samples,
+    is what the implementation's `Dataset` takes. scikit-learn wants (n_samples,
     n_features), so this reshapes to (n_features, n_rows) and transposes. When
     `n_rows` is smaller than the file, the FIRST n_rows of each column are
     taken -- the same subset, taken the same way, as `subset_columns` in the
@@ -82,7 +82,7 @@ def sklearn_version():
 def _max_features(spec):
     """`spec` as scikit-learn spells it. `sqrt`/`log2`/`all` are their strings
     (with `all` being their `None`); anything else is an integer COUNT, which
-    scikit-learn and the port both take literally."""
+    scikit-learn and the implementation both take literally."""
     if spec in ("sqrt", "log2"):
         return spec
     if spec == "all":

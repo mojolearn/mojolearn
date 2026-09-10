@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Python surface, mirrored so the names a user types are cuVS's names.
 
-PORT OF `cuvs/python/cuvs/cuvs/cluster/kmeans/kmeans.pyx` at cuVS
-`94c2819`. Partial. Do not improve.
+FOLLOWS `cuvs/python/cuvs/cuvs/cluster/kmeans/kmeans.pyx` at cuVS
+`94c2819`. Partial.
 
 There are no Python bindings in this tree yet, so this file is not a binding.
 It is the SHAPE of one, written in Mojo, and it exists for the reason the
@@ -18,7 +18,7 @@ Their public surface is exactly four names
 
 `KMeansParams` there is a `cdef class` wrapping the C++ `params` struct with
 one read-only property per field, which `cluster/kmeans_params.mojo` already
-transliterates. What this file adds is the two things the pyx does that the
+follow statement for statements. What this file adds is the two things the pyx does that the
 C++ layer does not:
 
 1. **`fit` returns `(centroids, inertia, n_iter)` as a tuple**, so inertia is
@@ -69,7 +69,7 @@ def kmeans_params_from_python(
     seed are C++-only fields with no Python setter. `batch_samples`,
     `batch_centroids` and `seed` are kept here because this tree's fit takes
     them; `hierarchical`/`hierarchical_n_iters` select their balanced k-means
-    (`kmeans_balanced.cuh`), which is NOT PORTED, so they are absent rather
+    (`kmeans_balanced.cuh`), which is NOT IMPLEMENTED, so they are absent rather
     than accepted and ignored.
     """
     var p = KMeansParams.default()

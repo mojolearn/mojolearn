@@ -178,7 +178,7 @@ def bench_histogram_only(n_rows: Int, repeats: Int) raises:
     inside `AddPoint`; Mojo has no lane primitives, so ours is a 512-thread
     threadgroup barrier, and `AddPoint` runs it EIGHT times per bin per
     unrolled row, so 16 barriers per row-batch of 2. That is the largest
-    known handicap in the port and it has never been measured.
+    known handicap in the implementation and it has never been measured.
     """
     var ctx = DeviceContext()
     # Scratch for the multi-block flush signature; unused at one block.
@@ -998,7 +998,7 @@ def build_mixed_dataset(
 def bench_tree_shapes(n_rows: Int, max_depth: Int, repeats: Int) raises:
     """The timing table on WIDE data, with the arms interleaved.
 
-    EVERY earlier number in this port came from 32 uniform binary features:
+    EVERY earlier number in this implementation came from 32 uniform binary features:
     one policy, one launch per level, a 64-cell histogram. That is the shape
     CatBoost's design is least suited to, and it is not the shape CatBoost
     runs. `border_count` defaults to 254, so a quantized numeric column is a

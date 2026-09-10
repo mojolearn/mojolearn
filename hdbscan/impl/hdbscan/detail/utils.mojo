@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`make_cluster_tree`, the two `parent_csr`s, and the CSR scan they need.
 
-PORT OF `cuml-v26.08.00/cpp/src/hdbscan/detail/utils.h` (cuML `265b9da`):
+FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/utils.h` (cuML `265b9da`):
 `make_cluster_tree` (`:83-140`) and `parent_csr` (`:150-170`); plus
 `cuvs`/RAFT's `raft::sparse::convert::sorted_coo_to_csr` (`csr.cuh:78-90`)
 as the host counting scan both of them call. Their `cub_segmented_reduce`
-(`:60-76`) is NOT ported as a function: it is a CUB dispatch wrapper, and
+(`:60-76`) is NOT implemented as a function: it is a CUB dispatch wrapper, and
 the two reductions that use it are replaced per-call by pinned folds
 (DEVIATIONS 1603 and 1604, `stabilities.mojo`). Their `normalize`
 (`:172-189`) and `softmax` (`:191-220`) are reached only by soft

@@ -136,7 +136,7 @@ def select_d_host(
 
     Writes `batch_size` int32 to `d_ptr` and returns `batch_size`. `D` is
     NOT chosen here and must be given: their `D` comes from statsmodels'
-    STL on the host and is not ported (`tsa/NOT_IMPLEMENTED.tsv`).
+    STL on the host and is not implemented (`tsa/NOT_IMPLEMENTED.tsv`).
     """
     _refuse_empty_shape(batch_size, n_obs, "select_d")
     var ctx = DeviceContext()

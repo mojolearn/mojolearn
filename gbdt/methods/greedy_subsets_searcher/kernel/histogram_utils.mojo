@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Sibling subtraction and the per-feature bin prefix scan.
 
-PORT OF `catboost/cuda/methods/greedy_subsets_searcher/kernel/
-histogram_utils.cu` at CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/greedy_subsets_searcher/kernel/
+histogram_utils.cu` at CatBoost `54a8143a`. Followed statement for statement.
 
 Four kernels, all bucket-scaling rather than row-scaling, so neither is
 where the time goes. They matter because of what they let the histogram
@@ -225,7 +225,7 @@ def scan_histograms_kernel(
     This substitution is safe for identity and NOT free for speed. A prefix
     sum is order-defined, so a serial scan and a correct parallel scan agree
     exactly in exact arithmetic; in floating point they do NOT, which is why
-    the scan is a NUMERIC row and the port uses one shape everywhere rather
+    the scan is a NUMERIC row and the implementation uses one shape everywhere rather
     than a fast one per vendor.
 
     One thread per feature is enough because folds per feature is small (255
@@ -468,7 +468,7 @@ def copy_histograms_vec4_kernel(
 
     ================= DEVIATION BLOCK =================
     Their `CopyHistogramsImpl` (`histogram_utils.cu:15-34`) copies ONE
-    float per thread, and this port transliterated that. On NVIDIA that
+    float per thread, and this implementation followed statement for statement that. On NVIDIA that
     is free: `__ldg` plus `WriteThrough` (`st.global.wt`) already move a
     full sector per warp. On this Metal box it is not -- MEASURED, at a
     depth-6 level's shape (100 features x 254 folds x 2 stats, 32 pairs):
@@ -608,7 +608,7 @@ def write_reduces_histograms_kernel(
     """`WriteReducesHistogramsImpl`, copied.
 
     **CatBoost keeps TWO histogram layouts and this is the bridge between
-    them.** The absence of this kernel is why mixed-width trees in this port
+    them.** The absence of this kernel is why mixed-width trees in this implementation
     grew, conserved every row, and refused to split.
 
         block histogram   [leaf][stat][binFeature WITHIN THIS BLOCK]

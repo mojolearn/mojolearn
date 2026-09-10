@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The loss and its parameters, and the leaf estimator that follows from it.
 
-PORT OF `catboost/private/libs/options/loss_description.{h,cpp}` at CatBoost
-`54a8143a` -- the loss function and its parameter accessors. Transliterated.
-Do not improve.
+FOLLOWS `catboost/private/libs/options/loss_description.{h,cpp}` at CatBoost
+`54a8143a` -- the loss function and its parameter accessors. Followed statement for statement.
 
 **The leaf-estimation defaults are NOT here.** `GetEstimationMethodDefaults`
 and `SetLeavesEstimationDefault` are `catboost_options.cpp:30-360`, so they

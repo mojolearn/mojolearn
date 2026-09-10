@@ -11,7 +11,7 @@ conversion and the Laplacian is built on the COO. The two overloads agree on
 every value but NOT on every rounding: the CSR kernel skips a self-loop in
 the degree (`input_value = col_index == row ? 0 : adj_values[...]`), the COO
 overload SUMS it into the degree and SUBTRACTS it back on the diagonal
-(`degrees[row] - value`), two roundings where the CSR arm had none. We port
+(`degrees[row] - value`), two roundings where the CSR arm had none. We implementation
 the COO arm because it is the 26.08 arm; `spectral/NOT_IMPLEMENTED.tsv` names the
 other.
 

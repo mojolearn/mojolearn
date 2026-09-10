@@ -5,12 +5,12 @@
 DEVIATION 505 (IDENTITY_PATHS row 24). Reached only under
 `NUMERIC_IDENTICAL`.
 
-NOT A PORT. cuVS's `tiled_brute_force_knn` gets this tile from
+NO REFERENCE FILE. cuVS's `tiled_brute_force_knn` gets this tile from
 `cuvs::distance::pairwise_distance`, which is cuBLAS underneath
 (`knn_brute_force.cuh:172-183`), and this tree mirrors that call with MAX's
 `linalg.matmul` through `core/gemm.mojo::gemm_nt`. Under `NUMERIC_FAST` that
 is the right thing and stays: a library with no source is a library we do
-not port.
+not implementation.
 
 WHY `IDENTICAL` CANNOT USE IT
 ------------------------------

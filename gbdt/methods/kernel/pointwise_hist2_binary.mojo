@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The BINARY driver: 32 one-bit features per block.
 
-PORT OF `catboost/cuda/methods/kernel/pointwise_hist2_binary.cu` at CatBoost
-`54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_binary.cu` at CatBoost
+`54a8143a`. Followed statement for statement.
 
 `ComputeSplitPropertiesBImpl`. It builds its histogram with
 `TPointHistHalfByte` -- the same accumulator the half-byte kernel uses, not a
@@ -28,7 +28,7 @@ NO BIT-WIDTH DISPATCH. Unlike the one-byte kernels this one has no
 construction, and the host decides which features reach it.
 
 DEVIATION (arch): their `use64bitLoad = IsFullPass` above compute
-capability 3.5, and this port takes that modern arm -- `ComputeHistogram2`
+capability 3.5, and this implementation takes that modern arm -- `ComputeHistogram2`
 on a full pass, the scalar loop with inner and outer unroll 1 on a partial
 one. Scheduling, not numeric.
 """

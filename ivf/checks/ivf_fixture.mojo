@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Planted index and query sets for the IVF gates, ASSEMBLED FROM BITS.
 
-NOT A PORT. `IDENTITY_PATHS` row 32's lesson applies here verbatim: a host
+NO REFERENCE FILE. `IDENTITY_PATHS` row 32's lesson applies here verbatim: a host
 `target += v * w` chain is a contraction decision, so a fixture built by
 host arithmetic can hand two machines different inputs before the first
 kernel runs. Every value here is either a splitmix64 hash turned into a
@@ -34,7 +34,7 @@ THE FIVE FIXTURES THE BRIEF REQUIRES, AND WHAT EACH ONE REACHES
    out in groups of three EXACT duplicates, so every distance from any
    query is attained by three distinct original indices at once. Under
    `IDENTICAL` the composite key resolves that to the lowest of the three
-   and `check_search_vs_oracle` compares which; under `FAST` the ported
+   and `check_search_vs_oracle` compares which; under `FAST` the implemented
    selector's back-fill decides it by atomic arrival and the same
    comparison is a REPORT. A gate that never reaches the tie class is a
    gate about a class that does not exist -- `check_assignment_ties`

@@ -3,13 +3,13 @@
 """The pointwise family's odds and ends: pick the better split, name it, and
 four bit-interleave helpers.
 
-PORT OF `catboost/cuda/methods/helpers.{h,cpp}` at CatBoost `54a8143a`.
-Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/helpers.{h,cpp}` at CatBoost `54a8143a`.
+Followed statement for statement.
 
 `helpers.h` is 104 lines and `helpers.cpp` is 173, and between them they hold
 five unrelated jobs. Sorted by what they need to run:
 
-| theirs | line | ported here | what it needs |
+| theirs | line | implemented here | what it needs |
 |---|---|---|---|
 | `TakeBest(a, b)` | `helpers.h:11` | `take_best` | nothing |
 | `TakeBest(a, b, c)` | `helpers.h:19` | `take_best3` | nothing |
@@ -22,25 +22,25 @@ five unrelated jobs. Sorted by what they need to run:
 | `SplitConditionToString` (+`ESplitValue`) | `helpers.cpp:106` | `split_condition_to_string_value` | borders + nan mode |
 | `PrintBestScore` | `helpers.cpp:142` | `print_best_score` | the above |
 | `HasPermutationDependentSplit` | `helpers.cpp:60` | `has_permutation_dependent_split` | `IsCtr`/`IsPermutationDependent` |
-| `GetBinsForModel` | `helpers.cpp:3` | **NOT PORTED** | `TScopedCacheHolder`, `TTreeUpdater`, `TFeatureParallelDataSet` |
-| `CacheBinsForModel` | `helpers.cpp:45` | **NOT PORTED** | the same three |
+| `GetBinsForModel` | `helpers.cpp:3` | **NOT IMPLEMENTED** | `TScopedCacheHolder`, `TTreeUpdater`, `TFeatureParallelDataSet` |
+| `CacheBinsForModel` | `helpers.cpp:45` | **NOT IMPLEMENTED** | the same three |
 
 WHY THE LAST TWO ARE NOT HERE, spelled out so nobody reads their absence as
 an oversight. `GetBinsForModel` builds a document->leaf bin array for a
 finished `TObliviousTreeStructure` by replaying every split through
 `TTreeUpdater` (`gpu_data/oblivious_tree_bin_builder.h`) and MEMOISING the
 result in a `TScopedCacheHolder` keyed on whether any split is
-permutation-dependent. All three of those types are unported, and its only
+permutation-dependent. All three of those types are unimplemented, and its only
 callers are the FEATURE-PARALLEL learner and the feature-parallel leaves
 estimator (`feature_parallel_pointwise_oblivious_tree.h:43`,
 `add_oblivious_tree_model_feature_parallel.cpp:12` and `:31`,
 `leaves_estimation/oblivious_tree_leaves_estimator.h:143`) -- none of which
-this repository has. Porting them now would be writing a cache for a caller
+this repository has. Implementing them now would be writing a cache for a caller
 that does not exist, which is the defect `ENGINEERING_RULES.md` rule 3 names.
 They belong with rung 2 of `archive/reference/PORTING.md` 91 E.
 
 WHAT "TAKES THE MANAGER'S ANSWERS AS ARGUMENTS" MEANS, and why it is not a
-redesign. `TBinarizedFeaturesManager` is unported. Every function above that
+redesign. `TBinarizedFeaturesManager` is unimplemented. Every function above that
 names it reads exactly one or two facts out of it -- `IsCat(featureId)`,
 `GetBinCount(featureId)`, `GetBorders(featureId)`, `GetNanMode(featureId)`,
 `IsCtr(featureId)`, `IsPermutationDependent(ctr)` -- and then does arithmetic
@@ -53,8 +53,8 @@ changes.
 THREE DEPARTURES, ALL IN THIS FILE, NONE ARITHMETIC.
 
 1. **`GetBinsForModel` and `CacheBinsForModel` are absent**, for the reason
-   above: their three dependencies are unported and their four call sites are
-   all in the feature-parallel learner, which is unported too. Recorded here
+   above: their three dependencies are unimplemented and their four call sites are
+   all in the feature-parallel learner, which is unimplemented too. Recorded here
    rather than silently skipped.
 
 2. **The manager is a parameter list.** `ToSplit`, both
@@ -68,7 +68,7 @@ THREE DEPARTURES, ALL IN THIS FILE, NONE ARITHMETIC.
            return manager.TranslateFeatureBundleSplitToBinarySplit(...);
        }
 
-   (`helpers.cpp:159-161`). Feature bundles are unported, so `to_split` has
+   (`helpers.cpp:159-161`). Feature bundles are unimplemented, so `to_split` has
    NO bundle arm. A caller that ever has bundles must add it; until then the
    branch is unreachable rather than wrong, and `is_feature_bundle` is
    accepted as an argument purely so a caller cannot forget to raise.
@@ -137,7 +137,7 @@ def best_split_properties_less(
     level where nothing scored returns the sentinel rather than the first
     real split. Their `Gain` also defaults to `+inf`, so the tie is reached
     only when both sides are undefined -- but `ENGINEERING_RULES.md` 0c is the
-    rule that says port the branch, not the reachability argument.
+    rule that says implementation the branch, not the reachability argument.
 
     **`BinId` is the last resort and it is `<`, not `<=`.** Equal records are
     therefore NOT less than each other, and since `TakeBest` is written
@@ -248,7 +248,7 @@ def to_split(
         raise Error("Need best split properties")
     if is_feature_bundle:
         raise Error(
-            "ToSplit: feature bundles are not ported. Theirs calls"
+            "ToSplit: feature bundles are not implemented. Theirs calls"
             " TranslateFeatureBundleSplitToBinarySplit (helpers.cpp:159-161);"
             " see DEVIATION 99"
         )
@@ -404,7 +404,7 @@ def best_score_message(
         }
 
     -- is NOT appended here: it needs `TBinarizedFeaturesManager::GetCtr` and
-    a `TFeatureTensor` printer, both unported. DEVIATION 99.2.
+    a `TFeatureTensor` printer, both unimplemented. DEVIATION 99.2.
     """
     return (
         String("Best split for depth ")
@@ -465,7 +465,7 @@ def has_permutation_dependent_split(
     Its two callers are `GetBinsForModel` and `CacheBinsForModel`
     (`helpers.cpp:6` and `:50`), both of which pick a cache SCOPE with the
     answer: permutation-dependent structures cache per permutation,
-    independent ones cache once. Neither is ported (DEVIATION 99.1), so this
+    independent ones cache once. Neither is implemented (DEVIATION 99.1), so this
     predicate is currently unreached in-tree, and it is here because the
     third caller, `binarizations_manager.cpp:138`, shows the same question
     being asked of a CTR's own tensor one level down.
@@ -501,9 +501,9 @@ def has_permutation_dependent_split(
 # .cpp:152-153`. `MergeBits` has no caller either; the `MergeBits` in
 # `ctrs/ctr_kernels.h:170` is an unrelated device kernel of the same name.
 #
-# So all four are ported for completeness of the assigned file and NONE has a
-# caller here or there. `ENGINEERING_RULES.md` rule 3 says an unported file is
-# visible and a mis-ported one is not -- these are transcribed and gated
+# So all four are implemented for completeness of the assigned file and NONE has a
+# caller here or there. `ENGINEERING_RULES.md` rule 3 says an unimplemented file is
+# visible and a mis-implemented one is not -- these are transcribed and gated
 # against an independent host oracle for exactly that reason, and their lack
 # of a caller is stated here rather than discovered later.
 #

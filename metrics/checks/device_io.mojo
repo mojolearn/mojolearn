@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host <-> device copies for the metric checks and drivers. Plumbing, not
-a port: RAFT receives device pointers and never uploads anything."""
+an implementation: RAFT receives device pointers and never uploads anything."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 

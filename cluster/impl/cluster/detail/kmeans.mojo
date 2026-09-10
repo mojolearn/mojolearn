@@ -2,12 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Initialization and the Lloyd iteration.
 
-PORT OF `cuvs/src/cluster/detail/kmeans.cuh` at cuVS `94c2819`. Partial.
-Do not improve.
+FOLLOWS `cuvs/src/cluster/detail/kmeans.cuh` at cuVS `94c2819`. Partial.
 
 Their file is 1242 lines and most of it is host bookkeeping for cases this
 tree does not have: multi-GPU partitioned fits, `kmeans_transform`, and the
-`kmeans_auto_find_k` driver. What is ported is the algorithm: the three
+`kmeans_auto_find_k` driver. What is implemented is the algorithm: the three
 initializations (random, classic k-means++, scalable k-means||) and the
 iteration.
 
@@ -32,7 +31,7 @@ THE TEST RUNS ON THE HOST AND STOPS THE FIT IN THE SAME ITERATION
 done = true;`, and `:494-497` breaks. There is no device-side convergence
 kernel and no flag in flight.
 
-An earlier version of this port ran the test in a one-thread kernel, read the
+An earlier version of this implementation ran the test in a one-thread kernel, read the
 flag one iteration late, and attributed both to cuVS. Neither is in their
 source: `check_convergence` does not exist anywhere in cuVS, cuML or RAFT.
 That version paid for both control planes at once -- it still synced every

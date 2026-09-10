@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The offset arithmetic every POINTWISE histogram kernel shares.
 
-PORT OF `catboost/cuda/methods/kernel/split_properties_helpers.cuh` at
-CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/kernel/split_properties_helpers.cuh` at
+CatBoost `54a8143a`. Followed statement for statement.
 
 This file belongs to CatBoost's OTHER histogram family. `archive/reference/PORTING.md` 91 B
 lays out which is which; the short version is that CatBoost has three GPU
 tree searchers and two histogram families:
 
-    greedy_subsets_searcher/kernel/   ->  ported, drives our symmetric trees,
+    greedy_subsets_searcher/kernel/   ->  implemented, drives our symmetric trees,
                                           and is what CatBoost runs for
                                           MULTICLASS symmetric trees
     methods/kernel/pointwise_hist2*   ->  THIS one, shared by BOTH of their
@@ -26,13 +26,13 @@ depth `d` is `p | (1 << d)`. That structural difference is what the offset
 helpers below encode, and it is why the two families cannot share code even
 though they compute the same sums.
 
-WHAT IS AND IS NOT IN THIS PORT OF THE FILE
+WHAT IS AND IS NOT COVERED HERE
 -------------------------------------------
-Ported here: `TPointwisePartOffsetsHelper`, the host-side
+Implemented here: `TPointwisePartOffsetsHelper`, the host-side
 `EstimateBlockPerFeatureMultiplier` and `HasOneHotFeatures`, `ELoadType`,
 and `ScanHistogramsImpl`.
 
-NOT ported, because they belong to the PAIRWISE family which this
+NOT implemented, because they belong to the PAIRWISE family which this
 repository does not build (`gbdt/NOT_IMPLEMENTED.tsv` already carries that family):
 `ConvertBlockToPart`, `GetPairwisePartIdToCalculate`,
 `TCmpBinsWithoutOneHot`, `TCmpBinsWithOneHot`, `TCmpBinsOneByteTrait`.
@@ -41,8 +41,8 @@ Their device-side `GetMaxBinCount` and `HasOneHotFeatures` are deliberately
 held until the kernels that call them land. Both reduce over exactly FOUR
 shared-memory slots (`:31-40`, `:52-61`) while every thread in the block
 writes one, so their contract depends on how many features the calling
-kernel puts in a block -- and a helper ported without its call site is a
-helper ported from a guess.
+kernel puts in a block -- and a helper implemented without its call site is a
+helper implemented from a guess.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -239,7 +239,7 @@ def estimate_block_per_feature_multiplier(
     idea is familiar here even though the arithmetic is not shared.
 
     `blocksPerSm` is 2 on everything at or above compute capability 5, and
-    this port takes that arm on every vendor -- the same modern-side choice
+    this implementation takes that arm on every vendor -- the same modern-side choice
     `hist_2_one_byte_base.mojo` records for `Unroll` and `LoadSize`. It is a
     SCHEDULING constant: it changes how many document blocks are launched
     and therefore how many partial sums are reduced, which is a float
@@ -310,7 +310,7 @@ def scan_pointwise_histograms_kernel(
     threadIdx.x / 32`, so within one block different warps carry different
     feature ids and the tail block has warps that fail the test. A block
     barrier reached by only some warps is undefined in CUDA and hangs on
-    Metal. Transliterating it would be porting a bug onto a target that
+    Metal. Following it statement for statement would be implementing a bug onto a target that
     punishes it.
 
     ONE-HOT FEATURES ARE SKIPPED and that is theirs (`:126`): a one-hot

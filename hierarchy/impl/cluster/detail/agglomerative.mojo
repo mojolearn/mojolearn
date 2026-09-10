@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The dendrogram on the host, the flat labels on the device.
 
-PORT OF `cuvs/cpp/src/cluster/detail/agglomerative.cuh`, cuVS `94c2819`:
+FOLLOWS `cuvs/cpp/src/cluster/detail/agglomerative.cuh`, cuVS `94c2819`:
 `UnionFind` (`:41-80`), `build_dendrogram_host` (`:104-155`),
 `write_levels_kernel` (`:157-166`), `inherit_labels` (`:179-210`),
 `init_label_roots` (`:212-224`) and `extract_flattened_clusters`
-(`:238-326`). Transliterated, with ONE declared departure (DEVIATION 622,
-below) whose output is identical to theirs. Do not improve.
+(`:238-326`). Followed statement for statement, with ONE declared departure (DEVIATION 622,
+below) whose output is identical to theirs.
 
 WHY THE DENDROGRAM IS DETERMINISTIC GIVEN THE SORTED MST. `build_dendrogram
 _host` walks the sorted edge list in order and, per edge, merges the two

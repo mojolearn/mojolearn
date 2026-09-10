@@ -551,7 +551,7 @@ struct TEstimationWorkspace(Movable):
     neither should this: their `TCudaManager` hands every estimator
     buffer out of the per-device memory pool (`cuda_lib/memory_pool.h`),
     so tree 2's `TDocParallelLeavesEstimator` reuses tree 1's device
-    memory. This port called `enqueue_create_buffer` inside
+    memory. This implementation called `enqueue_create_buffer` inside
     `_estimate_and_apply` -- THREE fresh `n_rows`-sized buffers (target,
     weights, `approx_dim * n_rows` of cursor), the two partition-offset
     buffers plus their host staging, and the estimate's device/host pair,
@@ -892,7 +892,7 @@ def fit_with_test(
     # `TObliviousTreeLearnerOptions::RandomStrength`
     # (`oblivious_tree_options.cpp:17`). **THEIR DEFAULT IS 1.0 AND THIS
     # ONE IS 0.0**; see `CatBoostOptions.random_strength` for why the
-    # default did not move with the port.
+    # default did not move with the implementation.
     #
     # It reaches BOTH searchers and does something on only one of them:
     # the doc-parallel arm's noise survives into the gain
@@ -980,7 +980,7 @@ def fit_with_test(
     DEVIATION 64: RMSE AT NEWTON-1 SKIPS THE ESTIMATOR. Their
     `NeedEstimation()` is `LeavesEstimationMethod != Simple`
     (`greedy_subsets_searcher.h:67-69`), which is TRUE for RMSE, so theirs
-    runs the estimator and overwrites the searcher's leaf. This port does
+    runs the estimator and overwrites the searcher's leaf. This implementation does
     not, because for RMSE alone the two answers are the same number:
     the searcher writes `stats / (w + L2Reg)`
     (`greedy_search_helper.cpp:646-647`) and one Newton step from zero
@@ -1000,7 +1000,7 @@ def fit_with_test(
     (`boosting_options.cpp:10`). It stood at 0.3 here, a tenfold larger step
     than stock CatBoost, which is a different model for every caller that did
     not pass one. See `CatBoostOptions.learning_rate` for the data-dependent
-    retune (`options_helper.cpp:269-288`) that is deliberately not ported.
+    retune (`options_helper.cpp:269-288`) that is deliberately not implemented.
 
     Returns the loss per row after each iteration: their `functionValue`
     (`pointwise_targets.cu:271`, `:363` for the cross-entropy arm) with the
@@ -1053,7 +1053,7 @@ def fit_with_test(
             raise Error(
                 "grow_policy " + String(grow_policy) + " is not"
                 " SymmetricTree, Depthwise or Lossguide; EGrowPolicy::Region"
-                " is unported (structure_searcher_options.check)"
+                " is unimplemented (structure_searcher_options.check)"
             )
         if use_pointwise_searcher:
             # `TDocParallelObliviousTreeSearcher` grows OBLIVIOUS trees and
@@ -1115,7 +1115,7 @@ def fit_with_test(
     # their `cursor`: the running prediction for every row. With
     # `boost_from_average` false, `cursors->StartingPoint` is unset and
     # `CreateCursors` writes `TVector<float> start(sampleCount, 0.0)`
-    # (`doc_parallel_boosting.h:180-186`); with it TRUE (PORTED
+    # (`doc_parallel_boosting.h:180-186`); with it TRUE (IMPLEMENTED
     # 2026-08-22), `StartingPoint = NCB::CalcOptimumConstApprox(loss,
     # target, weights)` (`:174-182`) and every cursor plane is written
     # with `const float value = (*cursors->StartingPoint)[dim]` -- the
@@ -1330,7 +1330,7 @@ def fit_with_test(
     var losses = List[Float64]()
     var test_losses = List[Float64]()
     # `CreateOverfittingDetector(options, maxIsOptimal, hasTest)`
-    # (`overfitting_detector.cpp:205-207`). EVERY loss this port trains is
+    # (`overfitting_detector.cpp:205-207`). EVERY loss this implementation trains is
     # MINIMIZED, so `maxIsOptimal` is False; a detector built without a
     # test set is inert whatever was asked (`:122-124`).
     var has_test = test.__bool__() and test.value().n_rows > 0
@@ -1425,9 +1425,9 @@ def fit_with_test(
         # permutations the structure comes from permutation 0 or 1 and
         # permutation 2 is never searched on. That reads like an
         # off-by-one in their code and it is transcribed rather than
-        # corrected: COPY, DO NOT IMPROVE, and a fit that searched on a
-        # permutation theirs never searches on is not this port's call to
-        # make. It is the same expression in their feature-parallel
+        # corrected, because a fit that searched on a permutation theirs
+        # never searches on would not be answering the same question.
+ It is the same expression in their feature-parallel
         # learner (`dynamic_boosting.h:286-289`), which is evidence it is
         # deliberate or at least old.
         var learn_perm_count = perm_count - 1 if est_p != 0 else 1
@@ -1590,7 +1590,7 @@ def fit_with_test(
             # their `BootstrapAndFilter`: one draw per row multiplies
             # BOTH planes. Bayesian never zeroes a weight, so their
             # filter branch cannot fire for it; Bernoulli and Poisson do
-            # zero weights and this port still does not filter, which is
+            # zero weights and this implementation still does not filter, which is
             # DEVIATION 69 in `bootstrap.mojo` -- same model, more rows
             # streamed than theirs.
             var compute_mags = False

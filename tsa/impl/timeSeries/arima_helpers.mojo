@@ -2,15 +2,15 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`prepare_data`: difference a batch before a test or a filter.
 
-PORT OF `cuml/cpp/src_prims/timeSeries/arima_helpers.cuh` at cuML 265b9da6
+FOLLOWS `cuml/cpp/src_prims/timeSeries/arima_helpers.cuh` at cuML 265b9da6
 (v26.08.00), lines 194-240 ONLY (`prepare_data`). The stationarity test is
 its one caller in this lane (`stationarity.cuh:330`). The rest of the file
 -- `reduced_polynomial`, `prepare_future_data`, `finalize_forecast` /
 `_undiff_kernel`, `batched_jones_transform` -- is reached by the ARIMA lane
-and ported in `arima/impl/timeSeries/arima_helpers.mojo`, which imports
+and implemented in `arima/impl/timeSeries/arima_helpers.mojo`, which imports
 `prepare_data` from here rather than spelling it twice.
 
-COPY, DO NOT IMPROVE. Their dispatch (`arima_helpers.cuh:219-239`):
+Their dispatch (`arima_helpers.cuh:219-239`):
 `d + D == 1` -> one `batched_diff_kernel` with period `1` if `d` else `s`;
 `d + D == 2` -> one `batched_second_diff_kernel` with `period1 = d ? 1 : s`,
 `period2 = d == 2 ? 1 : s`; `d + D == 0` -> a copy. Threads per block is
@@ -79,7 +79,7 @@ def prepare_data(
 def prepare_data_host(
     y: List[Float32], batch_size: Int, n_obs: Int, d: Int, D: Int, s: Int
 ) raises -> List[Float32]:
-    """The host replay of the dispatch above (NOT a port; the oracle)."""
+    """The host replay of the dispatch above (NOT an implementation; the oracle)."""
     if d + D > 2:
         raise Error("prepare_data_host: d + D must be <= 2")
     if d + D == 1:

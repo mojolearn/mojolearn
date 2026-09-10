@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Core distances from the k-NN graph, and the mutual reachability space.
 
-PORT OF `cuml-v26.08.00/cpp/src/hdbscan/detail/reachability.cuh`
+FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/reachability.cuh`
 (cuML `265b9da`) and, for the parts cuML 26.08 has already delegated to
 cuVS, `cuvs/cpp/src/neighbors/detail/reachability.cuh` (cuVS `94c2819`).
 Both files carry the SAME `core_distances` and `compute_knn`, which is
-why one Mojo file stands for both; `hdbscan/DERIVATION_MAP.tsv` records the
-pair. Transliterated, their order. Do not improve.
+why one Mojo file stands for both. Followed statement for statement, their
+order.
 
 WHAT IS HERE
   `core_distances`      `reachability.cuh:49-63` (cuVS) / `:42-56` (cuML)
@@ -20,7 +20,7 @@ WHAT IS REFUSED BY NAME
 both for DEVIATION 1600's two reasons, which are written out in full in
 `hdbscan/checks/mutual_reachability_dense.mojo`'s block: the sparse
 graph's MST is a forest and the fix-up (`connect_knn_graph`,
-`cross_component_nn`, `merge_msts`) is NOT PORTED in `hierarchy/`; and the
+`cross_component_nn`, `merge_msts`) is NOT IMPLEMENTED in `hierarchy/`; and the
 `DistanceEpilogue` template `mutual_reachability_knn_l2` needs does not
 exist on `neighbors/impl/neighbors/detail/knn_brute_force.mojo`.
 
@@ -257,7 +257,7 @@ def compute_core_dists(
     """`_compute_core_dists`, `reachability.cuh:100-122`. Their name has a
     leading underscore because it is their CPU/GPU interop entry; the
     underscore is dropped here because Mojo has no such convention and
-    `hdbscan/DERIVATION_MAP.tsv` records the rename.
+
 
     `knn_dists` (`m x min_samples`) and `knn_inds` are the caller's, so
     the driver can record them as stages; theirs are function-local
@@ -271,7 +271,7 @@ def compute_core_dists(
             "hdbscan.compute_core_dists: metric=" + String(metric)
             + " refused by name; Currently only L2 expanded distance is"
             " supported (their RAFT_EXPECTS at reachability.cuh:109). To"
-            " close this refusal, port the metric into"
+            " close this refusal, implementation the metric into"
             " hierarchy/impl/cluster/detail/connectivities.mojo's"
             " distance step first, because the dense mutual reachability"
             " graph reads that matrix"
@@ -292,9 +292,9 @@ def compute_core_dists(
 
 
 def mutual_reachability_knn_l2() raises:
-    """`reachability.cuh:151-188`. NOT PORTED; raises by name."""
+    """`reachability.cuh:151-188`. NOT IMPLEMENTED; raises by name."""
     raise Error(
-        "hdbscan.mutual_reachability_knn_l2: NOT PORTED (DEVIATION 1600)."
+        "hdbscan.mutual_reachability_knn_l2: NOT IMPLEMENTED (DEVIATION 1600)."
         " It runs cuvs::neighbors::detail::tiled_brute_force_knn with the"
         " ReachabilityPostProcess epilogue so the k-selection happens IN"
         " mutual reachability space, and"
@@ -309,18 +309,18 @@ def mutual_reachability_knn_l2() raises:
 
 
 def mutual_reachability_graph(n_components_hint: Int) raises:
-    """`reachability.cuh:190-256`. NOT PORTED; raises by name."""
+    """`reachability.cuh:190-256`. NOT IMPLEMENTED; raises by name."""
     raise Error(
-        "hdbscan.mutual_reachability_graph: NOT PORTED (DEVIATION 1600)."
+        "hdbscan.mutual_reachability_graph: NOT IMPLEMENTED (DEVIATION 1600)."
         " Their sparse graph is a symmetrized min_samples-nearest-neighbour"
         " COO, which is DISCONNECTED whenever the data has more than one"
         " well-separated cluster -- the case HDBSCAN exists for -- so"
         " build_sorted_mst returns a forest and enters its fix-up loop."
         " That loop needs connect_knn_graph / cross_component_nn /"
-        " merge_msts, which hierarchy/DERIVATION_MAP.tsv records as NOT PORTED"
+        " merge_msts, which is NOT IMPLEMENTED"
         " and hierarchy/impl/cluster/detail/mst.mojo raises by name. It"
         " also needs mutual_reachability_knn_l2, refused above. To close"
-        " this refusal, port the cross-component fix-up in the hierarchy"
+        " this refusal, implementation the cross-component fix-up in the hierarchy"
         " lane (pinning the host overload's std::mt19937 random vertex"
         " choice, mst.cuh:167-190) and the k-NN epilogue in the neighbors"
         " lane; until then use the dense arm, which is the complete graph"

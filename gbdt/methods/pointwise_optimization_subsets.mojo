@@ -283,7 +283,7 @@ def deinterleave_partitions_kernel(
     part_size: MutPointer[UInt32, MutAnyOrigin],
     part_count_in: Int32,
 ):
-    """ADAPTER, NOT A PORT."""
+    """ADAPTER, NO REFERENCE FILE."""
     var part_count = Int(part_count_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(block_dim.x) * Int(grid_dim.x)

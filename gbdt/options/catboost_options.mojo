@@ -5,7 +5,7 @@
 MIRRORS `catboost/private/libs/options/`, principally
 `catboost_options.cpp`, `boosting_options.cpp`, `oblivious_tree_options.cpp`,
 `bootstrap_options.h` and `data_processing_options.cpp`. Their spellings are
-kept exactly, including the ones this port does not honor yet, because a name
+kept exactly, including the ones this implementation does not honor yet, because a name
 that differs from CatBoost's is a name somebody has to translate every time
 they read their docs against our source.
 
@@ -24,7 +24,7 @@ reading only `oblivious_tree_options.cpp` gets them wrong:
   (`catboost_options.cpp:993-1001`), which also refuses any user value that
   is not `1 << depth`. The literal 31 never reaches a symmetric tree.
 - `border_count` is 128 on GPU and 254 on CPU
-  (`data_processing_options.cpp:14-19`). This is a GPU port, so it is 128.
+  (`data_processing_options.cpp:14-19`). This is a GPU implementation, so it is 128.
 - `leaf_estimation_method` is constructed at `Gradient`
   (`oblivious_tree_options.cpp:14`) and then set per LOSS; RMSE gets
   `Newton` (`catboost_options.cpp:59-64`, `:304-306`).
@@ -91,7 +91,7 @@ def grow_policy_name(p: Int) -> String:
 
 def grow_policy_from_name(name: String) raises -> Int:
     """Their `EGrowPolicy` spellings (`enums.h`), `FromString` semantics:
-    the three this port grows, by name; `Region` and anything else raise
+    the three this implementation grows, by name; `Region` and anything else raise
     by name rather than defaulting. An empty string is SymmetricTree, the
     constructed default (`oblivious_tree_options.cpp:23`)."""
     if name == "" or name == "SymmetricTree":
@@ -103,7 +103,7 @@ def grow_policy_from_name(name: String) raises -> Int:
     if name == "Region":
         raise Error(
             "grow_policy='Region' is EGrowPolicy::Region, which no lane"
-            " ports (greedy_search_helper.cpp:325-350); SymmetricTree,"
+            " implements (greedy_search_helper.cpp:325-350); SymmetricTree,"
             " Depthwise and Lossguide are the three grown here"
         )
     raise Error(
@@ -120,7 +120,7 @@ def grow_policy_from_name(name: String) raises -> Int:
 #
 # The shipped default is COSINE, not L2:
 # `ScoreFunction("score_function", EScoreFunction::Cosine)` --
-# `private/libs/options/oblivious_tree_options.cpp:22`. This port scored
+# `private/libs/options/oblivious_tree_options.cpp:22`. This implementation scored
 # every level with L2 and had no option at all, so a run configured as stock
 # CatBoost picked a DIFFERENT SPLIT AT EVERY LEVEL. Cosine is not a rescaled
 # L2 -- it normalizes by `sqrt(sum(w * mu^2))`, so it ranks candidates by the
@@ -180,7 +180,7 @@ def is_second_order_score_function(s: Int) raises -> Bool:
 #
 # NO CATBOOST COUNTERPART. They ship one GPU backend and accept whatever
 # their float atomics do, so the question does not arise for them. It arises
-# here because this port targets Metal, CUDA and HIP from one source.
+# here because this implementation targets Metal, CUDA and HIP from one source.
 #
 # THREE LEVELS, A LADDER RATHER THAN TWO SWITCHES, because across-device
 # determinism strictly implies within-device determinism and two independent
@@ -240,7 +240,7 @@ def determinism_name(d: Int) -> String:
 # weight is multiplied by a fresh random draw once per tree, and the
 # histogram, the split scores and the leaf values are all computed from the
 # reweighted target. Stock CatBoost therefore grows a DIFFERENT tree from the
-# one this port grows even when every other option matches.
+# one this implementation grows even when every other option matches.
 
 comptime BOOTSTRAP_POISSON = 0
 comptime BOOTSTRAP_BAYESIAN = 1
@@ -284,7 +284,7 @@ def leaf_estimation_method_name(m: Int) -> String:
 
 @fieldwise_init
 struct CatBoostOptions(Copyable, Movable):
-    """Their option names, their defaults, and what this port honors."""
+    """Their option names, their defaults, and what this implementation honors."""
 
     var depth: Int
     """`depth`. CatBoost's default is 6. HONORED: `run_tree`'s `max_depth`."""
@@ -299,7 +299,7 @@ struct CatBoostOptions(Copyable, Movable):
     `models/add_non_symmetric_tree_doc_parallel.mojo` (their
     `TAddModelDocParallel<TNonSymmetricTree>`), and written as `ntree`
     records by `models/model_text.mojo`. `Region` is refused by name: no
-    lane ports it. `pixi run check-grow-policy` gates the dispatch."""
+    lane implements it. `pixi run check-grow-policy` gates the dispatch."""
 
     var max_leaves: Int
     """`max_leaves`. **Default `1 << depth`, which is 64 at the default depth
@@ -361,7 +361,7 @@ struct CatBoostOptions(Copyable, Movable):
     """`score_function`. **Default Cosine**, which is CatBoost's shipped
     default (`oblivious_tree_options.cpp:22`), NOT L2. HONORED for Cosine,
     NewtonCosine, L2 and NewtonL2: the score kernel selects the calcer at
-    comptime. SolarL2, SatL2 and LOOL2 are not ported and `check()` refuses
+    comptime. SolarL2, SatL2 and LOOL2 are not implemented and `check()` refuses
     them."""
 
     var model_size_reg: Float32
@@ -390,11 +390,11 @@ struct CatBoostOptions(Copyable, Movable):
     var border_count: Int
     """`border_count`. **Default 128, not 254.** The value is task-type
     dependent: `type == ETaskType::GPU ? 128 : 254`
-    (`data_processing_options.cpp:14-19`), and this is the GPU port. 254 is
+    (`data_processing_options.cpp:14-19`), and this is the GPU implementation. 254 is
     CatBoost's CPU default and was ours by mistake, which is a quantization
     twice as fine as stock CatBoost on this backend.
 
-    NOT HONORED: quantization is not ported, so the port consumes fold counts
+    NOT HONORED: quantization is not implemented, so the implementation consumes fold counts
     a caller has already produced. This is the option that would drive them,
     and the number it would drive them to is 128."""
 
@@ -413,7 +413,7 @@ struct CatBoostOptions(Copyable, Movable):
     land on the same number for MSE at one iteration.
 
     Gradient is refused even though it also coincides for MSE, because it
-    coincides only for MSE and a silent agreement is not a port."""
+    coincides only for MSE and a silent agreement is not an implementation."""
 
     var leaf_estimation_iterations: Int
     """`leaf_estimation_iterations`. Default 1 for RMSE
@@ -429,7 +429,7 @@ struct CatBoostOptions(Copyable, Movable):
 
     var random_strength: Float32
     """`random_strength`. **CatBoost's default is 1.0 and OURS IS 0.0**
-    (`oblivious_tree_options.cpp:17`), one of only three places this port's
+    (`oblivious_tree_options.cpp:17`), one of only three places this implementation's
     default differs from theirs; the others are `bootstrap_type` and
     `determinism`.
 
@@ -482,7 +482,7 @@ struct CatBoostOptions(Copyable, Movable):
     CatBoost also RETUNES this from the data when the user set neither it nor
     the three leaf-estimation options (`options_helper.cpp:269-288`, a fitted
     curve in `iterationCount` and `learnObjectCount`). That retune is not
-    ported: it needs the row count and the loss at option-resolution time, and
+    implemented: it needs the row count and the loss at option-resolution time, and
     substituting a guess for a fitted curve is exactly the silent deviation
     this file exists to prevent. 0.03 is the value their curve backs off to."""
 
@@ -494,18 +494,18 @@ struct CatBoostOptions(Copyable, Movable):
     var boost_from_average: Bool
     """`boost_from_average`. Default false (`boosting_options.cpp:17`);
     their data-dependent auto-true (`AdjustBoostFromAverageDefaultValue`)
-    is resolved by `train`, not here, mirroring their layering. PORTED
+    is resolved by `train`, not here, mirroring their layering. IMPLEMENTED
     2026-08-22 for RMSE, Logloss and CrossEntropy: `fit_with_test` seeds
     every cursor with `CalcOptimumConstApprox`
     (`gbdt/metrics/optimal_const_for_loss.mojo`) and the model records the
     bias (`doc_parallel_boosting.h:174-182`, `:434`). `check()` here
-    validates the flag against the ported loss set."""
+    validates the flag against the implemented loss set."""
 
     # --- bootstrap_options.h, and this one changes the tree -----------------
 
     var bootstrap_type: Int
     """`bootstrap` / `type`. **CatBoost's default is Bayesian and OURS IS No**,
-    the third and largest place this port's default differs from theirs
+    the third and largest place this implementation's default differs from theirs
     (`bootstrap_options.h:18`).
 
     Not a preference and not a tuning choice. `BootstrapAndFilter` runs once
@@ -513,10 +513,10 @@ struct CatBoostOptions(Copyable, Movable):
     (`weak_objective_impl.h:31-36`), multiplying every row's weight by a fresh
     random draw, so under stock defaults the histogram, the split scores and
     the leaf values are all computed from a reweighted target. Nothing in this
-    port samples, so `No` is the value that describes what actually happens,
+    implementation samples, so `No` is the value that describes what actually happens,
     and `check()` refuses the rest rather than accepting a name it discards.
 
-    The consequence to state plainly: **a shipped-defaults run of this port is
+    The consequence to state plainly: **a shipped-defaults run of this implementation is
     not a shipped-defaults run of CatBoost**, and any comparison between them
     has to say so."""
 
@@ -571,8 +571,8 @@ struct CatBoostOptions(Copyable, Movable):
         """CatBoost's defaults, with THREE deliberate departures.
 
         `random_strength` is 0.0 rather than 1.0 and `bootstrap_type` is `No`
-        rather than `Bayesian`. `bootstrap_type` is unported; the score
-        noise IS ported and 1.0 would pass `check()`, but the shipped
+        rather than `Bayesian`. `bootstrap_type` is unimplemented; the score
+        noise IS implemented and 1.0 would pass `check()`, but the shipped
         searcher is the one where CatBoost's own noise cancels, so 0.0 is
         still the value that describes what a default fit does. `determinism` has no
         CatBoost counterpart at all and defaults to `device`.
@@ -612,7 +612,7 @@ struct CatBoostOptions(Copyable, Movable):
             raise Error(
                 "grow_policy="
                 + grow_policy_name(self.grow_policy)
-                + " has no searcher in this port; SymmetricTree, Depthwise"
+                + " has no searcher in this implementation; SymmetricTree, Depthwise"
                 " and Lossguide are grown, EGrowPolicy::Region is not"
             )
         # `CB_ENSURE(MaxDepth <= 16, "Maximum tree depth is 16")` applies to
@@ -696,7 +696,7 @@ struct CatBoostOptions(Copyable, Movable):
             # `TLOOL2ScoreCalcer` and `TSatL2ScoreCalcer` have none. So
             # under L2 or NewtonL2 the option is accepted and discarded by
             # CATBOOST ITSELF. Copying that silence would leave a knob that
-            # reads as live and is not, which this port refuses on
+            # reads as live and is not, which this implementation refuses on
             # principle even where CatBoost does not.
             raise Error(
                 "random_strength="
@@ -710,7 +710,7 @@ struct CatBoostOptions(Copyable, Movable):
             )
         if self.rsm != 1.0:
             raise Error(
-                "rsm is not ported; every feature is scored at every level,"
+                "rsm is not implemented; every feature is scored at every level,"
                 " so set it to 1.0"
             )
         if (
@@ -722,12 +722,12 @@ struct CatBoostOptions(Copyable, Movable):
             raise Error(
                 "score_function="
                 + score_function_name(self.score_function)
-                + " is not ported; only Cosine, NewtonCosine, L2 and"
+                + " is not implemented; only Cosine, NewtonCosine, L2 and"
                 " NewtonL2 have a calcer in the score kernel"
             )
         if self.model_size_reg != 0.5:
             raise Error(
-                "model_size_reg is not ported; UpdateFeatureWeightsForBest"
+                "model_size_reg is not implemented; UpdateFeatureWeightsForBest"
                 "Splits is not written, so every feature weight is 1.0 and"
                 " any value but the default 0.5 would be silently discarded."
                 " NOTE that at 0.5 this is no longer a no-op either once a"
@@ -747,11 +747,11 @@ struct CatBoostOptions(Copyable, Movable):
                 " live under Depthwise and Lossguide (DEVIATION 259)"
             )
         # The three boosting options, all honored. `boost_from_average`
-        # (PORTED 2026-08-22) is validated against the losses whose
+        # (IMPLEMENTED 2026-08-22) is validated against the losses whose
         # CalcOptimumConstApprox arm exists
         # (`gbdt/metrics/optimal_const_for_loss.mojo`); their own ENSURE
         # (`catboost_options.cpp:705-709`) allows the quantile family too,
-        # whose constant needs the unported CalcSampleQuantile.
+        # whose constant needs the unimplemented CalcSampleQuantile.
         if self.learning_rate <= 0.0:
             raise Error(
                 "learning_rate must be positive; got "
@@ -766,7 +766,7 @@ struct CatBoostOptions(Copyable, Movable):
         # ENSURE (`catboost_options.cpp:703-711`) and this struct does not
         # carry the loss, so it lives where the loss is known: `train`'s
         # resolver raises by name for losses whose CalcOptimumConstApprox
-        # arm is not ported. Nothing to check here.
+        # arm is not implemented. Nothing to check here.
         # Bootstrap. Theirs defaults to Bayesian at temperature 1.0 and
         # reweights every row once per tree BEFORE the derivatives are taken
         # (`weak_objective_impl.h:31-36`), so accepting the name and skipping
@@ -775,7 +775,7 @@ struct CatBoostOptions(Copyable, Movable):
             raise Error(
                 "bootstrap_type="
                 + bootstrap_type_name(self.bootstrap_type)
-                + " is not ported; no row sampling happens anywhere in this"
+                + " is not implemented; no row sampling happens anywhere in this"
                 " tree, so set it to No rather than believing the target was"
                 " reweighted. CatBoost's own default is Bayesian, which means"
                 " a defaults run here is NOT a defaults run of CatBoost"
@@ -861,7 +861,7 @@ struct TCtrDescription(Copyable, Movable):
 
     `PriorEstimation` is `EPriorEstimation::No` in every one of them and is
     not carried here: the GPU refuses anything else for every ctr type but
-    Borders (`catboost_options.cpp:524-533`), and no estimator is ported.
+    Borders (`catboost_options.cpp:524-533`), and no estimator is implemented.
     """
 
     var ctr_type: Int
@@ -891,7 +891,7 @@ def create_default_counter(projection_type: Int) raises -> TCtrDescription:
     GetDefaultPriors(Counter))`, which is the CPU's spelling of the same
     counts under a different normalization -- and the reason a local
     CatBoost CPU arm can only be an information-matched comparison for our
-    FeatureFreq columns, never a bitwise oracle. This is the GPU port, so
+    FeatureFreq columns, never a bitwise oracle. This is the GPU implementation, so
     this returns the GPU branch and `Counter` never appears.
     """
     var border_selection_type: Int
@@ -911,7 +911,7 @@ def create_default_counter(projection_type: Int) raises -> TCtrDescription:
 
 struct TCatFeatureParams(Copyable, Movable):
     """`NCatboostOptions::TCatFeatureParams` (`cat_feature_options.cpp:226-239`)
-    with the fields this port can act on.
+    with the fields this implementation can act on.
 
     `PerFeatureCtrs`, `StoreAllSimpleCtrs`, `CtrLeafCountLimit` and
     `CtrHistoryUnit` are deliberately ABSENT rather than present and
@@ -919,7 +919,7 @@ struct TCatFeatureParams(Copyable, Movable):
     that does not exist: per-feature descriptions need a feature id map, the
     leaf-count limit bounds a tree-ctr cache that is not built, and
     `CtrHistoryUnit::Group` needs the four groupwise kernels
-    `gbdt/ctrs/kernel/ctr_calcers.mojo` documents as unported.
+    `gbdt/ctrs/kernel/ctr_calcers.mojo` documents as unimplemented.
     """
 
     var simple_ctrs: List[TCtrDescription]
@@ -928,7 +928,7 @@ struct TCatFeatureParams(Copyable, Movable):
 
     var combination_ctrs: List[TCtrDescription]
     """`combinations_ctrs`. Same pair with `CreateDefaultCounter(TreeCtr)`.
-    NOT HONORED: feature combinations are not ported, and `check()` refuses
+    NOT HONORED: feature combinations are not implemented, and `check()` refuses
     a `max_ctr_complexity` above 1 rather than accepting the descriptions
     and computing nothing from them."""
 
@@ -948,7 +948,7 @@ struct TCatFeatureParams(Copyable, Movable):
     var max_tensor_complexity: Int
     """`max_ctr_complexity`. CatBoost's default is 4
     (`cat_feature_options.cpp:231`). **OURS IS 1**, because feature
-    combinations are not ported; `check()` refuses anything larger rather
+    combinations are not implemented; `check()` refuses anything larger rather
     than silently computing simple CTRs under a name that promises
     combinations of up to four features."""
 
@@ -988,12 +988,12 @@ struct TCatFeatureParams(Copyable, Movable):
         constructor's values for the rest.
 
         The loss switch above it sends PairLogit and PairLogitPairwise to a
-        counter-only pair; neither is a ported loss, so the `default:`
+        counter-only pair; neither is a implemented loss, so the `default:`
         branch is the only one reachable here.
 
         ONE DEPARTURE, the same shape as `bootstrap_type`'s:
         `max_tensor_complexity` is 1 rather than CatBoost's 4, because
-        combinations are not ported and 4 is a value `check()` would refuse.
+        combinations are not implemented and 4 is a value `check()` would refuse.
         A default that fails its own validation is how a library ships an
         unusable out-of-the-box configuration.
         """
@@ -1022,10 +1022,10 @@ struct TCatFeatureParams(Copyable, Movable):
         that used to stand here saying otherwise are deleted rather than
         annotated.
 
-        The first said this port had no permutation machinery, so the
+        The first said this implementation had no permutation machinery, so the
         ordered statistic would have to run in ROW order -- a different and
         much worse estimator rather than a slower one.
-        `gbdt/data/permutation.mojo` ported `TDataPermutation` on
+        `gbdt/data/permutation.mojo` implemented `TDataPermutation` on
         2026-08-21 (`archive/reference/PORTING.md` 55). The second said a `Borders` model
         could not carry its apply-time CTR tables, so the fallback stayed
         here to avoid shipping a default that trains and cannot score;
@@ -1035,10 +1035,10 @@ struct TCatFeatureParams(Copyable, Movable):
         What this configuration IS for: a fit restricted to FREQUENCY
         information, which is the arm the AMAZON quality row compares
         against CatBoost's CPU `Counter`, and the permutation-independent
-        half of the port on its own. It is one column per categorical
+        half of the implementation on its own. It is one column per categorical
         feature instead of four.
 
-        The caveat that survives: this port builds ONE set of CTR columns
+        The caveat that survives: this implementation builds ONE set of CTR columns
         where their loop builds `permutation_count` of them, so a `Borders`
         fit here carries more of the ordered statistic's noise than theirs.
         That is deviation 55a -- a quality difference on the same
@@ -1145,7 +1145,7 @@ struct TCatFeatureParams(Copyable, Movable):
             raise Error(
                 "max_ctr_complexity="
                 + String(self.max_tensor_complexity)
-                + " is not ported; feature combinations (tree CTRs) need"
+                + " is not implemented; feature combinations (tree CTRs) need"
                 " their own tree_ctr_datasets_visitor machinery, so set it"
                 " to 1 rather than believing combinations were built."
                 " CatBoost's own default is 4, which means a defaults run"
@@ -1166,7 +1166,7 @@ struct TCatFeatureParams(Copyable, Movable):
                 + border_selection_name(
                     self.target_binarization.border_selection_type
                 )
-                + " is not ported; CatBoost's default is MinEntropy with one"
+                + " is not implemented; CatBoost's default is MinEntropy with one"
                 " border (cat_feature_options.cpp:230) and the GPU takes its"
                 " count from ctr_target_border_count, a per-CTR override"
                 " being refused outright (catboost_options.cpp:505)"
@@ -1198,7 +1198,7 @@ struct TCatFeatureParams(Copyable, Movable):
                 raise Error(
                     "simple_ctr="
                     + ctr_type_name(d.ctr_type)
-                    + " is not ported; only Borders and FeatureFreq have a"
+                    + " is not implemented; only Borders and FeatureFreq have a"
                     " calcer in gbdt/ctrs/"
                 )
             if len(d.priors) == 0:
@@ -1221,7 +1221,7 @@ struct TCatFeatureParams(Copyable, Movable):
 # =========================================================================
 # THE LEAF-ESTIMATION DEFAULTS.
 #
-# PORT OF `GetEstimationMethodDefaults` (`catboost_options.cpp:30-271`) and
+# FOLLOWS `GetEstimationMethodDefaults` (`catboost_options.cpp:30-271`) and
 # `TCatBoostOptions::SetLeavesEstimationDefault` (`:273-360`).
 #
 # THEY LIVE HERE BECAUSE THEY LIVE THERE. Both were written into
@@ -1250,15 +1250,15 @@ def get_estimation_method_defaults(
     """`GetEstimationMethodDefaults(ETaskType::GPU, loss)`.
 
     Transcribed branch for branch from their switch, GPU arm taken at every
-    `taskType` test, for the twelve objectives this port trains. Their
+    `taskType` test, for the twelve objectives this implementation trains. Their
     remaining cases are ranking, multi-target and user-defined losses that
-    do not reach this file; each is `NOT PORTED` rather than defaulted,
+    do not reach this file; each is `NOT IMPLEMENTED` rather than defaulted,
     which is why the tail raises instead of falling through to the initial
     values.
     """
     # Their four initializers (`:34-37`) are `1, 1, Newton, 3.0`. Every
     # branch below assigns all four, because the twelve objectives this
-    # port trains are exactly the ones whose cases are complete in their
+    # implementation trains are exactly the ones whose cases are complete in their
     # switch; declaring without initializing keeps that fact checkable by
     # the compiler instead of hiding a missed assignment behind a default.
     var newton: Int
@@ -1343,9 +1343,9 @@ def use_exact_leaves(loss: TLossDescription) -> Bool:
             && ((TaskType == GPU && BoostingType == Plain) || ...)
 
     Both trailing conjuncts are constants here. `IsSingleHost` is true --
-    this port has one device and no distributed mode. `BoostingType` is
+    this implementation has one device and no distributed mode. `BoostingType` is
     Plain -- `gbdt/methods/doc_parallel_boosting.mojo` IS their plain
-    doc-parallel loop and ordered boosting is NOT PORTED, so there is no
+    doc-parallel loop and ordered boosting is NOT IMPLEMENTED, so there is no
     configuration in this tree where the test could go the other way.
 
     NOTE WHAT IS NOT ON THE LIST: `LogLinQuantile`. It shares the Gradient
@@ -1358,7 +1358,7 @@ def use_exact_leaves(loss: TLossDescription) -> Bool:
     A reader comparing against CatBoost's own GPU defaults should know that
     their GPU picks ORDERED boosting by default for these losses
     (`catboost_options.cpp:802-807`), under which their own `useExact` is
-    false and Gradient stands. Their CPU -- the arm this port is measured
+    false and Gradient stands. Their CPU -- the arm this implementation is measured
     against, because their GPU does not run on this machine -- takes the
     Exact branch (`:293`), so Exact is what the comparison needs.
     """
@@ -1446,7 +1446,7 @@ def set_leaves_estimation_default(
 
 # ============================ DEVIATION 257 ============================
 # NOT a deviation from their arithmetic -- a CB_ENSURE of theirs that was
-# never ported, found 2026-08-23 while explaining why the E2 matrix's
+# never implemented, found 2026-08-23 while explaining why the E2 matrix's
 # `Huber`, `Quantile+Newton` and `MAE+Newton` cells hashed bit-identical
 # (66adb9a97127bab9...). That hash is sha256 of 20,000 float32 ZEROS: with
 # every |residual| above delta (the fixture's y sits in [3.74, 10.55] and
@@ -1471,10 +1471,10 @@ def set_leaves_estimation_default(
 # rejects Newton for Quantile, MultiQuantile, MAE, LogLinQuantile, MAPE,
 # StochasticFilter, StochasticRank, and for Lq with q < 2; catboost
 # 1.2.10 says so at runtime ("Newton leaves estimation method is not
-# supported for Quantile loss function"). This port let them through to a
-# zero-Hessian Newton step. Ported below, GPU arm: the CPU-only pairwise
-# clause is `false` here and the two Stochastic* losses are not ported,
-# so the list is the five this port trains plus the Lq clause.
+# supported for Quantile loss function"). This implementation let them through to a
+# zero-Hessian Newton step. Implemented below, GPU arm: the CPU-only pairwise
+# clause is `false` here and the two Stochastic* losses are not implemented,
+# so the list is the five this implementation trains plus the Lq clause.
 # =======================================================================
 
 

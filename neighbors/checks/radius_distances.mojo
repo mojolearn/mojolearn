@@ -14,9 +14,9 @@ register at the moment it decides a point is inside eps. Adding a store there
 costs nothing to compute. It was rejected, for the same three reasons
 IDENTITY_PATHS row 61 rejected the composite sort key:
 
-  * `neighbors/impl/neighbors/ball_cover/registers.mojo` carries the banner
-    "Partial. Do not improve." Its body mirrors cuML's and the value of that
-    mirror is that a reader can diff it against the upstream. Five new stores
+  * `neighbors/impl/neighbors/ball_cover/registers.mojo` is marked partial.
+    Its shape follows cuML's closely, and the value of that is that a reader
+    can diff it against the reference. Five new stores
     at five sites is exactly the kind of local improvement that makes the
     next divergence hunt cost a day.
   * The store would be paid in EVERY mode. A `comptime` cannot remove a write

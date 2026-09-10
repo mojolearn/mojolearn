@@ -6,7 +6,7 @@ The fold layout ordered boosting grows trees on: N tasks laid out as 2N
 partitions over one concatenated document array, learn at even folds and test
 at odd ones.
 
-**WHY THE PAIRING IS THE THING TO GATE.** The dynamic scorer -- ported and
+**WHY THE PAIRING IS THE THING TO GATE.** The dynamic scorer -- implemented and
 gated before this file existed -- reads folds `(f, f + 1)` as
 `(estimate, test)` and steps by TWO. If this layout ever put the test half
 first, or interleaved tasks differently, the scorer would evaluate every

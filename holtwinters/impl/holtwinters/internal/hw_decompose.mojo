@@ -41,9 +41,9 @@ form of the same pseudo-inverse -- `tbar = (m+1)/2`, `Sxx = m (m^2 - 1) /
 w1[t], 1/m)` (one explicit fma so no host codegen can contract it
 differently) -- then rounded to float32 and uploaded. The DATA-TOUCHING
 step, `batched_ls_solver_kernel` (one thread per series, the two dots
-ascending through `identical_mul_add` + `ftz`), is ported unchanged.
+ascending through `identical_mul_add` + `ftz`), is implemented unchanged.
 WHY: ENGINEERING_RULES 0b-i: where their path calls a CLOSED library there is
-nothing to port and the MAX equivalent is the substitute; but MAX's QR
+nothing to implement and the MAX equivalent is the substitute; but MAX's QR
 would be another vendor-shaped float32 result for a quantity that is a
 CONSTANT of `trend_len`, and the identity claim needs the constant to be
 the same bits on every machine. Host float64 basic ops are.
@@ -52,7 +52,7 @@ MEASURED: `hw_check::check_hw_decompose_vs_reference` -- the float32
 construction) and the start level/trend of a planted noiseless
 level+trend series recovered within tolerance; their cuSOLVER bits were
 not run (no NVIDIA here) and are expected to differ from ours in the last
-bits of `R1Qt`, which is the one place this port's decomposition is NOT
+bits of `R1Qt`, which is the one place this implementation's decomposition is NOT
 their bits -- stated in the README as such.
 ============================================================================
 """

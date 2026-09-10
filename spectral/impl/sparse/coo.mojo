@@ -4,7 +4,7 @@
 
 Host-resident here (theirs is device-resident, `rmm::device_uvector`s), because
 every consumer in this lane reads it on the host before uploading the sorted
-arrays once. Nothing else of the struct is ported (`allocate`, `validate_mem`,
+arrays once. Nothing else of the struct is implemented (`allocate`, `validate_mem`,
 the stream plumbing): those are memory management, not algorithm.
 """
 

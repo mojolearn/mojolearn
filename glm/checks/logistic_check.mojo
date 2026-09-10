@@ -24,9 +24,9 @@ DEVIATIONS 546-549. See `glm/README.md`. The checks:
                                        bias slot (it is not there)
     check_logistic_refuses_by_name     softmax (3 classes), sample_weight,
                                        an unknown loss: each RAISES with the
-                                       message naming the unported thing --
+                                       message naming the unimplemented thing --
                                        and an l1 penalty does NOT, because
-                                       OWL-QN is ported (DEVIATION 552)
+                                       OWL-QN is implemented (DEVIATION 552)
     check_owlqn_is_a_minimizer         the l1 arm: SUBGRADIENT optimality in
                                        float64 at the returned point, the
                                        full objective below it at 8
@@ -440,7 +440,7 @@ def _fit_raises(ctx: DeviceContext, pams: QNParams, n_classes: Int, has_sw: Bool
 def check_logistic_refuses_by_name() raises:
     var ctx = DeviceContext()
     # l1 USED TO RAISE HERE and must not any more (DEVIATION 552): `l1 != 0`
-    # selects OWL-QN (`qn_solvers.cuh:420`) and OWL-QN is ported. This arm
+    # selects OWL-QN (`qn_solvers.cuh:420`) and OWL-QN is implemented. This arm
     # is kept, inverted, so that a regression to the refusal is caught by
     # the check that used to require it.
     var p1 = _params(1.0, True, True)
@@ -449,7 +449,7 @@ def check_logistic_refuses_by_name() raises:
     if m1 != "":
         raise Error(
             "check_logistic_refuses_by_name: an l1 penalty RAISED, and"
-            " min_owlqn is ported. Got: " + m1
+            " min_owlqn is implemented. Got: " + m1
         )
     var p2 = _params(1.0, True, True)
     p2.loss = QN_LOSS_SOFTMAX
@@ -460,7 +460,7 @@ def check_logistic_refuses_by_name() raises:
     if m3.find("logistic loss invalid C") < 0:
         raise Error("3 classes under logistic did not raise their text; got: " + m3)
     var m4 = _fit_raises(ctx, _params(1.0, True, True), 2, True)
-    if m4.find("sample_weight is NOT PORTED") < 0:
+    if m4.find("sample_weight is NOT IMPLEMENTED") < 0:
         raise Error("sample_weight did not raise by name; got: " + m4)
     var p5 = _params(1.0, True, True)
     p5.loss = 42
@@ -470,7 +470,7 @@ def check_logistic_refuses_by_name() raises:
     print(
         "check_logistic_refuses_by_name OK: softmax, 3 classes,"
         " sample_weight and an unknown loss each RAISE by name; an l1"
-        " penalty does NOT (it takes the ported OWL-QN arm)"
+        " penalty does NOT (it takes the implemented OWL-QN arm)"
     )
 
 
@@ -899,7 +899,7 @@ def check_owlqn_is_a_minimizer() raises:
         + String(bound) + " (at parameter " + String(worst_k) + ", "
         + worst_kind + "); objective " + String(f0) + " below 8"
         " perturbations and below the L2 solution's " + String(f2)
-        + "; n_iter " + String(r.n_iter) + ", " 
+        + "; n_iter " + String(r.n_iter) + ", "
         + String(_count_exact_zeros(r.w, d)) + " of " + String(d)
         + " weights exactly zero"
     )

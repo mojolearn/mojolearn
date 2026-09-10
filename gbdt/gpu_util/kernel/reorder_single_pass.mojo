@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Single-pass stable one-bit partition: their LARGE-leaf sort path.
 
-PORT OF THE DESIGN behind `SortByFlagsInLeaf`'s big arm
+FOLLOWS THE DESIGN behind `SortByFlagsInLeaf`'s big arm
 (`catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu:741`):
 
     if (part.Size > FastSortSize()) {          // FastSortSize() == 500000
@@ -11,7 +11,7 @@ PORT OF THE DESIGN behind `SortByFlagsInLeaf`'s big arm
         SortWithoutCub(leafId, ...);
     }
 
-`reorder_one_bit.mojo` ports the small arm and records (its `FAST_SORT_SIZE`
+`reorder_one_bit.mojo` implements the small arm and records (its `FAST_SORT_SIZE`
 banner) that the big arm was a gap: we had no device sort to take, so the
 block-scan partition ran at EVERY size. The key is ONE BIT, so the sort was
 never the point -- a stable one-bit partition is a prefix scan plus a
@@ -51,7 +51,7 @@ DECLINED, not missed.
 CUB assigns `tile_idx = start_tile + blockIdx.x` (`agent_scan.cuh:412`) and
 leans on NVIDIA's scheduler starting blocks in nondecreasing order. AMD's
 rocPRIM implements the same lookback with an ORDERED BLOCK ID -- a global
-atomic ticket -- because HIP does not promise that order. This port routes
+atomic ticket -- because HIP does not promise that order. This implementation routes
 to BOTH vendors through one row, so it takes the ticket. The ticket is also
 what makes the scatter's wait sound; see the deadlock argument on the
 kernel.
@@ -62,7 +62,7 @@ kernel.
 # THEIRS: above `FastSortSize()` == 500,000 rows CatBoost leaves the
 # per-leaf partition to `cub::DeviceRadixSort::SortPairs` on the one flag
 # bit (`split_points.cu:737-741`). Below it, `SortWithoutCub` -- already
-# ported as `reorder_one_bit.mojo` and, batched per level, as
+# implemented as `reorder_one_bit.mojo` and, batched per level, as
 # `launch_stable_partition` in `kernel/split_points.mojo`.
 #
 # OURS BEFORE THIS FILE: the 3-launch block-scan partition at every size.

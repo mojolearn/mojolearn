@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Hashed fixtures for the Mamba-2 (SSD) identity block, profile
 `mojolearn.identical.mamba2.fp32.v1` (`mamba/IDENTICAL_MAMBA2_CONTRACT.md`).
-NOT A PORT.
+NO REFERENCE FILE.
 
 The shape of this file is `mamba/checks/mamba_fixture.mojo`'s, on purpose,
 and it IMPORTS that file's generator machinery (`corpus_splitmix64`,

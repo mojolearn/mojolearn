@@ -2,18 +2,18 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """L2 k-NN with the distance matrix NEVER written. Their DISPATCHED DEFAULT.
 
-PORT OF `cuvs/src/neighbors/detail/fused_l2_knn.cuh::fusedL2kNN` at cuVS
+FOLLOWS `cuvs/src/neighbors/detail/fused_l2_knn.cuh::fusedL2kNN` at cuVS
 `94c2819`, built on `raft/linalg/contractions.cuh::Policy2x8` and
 `raft/linalg/detail/contractions.cuh::Contractions_NT`, with their
 `neighbors/impl/neighbors/topk/warp_topk.mojo`'s `WarpSelect` as the selector.
 That selector was written clean-room from Batcher (1968) on 2026-08-31 and
-replaced a transliteration; the queue's SHAPE is what this file depends on,
+replaced a statement-for-statement match; the queue's SHAPE is what this file depends on,
 not its provenance.
-Partial. Do not improve.
+Partial.
 
 WHY THIS FILE EXISTS, WHICH IS THE MOST IMPORTANT THING IN IT
 --------------------------------------------------------------
-`knn_brute_force.mojo` says it is a port of `tiled_brute_force_knn`. It is,
+`knn_brute_force.mojo` says it is an implementation of `tiled_brute_force_knn`. It is,
 and **`tiled_brute_force_knn` is not the function cuVS runs for our
 benchmark.** `brute_force_knn_impl` dispatches at
 `knn_brute_force.cuh:443-447`:
@@ -28,7 +28,7 @@ benchmark.** `brute_force_knn_impl` dispatches at
 
 `bench/scaling_main.mojo` measures k=10, row major, L2, 32 features. Every
 one of those four conditions holds, so **cuVS takes `fusedL2Knn` and this
-repository had ported only the `else`.** We ported their fallback and
+repository had implemented only the `else`.** We implemented their fallback and
 benchmarked it against scikit-learn as if it were their algorithm.
 
 WHAT THE FALLBACK COSTS, IN BYTES
@@ -91,7 +91,7 @@ and merges them with `updateSortedWarpQ` (`:147-185`).
 OURS: `heap0`/`heap1` are constructed once, before the column loop, and
 every column tile runs their `else` arm. `shDumpKV`, `allWarpTopKs`,
 `loadWarpQShmem`, `storeWarpQShmem` and `updateSortedWarpQ` are all
-unreached and unported.
+unreached and unimplemented.
 
 REASON, and it is a hard language wall, not a preference:
 `updateSortedWarpQ` is built on `__ballot_sync` and `__ffs` (`:160`, `:165`)
@@ -118,7 +118,7 @@ element enters the thread queue that theirs would have rejected; the cost is
 the vote in `checkThreadQ`, which is 8 per row per column tile. Not measured
 separately.
 
-**DEVIATION BLOCK 2 - the cross-block merge IS ported; only the FENCE
+**DEVIATION BLOCK 2 - the cross-block merge IS implemented; only the FENCE
 SPELLING deviates.** Theirs grid-strides BOTH axes and serializes the
 per-row merge across column blocks with a mutex array,
 `atomicCAS`/`atomicExch` and `__threadfence` (`:241-281`, `:313-338`); so
@@ -158,7 +158,7 @@ deviation and can now cite this block instead of a wall.
 **DEVIATION BLOCK 3 - single-buffered shared pages.** Their
 `Policy::SmemSize` is `2 * SmemPage` because `Contractions_NT` is DOUBLE
 BUFFERED. Two pages at Policy2x8 is 36,992 bytes against Metal's 32 KB
-threadgroup limit (`archive/reference/PORTING.md 1`), so this port is single-buffered exactly
+threadgroup limit (`archive/reference/PORTING.md 1`), so this implementation is single-buffered exactly
 as `core/gemm.mojo` is. With the selector now in registers the kernel's
 shared footprint is one page, 18,496 bytes, and nothing else -- so the
 ceiling that forces this is Apple's alone and the double buffer would fit on
@@ -327,7 +327,7 @@ def fused_l2_knn_kernel[
 
     `d_in` is their `k`, the feature count. `num_nn_in` is their `numOfNN`,
     the neighbor count. Their kernel calls the feature count `k` and this
-    port does not, because `k` means the neighbor count everywhere else in
+    implementation does not, because `k` means the neighbor count everywhere else in
     this tree and the collision has already cost one reading of their file.
 
     `num_warp_q` / `num_thread_q` are their `NumWarpQ` / `NumThreadQ`
@@ -840,7 +840,7 @@ def fused_l2_knn(
     and every caller in this tree already has them from `compute_norms`.
 
     `L2Unexpanded` / `L2SqrtUnexpanded` route to `fusedL2UnexpKnn` upstream
-    and are NOT ported; see `neighbors/NOT_IMPLEMENTED.tsv` in the lane file.
+    and are NOT implemented; see `neighbors/NOT_IMPLEMENTED.tsv` in the lane file.
     """
     # `ASSERT(k > 0)`, `ASSERT(D > 0)`, `ASSERT(n_index_rows > 0)`,
     # `ASSERT(n_query_rows > 0)`, `fused_l2_knn.cuh:963-967`.

@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Named, nested, scoped timers over the control plane.
 
-PORT OF `catboost/cuda/cuda_lib/cuda_profiler.h` at CatBoost `54a8143a`.
-Transliterated where it transliterates. See the DEVIATION BLOCK.
+FOLLOWS `catboost/cuda/cuda_lib/cuda_profiler.h` at CatBoost `54a8143a`.
+Followed statement for statement where it follow statement for statements. See the DEVIATION BLOCK.
 
 This is not instrumentation bolted on afterwards; it is how CatBoost knows
 where a tree's time goes, and their driver is full of it:
@@ -62,7 +62,7 @@ thread-local manager singleton here and the manager owns the profiler, so
 reaching back would be a cycle. The profiler holds the same `DeviceContext`
 the worker holds and drains it.
 
-CONSEQUENCE, stated because it is the exact class of bug this port exists to
+CONSEQUENCE, stated because it is the exact class of bug this implementation exists to
 kill: a drain from `ImplicitLabelSync` does NOT pass through
 `TGpuOneDeviceWorker._device_sync`, so it is invisible to `sync_count` and to
 `sync_budget`. `LabelAsync` is the default and drains nothing. Selecting

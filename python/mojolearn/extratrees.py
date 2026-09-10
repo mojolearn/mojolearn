@@ -13,8 +13,8 @@ accepted and ignored -- a silently dropped option is indistinguishable, from
 the caller's side, from one that works. Almost all refusals fire in the Mojo
 layer (`extratrees/estimator.mojo`), which is the single place both the host
 and device arms resolve their configuration; this wrapper refuses only what
-never crosses the boundary: the criteria this port has not transcribed
-(NOT_IMPLEMENTED.tsv rows 7 and 12-14; row 11, entropy, is PORTED -- DEVIATION
+never crosses the boundary: the criteria this implementation has not transcribed
+(NOT_IMPLEMENTED.tsv rows 7 and 12-14; row 11, entropy, is IMPLEMENTED -- DEVIATION
 459) and the two forest-level knobs that do not exist here (`n_jobs`,
 `verbose`). The one time this sentence was false --
 the regressor's `max_features` rode across and was overwritten on the far
@@ -36,7 +36,7 @@ replacement through cuML's own sampler (the fnv1a32 `(seed, tree)` chain
 feeding RAFT's Philox `uniformInt`, reused from the RF lane), and
 `max_samples` is resolved exactly as sklearn's `_get_n_samples_bootstrap`
 resolves it (None = n_rows, int = that count, float f = max(int(f *
-n_rows), 1)). `oob_score` stays refused: the out-of-bag mask is not ported.
+n_rows), 1)). `oob_score` stays refused: the out-of-bag mask is not implemented.
 
 `max_leaf_nodes` (2026-09-01): HONOURED, and it was refused until that day.
 sklearn's meaning is best-first growth (`_tree.pyx:374-508`), which is a
@@ -97,7 +97,7 @@ _CLASSIFIER_CRITERIA = {
     "log_loss": _CRITERION_ENTROPY,
 }
 
-_UNPORTED_CRITERIA = {
+_UNSUPPORTED_CRITERIA = {
     # sklearn name -> (which estimator, the recorded reason)
     "friedman_mse": ("regressor", "no cuML counterpart; the exhaustive"
                      " splitter it serves is the ensemble/ lane"),
@@ -111,14 +111,14 @@ _UNPORTED_CRITERIA = {
 def _refuse_forest_knobs(n_jobs, verbose):
     if n_jobs is not None:
         raise NotImplementedError(
-            "n_jobs is not ported: there is no CPU thread pool here -- the"
+            "n_jobs is not implemented: there is no CPU thread pool here -- the"
             " fit runs one host thread driving the GPU (device='gpu')."
             " Refused by name rather than"
             " accepted and ignored."
         )
     if verbose:
         raise NotImplementedError(
-            "verbose is not ported: nothing in the Mojo layer logs per-tree"
+            "verbose is not implemented: nothing in the Mojo layer logs per-tree"
             " progress. Refused by name rather than accepted and ignored."
         )
 
@@ -377,9 +377,9 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         super().__init__(device)
         _refuse_forest_knobs(n_jobs, verbose)
         if criterion not in _CLASSIFIER_CRITERIA:
-            reason = _UNPORTED_CRITERIA.get(criterion)
+            reason = _UNSUPPORTED_CRITERIA.get(criterion)
             raise NotImplementedError(
-                f"criterion={criterion!r} is not ported"
+                f"criterion={criterion!r} is not implemented"
                 + (f" ({reason[1]})" if reason else "")
                 + "; 'gini', 'entropy' and its alias 'log_loss' are."
             )
@@ -460,9 +460,9 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         super().__init__(device)
         _refuse_forest_knobs(n_jobs, verbose)
         if criterion != "squared_error":
-            reason = _UNPORTED_CRITERIA.get(criterion)
+            reason = _UNSUPPORTED_CRITERIA.get(criterion)
             raise NotImplementedError(
-                f"criterion={criterion!r} is not ported"
+                f"criterion={criterion!r} is not implemented"
                 + (f" ({reason[1]})" if reason else "")
                 + "; only 'squared_error' is."
             )

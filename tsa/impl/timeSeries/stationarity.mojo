@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The batched KPSS stationarity test (Kwiatkowski et al. 1992).
 
-PORT OF `cuml/cpp/src_prims/timeSeries/stationarity.cuh` at cuML 265b9da6
+FOLLOWS `cuml/cpp/src_prims/timeSeries/stationarity.cuh` at cuML 265b9da6
 (v26.08.00): `s2B_accumulation_kernel` (:81-102),
 `kpss_stationarity_check_kernel` (:121-160), `_kpss_test` (:191-281),
-`kpss_test` (:300-336). COPY, DO NOT IMPROVE. The RAFT primitives that file
+`kpss_test` (:300-336). The RAFT primitives that file
 calls -- `raft::stats::mean`, `raft::linalg::matrixVectorOp`,
 `raft::linalg::reduce` (sum, and sum of `L2Op` squares),
 `thrust::inclusive_scan_by_key` -- are written here at their call sites,

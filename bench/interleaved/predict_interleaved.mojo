@@ -240,7 +240,7 @@ def main() raises:
         var their_full = arm.predict_seconds(name, BORDER, -1).__float__()
         var their_one = arm.predict_seconds(name, BORDER, 1).__float__()
 
-        # THE EVALUATOR ARM: their own GPU inference design, ported
+        # THE EVALUATOR ARM: their own GPU inference design, implemented
         # (gbdt/models/cuda/evaluator.mojo) -- quantize once, one eval
         # kernel over every tree, results back.
         var t0 = perf_counter_ns()

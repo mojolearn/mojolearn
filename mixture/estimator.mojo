@@ -148,7 +148,7 @@ def covariance_type_from_name(name: String) raises -> Int:
         return COV_FULL
     if name == "tied":
         raise Error(
-            "GaussianMixture: covariance_type='tied' is NOT PORTED."
+            "GaussianMixture: covariance_type='tied' is NOT IMPLEMENTED."
             " scikit-learn shares ONE d x d covariance across every"
             " component (_gaussian_mixture.py:200-227), which is one"
             " Cholesky per iteration rather than n_components of them and a"
@@ -160,7 +160,7 @@ def covariance_type_from_name(name: String) raises -> Int:
         )
     if name == "diag":
         raise Error(
-            "GaussianMixture: covariance_type='diag' is NOT PORTED."
+            "GaussianMixture: covariance_type='diag' is NOT IMPLEMENTED."
             " scikit-learn stores n_components x d variances and computes"
             " the log probability without any Cholesky at all"
             " (_gaussian_mixture.py:539-544, precisions = precisions_chol"
@@ -171,7 +171,7 @@ def covariance_type_from_name(name: String) raises -> Int:
         )
     if name == "spherical":
         raise Error(
-            "GaussianMixture: covariance_type='spherical' is NOT PORTED."
+            "GaussianMixture: covariance_type='spherical' is NOT IMPLEMENTED."
             " One variance per component (_gaussian_mixture.py:545-552),"
             " which is k-means with a soft assignment and a variance."
             " cluster/ already ships the hard-assignment half, identity"
@@ -193,7 +193,7 @@ def init_params_from_name(name: String) raises -> Int:
         return INIT_RANDOM
     if name == "k-means++":
         raise Error(
-            "GaussianMixture: init_params='k-means++' is NOT PORTED."
+            "GaussianMixture: init_params='k-means++' is NOT IMPLEMENTED."
             " scikit-learn calls sklearn.cluster.kmeans_plusplus and"
             " one-hots the CHOSEN INDICES rather than a full assignment"
             " (_base.py:148-155), so it needs the seeding routine's own"
@@ -206,7 +206,7 @@ def init_params_from_name(name: String) raises -> Int:
         )
     if name == "random_from_data":
         raise Error(
-            "GaussianMixture: init_params='random_from_data' is NOT PORTED."
+            "GaussianMixture: init_params='random_from_data' is NOT IMPLEMENTED."
             " scikit-learn draws n_components row indices WITHOUT"
             " REPLACEMENT (_base.py:140-147), which is a rejection loop"
             " whose consumed-draw count depends on the data. That is a"

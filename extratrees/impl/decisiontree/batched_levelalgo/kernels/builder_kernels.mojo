@@ -527,7 +527,7 @@ comptime SAMP_SAB_NO_DEDUPE: Int32 = 2
 """Skip the adjacent-difference test, so EVERY slot is a head."""
 
 comptime SAMP_SAB_AGG_ONE_PER_THREAD: Int32 = 3
-"""Scan ONE item per thread instead of `MAX_SAMPLES_PER_THREAD` of them -- the classic mis-port of a CUB collective that has an `ITEMS_PER_THREAD` template argument."""
+"""Scan ONE item per thread instead of `MAX_SAMPLES_PER_THREAD` of them -- the classic mis-implementation of a CUB collective that has an `ITEMS_PER_THREAD` template argument."""
 
 comptime SAMP_SAB_KEY_NO_THREAD: Int32 = 4
 """Drop `threadIdx.x` from the fnv1a32 chain (`:168`), so every thread of the block draws the IDENTICAL stream."""

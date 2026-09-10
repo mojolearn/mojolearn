@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The pinned distance tile with two pins BROKEN ON PURPOSE, for the check.
 
-NOT A PORT, NOT REACHED by any driver or by the Python-facing entry. A copy
+NO REFERENCE FILE, NOT REACHED by any driver or by the Python-facing entry. A copy
 of `neighbors/checks/pinned_distance_tile.mojo`'s kernel (DEVIATION 505)
 with two sabotage arms that `linkage_check.mojo` selects and nothing else
 can: the copy exists because that file belongs to the neighbors lane and a

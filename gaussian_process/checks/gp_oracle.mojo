@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host oracles: a float32 serial replay and a float64 reference.
 
-NOT A PORT. scikit-learn checks nothing about a Gaussian process at the bit
+NO REFERENCE FILE. scikit-learn checks nothing about a Gaussian process at the bit
 level and need not: `sklearn/gaussian_process/tests/test_gpr.py` compares
 against closed forms and against itself at `assert_almost_equal`, which is
 the right test for a library that ships one backend. We ship three from one

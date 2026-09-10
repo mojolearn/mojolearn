@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random ball cover: the distance functors and the sort comparator.
 
-PORT OF `cuvs/src/neighbors/ball_cover/registers_types.cuh` (the `DistFunc`
+FOLLOWS `cuvs/src/neighbors/ball_cover/registers_types.cuh` (the `DistFunc`
 family) and `cuvs/src/neighbors/ball_cover/common.cuh` (`NNComp`) at cuVS
-`94c2819`. Transliterated. Do not improve.
+`94c2819`. Followed statement for statement.
 
 WHICH FUNCTOR ACTUALLY SHIPS, READ FROM THEIR CODEGEN
 -----------------------------------------------------
@@ -217,7 +217,7 @@ def rbc_validate_metric(metric: Int, metric_arg: Float32) raises:
 
     Host only, before any upload or launch. Every message says what the
     prune rests on, because a caller who is told only "refused" will
-    reasonably assume the work is merely unported.
+    reasonably assume the work is merely unimplemented.
     """
     if metric == DIST_LP_UNEXPANDED:
         # DEVIATION 552's clauses first: they refuse a `p` that is not a
@@ -262,7 +262,7 @@ def rbc_validate_metric(metric: Int, metric_arg: Float32) raises:
             " them slowly."
             " cuML refuses it on the same index for the same reason"
             " (VALID_METRICS['rbc']). Use NearestNeighbors, which is exact"
-            " brute force and honors every ported metric."
+            " brute force and honors every implemented metric."
         )
     if metric == DIST_L2_EXPANDED or metric == DIST_L2_UNEXPANDED:
         raise Error(

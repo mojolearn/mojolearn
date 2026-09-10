@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """LSD radix sort WITHIN each of a partition's contiguous segments.
 
-PORT OF `catboost/cuda/cuda_util/kernel/segmented_sort.{cu,cuh}` at CatBoost
+FOLLOWS `catboost/cuda/cuda_util/kernel/segmented_sort.{cu,cuh}` at CatBoost
 `54a8143a` -- their `NKernel::SegmentedRadixSort<K, V>` and the
 `TSegmentedRadixSortContext` that carries its bit range. THIS FILE IS THE
 MIRROR ADDRESS FOR THAT ONE, which is why it is named for their file rather
 than for what it does.
 
 The API above it is `cuda_util/segmented_sort.{h,cpp}`; the caller in this
-port's reach is `ComputeWeightedQuantile`
+implementation's reach is `ComputeWeightedQuantile`
 (`methods/leaves_estimation/leaves_estimation_helper.h:110-112`):
 
     SegmentedRadixSort(orderedTargets, orderedWeights, tmpTargets,
@@ -18,12 +18,12 @@ port's reach is `ComputeWeightedQuantile`
 # =========================================================================
 # DEVIATION 65: their whole file is a CUB call. `NKernel::SegmentedRadixSort`
 # (`segmented_sort.cu:7-45`) sets up two `cub::DoubleBuffer`s and hands them
-# to `cub::DeviceSegmentedRadixSort::SortPairs`, so the body being ported
-# here is the SortPairs itself. CUB is OPEN and therefore a port candidate
+# to `cub::DeviceSegmentedRadixSort::SortPairs`, so the body being implemented
+# here is the SortPairs itself. CUB is OPEN and therefore an candidate to implement
 # under ENGINEERING_RULES 0b-i, and MAX ships no device sort at all
 # (archive/reference/VENDOR_LIBS.md, re-checked 2026-08-20), so there is nothing to call.
 #
-# Their `Descending` arm (`SortPairsDescending`, `:29-36`) is NOT PORTED:
+# Their `Descending` arm (`SortPairsDescending`, `:29-36`) is NOT IMPLEMENTED:
 # `ComputeWeightedQuantile` passes the default `compareGreater = false`
 # (`segmented_sort.h:14`), and ENGINEERING_RULES 3 says a branch no caller
 # reaches is not done. `TSegmentedRadixSortContext`'s `FirstBit`/`LastBit`

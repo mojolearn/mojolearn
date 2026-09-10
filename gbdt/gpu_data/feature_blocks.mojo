@@ -57,7 +57,7 @@ def blocks_for(layout: CompressedIndexLayout, n_rows: Int) raises -> List[
     `block_first_bin` by each block's fold count, so a feature's destination
     in the flat histogram is `sum(earlier blocks' folds) + fold_offset`.
     `build_layout` assigns `first_fold_index` by walking policies and
-    features in exactly this order, which is the port of their one-builder
+    features in exactly this order, which is the implementation of their one-builder
     invariant: their group write offset and their per-feature
     `FirstFoldIndex` both come off `BinFeaturesBuilder`
     (`compute_by_blocks_helper.cpp:189` and `:218`) inside one `AddGroup`

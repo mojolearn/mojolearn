@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The condensed tree: collapse every subtree below `min_cluster_size`.
 
-PORT OF `cuml-v26.08.00/cpp/src/hdbscan/detail/condense.cuh`
+FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/condense.cuh`
 (cuML `265b9da`): `bfs_from_node` (`:37-66`), `_build_condensed_hierarchy`
-(`:91-212`) and `build_condensed_hierarchy` (`:237-286`). Transliterated,
-their branches in their order. Do not improve.
+(`:91-212`) and `build_condensed_hierarchy` (`:237-286`). Followed statement for statement,
+their branches in their order.
 
 THIS IS A HOST FUNCTION ON THEIR SIDE TOO, and that is worth stating
 because the file name says `.cuh`. cuML 26.08 rewrote condense as a
@@ -190,8 +190,7 @@ def build_condensed_hierarchy(
 ) raises -> CondensedHierarchy:
     """`condense.cuh:237-286`, with `_build_condensed_hierarchy`
     (`:91-212`) inlined behind it exactly as their call at `:274-283`
-    puts it -- one Mojo function for their pair, recorded in
-    `hdbscan/DERIVATION_MAP.tsv`.
+    puts it -- one Mojo function for their pair.
 
     Returns the condensed hierarchy their `condensed_tree.condense(...)`
     at `:285` populates.
@@ -403,7 +402,7 @@ def _collapse(
 
     Their three copies are one function here; the body is transcribed
     once because it is three copies of one paragraph, and
-    `hdbscan/DERIVATION_MAP.tsv` records the fold.
+
     """
     var descendants = List[Int32]()
     bfs_from_node(subtree_root, n_samples, h_children, descendants, sabotage)

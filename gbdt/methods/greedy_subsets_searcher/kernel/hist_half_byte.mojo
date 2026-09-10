@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The half-byte histogram kernel: 8 features per 4-byte load.
 
-PORT OF `hist_half_byte.cu` plus the loop it instantiates,
+FOLLOWS `hist_half_byte.cu` plus the loop it instantiates,
 `compute_hist_loop_one_stat.cuh` (`ALIGN_MEMORY`,
 `TComputeHistogramImpl<FourElements>::Compute`,
 `ComputeSplitPropertiesDirectLoadsImpl`), at CatBoost `54a8143a`.
-Transliterated. Do not improve.
+Followed statement for statement.
 
 The features that need 2 to 15 folds land here: one `UInt32` of the
 compressed index holds EIGHT of them at 4 bits each, so one load feeds eight
@@ -197,7 +197,7 @@ def half_byte_hist_kernel(
     barrier()
     var slice_base = slice_offset(tid)
 
-    # --- AlignMemoryAccess, ported --------------------------------------
+    # --- AlignMemoryAccess, implemented --------------------------------------
     # (`compute_hist_loop_one_stat.cuh:57-105`, the direct overload.)
     #
     # REQUIRED by LOAD_SIZE 4, not an optimization: a partition offset is not
@@ -287,7 +287,7 @@ def half_byte_hist_kernel(
         # matrix claims one exists. Write that path before flipping the row.
         return
 
-    # This is where the port stops being a transliteration. CatBoost syncs a `tiled_partition<8>`, which is
+    # This is where the implementation stops being a statement-for-statement match. CatBoost syncs a `tiled_partition<8>`, which is
     # WARP-LOCAL, so warps with different iteration counts never wait on each
     # other. Mojo 1.0 has only the threadgroup-wide `barrier()`, and a
     # threadgroup barrier that some warps reach and others skip is undefined
@@ -637,7 +637,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
     barrier()
     var slice_base = slice_offset(tid)
 
-    # --- AlignMemoryAccess (gather), ported
+    # --- AlignMemoryAccess (gather), implemented
     # (`compute_hist_loop_one_stat.cuh:107-157`). Same peel as the direct
     # variant; the difference is only that the bin comes through `indices`.
     #
@@ -744,7 +744,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
         # matrix claims one exists. Write that path before flipping the row.
         return
 
-    # This is where the port stops being a transliteration. CatBoost syncs a `tiled_partition<8>`, which is
+    # This is where the implementation stops being a statement-for-statement match. CatBoost syncs a `tiled_partition<8>`, which is
     # WARP-LOCAL, so warps with different iteration counts never wait on each
     # other. Mojo 1.0 has only the threadgroup-wide `barrier()`, and a
     # threadgroup barrier that some warps reach and others skip is undefined

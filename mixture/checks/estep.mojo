@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The E-step: the log Gaussian probability, and the responsibilities.
 
-NOT A PORT, AND THERE IS NOTHING TO PORT. cuML has no Gaussian mixture model
+NO REFERENCE FILE, AND THERE IS NOTHING TO IMPLEMENTATION. cuML has no Gaussian mixture model
 at `upstream/cuml-v26.08.00` (`265b9da`): no `gmm` directory, no `mixture`
 module, no `GaussianMixture` symbol outside a scikit-learn test xfail list.
-cuVS (`6ba2ce2`) and RAFT (`ebf9268`) have none either. `ENGINEERING_RULES.md`'s
-COPY DO NOT IMPROVE therefore **does not apply to this lane**, because there
-is no upstream file to copy. What applies instead is
+cuVS (`6ba2ce2`) and RAFT (`ebf9268`) have none either. `ENGINEERING_RULES.md`
+0b therefore **points at nothing for this lane**, and every design question
+here was ours to answer. What applies instead is
 `mixture/README.md`'s rule: `sklearn/mixture/_gaussian_mixture.py` and
 `_base.py` define the SEMANTICS and are the ORACLE, and they are never the
 design source.

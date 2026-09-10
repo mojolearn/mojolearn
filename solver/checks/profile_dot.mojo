@@ -5,7 +5,7 @@ and it is not this section's: it is `mojolearn.identical.gemm.fp32.v1` at
 `m = n = 1, k = n_rows` (an `OP_NT` cell, `gemm/IDENTICAL_FP32_CONTRACT.md`
 section 0.1: "`gemv` is `OP_NT` at `n == 1` and is NOT a fourth operation").
 
-NOT A PORT. cuML's coordinate descent performs four reductions over the
+NO REFERENCE FILE. cuML's coordinate descent performs four reductions over the
 rows -- the column norms (`cd.cuh:172`, RAFT `coalescedReduction`), the
 per-coordinate `dot(X[:, ci], residual)` (`cd.cuh:206`, cuBLAS `gemv`), and
 under `fit_intercept` the column means and the label mean
@@ -37,7 +37,7 @@ vector is `n_rows` floats allocated once per fit.
 
 FAST does not come here. Under FAST the four reductions are the vendor
 spellings: `gemv_gpu` for the dot (cuBLAS mirror, `core/gemm.mojo::gemv_n`)
-and the ported `coalescedSumMediumKernel` for the norms and means.
+and the implemented `coalescedSumMediumKernel` for the norms and means.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

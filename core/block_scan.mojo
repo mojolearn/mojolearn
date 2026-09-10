@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cub::BlockScan<BinT, TPB>::InclusiveSum`, and cuML's `pdf_to_cdf` loop.
 
-PORT OF `cub/cub/block/block_scan.cuh` and its default algorithm
+FOLLOWS `cub/cub/block/block_scan.cuh` and its default algorithm
 `cub/cub/block/specializations/block_scan_warp_scans.cuh`, over
 `cub/cub/warp/specializations/warp_scan_smem.cuh`, at NVIDIA/cccl
 `d10a88a945caa4ea63dd2a909cf789c6dbe085a4` (cloned read-only into
@@ -12,7 +12,7 @@ PORT OF `cub/cub/block/block_scan.cuh` and its default algorithm
 `cpp/src/decisiontree/batched-levelalgo/bins.cuh` at rapidsai/cuml
 `v26.08.00` (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`).
 
-CUB IS OPEN, SO IT IS PORTED. `max.gpu.primitives.block.prefix_sum` was
+CUB IS OPEN, SO IT IS IMPLEMENTED. `max.gpu.primitives.block.prefix_sum` was
 not called in its place, and here the reason is not a preference: it is
 addition over a SCALAR and takes no operator, while this scan's element is
 one of cuML's four bin STRUCTS. There is nothing to substitute.
@@ -38,7 +38,7 @@ one of cuML's four bin STRUCTS. There is nothing to substitute.
       return total_aggregate;                                 // :282
     }
 
-Three things in that loop decide the port's shape and all three are
+Three things in that loop decide the implementation's shape and all three are
 transcribed rather than paraphrased:
 
   * the loop bound is `ceildiv(n_bins, TPB) * TPB`, so EVERY thread enters
@@ -51,7 +51,7 @@ transcribed rather than paraphrased:
     fed into the next scan as a seed. CUB ships a prefix-callback form
     (`BlockScanWarpScans::InclusiveScan` with `BlockPrefixCallbackOp`,
     `block_scan_warp_scans.cuh:486-508`) that would do it inside the
-    collective; cuML does not use it, so this file does not port it.
+    collective; cuML does not use it, so this file does not implementation it.
 
 ## `BinT` is not a scalar
 

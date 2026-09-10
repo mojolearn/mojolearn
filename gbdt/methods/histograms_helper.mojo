@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """When to rebuild a level's histograms from scratch, and how big they are.
 
-PORT OF `catboost/cuda/methods/histograms_helper.h` at CatBoost `54a8143a`,
-`TComputeHistogramsHelper`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/histograms_helper.h` at CatBoost `54a8143a`,
+`TComputeHistogramsHelper`. Followed statement for statement.
 
 This is the object the doc-parallel oblivious searcher holds one of per
 FEATURE GROUPING POLICY -- binary, half-byte, one-byte -- and drives once per
@@ -42,7 +42,7 @@ skipped level -- disagrees, and the answer is to rebuild.
 
 **So the helper does not need to be told a new tree started.** That is the
 design: the only input is the subsets' own depth, and every discontinuity
-resolves to a full pass on its own. A port that added a `reset()` call would
+resolves to a full pass on its own. An implementation that added a `reset()` call would
 work and would be a different program.
 
 ## Two different sizes, and they are not the same expression
@@ -62,7 +62,7 @@ size and lets the caller own the buffer, because this repository has no
 `TCudaBuffer` and a helper that allocated on its own would hide the growth
 `ResetHistograms` exists to make explicit.
 
-NOT PORTED HERE: `EnsureHistCompute`, which synchronizes a
+NOT IMPLEMENTED HERE: `EnsureHistCompute`, which synchronizes a
 `TComputationStream`. There are no streams on Metal (`metal-hardware-gaps`),
 so every launch is already ordered on the one queue and the flag it guards
 has nothing to guard.

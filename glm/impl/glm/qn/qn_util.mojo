@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`LBFGSParam`, the return codes, `check_convergence`, `lbfgs_search_dir`.
 
-PORT OF `cuml/cpp/src/glm/qn/qn_util.cuh` at cuML `00094f7`. WHOLE FILE
+FOLLOWS `cuml/cpp/src/glm/qn/qn_util.cuh` at cuML `00094f7`. WHOLE FILE
 since 2026-09-01: `project_orth`, `get_pseudo_grad`, `op_project` and
-`op_pseudo_grad` -- OWL-QN's four operators -- are ported at the bottom,
+`op_pseudo_grad` -- OWL-QN's four operators -- are implemented at the bottom,
 with the two device kernels that apply them elementwise and their host
-wrappers. Do not improve.
+wrappers.
 
 WHY THE KERNELS ARE HERE AND NOT IN `simple_mat/dense.mojo`. Upstream these
 are functors passed to `SimpleVec::assign_binary`, so the arithmetic lives

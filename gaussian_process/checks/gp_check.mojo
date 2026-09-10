@@ -872,7 +872,7 @@ def check_gp_refusals() raises:
         + "]: "
         + String(n_refused)
         + " refusals fired BY NAME (general Matern and nu=inf,"
-        " classification, six unported kernel names, four optimizers,"
+        " classification, six unimplemented kernel names, four optimizers,"
         " restarts, normalize_y, four bad alphas, non-finite X and y,"
         " multi-output y, a zero length scale, a mis-sized ARD vector,"
         " sample_y, and a failed fit's lml and predict), and the three"

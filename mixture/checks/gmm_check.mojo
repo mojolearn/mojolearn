@@ -561,8 +561,8 @@ def check_gmm_refusals() raises:
     """Every refusal fires BY NAME, and the acceptances prove they are not
     simply always firing.
 
-    Eight refusal families: the three unported covariance types, the two
-    unported initializations, a collapsed component, non-finite input, and
+    Eight refusal families: the three unimplemented covariance types, the two
+    unimplemented initializations, a collapsed component, non-finite input, and
     `n_components` out of range at both ends.
     """
     var n_refused = 0
@@ -579,7 +579,7 @@ def check_gmm_refusals() raises:
             var _t = covariance_type_from_name(nm)
         except e:
             raised = True
-            if String(e).find("NOT PORTED") < 0 and String(e).find(
+            if String(e).find("NOT IMPLEMENTED") < 0 and String(e).find(
                 "not one of"
             ) < 0:
                 raise Error(
@@ -597,7 +597,7 @@ def check_gmm_refusals() raises:
             " a refusal set that fires on everything proves nothing"
         )
 
-    # (2) the two unported initializations
+    # (2) the two unimplemented initializations
     var init_names: List[String] = [
         String("k-means++"), String("random_from_data"), String("nonsense"),
     ]

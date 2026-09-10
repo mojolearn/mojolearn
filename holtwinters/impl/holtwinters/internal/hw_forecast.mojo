@@ -4,7 +4,7 @@
 
 `holtwinters_seasonal_forecast_kernel` and `holtwinters_forecast_gpu`'s
 seasonal arm (the public `ML::HoltWinters::forecast` always passes level,
-trend and season; the level-only and non-seasonal kernels are UNPORTED).
+trend and season; the level-only and non-seasonal kernels are UNIMPLEMENTED).
 One thread per series, `h` steps serial: `level + trend * (i + 1) + season`
 is `fma(trend, i + 1, level) + season` (additive) or `fma(...) * season`
 (multiplicative); `i + 1` is exact in float32.

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Merge two labellings in place, according to a core-point mask.
 
-PORT OF `raft/label/detail/merge_labels.cuh` at RAFT `661a3b8`
+FOLLOWS `raft/label/detail/merge_labels.cuh` at RAFT `661a3b8`
 (`propagate_label_kernel`, `reassign_label_kernel`, `merge_labels`).
-Transliterated. Do not improve.
+Followed statement for statement.
 
 WHY DBSCAN NEEDS THIS AT ALL
 ----------------------------
@@ -20,7 +20,7 @@ Their comment at `runner.cuh:392-395` is the reason this cannot be shortcut:
     weak_cc_batched and skipping the merge step would lead to incorrect
     results as described in #3094.
 
-This port previously had no merge and no per-batch labelling. It kept ONE
+This implementation previously had no merge and no per-batch labelling. It kept ONE
 `weak_cc` over a CSR built from every row of the dataset, which is correct
 but is the thing batching exists to prevent: the global CSR is as large as
 the whole adjacency in sparse form, so the memory the batched adjacency

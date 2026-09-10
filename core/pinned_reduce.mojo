@@ -5,7 +5,7 @@
 DEVIATION 504 (IDENTITY_PATHS row 20). Reached only under
 `NUMERIC_IDENTICAL`; the FAST arm IS the library call.
 
-NOT A PORT. cuVS, cuML and RAFT each ship one GPU backend and reduce with
+NO REFERENCE FILE. cuVS, cuML and RAFT each ship one GPU backend and reduce with
 whatever CUB gives them; the question this file answers -- *does the fold
 combine the same partials in the same order on Metal, CUDA and HIP* -- only
 exists because we ship three backends from one source.

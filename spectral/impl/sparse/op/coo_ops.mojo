@@ -15,7 +15,7 @@ overload (`filter.cuh:197-250`); `sorted_coo_to_csr` is `coo_degree` plus
 an `exclusive_scan` (`csr.cuh:78-90`). All integer
 work; none of it rounds a float.
 OURS: the same three operations on the host, over `List[Int32]`/
-`List[Float32]`, because (a) the repository has no device sort to port them
+`List[Float32]`, because (a) the repository has no device sort to implement them
 onto without writing one, and (b) the outputs are pure functions of the
 input regardless of where they run -- a sort to a TOTAL ORDER `(row, col,
 original index)` has exactly one answer, a compaction of nonzeros in that

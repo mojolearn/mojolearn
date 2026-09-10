@@ -225,7 +225,7 @@ Both paper variants rebuilt successfully after the correction.
   does not retroactively turn that old refusal row into a pass.
 - [ ] Validate additive PCA whitening binding exposure and bounded k-NN
   k=257–1024 selector extension after source review. Existing distance-weighted
-  voting, Manhattan and cosine need current evidence, not duplicate ports.
+  voting, Manhattan and cosine need current evidence, not duplicate implements.
   Audited source `2e53699e` lacks the PCA whitening binding export; this is
   not an inspection of the differently sourced published native payload.
   Later export additions remain unqualified and are not retroactive release coverage.

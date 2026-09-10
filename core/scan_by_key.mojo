@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`thrust::inclusive_scan_by_key`, FUSED: the cuML RF node partition.
 
-PORT OF the call at
+FOLLOWS the call at
 `cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels_impl.cuh
 :165-206` (`launchNodeSplitKernel`), its operator at `:40-46`
 (`NodeSplitPartitionScanOp`), its state at `:36-38`
@@ -42,7 +42,7 @@ writer, so partition_row_ids is populated during the scan rather than by
 a second scatter kernel."
 
 A segmented-scan primitive that takes an input ARRAY and writes an output
-ARRAY does not port this call. It ports a slower algorithm and freezes the
+ARRAY does not implementation this call. It implements a slower algorithm and freezes the
 extra passes into the design, which is the mistake this repository has
 already paid for once (`traffic-model-ignores-blocks`; and the k-NN case
 where standing a device-wide vendor GEMM plus a vendor top-k in for a
@@ -89,8 +89,8 @@ instantiations.
 ## The head flag is derived from the KEYS, not supplied
 
 Theirs compares adjacent keys (`thrust::equal_to<IdxT>{}` at `:205`); the
-CatBoost family this repository already ports reads a flag bit out of the
-value or the index. This port keeps THEIRS: slot `i` is a segment head iff
+CatBoost family this repository already implements reads a flag bit out of the
+value or the index. This implementation keeps THEIRS: slot `i` is a segment head iff
 `i == 0` or `key(i) != key(i - 1)`. That is two key evaluations per slot,
 and their key functor is a single `workload_info[slot / TPB].nodeid`
 load, so it is cheap on their side too.

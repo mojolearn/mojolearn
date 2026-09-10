@@ -3,7 +3,7 @@
 """Multinomial logistic regression (cuML `qnFit`, QN_LOSS_SOFTMAX, L-BFGS):
 oracle, reach, identity.
 
-DEVIATIONS 705-706 (the port, `glm/impl/glm/qn/glm_softmax.mojo`) and
+DEVIATIONS 705-706 (the implementation, `glm/impl/glm/qn/glm_softmax.mojo`) and
 709-711 (the gates here). See `glm/README.md`, "QN losses". The checks:
 
     check_softmax_fd_gradient           the FLOAT64 host objective's analytic
@@ -519,7 +519,7 @@ def check_softmax_refuses_by_name() raises:
     if m4.find("min_owlqn") < 0:
         raise Error("l1 did not raise by name; got: " + m4)
     var m5 = _fit_raises(ctx, _params(1.0, True, True), 3, True)
-    if m5.find("sample_weight is NOT PORTED") < 0:
+    if m5.find("sample_weight is NOT IMPLEMENTED") < 0:
         raise Error("sample_weight did not raise by name; got: " + m5)
     print(
         "check_softmax_refuses_by_name OK: softmax with C=2, logistic with C=3,"

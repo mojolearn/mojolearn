@@ -41,7 +41,7 @@ SAME 400k x 500 float slice of epsilon, interleaved in one process:
 A - B is the preparation bill: borders + binning + cindex build + the
 device uploads. Whether it is 0.5 s or 50 s decides whether the
 user-facing path needs the device binarize kernel
-(`binarize_float_feature_kernel`, already ported for inference) wired
+(`binarize_float_feature_kernel`, already implemented for inference) wired
 into `train()`, or nothing at all.
 
 The CatBoost side of the same question is one number from their arm

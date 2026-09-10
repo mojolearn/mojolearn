@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Hashed fixtures for the Isolation Forest gates and the card, ASSEMBLED
-FROM BITS. NOT A PORT.
+FROM BITS. NO REFERENCE FILE.
 
 Every value is a splitmix64 hash turned into a float32 by BITCAST (the
 kde lane's `bits_value`, IDENTITY_PATHS row 32's lesson: a host

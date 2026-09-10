@@ -62,7 +62,7 @@ them is a decision somebody could get wrong from memory:
 unlike the training input which is column-major by default
 (`randomforest.hpp:181-186`).
 
-## FIT: their dispatch, recorded even though the body is not ported
+## FIT: their dispatch, recorded even though the body is not implemented
 
 `DecisionTree::fit` (`decisiontree.cuh:234-333`) does exactly two things
 before handing off to `Builder<ObjectiveT>::train()`:
@@ -103,7 +103,7 @@ it is carried there.
 
 (b) `get_tree_text` / `get_tree_json` / `get_node_text` /
 `get_node_json` / `to_string_high_precision`
-(`decisiontree.cuh:69-152`, `decisiontree.cu:85-97`) are NOT PORTED
+(`decisiontree.cuh:69-152`, `decisiontree.cu:85-97`) are NOT IMPLEMENTED
 YET and `get_tree_json` below raises by name rather than emitting a
 tree.
 WHY, and this is a priced refusal rather than laziness: their dumps
@@ -126,7 +126,7 @@ oracle comparison against their wheel would use anyway.
 (c) `TreeMetaDataNode::train_time` (`decisiontree.hpp:97`, a `double`
 holding milliseconds) is CARRIED as a Float64 field so the struct
 matches theirs field for field, and is NEVER WRITTEN and NEVER READ by
-this port. `get_tree_summary_text` below therefore omits the
+this implementation. `get_tree_summary_text` below therefore omits the
 " Tree Fitting - Overall time --> N milliseconds" line their version
 prints (`decisiontree.cu:80-81`). Timing is out of scope this round by
 instruction; a field that would report a duration is left at its
@@ -136,7 +136,7 @@ that a later lane restoring the line knows it was removed on purpose
 and not lost.
 
 (d) `double` resolution, per site, for this file. There is exactly one
-`double` in the ported surface -- `train_time` -- and it is host-side
+`double` in the implemented surface -- `train_time` -- and it is host-side
 and inert per (c), so it stays Float64. `DecisionTreeParams` has no
 `double`: `max_features` and `min_impurity_decrease` are `float`
 (`decisiontree.hpp:33, 54`) and are Float32 here, which matters
@@ -290,7 +290,7 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
 
         What this method refuses is what a caller can set TODAY and get a
         wrong answer from. Training parameters are a separate question
-        with a separate answer -- `fit` is not ported, so it refuses ALL
+        with a separate answer -- `fit` is not implemented, so it refuses ALL
         of them, by name, in `check_fit_supported()` below rather than
         letting one of them look honored.
         """
@@ -303,7 +303,7 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
                 "split_criterion=MAE is not supported by cuML either --"
                 " `validity_check` refuses it at decisiontree.cu:28 and"
                 " randomforest_common.pyx:147 raises NotImplementedError."
-                " There is no upstream MAE path to port."
+                " There is no upstream MAE path to implement."
             )
         if self.split_criterion < GINI or self.split_criterion > CRITERION_END:
             raise Error(
@@ -312,7 +312,7 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
                 + " is not a CRITERION; algo_helper.h:10-18 enumerates 0"
                 " (GINI) through 7 (CRITERION_END). Their Python layer"
                 " silently warns and substitutes CRITERION_END here"
-                " (randomforest_common.pyx:142-146); this port refuses"
+                " (randomforest_common.pyx:142-146); this implementation refuses"
                 " instead, because a substituted criterion is a"
                 " different model under the same name."
             )
@@ -322,7 +322,7 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
         """Every training field now HAS a consumer. Nothing is refused here.
 
         THIS METHOD USED TO RAISE, and the sentence it raised with --
-        "DecisionTree.fit is NOT PORTED YET ... the only thing that reads
+        "DecisionTree.fit is NOT IMPLEMENTED YET ... the only thing that reads
         them is Builder<ObjectiveT>::train(), which does not exist yet" --
         is deleted rather than annotated, because it is false. All nine
         `DecisionTreeParams` fields are read:
@@ -348,7 +348,7 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
         them now, and it passes no objective at all.
 
         It is kept as a method rather than deleted so that a future
-        unported field has somewhere to be refused BY NAME. That is the
+        unimplemented field has somewhere to be refused BY NAME. That is the
         rule it exists for: an option present and ignored is worse than one
         absent, because absent fails loudly.
         """
@@ -380,7 +380,7 @@ def set_tree_params(
     declares `split_criterion` before `min_impurity_decrease`
     (`decisiontree.hpp:49, 54`). Both orders are kept as they are; the
     mismatch is theirs and is exactly the kind of thing a positional
-    call gets wrong, which is why every call site in this port names its
+    call gets wrong, which is why every call site in this implementation names its
     arguments.
     """
     params.max_depth = cfg_max_depth
@@ -468,7 +468,7 @@ def get_tree_summary_text[
 
 
 def get_tree_json[dtype: DType](tree: TreeMetaDataNode[dtype]) raises -> String:
-    """`ML::DT::get_tree_json`, `decisiontree.cu:92-97`. NOT PORTED YET.
+    """`ML::DT::get_tree_json`, `decisiontree.cu:92-97`. NOT IMPLEMENTED YET.
 
     Raises by name rather than emitting a tree whose thresholds would
     not round-trip. DEVIATION 118b has the reason and the price.
@@ -477,7 +477,7 @@ def get_tree_json[dtype: DType](tree: TreeMetaDataNode[dtype]) raises -> String:
     raise Error(
         "get_tree_json / get_tree_text / get_node_json / get_node_text /"
         " to_string_high_precision (decisiontree.cuh:69-152,"
-        " decisiontree.cu:85-97) are NOT PORTED YET. Their whole value is"
+        " decisiontree.cu:85-97) are NOT IMPLEMENTED YET. Their whole value is"
         " to_string_high_precision's max_digits10 round-trip"
         " (decisiontree.cuh:76-78), and Mojo's String(Float32) does not"
         " round-trip -- so a dump written through it would disagree with"
@@ -502,11 +502,11 @@ struct DecisionTree:
 
     @staticmethod
     def fit[dtype: DType](params: DecisionTreeParams) raises:
-        """`DecisionTree::fit`, `decisiontree.cuh:234-333`. NOT PORTED.
+        """`DecisionTree::fit`, `decisiontree.cuh:234-333`. NOT IMPLEMENTED.
 
         Their body does two things: resolve `CRITERION_END` to GINI/MSE
         (`:251-256`) and dispatch to one of four `Builder<ObjectiveT>`
-        instantiations (`:259-332`). BOTH now live elsewhere in this port
+        instantiations (`:259-332`). BOTH now live elsewhere in this implementation
         -- the resolution in `Builder`'s constructor, the dispatch in the
         `O` a caller picks -- so this single-tree entry point has nothing
         left of its own and no callers.
@@ -518,7 +518,7 @@ struct DecisionTree:
         successful no-op from a successful fit.
         """
         raise Error(
-            "DecisionTree.fit is not ported: fit a one-tree forest through"
+            "DecisionTree.fit is not implemented: fit a one-tree forest through"
             " ensemble.randomforest.fit_forest instead. Their"
             " decisiontree.cuh:251-256 criterion resolution lives in"
             " Builder's constructor and their :259-332 objective dispatch"

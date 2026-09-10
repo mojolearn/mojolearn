@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`build_mr_linkage`: the linkage in mutual reachability space.
 
-PORT OF `cuvs/cpp/src/cluster/detail/single_linkage.cuh::build_mr_linkage`
+FOLLOWS `cuvs/cpp/src/cluster/detail/single_linkage.cuh::build_mr_linkage`
 (`:50-118`) at cuVS `94c2819`, the function `hierarchy/NOT_IMPLEMENTED.tsv` line
 8 names as "HDBSCAN's linkage (core distances, mutual reachability), not
 single linkage's ... it is the ROADMAP's Phase 1 and would reuse this
@@ -15,7 +15,7 @@ THAT CLAIM HELD. Nothing in `hierarchy/impl/sparse/solver/`,
 for this lane; they are IMPORTED. The one thing the claim did not say,
 and that this lane found, is that the GRAPH is not carried over: theirs
 is a sparse k-NN COO whose MST is a forest, and the fix-up it needs is
-the part `hierarchy` records as NOT PORTED. See DEVIATION 1600 in
+the part `hierarchy` records as NOT IMPLEMENTED. See DEVIATION 1600 in
 `hdbscan/checks/mutual_reachability_dense.mojo`.
 
 WHAT THEIR FUNCTION DOES, STEP FOR STEP (`:62-117`), AND WHAT OURS DOES
@@ -28,7 +28,7 @@ WHAT THEIR FUNCTION DOES, STEP FOR STEP (`:62-117`), AND WHAT OURS DOES
              OURS: `color` unchanged; the reduction op is an argument of
              the FIX-UP LOOP ONLY (`build_sorted_mst`'s `connect_knn_
              graph`), which a complete graph never enters, so it is not
-             ported. `hdbscan/NOT_IMPLEMENTED.tsv` has the row.
+             implemented. `hdbscan/NOT_IMPLEMENTED.tsv` has the row.
   `:88-102`  `build_sorted_mst(...)` with `nnz = mr_coo.nnz`
              OURS: `hierarchy/impl/cluster/detail/mst.mojo::
              build_sorted_mst`, unchanged, with `nnz = m * m`.
@@ -111,7 +111,7 @@ def build_mr_linkage(
             + String(PAIRWISE_MAX_ROWS)
             + "; the dense mutual reachability graph is m * m cells and"
             " hierarchy's PAIRWISE connectivity refuses past that bound"
-            " (their value_idx overflows). To close this refusal, port the"
+            " (their value_idx overflows). To close this refusal, implementation the"
             " SPARSE arm (DEVIATION 1600), which needs the cross-component"
             " fix-up in the hierarchy lane and a k-NN distance epilogue in"
             " the neighbors lane"
@@ -212,7 +212,7 @@ def build_mr_linkage(
     # kernel writes temp_src[tid] = tid with the mutual-add tie broken on a
     # COLOR comparison, not a vertex one.
     #
-    # THERE IS NOTHING TO PORT HERE. Their colors come from a round whose
+    # THERE IS NOTHING TO IMPLEMENTATION HERE. Their colors come from a round whose
     # min-edge tie is a cuRAND draw (DEVIATION 620) feeding a sort documented
     # unstable (DEVIATION 621), so their condensed-tree numbering varies run
     # to run on one GPU. An artifact is not a rule, and we cannot transcribe

@@ -7,7 +7,7 @@
 NO CATBOOST COUNTERPART: this is a gate, and `checks/` is where gates
 live.
 
-WHAT GATES WHAT. The kernel is the port of `PointwiseTargetImpl<TTarget>`
+WHAT GATES WHAT. The kernel is the implementation of `PointwiseTargetImpl<TTarget>`
 (`pointwise_targets.cu:246-281`) specialized on each of their nine objective
 structs (`:11-240`). No CatBoost fit can gate its DERIVATIVES bitwise -- the
 kernel's own deviation block explains why: their file mixes `__expf`,

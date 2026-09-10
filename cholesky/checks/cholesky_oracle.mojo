@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host oracles: a float32 serial replay and a float64 reference.
 
-NOT A PORT. cuML and cuVS check nothing about Cholesky at the bit level and
+NO REFERENCE FILE. cuML and cuVS check nothing about Cholesky at the bit level and
 need not: `cuml/cpp/tests/sg/lars_test.cu:110-125` compares
 `updateCholesky` against `cusolverDnpotrf` at a tolerance, which is the right
 test for a library that ships one backend. We ship three from one source, so

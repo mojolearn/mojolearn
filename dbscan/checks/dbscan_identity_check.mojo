@@ -464,7 +464,7 @@ def check_dbscan_refuses_truncated_propagation() raises:
                 "check_dbscan_refuses_truncated_propagation (FAST): the"
                 " truncated run raised. Under FAST the upstream's silent"
                 " truncation is the behaviour, and changing it would be an"
-                " improvement on cuML rather than a port of it."
+                " improvement on cuML rather than an implementation of it."
             )
         var moved = 0
         for i in range(DB_N):

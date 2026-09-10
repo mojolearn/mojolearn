@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The triangular and diagonal helpers of RAFT's dense matrix utilities.
 
-PORT of `raft/matrix/detail/matrix.cuh` at RAFT `ebf9268`
+IMPLEMENTATION of `raft/matrix/detail/matrix.cuh` at RAFT `ebf9268`
 (`upstream/raft-v26.08.00`), the four kernels a Cholesky lane needs:
 `getUpperTriangular` / `copyUpperTriangular` (`:196-222`),
 `copyVectorToMatrixDiagonal` / `initializeDiagonalMatrix` (`:225-262`),
 `copyVectorFromMatrixDiagonal` / `getDiagonalMatrix` (`:240-273`) and
 `matrixDiagonalInverse` / `getDiagonalInverseMatrix` (`:277-294`).
-Transliterated. **COPY, DO NOT IMPROVE**, with the two departures below.
+Followed statement for statement, with the two departures below.
 
 Nothing else from that header is here: `slice`, `columnWiseSort`, `gather`,
 `getL2Norm` and the print helpers belong to other sections or to nobody, and
@@ -37,7 +37,7 @@ invisible gap (ENGINEERING_RULES rule 3).
 # =========================================================================
 
 # =========================================================================
-# DEVIATION 1645: `matrix_diagonal_inverse` IS PORTED AND IS UNREACHABLE
+# DEVIATION 1645: `matrix_diagonal_inverse` IS IMPLEMENTED AND IS UNREACHABLE
 # FROM ANY IDENTITY PATH IN THIS LANE, ON PURPOSE.
 #
 # Their `getDiagonalInverseMatrix` (`:290-294`) exists so that later work can
@@ -53,10 +53,9 @@ invisible gap (ENGINEERING_RULES rule 3).
 # `CHOL_SAB_TRSM_RECIPROCAL` is the arm that swaps this shape in so the gate
 # can be shown to see the difference.
 #
-# The kernel is ported anyway, because ENGINEERING_RULES rule 3 says an unported
-# file is visible and a mis-ported one is not, and because a FAST-mode caller
-# outside this lane may legitimately want it. It has no caller HERE and
-# `cholesky/DERIVATION_MAP.tsv` says so in the same words.
+# The kernel is implemented anyway, because ENGINEERING_RULES rule 3 says an unimplemented
+# file is visible and a mis-implemented one is not, and because a FAST-mode caller
+# outside this lane may legitimately want it. It has no caller HERE.
 # =========================================================================
 """
 

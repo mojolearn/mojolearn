@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, ported from pinned cuML and sklearn implementations."""
+"""ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
 from extratrees.checks.host_splitter import (
     node_split_random_gini,
@@ -163,7 +163,7 @@ def max_nodes(max_depth: Int32) -> Int:
 # unchanged, and DEVIATION 211's cross-tree batching survives intact. What
 # changes is who is in each batch, and that is DEVIATION 469's cost.
 #
-# WHAT IS NOT PORTED FROM THEIR BUILDER, stated rather than left to be
+# WHAT IS NOT IMPLEMENTED FROM THEIR BUILDER, stated rather than left to be
 # discovered. (a) Their frontier also carries records for nodes that are
 # ALREADY leaves (`is_leaf = 1`, `improvement = 0.0`, `_tree.pyx:641-647`),
 # popped later to be finalised. Ours does not, and the trees are the same:
@@ -210,7 +210,7 @@ def max_nodes(max_depth: Int32) -> Int:
 #
 #   with `count` the node's row count and `total` the tree's sampled row
 #   count -- `weighted_n_samples` with `sample_weight=None`, which is the
-#   only case this port supports (NOT_IMPLEMENTED.tsv's `sample_weight`
+#   only case this implementation supports (NOT_IMPLEMENTED.tsv's `sample_weight`
 #   row).
 # WHY NOT RECOMPUTE THEIR EXPRESSION TERM FOR TERM: it needs
 #   `imp_parent`, `imp_left` and `imp_right` as three separate Float32s at
@@ -329,7 +329,7 @@ comptime BESTFIRST_SAB_NONE: Int32 = 0
 """No sabotage. The shipping value."""
 
 comptime BESTFIRST_SAB_FIFO: Int32 = 1
-"""Order the frontier by arrival instead of by improvement -- what a port
+"""Order the frontier by arrival instead of by improvement -- what an implementation
 that kept cuML's deque and only added the leaf budget would build. The mode
 becomes cuML's `max_leaves` under sklearn's name, so the TREE must move on
 any fixture where the best node is not the oldest. DEVIATION 466's gate."""
@@ -376,8 +376,8 @@ def frontier_key(gain: Float32, count: Int32, total: Int32) -> Float32:
 struct FrontierRecord(ImplicitlyCopyable, Movable):
     """One searched, splittable node waiting to be expanded.
 
-    `FrontierRecord` (`_tree.pyx:341-357`), minus the members this port does
-    not have a use for -- see DEVIATION BLOCK 466's "what is not ported".
+    `FrontierRecord` (`_tree.pyx:341-357`), minus the members this implementation does
+    not have a use for -- see DEVIATION BLOCK 466's "what is not implemented".
     Theirs carries `start`/`end`/`pos` where ours carries the
     `NodeWorkItem`'s `InstanceRange` and the `Split`'s `n_left`, which are
     the same two numbers under different names.
@@ -687,7 +687,7 @@ struct NodeQueue[dtype: DType](Movable):
         return self.params.max_leaf_nodes != -1
 
     def bestfirst_budget_left(self) -> Bool:
-        """`max_split_nodes > 0` (`_tree.pyx:424`, `:454`), in this port's
+        """`max_split_nodes > 0` (`_tree.pyx:424`, `:454`), in this implementation's
         counter.
 
         `tree.leaf_counter` IS the leaf count here -- it starts at 1 for the
@@ -773,7 +773,7 @@ struct NodeQueue[dtype: DType](Movable):
         Returns whether the node was admitted. An INVALID split is not
         admitted, and that is where their `is_leaf` records go: in this
         representation the node is already a leaf and staying off the heap
-        leaves it one (DEVIATION BLOCK 466, "what is not ported", (a)). The
+        leaves it one (DEVIATION BLOCK 466, "what is not implemented", (a)). The
         validity test is `split_not_valid`, the same call `push` makes and
         the same call `nodeSplitKernel` makes, so a node cannot be admitted
         under one rule and expanded under another.
@@ -1444,7 +1444,7 @@ def train_classification_bestfirst(
                 _add_to_frontier(split_node_right, frontier)
 
     THE ORDER INSIDE ONE EXPANSION IS LOAD BEARING AND IS NOT THEIRS'
-    ORDER, because this port partitions where they index. Theirs never
+    ORDER, because this implementation partitions where they index. Theirs never
     permutes anything: `_add_split_node` reads `samples[start:end]` and the
     parent's `node_split` already wrote `split.pos`. Ours must partition the
     parent's row range BEFORE either child's search reads it, so the
@@ -1574,7 +1574,7 @@ def train_regression_bestfirst(
 # every device kernel in this lane was UNWIRED -- built, checked per cell, and
 # reached by nothing but its own check, which rule 3 says is not done.
 #
-# THEIR HOST/DEVICE SPLIT IS PORTED, NOT RE-DECIDED. cuML's node queue is a
+# THEIR HOST/DEVICE SPLIT IS IMPLEMENTED, NOT RE-DECIDED. cuML's node queue is a
 # HOST structure: `doSplit` ends with `raft::update_host(h_splits, splits,
 # work_items.size())` and a `sync_stream` (`:492-494`), and `Push` then runs on
 # the host. So copying the batch's chosen splits back per level is theirs, not
@@ -1618,7 +1618,7 @@ def gain_per_split(
     n_classes)` ints that their design never moves -- and formed the gain
     in `Float64` on the host. It was correct and it was the wrong shape,
     and the commit that introduced it argued "the cheaper fix moved less
-    code", which optimises for the porter rather than for the port.
+    code", which optimises for the porter rather than for the implementation.
 
     THIS FORM: the gain is computed here, in `Float32`, from their
     expression, and travels with the candidate into the reduction. The
@@ -1761,7 +1761,7 @@ def score_to_candidate_kernel(
     WHY IT IS ELEMENTWISE AND NOT FUSED INTO EITHER NEIGHBOUR: fusing it
     into the finalize kernel would make that kernel write two layouts of
     the same fact, and fusing it into the reduction would make the
-    reduction read a layout it does not own. Both couple two ported files
+    reduction read a layout it does not own. Both couple two implemented files
     to each other through a shape neither upstream has.
 
     THE ONE PIECE OF POLICY IN IT: a cell whose status is not SCORED
@@ -1911,7 +1911,7 @@ def fill_row_slots(
 
     OURS: the `bootstrap == false` arm is `row_ids_tiled_sequence_kernel`
     (DEVIATION 200/211, unchanged); the `bootstrap == true` arm is
-    `core.philox.launch_uniform_int` -- the RF lane's port of RAFT's
+    `core.philox.launch_uniform_int` -- the RF lane's implementation of RAFT's
     `uniformInt` under `GenPhilox` (its DEVIATION 184 geometry, its oracle)
     -- called ONCE PER SLOT on a sub-buffer view of that slot, seeded by
     `row_sample_seed(seed, tree_id)` (`pcg_rng.mojo`, the same fnv1a32
@@ -2094,7 +2094,7 @@ def sample_features_for_device[
     That would be a DIFFERENT ALGORITHM wearing this one's name, on the
     one arm nobody would look at. Tracking `V = 1 - W` through `expm1f`
     was rejected for the opposite reason: it is numerically BETTER than
-    cuML, and this is a port.
+    cuML, and this is an implementation.
 
     WHY NOT REFUSE THE ARM: refusing would make the device path unusable
     whenever `k/n` is near 1 at large `n`, and the host transcription is
@@ -2556,7 +2556,7 @@ def _device_max_acc() -> Int:
 comptime FOREST_SAB_NONE = Int32(0)
 comptime FOREST_SAB_SCALAR_TREE = Int32(1)
 """DEVIATION 211 sabotage: every item in a merged batch is staged with the
-FIRST item's tree id, which is what a port that kept the per-launch scalar
+FIRST item's tree id, which is what an implementation that kept the per-launch scalar
 would silently do. Every tree but the batch-first one must move."""
 comptime FOREST_SAB_SHARED_ROW_BASE = Int32(2)
 """DEVIATION 211 sabotage: every in-flight tree's root range starts at slot
@@ -3640,7 +3640,7 @@ def train_forest_classification_device_timed(
             + " (DEVIATION 172: shared sizing is comptime here)"
         )
 
-    # --- identity trace (`core/identity_trace.mojo`) -- NOT A PORT --------
+    # --- identity trace (`core/identity_trace.mojo`) -- NO REFERENCE FILE --------
     # Stage checkpoints so a cross-backend bit difference has an ADDRESS.
     # `MOJOLEARN_IDENTITY_TRACE` is read ONCE, here, at fit entry; unset
     # (the shipping state) every `record_*` returns on one boolean test.
@@ -3662,7 +3662,7 @@ def train_forest_classification_device_timed(
             + String(seed)
         )
         # The post-upload boundary. ET fits the RAW resident matrix -- this
-        # port has no quantile/binning stage, so deviation 184's resident
+        # implementation has no quantile/binning stage, so deviation 184's resident
         # dataset is the corresponding stage output.
         trace.record_device(ctx, "dataset.data", dataset.d_data)
         trace.record_device(ctx, "dataset.labels", dataset.d_labels)
@@ -4870,7 +4870,7 @@ def train_forest_regression_device_timed(
 
     comptime TPB = DEVICE_TPB
 
-    # --- identity trace -- NOT A PORT; see the classification twin --------
+    # --- identity trace -- NO REFERENCE FILE; see the classification twin --------
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(

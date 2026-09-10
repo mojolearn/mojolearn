@@ -43,7 +43,7 @@ any data, and neither is a transcription of the code under test:
    the calcer see the multiset `{a, b, -(a+b)}`. Feeding the free planes
    `(a, -(a+b))` instead pins class 1 rather than class 2 and presents the
    SAME multiset, so the score must be identical to the last bit that the
-   summation order allows. A port that used the wrong sign, dropped the
+   summation order allows. An implementation that used the wrong sign, dropped the
    extra leaf, or gave it the wrong weight breaks this.
 
 THE SABOTAGES:
