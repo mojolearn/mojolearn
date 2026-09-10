@@ -66,3 +66,67 @@ def test_versioned_gpu_archive_and_legacy_default(cls, tmp_path, monkeypatch):
     np.testing.assert_array_equal(restored._leaves, gpu._leaves)
     gpu.set_params(inference_engine='sequential')
     assert not gpu.__sklearn_is_fitted__()
+
+
+@pytest.mark.parametrize('cls', CLASSES)
+def test_resident_model_reuse_invalidation_and_lifetime(cls, monkeypatch):
+    import ctypes
+    import gc
+    import pickle
+    prepared, released, predicted = [], [], []
+
+    def prepare(*args):
+        prepared.append(args)
+        return len(prepared)
+
+    def predict(handle, x, out, dims):
+        predicted.append(handle)
+        values = np.ctypeslib.as_array((ctypes.c_float * (dims[0]*dims[2])).from_address(out))
+        values[:] = 1 / dims[2]
+        return dims[0]
+
+    native = SimpleNamespace(forest_prepare_gpu=prepare,
+                             forest_predict_resident_gpu=predict,
+                             forest_release_gpu=released.append)
+    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    model = fitted(cls, 'parallel_groves')
+    X = np.ones((3, 1), dtype=np.float32)
+    original = model._leaves
+    call = model.predict_proba if model._num_outputs > 1 else model.predict
+    first = call(X)
+    np.testing.assert_array_equal(call(X), first)
+    assert predicted == [1, 1] and len(prepared) == 1
+    assert not model._leaves.flags.writeable
+    with pytest.raises(ValueError):
+        model._leaves.setflags(write=True)
+    original[:] = 99
+    assert model._leaves[0] == 1
+
+    restored = pickle.loads(pickle.dumps(model))
+    assert not hasattr(restored, '_resident_forest')
+    np.testing.assert_array_equal(restored.predict_proba(X) if model._num_outputs > 1
+                                  else restored.predict(X), first)
+    assert predicted[-1] == 2
+    del restored
+    gc.collect()
+    assert released == [2]
+
+    model._leaves = model._leaves.copy()
+    call(X)
+    gc.collect()
+    assert len(prepared) == 3 and predicted[-1] == 3 and 1 in released
+    model.set_params(inference_engine='sequential')
+    gc.collect()
+    assert sorted(released) == [1, 2, 3]
+
+
+def test_resident_refuses_bad_arrays_before_pointer_handoff(monkeypatch):
+    def fail(*args):
+        pytest.fail('malformed host arrays reached native pointer ABI')
+    native = SimpleNamespace(forest_prepare_gpu=fail, forest_predict_resident_gpu=fail,
+                             forest_release_gpu=fail)
+    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    model = fitted(RandomForestRegressor, 'parallel_groves')
+    model._leaves = np.array([], dtype=np.float32)
+    with pytest.raises(ValueError, match='shapes'):
+        model.predict(np.ones((2, 1), dtype=np.float32))

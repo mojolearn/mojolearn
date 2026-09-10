@@ -618,17 +618,7 @@ class RandomForestClassifier(_RandomForestBase):
     def predict_proba(self, X):
         Xa, n_rows, n_features = self._check_predict_input(X)
         out = np.empty(n_rows * self._num_outputs, dtype=np.float32)
-        wrote = self._prediction_function("rf_predict_proba")(
-            _addr_ro(self._offsets),
-            _addr_ro(self._colid),
-            _addr_ro(self._quesval),
-            _addr_ro(self._left_child),
-            _addr_ro(self._leaves),
-            _addr_ro(Xa),
-            _addr(out),
-            [int(n_rows), int(n_features), self._n_trees,
-             self._num_outputs],
-        )
+        wrote = self._predict_forest("rf_predict_proba", Xa, out)
         if wrote != n_rows:
             raise RuntimeError(
                 f"rf_predict_proba wrote {wrote} of {n_rows} rows"
@@ -736,16 +726,7 @@ class RandomForestRegressor(_RandomForestBase):
     def predict(self, X):
         Xa, n_rows, n_features = self._check_predict_input(X)
         out = np.empty(n_rows, dtype=np.float32)
-        wrote = self._prediction_function("rf_predict_reg")(
-            _addr_ro(self._offsets),
-            _addr_ro(self._colid),
-            _addr_ro(self._quesval),
-            _addr_ro(self._left_child),
-            _addr_ro(self._leaves),
-            _addr_ro(Xa),
-            _addr(out),
-            [int(n_rows), int(n_features), self._n_trees, 1],
-        )
+        wrote = self._predict_forest("rf_predict_reg", Xa, out)
         if wrote != n_rows:
             raise RuntimeError(
                 f"rf_predict_reg wrote {wrote} of {n_rows} rows"

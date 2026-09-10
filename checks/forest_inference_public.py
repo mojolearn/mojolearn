@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Public GPU parallel-grove inference: independent graph oracle and archives."""
-import hashlib, json, os, tempfile, time
+import argparse, gc, hashlib, json, os, pickle, tempfile, time
 from pathlib import Path
 import numpy as np
 from mojolearn import RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor
@@ -40,34 +40,53 @@ def oracle(model, X):
 
 
 def main():
-    assert os.environ.get('MOJOLEARN_NUMERIC_MODE')=='identical'
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--mode', choices=('fast','identical'), default='identical')
+    parser.add_argument('--vendor', choices=('cuda','metal','hip'), default='cuda')
+    args=parser.parse_args()
+    assert os.environ.get('MOJOLEARN_NUMERIC_MODE')==args.mode
     rng=np.random.default_rng(7)
     X=rng.normal(size=(513,5)).astype(np.float32)
     outputs=[]
     for cls in (RandomForestClassifier,RandomForestRegressor,ExtraTreesClassifier,ExtraTreesRegressor):
         classifier=cls._estimator_type=='classifier'
         y=(X[:,0]+X[:,1]>.25).astype(np.int32) if classifier else (X[:,0]*.7-X[:,1]*.2).astype(np.float32)
-        m=cls(n_estimators=33,max_depth=5,random_state=7,numeric_mode='identical',inference_engine='parallel_groves').fit(X,y)
+        m=cls(n_estimators=33,max_depth=5,random_state=7,numeric_mode=args.mode,inference_engine='parallel_groves').fit(X,y)
         native=m._bind()
         prefix='rf' if cls.__name__.startswith('Random') else 'trees'
-        assert getattr(native,prefix+'_numeric_mode')()==1
-        assert getattr(native,prefix+'_vendor')()=='cuda'
+        assert getattr(native,prefix+'_numeric_mode')()==(1 if args.mode=='identical' else 0)
+        assert getattr(native,prefix+'_vendor')()==args.vendor
         pred=m.predict_proba(X) if classifier else m.predict(X)
         expected=oracle(m,X)
         if not classifier: expected=expected[:,0]
         np.testing.assert_array_equal(np.asarray(pred,dtype=np.float32).view(np.uint32),expected.view(np.uint32))
+        resident=m._resident_forest
         again=m.predict_proba(X) if classifier else m.predict(X)
+        assert m._resident_forest is resident
         np.testing.assert_array_equal(pred,again)
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'model.npz';m.save(path);loaded=cls.load(path)
             restored=loaded.predict_proba(X) if classifier else loaded.predict(X)
             np.testing.assert_array_equal(pred,restored)
             assert loaded.inference_engine=='parallel_groves'
+        restored=pickle.loads(pickle.dumps(m))
+        assert not hasattr(restored, '_resident_forest')
+        copy_pred=restored.predict_proba(X) if classifier else restored.predict(X)
+        np.testing.assert_array_equal(pred,copy_pred)
+        released_handle=restored._resident_forest.handle
+        del restored
+        gc.collect()
+        try:
+            native.forest_release_gpu(released_handle)
+        except Exception as exc:
+            assert 'released' in str(exc)
+        else:
+            raise AssertionError('destroyed estimator left a live GPU model')
         m.inference_engine='sequential'
         reference=m.predict_proba(X) if classifier else m.predict(X)
         np.testing.assert_allclose(pred,reference,rtol=2e-6,atol=2e-6)
-        record=dict(estimator=cls.__name__,hash=hashlib.sha256(pred.tobytes()).hexdigest(),max_difference=float(np.max(np.abs(pred-reference))))
+        record=dict(estimator=cls.__name__,mode=args.mode,vendor=args.vendor,hash=hashlib.sha256(pred.tobytes()).hexdigest(),max_difference=float(np.max(np.abs(pred-reference))))
         print(json.dumps(record),flush=True);outputs.append(record)
-    print('PASS public parallel-groves GPU inference, graph oracle, repeated calls, versioned archives')
+    print('PASS public parallel-groves GPU inference, graph oracle, resident reuse/release, pickle, versioned archives')
 
 if __name__=='__main__': main()

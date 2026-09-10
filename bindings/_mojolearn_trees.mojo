@@ -33,6 +33,10 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
+from forest_inference_binding import (
+    forest_prepare_gpu_binding, forest_predict_resident_gpu_binding, forest_release_gpu_binding,
+    forest_vector_groves_binding,
+)
 from core.forest_inference import forest_predict_gpu
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -463,6 +467,10 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         m.def_function[et_regressor_fit_binding]("et_regressor_fit")
         m.def_function[et_predict_binding]("et_predict")
         m.def_function[et_predict_gpu_parallel_binding]("et_predict_gpu_parallel")
+        m.def_function[forest_prepare_gpu_binding[False]]("forest_prepare_gpu")
+        m.def_function[forest_predict_resident_gpu_binding[False]]("forest_predict_resident_gpu")
+        m.def_function[forest_release_gpu_binding[False]]("forest_release_gpu")
+        m.def_function[forest_vector_groves_binding]("forest_vector_groves")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_trees: ", e))

@@ -262,17 +262,7 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
                 f"X has {n_features} features, fit saw {self.n_features_in_}"
             )
         out = np.empty(n_rows * self._num_outputs, dtype=np.float32)
-        wrote = self._prediction_function("et_predict")(
-            _addr_ro(self._offsets),
-            _addr_ro(self._colid),
-            _addr_ro(self._quesval),
-            _addr_ro(self._left_child),
-            _addr_ro(self._leaves),
-            _addr_ro(Xa),
-            _addr(out),
-            [int(n_rows), int(n_features), self._n_trees,
-             self._num_outputs],
-        )
+        wrote = self._predict_forest("et_predict", Xa, out)
         if wrote != n_rows:
             raise RuntimeError(
                 f"et_predict wrote {wrote} of {n_rows} rows"

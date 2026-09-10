@@ -30,6 +30,10 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
+from forest_inference_binding import (
+    forest_prepare_gpu_binding, forest_predict_resident_gpu_binding, forest_release_gpu_binding,
+    forest_vector_groves_binding,
+)
 from core.forest_inference import forest_predict_gpu
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -785,6 +789,10 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
         m.def_function[rf_predict_proba_gpu_parallel_binding]("rf_predict_proba_gpu_parallel")
         m.def_function[rf_predict_reg_gpu_parallel_binding]("rf_predict_reg_gpu_parallel")
+        m.def_function[forest_prepare_gpu_binding[True]]("forest_prepare_gpu")
+        m.def_function[forest_predict_resident_gpu_binding[True]]("forest_predict_resident_gpu")
+        m.def_function[forest_release_gpu_binding[True]]("forest_release_gpu")
+        m.def_function[forest_vector_groves_binding]("forest_vector_groves")
         return m.finalize()
     except e:
         abort(String("failed to initialize _mojolearn_rf: ") + String(e))
