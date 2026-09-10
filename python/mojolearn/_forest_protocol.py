@@ -7,8 +7,29 @@ legacy forest archives cannot reconstruct training parameters for cloning.
 """
 import functools
 import inspect
+import weakref
 
 import numpy as np
+from ._arrays import _addr, _addr_ro
+
+
+_FOREST_ARRAYS = ("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
+
+
+class _ResidentForest:
+    """Own a device snapshot independently of estimator lifetime or pickling."""
+    def __init__(self, native, arrays, dimensions, mode):
+        self.native = native
+        self.arrays = arrays
+        self.dimensions = dimensions
+        self.mode = mode
+        self.handle = native.forest_prepare_gpu(
+            *(_addr_ro(a) for a in arrays), list(dimensions))
+        self._finalizer = weakref.finalize(self, native.forest_release_gpu, self.handle)
+
+    def matches(self, native, arrays, dimensions, mode):
+        return (native is self.native and dimensions == self.dimensions and mode == self.mode
+                and all(a is b for a, b in zip(arrays, self.arrays)))
 
 
 def forest_estimator(kind):
@@ -127,6 +148,55 @@ class ForestProtocol:
         if function is None:
             raise RuntimeError("rebuild the forest binding for inference_engine=" + repr(engine))
         return function
+
+    def _predict_forest(self, sequential_name, X, out):
+        """Shared RF/ET dispatch; cache nvForest-style owned device model state.
+
+        cuML 26.08.00 randomforest_common.pyx:675-693 caches its nvForest
+        model; :350-353 omits that device object from pickle. Our flat model
+        uses immutable host snapshots to make invalidation unambiguous.
+        """
+        engine = self._prediction_engine()
+        native = self._bind()
+        rows, features = X.shape
+        dimensions = (int(features), int(self._n_trees), int(self._num_outputs))
+        arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)
+        if engine == "sequential":
+            return self._prediction_function(sequential_name)(
+                *(_addr_ro(a) for a in arrays), _addr_ro(X),
+                _addr(out), [int(rows), *dimensions])
+        required = ("forest_prepare_gpu", "forest_predict_resident_gpu", "forest_release_gpu")
+        if any(not callable(getattr(native, name, None)) for name in required):
+            raise RuntimeError("rebuild the forest binding for resident parallel_groves inference")
+        mode = self._effective_mode()
+        resident = getattr(self, "_resident_forest", None)
+        if resident is None or not resident.matches(native, arrays, dimensions, mode):
+            # A bytes owner cannot be made writable again via setflags(). A
+            # caller retaining an old mutable private-array alias cannot alter
+            # the device snapshot or the host model used by save/sequential.
+            dtypes = (np.int32, np.int32, np.float32, np.int32, np.float32)
+            for a, dtype in zip(arrays, dtypes):
+                if not isinstance(a, np.ndarray) or a.dtype != dtype or a.ndim != 1:
+                    raise ValueError("forest model arrays must have their original flat dtypes")
+            nodes = arrays[1].size
+            if (arrays[0].size != dimensions[1] + 1 or nodes < 1
+                    or arrays[2].size != nodes or arrays[3].size != nodes
+                    or arrays[4].size != nodes * dimensions[2]
+                    or int(arrays[0][-1]) != nodes):
+                raise ValueError("forest model array shapes do not match metadata")
+            frozen = tuple(np.frombuffer(a.tobytes(), dtype=a.dtype) for a in arrays)
+            resident = _ResidentForest(native, frozen, dimensions, mode)
+            for name, a in zip(_FOREST_ARRAYS, frozen):
+                setattr(self, name, a)
+            self._resident_forest = resident
+        return native.forest_predict_resident_gpu(
+            resident.handle, _addr_ro(X), _addr(out),
+            [int(rows), int(features), dimensions[2]])
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("_resident_forest", None)
+        return state
 
     def _archive_inference_metadata(self, arrays, sequential_format):
         if self._prediction_engine() == "parallel_groves":

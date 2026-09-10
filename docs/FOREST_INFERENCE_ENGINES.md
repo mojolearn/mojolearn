@@ -48,9 +48,22 @@ remains available and is still the default. No training mode is deprecated.
 The bounded new path accepts finite Float32 features, thresholds and leaves;
 non-finite inputs/results and malformed tree graphs are refused. Host code
 validates and stages arrays; traversal and prediction arithmetic run on the GPU.
-The first implementation uploads model/input arrays each call and reads output
-back. Persistent GPU models, borrowed input buffers, vector-leaf traversal reuse
-and tuning beyond the fixed graph remain performance work.
+On the first `parallel_groves` prediction, the estimator validates and uploads
+an owned model snapshot. Later predictions reuse its device buffers and context;
+input upload and output readback still occur each call. The five private model
+arrays become immutable host snapshots at preparation, so previously retained
+mutable aliases cannot silently change device predictions. Replacing a private
+model array causes preparation of a new snapshot. Refitting or `set_params`
+releases the old cache. Pickling excludes device handles and rebuilds on demand.
+Native registry operations currently retain the Python GIL, serializing calls
+through that boundary; concurrent calls and borrowed GPU inputs remain work.
+
+A compile-time `MOJOLEARN_FOREST_VECTOR_GROVES` candidate reuses each tree
+traversal across 2–8 output components, following nvForest's vector-leaf loop.
+It preserves every per-output addition and uses the same fixed reduction graph.
+`MOJOLEARN_FOREST_SCALAR_GROVES` forces the scalar-output reference. Outputs
+above eight retain that reference. Selection remains experimental pending
+large-data timing; this is not another public inference algorithm.
 
 GPU-engine archives use a separate `*-parallel-groves-1` format and retain the
 numeric mode. Current loaders restore the selected engine; older loaders reject
