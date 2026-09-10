@@ -30,6 +30,8 @@ THE GIL IS RELEASED AROUND THE DEVICE WORK, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
+# DEVIATION 2486: shared byte-preserving host copies.
+from bindings.hostptr import f32_ptr, i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -44,15 +46,11 @@ from solver.estimator import cd_fit_host, cd_predict_host
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float32 buffer address")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f32_ptr(addr)
 
 
 def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int32 buffer address")
-    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return i32_ptr(addr)
 
 
 def cd_fit_binding(
