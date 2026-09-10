@@ -119,6 +119,8 @@ ORDER of the set, which is a different property from WHICH set.
 """
 
 from core.identity_trace import IdentityTrace
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from neighbors.impl.knn.knn import (
@@ -227,7 +229,12 @@ from neighbors.impl.neighbors.ball_cover.ball_cover import (
 )
 
 
-comptime DEFAULT_QUERY_TILE = 256
+# Opt-in bounded scheduling probe; no arithmetic or per-row selector changes.
+comptime QUERY_TILE_512_CANDIDATE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]()
+)
+comptime DEFAULT_QUERY_TILE = 512 if QUERY_TILE_512_CANDIDATE else 256
 """`bench/bench_main.mojo:72`. The value the published 1.51x was taken at."""
 
 comptime MIN_QUERY_TILE = 32
@@ -255,6 +262,10 @@ def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int) -> Int:
         tile = DEFAULT_QUERY_TILE
 
     var per_row_bytes = n_index * 4
+    comptime if QUERY_TILE_512_CANDIDATE:
+        # The IDENTICAL path allocates this many distance columns, not the
+        # whole index. Keep the historical cap in the baseline arm.
+        per_row_bytes = identical_index_tile(n_index) * 4
     if per_row_bytes > 0:
         while (
             tile > MIN_QUERY_TILE

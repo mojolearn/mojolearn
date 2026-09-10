@@ -28,7 +28,7 @@ from std.time import perf_counter_ns
 from bench.knn_smallk_dispatch_fixture import _coordinate
 from checks.kernel_matrix import TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from neighbors.estimator import knn_search, plan_query_tile
+from neighbors.estimator import DEFAULT_QUERY_TILE, knn_search, plan_query_tile
 from neighbors.impl.neighbors.detail.knn_brute_force import (
     EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL,
     EXPERIMENTAL_SMALLK_IDENTICAL,
@@ -133,7 +133,7 @@ def main() raises:
                 print("KNN_REF_WARMUP", "request", r, elapsed)
 
         # ---- device region: everything but the transfers and the host sort --
-        var query_tile = plan_query_tile(n_index, n_queries, 256)
+        var query_tile = plan_query_tile(n_index, n_queries, DEFAULT_QUERY_TILE)
         var buf_len = n_index // 8
         if buf_len < k:
             buf_len = k
