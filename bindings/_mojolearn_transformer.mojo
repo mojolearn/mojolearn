@@ -336,7 +336,7 @@ def _load_transformer_weights(
         )
 
 
-def _transformer_run(
+def _transformer_run[discard_cache: Bool = False](
     a: List[Int],
     b: Int,
     l: Int,
@@ -399,8 +399,9 @@ def _transformer_run(
     # else is a carried one, packed at stride s0 (DEVIATION 795(ii)).
     _btick(ton, tk, "surface.weights_up")
     var kv = LlamaKVCache(ctx, b, dims, smax, window)
-    kv.k = _upload_addr(ctx, a[10], cache_n)
-    kv.v = _upload_addr(ctx, a[11], cache_n)
+    comptime if not discard_cache:
+        kv.k = _upload_addr(ctx, a[10], cache_n)
+        kv.v = _upload_addr(ctx, a[11], cache_n)
     kv.s = s0
     # Per call, from the FROZEN theta (DEVIATION 795(iii)). p_max is the
     # cache capacity: pos0 + l <= kv.s_max <= p_max holds for every legal
@@ -427,8 +428,9 @@ def _transformer_run(
     # round-trip exactly whatever the used stride is.
     _btick(ton, tk, "surface.forward")
     _download_addr(ctx, stages.residual2, b * l * dm, a[12])
-    _download_addr(ctx, kv.k, cache_n, a[10])
-    _download_addr(ctx, kv.v, cache_n, a[11])
+    comptime if not discard_cache:
+        _download_addr(ctx, kv.k, cache_n, a[10])
+        _download_addr(ctx, kv.v, cache_n, a[11])
     _btick(ton, tk, "surface.outputs_down")
     var out_len = kv.s
     _ = w^
@@ -456,6 +458,46 @@ def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
     for i in range(13):
         a.append(Int(py=addrs[i]))
     return a^
+
+
+def transformer_forward_fresh_binding(
+    addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Stateless prefill: original zero device cache, only y is returned.
+
+    Eleven pointers: x, nine weights, y. Eight scalars: B, L, d_model,
+    n_heads, n_kv_heads, head_dim, intermediate, window. Capacity remains
+    L (or a window-sized ring), exactly as Python allocate_state(B, L).
+    The zero sentinel cache pointers never reach a transfer in this arm.
+    """
+    if len(addrs) != 11 or len(params) != 8:
+        raise Error("transformer_forward_fresh: expected 11 addresses and 8 scalars")
+    var a = List[Int]()
+    for i in range(10):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("transformer_forward_fresh: null buffer address at slot " + String(i))
+        a.append(address)
+    a.append(0)
+    a.append(0)
+    var y = Int(py=addrs[10])
+    if y == 0:
+        raise Error("transformer_forward_fresh: null output address")
+    a.append(y)
+    var b = Int(py=params[0])
+    var l = Int(py=params[1])
+    var dm = Int(py=params[2])
+    var nh = Int(py=params[3])
+    var nkv = Int(py=params[4])
+    var hd = Int(py=params[5])
+    var it = Int(py=params[6])
+    var window = Int(py=params[7])
+    if b <= 0 or l <= 0:
+        raise Error("transformer_forward_fresh: B and L must be positive")
+    var out_len = 0
+    with GILReleased(Python()):
+        out_len = _transformer_run[True](a, b, l, dm, nh, nkv, hd, it, l, 0, window)
+    return PythonObject(out_len)
 
 
 def transformer_forward_binding(
@@ -737,6 +779,8 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
             "transformer_numeric_mode"
         )
         m.def_function[transformer_forward_binding]("transformer_forward")
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]():
+            m.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
         m.def_function[transformer_decode_step_binding](
             "transformer_decode_step"
         )

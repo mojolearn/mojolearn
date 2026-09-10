@@ -522,11 +522,31 @@ class TransformerBlock(NumericModeMixin):
             0, self.window,
         )
 
+    def _call_fresh(self, x, ext):
+        """Stateless prefill with the original zero cache owned only on device."""
+        b, l = int(x.shape[0]), int(x.shape[1])
+        y = np.empty((b, l, self.d_model), dtype=np.float32)
+        # All pointer owners remain live until the synchronous native return.
+        w = self._w
+        addrs = [_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr(y)]
+        ext.transformer_forward_fresh(
+            addrs, [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+                    self.head_dim, self.intermediate, self.window],
+        )
+        return y
+
     def _call(self, x, state, step):
         what = ("TransformerBlock.step" if step
                 else "TransformerBlock.forward")
         x = _batch_tokens(x, what, self.d_model, step)
         b, l = int(x.shape[0]), int(x.shape[1])
+        fresh_ext = None
+        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
+        if (state is None and not step and b > 0 and l > 0
+                and self.window >= 0 and mode == "identical"):
+            fresh_ext = self._extension()
+            if hasattr(fresh_ext, "transformer_forward_fresh"):
+                return self._call_fresh(x, fresh_ext)
         if state is None:
             # A self-contained prefill: the cache exists for exactly this
             # call and is discarded, so its capacity is the call's length.
@@ -559,7 +579,7 @@ class TransformerBlock(NumericModeMixin):
         # of self._w (alive on self), kc, vc, y -- which is what keeps
         # the addresses alive (_arrays.py).
         w = self._w
-        ext = self._extension()
+        ext = fresh_ext if fresh_ext is not None else self._extension()
         addrs = (
             # ORDER MATCHES bindings/_mojolearn_transformer.mojo::
             # transformer_forward_binding: x, input_layernorm.weight,
