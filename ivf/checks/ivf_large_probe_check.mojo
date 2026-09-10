@@ -6,7 +6,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from ivf.checks.ivf_check import _plant_index, _search
 
 
-def main() raises:
+def check_large_probes() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("large probe gate requires IDENTICAL")
     comptime N = 1057
@@ -30,3 +30,7 @@ def main() raises:
             if result.indices[rank] != UInt32(rank) or bitcast[DType.uint32](result.distances[rank]) != UInt32(0):
                 raise Error("coarse257/final257 tied selection lost original-index order")
     print("IVF LARGE PROBE PASS", "probes", LISTS, "selected_cells", 257)
+
+
+def main() raises:
+    check_large_probes()

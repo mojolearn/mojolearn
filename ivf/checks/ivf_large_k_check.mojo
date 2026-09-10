@@ -4,6 +4,7 @@ from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from ivf.checks.ivf_check import _plant_index, _search
+from ivf.checks.ivf_large_probe_check import check_large_probes
 
 
 def main() raises:
@@ -56,3 +57,4 @@ def main() raises:
         if not refused:
             raise Error("IVF1025 exceeded bounded rank profile")
     print("IVF LARGE K PASS", "selected_cells", 2562, "refusal", 1025)
+    check_large_probes()
