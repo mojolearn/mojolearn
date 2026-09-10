@@ -24,6 +24,7 @@ mkdir -p "$LOGS" "$BINS" "$OUT/ib" "$OUT/speed"
 cd "$ROOT" || exit 9
 PATH="$HOME/.pixi/bin:$PATH"; export PATH
 export MOJOLEARN_NUMERIC_MODE=identical
+export MOJOLEARN_SPEED_EXPECTED_VENDOR=cuda
 TIER=python/mojolearn/identical
 
 cmd_build() {

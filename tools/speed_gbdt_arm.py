@@ -198,13 +198,15 @@ def process_deadline_s():
 
 
 def numeric_mode_label():
-    """FAST or IDENTICAL. This slice's whole question is the FAST path -- the
-    default build, NOT `-D MOJOLEARN_NUMERIC_IDENTICAL=1` -- so FAST is the
-    expected value here and a run that reports IDENTICAL is answering a
-    different question. The label is read from the environment rather than
-    assumed, because a mislabelled arm is worse than a missing one."""
+    """Requested MojoLearn tier, not a claim about competitor arithmetic.
+
+    The MojoLearn runner separately verifies the actual binding before timing.
+    Opponent-only runs retain this label solely as experiment context.
+    """
     mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower()
-    return "IDENTICAL" if mode == "identical" else "FAST"
+    if mode not in ("fast", "deterministic", "identical"):
+        raise ValueError("invalid MOJOLEARN_NUMERIC_MODE: " + repr(mode))
+    return mode.upper()
 
 
 def device_string():
@@ -269,12 +271,10 @@ def hash_predictions(vec):
     digits, the same recipe `bench/external/patch_gbm_bench.py` puts in the
     gbm-bench results.
 
-    IT IS NOT A DETERMINISM CLAIM HERE. This slice measures the FAST path,
-    which is the explicitly non-deterministic arm: cuML's `n_streams`, our
-    own atomics and CatBoost's GPU reductions all reorder run to run. Two
-    equal hashes across rounds are informative, two unequal ones are
-    expected, and neither is a defect. Across arms the hashes are not even
-    comparable, because the dtypes differ."""
+    Equal repeated hashes are a same-device witness, not cross-device
+    qualification. Competitor GPU fits may vary. An IDENTICAL MojoLearn arm
+    must retain its own exact predictions; different libraries need not match.
+    """
     if vec is None:
         return None
     arr = np.ascontiguousarray(vec)
@@ -1140,11 +1140,10 @@ def cuml_rf_arm(lane, cfg, data):
     """cuML's RandomForest on the GPU: NVIDIA's own forest, and the library
     `ensemble/` is a port of. The honest opponent for the `rf` lane.
 
-    `n_streams` is left at cuML's default. Their own documentation says a
-    value above 1 makes the fit NON-REPRODUCIBLE, which is fine here and only
-    here: this slice measures the FAST path, which is the explicitly
-    non-deterministic arm. Pinning it to 1 would be benchmarking a
-    configuration no cuML user runs."""
+    `n_streams` is left at cuML's default for the primary competitor baseline.
+    A separately labeled one-stream arm can diagnose scheduling effects.
+    Neither requires cuML to implement MojoLearn's IDENTICAL contract.
+    """
     from cuml.ensemble import RandomForestClassifier, RandomForestRegressor
 
     if lane != "rf":
