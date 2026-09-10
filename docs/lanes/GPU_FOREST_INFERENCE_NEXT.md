@@ -159,8 +159,10 @@ cancellation cases. Training-mode contracts are not evidence for inference bits.
 5. Model buffers/context persist across calls. Immutable host snapshots prevent
    stale device state; replacement/refit invalidates the cache, and GPU handles
    are excluded from pickle. Borrowed host input/output avoids intermediate
-   Lists. Device input/output buffers are still allocated per call. Their reuse,
-   GPU-array inputs and nvForest-style packed node layout remain next work.
+   Lists. The default still allocates device input/output per call. An exact-size
+   workspace reuse candidate is reachable through the benchmark `--reuse-io`
+   arm; large CUDA timing is pending. GPU-array inputs and nvForest-style
+   packed node layout remain next work.
 
 The shared engine and new native entrypoints are implemented. Bounded CUDA and
 Metal kernel checks and public CUDA RF/ET checks passed; broader cross-vendor

@@ -28,6 +28,9 @@ struct ResidentForest(Movable):
     var thresholds: Optional[DeviceBuffer[DType.float32]]
     var left: Optional[DeviceBuffer[DType.int32]]
     var leaves: Optional[DeviceBuffer[DType.float32]]
+    var input_workspace: Optional[DeviceBuffer[DType.float32]]
+    var output_workspace: Optional[DeviceBuffer[DType.float32]]
+    var workspace_rows: Int
     var features: Int
     var outputs: Int
     var trees: Int
@@ -37,6 +40,9 @@ struct ResidentForest(Movable):
         features: Int, outputs: Int) raises:
         var empty = List[Float32]()
         validate_flat_forest(offsets, columns, thresholds, left, leaves, empty, 0, features, outputs)
+        self.input_workspace = Optional[DeviceBuffer[DType.float32]]()
+        self.output_workspace = Optional[DeviceBuffer[DType.float32]]()
+        self.workspace_rows = 0
         self.features = features
         self.outputs = outputs
         self.trees = len(offsets) - 1
@@ -71,6 +77,8 @@ struct ResidentForest(Movable):
     def __deinit__(deinit self):
         # Predict/prepare are synchronous; destroy GPU operands before context
         # even when an upload/allocation exception bypasses explicit release.
+        _ = self.output_workspace^
+        _ = self.input_workspace^
         _ = self.leaves^
         _ = self.left^
         _ = self.thresholds^
@@ -81,6 +89,9 @@ struct ResidentForest(Movable):
     def close(mut self) raises:
         if self.ctx:
             self.ctx.value().synchronize()
+        self.output_workspace = None
+        self.input_workspace = None
+        self.workspace_rows = 0
         self.leaves = None
         self.left = None
         self.thresholds = None
@@ -127,7 +138,8 @@ struct ResidentForest(Movable):
 
     def predict_into[RF_INPUT: Bool](mut self,
         x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
-        rows: Int, features: Int, outputs: Int) raises:
+        rows: Int, features: Int, outputs: Int,
+        reuse_io: Bool = False) raises:
         """Borrowed synchronous I/O; caller retains buffers and holds the GIL.
 
         nvForest26.08 forest_model.hpp:284-308 wraps borrowed I/O pointers.
@@ -141,23 +153,63 @@ struct ResidentForest(Movable):
         require_finite_pointer(x, rows * features)
         if rows == 0:
             return
-        var dx = self.ctx.value().enqueue_create_buffer[DType.float32](rows * features)
-        var dout = self.ctx.value().enqueue_create_buffer[DType.float32](rows * outputs)
+        if reuse_io:
+            self.prepare_workspace(rows)
+            _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
+                self.columns.value(), self.thresholds.value(), self.left.value(),
+                self.leaves.value(), x, output, rows, features, outputs, self.trees,
+                self.input_workspace.value(), self.output_workspace.value())
+        else:
+            var dx = self.ctx.value().enqueue_create_buffer[DType.float32](rows * features)
+            var dout = self.ctx.value().enqueue_create_buffer[DType.float32](rows * outputs)
+            _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
+                self.columns.value(), self.thresholds.value(), self.left.value(),
+                self.leaves.value(), x, output, rows, features, outputs, self.trees, dx, dout)
+            _ = dx^
+            _ = dout^
+
+    def prepare_workspace(mut self, rows: Int) raises:
+        # DEVIATION BLOCK FOREST-IO-REUSE-1 (unmeasured candidate):
+        # nvForest cef3a50d forest_model.hpp:284-308 borrows caller-owned GPU
+        # buffers; our NumPy boundary requires host/device copies. Retain one
+        # exact-size pair, avoiding two device allocations on equal-size calls.
+        # No high-water cache: resizing releases the previous pair. Keep the
+        # default off pending large CUDA IDENTICAL end-to-end measurements.
+        # Calls are synchronous and the binding holds the GIL throughout.
+        if self.workspace_rows == rows:
+            return
+        self.input_workspace = None
+        self.output_workspace = None
+        self.workspace_rows = 0
         try:
-            self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x)
-            launch_forest_inference[RF_INPUT, True](
-                self.ctx.value(), self.offsets.value(), self.columns.value(),
-                self.thresholds.value(), self.left.value(), self.leaves.value(),
-                dx, dout, rows, features, outputs, self.trees,
-            )
-            self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dout)
-            self.ctx.value().synchronize()
+            self.input_workspace = self.ctx.value().enqueue_create_buffer[DType.float32](rows * self.features)
+            self.output_workspace = self.ctx.value().enqueue_create_buffer[DType.float32](rows * self.outputs)
         except e:
             self.ctx.value().synchronize()
+            self.input_workspace = None
+            self.output_workspace = None
             raise e
-        require_finite_pointer(output, rows * outputs)
-        _ = dx^
-        _ = dout^
+        self.workspace_rows = rows
+
+
+def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
+    mut offsets: DeviceBuffer[DType.int32], mut columns: DeviceBuffer[DType.int32],
+    mut thresholds: DeviceBuffer[DType.float32], mut left: DeviceBuffer[DType.int32],
+    mut leaves: DeviceBuffer[DType.float32],
+    x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
+    rows: Int, features: Int, outputs: Int, trees: Int,
+    mut dx: DeviceBuffer[DType.float32], mut dout: DeviceBuffer[DType.float32]) raises:
+    try:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        launch_forest_inference[RF_INPUT, True](ctx, offsets, columns,
+            thresholds, left, leaves, dx, dout, rows, features, outputs, trees)
+        ctx.enqueue_copy(dst_ptr=output, src_buf=dout)
+        ctx.synchronize()
+    except e:
+        ctx.synchronize()
+        raise e
+    require_finite_pointer(output, rows * outputs)
+
 
 
 struct ForestRegistry(Defaultable, Movable):
@@ -219,10 +271,10 @@ def resident_release[RF_INPUT: Bool](handle: Int) raises:
 
 def resident_predict_into[RF_INPUT: Bool](handle: Int,
     x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
-    rows: Int, features: Int, outputs: Int) raises:
+    rows: Int, features: Int, outputs: Int, reuse_io: Bool = False) raises:
     var state = RF_REGISTRY.get_or_create_ptr()
     comptime if not RF_INPUT:
         state = ET_REGISTRY.get_or_create_ptr()
     if handle not in state[].entries:
         raise Error("unknown or released resident forest handle")
-    state[].entries[handle].predict_into[RF_INPUT](x, output, rows, features, outputs)
+    state[].entries[handle].predict_into[RF_INPUT](x, output, rows, features, outputs, reuse_io)

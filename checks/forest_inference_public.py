@@ -41,10 +41,15 @@ def oracle(model, X):
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--borrowed-buffers', action='store_true')
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument('--borrowed-buffers', action='store_true')
+    selection.add_argument('--reuse-io', action='store_true')
     parser.add_argument('--mode', choices=('fast','identical'), default='identical')
     parser.add_argument('--vendor', choices=('cuda','metal','hip'), default='cuda')
     args=parser.parse_args()
+    if args.reuse_io:
+        from mojolearn._forest_protocol import ForestProtocol
+        ForestProtocol._resident_prediction_function = lambda self, native: native.forest_predict_resident_reuse_gpu
     if args.borrowed_buffers:
         from mojolearn._forest_protocol import ForestProtocol
         ForestProtocol._resident_prediction_function = lambda self, native: native.forest_predict_resident_into_gpu
@@ -89,7 +94,7 @@ def main():
         m.inference_engine='sequential'
         reference=m.predict_proba(X) if classifier else m.predict(X)
         np.testing.assert_allclose(pred,reference,rtol=2e-6,atol=2e-6)
-        record=dict(estimator=cls.__name__,mode=args.mode,vendor=args.vendor,borrowed_override=args.borrowed_buffers,io_entrypoint=m._resident_prediction_function(native).__name__,hash=hashlib.sha256(pred.tobytes()).hexdigest(),max_difference=float(np.max(np.abs(pred-reference))))
+        record=dict(estimator=cls.__name__,mode=args.mode,vendor=args.vendor,borrowed_override=args.borrowed_buffers,reuse_io_override=args.reuse_io,io_entrypoint=m._resident_prediction_function(native).__name__,hash=hashlib.sha256(pred.tobytes()).hexdigest(),max_difference=float(np.max(np.abs(pred-reference))))
         print(json.dumps(record),flush=True);outputs.append(record)
     print('PASS public parallel-groves GPU inference, graph oracle, resident reuse/release, pickle, versioned archives')
 

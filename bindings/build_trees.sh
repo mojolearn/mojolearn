@@ -191,8 +191,8 @@ X = rng.random((512, 6), dtype=np.float32)
 yc = (X[:, 0] > 0.5).astype(np.int64)
 yr = X[:, 1].astype(np.float32)
 
-# CLASSIFIER, gpu arm vs cpu arm: the lane's device_forest_check proves the
-# two forests bit-identical, so the wrapper must agree everywhere.
+# GPU-only classifier: repeated seeded fits must agree. CPU training was
+# removed; its refusal is checked below, rather than fitting a removed arm.
 # TEN trees, not three. At n_estimators=3 the 0.9 accuracy bar below is a
 # property of the SEED, not of the code: measured 2026-08-27 (variance
 # probe, DEVIATION 465's rollout), 4 of 20 random_states score below 0.9
@@ -201,30 +201,29 @@ yr = X[:, 1].astype(np.float32)
 # fixture stays milliseconds.
 kw = dict(n_estimators=10, max_depth=6, random_state=7)
 pg = et.ExtraTreesClassifier(device="gpu", **kw).fit(X, yc)
-pc = et.ExtraTreesClassifier(device="cpu", **kw).fit(X, yc)
+pc = et.ExtraTreesClassifier(device="gpu", **kw).fit(X, yc)
 if not np.array_equal(pg.predict(X), pc.predict(X)):
-    raise SystemExit("smoke: classifier gpu and cpu arms disagree")
+    raise SystemExit("smoke: classifier repeated GPU fits disagree")
 if not np.array_equal(pg.predict_proba(X), pc.predict_proba(X)):
-    raise SystemExit("smoke: classifier proba gpu/cpu arms disagree")
+    raise SystemExit("smoke: classifier repeated GPU probabilities disagree")
 if (pg.predict(X) == yc).mean() < 0.9:
     raise SystemExit("smoke: classifier failed a separable fixture")
 
-# REGRESSOR, gpu arm: structure-identical to cpu, leaves within one
-# quantization step (deviation 135) -- at this scale, prediction agreement
-# far tighter than any real signal.
+# GPU regression quality and repeatability; no CPU learner is required.
 rg = et.ExtraTreesRegressor(device="gpu", **kw).fit(X, yr)
-rc = et.ExtraTreesRegressor(device="cpu", **kw).fit(X, yr)
-d = np.abs(rg.predict(X) - rc.predict(X)).max()
-if d > 1e-4:
-    raise SystemExit(f"smoke: regressor gpu/cpu arms {d} apart")
+rc = et.ExtraTreesRegressor(device="gpu", **kw).fit(X, yr)
+if not np.array_equal(rg.predict(X), rc.predict(X)):
+    raise SystemExit("smoke: regressor repeated GPU fits disagree")
 if np.abs(rg.predict(X) - yr).mean() > 0.1:
     raise SystemExit("smoke: regressor failed to fit a copied column")
-# The arms must NOT be bit-equal: the gpu arm's leaves are quantized means
-# (the estimator's reach proof, deviation 188). Bit-equality here means the
-# device arm silently served the host fit.
-if d == 0.0:
-    raise SystemExit("smoke: regressor arms bit-equal -- device arm did not"
-                     " quantize, so it did not run on the device")
+for estimator in (et.ExtraTreesClassifier, et.ExtraTreesRegressor):
+    try:
+        estimator(device="cpu", **kw)
+    except ValueError as e:
+        if "GPU-only" not in str(e):
+            raise SystemExit("smoke: CPU refusal did not explain GPU-only training")
+    else:
+        raise SystemExit("smoke: removed CPU learner was accepted")
 
 # Refusals must cross the boundary by name. (bootstrap=True and
 # criterion='entropy' were in this list until DEVIATIONS 459/460 ported

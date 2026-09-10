@@ -106,3 +106,44 @@ coverage remain pending. The option stays experimental and opt-in.
 Training comparisons are independent of inference timing. The campaign's
 [raw evidence](../bench/results/tree_tuning_h100_2026-09-10/README.md) records
 large-data training and prediction results separately.
+
+
+### Device I/O reuse candidate (September 10 follow-up)
+
+The shared resident RF/ET owner now supports one retained exact-size device
+input/output pair through `forest_predict_resident_reuse_gpu`. Public predictions
+still use the existing borrowed-host allocation path. The performance harness
+`bench/speed/forest_inference_ab.py --reuse-io` adds both the borrowed baseline and
+reuse candidate to its interleaved, exact-output comparison on the same forest.
+This is a benchmark option, not another inference algorithm or numeric mode.
+
+Equal nonempty batch sizes reuse both allocations; a changed size releases the
+old pair before allocating its replacement. Empty calls retain the pair without
+copying or launching. Memory retained is `4 * rows * (features + outputs)` bytes
+for the most recent nonempty batch, released with the model. Inputs still upload
+and outputs still download on every call. The binding holds the GIL and each call
+synchronizes before returning, so this workspace is not concurrently shared.
+
+Source basis: nvForest `cef3a50d`, `forest_model.hpp:284–308`, borrows device I/O
+from its caller. Our NumPy interface needs owned device staging; retaining that
+staging is declared `FOREST-IO-REUSE-1`, an unmeasured candidate rather than a
+literal upstream allocation policy. The fixed reduction and threshold policies
+are unchanged. Native FAST/IDENTICAL Metal checks compare both arms for RF/ET,
+changed inputs, reuse, resizing, zero rows, and cleanup. These are correctness
+fixtures, not speed evidence or CUDA/HIP qualification.
+
+Next measurement: NVIDIA IDENTICAL on HIGGS (1M fit / 500k prediction rows),
+Year and Covtype, recording cold calls, interleaved warm single-call timings,
+throughput blocks, and retained memory. Compare reuse directly with borrowed
+allocation; separate this from cuML's independently trained RF. No speedup or
+new default is justified until these large-workload results are stable.
+
+Validation of this follow-up: native lifecycle checks passed on Metal in FAST
+and IDENTICAL; public FAST Metal checks passed for all four estimators with
+both entrypoints, matching complete prediction hashes, independent graph
+oracles, pickle and archive checks. The same-process harness selector was
+exercised for both RF and ET. The existing 67 forest host tests passed.
+`bindings/build_trees.sh` now checks GPU repeats and explicit CPU refusal;
+its stale smoke test attempted to fit the removed CPU learner. Both binding
+build gates passed after that correction. No NVIDIA rental or performance
+measurement was run for this follow-up.

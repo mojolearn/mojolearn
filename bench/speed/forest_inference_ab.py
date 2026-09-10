@@ -94,15 +94,16 @@ def prediction_arm(model, name):
     GPU ABI. Input checking/packing and output construction remain public.
     """
     model.inference_engine = 'sequential' if name == 'sequential' else 'parallel_groves'
-    if name in ('parallel_groves_resident', 'parallel_groves_borrowed'):
+    if name in ('parallel_groves_resident', 'parallel_groves_borrowed', 'parallel_groves_reuse'):
         hook = '_resident_prediction_function'
         if not callable(getattr(model, hook, None)):
-            if name == 'parallel_groves_borrowed':
+            if name != 'parallel_groves_resident':
                 raise RuntimeError('rebuild Python wrapper for borrowed-buffer inference')
             yield
             return
-        native_name = ('forest_predict_resident_into_gpu' if name == 'parallel_groves_borrowed'
-                       else 'forest_predict_resident_gpu')
+        native_name = {'parallel_groves_borrowed': 'forest_predict_resident_into_gpu',
+                       'parallel_groves_reuse': 'forest_predict_resident_reuse_gpu',
+                       'parallel_groves_resident': 'forest_predict_resident_gpu'}[name]
         if not callable(getattr(model._bind(), native_name, None)):
             raise RuntimeError('rebuild binding for ' + native_name)
         previous = model.__dict__.get(hook)
@@ -155,6 +156,8 @@ def main():
     parser.add_argument('--staged-rounds', type=int, default=0)
     parser.add_argument('--trees', type=int, help='explicit model-complexity diagnostic override')
     parser.add_argument('--depth', type=int, help='explicit model-complexity diagnostic override')
+    parser.add_argument('--reuse-io', action='store_true',
+                        help='compare exact-size device workspace reuse with borrowed allocation')
     parser.add_argument('--borrowed-buffers', action='store_true',
                         help='add resident borrowed-output ABI arm; requires new binding and wrapper hook')
     parser.add_argument('--include-sequential', action='store_true',
@@ -215,11 +218,15 @@ def main():
     arrays = [(name, getattr(ours, name)) for name in
               ('_offsets', '_colid', '_quesval', '_left_child', '_leaves')]
     names = ['parallel_groves_transient', 'parallel_groves_resident']
-    if args.borrowed_buffers:
+    if args.borrowed_buffers or args.reuse_io:
         if (not callable(getattr(ours, '_resident_prediction_function', None))
                 or not callable(getattr(ours._bind(), 'forest_predict_resident_into_gpu', None))):
             raise RuntimeError('borrowed-buffers requires resident selector hook and into binding')
         names.append('parallel_groves_borrowed')
+    if args.reuse_io:
+        if not callable(getattr(ours._bind(), 'forest_predict_resident_reuse_gpu', None)):
+            raise RuntimeError('reuse-io requires rebuilt reuse binding')
+        names.append('parallel_groves_reuse')
     if args.include_sequential:
         names.append('sequential')
     cuml_model = None
@@ -244,11 +251,13 @@ def main():
         rows_fit=len(data.y_train), rows_predict=len(data.y_test),
         features=data.X_train.shape[1], outputs=int(ours._num_outputs),
         numeric_mode=mode, vendor=vendor, binding=witness, config=cfg, versions=versions,
-        compiled_vector_groves=vector_dispatch, borrowed_buffers=args.borrowed_buffers,
+        compiled_vector_groves=vector_dispatch, borrowed_buffers=args.borrowed_buffers or args.reuse_io, reuse_io=args.reuse_io,
         first_call_contract='round0 includes lazy preparation for each engine; measured repeats may reuse resident state',
         trees=int(ours._n_trees), nodes=int(ours._colid.size),
         host_model_bytes=sum(value.nbytes for _, value in arrays),
         host_predict_input_bytes=int(data._ours_Xtest.nbytes),
+        retained_reuse_workspace_bytes=(4 * len(data.y_test) *
+            (data.X_train.shape[1] + int(ours._num_outputs)) if args.reuse_io else 0),
         model_sha256=digest_arrays(arrays),
         data_sha256=digest_arrays([(name, getattr(data, name)) for name in
                                  ('X_train', 'y_train', 'X_test', 'y_test')]),
@@ -273,7 +282,8 @@ def main():
         stages_contract='separate instrumented public calls, no kernel-only timing; '
                         'dispatch includes cache lookup, native validation, allocation, transfer, traversal and output; '
                         'ET input checking is included in Python remainder',
-        memory_contract='reported byte counts are host arrays, not peak device/host memory; collect telemetry separately')
+        memory_contract='host arrays and calculated retained reuse workspace are reported, not peak memory; '
+                        'after reuse warmup its pair stays resident during all arms; collect telemetry separately')
     # Do not retain pre-cache host arrays after the resident snapshot freezes
     # them; an extra benchmark-only owner would distort model memory pressure.
     del arrays

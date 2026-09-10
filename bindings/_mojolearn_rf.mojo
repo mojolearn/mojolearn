@@ -794,6 +794,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[forest_release_gpu_binding[True]]("forest_release_gpu")
         m.def_function[forest_vector_groves_binding]("forest_vector_groves")
         m.def_function[forest_predict_resident_into_gpu_binding[True]]("forest_predict_resident_into_gpu")
+        m.def_function[forest_predict_resident_into_gpu_binding[True, True]]("forest_predict_resident_reuse_gpu")
         return m.finalize()
     except e:
         abort(String("failed to initialize _mojolearn_rf: ") + String(e))

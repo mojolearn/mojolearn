@@ -8,7 +8,55 @@ from core.forest_inference import forest_predict_gpu
 from core.forest_inference_model import resident_prepare, resident_predict, resident_release, ResidentForest, resident_predict_into
 
 
+def check_workspace[RF_INPUT: Bool]() raises:
+    var offsets: List[Int32] = [0, 3]
+    var columns: List[Int32] = [0, -1, -1]
+    var thresholds: List[Float32] = [2, 0, 0]
+    var left: List[Int32] = [1, -1, -1]
+    var leaves: List[Float32] = [0, 0, 0.25, 0.75, 0.75, 0.25]
+    var model = ResidentForest(offsets, columns, thresholds, left, leaves, 2, 2)
+    var sizes: List[Int] = [3, 3, 1, 5, 0, 5, 2]
+    for step in range(len(sizes)):
+        var rows = sizes[step]
+        var x = List[Float32](length=rows * 2, fill=Float32(0))
+        for row in range(rows):
+            # Change values even when the shape is unchanged: stale input or
+            # output must fail the independent split oracle.
+            x[row * 2] = Float32(1 if (row + step) % 2 == 0 else 3)
+        var actual = List[Float32](length=rows * 2, fill=Float32(-9))
+        var reference = List[Float32](length=rows * 2, fill=Float32(-8))
+        var previous_rows = model.workspace_rows
+        model.predict_into[RF_INPUT](x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            reference.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows, 2, 2, False)
+        if model.workspace_rows != previous_rows:
+            raise Error("uncached prediction changed workspace")
+        if rows > 0 and previous_rows == rows:
+            var input_address = model.input_workspace.value().unsafe_ptr()
+            var output_address = model.output_workspace.value().unsafe_ptr()
+            model.predict_into[RF_INPUT](x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                actual.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows, 2, 2, True)
+            if input_address != model.input_workspace.value().unsafe_ptr() or output_address != model.output_workspace.value().unsafe_ptr():
+                raise Error("same-shape workspace was not reused")
+        else:
+            model.predict_into[RF_INPUT](x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                actual.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows, 2, 2, True)
+        if model.workspace_rows != (rows if rows > 0 else previous_rows):
+            raise Error("workspace resize/empty lifecycle mismatch")
+        for row in range(rows):
+            for output in range(2):
+                var expected = Float32(0.25 if (row + step + output) % 2 == 0 else 0.75)
+                var i = row * 2 + output
+                if actual[i] != expected or bitcast[DType.uint32](actual[i]) != bitcast[DType.uint32](reference[i]):
+                    raise Error("workspace stale data or reference mismatch")
+    model.close()
+    if model.input_workspace or model.output_workspace or model.workspace_rows != 0:
+        raise Error("close retained workspace")
+    print("WORKSPACE_PASS RF_INPUT", RF_INPUT, "cached/uncached resize/reuse/empty/changed-input/close")
+
+
 def main() raises:
+    check_workspace[True]()
+    check_workspace[False]()
     print("RESIDENT_MODE", Int(GLOBAL_NUMERIC_MODE), "VENDOR", String(COMPILED_VENDOR))
     var off: List[Int32] = [0, 1]
     var col: List[Int32] = [-1]
@@ -19,11 +67,11 @@ def main() raises:
     var h = resident_prepare[True](off, col, thr, left, leaf, 2, 2)
     var ctx = DeviceContext()
     var reference = forest_predict_gpu[True, True](ctx, off, col, thr, left, leaf, x, 3, 2, 2)
-    for _ in range(3):
+    for repeat in range(4):
         var direct = List[Float32](length=6, fill=Float32(-9))
         resident_predict_into[True](h,
             x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            direct.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 3, 2, 2)
+            direct.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 3, 2, 2, repeat % 2 == 1)
         var actual = resident_predict[True](h, x, 3, 2, 2)
         for i in range(6):
             if bitcast[DType.uint32](direct[i]) != bitcast[DType.uint32](actual[i]):
@@ -71,7 +119,7 @@ def main() raises:
     try:
         resident_predict_into[True](h,
             bad.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            untouched.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 3, 2, 2)
+            untouched.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 3, 2, 2, True)
     except:
         rejected = True
     if not rejected:
@@ -121,7 +169,7 @@ def main() raises:
     try:
         resident_predict_into[True](overflow_handle,
             x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            overflow_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 3, 2, 1)
+            overflow_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 3, 2, 1, True)
     except:
         rejected = True
     if not rejected:

@@ -92,7 +92,7 @@ def forest_vector_groves_binding(outputs: PythonObject) raises -> PythonObject:
     return PythonObject(vector_groves_for(Int(py=outputs)))
 
 
-def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool](
+def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool, REUSE_IO: Bool = False](
     handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
     params: PythonObject) raises -> PythonObject:
     """Experimental borrowed-pointer A/B entry; output may change on error."""
@@ -109,5 +109,5 @@ def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool](
     var op = _f32_ptr(Int(py=out_addr))
     resident_predict_into[RF_INPUT](Int(py=handle),
         xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
-        rows, features, outputs)
+        rows, features, outputs, REUSE_IO)
     return PythonObject(rows)
