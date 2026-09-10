@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Diagnostic only: repeated same-binary Mamba3 calls with explicit shape order.
 
-Requires the retained seq_py_speed_arm.py fixture helper staged into this same
-checkout's bench/speed. No source changes, compiler invocation, or timing claim.
+Loads explicit retained helper/spec files without overwriting tracked tools. No source changes, compiler invocation, or timing claim.
 Output is JSONL; native M3_PHASE lines can be interleaved when a separately
 built phase-instrumented library is supplied. That library is a different arm.
 """
@@ -37,6 +36,7 @@ def usage():
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--harness", type=Path, required=True)
+    p.add_argument("--spec", type=Path, required=True, help="retained speed_torch_seq.py with Mamba3 fixture rows")
     p.add_argument("--order", default="narrow,wide,narrow,tiny,narrow,wide")
     p.add_argument("--rounds", type=int, default=8)
     p.add_argument("--passes", type=int, default=2)
@@ -49,11 +49,30 @@ def main():
     assert 1 <= len(order) <= 12 and set(order) <= {"tiny", "narrow", "wide"}
     harness = args.harness.resolve(strict=True)
     checkout = Path(__file__).resolve().parents[1]
-    assert harness.parents[2] == checkout, "stage fixture helper into the candidate checkout; do not import another checkout's bindings"
+    fixture_spec_path = args.spec.resolve(strict=True)
+    driver_path = (checkout / "bench/speed/seq_speed_main.mojo").resolve(strict=True)
     os.environ["MOJOLEARN_NUMERIC_MODE"] = "identical"
-    spec = importlib.util.spec_from_file_location("mamba_regime_fixture", harness)
-    fixture = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(fixture)
+    # Historical helpers derive paths from their own archive directory.
+    # Bind the explicit spec first, with its data/source roots overridden to
+    # THIS checkout. No tracked module is copied over or edited.
+    for path in (checkout / "tools", checkout / "python"):
+        sys.path.insert(0, str(path))
+    controlled_path = sys.path.copy()
+    spec_loader = importlib.util.spec_from_file_location("speed_torch_seq", fixture_spec_path)
+    fixture_spec = importlib.util.module_from_spec(spec_loader)
+    sys.modules["speed_torch_seq"] = fixture_spec
+    spec_loader.loader.exec_module(fixture_spec)
+    original_roots = dict(REPO=str(fixture_spec.REPO), DRIVER_MOJO=str(fixture_spec.DRIVER_MOJO))
+    fixture_spec.REPO = str(checkout)
+    fixture_spec.DRIVER_MOJO = str(driver_path)
+    harness_loader = importlib.util.spec_from_file_location("mamba_regime_fixture", harness)
+    fixture = importlib.util.module_from_spec(harness_loader)
+    harness_loader.loader.exec_module(fixture)
+    assert fixture.seqspec is fixture_spec, "historical helper imported a different fixture spec"
+    fixture._ROOT = str(checkout)
+    # Remove archive-relative paths added during helper import before any
+    # public API import; selected backend paths are checked below as well.
+    sys.path[:] = controlled_path
     import numpy as np
     import mojolearn._mamba_impl as implementation
     assert Path(implementation.__file__).resolve().is_relative_to(checkout), "wrong Python implementation checkout"
@@ -66,7 +85,10 @@ def main():
             chosen[key] = row
     assert set(order) <= chosen.keys(), "retained helper lacks requested fixture"
     emit("environment", pid=os.getpid(), python=sys.version, executable=sys.executable,
-         numpy=np.__version__, harness_sha256=sha_file(harness), implementation=str(implementation.__file__),
+         numpy=np.__version__, harness_path=str(harness), harness_sha256=sha_file(harness),
+         fixture_spec_path=str(fixture_spec_path), fixture_spec_sha256=sha_file(fixture_spec_path),
+         original_spec_roots=original_roots, effective_spec_roots=dict(REPO=str(checkout), DRIVER_MOJO=str(driver_path)),
+         driver_sha256=sha_file(driver_path), implementation=str(implementation.__file__),
          affinity=sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
          order=order, rounds=args.rounds, passes=args.passes,
          release_output_before_call=args.release_output_before_call,

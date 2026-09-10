@@ -24,11 +24,13 @@ which phase changes before changing kernels or re-adopting scratch.
 ## Bounded diagnostic
 
 `tools/mamba3_regime_probe.py` loads the retained seed/weight fixture helpers
-from an explicit path in the SAME checkout. The helper is historical and
-untracked: root must stage `bench/speed/seq_py_speed_arm.py` and its existing
-fixture dependencies, as for the previous public comparison. The script
-refuses a helper in another checkout to prevent its sys.path setup from
-selecting an unintended binding. Binary/Python paths, library and helper
+from explicit `--harness` and `--spec` paths. The retained spec supplies the
+Mamba3 rows missing from the current tracked `tools/speed_torch_seq.py`.
+It is loaded under `speed_torch_seq` before the helper, with `REPO` and
+`DRIVER_MOJO` explicitly rooted in the current checkout. Archive-relative
+sys.path additions are discarded before the public API is imported. Neither
+tracked tools nor fixture files are overwritten. Original/effective roots,
+helper/spec/driver hashes, loaded Python path, binary path and library
 SHA256, NumPy/Python versions, CPU affinity, input hashes, and addresses are
 recorded. No opponent or tree estimator executes.
 
@@ -44,8 +46,8 @@ isolates that lifetime choice. Neither run is a qualified production price.
 Root-only commands, activated environment and an exclusive device slot:
 
 ```
-python tools/mamba3_regime_probe.py --harness "$PWD/bench/speed/seq_py_speed_arm.py" --order narrow --passes 1 --rounds 12 --reference-json bench/results/staging_performance_2026-09-10/mamba-repeat/summary.json > /fresh/narrow-only.log
-python tools/mamba3_regime_probe.py --harness "$PWD/bench/speed/seq_py_speed_arm.py" --order narrow,wide,narrow,tiny,narrow,wide --passes 2 --rounds 8 --reference-json bench/results/staging_performance_2026-09-10/mamba-repeat/summary.json > /fresh/shape-order.log
+python tools/mamba3_regime_probe.py --harness bench/results/mamba3/2026-09-09-statepass/reproduction/seq_py_speed_arm.py --spec bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py --order narrow --passes 1 --rounds 12 --reference-json bench/results/staging_performance_2026-09-10/mamba-repeat/summary.json > /fresh/narrow-only.log
+python tools/mamba3_regime_probe.py --harness bench/results/mamba3/2026-09-09-statepass/reproduction/seq_py_speed_arm.py --spec bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py --order narrow,wide,narrow,tiny,narrow,wide --passes 2 --rounds 8 --reference-json bench/results/staging_performance_2026-09-10/mamba-repeat/summary.json > /fresh/shape-order.log
 ```
 
 Repeat the second command in a fresh process. If the regime changes, repeat
@@ -85,3 +87,12 @@ two buffers currently total391MiB at400k/batch512. Their allocation may cost
 host time or constrain larger batching; it does not establish a throughput
 win. No speculative production edit is included until the Mamba allocation
 regime is understood and a same-source phase measurement supports this work.
+
+Local Metal tiny smoke (root alone; no telemetry or large allocations):
+
+```
+python tools/mamba3_regime_probe.py --harness bench/results/mamba3/2026-09-09-statepass/reproduction/seq_py_speed_arm.py --spec bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py --order tiny --passes 1 --rounds 2 --reference-json bench/results/staging_performance_2026-09-10/mamba-repeat/summary.json > /fresh/tiny-smoke.log
+```
+
+A tiny pass only qualifies fixture loading and instrumentation. H100 large
+shape regime diagnosis remains RUN OWED and is not inferred from Metal.
