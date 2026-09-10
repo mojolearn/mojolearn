@@ -15,7 +15,7 @@ from std.math import abs
 from std.testing import assert_equal, assert_true
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from core.forest_inference import forest_predict_gpu, validate_flat_forest
+from core.forest_inference import forest_predict_gpu, validate_flat_forest, vector_groves_for
 
 
 def reference_flush(x: Float32) -> Float32:
@@ -60,6 +60,9 @@ def check_value(actual: Float32, expected: Float32) raises:
 def leaf_value(tree: Int, output: Int, outputs: Int, left_side: Bool) -> Float32:
     if outputs == 1:
         return Float32(tree%7-3)/Float32(8) if left_side else Float32(tree%5+1)/Float32(4)
+    if outputs > 2:
+        # Independent vector regression channels expose output-stride mistakes.
+        return Float32((tree+2*output+(3 if left_side else 1))%11-5)/Float32(16)
     var first = Float32(tree%4+1)/Float32(8) if left_side else Float32(tree%3+1)/Float32(4)
     return first if output == 0 else Float32(1)-first
 
@@ -112,6 +115,10 @@ def fixture[RF_INPUT: Bool](ctx: DeviceContext, trees: Int, outputs: Int) raises
             print("BITS",RF_INPUT,trees,outputs,row,c,ordered[index].to_bits(),grove[index].to_bits())
             # Dyadic fixture totals sum exactly in either association.
             assert_equal(ordered[index].to_bits(),grove[index].to_bits())
+    var fingerprint = UInt64(1469598103934665603)
+    for value in grove:
+        fingerprint = (fingerprint ^ UInt64(value.to_bits[DType.uint32]())) * UInt64(1099511628211)
+    print("fingerprint",RF_INPUT,trees,outputs,fingerprint)
     print("PASS fixture",RF_INPUT,trees,outputs)
 
 
@@ -128,11 +135,25 @@ def cancellation(ctx: DeviceContext) raises:
         thresholds.append(0)
         children.append(-1)
         leaves.append(Float32(16777216) if tree == 0 else (Float32(1) if tree == 1 else (Float32(-16777216) if tree == 2 else Float32(0))))
-    var ordered = forest_predict_gpu[False,False](ctx,offsets,cols,thresholds,children,leaves,x,1,1,1)
-    var grove = forest_predict_gpu[False,True](ctx,offsets,cols,thresholds,children,leaves,x,1,1,1)
-    check_value(ordered[0],reference_mean(leaves,False))
-    check_value(grove[0],reference_mean(leaves,True))
-    assert_true(ordered[0].to_bits() != grove[0].to_bits())
+    var widths: List[Int] = [1,2,3,8]
+    for outputs in widths:
+        var vectors = List[Float32]()
+        for tree in range(33):
+            for c in range(outputs):
+                vectors.append(leaves[tree] if c%2 == 0 else -leaves[tree])
+        var ordered = forest_predict_gpu[False,False](ctx,offsets,cols,thresholds,children,vectors,x,1,1,outputs)
+        var grove = forest_predict_gpu[False,True](ctx,offsets,cols,thresholds,children,vectors,x,1,1,outputs)
+        for c in range(outputs):
+            var channel = List[Float32]()
+            for tree in range(33):
+                channel.append(vectors[tree*outputs+c])
+            check_value(ordered[c],reference_mean(channel,False))
+            check_value(grove[c],reference_mean(channel,True))
+            assert_true(ordered[c].to_bits() != grove[c].to_bits())
+        var fingerprint = UInt64(1469598103934665603)
+        for value in grove:
+            fingerprint = (fingerprint ^ UInt64(value.to_bits[DType.uint32]())) * UInt64(1099511628211)
+        print("fingerprint cancellation",outputs,fingerprint)
     # Reassociation is intentionally observable; never assert blanket legacy parity.
     print("PASS cancellation: ordered and grove intentionally differ")
     var empty = List[Float32]()
@@ -176,10 +197,11 @@ def main() raises:
     invalid_graph()
     var ctx = DeviceContext()
     var counts: List[Int] = [1,31,32,33]
-    for trees in counts:
-        fixture[False](ctx,trees,1)
-        fixture[False](ctx,trees,2)
-        fixture[True](ctx,trees,1)
-        fixture[True](ctx,trees,2)
+    var widths: List[Int] = [1,2,3,7,8,9]
+    for outputs in widths:
+        print("vector_groves",outputs,vector_groves_for(outputs))
+        for trees in counts:
+            fixture[False](ctx,trees,outputs)
+            fixture[True](ctx,trees,outputs)
     cancellation(ctx)
     print("PASS shared GPU forest inference prototype")

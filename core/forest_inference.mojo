@@ -22,8 +22,9 @@ remain unflushed. NaN/infinity inputs/model values are refused for this slice.
 Host work validates/stages only. All prediction arithmetic/traversal is GPU.
 """
 from std.gpu import block_idx, block_dim, thread_idx
+from std.sys.compile import is_defined
 from std.memory import bitcast, stack_allocation
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_div
@@ -114,6 +115,118 @@ def forest_grove32_kernel[RF_INPUT: Bool](
         output.unsafe_store(item,ftz(identical_div(ftz(sums[unsafe_offset=tid]),Float32(trees))))
 
 
+
+def vector_groves_for(outputs: Int) -> Bool:
+    """Compile-time experiment selector; force-off retains the scalar reference."""
+    return (is_defined["MOJOLEARN_FOREST_VECTOR_GROVES"]()
+            and not is_defined["MOJOLEARN_FOREST_SCALAR_GROVES"]()
+            and outputs >= 2 and outputs <= 8)
+
+
+def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int](
+    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
+    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, features_in: Int32, outputs_in: Int32, trees_in: Int32,
+):
+    """Reuse nvForest's vector-leaf task: evaluate once, then all outputs.
+
+    Source pin/path in module header, gpu.cuh:139-158: evaluate_tree produces
+    one leaf ID, then the vector-output loop updates each class for that
+    task/grove. Keep our existing fixed32 logical groves and addition order
+    per output; only independent output work shares traversal. Capacity2/4/8
+    bounds register use and shared scratch (at most4KiB). More outputs keep
+    the existing scalar-output kernel. No row*tree global scratch is added.
+    """
+    var rows = Int(rows_in)
+    var features = Int(features_in)
+    var outputs = Int(outputs_in)
+    var trees = Int(trees_in)
+    var tid = Int(thread_idx.x)
+    var lane = tid%32
+    var row = Int(block_idx.x)*4+tid//32
+    var totals = stack_allocation[OUTPUT_CAPACITY,Float32]()
+    @parameter
+    for c in range(OUTPUT_CAPACITY):
+        totals[unsafe_offset=c] = Float32(0)
+    if row < rows:
+        var tree = lane
+        while tree < trees:
+            var node = reached_leaf[RF_INPUT](offsets,columns,thresholds,left,x,tree,row,features)
+            @parameter
+            for c in range(OUTPUT_CAPACITY):
+                if c < outputs:
+                    totals[unsafe_offset=c] = forest_add(totals[unsafe_offset=c],leaves.unsafe_load(node*outputs+c))
+            tree += 32
+    var sums = stack_allocation[128*OUTPUT_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
+    @parameter
+    for c in range(OUTPUT_CAPACITY):
+        sums[unsafe_offset=c*128+tid] = totals[unsafe_offset=c]
+    barrier()
+    var step = 16
+    while step > 0:
+        if lane < step:
+            @parameter
+            for c in range(OUTPUT_CAPACITY):
+                sums[unsafe_offset=c*128+tid] = forest_add(sums[unsafe_offset=c*128+tid],sums[unsafe_offset=c*128+tid+step])
+        barrier()
+        step //= 2
+    if lane == 0 and row < rows:
+        @parameter
+        for c in range(OUTPUT_CAPACITY):
+            if c < outputs:
+                output.unsafe_store(row*outputs+c,ftz(identical_div(ftz(sums[unsafe_offset=c*128+tid]),Float32(trees))))
+
+
+def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool](
+    ctx: DeviceContext,
+    mut doff: DeviceBuffer[DType.int32], mut dcol: DeviceBuffer[DType.int32],
+    mut dthr: DeviceBuffer[DType.float32], mut dleft: DeviceBuffer[DType.int32],
+    mut dleaf: DeviceBuffer[DType.float32], mut dx: DeviceBuffer[DType.float32],
+    mut dout: DeviceBuffer[DType.float32], n_rows: Int, n_features: Int,
+    n_outputs: Int, trees: Int,
+) raises:
+    """One shared enqueue dispatcher for transient and resident model owners.
+
+    Caller validates all shapes/indices/finite values, owns buffer lifetimes
+    through completion and performs required readback/synchronization. No
+    allocations or device drains occur here. Empty row batches enqueue nothing.
+    """
+    if n_rows == 0:
+        return
+    comptime if GROVE:
+        if vector_groves_for(n_outputs):
+            if n_outputs <= 2:
+                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,2]](
+                    doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                    dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                    grid_dim=(n_rows+3)//4,block_dim=128,
+                )
+            elif n_outputs <= 4:
+                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,4]](
+                    doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                    dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                    grid_dim=(n_rows+3)//4,block_dim=128,
+                )
+            else:
+                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,8]](
+                    doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                    dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                    grid_dim=(n_rows+3)//4,block_dim=128,
+                )
+        else:
+            ctx.enqueue_function[forest_grove32_kernel[RF_INPUT]](
+                doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                grid_dim=(n_rows*n_outputs+3)//4,block_dim=128,
+            )
+    else:
+        ctx.enqueue_function[forest_ordered_kernel[RF_INPUT]](
+            doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+            dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+            grid_dim=(n_rows*n_outputs+127)//128,block_dim=128,
+        )
+
 def require_finite(values: List[Float32]) raises:
     for value in values:
         if (bitcast[DType.uint32](value) & UInt32(0x7f800000)) == UInt32(0x7f800000):
@@ -190,18 +303,9 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
     ctx.enqueue_copy(dst_buf=dleft,src_ptr=left.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dleaf,src_ptr=leaves.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dx,src_ptr=x.unsafe_ptr())
-    comptime if GROVE:
-        ctx.enqueue_function[forest_grove32_kernel[RF_INPUT]](
-            doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
-            dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-            grid_dim=(n_rows*n_outputs+3)//4,block_dim=128,
-        )
-    else:
-        ctx.enqueue_function[forest_ordered_kernel[RF_INPUT]](
-            doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
-            dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-            grid_dim=(n_rows*n_outputs+127)//128,block_dim=128,
-        )
+    launch_forest_inference[RF_INPUT,GROVE](
+        ctx,doff,dcol,dthr,dleft,dleaf,dx,dout,n_rows,n_features,n_outputs,trees,
+    )
     ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(),src_buf=dout)
     ctx.synchronize()
     # Keep borrowed host inputs and device operands live through the drain.
