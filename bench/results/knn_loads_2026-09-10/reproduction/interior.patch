@@ -1,0 +1,70 @@
+diff --git a/neighbors/checks/pinned_distance_tile.mojo b/neighbors/checks/pinned_distance_tile.mojo
+index 9f10d7bb..6f8c5afd 100644
+--- a/neighbors/checks/pinned_distance_tile.mojo
++++ b/neighbors/checks/pinned_distance_tile.mojo
+@@ -176,7 +176,7 @@ def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
+ 
+ 
+ @always_inline
+-def _rt_dot_tile[REPAIR: Bool](
++def _rt_dot_tile[REPAIR: Bool, VECTOR: Bool = False](
+     q: MutPointer[Float32, MutAnyOrigin],
+     yt: MutPointer[Float32, MutAnyOrigin],
+     rows_idx: SIMD[DType.int32, RT_ROWS],
+@@ -186,8 +186,16 @@ def _rt_dot_tile[REPAIR: Bool](
+     var acc = SIMD[DType.float32, RT_ROWS * RT_COLS](0.0)
+     for f in range(d):
+         var yv = SIMD[DType.float32, RT_COLS](0.0)
+-        comptime for c in range(RT_COLS):
+-            yv[c] = _rt_load(yt.unsafe_load(f * y_stride + Int(cols_idx[c])))
++        # Experimental transport only; feature and FMA order are unchanged.
++        # RAFT linalg/detail/contractions.cuh:193-219 uses vector global loads.
++        # This identical tile has a different layout and retains scalar edge loads.
++        comptime if VECTOR:
++            var raw = yt.unsafe_load[width=4, alignment=16](f * y_stride + Int(cols_idx[0]))
++            comptime for c in range(RT_COLS):
++                yv[c] = _rt_load(raw[c])
++        else:
++            comptime for c in range(RT_COLS):
++                yv[c] = _rt_load(yt.unsafe_load(f * y_stride + Int(cols_idx[c])))
+         comptime for r in range(RT_ROWS):
+             var qv = _rt_load(q.unsafe_load(Int(rows_idx[r]) * d + f))
+             comptime for c in range(RT_COLS):
+@@ -200,7 +208,7 @@ def _rt_dot_tile[REPAIR: Bool](
+ 
+ 
+ @always_inline
+-def _rt_accumulate_tile(
++def _rt_accumulate_tile[VECTOR: Bool = False](
+     q: MutPointer[Float32, MutAnyOrigin],
+     yt: MutPointer[Float32, MutAnyOrigin],
+     rows_idx: SIMD[DType.int32, RT_ROWS],
+@@ -226,8 +234,8 @@ def _rt_accumulate_tile(
+                 if e != 0 and e < y_min:
+                     y_min = e
+         if q_min + y_min >= 151:
+-            return _rt_dot_tile[False](q, yt, rows_idx, cols_idx, d, y_stride)
+-    return _rt_dot_tile[True](q, yt, rows_idx, cols_idx, d, y_stride)
++            return _rt_dot_tile[False, VECTOR](q, yt, rows_idx, cols_idx, d, y_stride)
++    return _rt_dot_tile[True, VECTOR](q, yt, rows_idx, cols_idx, d, y_stride)
+ 
+ 
+ @always_inline
+@@ -270,7 +278,7 @@ def _rt_accumulate_metadata_tile(
+     return _rt_dot_tile[True](q, yt, rows_idx, cols_idx, d, y_stride)
+ 
+ 
+-def pinned_distance_register_tile_kernel[METADATA: Bool](
++def pinned_distance_register_tile_kernel[METADATA: Bool, VECTOR: Bool = False](
+     z: MutPointer[Float32, MutAnyOrigin],
+     q: MutPointer[Float32, MutAnyOrigin],
+     yt: MutPointer[Float32, MutAnyOrigin],
+@@ -312,7 +320,7 @@ def pinned_distance_register_tile_kernel[METADATA: Bool](
+     comptime if METADATA:
+         acc = _rt_accumulate_metadata_tile(q, yt, q_minima, y_minima, rows_idx, cols_idx, d, y_stride)
+     else:
+-        acc = _rt_accumulate_tile(q, yt, rows_idx, cols_idx, d, y_stride)
++        acc = _rt_accumulate_tile[VECTOR](q, yt, rows_idx, cols_idx, d, y_stride)
+ 
+     comptime for r in range(RT_ROWS):
+         var row = row0 + r

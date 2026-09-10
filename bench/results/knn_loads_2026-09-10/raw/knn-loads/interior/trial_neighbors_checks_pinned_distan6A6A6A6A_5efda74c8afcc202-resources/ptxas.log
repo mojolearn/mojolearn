@@ -1,0 +1,5 @@
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function 'neighbors_checks_pinned_distan6A6A6A6A_5efda74c8afcc202' for 'sm_90a'
+ptxas info    : Function properties for neighbors_checks_pinned_distan6A6A6A6A_5efda74c8afcc202
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 26 registers, used 0 barriers

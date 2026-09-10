@@ -1,0 +1,195 @@
+1114 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x706900000000, nodemask=1)
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:202:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:203:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:204:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:205:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:206:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt64(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:230:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:231:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:232:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:242:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:244:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:249:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:293:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:294:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:299:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:300:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:302:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:303:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:304:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:304:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:309:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:312:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:312:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:318:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:360:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_val[slot] = o_val.unsafe_load(slot)
+        ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:361:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_idx[slot] = o_idx.unsafe_load(slot)
+        ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:366:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[slot], s_idx[slot], select_min)
+                                  ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:366:53: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[slot], s_idx[slot], select_min)
+                                               ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:369:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                             ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:369:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:371:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_val.unsafe_store(rank, s_val[slot])
+                                 ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:33:
+/root/performance/neighbors/checks/select_radix_identical.mojo:372:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_idx.unsafe_store(rank, s_idx[slot])
+                                 ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:27:
+Imported from /root/performance/core/row_norms.mojo:60:
+/root/performance/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:27:
+Imported from /root/performance/core/row_norms.mojo:60:
+/root/performance/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:27:
+Imported from /root/performance/core/row_norms.mojo:60:
+/root/performance/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:27:
+Imported from /root/performance/core/row_norms.mojo:60:
+/root/performance/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:32:
+Imported from /root/performance/neighbors/checks/transposed_index_distance_candidate.mojo:21:
+/root/performance/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/performance/bench/knn_vector_load_trial.mojo:32:
+Imported from /root/performance/neighbors/checks/transposed_index_distance_candidate.mojo:21:
+/root/performance/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/performance/bench/knn_vector_load_trial.mojo:200:17: warning: ref 'warm' was never used, remove it?
+            for warm in range(2):
+                ^

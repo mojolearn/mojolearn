@@ -1,0 +1,79 @@
+{
+  "target": "sm_90a",
+  "entries": [
+    "neighbors_checks_pinned_distan6A6A6A6A_5efda74c8afcc202"
+  ],
+  "ptx_sha256": "e16163a161d88f7f8433ff8d9233afc00cd32a352589334451b3672679b1d0c5",
+  "source": "/root/knn-loads/vector/trial_neighbors_checks_pinned_distan6A6A6A6A_5efda74c8afcc202.ptx",
+  "source_sha256": "e16163a161d88f7f8433ff8d9233afc00cd32a352589334451b3672679b1d0c5",
+  "host": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+  "status": "assembled",
+  "scope": "offline assembly; no execution, timing, or achieved occupancy",
+  "runtime_jit_equivalence": "not established",
+  "commands": [
+    {
+      "argv": [
+        "/root/cuda126-tools/nvidia/cuda_nvcc/bin/ptxas",
+        "--version"
+      ],
+      "log": "ptxas-version.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/local/cuda-12.4/bin/cuobjdump",
+        "--version"
+      ],
+      "log": "cuobjdump-version.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/root/cuda126-tools/nvidia/cuda_nvcc/bin/ptxas",
+        "--verbose",
+        "--gpu-name",
+        "sm_90a",
+        "/root/knn-loads/vector/trial_neighbors_checks_pinned_distan6A6A6A6A_5efda74c8afcc202-resources/input.ptx",
+        "--output-file",
+        "/root/knn-loads/vector/trial_neighbors_checks_pinned_distan6A6A6A6A_5efda74c8afcc202-resources/kernel.cubin"
+      ],
+      "log": "ptxas.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/local/cuda-12.4/bin/cuobjdump",
+        "--dump-resource-usage",
+        "/root/knn-loads/vector/trial_neighbors_checks_pinned_distan6A6A6A6A_5efda74c8afcc202-resources/kernel.cubin"
+      ],
+      "log": "resources.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/local/cuda-12.4/bin/cuobjdump",
+        "--dump-sass",
+        "/root/knn-loads/vector/trial_neighbors_checks_pinned_distan6A6A6A6A_5efda74c8afcc202-resources/kernel.cubin"
+      ],
+      "log": "sass.log",
+      "returncode": 0
+    }
+  ],
+  "ptxas": {
+    "path": "/root/cuda126-tools/nvidia/cuda_nvcc/bin/ptxas",
+    "sha256": "81ef7761e3769ec17980aba4e416ecbc85352b8dce26cdd392b7204302a909a2"
+  },
+  "cuobjdump": {
+    "path": "/usr/local/cuda-12.4/bin/cuobjdump",
+    "sha256": "99964c9ef10074bad96b224fe04628d153b6f518328ca1e330538e568baabdda"
+  },
+  "artifacts": {
+    "cuobjdump-version.log": "7a0cbe32e10d72cb84cb0152f0f1e1de3f02edc42115e70ab0f4d7744b837fdf",
+    "input.ptx": "e16163a161d88f7f8433ff8d9233afc00cd32a352589334451b3672679b1d0c5",
+    "kernel.cubin": "1d6f2251d6e5d3a6747da723801ea35687cf4055330f0f395ff40a6dd64d6474",
+    "ptxas-version.log": "7fac101e1cc8eb83e134dadb8801a66ce93bc6d6feb6ba6183dab4103cbe0087",
+    "ptxas.log": "824afbd8ef7da2adf0e6333ce9c06ca99b8a31a5f7e47da84fe78aaaf176e475",
+    "resources.log": "25815eb35ddbd0ed315d54118613cbcc77b39fe1a951ef2bf4148dc42e8c83a7",
+    "sass.log": "c3b91b79d0297c813e2d4fd3f13f5a6377fe176dd57325e876e6ea23bd3b8517"
+  }
+}
