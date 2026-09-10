@@ -51,6 +51,10 @@ builds/measurements through `tools/with_build_lock.sh`. Commit completed slices
 and push the lane. Integrating with current main requires a separate conflict
 and regression review; lane completion is not main/release completion.
 
+Serial pipeline CV now has a bounded public API; see the
+[cross-validation contract](GPU_CROSS_VALIDATION.md). Native GPU splitting,
+encoders and device-resident pipeline ownership remain queued.
+
 ## What is already present
 
 | Area | Implemented scope | Remaining qualification or limitation |

@@ -16,8 +16,9 @@ local build/smoke validation only. C1 now adds bounded
 [GPU MinMaxScaler](GPU_MINMAX_SCALER.md) and
 [GPU StandardScaler](GPU_STANDARD_SCALER.md); the
 [bounded B2 GBDT adapters](GBDT_SKLEARN_ADAPTER_PLAN.md) add RMSE regression
-and binary Logloss classification while preserving legacy raw predictions. The
-remaining phases follow. A complete cross-vendor
+and binary Logloss classification while preserving legacy raw predictions. A bounded [serial cross-validation API](GPU_CROSS_VALIDATION.md) now clones
+and fits pipelines per fold using optional sklearn split metadata. Native D1
+splitters remain queued. The remaining phases follow. A complete cross-vendor
 pipeline has not been qualified. Metrics and estimator compatibility take priority over
 the longer-tail tree features.
 
@@ -84,7 +85,7 @@ messages as each feature lands instead of advertising unimplemented names.
 | C1: scalers | Mirror StandardScaler population-variance and MinMaxScaler contracts in Mojo: fixed reduction schedule, defined precision, zero-variance/range handling, then elementwise transform/inverse transform. Own learned statistics and propagate numeric_mode. | Independent moments, constant columns, weights where supported, NaN policy, overflow/cancellation, fit-transform/inverse behavior and round trips; transformed bytes compared across devices. |
 | C2: encoders | Stable LabelEncoder/OrdinalEncoder vocabulary first, then one-hot: category order, unknown-category policy, serialized mappings and bounded dense output; sparse output follows a real sparse contract. Target encoding later with out-of-fold training values, smoothing and explicit leakage prevention. | Train/test category mismatch, deterministic codes, heldout leakage tests, fold ownership and category-map round trips. Do not expose a target encoder that fits on evaluation labels. |
 | D1: splitting and folds | Build train_test_split and KFold on explicit index permutations and a stable integer RNG mapping; add StratifiedKFold with deterministic class allocation/ties. Reuse resample mechanisms where their algorithm and scale fit. | Exact index coverage/disjointness, stable seed vectors, size rounding, class imbalance and tiny classes; publish any RNG difference from sklearn rather than imply same-seed index equality. |
-| D2: cross-validation/search | Implement serial cross_val_score orchestration around clone/fit/predict/metric; use sklearn GridSearchCV through compatibility first rather than build another search engine. Fit transformations and quantizers on training folds only. | No preprocessing/quantization/target leakage, explicit score direction, stable fold aggregation and best-parameter ties, reproducible refit, errors/cancellation and bounded device memory. |
+| D2: cross-validation/search | Bounded [serial cross_val_score](GPU_CROSS_VALIDATION.md) implemented using optional sklearn cloning/splits and estimator or callable scoring; use sklearn GridSearchCV through compatibility first rather than build another search engine. Fit transformations and quantizers on training folds only. | No preprocessing/quantization/target leakage, explicit score direction, stable fold aggregation and best-parameter ties, reproducible refit, errors/cancellation and bounded device memory. |
 | E: pipeline qualification | Compose a bounded numeric preprocessing → training → prediction → scoring workflow with owned/device-aware data and explicit mode at every stage. Save the transforms, model and schema together. | Cross-vendor intermediate and final identity using installed artifacts, complete provenance, independent accuracy checks and end-to-end time/memory measurements. |
 
 A1/A2 and B1 can run as independent source lanes. A3 used a sort design
