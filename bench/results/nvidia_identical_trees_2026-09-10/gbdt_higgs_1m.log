@@ -1,0 +1,22 @@
+5492 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bf4c0000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+5572 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52a580000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 ms=979.423
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 ms=986.533
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=625.906 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=1 ms=902.676 hash=e243e25617285011
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=2 ms=467.625 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=2 ms=964.420 hash=61545c95c75c0b26
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=3 ms=465.291 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=3 ms=857.571 hash=4a901a9a72d08512
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=4 ms=483.232 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=4 ms=886.847 hash=462efbb8ead9ce67
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=5 ms=471.659 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=5 ms=895.264 hash=ff487eb3dc81372b
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542067
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800716
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.542525
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800430
+BASELINE_RESULT /root/trees_out/gbdt_higgs_1m.json complete= True repeatable= True

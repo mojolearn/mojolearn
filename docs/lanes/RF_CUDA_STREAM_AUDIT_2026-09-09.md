@@ -1,5 +1,11 @@
 # RF CUDA stream audit, 2026-09-09
 
+Update 2026-09-10: the real H100 stream probe now passes: `create_stream()`
+adds a selectable context view. See [NVIDIA evidence](../../bench/results/nvidia_identical_trees_2026-09-10/README.md).
+Production overlap remains unimplemented; kernel ownership and timing still
+need validation. The September 9 investigation below is historical.
+
+
 Status: no production stream scheduler enabled. The installed API supports real
 stream objects, but this Apple M4 machine cannot establish how a CUDA-created
 stream becomes a selectable context view. No remote training pod was used.

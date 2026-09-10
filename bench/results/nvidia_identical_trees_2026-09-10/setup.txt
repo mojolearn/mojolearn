@@ -1,0 +1,15 @@
+started=2026-09-10T12:12:36Z commit=45d65d55a4f1d11a06df5146773c50963deea1f4
+pixi_install=0 12:12:51
+pip_base=0 12:13:10
+build_base=0 12:13:42
+build_gbdt=0 12:15:18
+build_rf=0 12:15:41
+build_trees=0 12:16:06
+import_identical=0 12:16:06
+pip_cuml=0 12:16:09
+higgs_zip=0 12:17:22
+higgs_unzip=0 12:17:26
+download_higgs=0 12:18:46
+lightgbm_cuda_build=143 12:19:14
+lightgbm_cuda_works=NO Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+finished=2026-09-10T12:19:15Z

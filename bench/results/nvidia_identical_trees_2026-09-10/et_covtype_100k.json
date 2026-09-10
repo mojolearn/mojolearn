@@ -1,0 +1,108 @@
+{
+  "lane": "et",
+  "dataset": "covtype-90000x54",
+  "config": {
+    "seed": 7,
+    "n_estimators": 100,
+    "max_depth": 16,
+    "n_bins": 128,
+    "min_samples_leaf": 1,
+    "min_samples_split": 2,
+    "min_impurity_decrease": 0.0,
+    "bootstrap": false
+  },
+  "numeric_mode": "identical",
+  "vendor": "cuda",
+  "rounds": 5,
+  "binding": {
+    "requested": "identical",
+    "resolved": "identical",
+    "compiled": "identical",
+    "vendor": "cuda",
+    "path": "/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so"
+  },
+  "binding_sha256": "32a89c63c2b78f27daddfa9e26a832e7759a61437e2e6b84e0814e676580b239",
+  "benchmark_source_sha256": {
+    "/root/mojolearn/bench/speed/nvidia_identical_trees.py": "4c002cf495e68586f96ec0bd7f47f707c09d4fd472b157e75af5ec321a11d843",
+    "/root/mojolearn/bench/speed/forest_speed_arm.py": "4ac4271472199e5959db557953056189e4c1222bb0c86d8c81c986cc00c41b13",
+    "/root/mojolearn/tools/speed_gbdt_arm.py": "e6ccab4dc0bf92f3be78bcfc8447b2635bd747014fa3d6d4df8429e00cf667ba"
+  },
+  "source_commit": "e4cd8a6b5897d0814deba1e0852dcc419d909ecf",
+  "data_sha256": "5acf8f49a7bf68973d3beaa249f252e619ba064249a27049c87e6bdf2b9783d9",
+  "versions": {
+    "numpy": "2.4.6",
+    "catboost": "1.2.10",
+    "cuml-cu12": "26.8.0"
+  },
+  "arm_parameters": {
+    "ours": {
+      "n_estimators": 100,
+      "criterion": "gini",
+      "max_depth": 16,
+      "min_samples_split": 2,
+      "min_samples_leaf": 1,
+      "min_weight_fraction_leaf": 0.0,
+      "max_features": "sqrt",
+      "max_leaf_nodes": null,
+      "min_impurity_decrease": 0.0,
+      "bootstrap": false,
+      "oob_score": false,
+      "n_jobs": null,
+      "random_state": 7,
+      "verbose": 0,
+      "warm_start": false,
+      "class_weight": null,
+      "ccp_alpha": 0.0,
+      "max_samples": null,
+      "monotonic_cst": null,
+      "device": "gpu",
+      "numeric_mode": null
+    }
+  },
+  "summary": {
+    "ours": {
+      "fit_ms": [
+        1484.827,
+        1533.914,
+        1466.426,
+        1462.05,
+        1469.566
+      ],
+      "median_ms": 1469.566,
+      "max_min_spread": 1.0491529017475463,
+      "stable": true
+    }
+  },
+  "complete": true,
+  "quality": [
+    {
+      "arm": "ours",
+      "metric": "accuracy",
+      "value": 0.8703
+    }
+  ],
+  "quality_valid": true,
+  "repeated_model_and_prediction_equal": true,
+  "model_hashes": [
+    "3eaf1c1f204c772005d7cee8d09834ecd21040a8cd0602d66c11b49105081d66",
+    "3eaf1c1f204c772005d7cee8d09834ecd21040a8cd0602d66c11b49105081d66",
+    "3eaf1c1f204c772005d7cee8d09834ecd21040a8cd0602d66c11b49105081d66",
+    "3eaf1c1f204c772005d7cee8d09834ecd21040a8cd0602d66c11b49105081d66",
+    "3eaf1c1f204c772005d7cee8d09834ecd21040a8cd0602d66c11b49105081d66",
+    "3eaf1c1f204c772005d7cee8d09834ecd21040a8cd0602d66c11b49105081d66"
+  ],
+  "prediction_hashes": {
+    "ours": [
+      "01ddfc6291a063d1",
+      "01ddfc6291a063d1",
+      "01ddfc6291a063d1",
+      "01ddfc6291a063d1",
+      "01ddfc6291a063d1"
+    ]
+  },
+  "scores": [
+    "FSPEED-ACC lane=et arm=ours metric=accuracy value=0.870300"
+  ],
+  "refusals": [],
+  "timing_contract": "constructor + host packing + fit + synchronization; scoring excluded"
+}

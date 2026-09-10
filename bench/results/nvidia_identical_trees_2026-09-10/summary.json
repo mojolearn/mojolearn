@@ -1,0 +1,153 @@
+{
+  "rf": {
+    "summary": {
+      "ours": {
+        "fit_ms": [
+          4904.681,
+          4904.963,
+          4789.484,
+          4860.937,
+          6586.897
+        ],
+        "median_ms": 4904.681,
+        "max_min_spread": 1.3752832246647029,
+        "stable": false
+      },
+      "cuml-rf-gpu": {
+        "fit_ms": [
+          3421.173,
+          3513.199,
+          4171.21,
+          3527.001,
+          4275.569
+        ],
+        "median_ms": 3527.001,
+        "max_min_spread": 1.2497377361507298,
+        "stable": false
+      },
+      "cuml-rf-gpu-stream1": {
+        "fit_ms": [
+          3832.141,
+          3409.488,
+          4684.26,
+          4692.616,
+          3859.076
+        ],
+        "median_ms": 3859.076,
+        "max_min_spread": 1.3763403772061964,
+        "stable": false
+      }
+    },
+    "quality": [
+      {
+        "arm": "ours",
+        "metric": "logloss",
+        "value": 0.53885
+      },
+      {
+        "arm": "ours",
+        "metric": "auc",
+        "value": 0.809906
+      },
+      {
+        "arm": "cuml-rf-gpu",
+        "metric": "logloss",
+        "value": 0.538814
+      },
+      {
+        "arm": "cuml-rf-gpu",
+        "metric": "auc",
+        "value": 0.809834
+      },
+      {
+        "arm": "cuml-rf-gpu-stream1",
+        "metric": "logloss",
+        "value": 0.538814
+      },
+      {
+        "arm": "cuml-rf-gpu-stream1",
+        "metric": "auc",
+        "value": 0.809834
+      }
+    ],
+    "complete": true,
+    "repeatable": true
+  },
+  "gbdt-symmetric": {
+    "summary": {
+      "ours": {
+        "fit_ms": [
+          625.906,
+          467.625,
+          465.291,
+          483.232,
+          471.659
+        ],
+        "median_ms": 471.659,
+        "max_min_spread": 1.345192578407921,
+        "stable": false
+      },
+      "catboost-gpu": {
+        "fit_ms": [
+          902.676,
+          964.42,
+          857.571,
+          886.847,
+          895.264
+        ],
+        "median_ms": 895.264,
+        "max_min_spread": 1.1245949314983832,
+        "stable": false
+      }
+    },
+    "quality": [
+      {
+        "arm": "ours",
+        "metric": "logloss",
+        "value": 0.542067
+      },
+      {
+        "arm": "ours",
+        "metric": "auc",
+        "value": 0.800716
+      },
+      {
+        "arm": "catboost-gpu",
+        "metric": "logloss",
+        "value": 0.542525
+      },
+      {
+        "arm": "catboost-gpu",
+        "metric": "auc",
+        "value": 0.80043
+      }
+    ],
+    "complete": true,
+    "repeatable": true
+  },
+  "et": {
+    "summary": {
+      "ours": {
+        "fit_ms": [
+          1484.827,
+          1533.914,
+          1466.426,
+          1462.05,
+          1469.566
+        ],
+        "median_ms": 1469.566,
+        "max_min_spread": 1.0491529017475463,
+        "stable": true
+      }
+    },
+    "quality": [
+      {
+        "arm": "ours",
+        "metric": "accuracy",
+        "value": 0.8703
+      }
+    ],
+    "complete": true,
+    "repeatable": true
+  }
+}

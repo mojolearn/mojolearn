@@ -1,0 +1,92 @@
+{
+  "lane": "gbdt-symmetric",
+  "dataset": "synthclf-29492x32",
+  "config": {
+    "seed": 7,
+    "n_estimators": 10,
+    "max_depth": 6,
+    "learning_rate": 0.1,
+    "l2": 1.0,
+    "borders": 254,
+    "max_leaves": 64,
+    "grow_policy": "SymmetricTree"
+  },
+  "numeric_mode": "identical",
+  "vendor": "cuda",
+  "rounds": 1,
+  "source_commit": "45d65d55a4f1d11a06df5146773c50963deea1f4",
+  "data_sha256": "eaab7dc55a4d039575db8dc5eedb0447522f8acc225b91fbd45d8fb7db78f6ed",
+  "versions": {
+    "numpy": "2.4.6",
+    "catboost": "1.2.10",
+    "cuml-cu12": "26.8.0"
+  },
+  "arm_parameters": {
+    "ours": {
+      "seed": 7,
+      "n_estimators": 10,
+      "max_depth": 6,
+      "learning_rate": 0.1,
+      "l2": 1.0,
+      "borders": 254,
+      "max_leaves": 64,
+      "grow_policy": "SymmetricTree"
+    },
+    "catboost-gpu": {
+      "iterations": 10,
+      "learning_rate": 0.1,
+      "depth": 6,
+      "l2_leaf_reg": 1.0,
+      "loss_function": "Logloss",
+      "border_count": 254,
+      "random_seed": 7,
+      "verbose": false,
+      "allow_writing_files": false,
+      "boosting_type": "Plain",
+      "task_type": "GPU",
+      "devices": "0",
+      "bootstrap_type": "No",
+      "grow_policy": "SymmetricTree"
+    }
+  },
+  "summary": {
+    "ours": {
+      "fit_ms": [
+        133.973
+      ],
+      "median_ms": 133.973,
+      "max_min_spread": 1.0,
+      "stable": null
+    },
+    "catboost-gpu": {
+      "fit_ms": [
+        221.859
+      ],
+      "median_ms": 221.859,
+      "max_min_spread": 1.0,
+      "stable": null
+    }
+  },
+  "complete": true,
+  "repeated_model_and_prediction_equal": true,
+  "model_hashes": [
+    "73430af79698f13f7452d436bba4a93ff9bd71711b3f8c7882ed8842ce03e920",
+    "73430af79698f13f7452d436bba4a93ff9bd71711b3f8c7882ed8842ce03e920"
+  ],
+  "prediction_hashes": {
+    "ours": [
+      "94cb51c9c574e411"
+    ],
+    "catboost-gpu": [
+      "ad137d32fb947044"
+    ]
+  },
+  "scores": [
+    "FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.179864",
+    "FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.995278",
+    "FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.176431",
+    "FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.994848"
+  ],
+  "refusals": [],
+  "timing_contract": "constructor + host packing + fit + synchronization; scoring excluded"
+}

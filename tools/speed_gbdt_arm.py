@@ -893,10 +893,10 @@ def max_features_for(data):
 class Arm(object):
     """One timed competitor.
 
-    `make()` returns a fresh unfitted estimator; it runs OUTSIDE the timer,
-    so any host-side setup a constructor does is not charged to the fit.
-    `fit(model, data)` is the ONLY thing inside the timer. `sync()` also runs
-    inside it, because a fit is not finished until the device says so, and
+    `make()` returns a fresh unfitted estimator. The shared runner times
+    construction, `fit(model, data)` and `sync()` together: constructor work
+    and input conversion in fit are included. Synchronization is included
+    because a fit is not finished until the device says so, and
     for the libraries whose `fit` already blocks it is a documented no-op.
     `score(model, data)` runs outside and returns `(metric_name, value,
     prediction_vector)`."""

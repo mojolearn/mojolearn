@@ -1,0 +1,11 @@
+6024 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7924c0000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=covtype-90000x54 ms=1969.099
+FSPEED lane=et arm=ours shape=covtype-90000x54 round=1 ms=1484.827 hash=01ddfc6291a063d1
+FSPEED lane=et arm=ours shape=covtype-90000x54 round=2 ms=1533.914 hash=01ddfc6291a063d1
+FSPEED lane=et arm=ours shape=covtype-90000x54 round=3 ms=1466.426 hash=01ddfc6291a063d1
+FSPEED lane=et arm=ours shape=covtype-90000x54 round=4 ms=1462.050 hash=01ddfc6291a063d1
+FSPEED lane=et arm=ours shape=covtype-90000x54 round=5 ms=1469.566 hash=01ddfc6291a063d1
+FSPEED-ACC lane=et arm=ours metric=accuracy value=0.870300
+BASELINE_RESULT /root/trees_out/et_covtype_100k.json complete= True repeatable= True

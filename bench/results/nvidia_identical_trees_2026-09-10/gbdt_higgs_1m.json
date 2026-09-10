@@ -1,0 +1,148 @@
+{
+  "lane": "gbdt-symmetric",
+  "dataset": "higgs-1000000x28",
+  "config": {
+    "seed": 7,
+    "n_estimators": 100,
+    "max_depth": 6,
+    "learning_rate": 0.1,
+    "l2": 1.0,
+    "borders": 254,
+    "max_leaves": 64,
+    "grow_policy": "SymmetricTree"
+  },
+  "numeric_mode": "identical",
+  "vendor": "cuda",
+  "rounds": 5,
+  "binding": {
+    "requested": "identical",
+    "resolved": "identical",
+    "compiled": "identical",
+    "vendor": "cuda",
+    "path": "/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so"
+  },
+  "binding_sha256": "fc2603212264f55fe78b7b63727a0683380621d2f3a00ed9d5543dc1a6660403",
+  "benchmark_source_sha256": {
+    "/root/mojolearn/bench/speed/nvidia_identical_trees.py": "4c002cf495e68586f96ec0bd7f47f707c09d4fd472b157e75af5ec321a11d843",
+    "/root/mojolearn/bench/speed/forest_speed_arm.py": "4ac4271472199e5959db557953056189e4c1222bb0c86d8c81c986cc00c41b13",
+    "/root/mojolearn/tools/speed_gbdt_arm.py": "e6ccab4dc0bf92f3be78bcfc8447b2635bd747014fa3d6d4df8429e00cf667ba"
+  },
+  "source_commit": "e4cd8a6b5897d0814deba1e0852dcc419d909ecf",
+  "data_sha256": "640ef1484d55ae61318426d3ce71ebab4f648de2fbb287ec4f631de8459fe159",
+  "versions": {
+    "numpy": "2.4.6",
+    "catboost": "1.2.10",
+    "cuml-cu12": "26.8.0"
+  },
+  "arm_parameters": {
+    "ours": {
+      "seed": 7,
+      "n_estimators": 100,
+      "max_depth": 6,
+      "learning_rate": 0.1,
+      "l2": 1.0,
+      "borders": 254,
+      "max_leaves": 64,
+      "grow_policy": "SymmetricTree"
+    },
+    "catboost-gpu": {
+      "iterations": 100,
+      "learning_rate": 0.1,
+      "depth": 6,
+      "l2_leaf_reg": 1.0,
+      "loss_function": "Logloss",
+      "border_count": 254,
+      "random_seed": 7,
+      "verbose": false,
+      "allow_writing_files": false,
+      "boosting_type": "Plain",
+      "task_type": "GPU",
+      "devices": "0",
+      "bootstrap_type": "No",
+      "grow_policy": "SymmetricTree"
+    }
+  },
+  "summary": {
+    "ours": {
+      "fit_ms": [
+        625.906,
+        467.625,
+        465.291,
+        483.232,
+        471.659
+      ],
+      "median_ms": 471.659,
+      "max_min_spread": 1.345192578407921,
+      "stable": false
+    },
+    "catboost-gpu": {
+      "fit_ms": [
+        902.676,
+        964.42,
+        857.571,
+        886.847,
+        895.264
+      ],
+      "median_ms": 895.264,
+      "max_min_spread": 1.1245949314983832,
+      "stable": false
+    }
+  },
+  "complete": true,
+  "quality": [
+    {
+      "arm": "ours",
+      "metric": "logloss",
+      "value": 0.542067
+    },
+    {
+      "arm": "ours",
+      "metric": "auc",
+      "value": 0.800716
+    },
+    {
+      "arm": "catboost-gpu",
+      "metric": "logloss",
+      "value": 0.542525
+    },
+    {
+      "arm": "catboost-gpu",
+      "metric": "auc",
+      "value": 0.80043
+    }
+  ],
+  "quality_valid": true,
+  "repeated_model_and_prediction_equal": true,
+  "model_hashes": [
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3"
+  ],
+  "prediction_hashes": {
+    "ours": [
+      "dac2cf366e219cec",
+      "dac2cf366e219cec",
+      "dac2cf366e219cec",
+      "dac2cf366e219cec",
+      "dac2cf366e219cec"
+    ],
+    "catboost-gpu": [
+      "e243e25617285011",
+      "61545c95c75c0b26",
+      "4a901a9a72d08512",
+      "462efbb8ead9ce67",
+      "ff487eb3dc81372b"
+    ]
+  },
+  "scores": [
+    "FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542067",
+    "FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800716",
+    "FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.542525",
+    "FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800430"
+  ],
+  "refusals": [],
+  "timing_contract": "constructor + host packing + fit + synchronization; scoring excluded"
+}
