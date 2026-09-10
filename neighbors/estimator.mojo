@@ -23,22 +23,18 @@ through without a second representation being invented in between.
 THE POLICY CHOICES
 ------------------
 
-1. `query_tile` DEFAULTS TO 256, which is the value
-   `bench/bench_main.mojo:72` was measured at. It is not a tuned number and
-   it is not claimed to be optimal; it is the number the published 1.51x
-   describes. Changing it moves off the measured configuration, so
-   `knn_search` reports the tile it actually used rather than letting a
-   caller assume.
+1. `query_tile` defaults to 512 on NVIDIA IDENTICAL and 256 on other
+   columns and numeric modes. The NVIDIA default is backed by the large
+   query-batch evidence in `bench/OPPONENT_REFERENCE.md`; the legacy override
+   restores 256. `knn_search` reports the tile actually used after planning.
 
-2. THE WORKSPACE IS CAPPED AND THE CAP CAN LOWER THE TILE.
-   `tiled_brute_force_knn` needs a `query_tile x n_index` distance tile, which
-   at the benchmark's 400,000-point index is already 409 MB. Left alone it
-   grows without bound: a 4,000,000-point index at tile 256 would ask for
-   4.1 GB on a 16 GB machine. So the tile is lowered until the tile fits
-   `WORKSPACE_BUDGET_BYTES`. **The budget is set so the benchmark shape is
-   untouched** -- 409 MB is under it -- and the lowering only begins above
-   roughly a 500,000-point index. When it fires, the configuration is no
-   longer the measured one and `used_query_tile` says so.
+2. THE DISTANCE WORKSPACE IS CAPPED AND THE CAP CAN LOWER THE TILE.
+   The cap is 768 MiB for the distance tile alone, not total request memory.
+   For the measured NVIDIA IDENTICAL scope (index <= 400,000 and requested
+   tile <= 512), planning uses the actual bounded index tile (65,536 columns
+   at the large target). Elsewhere it retains the conservative full-index
+   estimate. Queries also clamp the selected tile. Radix scratch, inputs,
+   outputs and other preparation storage are additional allocations.
 
 3. `return_sqrt` DEFAULTS TO TRUE, and the benchmark ran with it FALSE.
    scikit-learn's `kneighbors` returns Euclidean distances; the benchmark
@@ -230,7 +226,7 @@ from neighbors.impl.neighbors.ball_cover.ball_cover import (
 
 
 # Measured NVIDIA IDENTICAL query batching; row arithmetic is unchanged.
-# Other columns retain256 unless explicitly opting into qualification.
+# Other columns retain 256 unless explicitly opting into qualification.
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA
 comptime QUERY_TILE_512_CANDIDATE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -238,7 +234,7 @@ comptime QUERY_TILE_512_CANDIDATE = (
     and (TARGET_COLUMN == COLUMN_NVIDIA or is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]())
 )
 comptime DEFAULT_QUERY_TILE = 512 if QUERY_TILE_512_CANDIDATE else 256
-"""Original256 schedule; measured NVIDIA IDENTICAL512, bounded below."""
+"""Measured NVIDIA IDENTICAL 512 schedule; otherwise 256, bounded below."""
 
 comptime MIN_QUERY_TILE = 32
 """The floor the workspace cap will not lower past. Below this the tile loop

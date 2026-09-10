@@ -703,3 +703,15 @@ Other shapes retain existing preflight, and explicit experimental/disable flags
 remain. Source: forced aeddd83e; final aeddd83e plus retained working patch.
 Raw samples, full outputs, source/binary hashes, flags and final policy:
 `bench/results/knn_metadata_2026-09-10/README.md`.
+
+
+### NVIDIA kNN vector-load component diagnostic, September 10
+
+`bench/results/knn_loads_2026-09-10/` retains current batch-512 phase profiles
+and same-process distance-tile trials. On H100 80GB HBM3 / driver 580.126.09,
+the aligned interior candidate takes 0.314308 ms vs scalar 0.335547 ms on
+512×65,536/d32 (6.33% less component time). This excludes preparation,
+selection and request work. It is not a new opponent tuple, ordinary request
+price, promoted default, or replacement for the qualified 2.69×/2.95× rows.
+No opponent was timed. Exact fixture, source, toolchain, UUID and output
+checks are recorded with the evidence.

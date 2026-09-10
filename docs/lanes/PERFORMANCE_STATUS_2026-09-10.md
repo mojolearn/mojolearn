@@ -48,11 +48,26 @@ Small cases remain correctness/diagnostic controls, not promotion evidence.
 
 ## Next NVIDIA kNN experiment
 
-The latest retained phase split is from the earlier 256-query configuration,
-not the current 512-query default: distance ~59.4%, selection ~37.5%, merge
-~2.2%. Reprofile the current default before reusing those shares. A distinct
-next candidate is explicit aligned 128-bit loads of contiguous index values
-inside the existing 8x4 distance tile, with scalar ragged fallback, if SASS
-shows the compiler currently emits scalar loads. Preserve tile indexing and
-ascending feature FMA order. This differs from the already rejected column
-remapping. Validate on 400k/ 4000/d32 at both k10 and k15 before any default.
+The new `bench/results/knn_loads_2026-09-10` capture profiles the current
+512-query default on 400k/4k/d32: distance 16.21–16.23 ms, selection
+10.30/14.62 ms for k10/k15. These synchronized phase diagnostics do not
+replace ordinary request prices or cached opponent ratios.
+
+Scalar index loads survive offline assembly. An aligned vector load with
+in-kernel checks raised register use from 63 to 65 and was slightly slower.
+Selecting a separate aligned specialization before launch reduced registers
+to 57 and saved **6.33% distance-tile time**, 0.335547 → 0.314308 ms,
+at production tile dimensions 512×65,536/d32. The isolated fixture uses
+index stride 65,536; the complete target request uses stride 400,000. Both arms alternate inside one
+process; full output checks and deliberate candidate sabotage establish reach.
+This is a component candidate, not a promoted default or request-speed claim.
+
+Next: integrate the candidate into a same-process complete-request experiment
+at 400k/4k/d32 k10/k15. Production alignment admission must cover full-index
+stride, sub-buffer offset, and final index/query partitions. Preserve scalar
+fallbacks and qualify other large shapes before widening scope. Selection
+is almost as expensive as distance at k15 and remains a separate target.
+
+The H100 rental for this continuation was terminated and verified gone.
+GEMM, attention, Mamba and Transformer status above is unchanged; no new
+opponent timing was run, and trees were not edited.
