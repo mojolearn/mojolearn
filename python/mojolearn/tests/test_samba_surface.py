@@ -349,13 +349,12 @@ def arm_attention(rep):
     ids = hashed_ids((2, 9), 64, 51)
     logits = st.forward(ids[:, :-1])
     rep.check(arm, logits.shape == (2, 8, 64) and np.isfinite(logits).all(), "hybrid forward is finite")
-    if getattr(mojolearn.TransformerBlock, "backward", None) is None:
-        rep.raises(arm, NotImplementedError, "NO backward", "attention backward refused by name",
-                   st.loss_and_grads, ids[:, :-1], ids[:, 1:])
-    else:
-        loss, grads = st.loss_and_grads(ids[:, :-1], ids[:, 1:])
-        rep.check(arm, math.isfinite(loss) and all(np.isfinite(g).all() for g in grads),
-                  "hybrid loss_and_grads finite through TransformerBlock.backward")
+    loss, grads = st.loss_and_grads(ids[:, :-1], ids[:, 1:])
+    rep.check(arm, math.isfinite(loss) and all(np.isfinite(g).all() for g in grads),
+              "hybrid loss_and_grads finite through TransformerBlock.backward")
+    rep.check(arm, len(grads) == len(st.names) and
+              all(g.shape == st.shapes[n] for n, g in zip(st.names, grads)),
+              "hybrid backward returns every registry gradient with its shape")
 
 
 def main(out=sys.stdout):

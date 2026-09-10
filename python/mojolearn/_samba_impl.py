@@ -9,8 +9,9 @@ accumulation, a position-keyed RNG and a JSON+hex+sha256 checkpoint.
 PRIVATE MODULE, AND IT HOLDS NO NUMERICS. Every arithmetic step is a call
 into `_mojolearn_training` (embedding, RMSNorm, head GEMM, accumulate, RNG,
 loss, optimizer), `_mojolearn_mamba` (Mamba3Block forward/backward) or
-`_mojolearn_transformer` (TransformerBlock forward; its backward is bound
-by another lane and is refused BY NAME here until it exists). This file
+`_mojolearn_transformer` (TransformerBlock forward and IDENTICAL zero-state
+prefill backward). Attention layers use full causal attention, and each
+backward recomputes its saved layer input from a fresh cache. This file
 decides the ORDER of the tensor registry (part of the clipped answer), the
 order of the blocks, and what goes in a checkpoint.
 
@@ -315,12 +316,12 @@ class SambaStack(object):
     # -- backward -----------------------------------------------------------
     def _refuse_no_backward(self):
         for i, kind in enumerate(self.config.layers):
-            if kind == "attention" and not hasattr(TransformerBlock, "backward"):
+            if kind == "attention" and not callable(getattr(TransformerBlock, "backward", None)):
                 raise NotImplementedError(
                     "mojolearn.SambaStack: layer %d is an attention block and "
-                    "mojolearn.TransformerBlock has NO backward yet (the "
-                    "transformer lane is binding it); this stack REFUSES BY "
-                    "NAME rather than skipping the block's gradient "
+                    "loaded TransformerBlock wrapper has no callable backward; "
+                    "install a matching wrapper and IDENTICAL transformer "
+                    "extension. The layer gradient cannot be skipped "
                     "(python/mojolearn/_samba_impl.py)" % i)
 
     def loss_and_grads(self, inputs, targets, num_items=None,

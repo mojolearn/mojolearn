@@ -53,7 +53,23 @@ Files:
       .train_step(inputs, targets) .state_dict() .load_state_dict(s)
       .save_checkpoint(path) -> sha256   SambaStack.from_checkpoint(path)
 
-## Status per task
+## Current attention wiring (2026-09-10)
+
+`TransformerBlock.backward` is implemented and registered in the native
+extension. `SambaStack.loss_and_grads` already calls it in reverse layer order;
+no additional binding is needed. Its attention blocks use full causal,
+zero-state prefill; backward returns the input gradient and all nine weight
+gradients. This is IDENTICAL-only and does not supply carried-cache gradients.
+The historical status below describes the original draft, not current support.
+
+`python/mojolearn/tests/test_samba_attention_wiring.py` checks the native ABI,
+owned output arrays, mixed attention/Mamba3 reverse routing, gradient registry,
+and tied/untied embedding accumulation with CPU mocks. Those mocks do not
+qualify numerical correctness. The existing `test_samba_surface` ATTENTION arm
+runs the real hybrid backward and now requires it rather than treating its
+absence as an acceptable refusal. Root must run these checks on the new source.
+
+## Historical status per task
 
 1. LR schedule: WRITTEN. Exact rational spelling (Fraction, Taylor cosine on a
    pi interval, single round-half-even to float32, ftz). Pins in
