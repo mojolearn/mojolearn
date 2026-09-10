@@ -1,0 +1,62 @@
+{
+  "arms": {
+    "baseline": {
+      "samples_ms": [
+        5931.995723,
+        5832.27502,
+        5833.722072,
+        6125.008881,
+        6168.594457,
+        6116.154834
+      ],
+      "median_ms": 6024.0752785,
+      "min_ms": 5832.27502,
+      "max_ms": 6168.594457,
+      "stdev_ms": 153.58244932364633,
+      "mad_ms": 122.72639049999952,
+      "pass_medians_ms": [
+        5833.722072,
+        6125.008881
+      ],
+      "drift_ratio": 1.049931554058443,
+      "spread_ratio": 1.0576652225498104,
+      "sample_count": 6
+    },
+    "candidate": {
+      "samples_ms": [
+        5540.400442,
+        5539.458101,
+        5549.730643,
+        5562.314073,
+        5776.786797,
+        5597.064354
+      ],
+      "median_ms": 5556.022358,
+      "min_ms": 5539.458101,
+      "max_ms": 5776.786797,
+      "stdev_ms": 91.9036405523881,
+      "mad_ms": 16.093086500000027,
+      "pass_medians_ms": [
+        5540.400442,
+        5597.064354
+      ],
+      "drift_ratio": 1.0102274037036112,
+      "spread_ratio": 1.0428433055495367,
+      "sample_count": 6
+    }
+  },
+  "stable": true,
+  "observed_speedup": 1.0842424472655443,
+  "qualified_speedup": 1.0842424472655443,
+  "fingerprints": {
+    "model": "bc154208be5fbb9a2b8c492718cd787d46b8fdfac6d27029183c804c13033e53",
+    "predictions": "a49b3df6752eabcfd5b49930df92c614c3a8bb2b30e01ccae31de49337dec50a"
+  },
+  "pass_order": [
+    "baseline",
+    "candidate",
+    "candidate",
+    "baseline"
+  ],
+  "config": "/root/trees_out/tuning/et-covtype/config.json"
+}

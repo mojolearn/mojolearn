@@ -158,4 +158,6 @@ million training rows and below 256 MiB of input. That reminder remains
 visible: full covertype is a useful seven-class companion workload, not a
 substitute for million-row and high-memory-pressure runs. Additional large
 binary and multiclass cells, repeated devices/windows and supported numeric
-modes are needed before broadening the opt-in policy.
+modes need correctness coverage before broadening the opt-in policy. NVIDIA
+performance work remains IDENTICAL-only; this does not request internal mode
+speed comparisons.
