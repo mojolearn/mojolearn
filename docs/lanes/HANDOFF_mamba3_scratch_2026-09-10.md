@@ -28,3 +28,45 @@ The constructor's default remains zero initialization. The binding opts in only 
 `tools/mamba3_scratch_leg.sh` runs baseline, uninitialized and poison builds. It compares native default/B2-L65-D64 traces, runs decode-cross/continuation/refusal, checks 39,087,232 fresh/report cells and mutable refusals, runs the combined public surface, and compares all three original public output files by complete SHA256 across arms. It records all timing samples; poison is a correctness diagnostic, not the performance candidate. Existing matched fixture helpers and an explicit Python runtime are reused; no opponent is measured.
 
 Root's first Apple gate should compile/run the native check with IDENTICAL, UNINITIALIZED_SCRATCH and POISON_SCRATCH. If it passes, run the long shape and decode-cross/continuation before committing time to public GPU pricing. No production default should change until bitwise admission and a repeatable benefit are recorded.
+
+## Definite-write audit (candidate bcc511d7)
+
+References below name functions, with line numbers at this candidate revision. `block` means `mamba/impl/mamba_ssm/modules/mamba3.mojo`; `siso` means `mamba/impl/mamba_ssm/ops/mamba3_siso.mojo`; `m1` means `mamba/impl/transformers/models/mamba/modeling_mamba.mojo`. Let M=B*L, T=q0+L, C=ceil(T/Q), N=128 and P=64. Only logical cells are consumed or traced; allocation's max(n,1) sentinel is not a logical cell.
+
+| Field(s) | Definite write and extent |
+| --- | --- |
+| norm_sumsq, norm_out | m1 `mamba_rms_norm_kernel`:626 owns each token, initializes its local accumulator, stores M sums and all M*D normalized cells. |
+| in_proj, out_proj | block `mamba3_block_forward`:1106 calls `identical_gemm[False]` for both projections: no old output accumulation. All positive output dimensions are written. |
+| a_out, dt_out | block `m3_a_dt_kernel`:504 stores both outputs for every cell below M*H. |
+| bcnorm_b, bcnorm_c | block `m3_bcnorm_kernel`:558 owns each token and stores both complete N-element rows. |
+| gamma_work, betap_work, scale_work | siso `m3_scale_kernel`:327 stores all B*T*H cells; its final shifted-beta zero is explicitly stored. |
+| theta_out | siso `m3_angle_increment_kernel`:384 first writes every M*H*R increment if enabled; `m3_angle_kernel`:411 subsequently reads and overwrites exactly those cells. The legacy path computes increments directly and never reads old theta_out. |
+| theta_last | siso `m3_angle_kernel`:411 stores each B*H*R owner's final run after all L tokens. |
+| qkdot | siso `m3_qkdot_kernel`:589 stores all M*H cells. |
+| kscale_work | siso `m3_kscale_kernel`:644 stores all B*T*H*N cells. |
+| dacs | siso `m3_dacs_kernel`:674 owns each B*H*C row and stores all Q entries. Padded entries explicitly receive the last real prefix sum. |
+| seg_l | siso `m3_seg_l_kernel`:736 owns every column in B*C*H*Q*Q; rows i<=j explicitly receive +0, remaining rows receive their decay, including padded rows. |
+| qk_s | siso `m3_state_decay_kernel`:870 writes the B*H*C*(Q+1) prefix used as decay scratch. Increment/scan reads only that prefix. Later `m3_qk_s_kernel`:1211 or `m3_qk_s_tiled_kernel`:1161 overwrites the full B*C*H*Q*Q allocation before Y_intra. Scalar output starts at zero and is always stored. Tiled structural-zero and padded-row branches explicitly store zeros before returning. |
+| pass_states | siso `m3_state_increment_kernel`:889, tiled:935 or shared_v:987 writes all B*C*H*P*N increments before `m3_state_scan_kernel`:1037 reads and overwrites every chunk entry. Legacy `m3_statepass_kernel`:1071 directly stores every entering-state entry before downstream use. |
+| h_last | Both state-scan:1037 and legacy statepass:1071 store the complete B*H*P*N report after the chunk loop. |
+| yintra | siso scalar:1330 stores every M*H*P cell. Tiled:1271 has two channel tiles per head and eight token rows per tile; stores exactly q0<=t<T. Whole-buffer-prefix tiles return uniformly, but correspond to no output rows. |
+| ystate | siso scalar:1453 and tiled:1395 cover the same complete new-token extent as Y_intra. |
+| skip_out, gate_out | siso `m3_skip_gate_kernel`:1521 stores both results for every M*H*P cell. |
+| residual_out | m1 `residual_add_kernel`:1113 stores every M*D cell. |
+| k_last, v_last | siso `m3_reports_kernel`:1636 partitions B*H*(N+P) owners between the two reports and copies the final real row T-1. |
+
+`mamba3_block_forward` rejects B<=0 or L<=0 before any stage consumer, then rejects stage/call/state shape disagreement. Thus an L=0 caller cannot read uninitialized reports, and admitted calls always have T>0 and C>=1. For L=1 decode and arbitrary admitted q0, only new-token outputs are allocated at M; their producer offsets subtract q0. Q is 32 or 64, divisible by the tiled token width 8, so a tile never crosses a chunk boundary. Partial final tiles mask only non-output lanes. Dacs, seg_l and qk_s explicitly write their padded tails; increment folds retain structural padded zeros. Buffered-prefix/new-token assembly still uses zero-initialized adt_work, sig_work, dt_work, rotq_work, rotk_work and v_work. Recurrent theta/h, pending state, and unused buffered capacity retain their original initialization and update rules.
+
+This proof is for admitted, unsabotaged calls. Deliberately armed upstream-recurrence sabotage can skip producers; the public binding already refuses sabotage builds. The proof does not turn skipped-producer negative-control configurations into supported scratch consumers.
+
+## Allocation lifetime
+
+`_m3_stage_buffer` returns `dev^`, transferring the owning DeviceBuffer into its stage field; no borrowed local pointer or host storage escapes. The public binding constructs `dstages` at line879, then `_m3_upload_addr` at line884 synchronizes the same DeviceContext before entering the block. `_m3_upload_addr`:257 synchronizes both its direct-copy and legacy upload paths. Each output/report download completes before the explicit `dstages` teardown at line915. Native block calls also perform synchronous refusal readbacks before numerical stage consumers. Thus this change does not depend on a borrowed allocation surviving a helper return, nor on an unsynchronized public first use. Enqueue ordering on the same context remains the existing API pattern; no claim about undocumented cross-stream ordering is needed. A metadata refusal before kernel launch holds no enqueued stage-consuming pointer. Six retained zero-filled fields introduce additional synchronization, but this incidental fact is not the lifetime justification.
+
+Root reports Apple baseline/poison native default and long traces byte-equal, plus decode-cross, continuation and refusal passes. H100 admission/performance remains pending at the time of this audit.
+
+## Transformer follow-on review (no edits)
+
+`LlamaDeviceStages.__init__` in `transformer/impl/transformers/models/llama/modeling_llama.mojo`:1193 also zero-fills projection, norm, MLP and attention scratch. A bounded follow-on could opt out only for fully written linear stages: both norm sums/outputs, q/k/v projections, q/k rotary outputs, context/output projection, residuals and MLP intermediates. These are produced by `llama_rms_norm_kernel`:1315, GEMM with no accumulation, `apply_rotary_pos_emb_kernel`:1601, attention context/scatter or fused forward, `silu_kernel`:2404 and `mlp_gated_kernel`:2431. Attention context needs route-specific proof before inclusion.
+
+Do NOT mechanically apply the Mamba list to transformer cache storage: `kv_append_kernel`:1723 writes only the active packed B*nkv*S*HD prefix, while stage cache buffers have S_cap capacity. The non-window path at line3298 copies whole stage buffers into the persistent cache; an unwritten capacity tail could therefore become observable. Preserve k_cache/v_cache zeros unless a separate capacity-tail proof or exact clearing rule is implemented. Preserve LlamaKVCache's own zeros, lean attention placeholders, and unused packed-head scratch until their backward/materialization consumers are audited. The RoPE table kernel:1473 fully writes both tables, but removing those two fills has much smaller volume than linear stages. Measure current allocation phase before selecting this follow-on; no transformer source changes are proposed here.
