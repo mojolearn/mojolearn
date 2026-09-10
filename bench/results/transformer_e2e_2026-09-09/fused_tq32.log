@@ -1,0 +1,188 @@
+6251 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x705580000000, nodemask=1)
+=== transformer fused attention vs eager, BITWISE (mode IDENTICAL)
+  case win45_hd64_l150  B=1 L=150 S=150 key_lo=0 win=45 pos0=0 nh=4 nkv=2 hd=64
+    fused forward status: RAN
+    fwd ctx (direct): 38400 cells bit-identical
+    fwd amax: 600 cells bit-identical
+    fwd denom: 600 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 38400 cells bit-identical
+    fwd amax (wrapper): 600 cells bit-identical
+    fwd denom (wrapper): 600 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 600 cells bit-identical
+    bwd dq: 38400 cells bit-identical
+    bwd dk: 19200 cells bit-identical
+    bwd dv: 19200 cells bit-identical
+  case base_hd64_l300  B=2 L=300 S=300 key_lo=0 win=0 pos0=0 nh=4 nkv=2 hd=64
+    fused forward status: RAN
+    fwd ctx (direct): 153600 cells bit-identical
+    fwd amax: 2400 cells bit-identical
+    fwd denom: 2400 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 153600 cells bit-identical
+    fwd amax (wrapper): 2400 cells bit-identical
+    fwd denom (wrapper): 2400 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 2400 cells bit-identical
+    bwd dq: 153600 cells bit-identical
+    bwd dk: 76800 cells bit-identical
+    bwd dv: 76800 cells bit-identical
+  case win96_hd64_l300  B=2 L=300 S=300 key_lo=0 win=96 pos0=0 nh=4 nkv=2 hd=64
+    fused forward status: RAN
+    fwd ctx (direct): 153600 cells bit-identical
+    fwd amax: 2400 cells bit-identical
+    fwd denom: 2400 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 153600 cells bit-identical
+    fwd amax (wrapper): 2400 cells bit-identical
+    fwd denom (wrapper): 2400 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 2400 cells bit-identical
+    bwd dq: 153600 cells bit-identical
+    bwd dk: 76800 cells bit-identical
+    bwd dv: 76800 cells bit-identical
+  case win2048_hd64_l700_nrep4  B=1 L=700 S=700 key_lo=0 win=2048 pos0=0 nh=4 nkv=1 hd=64
+    fused forward status: RAN
+    fwd ctx (direct): 179200 cells bit-identical
+    fwd amax: 2800 cells bit-identical
+    fwd denom: 2800 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 179200 cells bit-identical
+    fwd amax (wrapper): 2800 cells bit-identical
+    fwd denom (wrapper): 2800 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 2800 cells bit-identical
+    bwd dq: 179200 cells bit-identical
+    bwd dk: 44800 cells bit-identical
+    bwd dv: 44800 cells bit-identical
+  case decode_hd64_pos200  B=2 L=1 S=201 key_lo=0 win=0 pos0=200 nh=4 nkv=2 hd=64
+    fused forward status: RAN
+    fwd ctx (direct): 512 cells bit-identical
+    fwd amax: 8 cells bit-identical
+    fwd denom: 8 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 512 cells bit-identical
+    fwd amax (wrapper): 8 cells bit-identical
+    fwd denom (wrapper): 8 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 8 cells bit-identical
+    bwd dq: 512 cells bit-identical
+    bwd dk: 51456 cells bit-identical
+    bwd dv: 51456 cells bit-identical
+  case decode_win64_pos200  B=2 L=1 S=64 key_lo=137 win=64 pos0=200 nh=4 nkv=2 hd=64
+    fused forward status: RAN
+    fwd ctx (direct): 512 cells bit-identical
+    fwd amax: 8 cells bit-identical
+    fwd denom: 8 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 512 cells bit-identical
+    fwd amax (wrapper): 8 cells bit-identical
+    fwd denom (wrapper): 8 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 8 cells bit-identical
+    bwd dq: 512 cells bit-identical
+    bwd dk: 16384 cells bit-identical
+    bwd dv: 16384 cells bit-identical
+  case split_win50_pos100_l37  B=1 L=37 S=86 key_lo=51 win=50 pos0=100 nh=2 nkv=1 hd=64
+    fused forward status: RAN
+    fwd ctx (direct): 4736 cells bit-identical
+    fwd amax: 74 cells bit-identical
+    fwd denom: 74 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 4736 cells bit-identical
+    fwd amax (wrapper): 74 cells bit-identical
+    fwd denom (wrapper): 74 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 74 cells bit-identical
+    bwd dq: 4736 cells bit-identical
+    bwd dk: 5504 cells bit-identical
+    bwd dv: 5504 cells bit-identical
+  case hd16_win7_l40  B=2 L=40 S=40 key_lo=0 win=7 pos0=0 nh=2 nkv=1 hd=16
+    fused forward status: RAN
+    fwd ctx (direct): 2560 cells bit-identical
+    fwd amax: 160 cells bit-identical
+    fwd denom: 160 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 2560 cells bit-identical
+    fwd amax (wrapper): 160 cells bit-identical
+    fwd denom (wrapper): 160 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 160 cells bit-identical
+    bwd dq: 2560 cells bit-identical
+    bwd dk: 1280 cells bit-identical
+    bwd dv: 1280 cells bit-identical
+  case hd24_l33  B=1 L=33 S=33 key_lo=0 win=0 pos0=0 nh=2 nkv=1 hd=24
+    fused forward status: RAN
+    fwd ctx (direct): 1584 cells bit-identical
+    fwd amax: 66 cells bit-identical
+    fwd denom: 66 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 1584 cells bit-identical
+    fwd amax (wrapper): 66 cells bit-identical
+    fwd denom (wrapper): 66 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 66 cells bit-identical
+    bwd dq: 1584 cells bit-identical
+    bwd dk: 792 cells bit-identical
+    bwd dv: 792 cells bit-identical
+  case hd128_win20_l70  B=1 L=70 S=70 key_lo=0 win=20 pos0=0 nh=2 nkv=2 hd=128
+    fused forward status: RAN
+    fwd ctx (direct): 17920 cells bit-identical
+    fwd amax: 140 cells bit-identical
+    fwd denom: 140 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 17920 cells bit-identical
+    fwd amax (wrapper): 140 cells bit-identical
+    fwd denom (wrapper): 140 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 140 cells bit-identical
+    bwd dq: 17920 cells bit-identical
+    bwd dk: 17920 cells bit-identical
+    bwd dv: 17920 cells bit-identical
+  case hd128_win45_l150  B=1 L=150 S=150 key_lo=0 win=45 pos0=0 nh=4 nkv=1 hd=128
+    fused forward status: RAN
+    fwd ctx (direct): 76800 cells bit-identical
+    fwd amax: 600 cells bit-identical
+    fwd denom: 600 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 76800 cells bit-identical
+    fwd amax (wrapper): 600 cells bit-identical
+    fwd denom (wrapper): 600 cells bit-identical
+    fused backward status: RAN
+    bwd zdot: 600 cells bit-identical
+    bwd dq: 76800 cells bit-identical
+    bwd dk: 19200 cells bit-identical
+    bwd dv: 19200 cells bit-identical
+  case underflow_hd128_l48  B=1 L=48 S=48 key_lo=0 win=0 pos0=0 nh=2 nkv=1 hd=128
+    fused forward status: CORNER
+    wrapper status: CORNER
+    fwd ctx (wrapper): 12288 cells bit-identical
+    fwd amax (wrapper): 96 cells bit-identical
+    fwd denom (wrapper): 96 cells bit-identical
+    fused backward status: CORNER
+  case underflow_hd64_l48  B=1 L=48 S=48 key_lo=0 win=0 pos0=0 nh=2 nkv=1 hd=64
+    fused forward status: CORNER
+    wrapper status: CORNER
+    fwd ctx (wrapper): 6144 cells bit-identical
+    fwd amax (wrapper): 96 cells bit-identical
+    fwd denom (wrapper): 96 cells bit-identical
+    fused backward status: CORNER
+  case regime_q1e30  B=1 L=32 S=32 key_lo=0 win=0 pos0=0 nh=2 nkv=1 hd=64
+    fused forward status: REFUSED_REGIME
+    wrapper status: REFUSED_REGIME
+    fwd ctx (wrapper): 4096 cells bit-identical
+    fwd amax (wrapper): 64 cells bit-identical
+    fwd denom (wrapper): 64 cells bit-identical
+    fused backward status: REFUSED_REGIME
+  case regime_dctx1e30  B=1 L=32 S=32 key_lo=0 win=0 pos0=0 nh=2 nkv=1 hd=64
+    fused forward status: RAN
+    fwd ctx (direct): 4096 cells bit-identical
+    fwd amax: 64 cells bit-identical
+    fwd denom: 64 cells bit-identical
+    wrapper status: RAN
+    fwd ctx (wrapper): 4096 cells bit-identical
+    fwd amax (wrapper): 64 cells bit-identical
+    fwd denom (wrapper): 64 cells bit-identical
+    fused backward status: REFUSED_REGIME
+transformer_fused_check: PASS, 15 cases, every compared buffer bit-identical, every status as expected

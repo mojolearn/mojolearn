@@ -51,6 +51,7 @@ from transformer.impl.transformers.models.llama.fused_attention import (
     fused_backward_launch,
     fused_forward_launch,
     fused_supported_head_dim,
+    fused_forward_supported_head_dim,
 )
 from transformer.impl.transformers.models.llama.modeling_llama import (
     LlamaDeviceStages,
@@ -104,14 +105,17 @@ def cases() -> List[FusedCase]:
     out.append(FusedCase("split_win50_pos100_l37", 1, 37, 2, 1, 64, 50, 100, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
     out.append(FusedCase("hd16_win7_l40", 2, 40, 2, 1, 16, 7, 0, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
     out.append(FusedCase("hd24_l33", 1, 33, 2, 1, 24, 0, 0, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN))
-    # hd 128 claims 35,600 shared bytes per block; on a column whose shared
-    # limit is below that (kernel matrix `lib_smem_page_fits_for`) the launch
-    # must REFUSE by name and the wrapper takes the eager path, same bits.
+    # Forward hd128 now uses 18,624 shared bytes; the backward still uses
+    # its legacy page and may independently refuse on a 32 KB column.
     var hd128 = FUSED_RAN if fused_supported_head_dim(128) else FUSED_REFUSED_REGIME
-    out.append(FusedCase("hd128_win20_l70", 1, 70, 2, 2, 128, 20, 0, -1.0, 1.0, -1, 1.0, 1.0, hd128, hd128))
+    var f128 = FUSED_RAN if fused_forward_supported_head_dim(128) else FUSED_REFUSED_REGIME
+    out.append(FusedCase("hd128_win20_l70", 1, 70, 2, 2, 128, 20, 0, -1.0, 1.0, -1, 1.0, 1.0, f128, hd128))
+    out.append(FusedCase("hd128_win45_l150", 1, 150, 4, 1, 128, 45, 0, -1.0, 1.0, -1, 1.0, 1.0, f128, hd128))
     # Every visible product `w * v` flushes to `-0.0` (|v| ~ 1e-37, w >= 1/48),
     # and the keys from 40 on carry `+v`, so the eager tail launders rows
     # t < 40 to `+0.0`. The fused chain must report the corner.
+    var c128 = FUSED_CORNER if f128 == FUSED_RAN else FUSED_REFUSED_REGIME
+    out.append(FusedCase("underflow_hd128_l48", 1, 48, 2, 1, 128, 0, 0, -1.2e-37, -0.8e-37, 40, 1.0, 1.0, c128, EXPECT_ANY))
     out.append(FusedCase("underflow_hd64_l48", 1, 48, 2, 1, 64, 0, 0, -1.2e-37, -0.8e-37, 40, 1.0, 1.0, FUSED_CORNER, EXPECT_ANY))
     out.append(FusedCase("regime_q1e30", 1, 32, 2, 1, 64, 0, 0, -1.0, 1.0, -1, 1e30, 1.0, FUSED_REFUSED_REGIME, FUSED_REFUSED_REGIME))
     out.append(FusedCase("regime_dctx1e30", 1, 32, 2, 1, 64, 0, 0, -1.0, 1.0, -1, 1.0, 1e30, FUSED_RAN, FUSED_REFUSED_REGIME))

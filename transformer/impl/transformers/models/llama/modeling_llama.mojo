@@ -1001,6 +1001,59 @@ struct LlamaDeviceWeights(Movable):
         _refuse_nonfinite_device(ctx, "down_proj.weight", self.w_down, dm * it)
 
 
+    def __init__(
+        out self, ctx: DeviceContext, dims: LlamaDims, eps: Float32,
+        var norm1_w: DeviceBuffer[DType.float32],
+        var norm2_w: DeviceBuffer[DType.float32],
+        var w_q: DeviceBuffer[DType.float32],
+        var w_k: DeviceBuffer[DType.float32],
+        var w_v: DeviceBuffer[DType.float32],
+        var w_o: DeviceBuffer[DType.float32],
+        var w_gate: DeviceBuffer[DType.float32],
+        var w_up: DeviceBuffer[DType.float32],
+        var w_down: DeviceBuffer[DType.float32],
+    ) raises:
+        """Own uploaded buffers directly, with the host constructor's
+        identical length checks and ordered device refusals. The binding
+        uses this to avoid zero-filled host Lists and a redundant copy of
+        every weight on each call; no pointer or weight cache survives it.
+        """
+        dims.validate()
+        self.dims = dims.copy()
+        self.eps = eps
+        var dm = dims.d_model
+        var qw = dims.q_width()
+        var kw = dims.kv_width()
+        var it = dims.intermediate
+        _expect_len("norm1.weight", len(norm1_w), dm)
+        _expect_len("norm2.weight", len(norm2_w), dm)
+        _expect_len("q_proj.weight", len(w_q), qw * dm)
+        _expect_len("k_proj.weight", len(w_k), kw * dm)
+        _expect_len("v_proj.weight", len(w_v), kw * dm)
+        _expect_len("o_proj.weight", len(w_o), dm * qw)
+        _expect_len("gate_proj.weight", len(w_gate), it * dm)
+        _expect_len("up_proj.weight", len(w_up), it * dm)
+        _expect_len("down_proj.weight", len(w_down), dm * it)
+        self.norm1_w = norm1_w^
+        self.norm2_w = norm2_w^
+        self.w_q = w_q^
+        self.w_k = w_k^
+        self.w_v = w_v^
+        self.w_o = w_o^
+        self.w_gate = w_gate^
+        self.w_up = w_up^
+        self.w_down = w_down^
+        _refuse_nonfinite_device(ctx, "input_layernorm.weight", self.norm1_w, dm)
+        _refuse_nonfinite_device(ctx, "post_attention_layernorm.weight", self.norm2_w, dm)
+        _refuse_nonfinite_device(ctx, "q_proj.weight", self.w_q, qw * dm)
+        _refuse_nonfinite_device(ctx, "k_proj.weight", self.w_k, kw * dm)
+        _refuse_nonfinite_device(ctx, "v_proj.weight", self.w_v, kw * dm)
+        _refuse_nonfinite_device(ctx, "o_proj.weight", self.w_o, dm * qw)
+        _refuse_nonfinite_device(ctx, "gate_proj.weight", self.w_gate, it * dm)
+        _refuse_nonfinite_device(ctx, "up_proj.weight", self.w_up, it * dm)
+        _refuse_nonfinite_device(ctx, "down_proj.weight", self.w_down, dm * it)
+
+
 struct LlamaKVCache(Movable):
     """The recurrent state between calls (contract section 7.2):
     `k_cache` and `v_cache`, each `[B, n_kv, S, head_dim]`, appended to at

@@ -420,3 +420,7 @@ backward cards compared byte-for-byte equal, and the rebuilt IDENTICAL
 transformer binding passed 116/116 surface checks. Logs are in
 `bench/results/attnlane_regblock_2026-09-09/apple/`. No Apple run remains
 owed for this change; AMD remains unmeasured.
+
+### Final Apple HD128/end-to-end validation, 2026-09-09
+
+Root ran the final TQ16/BK32/KS64 kernel:15casesPASS. With direct device-weight binding constructor, original forward/backward cards both cmp unchanged; rebuilt IDENTICAL extension passed116-check surface and focusedHD128 public gradients/split caches/mutable-weight refusals. Evidence:`bench/results/transformer_e2e_2026-09-09/apple/`. NVIDIA same-L40S original-grid ownA/B426.012→175.726ms narrow,264.311→180.683ms wide, full64MiB outputcmp equal. Original and fresh Torch comparison both failed statednumericaladmission; noqualifiedopponentratio. See evidenceREADME for exactprotocol. Pre-existing hardwareFTZ seam boundary is being addressed separately.

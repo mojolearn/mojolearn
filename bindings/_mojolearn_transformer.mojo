@@ -129,6 +129,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
+from std.sys.compile import is_defined
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -147,7 +148,7 @@ from transformer.checks.transformer_fixture import RMS_EPS, ROPE_THETA
 # `_upload`/`_download` by their underscore names is DEVIATION 1112's
 # settled pattern (`transformer_check.mojo` imports the same pair).
 from transformer.impl.transformers.models.llama.fused_attention import (
-    fused_supported_head_dim,
+    fused_forward_supported_head_dim,
 )
 from transformer.impl.transformers.models.llama.modeling_llama import (
     ATTN_PATH_EAGER,
@@ -276,9 +277,47 @@ def transformer_lean_stages(hd: Int) -> Bool:
     always. The eager fallback grows the buffers on demand."""
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         return False
-    if not fused_supported_head_dim(hd):
+    if not fused_forward_supported_head_dim(hd):
         return False
     return attention_path_choice(PLANT_AT_NONE) != ATTN_PATH_EAGER
+
+
+def _load_transformer_weights(
+    ctx: DeviceContext, dims: LlamaDims, a: List[Int],
+) raises -> LlamaDeviceWeights:
+    """One-call uploads; IDENTICAL skips intermediate host weight Lists.
+    Mutable caller arrays are reread and refused on every call as before.
+    """
+    var dm = dims.d_model
+    var qw = dims.q_width()
+    var kw = dims.kv_width()
+    var it = dims.intermediate
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY"]():
+        return LlamaDeviceWeights(
+            ctx, dims, RMS_EPS,
+            _upload_addr(ctx, a[1], dm),
+            _upload_addr(ctx, a[2], dm),
+            _upload_addr(ctx, a[3], qw * dm),
+            _upload_addr(ctx, a[4], kw * dm),
+            _upload_addr(ctx, a[5], kw * dm),
+            _upload_addr(ctx, a[6], dm * qw),
+            _upload_addr(ctx, a[7], it * dm),
+            _upload_addr(ctx, a[8], it * dm),
+            _upload_addr(ctx, a[9], dm * it),
+        )
+    else:
+        return LlamaDeviceWeights(
+            ctx, dims, RMS_EPS,
+            _read_f32(a[1], dm),
+            _read_f32(a[2], dm),
+            _read_f32(a[3], qw * dm),
+            _read_f32(a[4], kw * dm),
+            _read_f32(a[5], kw * dm),
+            _read_f32(a[6], dm * qw),
+            _read_f32(a[7], it * dm),
+            _read_f32(a[8], it * dm),
+            _read_f32(a[9], dm * it),
+        )
 
 
 def _transformer_run(
@@ -311,8 +350,6 @@ def _transformer_run(
     # from them, which is why nothing here pre-judges the shape.
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
-    var qw = dims.q_width()
-    var kw = dims.kv_width()
     if s0 < 0 or s0 > smax:
         raise Error(
             String("transformer: cached_tokens must be in [0, ")
@@ -338,20 +375,7 @@ def _transformer_run(
     # upstream shape authority, and its constructor is where the weights
     # are refused non-finite ONCE, DEVIATION 1875); values arrive as
     # given bits, unjudged.
-    var w = LlamaDeviceWeights(
-        ctx,
-        dims,
-        RMS_EPS,
-        _read_f32(a[1], dm),
-        _read_f32(a[2], dm),
-        _read_f32(a[3], qw * dm),
-        _read_f32(a[4], kw * dm),
-        _read_f32(a[5], kw * dm),
-        _read_f32(a[6], dm * qw),
-        _read_f32(a[7], it * dm),
-        _read_f32(a[8], it * dm),
-        _read_f32(a[9], dm * it),
-    )
+    var w = _load_transformer_weights(ctx, dims, a)
     # The caller's cache over the fresh zeros. LlamaKVCache's own
     # constructor refuses b <= 0, smax <= 0 and smax > 8192 (the
     # absolute-position ceiling, DEVIATION 812) BY NAME before the
@@ -579,20 +603,7 @@ def _transformer_backward_run(
     var ctx = DeviceContext()
     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
     var tk = Int(perf_counter_ns())
-    var w = LlamaDeviceWeights(
-        ctx,
-        dims,
-        RMS_EPS,
-        _read_f32(a[1], dm),
-        _read_f32(a[2], dm),
-        _read_f32(a[3], qw * dm),
-        _read_f32(a[4], kw * dm),
-        _read_f32(a[5], kw * dm),
-        _read_f32(a[6], dm * qw),
-        _read_f32(a[7], it * dm),
-        _read_f32(a[8], it * dm),
-        _read_f32(a[9], dm * it),
-    )
+    var w = _load_transformer_weights(ctx, dims, a)
     var kv = LlamaKVCache(ctx, b, dims, l, window)
     var rope = LlamaRopeTable(ctx, dims, ROPE_THETA, l)
     var lean = transformer_lean_stages(hd)

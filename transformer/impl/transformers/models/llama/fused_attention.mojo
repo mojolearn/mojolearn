@@ -152,6 +152,15 @@ def fused_supported_head_dim(hd: Int) -> Bool:
     )
 
 
+def fused_forward_supported_head_dim(hd: Int) -> Bool:
+    """Forward hd128 uses a smaller register-blocked page. Backward keeps
+    its original support predicate and takes eager when its page cannot
+    fit; forward and backward independently decide their exact fallback."""
+    if hd == 128:
+        return lib_smem_page_fits_for[TARGET_COLUMN, 18624]()
+    return fused_supported_head_dim(hd)
+
+
 def fused_rows_per_block(hd: Int) -> Int:
     return FUSED_THREADS // hd
 
@@ -390,7 +399,7 @@ def regime_finite(x_max: Float64) -> Bool:
 # ===========================================================================
 
 
-def fused_attn_forward_regblocked_kernel(
+def fused_attn_forward_regblocked_kernel[HD: Int](
     ctxv: MutPointer[Float32, MutAnyOrigin],
     amax: MutPointer[Float32, MutAnyOrigin],
     denom: MutPointer[Float32, MutAnyOrigin],
@@ -402,18 +411,18 @@ def fused_attn_forward_regblocked_kernel(
     s_in: Int32, pos0_in: Int32, key_lo_in: Int32, window_in: Int32,
     scale_in: Float32,
 ):
-    """hd64: 64 query rows share each 32-key tile. Each thread owns a
-    4x2 score register tile, preserving each ascending 64-term dot and
-    all three passes. Shared staging is reused for V after score dots;
-    the 17,152-byte page fits the 32 KB column too."""
-    comptime HD = 64
-    comptime TQ = 64
+    """Register tiles preserve each ascending HD-term dot and all three
+    passes. hd64 uses 64 query rows and KS16; hd128 uses 16 rows and KS64
+    to reduce live accumulators and score-window barriers. Staging is
+    reused for V: 17,152 shared bytes at hd64, 18,624 at hd128."""
+    comptime TQ = 16 if HD == 128 else 64
+    comptime RPT = TQ // 16
     comptime BK = 32
-    comptime KS = 16
-    comptime STRIDE = 20
-    var stg = stack_allocation[2048, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var tile = stack_allocation[64 * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var stats = stack_allocation[128, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    comptime KS = 64 if HD == 128 else 16
+    comptime STRIDE = KS + 4
+    var stg = stack_allocation[BK * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tile = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var stats = stack_allocation[2 * TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
     var tr = tid // 16
     var tc = tid % 16
@@ -436,16 +445,16 @@ def fused_attn_forward_regblocked_kernel(
     var kb_lo = r0[0] // BK
     var kb_hi = r1[1] // BK
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
-    var mpart = SIMD[DType.float32, 4](negmax)
+    var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
-    var cacc = SIMD[DType.float32, 16](0.0)
+    var cacc = SIMD[DType.float32, RPT * (HD // 16)](0.0)
     comptime for phase in range(3):
         for kb in range(kb_lo, kb_hi + 1):
-            var dots = SIMD[DType.float32, 8](0.0)
+            var dots = SIMD[DType.float32, RPT * 2](0.0)
             comptime for pw in range(HD // KS):
                 # The two operand pages are padded along the contracted
-                # dimension; loads serve eight independent fma chains.
-                comptime for si in range(6):
+                # dimension; loads serve RPT*2 independent fma chains.
+                comptime for si in range((TQ + BK) * KS // 256):
                     var i = tid + si * 256
                     var r = i // KS
                     var p = i % KS
@@ -461,17 +470,17 @@ def fused_attn_forward_regblocked_kernel(
                     stg.unsafe_store(r * STRIDE + p, x)
                 barrier()
                 comptime for p in range(KS):
-                    var qa = SIMD[DType.float32, 4](0.0)
+                    var qa = SIMD[DType.float32, RPT](0.0)
                     var ka = SIMD[DType.float32, 2](0.0)
-                    comptime for u in range(4):
+                    comptime for u in range(RPT):
                         qa[u] = stg.unsafe_load((tr + u * 16) * STRIDE + p)
                     comptime for v in range(2):
                         ka[v] = stg.unsafe_load((TQ + tc + v * 16) * STRIDE + p)
-                    comptime for u in range(4):
+                    comptime for u in range(RPT):
                         comptime for v in range(2):
                             dots[u * 2 + v] = _step(qa[u], ka[v], dots[u * 2 + v])
                 barrier()
-            comptime for u in range(4):
+            comptime for u in range(RPT):
                 var r = tr + u * 16
                 var t = t0 + r
                 var rr = _row_range(t, pos0, key_lo, window, s)
@@ -496,7 +505,7 @@ def fused_attn_forward_regblocked_kernel(
                         if j >= rr[0] and j <= rr[1]:
                             dacc = ftz(ftz(dacc) + ftz(tile.unsafe_load(tid * 33 + jj)))
             elif phase == 2:
-                comptime for si in range(8):
+                comptime for si in range(BK * HD // 256):
                     var i = tid + si * 256
                     var j = kb * BK + i // HD
                     var x = Float32(0.0)
@@ -506,19 +515,19 @@ def fused_attn_forward_regblocked_kernel(
                 barrier()
                 comptime for jj in range(BK):
                     var j = kb * BK + jj
-                    var va = SIMD[DType.float32, 4](0.0)
-                    comptime for v in range(4):
+                    var va = SIMD[DType.float32, HD // 16](0.0)
+                    comptime for v in range(HD // 16):
                         va[v] = stg.unsafe_load(jj * HD + tc + v * 16)
-                    comptime for u in range(4):
+                    comptime for u in range(RPT):
                         var r = tr + u * 16
                         var rr = _row_range(t0 + r, pos0, key_lo, window, s)
                         if t0 + r < l and j >= rr[0] and j <= rr[1]:
                             var w = tile.unsafe_load(r * 33 + jj)
-                            comptime for v in range(4):
-                                cacc[u * 4 + v] = _step(w, va[v], cacc[u * 4 + v])
+                            comptime for v in range(HD // 16):
+                                cacc[u * (HD // 16) + v] = _step(w, va[v], cacc[u * (HD // 16) + v])
             barrier()
         comptime if phase == 0:
-            comptime for u in range(4):
+            comptime for u in range(RPT):
                 tile.unsafe_store((tr + u * 16) * 16 + tc, mpart[u])
             barrier()
             if tid < TQ and t0 + tid < l:
@@ -532,12 +541,12 @@ def fused_attn_forward_regblocked_kernel(
                 stats.unsafe_store(TQ + tid, ftz(dacc))
                 denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))
         barrier()
-    comptime for u in range(4):
+    comptime for u in range(RPT):
         var t = t0 + tr + u * 16
         var rr = _row_range(t, pos0, key_lo, window, s)
         if t < l:
-            comptime for v in range(4):
-                var x = cacc[u * 4 + v]
+            comptime for v in range(HD // 16):
+                var x = cacc[u * (HD // 16) + v]
                 if bitcast[DType.uint32](x) == NEG_ZERO_BITS and rr[1] < s - 1:
                     corner.unsafe_store(0, Float32(1.0))
                 ctxv.unsafe_store((bb * l + t) * nh * HD + h * HD + tc + v * 16, x)
@@ -1386,7 +1395,7 @@ def fused_forward_launch(
     `FUSED_RAN`; on any other status nothing the caller reads is defined
     and the eager path must run. `k_cache`/`v_cache` are the PACKED span
     `[B, n_kv, S, head_dim]` the eager path reads."""
-    if not fused_supported_head_dim(hd):
+    if not fused_forward_supported_head_dim(hd):
         return FUSED_REFUSED_REGIME
     var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
     var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
@@ -1416,7 +1425,7 @@ def fused_forward_launch(
             grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
         )
     elif hd == 64:
-        comptime k64 = fused_attn_forward_regblocked_kernel
+        comptime k64 = fused_attn_forward_regblocked_kernel[64]
         blocks = b * nh * ((l + 63) // 64)
         nt = FUSED_THREADS
         ctx.enqueue_function[k64](
@@ -1427,7 +1436,9 @@ def fused_forward_launch(
             grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
         )
     else:
-        comptime k128 = fused_attn_forward_kernel[128, FUSED_THREADS // 128]
+        comptime k128 = fused_attn_forward_regblocked_kernel[128]
+        blocks = b * nh * ((l + 15) // 16)
+        nt = FUSED_THREADS
         ctx.enqueue_function[k128](
             ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
             corner.unsafe_ptr(), q_rope.unsafe_ptr(), k_cache.unsafe_ptr(),

@@ -1,0 +1,2 @@
+645a35c194d82beb8a49ff50050a67d7492af34de27cc99d8077a39a516bc37d  /root/jobs/attn-public/final_dump/seq.transformer.narrow.b8_l4096_d512.f32.bin
+6fe08dee3ef2a0ad769fde1803098789abd0ca4b112af93599e86e109a144532  /root/jobs/attn-public/final_dump/seq.transformer.wide.b8_l1024_d2048.f32.bin
