@@ -29,6 +29,7 @@ bytes serialization, both of which change this surface.
 """
 
 from std.os import abort
+from ensemble.instruments import StageTimes
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -242,8 +243,16 @@ def et_classifier_fit_binding(
             "et_classifier_fit: criterion (slot 21) must be GINI (0) or"
             " ENTROPY (1); got " + String(config.criterion)
         )
+    # DEVIATION 2480: optional host boundary attribution, no added drains.
+    var times = StageTimes()
+    var total_start = times.start()
+    var stamp = times.start()
     var x = _copy_f32(x_addr, n_rows * n_features)
+    times.stop_host("boundary_x_list", stamp)
+    stamp = times.start()
     var y = _copy_f32(y_addr, n_rows)
+    times.stop_host("boundary_y_list", stamp)
+    stamp = times.start()
 
     var result: FitResult
     with GILReleased(Python()):
@@ -252,7 +261,13 @@ def et_classifier_fit_binding(
             ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
             config,
         )
-    return _forest_out(result)
+    times.stop_host("boundary_device_fit_and_context", stamp)
+    stamp = times.start()
+    var output = _forest_out(result)
+    times.stop_host("boundary_python_objects", stamp)
+    times.stop_host("fit_total", total_start)
+    times.report()
+    return output
 
 
 def et_regressor_fit_binding(
@@ -280,8 +295,16 @@ def et_regressor_fit_binding(
             "et_regressor_fit: criterion (slot 21) must be MSE (2); got "
             + String(config.criterion)
         )
+    # DEVIATION 2480: optional host boundary attribution, no added drains.
+    var times = StageTimes()
+    var total_start = times.start()
+    var stamp = times.start()
     var x = _copy_f32(x_addr, n_rows * n_features)
+    times.stop_host("boundary_x_list", stamp)
+    stamp = times.start()
     var y = _copy_f32(y_addr, n_rows)
+    times.stop_host("boundary_y_list", stamp)
+    stamp = times.start()
 
     var result: FitResult
     with GILReleased(Python()):
@@ -289,7 +312,13 @@ def et_regressor_fit_binding(
         result = fit_extra_trees_regressor_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), config
         )
-    return _forest_out(result)
+    times.stop_host("boundary_device_fit_and_context", stamp)
+    stamp = times.start()
+    var output = _forest_out(result)
+    times.stop_host("boundary_python_objects", stamp)
+    times.stop_host("fit_total", total_start)
+    times.report()
+    return output
 
 
 def et_predict_binding(

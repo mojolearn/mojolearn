@@ -2,6 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
+from ensemble.instruments import StageTimes
+
 from extratrees.checks.host_splitter import (
     node_split_random_gini,
     node_split_random_mse,
@@ -2002,6 +2004,8 @@ def upload_dataset(
         raise Error("x_col_major must be n_rows * n_cols long, column major")
     if len(class_ids) != Int(n_rows):
         raise Error("class_ids must be n_rows long")
+    var boundary_times = StageTimes()
+    var boundary_start = boundary_times.start()
     var d_data = ctx.enqueue_create_buffer[DType.float32](len(x_col_major))
     var d_labels = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
     var h_data = ctx.enqueue_create_host_buffer[DType.float32](
@@ -2016,6 +2020,8 @@ def upload_dataset(
     ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
     ctx.synchronize()
+    boundary_times.stop_host("boundary_dataset_upload", boundary_start)
+    boundary_times.report()
     return DeviceDataset(d_data^, d_labels^, n_rows, n_cols, n_classes)
 
 

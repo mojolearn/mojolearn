@@ -1,0 +1,56 @@
+{"rows": 1000000, "features": 28, "trees": 100, "depth": 16, "mode": "fast", "vendor": "metal", "data_sha256": "1e65cb5dd97f215af44995d45c2f55043229e066a8d820db8022b9441a1f3e22", "scope": "stage attribution; instrumented fits are not certified performance"}
+BOUNDARY_FIT {"pair": -1, "timed": false, "total_ms": 35778.74920799513, "nodes": 1823474, "model_sha256": "8f137119898d48cfb8d981d7c8a09019b2fade484714044e9449092474ad103e"}
+BOUNDARY_FIT {"pair": 0, "timed": false, "total_ms": 35628.082083014306, "nodes": 1823474, "model_sha256": "8f137119898d48cfb8d981d7c8a09019b2fade484714044e9449092474ad103e"}
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  boundary_dataset_upload	0.11347 s
+MOJOLEARN_STAGE_TIMES [extratrees classification forest fit]
+  (serialized-by-measurement; compare total to an untimed run)
+   setup (buffers, row fill, workspace) -> 0.131308 s
+   stage + feature sampler -> 17.108861 s
+   range pass (init+range+decode+nonconst) -> 3.577977 s
+   score pass (init+score+finalize) -> 4.507104 s
+   candidate+reduce+splits readback -> 0.255607 s
+   host: split records -> 0.074695 s
+   partition (4 kernels) -> 8.421386 s
+   host: pop + batch assembly -> 0.009765 s
+   leaf pass -> 0.140018 s
+   host: queue push (children of the batch) -> 0.031602 s
+  total -> 34.258323 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  boundary_x_list	0.017177 s
+  boundary_y_list	0.00056 s
+  boundary_device_fit_and_context	34.375894 s
+  boundary_python_objects	1.02139 s
+  fit_total	35.415045 s
+  other	2.4e-05 s
+BOUNDARY_PYTHON {'binding_ms': 35415.214249980636, 'array_pack_ms': 1462.7836250001565}
+BOUNDARY_FIT {"pair": 0, "timed": true, "total_ms": 37331.74004100147, "nodes": 1823474, "model_sha256": "8f137119898d48cfb8d981d7c8a09019b2fade484714044e9449092474ad103e"}
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  boundary_dataset_upload	0.100832 s
+MOJOLEARN_STAGE_TIMES [extratrees classification forest fit]
+  (serialized-by-measurement; compare total to an untimed run)
+   setup (buffers, row fill, workspace) -> 0.148702 s
+   stage + feature sampler -> 17.304765 s
+   range pass (init+range+decode+nonconst) -> 3.578559 s
+   score pass (init+score+finalize) -> 4.459313 s
+   candidate+reduce+splits readback -> 0.248335 s
+   host: split records -> 0.07556 s
+   partition (4 kernels) -> 8.43384 s
+   host: pop + batch assembly -> 0.01009 s
+   leaf pass -> 0.132176 s
+   host: queue push (children of the batch) -> 0.030801 s
+  total -> 34.422141 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  boundary_x_list	0.034455 s
+  boundary_y_list	0.000725 s
+  boundary_device_fit_and_context	34.527 s
+  boundary_python_objects	1.024048 s
+  fit_total	35.58625 s
+  other	2.2e-05 s
+BOUNDARY_PYTHON {'binding_ms': 35586.44137499505, 'array_pack_ms': 1463.457500009099}
+BOUNDARY_FIT {"pair": 1, "timed": true, "total_ms": 37507.08333301009, "nodes": 1823474, "model_sha256": "8f137119898d48cfb8d981d7c8a09019b2fade484714044e9449092474ad103e"}
+BOUNDARY_FIT {"pair": 1, "timed": false, "total_ms": 35734.30429099244, "nodes": 1823474, "model_sha256": "8f137119898d48cfb8d981d7c8a09019b2fade484714044e9449092474ad103e"}

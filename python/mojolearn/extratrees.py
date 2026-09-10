@@ -248,7 +248,13 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
             n_rows, n_features, n_classes, self._cfg, self.device,
             self._criterion_code,
         )
+        # DEVIATION 2480: host-only clocks, disabled on the shipping path.
+        import os
+        from time import perf_counter
+        boundary_times = os.environ.get("MOJOLEARN_STAGE_TIMES") == "1"
+        binding_start = perf_counter() if boundary_times else 0
         out = fit_fn(addr_ro(Xf, name="X"), addr_ro(ya, name="y"), params)
+        binding_end = perf_counter() if boundary_times else 0
         del Xf, ya  # the borrow ends with the call
         offsets, colid, quesval, left_child, leaves, meta = out
         # The binding returns Python lists; packing them is the same
@@ -258,6 +264,9 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         self._quesval = Array.from_list([float(v) for v in quesval], "<f4")
         self._left_child = Array.from_list([int(v) for v in left_child], "<i4")
         self._leaves = Array.from_list([float(v) for v in leaves], "<f4")
+        if boundary_times:
+            print("BOUNDARY_PYTHON", {"binding_ms": (binding_end - binding_start) * 1000,
+                  "array_pack_ms": (perf_counter() - binding_end) * 1000}, flush=True)
         self.n_features_in_ = int(n_features)
         self._n_trees = int(meta[0])
         self._num_outputs = int(meta[1])
