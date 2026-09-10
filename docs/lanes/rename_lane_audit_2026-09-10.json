@@ -1,0 +1,421 @@
+{
+  "base": "690b178b27dcc1c543b04351b1b317fe98ab79c1",
+  "note": "Patch uniqueness is not semantic uniqueness; squash integrations require source comparison. No GPU runs.",
+  "refs": [
+    {
+      "ref": "codex/certification-source",
+      "tip": "eb835021dcd79a59a7e8f78c754a75db3c1fea83",
+      "ahead_commits": 14,
+      "patch_unique_commits": [
+        "6a3a2d30ab53e9207d327df38f4d22fb5111535e",
+        "d88c788374a06597c9ebd457666afc7e4054d0d9",
+        "6cbebbbdd67c3b27e8c113a09d7a41ec41e3e48a",
+        "93222bbcf73ad159791937e359050789991de042",
+        "6dd44ac53f178fa07fa91b13dadf749163df24f9",
+        "eb835021dcd79a59a7e8f78c754a75db3c1fea83"
+      ]
+    },
+    {
+      "ref": "diag/transformer-admission-followup-20260910",
+      "tip": "98aea764bbb02c175a5c02c8cf6b09c07f130109",
+      "ahead_commits": 2,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "fix/samba-attention-wiring-20260910",
+      "tip": "6993507c435f8d33161bdd5132b8c6ed7beabe1c",
+      "ahead_commits": 1,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "fix/umap-portable-pow64-20260910",
+      "tip": "9628de206c0bc04d46e5b4f19ef5e2893cb5c936",
+      "ahead_commits": 5,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "grid/nvidia-identity-2026-09-07",
+      "tip": "0ff72e9f2e8010ac03ffd41551c24f68c89cd8fc",
+      "ahead_commits": 29,
+      "patch_unique_commits": [
+        "550272be851a5da51aa1e66adf1e08b13e4ef169",
+        "20227dffdb94a27168d7c2ccafd917062b95ab64",
+        "b9d0c68ab24507543dd5e08fe4c92e6746c2ac26",
+        "95cdc950bb6d08288f09bde00f0bfee5d7b48ab7",
+        "05fb8d6dd265120b8f6c88a8737b5e9e4ae43e13",
+        "2d1d9dc45c0948e052b5cee4e63d04bec6eb4a9c",
+        "485d6438aee37fbcb1ab76e29c56d30b94f48d70",
+        "32f5e657089e3551744f78db796bf1176f9ea7c5",
+        "38e7e8656f1e5694aa23c45ff019bf25ac9e0b4a",
+        "334d84b8401145b49f37155c6cf9a2021929ddb5",
+        "fe09d27e574a15f18a4f244cf5220761959744d6",
+        "aad04198243c2eeb2262bb0e00c46f26b112e9f6",
+        "dafb9071bb23a1f8adae15e03299c069a985d74d",
+        "b85c08982ad173f9cd43ce08f20cd056b379a301",
+        "fcd6a7b26633d8957b3b77e18cbaae91fbc70c3f",
+        "1aab9041853430a86441410f3e91eaa57cd4e3ee",
+        "0905bf23581f27430f8a97a804b489a423e76aa5",
+        "61e3942ee78a61a5606e45a692866dc5345c6203",
+        "f73a0f764507a16504e403843b361fb096314df0",
+        "13aff2097859eac3cc953704ff51e44c28e1fb5c",
+        "a6bddf3140aeac4e6123620fd1104db16e8ed093",
+        "12c2d349d3287b1ab9ba4d672a0fd87de73cb501",
+        "98f4d3185ad276131f9b1113e1eeec54f3259598",
+        "379b08613d5d0a422a2e244900b54b3f2dfc8696",
+        "bd5410ba538a192ef354b8fddbfcd570736ef821",
+        "ed009462fd625870dde489586bb29d8adb6ecbda",
+        "8884f2f5520708dcbecca5467fab195c73b8708b",
+        "0ff72e9f2e8010ac03ffd41551c24f68c89cd8fc"
+      ]
+    },
+    {
+      "ref": "identical-host-libm-free",
+      "tip": "1495d328edeb4436dc54f58613ca8d94891fff22",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/byte-numerical",
+      "tip": "6d5fbbdda62898bd24be95a2f9ca6c66ea6f4781",
+      "ahead_commits": 1,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/byte-runtime",
+      "tip": "89916f25119f4a7d62e6c5bc414f3e30e637bf03",
+      "ahead_commits": 2,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/dbscan-compiler-crash",
+      "tip": "bc532145ba2ea2ed76632ce1d6d0fa2f60132d22",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/fused-attention",
+      "tip": "28b75e3710b44cb92a93be0165b98fa6aa574143",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/fused-attention-regblock",
+      "tip": "f31d215dcdf51aca59586c149bfba68433a0dddc",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/gemm-identical",
+      "tip": "4712ff455035f9263dda4147ae3d01b9e8eeaaba",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/gemm-splitk",
+      "tip": "847ddbb31d55acfe2e17e5ad13e59e43e57f7242",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/knn-identical",
+      "tip": "8faa10982b4bfd620a18e05078c5b8699ae609be",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/knn-ivf-width-pass",
+      "tip": "0c2efd88855f0bcb9e1620c587dc07e01243f7dc",
+      "ahead_commits": 14,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/knn-mamba-regimes",
+      "tip": "b9a5eebefd50aa3f7896eb2f8534dddfe67aa2a7",
+      "ahead_commits": 2,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/knn-next-pass",
+      "tip": "457a133b290cab3c974efd2765b5b6a44de97865",
+      "ahead_commits": 6,
+      "patch_unique_commits": [
+        "9a8f09d7d3131dec125048f63edebbe38590da52",
+        "8266f1c073cda911ed8ec1d662a681d02e35bdec"
+      ]
+    },
+    {
+      "ref": "lane/knn-selector",
+      "tip": "6493087dc4b6e0eb3176debfa305abbf8cf465e6",
+      "ahead_commits": 20,
+      "patch_unique_commits": [
+        "58dbc7b10626209a035cd1eb192f5c780a073df5",
+        "f2cff18e4fea133ee0ab80bc3ee86611b402d30a",
+        "8453e8830161f4b0cd41eb45b935ca35ce5c4d64",
+        "a8fac23da6540b7b6c2c4a10f029fc096a643341",
+        "bddebd521fd10aa9af553342afe0b947d2b4ff4c",
+        "cba0ca1cdd35c3d7e94922671757f867f50e3916",
+        "1a8e35447f001a6755a60e8f94b9cd3f41d4a4e2",
+        "4345e1d0f5d0ba71aa4a693f456fe7e501d5ed8f",
+        "c017b2e26bcaebf0df62cbe4c4a8710f7e48a969",
+        "b3989890fecfda0129a648769a8512430163bf29",
+        "ba22f69361501b44f64ec07c2bb1b833d4fd1165",
+        "10d04960c6ccc639d03a83f798f1285514d1312d",
+        "0857288d6085fa1d4fd4576a96c001edcffc1161",
+        "729ffa55e78b550db28f355f135937c307d75e7e",
+        "40b02c120f354627c83d5a7f4e0b30c86c2d821b",
+        "e5cf87970c45fb1714c39839300ecc7f8cff3c80",
+        "be3631588d846918589eb5ea30c8aa81244b3606",
+        "fa3a1cf7a4d9a39f5e5b6e09f21350b6a760e836",
+        "28273628e81b9e1f78094db14d627bb8aff19880",
+        "6493087dc4b6e0eb3176debfa305abbf8cf465e6"
+      ]
+    },
+    {
+      "ref": "lane/knn-throughput-pass",
+      "tip": "599e97c63f9197529424b78a968719b0516716d1",
+      "ahead_commits": 7,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/knn-width-pass",
+      "tip": "80557970037b7897c54396fe87a1b607b4bdd16c",
+      "ahead_commits": 16,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/mamba-transfer-batch",
+      "tip": "4d8900f922d5453fab4b372b2fd1112870079009",
+      "ahead_commits": 7,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/mamba3-next",
+      "tip": "5f923fec90d8cce69e02b9d4f03f521f0f3ec1cd",
+      "ahead_commits": 7,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/mamba3-residual",
+      "tip": "2646be97eb916c0564d0271dff94706a2d90c49e",
+      "ahead_commits": 6,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/mamba3-statepass",
+      "tip": "b42f1c857c75143d6d8a37790bcfbee226238151",
+      "ahead_commits": 23,
+      "patch_unique_commits": [
+        "97656916181ad4767fa1789af4b85a5d5c8e6c7a",
+        "0751c6a762cf7661deeece083f0ae8fbc1856774",
+        "7e0b00822be84bcc00c07c461a460ad6ec0003d0",
+        "15fb04e6257b1832a8952d7ec37b7e06eb3ab5f9",
+        "e1f9a23c6aedba9863c779bd39416d235ad8c9e4",
+        "b82955eea2f7fb9c58298874d7fc9ff43e25be24",
+        "85d388aafed464b92ccb41d1b56846779a2e61e5",
+        "c76f9549e79dd3f7b50a8bce3a62ad2770777e4e",
+        "87cc7dd9c88db5142887a16243685b8dcc3aa4b9",
+        "0325118f0eb77aa894f602baa82611d9077b34c3",
+        "1b992b1049c199e852d8bdd2975b6e88847114e5",
+        "7c4c8957648381b8b7ac9b41a15e84c54851f49a",
+        "edec471ddd59495967c96d5045f477a0d130e1f0",
+        "a801585d3f18f2cbb7f1e9931e21b3fc4fbdc5c4",
+        "dd899cd86ad24c7836d400ce3220661048b24f74",
+        "e96ff7cd71eab7e615a7c6438a191e7ee8580454",
+        "8467fc45eedf6a2d07c18484f71361132097ea2b",
+        "ce3e136bb516f98ec3132d0cbb7882faf12c321f",
+        "18627f923b05b808edfc1a4d311ef7ffd8b7b674",
+        "9c70cdb64118b0fa572118d91116279daa3641a6",
+        "1a076ee7ee2ac44d9897c00cd427edc61f569556",
+        "8cda8ceed8fe96caa1eca476dc96ec2215ad9b2f",
+        "b42f1c857c75143d6d8a37790bcfbee226238151"
+      ]
+    },
+    {
+      "ref": "lane/mamba3-yintra",
+      "tip": "0e5f80c69cf23a155406f5c846c7e97279b612c4",
+      "ahead_commits": 8,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/samba-attention",
+      "tip": "61d1f14b0b90c367252b1475a96ff1bcd0762036",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/samba-training",
+      "tip": "98e771ab7a32a1e6362958aafd9b8d4ec569036d",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/trees-identical",
+      "tip": "485040f88bf7f9fafe246c5e4752db1b85c196c7",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "lane/umap-optimizer",
+      "tip": "54da52ae746b974c57e41194a1f92abfa90140ff",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "numpy-free-0.7",
+      "tip": "a971d0ab4dc8252c3c97fde51236c4c1b8672892",
+      "ahead_commits": 4,
+      "patch_unique_commits": [
+        "0b4b6e491b56edeb466910345bde6a47cc516fed",
+        "637de94053480da5c090f85e945200818ae8d746",
+        "5413c4686c93456f1bd75fc403cf0cbb7e32eedc",
+        "a971d0ab4dc8252c3c97fde51236c4c1b8672892"
+      ]
+    },
+    {
+      "ref": "numpy-free-onto-main-20260910",
+      "tip": "d83f7f1c1df0159c9d020d66031743ca4b49c2a2",
+      "ahead_commits": 5,
+      "patch_unique_commits": [
+        "0b4b6e491b56edeb466910345bde6a47cc516fed",
+        "637de94053480da5c090f85e945200818ae8d746",
+        "5413c4686c93456f1bd75fc403cf0cbb7e32eedc",
+        "a971d0ab4dc8252c3c97fde51236c4c1b8672892"
+      ]
+    },
+    {
+      "ref": "numpy-free-phase1-20260910",
+      "tip": "d3ca042f4f2fe2a8f33ce1317b4900729dbf356a",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "perf/embedding-plan-sort-20260910",
+      "tip": "c135f87e2a4f41e0afdf0b70b9dbd95006eb0def",
+      "ahead_commits": 8,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "perf/transformer-admission-20260910",
+      "tip": "2787bc8c505c359b79ea0abe91159528c6cb720b",
+      "ahead_commits": 1,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "test/gemm-stage-ftz-20260910",
+      "tip": "685ad8886339a7fce01f9f6065ba2238a1f2ffe2",
+      "ahead_commits": 1,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "origin",
+      "tip": "690b178b27dcc1c543b04351b1b317fe98ab79c1",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "origin/alpha-api-20260906",
+      "tip": "db5bfe87d5957e62a4230416fb56a9f7c30eb11a",
+      "ahead_commits": 10,
+      "patch_unique_commits": [
+        "ce34d2e301dc4bc217f9ebf88a491043882224f9",
+        "6146b121608d4cf73706d6540bb884e134df409c",
+        "f30670da6f91c58347ec445c6ef358fb37e45fd1",
+        "201e5ebcf58b388573426a2df77b1d5161fd156a",
+        "9898d3e8fbb458d50af5aa28b9fc36bf34258ae6",
+        "8f6ed4112a3c140326011f908e8caf14c0dee4af",
+        "659ce86da4932bd2f6442a8faea1ad9cee5e979f",
+        "9dd1004b9cf85fc038649a100875687667ce949e",
+        "c90f8be10cfb3d412efa7dfb08d63abbbe879e86",
+        "db5bfe87d5957e62a4230416fb56a9f7c30eb11a"
+      ]
+    },
+    {
+      "ref": "origin/byte-lm-resume-20260906",
+      "tip": "d5893e2ae270236c629b00a198c2e017c26cb5af",
+      "ahead_commits": 7,
+      "patch_unique_commits": [
+        "d921eade0da5454e39e0cd103b9a1799286b41b9",
+        "56c81775210e7590c3d83ce590e53061388498e9",
+        "b3d38c235d7858ddf115558df0d2d7979ac2823a",
+        "102e6bf56f1adec0ae9f22a1b6083d3cb0212d28",
+        "c9d1165dfbcde0a3931764ed3fe2aa3583f860c4",
+        "3d255241d84c5ba856a3e5eabab942887d88b9ae",
+        "d5893e2ae270236c629b00a198c2e017c26cb5af"
+      ]
+    },
+    {
+      "ref": "origin/codex/certification-source",
+      "tip": "eb835021dcd79a59a7e8f78c754a75db3c1fea83",
+      "ahead_commits": 14,
+      "patch_unique_commits": [
+        "6a3a2d30ab53e9207d327df38f4d22fb5111535e",
+        "d88c788374a06597c9ebd457666afc7e4054d0d9",
+        "6cbebbbdd67c3b27e8c113a09d7a41ec41e3e48a",
+        "93222bbcf73ad159791937e359050789991de042",
+        "6dd44ac53f178fa07fa91b13dadf749163df24f9",
+        "eb835021dcd79a59a7e8f78c754a75db3c1fea83"
+      ]
+    },
+    {
+      "ref": "origin/grid/nvidia-identity-2026-09-07",
+      "tip": "0ff72e9f2e8010ac03ffd41551c24f68c89cd8fc",
+      "ahead_commits": 29,
+      "patch_unique_commits": [
+        "550272be851a5da51aa1e66adf1e08b13e4ef169",
+        "20227dffdb94a27168d7c2ccafd917062b95ab64",
+        "b9d0c68ab24507543dd5e08fe4c92e6746c2ac26",
+        "95cdc950bb6d08288f09bde00f0bfee5d7b48ab7",
+        "05fb8d6dd265120b8f6c88a8737b5e9e4ae43e13",
+        "2d1d9dc45c0948e052b5cee4e63d04bec6eb4a9c",
+        "485d6438aee37fbcb1ab76e29c56d30b94f48d70",
+        "32f5e657089e3551744f78db796bf1176f9ea7c5",
+        "38e7e8656f1e5694aa23c45ff019bf25ac9e0b4a",
+        "334d84b8401145b49f37155c6cf9a2021929ddb5",
+        "fe09d27e574a15f18a4f244cf5220761959744d6",
+        "aad04198243c2eeb2262bb0e00c46f26b112e9f6",
+        "dafb9071bb23a1f8adae15e03299c069a985d74d",
+        "b85c08982ad173f9cd43ce08f20cd056b379a301",
+        "fcd6a7b26633d8957b3b77e18cbaae91fbc70c3f",
+        "1aab9041853430a86441410f3e91eaa57cd4e3ee",
+        "0905bf23581f27430f8a97a804b489a423e76aa5",
+        "61e3942ee78a61a5606e45a692866dc5345c6203",
+        "f73a0f764507a16504e403843b361fb096314df0",
+        "13aff2097859eac3cc953704ff51e44c28e1fb5c",
+        "a6bddf3140aeac4e6123620fd1104db16e8ed093",
+        "12c2d349d3287b1ab9ba4d672a0fd87de73cb501",
+        "98f4d3185ad276131f9b1113e1eeec54f3259598",
+        "379b08613d5d0a422a2e244900b54b3f2dfc8696",
+        "bd5410ba538a192ef354b8fddbfcd570736ef821",
+        "ed009462fd625870dde489586bb29d8adb6ecbda",
+        "8884f2f5520708dcbecca5467fab195c73b8708b",
+        "0ff72e9f2e8010ac03ffd41551c24f68c89cd8fc"
+      ]
+    },
+    {
+      "ref": "origin/identical-host-libm-free",
+      "tip": "1495d328edeb4436dc54f58613ca8d94891fff22",
+      "ahead_commits": 0,
+      "patch_unique_commits": []
+    },
+    {
+      "ref": "origin/numpy-free-0.7",
+      "tip": "a971d0ab4dc8252c3c97fde51236c4c1b8672892",
+      "ahead_commits": 4,
+      "patch_unique_commits": [
+        "0b4b6e491b56edeb466910345bde6a47cc516fed",
+        "637de94053480da5c090f85e945200818ae8d746",
+        "5413c4686c93456f1bd75fc403cf0cbb7e32eedc",
+        "a971d0ab4dc8252c3c97fde51236c4c1b8672892"
+      ]
+    },
+    {
+      "ref": "origin/release-0.6.0-alpha-api",
+      "tip": "56c81775210e7590c3d83ce590e53061388498e9",
+      "ahead_commits": 2,
+      "patch_unique_commits": [
+        "d921eade0da5454e39e0cd103b9a1799286b41b9",
+        "56c81775210e7590c3d83ce590e53061388498e9"
+      ]
+    }
+  ]
+}

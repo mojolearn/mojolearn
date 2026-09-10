@@ -1,0 +1,213 @@
+{
+  "backup_bundle": "/tmp/mojolearn-retired-lanes-20260910.bundle",
+  "entries": [
+    {
+      "branch": "diag/transformer-admission-followup-20260910",
+      "tip": "98aea764bbb02c175a5c02c8cf6b09c07f130109",
+      "worktree": "/private/tmp/mojolearn-transformer-admission-next",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "fix/samba-attention-wiring-20260910",
+      "tip": "6993507c435f8d33161bdd5132b8c6ed7beabe1c",
+      "worktree": "/private/tmp/mojolearn-samba-attention",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "fix/umap-portable-pow64-20260910",
+      "tip": "9628de206c0bc04d46e5b4f19ef5e2893cb5c936",
+      "worktree": "/private/tmp/mojolearn-umap-pow64",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/byte-numerical",
+      "tip": "6d5fbbdda62898bd24be95a2f9ca6c66ea6f4781",
+      "worktree": "/private/tmp/mojolearn-byte-numerical",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/byte-runtime",
+      "tip": "89916f25119f4a7d62e6c5bc414f3e30e637bf03",
+      "worktree": "/private/tmp/mojolearn-byte-runtime",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/fused-attention",
+      "tip": "28b75e3710b44cb92a93be0165b98fa6aa574143",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a94c0adce7c14179f",
+      "action": "retain",
+      "reason": "dirty worktree or unresolved unique changes",
+      "dirty": "?? bench/results/runpod_leases/"
+    },
+    {
+      "branch": "lane/fused-attention-regblock",
+      "tip": "f31d215dcdf51aca59586c149bfba68433a0dddc",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-afe1520062beaa327",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/gemm-identical",
+      "tip": "4712ff455035f9263dda4147ae3d01b9e8eeaaba",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a7f6881ef7f397d7d",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/gemm-splitk",
+      "tip": "847ddbb31d55acfe2e17e5ad13e59e43e57f7242",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a68e7f0e68dc3bc9f",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/knn-identical",
+      "tip": "8faa10982b4bfd620a18e05078c5b8699ae609be",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-ae46675e22fad82d0",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/knn-ivf-width-pass",
+      "tip": "0c2efd88855f0bcb9e1620c587dc07e01243f7dc",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/knn-ivf-width-pass",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/knn-mamba-regimes",
+      "tip": "b9a5eebefd50aa3f7896eb2f8534dddfe67aa2a7",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/knn-mamba-regimes",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/knn-next-pass",
+      "tip": "457a133b290cab3c974efd2765b5b6a44de97865",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/knn-next-pass",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/knn-selector",
+      "tip": "6493087dc4b6e0eb3176debfa305abbf8cf465e6",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a8b4f188a0e93ff39",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/knn-throughput-pass",
+      "tip": "599e97c63f9197529424b78a968719b0516716d1",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/knn-throughput-pass",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/knn-width-pass",
+      "tip": "80557970037b7897c54396fe87a1b607b4bdd16c",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/knn-width-pass",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/mamba-transfer-batch",
+      "tip": "4d8900f922d5453fab4b372b2fd1112870079009",
+      "worktree": "/private/tmp/mojolearn-mamba-transfer-batch",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/mamba3-next",
+      "tip": "5f923fec90d8cce69e02b9d4f03f521f0f3ec1cd",
+      "worktree": "/private/tmp/mojolearn-mamba3-next",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/mamba3-residual",
+      "tip": "2646be97eb916c0564d0271dff94706a2d90c49e",
+      "worktree": "/private/tmp/mojolearn-mamba3-residual",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/mamba3-yintra",
+      "tip": "0e5f80c69cf23a155406f5c846c7e97279b612c4",
+      "worktree": "/private/tmp/mojolearn-mamba3-yintra",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/samba-attention",
+      "tip": "61d1f14b0b90c367252b1475a96ff1bcd0762036",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-afd8cf1f28065c190",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/samba-training",
+      "tip": "98e771ab7a32a1e6362958aafd9b8d4ec569036d",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-abd6cb40688b2c28d",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "lane/umap-optimizer",
+      "tip": "54da52ae746b974c57e41194a1f92abfa90140ff",
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a4b445131c31d9311",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "perf/embedding-plan-sort-20260910",
+      "tip": "c135f87e2a4f41e0afdf0b70b9dbd95006eb0def",
+      "worktree": "/private/tmp/mojolearn-embedding-sort",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "perf/transformer-admission-20260910",
+      "tip": "2787bc8c505c359b79ea0abe91159528c6cb720b",
+      "worktree": "/private/tmp/mojolearn-transformer-admission",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    },
+    {
+      "branch": "test/gemm-stage-ftz-20260910",
+      "tip": "685ad8886339a7fce01f9f6065ba2238a1f2ffe2",
+      "worktree": "/private/tmp/mojolearn-gemm-stage-ftz",
+      "action": "deleted",
+      "reason": "incorporated; clean",
+      "dirty": ""
+    }
+  ]
+}
