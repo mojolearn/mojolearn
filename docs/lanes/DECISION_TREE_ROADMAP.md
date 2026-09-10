@@ -4,7 +4,8 @@ Updated 2026-09-10. Working branch:
 `lane/trees-gpu-growth-rf-hist-2026-09-09`.
 This is the consolidated execution plan for single trees, Random Forest (RF),
 Extra Trees (ET), and symmetric/Depthwise/Lossguide GBDT. Status describes
-this source lane, not a published wheel or a merge to main.
+the source implementation, not a published wheel. The prior implementation
+was integrated into main at `8f14f107`.
 
 Pipeline expansion: [GPU_PIPELINE_PLAN.md](GPU_PIPELINE_PLAN.md) covers metrics,
 preprocessing, sklearn compatibility, model selection and end-to-end identity.
@@ -31,25 +32,54 @@ notices for adapted code. Translate the data flow into Mojo GPU kernels and
 explicit ownership; copying an option name is not implementing its semantics.
 Backend support in competitors must be checked separately from general APIs.
 
+## Performance priorities — user steering, 2026-09-10
+
+Success is IDENTICAL versus the relevant GPU competitor on NVIDIA, across
+all learners, including RF, ET and symmetric/oblivious GBDT. FAST performance
+work is requested only for decision trees on the local MacBook. This latest
+user clarification supersedes earlier FAST-versus-cuML/CatBoost NVIDIA plans.
+An internal FAST/DETERMINISTIC/IDENTICAL speed contest is not a deliverable.
+Keep supported modes correct through shared source, but spend NVIDIA tuning
+and benchmark effort on IDENTICAL. Do not describe identity as free or as an
+acceleration mechanism; similar observed timings do not isolate identity cost.
+DETERMINISTIC is not an integer-only algorithm. Integer counts may be shared
+across modes while floating scoring, regression and reductions still differ.
+
+Use cuML RF as the NVIDIA RF competitor and CatBoost GPU as the symmetric
+GBDT competitor. ET needs an actual equivalent learner before claiming ET
+parity; cuML RF is only a labeled contextual comparison. Qualify HIP correctness
+and identity separately: cuML is not an AMD backend. Preserve competitor
+semantics, quality measurements and honest workload boundaries.
+
 Current order:
 
-1. RF timing refresh is complete but inconclusive; keep candidates opt-in.
-   The bounded minimum-child-Hessian control now passes native/public M4
-   checks in all modes; broader device qualification remains.
-2. Continue common metrics and sklearn protocol work from the pipeline plan;
-   then add GBDT feature sampling and expose prepared datasets through Python.
-3. On an available NVIDIA GPU, qualify RF/ET candidates, large stable
-   partitions and the stream API; then implement measured stream overlap.
-4. Add interaction constraints, then monotonic constraints and coherent
-   regularized leaf updates.
-5. Extend categorical, multiclass/non-symmetric and other broader capabilities
-   in independently testable slices, according to workload demand.
+1. Dedicated NVIDIA IDENTICAL-versus-competitor baselines and profiling, starting
+   with RF/cuML and symmetric GBDT/CatBoost. Include fit and prediction
+   separately, transfer-inclusive timings, memory, quality and repeated runs.
+2. Optimize IDENTICAL RF/ET bottlenecks: existing shared histogram/count
+   candidates, scratch/input reuse, independent-tree overlap, and shared GPU
+   forest inference. RF already has cuML-derived shared histograms.
+3. Qualify CUDA/HIP correctness and identity for changed paths. MacBook FAST
+   decision-tree tuning is a separate target, not evidence for NVIDIA defaults.
+4. Continue useful feature gaps and prepared-data ownership in bounded slices;
+   retain the full backlog without displacing competitor performance work.
 
-Do not run competing GPU work or change the protected RunPod training
-environment. Parallelize source work and review; serialize local heavy
-builds/measurements through `tools/with_build_lock.sh`. Commit completed slices
-and push the lane. Integrating with current main requires a separate conflict
-and regression review; lane completion is not main/release completion.
+Independent-tree overlap is not implemented in production yet. Introduce it
+behind an explicit opt-in concurrency control, defaulting to the existing serial
+schedule. Use private per-slot scratch, fixed tree IDs/RNG and output slots.
+Shared integer counts can be scheduled freely only within their overflow
+contract; floating reductions within trees and final forest aggregation must
+retain their pinned association in IDENTICAL. Fixed output order does not
+require serial tree construction. Measure bandwidth contention, occupancy and
+peak scratch memory: overlap can be slower. Promote only measured workload and
+device configurations; keep a serial fallback. An opt-in flag alone is not a
+performance improvement.
+
+The user permits RunPod performance tests when warranted and has instructed
+us to proceed. Start with a bounded single-GPU measurement session and automatic
+teardown, not an open-ended campaign; never consume the protected training pod. Parallelize source work and review; serialize local
+heavy builds through `tools/with_build_lock.sh`. Commit completed slices and
+push to main after integration/conflict review, as explicitly requested.
 
 Serial pipeline CV now has a bounded public API; see the
 [cross-validation contract](GPU_CROSS_VALIDATION.md). Native GPU splitting,

@@ -1,11 +1,18 @@
 # Dedicated GPU measurement next
 
-The user requested AMD/NVIDIA measurements before drawing performance
-conclusions from the local MacBook. No idle endpoint was available in the
-read-only account inventory; see
+Latest user priority: IDENTICAL versus competitors on NVIDIA for every
+learner. FAST performance is only a MacBook decision-tree target. Use IDENTICAL
+for NVIDIA performance runs, including symmetric GBDT against CatBoost GPU.
+RF uses cuML RF; ET comparisons require an equivalent learner or explicit
+context-only labeling. Internal mode speed ratios are not the success metric.
+
+RunPod tests are authorized when warranted. Use a bounded single-GPU session
+with automatic teardown, separate from the protected Samba training pod.
+The last read-only inventory found only that protected pod; see
 [availability](../../bench/results/tree_gpu_availability_2026-09-10/README.md).
-The protected Samba training pod must remain untouched. An idle endpoint or
-a separate-rental spending limit is still required.
+
+The following allocation-reuse experiment is a diagnostic subtask; it does not
+replace the primary competitor benchmarks.
 
 The immediate comparison is the same sampled learner before/after allocation
 reuse, not sampled versus full-feature learning. Build both artifacts on the
@@ -33,13 +40,14 @@ Then, from the candidate checkout on the dedicated device:
 ```sh
 PYTHONPATH=python python checks/gbdt_feature_fraction_ab.py \
   --reference-root /path/to/reference-bindings \
-  --expected-vendor cuda \
+  --expected-vendor cuda --modes identical \
   --rows 8192 65536 262144 --rounds 5 \
   --output /path/to/results/sampled_reuse_ab.json
 ```
 
-Use `hip` for AMD. The driver defaults to FAST/IDENTICAL and all three growth
-policies, with fractions 0.5/0.25. It warms both arms, alternates order, checks
+Use `hip` for AMD identity qualification. Explicitly select IDENTICAL for
+NVIDIA timing; the driver otherwise defaults to FAST/IDENTICAL. It covers all
+three growth policies, with fractions 0.5/0.25. It warms both arms, alternates order, checks
 complete model and prediction hashes every fit, and records raw whole-fit
 seconds, both timing spreads, source data and binary hashes. It does not time
 prediction/hash construction as training. These are synthetic profiles; follow

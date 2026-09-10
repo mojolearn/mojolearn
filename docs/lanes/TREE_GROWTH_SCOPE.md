@@ -1,7 +1,8 @@
 # GPU tree growth scope and working memory
 
 Pipeline and mode decision (2026-09-10): [GPU_PIPELINE_PLAN.md](GPU_PIPELINE_PLAN.md).
-Keep DETERMINISTIC for now; prioritize metrics and estimator interoperability.
+Keep DETERMINISTIC supported. Latest priority is competitor-relative tree
+performance; metrics and interoperability remain implemented foundations.
 A1 unweighted Float32 errors, A2 unweighted GPU confusion/precision/recall/F1,
 and B1 RF/ET sklearn compatibility are implemented on the tree lane; contracts and remaining work are tracked in the pipeline plan.
 
@@ -131,3 +132,22 @@ projection runs once per sampled boosting tree, not at every depth/leaf split
 and not merely once per fit or growth-policy selection. Its cost can amortize
 over a deep tree. Decide from whole-fit measurements rather than rejecting
 packing on its name or assuming it is negligible.
+
+## Performance priority update — corrected 2026-09-10
+
+IDENTICAL versus GPU competitors on NVIDIA is the user's performance target
+EVERYWHERE, for all learners. FAST matters only for decision trees on the
+MacBook. This supersedes the earlier NVIDIA FAST comparison priority. Do not
+optimize an internal mode ratio or claim that identity is free or causes a
+speedup. DETERMINISTIC is not integer-only: integer statistics coexist with
+floating scoring and regression work. Similar timings cannot isolate the cost
+of identity across differently optimized implementations.
+
+Use cuML RF and CatBoost GPU symmetric GBDT as the appropriate NVIDIA
+comparators. ET needs a real equivalent competitor before claiming ET parity.
+HIP correctness/identity remains in scope; cuML is NVIDIA-only.
+
+Tree overlap is an audited design, not a production feature or flag. Implement
+an opt-in concurrency control first, with private scratch, fixed RNG/output
+ordering and a serial fallback. Preserve IDENTICAL's floating reduction order.
+Promote only when whole-fit timing and memory evidence support it.
