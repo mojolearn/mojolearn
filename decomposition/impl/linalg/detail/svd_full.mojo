@@ -564,7 +564,7 @@ def _wide_apply_q_kernel(
         var j = m - 1 - jj
         var rjj = r.unsafe_load(j * m + j)
         if rjj != Float32(0.0):
-            var ajj = packed.unsafe_load(j * m + j)
+            var ajj = ftz(packed.unsafe_load(j * m + j))
             var tau = qr_reflector_tau(ajj, abs(rjj), qr_reflector_u1(ajj, rjj))
             var acc = Float32(0.0)
             var row = j + 1 + tid
