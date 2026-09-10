@@ -216,7 +216,7 @@ class DBSCAN(NumericModeMixin):
                 f"mojolearn DBSCAN: metric={self.metric!r} with "
                 f"algorithm={self.algorithm!r} is refused. The ball cover "
                 "computes Euclidean distances for its landmark radii and "
-                "its three pruning bounds (neighbors/impl/neighbors/"
+                "its three pruning bounds (neighbors/impl/"
                 "ball_cover/), so it serves 'euclidean' only. Pass "
                 "algorithm='brute', which serves this metric. This is a "
                 "scope boundary and not a property of the algorithm: the "

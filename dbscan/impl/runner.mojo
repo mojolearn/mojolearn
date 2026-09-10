@@ -400,7 +400,7 @@ their code branches on is this Bool.
     # because a refusal that hides a doable feature is how a library stops
     # growing. The ball cover's pruning is metric-generic in principle: it
     # rests on the triangle inequality, which L1 satisfies. What is L2 in
-    # this tree is the IMPLEMENTATION -- `neighbors/impl/neighbors/
+    # this tree is the IMPLEMENTATION -- `neighbors/impl/
     # ball_cover/common.mojo::eps_dist_sq` and the three landmark bounds at
     # `ball_cover/registers.mojo:280`, `:422`, `:547` all compute Euclidean
     # distance, and the index's radii are built from it. An L1 ball cover is
