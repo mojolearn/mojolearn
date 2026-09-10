@@ -19,7 +19,7 @@ integer squared-distance sort. Repeated points force ties across original
 indices. All 2562 returned indices and raw distance words must match;
 k = 1025 must reach the rank-capacity refusal. A separate public gate
 probes 257 tied centroids and requires all 1057 candidates plus the lowest
-257 original indices. Both gates pass on Apple, as does the full existing
+257 original indices. Both gates pass on Apple and NVIDIA H100, as does the full existing
 IVF regression suite.
 
 The fused queue keeps its 32-lane sorting topology. IDENTICAL CDNA uses
@@ -35,8 +35,8 @@ and unsupported widths retain their previous entry refusals.
 The fused gate checks query counts 1, 9, and 17 with k = 1, 8, 32, and 64.
 It uses different queries in neighboring logical groups, duplicate vectors,
 and independent integer-distance ordering. It also checks all 2048 mappings
-from 64 virtual lanes to their 32 logical broadcast sources. Native Apple
-and Apple with a declared AMD column pass all twelve cases. The latter is
+from 64 virtual lanes to their 32 logical broadcast sources. Native Apple and NVIDIA H100, plus both devices with a declared AMD
+column, pass all twelve cases. The latter is
 real Metal execution of the scoped implementation plus address emulation,
 not physical CDNA execution.
 
@@ -46,10 +46,12 @@ shared integer tree through `MOJOLEARN_KNN_IDENTICAL_TREE_SELECT`; its
 physical 64-lane shuffle cannot run on a 32-lane device. The original Apple
 simulation omitted this flag and failed. The corrected simulation passes,
 while the explicit fused logical-group implementation remains active. Both
-the original failure and corrected result are archived. Actual CDNA
-compilation is recorded separately when available; physical device
-validation remains **RUN OWED**. A strict compilation flag rejects a
-simulated target.
+the original failure and corrected result are archived. Actual CDNA compilation also passes for gfx942, with
+`MOJOLEARN_REQUIRE_CDNA_TARGET=1` asserting a real CDNA compilation target
+rather than a column override. These binaries were not run on CDNA;
+physical device validation remains **RUN OWED**. NVIDIA validation used an
+H100 80GB HBM3, driver 580.126.09, and Mojo 1.0.0 (ed45d567). The native and
+corrected declared-width identity drivers pass there as well.
 
 The [Mojo shuffle_idx contract](https://mojolang.org/docs/std/gpu/primitives/warp/shuffle_idx/)
 specifies source lane IDs and an explicit participation mask. Keeping
@@ -63,3 +65,16 @@ Gate commits: `1241294b`, `b3dbd110`, and `70c234b5`.
 Evidence: `bench/results/knn/2026-09-10-ivf-fused-refusals/`.
 Root owns local builds and backend compilation. This lane rented no GPU,
 edited no tree source, and reran no opponent benchmark.
+
+The strict CDNA compile can be reproduced from the repository root with:
+
+```sh
+mojo build -I . --target-accelerator=gfx942 \
+  -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
+  -D MOJOLEARN_REQUIRE_CDNA_TARGET=1 \
+  neighbors/checks/fused_logical32_check.mojo -o /tmp/fused-cdna-check
+```
+
+This command validates target compilation only. It must not be executed on
+an H100 and reported as CDNA device evidence. The archived H100 results are
+under `h100-final/`, including compiler, GPU, source hashes, and verdict.
