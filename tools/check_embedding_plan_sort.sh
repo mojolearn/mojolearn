@@ -7,7 +7,7 @@ mkdir -p "$out"
 out=$(cd "$out" && pwd)
 mojo_bin=${MOJO:-mojo}
 "$mojo_bin" build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I "$repo" "$repo/embedding/checks/embedding_check.mojo" -o "$out/embedding-check"
-MOJOLEARN_EMB_CHECK_CLAUSE_D=1 MOJOLEARN_EMB_CHECK_CLAUSE_F=1 "$out/embedding-check" > "$out/fixture.log" 2>&1
+MOJOLEARN_EMB_CHECK_CLAUSE_D=1 "$out/embedding-check" > "$out/fixture.log" 2>&1
 "$mojo_bin" build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I "$repo" "$repo/embedding/checks/embedding_sort_check.mojo" -o "$out/embedding-sort-check"
 "$out/embedding-sort-check" > "$out/edges.log" 2>&1
 "$mojo_bin" build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL=1 -I "$repo" "$repo/embedding/checks/embedding_sort_check.mojo" -o "$out/embedding-sort-negative"

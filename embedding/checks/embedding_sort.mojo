@@ -17,12 +17,12 @@ comptime _SENTINEL = UInt64(0xFFFFFFFFFFFFFFFF)
 
 def _pack(keys: MutPointer[UInt64, MutAnyOrigin], ids: MutPointer[Int32, MutAnyOrigin], n: Int32, size: Int32, padding: Int32):
     var i = Int(block_idx.x * block_dim.x + thread_idx.x)
-    if i >= size:
+    if i >= Int(size):
         return
     var key = _SENTINEL
-    if i < n:
+    if i < Int(n):
         var v = Int(ids.unsafe_load(i))
-        if v != padding:
+        if v != Int(padding):
             var position = i
             comptime if _REVERSE_TIES:
                 position = Int(n) - 1 - i
@@ -33,7 +33,7 @@ def _pack(keys: MutPointer[UInt64, MutAnyOrigin], ids: MutPointer[Int32, MutAnyO
 def _exchange(keys: MutPointer[UInt64, MutAnyOrigin], size: Int32, span: Int32, stride: Int32):
     var i = Int(block_idx.x * block_dim.x + thread_idx.x)
     var j = i ^ Int(stride)
-    if i >= size or j <= i:
+    if i >= Int(size) or j <= i:
         return
     var a = keys.unsafe_load(i)
     var b = keys.unsafe_load(j)
@@ -56,18 +56,18 @@ def _lower(keys: MutPointer[UInt64, MutAnyOrigin], size: Int, needle: UInt64) ->
 
 def _runs(keys: MutPointer[UInt64, MutAnyOrigin], counts: MutPointer[Int32, MutAnyOrigin], begin: MutPointer[Int32, MutAnyOrigin], size: Int32, vocab: Int32):
     var v = Int(block_idx.x * block_dim.x + thread_idx.x)
-    if v > vocab:
+    if v > Int(vocab):
         return
     var lo = _lower(keys, Int(size), UInt64(v) << 32)
     begin.unsafe_store(v, Int32(lo))
-    if v < vocab:
+    if v < Int(vocab):
         var hi = _lower(keys, Int(size), UInt64(v + 1) << 32)
         counts.unsafe_store(v, Int32(hi - lo))
 
 
 def _perm(keys: MutPointer[UInt64, MutAnyOrigin], perm: MutPointer[Int32, MutAnyOrigin], size: Int32, n: Int32):
     var i = Int(block_idx.x * block_dim.x + thread_idx.x)
-    if i < size:
+    if i < Int(size):
         var key = keys.unsafe_load(i)
         if key != _SENTINEL:
             var position = Int(key & UInt64(0xFFFFFFFF))
