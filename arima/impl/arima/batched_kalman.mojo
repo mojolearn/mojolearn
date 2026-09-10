@@ -21,7 +21,7 @@ the two cuBLAS gemms at `:925-970`); confidence intervals (`level > 0`,
 `d_F_fc`, `confidence_intervals` kernel, host `erfinv`); MISSING
 OBSERVATIONS (`isnan(yt)` arms at `:191,193,219,236,246`; NaN is refused at the
 surface so those arms would be unreachable, and an unreached branch is an
-unchecked one -- PORTING_RULES 8). `arima/NOT_IMPLEMENTED.tsv` lists each.
+unchecked one -- ENGINEERING_RULES 8). `arima/NOT_IMPLEMENTED.tsv` lists each.
 
 PRECISION: DEVIATION 670 (`arima_common.mojo`): Float32 where theirs is
 `double`.
@@ -108,7 +108,7 @@ non-positive diffuse diagonal entry, and the diffuse block is initialized to
 `kappa = 1e6` by construction, so it is hard to reach by accident and no
 current fixture reaches it. That is recorded as OWED rather than claimed:
 the branch is written and unreached, and an unreached branch is an unchecked
-one (PORTING_RULES 8).
+one (ENGINEERING_RULES 8).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

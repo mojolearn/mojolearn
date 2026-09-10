@@ -50,7 +50,7 @@ to.
 Everything numeric that RAFT hands to a closed vendor library (cuSOLVER
 `syevd` through `raft::linalg::eig_dc`, cuSPARSE `SpMV`, cuBLAS `dot`,
 `axpy`, `gemv`, `gemm`) has a named stand-in here, listed in section 5.
-Those are the substitutions PORTING_RULES 0b-i admits, one per closed
+Those are the substitutions ENGINEERING_RULES 0b-i admits, one per closed
 library, and each is a numbered deviation.
 
 ## 2. THE SIGN RULE (DEVIATION 770)

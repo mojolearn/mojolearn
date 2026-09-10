@@ -181,7 +181,7 @@ def drain(
     mut hb_gt: HostBuffer[DType.float32],
 ) raises:
     """Module level because a nested closure cannot capture a
-    `DeviceContext` (`PORTING_RULES` rule 4)."""
+    `DeviceContext` (`ENGINEERING_RULES` rule 4)."""
     ctx.enqueue_copy(dst_buf=hb_bins, src_buf=subsets.bins)
     ctx.enqueue_copy(dst_buf=hb_idx, src_buf=subsets.indices)
     ctx.enqueue_copy(dst_buf=hb_parts, src_buf=subsets.partitions)
@@ -948,7 +948,7 @@ def main() raises:
     # THE SEARCHER'S TWO REFUSALS. Both are fold-gated, so both are checked
     # WITH folds and the score-function one is checked WITHOUT them too --
     # a guard that fires on every call would pass the first half of this
-    # gate and be a different bug (`PORTING_RULES` rule 8).
+    # gate and be a different bug (`ENGINEERING_RULES` rule 8).
     var fc_list = List[Int]()
     for _ in range(N_HB):
         fc_list.append(16)

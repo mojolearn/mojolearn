@@ -10,7 +10,7 @@ replicates were requested, not of how many threads ran, not of which thread
 got there first, not of what was drawn before it.
 
 NO UPSTREAM. cuML, cuVS and RAFT ship no bootstrap, no permutation test and
-no Monte Carlo integrator, so `PORTING_RULES.md`'s "COPY, DO NOT IMPROVE"
+no Monte Carlo integrator, so `ENGINEERING_RULES.md` 0b's settled-answer rule
 governs nothing in this file. What IS ported, and is ported without a change
 of any kind, is the GENERATOR underneath it: `core/philox.mojo` holds RAFT's
 `PhiloxGenerator` (cuRAND's `curandStatePhilox4_32_10_t`) and RAFT's Lemire
@@ -521,7 +521,7 @@ def monte_carlo_point_kernel(
 # ===========================================================================
 # The host mirrors. Serial, same arithmetic, same order.
 #
-# These are ORACLES, not a CPU path (PORTING_RULES 0b-ii): the map is
+# These are ORACLES, not a CPU path (ENGINEERING_RULES 0b-ii): the map is
 # integer arithmetic, so a host mirror is bit-for-bit the device's answer by
 # construction rather than by tolerance, and a gate that says so is worth
 # having. `resample_oracle.mojo` holds the float side.

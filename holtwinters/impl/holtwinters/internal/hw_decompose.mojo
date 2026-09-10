@@ -42,7 +42,7 @@ w1[t], 1/m)` (one explicit fma so no host codegen can contract it
 differently) -- then rounded to float32 and uploaded. The DATA-TOUCHING
 step, `batched_ls_solver_kernel` (one thread per series, the two dots
 ascending through `identical_mul_add` + `ftz`), is ported unchanged.
-WHY: PORTING_RULES 0b-i: where their path calls a CLOSED library there is
+WHY: ENGINEERING_RULES 0b-i: where their path calls a CLOSED library there is
 nothing to port and the MAX equivalent is the substitute; but MAX's QR
 would be another vendor-shaped float32 result for a quantity that is a
 CONSTANT of `trend_len`, and the identity claim needs the constant to be

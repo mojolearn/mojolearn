@@ -9,7 +9,7 @@ binding should reach, shaped like `cholesky/estimator.mojo` and
 `kde/estimator.mojo::kde_score_samples_host`.
 
 **THERE IS NO UPSTREAM GAUSSIAN PROCESS.** cuML, cuVS and RAFT implement
-none at the pinned commits, so `PORTING_RULES.md`'s COPY DO NOT IMPROVE does
+none at the pinned commits, so `ENGINEERING_RULES.md` 0b's settled-answer rule does
 not apply here, because there is nothing to copy.
 `gaussian_process/DERIVATION_MAP.tsv` carries the grep. scikit-learn's
 `sklearn/gaussian_process/_gpr.py` is the SEMANTICS reference and the ORACLE
@@ -676,7 +676,7 @@ def gpr_fit_host(
     # cannot pass one `DeviceBuffer` as two `mut` arguments of one call, and
     # `gp_kernel_matrix` needs both operands mutable because
     # `DeviceBuffer.unsafe_ptr()` is how every kernel in this repository
-    # receives a buffer. This is `PORTING_RULES` rule 4's shape: it changes
+    # receives a buffer. This is `ENGINEERING_RULES` rule 4's shape: it changes
     # HOW the call is spelled and not WHAT is computed -- the two buffers
     # hold identical bytes, so every cell of `K` is the same number it
     # would be -- and it costs `n_train * d` floats of device memory,
@@ -811,7 +811,7 @@ def _y_dot_alpha(
     argument.** Both `y` and `dual` are already on the host at this point --
     `cholesky_solve_host` returned one of them -- so a device round trip
     would upload two `n`-vectors and drain the queue to fold `n` products.
-    That is the shape of mistake `PORTING_RULES` rule 2's corollary
+    That is the shape of mistake `ENGINEERING_RULES` rule 2's corollary
     describes ("nine drains per level became two by DELETING our
     inventions"). `chol_logdet` is on the DEVICE for the opposite reason:
     its input is `diag(L)`, which is already there, and three lanes needed
@@ -1115,7 +1115,7 @@ def gpr_predict_host(
 # ===========================================================================
 # WHAT THIS LANE REFUSES, AS ENTRY POINTS RATHER THAN AS ABSENCES
 #
-# PORTING_RULES rule 3's other failure mode is an unported thing that is
+# ENGINEERING_RULES rule 3's other failure mode is an unported thing that is
 # INVISIBLE. A caller reaching for classification or for posterior sampling
 # should meet a named refusal that says where the work went, not a missing
 # symbol and a guess.

@@ -332,7 +332,7 @@ def main() raises:
            "shortcut leaf 0 " + String(got3[0]))
 
     # 5: THE BLOCKED-HESSIAN ARM, which the diagonal cases never reach.
-    #    PORTING_RULES 8: a non-default path is an unchecked path, and
+    #    ENGINEERING_RULES 8: a non-default path is an unchecked path, and
     #    every switch is exercised on BOTH sides by a named check per side.
     #
     #    The gate is analytic: the Newton direction for a block-quadratic

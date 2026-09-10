@@ -8,7 +8,7 @@ ports cuML's `excess_sample_with_replacement_kernel`
 dispatch at `builder.cuh:398-471`. This checks all three, and it is built
 around one rule and one fact.
 
-THE RULE is `PORTING_RULES.md` 8: a parameter that selects a kernel is a
+THE RULE is `ENGINEERING_RULES.md` 8: a parameter that selects a kernel is a
 parameter the checks enumerate, and a check that cannot NAME the kernel it ran
 can pass about a different one. There are THREE arms, not two -- the excess
 kernel is instantiated at `MAX_SAMPLES_PER_THREAD = 1` and at `= 72`, and the
@@ -25,7 +25,7 @@ minimum (`builder_kernels.cuh:231-232`, and CUB's own
 `block_adjacent_difference.cuh:393-419` confirms `output[0] =
 difference_op(input[0], tile_predecessor_item)`), so a sampled column 0 is
 flagged a duplicate and dropped. The port copies that, because
-`PORTING_RULES.md` 0b is COPY, DO NOT IMPROVE, and the check ASSERTS it, so
+`ENGINEERING_RULES.md` 0b says not to freelance on a settled sampling rule, and the check ASSERTS it, so
 that a later "fix" turns red instead of silently forking from cuML.
 
 The uniformity section is a smoke test and says so where it runs. It is not a
@@ -104,7 +104,7 @@ def assert_one_sample(
 
     Distinctness is checked with an `n`-wide seen-array rather than by
     comparing a count of uniques, because a count is an aggregate and
-    `PORTING_RULES.md` 7 is explicit that an aggregate verifies the total and
+    `ENGINEERING_RULES.md` 7 is explicit that an aggregate verifies the total and
     nothing about placement.
     """
     var seen = List[Int](length=n, fill=0)

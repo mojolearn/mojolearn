@@ -148,7 +148,7 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
         There is no counterpart of this in their struct -- theirs is a POD
         and the validation lives in `catboost_options.cpp`. It is here
         because a searcher option that is accepted and dropped is exactly
-        the failure `PORTING_RULES.md` rule 3 exists to prevent, and the
+        the failure `ENGINEERING_RULES.md` rule 3 exists to prevent, and the
         depthwise lane is the first caller that can reach a policy this
         struct does not implement.
         """

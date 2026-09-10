@@ -17,7 +17,7 @@ and does ONE thing: it casts the enums and calls
 `cuvs::distance::kde(...)` (`kde.cu:45-55`); the Cython
 `kernel_density.pyx` (26.08) validates and forwards. The algorithm itself
 lives in cuVS 26.08, and the cuVS checkout this tree is pinned to
-(`PORTING_RULES.md` 0a: `upstream/cuvs` at `94c2819`, 25.08) predates it
+(`ENGINEERING_RULES.md` 0a: `upstream/cuvs` at `94c2819`, 25.08) predates it
 and has no `kde`. The 25.08 cuML Python file above IS the algorithm the
 26.08 fused kernel was written to reproduce -- the same six log-kernels
 with the same `FLOAT_MIN` sentinel, the same normalization, the same

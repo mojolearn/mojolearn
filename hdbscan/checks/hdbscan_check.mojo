@@ -50,7 +50,7 @@ CHECKS
                                         two launch shapes record-identical
   check_hdbscan_signed_zero_inputs      a `-0.0` COORDINATE moves no bit
   check_hdbscan_selection_leaf          the OTHER side of the selection
-                                        switch (PORTING_RULES rule 8)
+                                        switch (ENGINEERING_RULES rule 8)
   check_hdbscan_float64_reference       the MST total against a Float64
                                         direct-form mutual reachability MST
   check_hdbscan_sabotages               the table below
@@ -1479,7 +1479,7 @@ def check_hdbscan_signed_zero_inputs() raises:
 
 
 def check_hdbscan_selection_leaf() raises:
-    """PORTING_RULES rule 8: a switch is exercised on BOTH sides by a
+    """ENGINEERING_RULES rule 8: a switch is exercised on BOTH sides by a
     named check per side, with the switch set explicitly inside it.
 
     Excess of Mass is the default and every other gate runs it. This one

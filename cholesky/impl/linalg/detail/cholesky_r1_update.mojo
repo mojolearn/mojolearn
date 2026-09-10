@@ -21,7 +21,7 @@ which is LARS -- least-angle regression -- growing the Gram matrix of its
 active set one column per step. **NOT the SVM.** `grep -rn cholesky
 cuml/cpp/src/svm/` at this pin returns nothing; cuML's SVM solver is SMO and
 touches no factorization. The brief that opened this lane said SVM, the
-checkout says LARS, and PORTING_RULES rule 1 says the file wins.
+checkout says LARS, and ENGINEERING_RULES rule 1 says the file wins.
 
 `raft::linalg::cholesky_r1_update.cuh:20-21` also states, in the public
 header, that the new mdspan API will NOT be provided for this function -- it
@@ -68,7 +68,7 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 # THE HOST ROUND TRIP IS COPIED RATHER THAN OPTIMIZED AWAY. Theirs reads two
 # scalars to the host, computes `sqrt` THERE, and writes one back. That is
 # two drains and a launch per rank, it is the shape of their algorithm, and
-# PORTING_RULES rule 2 says the host/device split is part of the algorithm
+# ENGINEERING_RULES rule 2 says the host/device split is part of the algorithm
 # and not an implementation detail to re-decide. It also makes the pivot
 # decision a HOST compare on a value already flushed and pinned on the
 # device, which is exactly the shape `potrf_lower` uses for `info`.

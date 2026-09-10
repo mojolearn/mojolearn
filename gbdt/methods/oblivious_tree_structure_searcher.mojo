@@ -302,7 +302,7 @@ def fit_feature_parallel_oblivious_tree_structure(
     a mismatch of inputs.
 
     THERE IS NO SABOTAGE HOOK IN THIS FUNCTION and that is deliberate:
-    `PORTING_RULES.md` 8 says a switch that outlives its measurement is a
+    `ENGINEERING_RULES.md` 8 says a switch that outlives its measurement is a
     defect, and a permanently wired defect selector is one. The reach
     evidence for this file is five defects planted by EDITING it and re-run,
     tabulated in `checks/feature_parallel_identity_check.mojo`'s

@@ -89,7 +89,7 @@ def pw_fold_winner_kernel(
     best)`, ties keep the EARLIER policy). The direct fold happens to be
     equivalent here -- a comparator tie implies identical records because
     `Gain` is monotone in `Score` per (feature, bin) and a feature lives in
-    exactly one policy -- but PORTING_RULES 0c says port the branch, not
+    exactly one policy -- but ENGINEERING_RULES 0c says port the branch, not
     the reachability argument.
 
     ONE THREAD. The work is at most 32 records; a parallel reduction would

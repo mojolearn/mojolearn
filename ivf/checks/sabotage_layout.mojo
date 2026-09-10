@@ -11,7 +11,7 @@ shipped bits cannot depend on this file.
 
 WHY THE COPIES EXIST RATHER THAN A FLAG ON THE REAL ONES
 ---------------------------------------------------------
-`PORTING_RULES.md` rule 8 is the reason a sabotage exists (a path that runs
+`ENGINEERING_RULES.md` rule 8 is the reason a sabotage exists (a path that runs
 is not a path that is gated) and `[[reached-but-inert]]` is the reason a
 sabotage has to be a SEPARATE spelling: a flag threaded into the production
 function is a branch in the production function, and the day someone passes

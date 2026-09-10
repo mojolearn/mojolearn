@@ -12,7 +12,7 @@ WHY IT IS HAND-WRITTEN RATHER THAN CALLED
 ------------------------------------------
 Two facts, in this order:
 
-  1. CUB is OPEN. `PORTING_RULES.md:30` ("0b. The charter") and the
+  1. CUB is OPEN. `ENGINEERING_RULES.md` 0b-i (CUB is readable, so a question about it has an answer) and the
      lane's charter both say the vendor-substitution rule applies only
      where the incumbent calls a CLOSED library -- cuBLAS, cuSOLVER --
      because there is nothing to read. CUB is readable, so the correct

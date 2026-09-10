@@ -96,7 +96,7 @@ pooling allocator, stated four separate ways in the published docs:
 The last one is their `MemoryDefragmentation` under another name, and the
 first two are the slab and the free-and-reuse. Porting a stack pool on top of
 it would be a second allocator over a first, and it would still ask
-`enqueue_create_buffer` for its slab. PORTING_RULES `0b-i` keeps exactly one
+`enqueue_create_buffer` for its slab. ENGINEERING_RULES `0b-i` keeps exactly one
 substitution alive -- a CLOSED library on their dispatch path -- and the MAX
 memory manager is one: it is the runtime, there is no source here to port.
 
@@ -109,7 +109,7 @@ pool and a cache exist.
 
 A SEPARATE WALL, and it is the one that would decide this even if MAX pooled
 nothing. A stack pool's product is a derived pointer into one slab, and rule 4
-of PORTING_RULES already records that `enqueue_function` refuses derived
+of ENGINEERING_RULES already records that `enqueue_function` refuses derived
 pointers as aliasing. Handing kernels slab slices is the shape Mojo rejects.
 ======================================================================
 

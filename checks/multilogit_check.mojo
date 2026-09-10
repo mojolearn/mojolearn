@@ -433,7 +433,7 @@ def check_two_class_collapse(ctx: DeviceContext) raises -> Int:
 def check_search_mode(ctx: DeviceContext, num_classes: Int) raises -> Int:
     """The `search=True` branch against the `search=False` one, BIT for BIT.
 
-    PORTING_RULES 8: a non-default path is an unchecked path, and the two
+    ENGINEERING_RULES 8: a non-default path is an unchecked path, and the two
     modes of this kernel are exactly such a switch. The relation between
     them is exact and needs no reference:
 

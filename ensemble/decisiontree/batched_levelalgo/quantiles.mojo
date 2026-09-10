@@ -33,7 +33,7 @@ at are a property of the DATASET, not of the tree. That is why
 distinct sampled values than `max_n_bins` gets fewer candidates, and
 `builder.cuh` reads that count per column.
 
-THE DISPATCH ANSWER, written down first as the charter requires
+THE DISPATCH ANSWER, written down first as rule 0b-i requires
 ----------------------------------------------------------------
 Their call site above passes `oversampling_factor = 4` as a HARD-CODED
 literal -- the default in the signature (`quantiles.cuh:152`) is never
@@ -54,7 +54,7 @@ compared against `global_rows` inside the sampler kernel
     from `PCGenerator`, WITH REPLACEMENT (nothing dedupes them).
 
 Both arms ship here and the check reaches both, because
-`PORTING_RULES.md:231` ("A NON-DEFAULT PATH IS AN UNCHECKED PATH") cuts
+`ENGINEERING_RULES.md` rule 8 ("A non-default path is an unchecked path") cuts
 the other way too: on a small dataset the RNG arm is the unreached one.
 
 The second dispatch question -- distributed or not -- is answered by
@@ -178,7 +178,7 @@ DEVIATION 111. `cub::DeviceSegmentedRadixSort::SortKeys`
 (`quantiles.cuh:244`, `:258`) is hand-written as
 `core/segmented_sort.mojo`.
 
-WHAT IT COSTS: CUB is OPEN, so under the charter the correct move is to
+WHAT IT COSTS: CUB is readable, so under rule 0b-i the correct move is to
 port the kernel rather than substitute a vendor primitive -- and there
 is no primitive to substitute in any case, since MAX ships no device
 sort (`archive/reference/VENDOR_LIBS.md`, checked 2026-08-20). The implementation is not a

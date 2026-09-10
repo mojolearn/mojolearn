@@ -1326,7 +1326,7 @@ def train_regression(
 # ==========================================================================
 # DEVIATION 466's HOST ARM. The oracles the device best-first driver is
 # checked against, in the same relation `train_classification` bears to
-# `train_classification_device` (`PORTING_RULES.md` 0b-ii: an oracle, not a
+# `train_classification_device` (`ENGINEERING_RULES.md` 0b-ii: an oracle, not a
 # CPU fallback).
 # ==========================================================================
 
@@ -1609,7 +1609,7 @@ def gain_per_split(
     DEVICE, which is where cuML computes it.
 
     THE FIRST FIX WAS ON THE HOST AND IT WAS A RULE-2 VIOLATION.
-    `PORTING_RULES.md` 2: "If they do something on the GPU in the control
+    `ENGINEERING_RULES.md` 2: "If they do something on the GPU in the control
     plane, we do it on the GPU. If they keep a decision on the device so
     the host never learns it, we keep it on the device." cuML computes
     `GainPerSplit` inside `computeSplitKernel` and the host never sees a

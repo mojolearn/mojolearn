@@ -18,7 +18,7 @@ verified: no `gmm` directory, no `mixture` module, and the only occurrence of
 two scikit-learn tests FLAKY UNDER `cuml.accel` -- which is a record that
 cuML does NOT accelerate the estimator and falls through to scikit-learn.
 cuVS (`6ba2ce2`) and RAFT (`ebf9268`) have none either. **So
-`PORTING_RULES.md`'s COPY DO NOT IMPROVE does not apply to this lane, because
+`ENGINEERING_RULES.md` 0b has no settled GPU answer to point at for this lane, because
 there is nothing to copy.**
 
 What governs instead: `sklearn/mixture/_gaussian_mixture.py` and `_base.py`
@@ -671,7 +671,7 @@ def gaussian_mixture_fit(
     one float32 comparison in one place, on a value the card has already
     hashed. The alternative -- a device-side test writing a flag -- would put
     the decision behind a kernel launch where nothing can hash it, and
-    `PORTING_RULES.md` rule 0c records that this repository has already
+    `ENGINEERING_RULES.md` rule 0c records that this repository has already
     invented one on-device convergence test, cited a line range that was
     actually a function signature, and been wrong: cuVS's own k-means loop
     syncs at `detail/kmeans.cuh:491` and tests on the HOST at `:492`. The

@@ -36,7 +36,7 @@ CHECKS
                                       serial host replay, per replicate
   check_bootstrap_known_answer        FIX_ANALYTIC: every replicate's answer
                                       derived by hand, three statistics
-  check_statistic_arms                PORTING_RULES rule 8: all six statistic
+  check_statistic_arms                ENGINEERING_RULES rule 8: all six statistic
                                       arms run with the switch set explicitly
   check_percentile_interval           the hand-worked identity-array example,
                                       integer and non-integer h, and the
@@ -1357,7 +1357,7 @@ def check_bootstrap_known_answer() raises:
 
 
 # ===========================================================================
-# CHECK 7: every statistic arm (PORTING_RULES rule 8)
+# CHECK 7: every statistic arm (ENGINEERING_RULES rule 8)
 # ===========================================================================
 
 

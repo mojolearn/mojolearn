@@ -5,7 +5,7 @@
     pixi run check-ctr-train
 
 `checks/ctr_check.mojo` gates the CTR ARITHMETIC. This gates the WIRING,
-which is a different failure: `PORTING_RULES.md` rule 3 -- a ported file
+which is a different failure: `ENGINEERING_RULES.md` rule 3 -- a ported file
 that no caller reaches is not done -- and this repository has shipped
 fully-written, fully-commented machinery nothing called more than once.
 
@@ -25,7 +25,7 @@ which is exactly the FeatureFreq CTR value. Two arms on the SAME data:
   under the implicit fallback (`TCatFeatureParams.default()`, four columns:
   three `Borders` priors and one `FeatureFreq`) and once under
   `feature_freq_only()` (one column), because a switch with one side
-  unexercised is an unchecked branch (`PORTING_RULES.md` 8).
+  unexercised is an unchecked branch (`ENGINEERING_RULES.md` 8).
 * **RAW arm** -- the same integer codes handed in as an ordinary numeric
   feature. The category CODES are assigned so that frequency is NOT
   monotone in the code (a hashed permutation), so an ordered threshold on

@@ -64,7 +64,7 @@ GATES -- each is a distinct MECHANISM, not a distinct assertion:
       permutation code in this repository.
   F7  THE MULTI-DEVICE ARM (`:194-198`), skipped at one device and therefore
       unchecked by everything else. Both sides of the `devCount > 1` switch,
-      per `PORTING_RULES` rule 8.
+      per `ENGINEERING_RULES` rule 8.
   F8  The live refusals: too few groups (on both sides of the device switch),
       growth rate <= 1.0, an empty group, an all-size-1 grouping.
   F9  `FoldCount` / `FoldBits`, and the POWER-OF-TWO STRIPE they feed. Read

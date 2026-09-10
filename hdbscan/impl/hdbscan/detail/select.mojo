@@ -14,7 +14,7 @@ beside its twin, which is the one rename this file makes and
 
 EXCESS OF MASS IS THE DEFAULT AND IS THE ONE THIS LANE SHIPS
 (`hdbscan.hpp:197`, `cluster_selection_method = EOM`). LEAF is ported too
-because it is nine lines of integer work and PORTING_RULES rule 8 is
+because it is nine lines of integer work and ENGINEERING_RULES rule 8 is
 explicit that a switch with an unexercised side is an unchecked path:
 `check_hdbscan_selection_leaf` runs it, and the same rule is why
 `cluster_selection_epsilon` is REFUSED rather than quietly ignored.

@@ -31,7 +31,7 @@ ONE INTEGER HAZARD OF THEIRS IS NOT PORTED: `a[i] * b[j]` (:61, :65) is an
 samples in both labelings (`a_i * b_j > 2^31`), which is a dataset of
 fifty thousand rows. Ours forms the product in Int64 and converts. Below
 the overflow the two are the same number; above it theirs is wrong.
-Named here so it is not mistaken for a re-design (PORTING_RULES 0c: fix
+Named here so it is not mistaken for a re-design (ENGINEERING_RULES 0c: fix
 their BUGS, numbered). It is part of DEVIATION 650's block.
 """
 

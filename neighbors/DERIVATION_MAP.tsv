@@ -71,7 +71,7 @@
 #                    file occupies an upstream file's slot and borrows its
 #                    control plane, and its BODY is a different algorithm,
 #                    stated in a numbered DEVIATION block in the file itself
-#                    because PORTING_RULES.md rule 4 requires a replacement to
+#                    because ENGINEERING_RULES.md rule 4 requires a replacement to
 #                    live in the file it replaces so a reader can diff. These
 #                    rows read `partial` or `transliterated` until 2026-08-31,
 #                    which described the SLOT and not the CONTENT: a file whose

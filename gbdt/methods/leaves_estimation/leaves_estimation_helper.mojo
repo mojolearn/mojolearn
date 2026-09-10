@@ -9,7 +9,7 @@ at CatBoost `54a8143a` -- `ComputeWeightedQuantile` (`:64-146`) and
 Only those two functions are ported. The rest of their header is pairwise
 and groupwise machinery (`MakeSupportPairsMatrix`, `ReorderPairs`,
 `FilterZeroLeafBins`) belonging to the ranking oracles, which are NOT
-PORTED; porting a function nothing reaches is the defect PORTING_RULES 3
+PORTED; porting a function nothing reaches is the defect ENGINEERING_RULES 3
 names.
 
 ## The step of theirs this file DOES NOT do, and why that is right

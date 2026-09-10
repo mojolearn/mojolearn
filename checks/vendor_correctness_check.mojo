@@ -2575,7 +2575,7 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
     # below from the same predicate -- and the vendor arm
     # (transpose_kernel x2 + gemm_nt) is then run EXPLICITLY at the same
     # shape, because a dispatched wrapper run covers one arm only
-    # (PORTING_RULES.md 8). Operands are the SAME matrix, so the diagonal is
+    # (ENGINEERING_RULES.md 8). Operands are the SAME matrix, so the diagonal is
     # a same-sign sum and the tolerance must cover plain accumulation-order
     # spread: measured worst 4.09e-6 relative at 32x32x10007 on two
     # independent routes, so the budget is 1e-5, not the 2e-6 the

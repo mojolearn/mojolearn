@@ -94,7 +94,7 @@ WHAT IS NOT HERE, AND WHERE IT IS
 # (`kde/impl/distance/distance.mojo`, RAFT's `l1.cuh`) and write the
 # four-token epilogue here.
 #
-# `PORTING_RULES 0b-i` is satisfied by that shape rather than violated by it:
+# `ENGINEERING_RULES 0b-i` is satisfied by that shape rather than violated by it:
 # cuML's dispatch for `metric="laplacian"` reaches a device-wide distance
 # computation followed by a device-wide elementwise `exp`, unfused, in two
 # passes, and so does this. Their fused arm does not exist.

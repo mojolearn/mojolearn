@@ -40,9 +40,9 @@ The four groupwise-CTR kernels at the end of their file --
 ranking loss is ported. `THistoryBasedCtrCalcer::NeedFixForGroupwiseCtr()`
 is `false` for every configuration this port can reach, so porting them
 would add four kernels no caller reaches -- the exact defect
-`PORTING_RULES.md` rule 3 names.
+`ENGINEERING_RULES.md` rule 3 names.
 
-## The two spelling workarounds (`PORTING_RULES.md` rule 4)
+## The two spelling workarounds (`ENGINEERING_RULES.md` rule 4)
 
 1. **`writeIndices` and `map` are nullable in their signatures**
    (`ctr_calcers.cu:57`, `:280`) and select between `dst[Index(idx[i])]`

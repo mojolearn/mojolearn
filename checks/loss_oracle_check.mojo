@@ -103,7 +103,7 @@ THE MAPE DEFECT, found by this check and still open.
   libm oracle passes. `checks/exact_estimation_check.mojo` passes alpha
   explicitly and calls `compute_weighted_quantile` with
   `use_mape_weights = False` on every one of its arms, so the MAPE branch
-  had no caller in any check -- `PORTING_RULES.md` 8, a non-default path is
+  had no caller in any check -- `ENGINEERING_RULES.md` 8, a non-default path is
   an unchecked path.
 
   THE FIX is to carry the estimator's alpha separately from the kernel's:

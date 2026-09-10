@@ -223,7 +223,7 @@ def rbc_take_one_pass(
     A named host function rather than two inline lines so the checks can
     assert which arm a fixture routes to with the SAME arithmetic the runner
     uses (`dbscan_check.mojo::check_dbscan_rbc_two_loop_arms`), per
-    PORTING_RULES 8: a parameter that selects a kernel is a parameter the
+    ENGINEERING_RULES 8: a parameter that selects a kernel is a parameter the
     checks enumerate.
     """
     if max_k <= 0:

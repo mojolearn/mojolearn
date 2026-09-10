@@ -435,7 +435,7 @@ def kernel_count_new_mst_edges(
 
 # ======================================================================
 # The Thrust calls `MST_solver` makes, spelled as kernels. Thrust is OPEN
-# (PORTING_RULES 0b-i) and these are what its calls do.
+# (ENGINEERING_RULES 0b-i) and these are what its calls do.
 # ======================================================================
 
 comptime MST_FILL_TPB = 256

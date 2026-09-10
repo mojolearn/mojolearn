@@ -205,7 +205,7 @@ def _download_i32(
 # ladders, written out rather than generated, because a reader auditing which
 # arm ran should be able to see it.
 #
-# THIS IS PORTING_RULES RULE 8'S SITE. Every arm below is a switch that
+# THIS IS ENGINEERING_RULES RULE 8'S SITE. Every arm below is a switch that
 # selects a kernel, so every arm needs a named check that runs it with the
 # switch set explicitly. `resample_check.mojo` enumerates them.
 # ===========================================================================

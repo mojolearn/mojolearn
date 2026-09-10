@@ -45,17 +45,18 @@ with no `MOJOLEARN_GPU_ARCHS` set targets YOUR GPU, which is what you want.
 5. State which hardware and numerical modes you actually ran. Unrun columns
    should be marked `cross-vendor-pending`, not inferred.
 
-## Ported and original code
+## Where an algorithm comes from
 
-MojoLearn mirrors algorithms from CatBoost, cuML, cuVS, RAFT and FAISS under
-their licenses. A contribution derived from upstream code must:
+Every line of Mojo here is written for this repository, and a contribution is
+expected to be written the same way. Where a contribution implements a
+published algorithm closely enough that a reader would want the reference,
+name it in the file so the next person can check the behavior against
+something. Where a lane keeps a `NOT_IMPLEMENTED.tsv`, record what the
+contribution deliberately leaves out, because a named gap is reviewable and a
+silent one is not.
 
-- name the exact upstream file and commit;
-- update the section's `DERIVATION_MAP.tsv` and, when applicable, `NOT_IMPLEMENTED.tsv`;
-- preserve required copyright and license notices;
-- distinguish transliteration, replacement and original `original` work.
-
-Do not paste code from a source whose license is incompatible or unknown.
+Do not paste code from any other project into this one. That is true
+regardless of the license.
 
 ## Numerical changes
 
@@ -78,7 +79,7 @@ cannot separate them is not evidence.
 
 The pull-request template asks for:
 
-- upstream provenance or a reason the code is original;
+- the reference for any published algorithm the change implements;
 - affected public APIs;
 - FAST and IDENTICAL effects;
 - tests and adversarial fixtures;

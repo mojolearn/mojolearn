@@ -639,7 +639,7 @@ def train(
     `build_ctr_tables` had no histogram arm -- and that reason is gone:
     `predict_floats` now maps a raw category through a `Borders` table the
     same way it does a `FeatureFreq` one. A switch that outlives its
-    reason is a defect (`PORTING_RULES.md` 8), so both sides stay
+    reason is a defect (`ENGINEERING_RULES.md` 8), so both sides stay
     exercised: `checks/ctr_apply_check.mojo` and
     `checks/ctr_train_check.mojo` each run the default AND
     `feature_freq_only()` explicitly.

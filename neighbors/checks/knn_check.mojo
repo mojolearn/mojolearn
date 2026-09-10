@@ -1798,7 +1798,7 @@ def check_fused_k_ceiling() raises:
 # `launchConfigGenerator` (`pairwise_distance_base.cuh:295-322`, M4 inputs)
 # now chooses the grid, and `grid_x` selects between the single-block column
 # sweep and the mutex merge -- a parameter that selects a kernel path, so
-# the checks below enumerate BOTH sides of it explicitly (PORTING_RULES 8).
+# the checks below enumerate BOTH sides of it explicitly (ENGINEERING_RULES 8).
 # ---------------------------------------------------------------------------
 
 

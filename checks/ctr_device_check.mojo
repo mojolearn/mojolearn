@@ -17,7 +17,7 @@ PERMUTATION is reached, and that it CHANGES THE ANSWER for the better.
    `GatherWithMask` at `ui32` and `ui8`, and `ScatterWithMask`. They are all
    reached through the bin builder below, but the builder can drive only one
    shape of each, and a parameter that selects behaviour is a parameter the
-   checks enumerate (`PORTING_RULES.md` 8). A third of the map words carry
+   checks enumerate (`ENGINEERING_RULES.md` 8). A third of the map words carry
    the top bit, because a fixture with clean indices cannot tell
    `map[i] & mask` from `map[i]` and the mask is the whole reason those two
    kernels exist.
@@ -135,7 +135,7 @@ def _check_primitives(ctx: DeviceContext, mut failures: List[String]) raises:
     array whose only end flag is the last one, and the gather's map is
     whatever the sort produced. So each is also driven here on a hostile
     fixture, both arms of the scan's `inclusive` switch included
-    (`PORTING_RULES.md` 8: a parameter that selects behaviour is a
+    (`ENGINEERING_RULES.md` 8: a parameter that selects behaviour is a
     parameter the checks enumerate).
 
     `n` is prime and is a multiple of neither block (512 for the scan, 256

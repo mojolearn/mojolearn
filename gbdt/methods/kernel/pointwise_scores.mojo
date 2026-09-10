@@ -56,7 +56,7 @@ so that it loses every comparison, and the argmin keeps the SMALLEST gain
 negation into every calcer and flips every comparison, because its host side
 was written against "larger is better". THIS FILE DOES NOT. It has no host
 side yet (see UNWIRED below), so there is nothing to accommodate, and
-PORTING_RULES 0b says copy. **Whoever wires this up: the two files in this
+ENGINEERING_RULES 0b says copy. **Whoever wires this up: the two files in this
 repository disagree about the sign of a score, on purpose, and the
 disagreement is upstream's own convention preserved here and inverted
 there.**
@@ -75,7 +75,7 @@ Everything in both files:
 
   `TSolarScoreCalcer`, `TL2ScoreCalcer` (both `MetaExponent` arms),
   `TLOOL2ScoreCalcer`, `TSatL2ScoreCalcer`, `TCosineScoreCalcer`
-      -> `ScoreCalcer[score_function]`, one tagged union (PORTING_RULES 4).
+      -> `ScoreCalcer[score_function]`, one tagged union (ENGINEERING_RULES 4).
   `ComputeSum<BLOCK_SIZE>`          -> `_compute_sum[block_size]`
   `FindOptimalSplitSolarImpl`       -> `find_optimal_split_solar_kernel`
   `TDirectHistLoader`,
@@ -186,7 +186,7 @@ one place Float64 is legitimate is a HOST oracle, and the gate uses one.
 DEVIATION 95: THEIR STRUCT POINTERS BECOME FLAT TYPED ARRAYS.
 ==========================================================================
 A Mojo kernel argument cannot be a pointer to a non-trivial struct, and
-PORTING_RULES 4 already records that `enqueue_function` refuses derived
+ENGINEERING_RULES 4 already records that `enqueue_function` refuses derived
 pointers as aliasing. Their four struct arguments are therefore passed as
 the flat arrays their C++ memory image already is:
 
@@ -1730,7 +1730,7 @@ def find_optimal_split(
             Dynamic
         }
 
-    Three arms, every one of them exercised by the gate (PORTING_RULES 8:
+    Three arms, every one of them exercised by the gate (ENGINEERING_RULES 8:
     a non-default path is an unchecked path, and reach is per-branch).
     """
     if fold_count == 1:

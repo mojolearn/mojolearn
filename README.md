@@ -324,9 +324,9 @@ can change results. Supervised targets, alternate metrics and alternate
 initialization remain unsupported.
 
 The APIs intentionally resemble scikit-learn, but mojolearn is not a drop-in
-replacement. Defaults follow the upstream GPU implementation mirrored by an
-algorithm where applicable. Unsupported parameters raise explicitly rather
-than being silently ignored.
+replacement. Where an algorithm has a settled convention for a default, that
+convention is followed. Unsupported parameters raise explicitly rather than
+being silently ignored.
 
 ## The exact scope of the claim
 
@@ -398,20 +398,16 @@ supported GPU; maintainers close cross-vendor certification columns.
 
 Current priorities are in [ROADMAP.md](ROADMAP.md). See also
 [verification](docs/VERIFY.md), [release](docs/PYPI_RELEASE.md),
-[porting rules](PORTING_RULES.md), [contributing](CONTRIBUTING.md),
-[governance](GOVERNANCE.md), and [attribution](NOTICE).
+[engineering rules](ENGINEERING_RULES.md), [contributing](CONTRIBUTING.md),
+[governance](GOVERNANCE.md), and [notices](NOTICE).
 
-## Provenance and citation
+## Citation
 
-The shipped implementation is Mojo, all of it written for this repository. Its
-kernels mirror the GPU designs of CatBoost, cuML, cuVS, RAFT and FAISS,
-deliberately and file for file, under the repository's copy-do-not-improve
-rule ([PORTING_RULES.md](PORTING_RULES.md)). By line count, between 67% and
-70% of the Mojo here has no upstream file it corresponds to, and the remainder
-is that mirrored substrate; the bounds and how they were computed are in
-`NOTICE`. Exact provenance and licenses are in `NOTICE`, the
-`DERIVATION_MAP.tsv` tables, source headers, and the archived derivation
-ledger.
+Every line of Mojo in this repository was written for it. The library
+implements published machine-learning algorithms, and where a specific
+published formulation is followed closely enough that a reader would want the
+reference, the source file names it. The numerical contract that is the
+project's distinguishing result has no counterpart anywhere.
 
 To cite mojolearn, use [CITATION.cff](CITATION.cff). The concept DOI is
 [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632).

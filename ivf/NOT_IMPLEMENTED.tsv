@@ -1,6 +1,6 @@
 # their_thing	status	why / where it would go
 # cuVS pinned at 6ba2ce2 (~/CascadeProjects/upstream/cuvs-v26.08.00).
-cpp/include/cuvs/neighbors/hnsw.hpp and cpp/src/neighbors/hnsw.cpp	REFUSED PERMANENTLY	It dispatches to the hnswlib CPU graph. PORTING_RULES.md 0b-ii: there is no CPU path in this repository and none is wanted. ivf_flat_index.mojo::ivf_refuse_algorithm("hnsw") raises with that sentence. THIS IS A REFUSAL, NOT AN UNPORTED ITEM, and it does not become one later
+cpp/include/cuvs/neighbors/hnsw.hpp and cpp/src/neighbors/hnsw.cpp	REFUSED PERMANENTLY	It dispatches to the hnswlib CPU graph. ENGINEERING_RULES.md 0b-ii: there is no CPU path in this repository and none is wanted. ivf_flat_index.mojo::ivf_refuse_algorithm("hnsw") raises with that sentence. THIS IS A REFUSAL, NOT AN UNPORTED ITEM, and it does not become one later
 cpp/src/neighbors/ivf_pq/ (the whole directory) + ivf_pq.hpp	NOT PORTED, out of scope	Product quantization: a codebook per subspace, a per-query lookup table, and a scan that reads codes rather than vectors. A different algorithm from IVF-FLAT, not a variation of it. This lane's brief is IVF-FLAT ONLY
 cpp/src/neighbors/cagra.cuh + cagra*.cu	NOT PORTED, out of scope	A graph index (build, optimize, merge, search). Nothing in it is shared with ivf_flat except the select_k this tree already has
 cpp/src/neighbors/ivf_sq/ + ivf_sq.hpp	NOT PORTED, out of scope	Scalar quantization over an IVF index

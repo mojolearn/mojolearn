@@ -256,7 +256,7 @@ def _clf_tag(stage: StringSlice, i: Int, n_outputs: Int) -> String:
 #   applies: the definition is four lines of arithmetic and this library
 #   already goes beyond cuML in several directions.
 # WHERE IT LIVES: the KERNELS are in their own file because they have no
-#   upstream to sit beside; the PARAMETER is here because PORTING_RULES
+#   upstream to sit beside; the PARAMETER is here because ENGINEERING_RULES
 #   rule 4 wants a departure in the file it departs from, so a reader
 #   diffing this file against `knn.cuh` sees it.
 # ===========================================================================

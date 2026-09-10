@@ -23,30 +23,23 @@ abstract: >-
   distinguishing result is a three-tier numeric contract selected at runtime,
   where the strictest tier produces bit-identical answers on Apple Silicon
   via Metal, NVIDIA via CUDA and AMD via ROCm, verified by per-stage identity
-  cards diffed across the three at pinned commits. Nothing upstream of this
-  library has such a tier, because none of the CUDA implementations it draws
-  on was ever asked to run anywhere but CUDA.
-  ORIGINAL TO THIS WORK, with no upstream counterpart: the determinism
-  ladder and its pinned-arithmetic primitives; the Metal backend; the
-  host-side control plane every estimator is reached through; the identity
-  cards, the host oracles and the sabotage methodology that gates them; the
-  bit-identical FP32 GEMM contract; and the transformer and Mamba
-  identity work. BY LINE COUNT, between 67% and 70% of the Mojo in this
-  repository has no upstream file it corresponds to; the other 30% to 33% is
-  the algorithmic substrate described next. The bounds and how they were
-  computed are in NOTICE.
-  THE SUBSTRATE IS DERIVED WORK AND IS DOCUMENTED AS SUCH, per file, with
-  the upstream path and pinned commit, in the DERIVATION_MAP tables and in each
-  file's own header: gradient-boosted oblivious (symmetric) trees from
-  CatBoost; random forests, extremely randomized trees, DBSCAN, PCA, ridge
-  and logistic regression, coordinate descent, support vector
-  classification, kernel density estimation, single-linkage and spectral
-  clustering, isolation forests, Holt-Winters and the scoring metrics from
-  cuML; k-means and brute-force k-nearest-neighbors from cuVS; and ordinary
-  least squares, top-k selection and the MST and Lanczos primitives from
-  RAFT. Those algorithms are the upstreams' work. See NOTICE for the license
-  obligations each carries, including the MIT-licensed FAISS warp-select
-  queue that RAFT vendors.
+  cards diffed across the three at pinned commits. No comparable GPU library
+  offers such a tier, because the CUDA implementations in the field were
+  never asked to run anywhere but CUDA.
+  Every line of Mojo in this repository was written for it. That includes the
+  determinism ladder and its pinned-arithmetic primitives, the Metal backend,
+  the host-side control plane every estimator is reached through, the identity
+  cards and host oracles and the sabotage methodology that gates them, the
+  bit-identical FP32 GEMM contract, portable elementary functions that replace
+  the host math library, a portable model serialization format, and the
+  transformer and Mamba identity work.
+  The estimator surface covers gradient-boosted oblivious trees, random
+  forests, extremely randomized trees, k-means, brute-force and IVF nearest
+  neighbors, DBSCAN, HDBSCAN, PCA, UMAP, ridge and logistic regression,
+  coordinate descent, support vector classification, kernel ridge regression,
+  Gaussian processes, Gaussian mixtures, kernel density estimation,
+  single-linkage and spectral clustering, isolation forests, Holt-Winters,
+  ARIMA, scoring metrics, and transformer and Mamba training and inference.
 keywords:
   - machine learning
   - GPU

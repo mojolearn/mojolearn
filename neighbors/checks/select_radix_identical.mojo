@@ -19,7 +19,7 @@ returned element lands is decided by it too. Two runs on one device can
 return different neighbours; two vendors certainly can. That is a real
 property of the upstream, it is why IDENTITY_PATHS row 11 was a REFUSE, and
 the ported file must keep it -- fixing a thing upstream does not do is an
-improvement, and improvements live outside `impl/` (PORTING_RULES).
+improvement, and improvements live outside `impl/` (ENGINEERING_RULES).
 
 This file is that improvement, reached only under `NUMERIC_IDENTICAL`.
 

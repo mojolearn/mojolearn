@@ -97,7 +97,7 @@ Read these when you need them, not before.
 | file | what it is for |
 |---|---|
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | the full contribution rules, provenance and licensing |
-| [PORTING_RULES.md](../PORTING_RULES.md) | how upstream algorithms are mirrored, and the rule that assumes our code is the broken one |
+| [ENGINEERING_RULES.md](../ENGINEERING_RULES.md) | the measurement and reach discipline, and the rule that assumes our code is the broken one |
 | [SUPPORT_MATRIX.md](../SUPPORT_MATRIX.md) | what the three numeric tiers promise, measured rather than argued |
 | [IDENTITY_PATHS.md](../IDENTITY_PATHS.md) | which code paths carry a bit-level claim |
 | [GOVERNANCE.md](../GOVERNANCE.md) | how decisions are made and how maintainership transfers |

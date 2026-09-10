@@ -23,7 +23,7 @@ are pure), If `-1`", and their default in `set_tree_params` is `-1`. Their
 (`decisiontree.cu:29`), so the documented default cannot survive validation --
 their Python layer substitutes a concrete depth before the C++ ever sees it.
 Recorded because it is exactly the kind of "the docs describe the intent, the
-branches are the algorithm" gap `PORTING_RULES.md` rule 3 is about, and because
+branches are the algorithm" gap `ENGINEERING_RULES.md` rule 3 is about, and because
 a port that trusted the header would ship an unlimited-depth default that their
 own code rejects. **This port takes the BRANCH, not the comment**: `max_depth`
 must be `>= 0`.

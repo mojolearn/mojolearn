@@ -1036,7 +1036,7 @@ def _run_two_loop_arm(
 def check_dbscan_rbc_two_loop_arms() raises:
     """BOTH upstream arms of loop 2's RBC dispatch, one named fixture each.
 
-    PORTING_RULES 8: a switch is exercised on both sides or one side is
+    ENGINEERING_RULES 8: a switch is exercised on both sides or one side is
     unchecked, and the RBC arm's loop 2 now has a switch --
     `algo.cuh:119-122` sends a batch down the ONE-PASS `max_k` form when
     loop 1's bound fits the spare room, and down the two-pass count + fill

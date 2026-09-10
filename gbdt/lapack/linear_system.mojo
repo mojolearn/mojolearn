@@ -22,7 +22,7 @@ and the pairwise oracle is not ported. It is in `gbdt/NOT_IMPLEMENTED.tsv`.
 # DEVIATION 74: theirs is LAPACK's `dposv_` (`linear_system.cpp:46-47`),
 # reached through the clapack vendored in `contrib/libs/clapack`.
 #
-# clapack is OPEN, so under PORTING_RULES 0b-i it is a port candidate rather
+# clapack is OPEN, so under ENGINEERING_RULES 0b-i it is a port candidate rather
 # than a call to make -- the "call the platform's equivalent" exception is
 # for CLOSED libraries (cuBLAS, cuSOLVER) where there is nothing to read.
 # And the shape rules it out anyway: this runs on the HOST, once per leaf,

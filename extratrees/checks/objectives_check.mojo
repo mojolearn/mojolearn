@@ -7,7 +7,7 @@
 
 WHY IT IS BUILT THE WAY IT IS
 -----------------------------
-Rule 8 (`PORTING_RULES.md` 7, and `extratrees/README.md`): **a check whose
+Rule 8 (`ENGINEERING_RULES.md` 7, and `extratrees/README.md`): **a check whose
 expected value is the same in every cell verifies the total and nothing about
 placement.** The case that earned the rule reported 0 wrong of 512 on a
 uniform fixture and 490 wrong of 512, same kernel, on a hashed one. So:

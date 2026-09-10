@@ -51,7 +51,7 @@ This is the classic IVF identity bug and its fix, and
 
 WHY THE LAYOUT AND THE MERGE ARE ON THE HOST
 ---------------------------------------------
-**DEVIATION 1800**, and it is a real departure from `PORTING_RULES.md`
+**DEVIATION 1800**, and it is a real departure from `ENGINEERING_RULES.md`
 rule 2, which says a control-plane decision they make on the device is one
 we make on the device. Theirs is a device kernel; this is a host counting
 sort and a host k-way merge.
@@ -61,7 +61,7 @@ The reason is that the deterministic device spelling needs a SEGMENTED RANK
 scan, and neither spelling has ever been measured against the other.
 Writing an unmeasured multi-block scan to replace an unmeasured host loop
 is inventing, which is
-what `PORTING_RULES.md` 0c is about. Closure condition, stated so it is not
+what `ENGINEERING_RULES.md` 0c is about. Closure condition, stated so it is not
 mistaken for done: a segmented exclusive scan over the label histogram,
 plus a scatter that reads its rank rather than an atomic. It changes no
 bit -- the host sort already produces the ordering the device one would --

@@ -344,7 +344,7 @@ def fused_l2_knn_kernel[
 
     `sabotage_in` is CHECK infrastructure, not theirs: nonzero makes the
     LAST producer hand over identity/keyMax instead of its queue, so
-    `knn_check` can prove the merge is reached (PORTING_RULES 6). The
+    `knn_check` can prove the merge is reached (ENGINEERING_RULES 6). The
     production entry point hard-codes 0, and at `grid_dim.x == 1` the
     value is never read.
 
@@ -965,7 +965,7 @@ def fused_l2_knn_launch(
     """The workspace-and-launch tail of `fusedL2ExpKnnImpl` (`:773-790`
     mutex workspace, `:822-838` launch), with the grid handed in so
     `knn_check` can pin it on BOTH sides of the `grid_x == 1` switch
-    (PORTING_RULES 8: a parameter that selects a kernel path is a parameter
+    (ENGINEERING_RULES 8: a parameter that selects a kernel path is a parameter
     the checks enumerate). Production enters through `fused_l2_knn` above,
     which computes the grid with `launch_config_generator` and hard-codes
     `sabotage = 0`; nothing else may choose a grid.

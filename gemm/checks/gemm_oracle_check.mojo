@@ -645,7 +645,7 @@ def check_ported_policy_matches_upstream() raises:
     seven hand-copied integers. Two transcriptions of one upstream table is
     two chances to mis-copy it, so the parameterized one is required to agree
     with the flattened one. If they ever disagree, ONE of them is wrong and
-    upstream decides which -- `PORTING_RULES.md` 0c.
+    upstream decides which -- `ENGINEERING_RULES.md` 0c.
     """
     # Policy4x4<float, 4>, the one RAFT's float distance kernels instantiate.
     _eq("Policy4x4 Nthreads", Policy4x4Float.nthreads, 256)

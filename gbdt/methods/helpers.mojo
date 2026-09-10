@@ -36,7 +36,7 @@ estimator (`feature_parallel_pointwise_oblivious_tree.h:43`,
 `add_oblivious_tree_model_feature_parallel.cpp:12` and `:31`,
 `leaves_estimation/oblivious_tree_leaves_estimator.h:143`) -- none of which
 this repository has. Porting them now would be writing a cache for a caller
-that does not exist, which is the defect `PORTING_RULES.md` rule 3 names.
+that does not exist, which is the defect `ENGINEERING_RULES.md` rule 3 names.
 They belong with rung 2 of `archive/reference/PORTING.md` 91 E.
 
 WHAT "TAKES THE MANAGER'S ANSWERS AS ARGUMENTS" MEANS, and why it is not a
@@ -136,7 +136,7 @@ def best_split_properties_less(
     every gain tie instead of losing every one of them, and `TakeBest` over a
     level where nothing scored returns the sentinel rather than the first
     real split. Their `Gain` also defaults to `+inf`, so the tie is reached
-    only when both sides are undefined -- but `PORTING_RULES.md` 0c is the
+    only when both sides are undefined -- but `ENGINEERING_RULES.md` 0c is the
     rule that says port the branch, not the reachability argument.
 
     **`BinId` is the last resort and it is `<`, not `<=`.** Equal records are
@@ -430,7 +430,7 @@ def print_best_score(
 ) raises:
     """`PrintBestScore` (`helpers.cpp:142-155`). `CATBOOST_INFO_LOG` is
     `print` here; this repository has no log-level machinery and inventing
-    one would be a third category of file (`PORTING_RULES.md` 0b-ii)."""
+    one would be a third category of file (`ENGINEERING_RULES.md` 0b-ii)."""
     print(best_score_message(best_split, borders, nan_mode, score, depth))
 
 
@@ -502,7 +502,7 @@ def has_permutation_dependent_split(
 # `ctrs/ctr_kernels.h:170` is an unrelated device kernel of the same name.
 #
 # So all four are ported for completeness of the assigned file and NONE has a
-# caller here or there. `PORTING_RULES.md` rule 3 says an unported file is
+# caller here or there. `ENGINEERING_RULES.md` rule 3 says an unported file is
 # visible and a mis-ported one is not -- these are transcribed and gated
 # against an independent host oracle for exactly that reason, and their lack
 # of a caller is stated here rather than discovered later.

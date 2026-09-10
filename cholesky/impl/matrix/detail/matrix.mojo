@@ -13,7 +13,7 @@ Transliterated. **COPY, DO NOT IMPROVE**, with the two departures below.
 Nothing else from that header is here: `slice`, `columnWiseSort`, `gather`,
 `getL2Norm` and the print helpers belong to other sections or to nobody, and
 `cholesky/NOT_IMPLEMENTED.tsv` records them as such rather than leaving them as an
-invisible gap (PORTING_RULES rule 3).
+invisible gap (ENGINEERING_RULES rule 3).
 
 # =========================================================================
 # DEVIATION 1644: ROW-MAJOR, WHERE THEIRS IS COLUMN-MAJOR.
@@ -53,7 +53,7 @@ invisible gap (PORTING_RULES rule 3).
 # `CHOL_SAB_TRSM_RECIPROCAL` is the arm that swaps this shape in so the gate
 # can be shown to see the difference.
 #
-# The kernel is ported anyway, because PORTING_RULES rule 3 says an unported
+# The kernel is ported anyway, because ENGINEERING_RULES rule 3 says an unported
 # file is visible and a mis-ported one is not, and because a FAST-mode caller
 # outside this lane may legitimately want it. It has no caller HERE and
 # `cholesky/DERIVATION_MAP.tsv` says so in the same words.

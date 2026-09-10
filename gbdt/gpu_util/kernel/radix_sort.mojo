@@ -32,7 +32,7 @@ sortedness for that reason.
 # =========================================================================
 # DEVIATION BLOCK: theirs is `cub::DeviceRadixSort::SortPairs`
 # (`cuda_util/kernel/sort_templ.cuh:26`). CUB is OPEN and therefore a port
-# candidate under PORTING_RULES 0b-i, and MAX ships no device sort
+# candidate under ENGINEERING_RULES 0b-i, and MAX ships no device sort
 # (archive/reference/VENDOR_LIBS.md, re-checked 2026-08-20), so there is nothing to call.
 #
 # What is written here is NOT a fresh design: it is CatBoost's OWN

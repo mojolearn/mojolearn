@@ -12,7 +12,7 @@ file also holds
 `RMSEWithUncertainty`, `MultiCrossEntropy`, `MultiRMSE` and
 `BuildConfusionMatrixBins`. Each of the others is a different `ELossFunction`
 with its own dispatch, and porting a kernel no caller reaches is the defect
-PORTING_RULES 3 names. They are listed in `NOT_IMPLEMENTED.tsv` rather than left
+ENGINEERING_RULES 3 names. They are listed in `NOT_IMPLEMENTED.tsv` rather than left
 looking absent.
 
 ## THE LAST CLASS IS IMPLICIT, AND EVERY LOOP BOUND SAYS SO

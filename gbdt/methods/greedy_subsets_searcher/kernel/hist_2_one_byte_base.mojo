@@ -34,7 +34,7 @@ which processes stat columns TWO AT A TIME (`numBlocks.z = numStats / 2`,
 each block reading `stats` and `stats + statLineSize`), and the
 `TPointHistOneByte` PASS family only above 128. Until 2026-08-19 this
 repository routed everything through the PASS family, which is the
-wrong-kernel-family misport PORTING_RULES 0b-i describes. When `numStats` is
+wrong-kernel-family misport ENGINEERING_RULES 0b-i describes. When `numStats` is
 odd, their `HIST2_PASS` macro first covers stat 0 with a one-stat
 `PASS(Bits, 1)` launch and then runs this family over the remaining even
 count with `SkipFirst = true` (`hist_one_byte.cu:306-312`); the `skip_first`

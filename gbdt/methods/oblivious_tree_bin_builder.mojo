@@ -312,7 +312,7 @@ def create_compressed_split(
     side is not reachable from this rung** (there are no CTR columns in the
     feature-parallel searcher until rung 4), so it is gated separately in
     `checks/feature_parallel_identity_check.mojo` against the identity
-    permutation rather than left as an unrun branch -- `PORTING_RULES.md` 8.
+    permutation rather than left as an unrun branch -- `ENGINEERING_RULES.md` 8.
     """
     var num_blocks = compressed_split_blocks(doc_count)
     if num_blocks == 0:

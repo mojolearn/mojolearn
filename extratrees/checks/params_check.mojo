@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Every branch of `validity_check`, accepted and refused, one case each.
 
-`PORTING_RULES.md` rule 8: a switch is exercised on BOTH sides by a named case
+`ENGINEERING_RULES.md` rule 8: a switch is exercised on BOTH sides by a named case
 per side, with the value set explicitly inside the case. "The suite covers it"
 is not coverage. A validator is nothing but switches, so this file is a table:
 one accepted configuration per parameter at its boundary, and one refused

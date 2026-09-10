@@ -4,7 +4,7 @@
 
 **NOT A PORT, AND THERE IS NOTHING TO PORT.** cuML, cuVS and RAFT implement
 no Gaussian process at any of the pinned commits; `gaussian_process/
-DERIVATION_MAP.tsv` carries the grep that establishes it. `PORTING_RULES.md`'s
+DERIVATION_MAP.tsv` carries the grep that establishes it. `ENGINEERING_RULES.md`'s
 COPY DO NOT IMPROVE therefore does not apply here, because there is nothing
 to copy. scikit-learn's `sklearn/gaussian_process/kernels.py` is the
 SEMANTICS reference and the ORACLE and is never the design source: it is
@@ -989,7 +989,7 @@ def gp_variance_kernel(
 
     The record is a PER-TEST-POINT FLAG, hashed as the card stage
     `gp.clamped` and summed on the host -- never a device counter. A count
-    is a TOTAL and says nothing about placement (PORTING_RULES rule 7: "a
+    is a TOTAL and says nothing about placement (ENGINEERING_RULES rule 7: "a
     check whose expected value is the same in every cell verifies the total
     and nothing about placement"); the flag vector is placement, and it is
     also the thing a cross-vendor diff can align. There is no atomic of any

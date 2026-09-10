@@ -23,7 +23,7 @@ a hierarchical, balanced-cluster-size quantizer with its own mesocluster
 recursion. This tree has no port of it (`cluster/DERIVATION_MAP.tsv` mirrors
 `cuvs::cluster::kmeans`, the Lloyd/k-means++ estimator, and nothing else),
 so this build trains the ported Lloyd k-means instead. That is a departure
-from `PORTING_RULES.md` 0b-i -- their dispatch goes somewhere we do not
+from `ENGINEERING_RULES.md` 0b-i -- their dispatch goes somewhere we do not
 have -- and it is stated at the top of `ivf/README.md` and in
 `ivf/NOT_IMPLEMENTED.tsv` rather than buried. Two consequences a reader must
 carry:

@@ -9,7 +9,7 @@ it and puts our numbers beside theirs.
 
 **WHAT IS A GATE HERE AND WHAT IS NOT.** Deviation 130 makes bitwise parity
 impossible by construction, so sklearn's number is never a gate
-(`PORTING_RULES.md` rule 4). Two kinds of row are nevertheless hard assertions,
+(`ENGINEERING_RULES.md` rule 4). Two kinds of row are nevertheless hard assertions,
 and neither is a gate BECAUSE sklearn said so:
 
 * the **analytic** fixtures, where the right answer is a closed form —
@@ -486,7 +486,7 @@ def main() raises:
             " previous iteration's flag. Transcribed faithfully per rule 1;"
             " see DEVIATIONS.md. Whether to keep it is an OPEN item in"
             " PLAN.md and is Andrew's call, because a workaround here changes"
-            " the algorithm and PORTING_RULES.md rule 4 says that is a fork,"
+            " the algorithm and ENGINEERING_RULES.md rule 4 says that is a fork,"
             " not a workaround."
         )
         raise Error(

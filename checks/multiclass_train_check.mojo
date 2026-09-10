@@ -404,7 +404,7 @@ def check_multiclass_train(ctx: DeviceContext) raises:
         # stride. A model whose `leaf_values` is `n_leaves * dim` fed to
         # that walk would silently predict the FIRST class's approxes.
         #
-        # PORTING_RULES 8: both sides of the switch, by a named check per
+        # ENGINEERING_RULES 8: both sides of the switch, by a named check per
         # side. `check-model-io` and `check-catboost-apply` exercise the
         # one-dimensional side; this is the other one.
         # BOTH SIDES, and numClasses = 2 is what supplies the second one:

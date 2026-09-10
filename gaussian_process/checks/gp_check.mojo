@@ -379,7 +379,7 @@ def _run_fixture(
     need a ridge other than the fixture's own --
     `check_duplicate_inputs_need_the_ridge`, which needs both -- call
     `gpr_fit_host` directly, and a parameter nothing passes is a parameter
-    nothing exercises (PORTING_RULES rule 8).
+    nothing exercises (ENGINEERING_RULES rule 8).
     """
     var n = gp_fixture_n(which)
     var d = gp_fixture_d(which)
@@ -1806,7 +1806,7 @@ def check_variance_is_nonnegative_and_clamps_are_counted() raises:
     The variance is also compared against the host oracle's replay of the
     same fold, and the CLAMP FLAGS are compared cell by cell, not just the
     total. A count is a total and says nothing about placement
-    (PORTING_RULES rule 7); the flag vector is placement.
+    (ENGINEERING_RULES rule 7); the flag vector is placement.
     """
     var total_clamped = 0
     var closest = Float32(3.4028234663852886e38)

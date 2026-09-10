@@ -8,7 +8,7 @@ WHAT IT IS STANDING IN FOR
 ---------------------------
 Neither file has a caller. The searcher above them
 (`oblivious_tree_doc_parallel_structure_searcher.{h,cpp}`) and the
-`pointwise_hist2*` family below them are unported, so `PORTING_RULES.md` rule
+`pointwise_hist2*` family below them are unported, so `ENGINEERING_RULES.md` rule
 3 applies with full force: `build_necessary_histograms` sat in this tree
 "fully written, commented, tested by a probe, and with its state machine
 exactly backwards" because nothing called it. This file is the caller until

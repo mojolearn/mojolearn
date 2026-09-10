@@ -58,7 +58,7 @@ right_child;}` in one `rmm::device_buffer`. Ours: `node_feature` (Int32),
 `node_threshold` (Float32), `node_left` (Int32), `node_right` (Int32),
 same indices, same `tree_offsets`. WHAT is said is unchanged (every field,
 every index); HOW changed because a whole-struct load through a pointer
-in a kernel is a known Metal-compiler wall (PORTING_RULES.md rule 4) and
+in a kernel is a known Metal-compiler wall (ENGINEERING_RULES.md rule 4) and
 because the identity card hashes each field as its own dtype
 (`if.treeNNN.structure.{feat,thr,left,right}`), which a packed struct of
 mixed dtypes could not express without a byte view.

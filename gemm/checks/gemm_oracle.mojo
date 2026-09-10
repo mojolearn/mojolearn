@@ -4,7 +4,7 @@
 
 **NOT A PORT, and it replaces no upstream call.** RAFT's standalone matrix
 product is `raft/linalg/gemm.hpp` -> `detail/cublaslt_wrappers.hpp` ->
-cuBLASLt, a CLOSED library with no source to mirror (`PORTING_RULES.md` 0b-i:
+cuBLASLt, a CLOSED library with no source to mirror (`ENGINEERING_RULES.md` 0b-i:
 "where the path their dispatch actually takes calls a CLOSED library we
 cannot read or port -- cuBLAS, cuSOLVER -- call the MAX equivalent, because
 there is nothing to port"). There is therefore no upstream reference

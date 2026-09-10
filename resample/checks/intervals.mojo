@@ -13,7 +13,7 @@ the SciPy expression it reproduces so a reader can diff them line by line.
 EVERYTHING IN THIS FILE EXCEPT THE JACKKNIFE RUNS ON THE HOST, and that is a
 decision rather than a leftover. The inputs are the bootstrap distribution
 (already back on the host, because the caller is returned it) and four
-scalars. PORTING_RULES 0b-ii is explicit that host work the GPU path needs is
+scalars. ENGINEERING_RULES 0b-ii is explicit that host work the GPU path needs is
 not a "CPU path", and IDENTITY_PATHS row 18 is equally explicit about the one
 thing that makes host arithmetic dangerous: a HOST LIBM call, whose last bits
 differ between macOS and glibc. So the rule this file keeps is narrow and

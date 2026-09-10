@@ -590,7 +590,7 @@ def km_feature_map_epilogue(
 
 
 # ===========================================================================
-# Host mirrors. ORACLES, not a CPU path (PORTING_RULES 0b-ii): the draws are
+# Host mirrors. ORACLES, not a CPU path (ENGINEERING_RULES 0b-ii): the draws are
 # integer arithmetic into a pinned float transform, so a host mirror is bit
 # for bit the device's answer BY CONSTRUCTION and a gate that says so is
 # worth having.

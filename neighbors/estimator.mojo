@@ -381,7 +381,7 @@ def knn_search_traced(
 
     Returns THE QUERY TILE THAT RAN, so a caller can record which
     configuration produced a number instead of assuming it was the default.
-    That is the same discipline `PORTING_RULES.md` rule 8 asks of the
+    That is the same discipline `ENGINEERING_RULES.md` rule 8 asks of the
     benchmark, applied at the boundary where a user can actually see it.
 
     Raises rather than clamping on every shape the kernel cannot serve. A

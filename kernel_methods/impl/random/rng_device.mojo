@@ -100,7 +100,7 @@ def km_guard_unit(u: Float32) -> Float32:
     `128 x 1024` weight matrix draws 65,536 pairs and one fit in 256 contains
     a non-finite weight whose feature map is NaN for every row.
 
-    A wrong answer with no error is the class `PORTING_RULES 0c` and the
+    A wrong answer with no error is the class `ENGINEERING_RULES 0c` and the
     standing rule `assume-our-code-is-broken` say to FIX rather than port.
     The fix is the smallest one available: `+0.0` becomes `2^-24`, which is
     EXACTLY the smallest positive value the generator can produce, so the

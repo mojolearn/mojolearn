@@ -25,7 +25,7 @@ assume:
 
 - The `return_sqrt=False` arm. `knn_search` defaults to True for
   scikit-learn parity while the benchmark ran False, and only the default is
-  exercised below. Per `PORTING_RULES.md` rule 8 that makes the False arm an
+  exercised below. Per `ENGINEERING_RULES.md` rule 8 that makes the False arm an
   UNCHECKED arm and any number taken on it provisional. It needs its own
   named check before anything is published on it.
 - Reach by sabotage. These prove `knn_search` agrees with a host truth; they
@@ -37,7 +37,7 @@ WHY THE ARM CHECK EXISTS
 ------------------------
 
 `check_knn_search_arms_agree` runs all three values of `knn_method` on one
-fixture, which `PORTING_RULES.md` rule 8 asks for and which is not
+fixture, which `ENGINEERING_RULES.md` rule 8 asks for and which is not
 ceremony here: the two arms DISAGREED about output order until 2026-08-20,
 and `KNN_METHOD_AUTO` picks between them BY SHAPE. A check that exercised
 only the default would have been green on one shape and silently describing

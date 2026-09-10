@@ -17,7 +17,7 @@ WHAT AUTHORITY EACH SECTION USES, because "it agrees with itself" is not one
    plain loop over a materialised `List[Int]` of node rows, reading the
    fixture's ROW-MAJOR accessor (the oracle reads cuML's COLUMN-MAJOR
    `Dataset`), accumulating in `Float64` with no objective object involved.
-   Class counts are compared PER CLASS, not as a total -- `PORTING_RULES.md`
+   Class counts are compared PER CLASS, not as a total -- `ENGINEERING_RULES.md`
    rule 8, earned here: a uniform fixture once reported 0 wrong of 512 on a
    kernel a hashed fixture showed to be 490 wrong of 512.
 3. **Order independence.** The same node, the same key, the columns supplied

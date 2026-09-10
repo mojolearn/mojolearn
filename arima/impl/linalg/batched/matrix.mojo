@@ -31,7 +31,7 @@ their pivot tie rule are not readable. The `info` array (singular pivot)
 is computed and NEVER CHECKED by the caller (`batched_kalman.cu:1088-1089`,
 `matrix.cuh:1876`), so a singular `I - T (x) T` produces an unusable `P0`
 silently.
-OURS (PORTING_RULES 0b-i: a closed call with no MAX equivalent for a
+OURS (ENGINEERING_RULES 0b-i: a closed call with no MAX equivalent for a
 batched LU is written out). `lu_inverse` per series: column-major,
 `getrf` semantics -- pivot = FIRST index of the largest `|a|` in the column
 (cuBLAS's `isamax` rule, a selection over magnitudes so no signed zero can

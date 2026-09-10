@@ -73,7 +73,7 @@ GATES
       EXACTLY. The gathered histogram is produced by the ported
       `gather_histogram_by_leaves`, so this gates the transpose and the
       loader that reads it as one chain. Both sides of the
-      `gatheredByLeaves` switch are named checks (PORTING_RULES 8).
+      `gatheredByLeaves` switch are named checks (ENGINEERING_RULES 8).
   G1  the gather kernel per cell, at HIST_COUNT 1, 2 and 4, at foldCount 4
       AND foldCount 1. Four is what makes the fold axis observable: at
       foldCount 1 the output index loses its fold term entirely and a

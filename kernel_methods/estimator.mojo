@@ -251,7 +251,7 @@ def kernel_ridge_fit_host(
     # `X^T X`). So `X` is uploaded TWICE. The alternative -- a special
     # diagonal path -- would be a SECOND kernel-matrix code path reached only
     # when the two operands are the same, which is exactly the non-default
-    # path `PORTING_RULES` rule 8 is about. One path, one extra copy of `X`.
+    # path `ENGINEERING_RULES` rule 8 is about. One path, one extra copy of `X`.
     var xa = _upload(ctx, x)
     var xb = _upload(ctx, x)
     var dy = _upload(ctx, y)

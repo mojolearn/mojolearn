@@ -86,7 +86,7 @@ with five pure virtuals and two implementations, `TWithoutQueriesGrouping`
 `const&` and dispatches virtually.
 
 OURS: one struct with a `kind` tag, built by `IQueriesGrouping.without_queries`
-or `IQueriesGrouping.queries`, dispatching on the tag. `PORTING_RULES` rule 4
+or `IQueriesGrouping.queries`, dispatching on the tag. `ENGINEERING_RULES` rule 4
 names this workaround: Mojo has no dynamic trait objects, and a tagged union
 is what their worker switches on anyway. NOT ARITHMETIC -- every one of the
 five accessors is transcribed branch for branch below.
@@ -483,7 +483,7 @@ def create_folds(
     const IQueriesGrouping&)`; `Config.BoostingType`, `Config.MinFoldSize` and
     `NCudaLib::GetCudaManager().GetDeviceCount()` are members and a global
     there, and are parameters here so that both sides of every branch can be
-    reached from a check (`PORTING_RULES` rule 8). `growth_rate` is
+    reached from a check (`ENGINEERING_RULES` rule 8). `growth_rate` is
     `Config.FoldLenMultiplier` at the one call site (`:594`).
 
     WHAT `growth_rate` ADMITS. `CB_ENSURE(growthRate > 1.0)` here (`:202`) and
@@ -730,7 +730,7 @@ def learn_permutation_id(random_value: Int, learn_permutation_count_in: Int) -> 
     adds the model back to all three (`:447-465`). It is only the STRUCTURE
     SEARCH that never sees it.
 
-    This is transcribed, not corrected. `PORTING_RULES` 0b: copy, do not
+    This is transcribed, not corrected. `ENGINEERING_RULES` 0b: copy, do not
     improve. Whether the `- 1` is deliberate or a typo in their tree is not
     this port's question to answer, and a port that quietly used
     `% learnPermutationCount` would train a different model from CatBoost on

@@ -303,7 +303,7 @@ def _knn_reference(
     (DEVIATION 509), but under `FAST` it chooses by shape, and a reference
     whose arm depends on how many queries this check happens to pass is a
     reference that tests a different thing in the two modes.
-    `PORTING_RULES.md` rule 8: the harness names the kernel it ran.
+    `ENGINEERING_RULES.md` rule 8: the harness names the kernel it ran.
 
     `return_sqrt=False` because the index under test carries
     `METRIC_L2_EXPANDED`, which is SQUARED distances on both sides.

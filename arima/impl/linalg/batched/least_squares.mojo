@@ -20,7 +20,7 @@ matrix produces an unusable solution and NOTHING reads the failure code.
 The routine's factorization, its association order, and what it does with a
 tiny pivot are all unreadable.
 
-OURS (PORTING_RULES 0b-i, the same rule DEVIATION 674 was taken under).
+OURS (ENGINEERING_RULES 0b-i, the same rule DEVIATION 674 was taken under).
 HOUSEHOLDER QR WITH BACK SUBSTITUTION, one thread per series, serial
 ascending, every multiply-add `identical_mul_add`, every intermediate
 through `ftz`.

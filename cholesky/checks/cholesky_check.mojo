@@ -450,7 +450,7 @@ def check_cholesky_refusals() raises:
 
     # (5) the NB hint. DEVIATION 1630. Under IDENTICAL a hint that is not the
     # pinned value raises; under FAST it is honored, and BOTH sides are
-    # exercised by name rather than only the default one (PORTING_RULES 8).
+    # exercised by name rather than only the default one (ENGINEERING_RULES 8).
     comptime if IDENTICAL:
         raised = False
         try:
@@ -1681,7 +1681,7 @@ def check_r1_update_equals_potrf() raises:
 
     # THE HOST ORACLE OF THE PORTED FILE, grown to half the panel width and
     # asserted against the oracle's own blocked factor. Without this arm
-    # `oracle_rank1_update` would have no caller, and PORTING_RULES rule 3
+    # `oracle_rank1_update` would have no caller, and ENGINEERING_RULES rule 3
     # says a ported file no caller reaches is not done.
     var half = CHOL_NB_PINNED // 2
     var otr = IdentityTrace.disabled()

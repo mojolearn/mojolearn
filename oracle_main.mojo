@@ -67,7 +67,7 @@ def main() raises:
         print("  CatBoost's own first three trees:")
         print_catboost_structure(path)
         check_border_parity(path)
-        # PORTING_RULES 8: the harness prints which path it took, beside the
+        # ENGINEERING_RULES 8: the harness prints which path it took, beside the
         # result. A differential that cannot name the accumulator it ran can
         # publish a green tick about a different one.
         print_policy_reach(path)

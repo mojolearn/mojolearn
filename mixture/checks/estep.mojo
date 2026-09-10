@@ -5,7 +5,7 @@
 NOT A PORT, AND THERE IS NOTHING TO PORT. cuML has no Gaussian mixture model
 at `upstream/cuml-v26.08.00` (`265b9da`): no `gmm` directory, no `mixture`
 module, no `GaussianMixture` symbol outside a scikit-learn test xfail list.
-cuVS (`6ba2ce2`) and RAFT (`ebf9268`) have none either. `PORTING_RULES.md`'s
+cuVS (`6ba2ce2`) and RAFT (`ebf9268`) have none either. `ENGINEERING_RULES.md`'s
 COPY DO NOT IMPROVE therefore **does not apply to this lane**, because there
 is no upstream file to copy. What applies instead is
 `mixture/README.md`'s rule: `sklearn/mixture/_gaussian_mixture.py` and

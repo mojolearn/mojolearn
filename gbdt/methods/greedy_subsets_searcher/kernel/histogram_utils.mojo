@@ -408,7 +408,7 @@ def zero_buffer_kernel(
 
     where `blockSize.Size()` is this block's bin-feature count.
 
-    DEVIATION (PORTING_RULES 4): theirs is `cudaMemsetAsync`, a driver call.
+    DEVIATION (ENGINEERING_RULES 4): theirs is `cudaMemsetAsync`, a driver call.
     Mojo has no exposed async memset on this toolchain, so the memset is a
     grid-stride store loop. Same bytes, same value, different way of saying
     it.

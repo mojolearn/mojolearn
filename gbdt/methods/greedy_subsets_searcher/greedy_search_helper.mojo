@@ -2069,7 +2069,7 @@ def replication_for(
     sixteenth of the rows, all contending on the same atomics.
 
     An invented heuristic in place of a formula that was sitting in their
-    source is exactly what PORTING_RULES rule 0 forbids, and it survived
+    source is exactly what ENGINEERING_RULES rule 0 forbids, and it survived
     because every measurement of it was taken on an empty histogram.
     ======================================================
 
@@ -2472,7 +2472,7 @@ def launch_histograms_for_blocks[
             # family; only 129-255 runs the one-stat `TPointHistOneByte`
             # PASS family. This dispatch routed ALL one-byte shapes through
             # the PASS family until 2026-08-19, a wrong-kernel-family misport
-            # of exactly the shape PORTING_RULES 0b-i names: the ported
+            # of exactly the shape ENGINEERING_RULES 0b-i names: the ported
             # kernel was faithful and their dispatch never sends
             # `maxBins <= 128` to it. `checks/hist2_check.mojo` covers
             # both families on the same input and fingerprints WHICH family

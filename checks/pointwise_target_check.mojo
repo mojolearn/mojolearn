@@ -46,7 +46,7 @@ digest:
 3. MODES. `estimation` true and false, which are two DIFFERENT plane layouts
    (`weight, weight*der` versus `weight*der, weight*der2`), and weighted
    versus unweighted. A check that ran only the default would leave the other
-   branch unreached, which is PORTING_RULES 8.
+   branch unreached, which is ENGINEERING_RULES 8.
 
 THE SABOTAGES. Rule 8 says one per MECHANISM, not one per assertion, and
 each is RUN on every invocation and required to move the check -- a
@@ -620,7 +620,7 @@ def check_pointwise_targets(ctx: DeviceContext) raises:
         else:
             print("  ok  ", objective_name(o), "alpha", a)
 
-    # LQ AT q >= 2, the OTHER Der2 arm. PORTING_RULES 8: reach is
+    # LQ AT q >= 2, the OTHER Der2 arm. ENGINEERING_RULES 8: reach is
     # per-branch, and the default alpha above deliberately sits below 2.
     var lq2 = 0
     for mode in range(4):

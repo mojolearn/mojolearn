@@ -52,7 +52,7 @@ claim needs. Four things live here:
    from the Float64 one is a bug the bit gates cannot see.
 
 NO FLOAT64 EVER GOES TO THE DEVICE. Metal has none. Everything in part 4
-is host-only, which is what `PORTING_RULES.md` 0b-ii permits an oracle to
+is host-only, which is what `ENGINEERING_RULES.md` 0b-ii permits an oracle to
 be.
 """
 

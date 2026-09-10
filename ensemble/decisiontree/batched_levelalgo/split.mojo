@@ -103,7 +103,7 @@ tie-breaking does not pick an edge", so determinism is plainly their
 INTENT.
 
 THIS PORT DOES NOT ACT ON THIS. Their structure is transcribed verbatim,
-non-associativity included, because copying is the charter and because a
+non-associativity included, because rule 0b says not to redesign it and because a
 "fix" here would be an invention that silently diverges from their answer
 in the common case too. It is recorded as an OPEN item in
 `archive/plans/ensemble/PLAN.md` to be settled the only way this repository settles

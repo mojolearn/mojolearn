@@ -11,7 +11,7 @@
 #   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
 #                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuVS pinned at 6ba2ce2, checked out at ~/CascadeProjects/upstream/cuvs-v26.08.00.
-# NOT ~/CascadeProjects/upstream/cuvs (94c2819, branch-25.08), which PORTING_RULES.md's
+# NOT ~/CascadeProjects/upstream/cuvs (94c2819, branch-25.08), which ENGINEERING_RULES.md's
 # table still names for cluster/ and neighbors/: this lane read the 26.08 tree because
 # that is where ivf_flat_interleaved_scan_jit.cuh, ivf_rabitq/ and the current
 # ivf_flat.hpp live. Paths below are relative to the cuVS repository root.

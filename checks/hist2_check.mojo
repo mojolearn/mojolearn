@@ -14,7 +14,7 @@ the arm that includes CatBoost's own GPU default border count) -- and demands
 EXACT, cell-for-cell agreement -- with each other and with a host tally --
 on the direct arm at depth 0 and the gather arm at depth 1, with a permuted
 row index on the gather arm so the indirection is load-bearing. Enumerating
-the variants is PORTING_RULES 8: `bits` selects a kernel, so the checks
+the variants is ENGINEERING_RULES 8: `bits` selects a kernel, so the checks
 enumerate it.
 
 WHY EXACTNESS IS AVAILABLE HERE, IN EITHER BUILD MODE. Every stat value is
@@ -31,7 +31,7 @@ below is `!=`, not a tolerance. Hashed per-row values, never uniform:
 a uniform plant verifies the total and nothing about placement, and it has
 passed broken kernels in this repository twice.
 
-REACH, per PORTING_RULES 7 and 8, because agreement between two arms is
+REACH, per ENGINEERING_RULES 7 and 8, because agreement between two arms is
 vacuous if the dispatch quietly ran the same kernel twice:
 
 1. FAMILY FINGERPRINT. The two families READ an out-of-contract bin
@@ -60,7 +60,7 @@ modes (each arm's `BlockLoadSize` is derived from its own block size, so the
 reach is predicted per arm below rather than assumed shared).
 
 3. ACCUMULATION MODES, per the `hist_smem_mode_for` matrix row
-   (PORTING_RULES 8: the row selects a kernel variant, so the checks
+   (ENGINEERING_RULES 8: the row selects a kernel variant, so the checks
    enumerate it). BOTH modes -- CatBoost's warp-private float
    (`HIST_SMEM_WARP_PRIVATE_F32`) and the Apple/bit-identical 2-warp-shared
    Int32 (`HIST_SMEM_SHARED2_I32`) -- run in this one binary through
@@ -774,7 +774,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
     # `fixed_scale` (2^30) wraps any arm that QUANTIZES -- the Int32 mode in
     # shared memory always, the float mode only in its writeback and only
     # under the integer flush -- and cannot touch an arm that never reads
-    # the scale. Sabotage per branch, PORTING_RULES 7.
+    # the scale. Sabotage per branch, ENGINEERING_RULES 7.
     var sf_i32 = run_mode_arm[bits, HIST_SMEM_SHARED2_I32](
         ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
         p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,

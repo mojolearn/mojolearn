@@ -216,7 +216,7 @@ comptime OBJECTIVE_MULTICLASS_OVA = 13
 #: `default:` arm throws "Unsupported loss function" before training can
 #: reach it. It is a METRIC that borrows the target kernel, and this port
 #: has no metric path for it to arrive by. Porting the arm would leave a
-#: branch no caller reaches, which PORTING_RULES 3 forbids.
+#: branch no caller reaches, which ENGINEERING_RULES 3 forbids.
 
 
 def objective_from_name(name: String) raises -> Int:

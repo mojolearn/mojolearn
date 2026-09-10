@@ -3,7 +3,7 @@
 """Entry point for the PCA checks.
 
 The Gram dispatch checks run here too: the covariance product is the one
-consumer every fit in this section shares, and `PORTING_RULES.md 8` wants
+consumer every fit in this section shares, and `ENGINEERING_RULES.md 8` wants
 both sides of `gemm_tn`'s split-K/vendor switch exercised by name.
 """
 
