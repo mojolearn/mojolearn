@@ -60,6 +60,7 @@ PY
                 /root/wp67_surface_capture.py "python/mojolearn/tests/test_${surface}_surface.py" \
                 "$DIR/$surface.bin" > "$DIR/surface-$surface.log" 2>&1
         done
+        timeout -k 10 90 "$PY" /root/wp67_classical_capture.py "$DIR/classical.bin" > "$DIR/classical.log" 2>&1
         if [ "$mode" = identical ]; then
             timeout -k 10 180 "$PY" /root/wp67_surface_capture.py packaging/language_model_smoke.py \
                 "$DIR/byte_lm.bin" > "$DIR/surface-byte_lm.log" 2>&1
@@ -71,13 +72,15 @@ PY
             kde/checks/kde_check.mojo resample/checks/resample_check.mojo \
             ivf/checks/ivf_check.mojo holtwinters/checks/hw_check.mojo \
             metrics/checks/trustworthiness_check.mojo spectral/checks/spectral_check.mojo \
-            hdbscan/checks/hdbscan_check.mojo tsa/checks/stationarity_check.mojo; do
+            hdbscan/checks/hdbscan_check.mojo tsa/checks/stationarity_check.mojo umap/checks/transform_check.mojo umap/checks/estimator_check.mojo; do
             label=$(basename "$check" .mojo)
             printf '%s %s check %s\n' "$arm" "$mode" "$label"
             MOJOLEARN_IDENTITY_TRACE="$DIR/$label.trace" timeout -k 10 300 pixi run mojo \
                 -I . --target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA $mode_define \
                 "$check" > "$DIR/check-$label.log" 2>&1
         done
+        [ ! -f /tmp/mojolearn.km.card.a ] || cp /tmp/mojolearn.km.card.a "$DIR/km.card"
+        [ ! -f /tmp/gmm.card.a ] || cp /tmp/gmm.card.a "$DIR/gmm.card"
         printf '%s %s native surfaces complete\n' "$arm" "$mode"
     done
 done
@@ -85,7 +88,7 @@ python3 - <<'PY'
 from pathlib import Path
 import json
 root=Path('/root/gemm_leg_out/wp67'); rows=[]
-for before in sorted([*(root/'before').rglob('*.bin'), *(root/'before').rglob('*.trace')]):
+for before in sorted([*(root/'before').rglob('*.bin'), *(root/'before').rglob('*.trace'), *(root/'before').rglob('*.card')]):
     after=root/'after'/before.relative_to(root/'before')
     same=before.read_bytes()==after.read_bytes()
     rows.append({'surface':str(before.relative_to(root/'before')),'bytes':before.stat().st_size,'bits_match':same})
@@ -93,3 +96,5 @@ for before in sorted([*(root/'before').rglob('*.bin'), *(root/'before').rglob('*
 (root/'comparisons.json').write_text(json.dumps(rows,indent=2)+'\n')
 print('PASS',len(rows),'complete exported-array captures')
 PY
+
+MOJOLEARN_NUMERIC_MODE=identical timeout -k 10 120 "$PY" /root/wp67_gp_predict_bench.py "$OUT/before/identical/gp.so" "$OUT/after/identical/gp.so" "$OUT/gp-large.json" > "$OUT/gp-large.log" 2>&1

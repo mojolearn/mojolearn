@@ -4,7 +4,6 @@ import argparse
 import json
 import os
 import shutil
-import subprocess
 from pathlib import Path
 import runpy
 import struct
@@ -70,17 +69,6 @@ def main():
     if count == 0:
         raise RuntimeError('surface produced no captured arrays; this is not an output gate')
     print(json.dumps({'arrays_captured': count, 'capture': str(args.capture)}))
-    if args.surface.endswith('test_arima_surface.py'):
-        subprocess.run([sys.executable, '/root/wp67_classical_capture.py',
-                        str(args.capture.parent / 'classical.bin')], check=True, timeout=90)
-        if args.capture.parent.name == 'fast' and args.capture.parent.parent.name == 'after':
-            root = args.capture.parent.parent.parent
-            before = root / 'before' / 'identical'
-            after = root / 'after' / 'identical'
-            assert (before/'gp.bin').read_bytes() == (after/'gp.bin').read_bytes()
-            subprocess.run([sys.executable, '/root/wp67_gp_predict_bench.py',
-                            str(before/'gp.so'), str(after/'gp.so'), str(root/'gp-large.json')],
-                           check=True, timeout=120)
 
 
 

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """Small native launch/output gate for non-tree WP6 surfaces; no timing claim."""
+import faulthandler
+faulthandler.enable()
+faulthandler.dump_traceback_later(30, repeat=True)
 import json
 import struct
 import sys
@@ -16,6 +19,7 @@ def main():
     y=(np.arange(48)%3).astype(np.int32)
     records=[]
     def save(name,value):
+        print("captured",name,flush=True)
         a=np.asarray(value)
         assert np.isfinite(a).all(),name
         records.append((name,a.shape,a.dtype.str,a.tobytes()))
@@ -24,6 +28,9 @@ def main():
         transformed=model.transform(x)
         save(cls.__name__+'.transform',transformed)
         save(cls.__name__+'.inverse',model.inverse_transform(transformed))
+    embedding=ml.UMAP(n_neighbors=5,n_epochs=12,init='spectral',random_state=19).fit(x)
+    save('umap.fit',embedding.embedding_)
+    save('umap.transform',embedding.transform(x[:4]+np.float32(.03125)))
     save('kde',ml.KernelDensity(bandwidth=.8).fit(x).score_samples(x[:7]))
     # Include exact matches (zero-distance weights), nonmatches, both weighting
     # policies, and a wide/k>64 case exercising the tiled search dispatch.
