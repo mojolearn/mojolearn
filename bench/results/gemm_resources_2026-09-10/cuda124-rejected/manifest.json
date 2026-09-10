@@ -1,0 +1,59 @@
+{
+  "target": "sm_90a",
+  "entries": [
+    "gemm_checks_gemm_identical_id6A6A6A6A6A6A_f9dade9e4111c0be"
+  ],
+  "ptx_sha256": "ad1eb77f4c35a0f25602062bdf3aa867d1d89f16c258f073c6f86ab16a080f5e",
+  "source": "/root/h100-current-128.ptx.gz",
+  "source_sha256": "3e71a9bea380a7cc2b25c1521076bd591ed17a32322b50e5eb47dac02cf6a12f",
+  "host": "Linux-6.8.0-90-generic-x86_64-with-glibc2.35",
+  "status": "incomplete",
+  "scope": "offline assembly; no execution, timing, or achieved occupancy",
+  "runtime_jit_equivalence": "not established",
+  "commands": [
+    {
+      "argv": [
+        "/usr/local/cuda-12.4/bin/ptxas",
+        "--version"
+      ],
+      "log": "ptxas-version.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/local/cuda-12.4/bin/cuobjdump",
+        "--version"
+      ],
+      "log": "cuobjdump-version.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/local/cuda-12.4/bin/ptxas",
+        "--verbose",
+        "--gpu-name",
+        "sm_90a",
+        "/root/jobs/gemm-resources/input.ptx",
+        "--output-file",
+        "/root/jobs/gemm-resources/kernel.cubin"
+      ],
+      "log": "ptxas.log",
+      "returncode": 255
+    }
+  ],
+  "ptxas": {
+    "path": "/usr/local/cuda-12.4/bin/ptxas",
+    "sha256": "1173444a1de6fd2d0f183409c91ef7d05f66a55839dad8d8ab642b2596b79b0b"
+  },
+  "cuobjdump": {
+    "path": "/usr/local/cuda-12.4/bin/cuobjdump",
+    "sha256": "99964c9ef10074bad96b224fe04628d153b6f518328ca1e330538e568baabdda"
+  },
+  "error": "/usr/local/cuda-12.4/bin/ptxas exited 255; see ptxas.log",
+  "artifacts": {
+    "cuobjdump-version.log": "7a0cbe32e10d72cb84cb0152f0f1e1de3f02edc42115e70ab0f4d7744b837fdf",
+    "input.ptx": "ad1eb77f4c35a0f25602062bdf3aa867d1d89f16c258f073c6f86ab16a080f5e",
+    "ptxas-version.log": "b3b2e7cb8e4a83c07492e954cb73f3bd886c3367271a83e8e664df9dda0654ec",
+    "ptxas.log": "9213d63d7bb65c350978694897625bc35c9deba2654a587f10a912b44182657d"
+  }
+}

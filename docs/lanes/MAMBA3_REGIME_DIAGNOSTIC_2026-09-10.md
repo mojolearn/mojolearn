@@ -98,3 +98,42 @@ A tiny pass only qualifies fixture loading and instrumentation. H100 large
 shape regime diagnosis remains RUN OWED and is not inferred from Metal.
 
 Root continuation: tiny Metal smoke passes both retained complete hashes; large H100 shape-order runs remain owed. Evidence: bench/results/mamba_regime_2026-09-10/.
+
+## Retained-log review continuation
+
+`tools/mamba3_regime_summary.py LOG` validates the complete scheduled call
+sequence, one binary digest, per-shape output digests, and paired begin/end
+records before emitting a JSON report. It retains every sample, separates the
+first call of each visit from the median of later calls (without calling those
+later calls warmed up), records each visit's predecessor, and carries host CPU
+and fault/switch counters alongside native phase samples. Nested phase timings
+are kept separately and must not be summed. A mixed phase inventory is refused;
+inspect raw logs for a shape-dependent instrumentation route or buffering before
+using that capture. The report includes the original log SHA256 and fixture
+provenance. It makes no opponent comparison or promotion decision.
+
+```
+python tools/mamba3_regime_summary.py /fresh/shape-order.log > /fresh/shape-order-summary.json
+python -m unittest discover -s tools -p test_mamba3_regime_summary.py
+```
+
+Four host tests pass: retained tiny cold-call separation, truncated/duplicate
+capture refusal, output mismatch refusal, and nested phase attribution with
+inconsistent inventory refusal. The retained Metal log's first call is
+385.847 ms and its second is 13.750 ms; these are instrumentation smoke samples,
+not production prices. No new device measurement or kernel/default change was
+made by this continuation. Large H100 diagnosis remains owed.
+
+## Large H100 continuation (supersedes the large-run-owed status above)
+
+The current `b69e8344` CUDA IDENTICAL binding completed two fresh-process,
+96-call shape-order diagnostics on H100; all 192 complete output hashes match
+the retained grid. Evidence and exact limits are in
+`bench/results/mamba_regime_large_2026-09-10/README.md`. After separating the
+first call of each visit, narrow visit medians span 52.939–58.420 ms and wide
+91.988–94.885 ms. The old roughly 229–284 ms steady regime did not reproduce.
+Cold first narrow calls were 2017.427/848.889 ms and remain in the evidence.
+This is progress on large-run diagnosis, not a qualified speedup or opponent
+ratio. The old binding/allocation-lifetime cause remains unresolved. No
+conditional phase/lifetime arm was warranted by these results; no default
+changed and no opponent ran.

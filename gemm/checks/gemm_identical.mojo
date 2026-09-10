@@ -38,12 +38,15 @@ Here that separation is three structural facts, not three promises:
    sums. So there is no cross-thread combination for a block size to
    reorder, and batch invariance is a property of the shape of the kernel
    rather than of a check that happens to pass.
-3. **The fold is a REGISTER STACK whose merge rule is a pure function of the
+3. **The fold is a thread-private stack whose merge rule is a pure function of the
    leaf index.** `_fold_push` merges when the level is occupied, which
    happens exactly when the contract's tree pairs. Proven equal to
    `fold_balanced_tree` for every `P` in `1 .. 2049` by
    `check_stack_fold_is_the_contract_tree` in `gemm_device_check.mojo`, and
    the argument is in `_fold_push`'s docstring. Contract section 7.2.
+   This is a source-level storage description, not a register-residency
+   guarantee: the current H100 tuned specialization has compiler local
+   storage and spills (see the September 10 GEMM resource capture).
 
 THE WORKSPACE QUESTION, CONTRACT 13.5
 --------------------------------------
@@ -52,8 +55,9 @@ k = 4096`, 64 GB at `k = 4,000,000`. Section 6.1 forbids fixing that by
 letting `L` depend on `m` or `n`, because `m` is the batch dimension.
 
 **The DEFAULT arm here is 13.5's second escape: one block owns an output tile
-and ALL of its `k` leaves, folding in registers. There is no global scratch
-at any shape, and `identical_gemm_workspace_floats` returns 0 for it.**
+and ALL of its `k` leaves, folding in thread-private storage. It allocates no
+explicit global workspace, and `identical_gemm_workspace_floats` returns 0
+for it.** Compiler local memory is separate from that workspace budget.
 That is the right arm wherever `m * n` is large enough to fill the machine on
 its own, which is every transformer row in `bench/gemm_shapes.mojo`.
 

@@ -1,0 +1,18 @@
+{
+  "cubin_sha256": "6258677585541ff892ead1ef9cfa031a168e2564ebb151dee6c4a3ae8f8322d2",
+  "entry": "gemm_checks_gemm_identical_id6A6A6A6A6A6A_f9dade9e4111c0be",
+  "driver_api_version": 13000,
+  "function_attributes": {
+    "max_threads_per_block": 256,
+    "shared_bytes": 40960,
+    "local_bytes_per_thread": 4144,
+    "registers_per_thread": 255
+  },
+  "block_threads": 256,
+  "dynamic_shared_bytes": 0,
+  "max_threads_per_sm": 2048,
+  "warp_threads": 32,
+  "max_active_blocks_per_sm": 1,
+  "theoretical_thread_occupancy": 0.125,
+  "scope": "Static driver occupancy of offline cubin. No kernel launched; achieved occupancy and runtime JIT equivalence are not established."
+}

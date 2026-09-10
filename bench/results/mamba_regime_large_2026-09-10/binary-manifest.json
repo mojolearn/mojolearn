@@ -1,0 +1,9 @@
+{
+  "source_commit": "b69e8344",
+  "binary_sha256": "f6da73c7d378943252e7280d481351b8763657188fc9f08da2c8bdb04bce03dc",
+  "binary_bytes": 4426072,
+  "packed_file": "mamba-cuda-identical.so.gz",
+  "packed_sha256": "6a95c42cfb0a82a179f625b041d1c9008e4cdbd1ee0e500763c9b81157e634db",
+  "packed_bytes": 891704,
+  "scope": "Exact retained current CUDA sm_90 IDENTICAL binding; trusted local build, not a portable wheel."
+}

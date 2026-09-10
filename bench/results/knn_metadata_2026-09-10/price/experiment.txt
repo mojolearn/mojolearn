@@ -1,0 +1,5 @@
+column=apple
+comparison=metadata
+control=MOJOLEARN_EXPERIMENTAL_KNN_PREFLIGHT_METADATA
+mode=price
+rounds=5

@@ -36,6 +36,8 @@ from neighbors.impl.neighbors.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     KNN_PHASE_TIMERS,
     KNN_REGISTER_TILE_IDENTICAL,
+    KNN_PREFLIGHT_METADATA,
+    KNN_PREFLIGHT_METADATA_DEFAULT,
     METRIC_FROM_IS_SQRT,
     brute_force_knn_impl,
     compute_norms_for_metric,
@@ -83,6 +85,8 @@ def main() raises:
         "selector", Int(EXPERIMENTAL_SMALLK_IDENTICAL),
         "transpose", Int(EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL),
         "register_tile", Int(KNN_REGISTER_TILE_IDENTICAL),
+        "metadata_forced", Int(KNN_PREFLIGHT_METADATA),
+        "metadata_default_capable", Int(KNN_PREFLIGHT_METADATA_DEFAULT),
         "index_tile", KNN_INDEX_TILE_IDENTICAL,
     )
     with DeviceContext() as ctx:

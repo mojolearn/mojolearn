@@ -1,0 +1,11 @@
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -1829,7 +1829,7 @@
+         # memory and the operand flushes hoisted (DEVIATION 1252).
+         var abase = pgw * APAGE + accrow * SSTRIDE
+         var bbase = pgw * BPAGE + acccol * SSTRIDE
+-        if chunk == KS:
++        if chunk == KS and not is_defined["MOJOLEARN_GEMM_SCALAR_SHARED_PROBE"]():
+             # THE FULL-WINDOW PATH. `VEC`-wide shared reads, then `VEC`
+             # ascending `p` steps out of them. `e` ascends inside `kc`
+             # ascending, so every accumulator sums its terms in exactly the

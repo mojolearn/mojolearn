@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Main-only, unrun index-layout qualification and component timing.
+"""Index-layout qualification and component timing; large prices are separate.
 
 Run IDENTICAL with -I .; imports transfer helpers from gemv_serial_layout_main.
 MOJOLEARN_KNN_LAYOUT_LARGE=1 enables rows32/index100000/features32 timing;
 override ROWS/COLS/D with the same prefix. SAMPLES defaults9, minimum7.
 Norms and selection use production kernels. Timing labels distinguish distance
 only, transpose+distance, and unchanged selection; these are NOT end-to-end
-kNN measurements. Allocations and norm calculation are excluded.
+kNN measurements. Norm calculation is excluded. The forced metadata arm
+includes its metadata allocations and preparation; use ordinary request prices
+for promotion, not these component timings.
 Large fixtures default to independently seeded pseudorandom queries/index
 (PROFILE=3). PROFILE=0 retains the original duplicate-heavy fixture.
 MOJOLEARN_KNN_LAYOUT_DUMP=1 prints every distance UInt32 for full cross-device
@@ -20,10 +22,12 @@ from std.os import getenv
 from std.time import perf_counter_ns
 from bench.gemv_serial_layout_main import _env_int, _upload, _read, _same
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.kernel_matrix import TARGET_COLUMN, knn_distance_metadata_for
+comptime METADATA = knn_distance_metadata_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]()
 from core.row_norms import NORM_TPB, row_norm_kernel
 from neighbors.checks.pinned_distance_tile import (
     PINNED_TILE_TPB, pinned_distance_tile_kernel,
-    RT_ROWS, RT_TILE_COLS, RT_TPB, pinned_distance_register_tile_kernel,
+    RT_ROWS, RT_TILE_COLS, RT_TPB, pinned_distance_register_tile_kernel, vector_exponent_minimum_kernel,
 )
 from neighbors.checks.transposed_index_distance_candidate import transposed_index_distance_into
 from neighbors.checks.select_radix_identical import radix_topk_identical_kernel
@@ -76,12 +80,29 @@ def _distance(
         # The qualification loop prepares yt in arm 1 before this arm.
         # Cover the production register tile against the scalar pinned
         # oracle, including cancellation, FTZ operands and ragged features.
-        ctx.enqueue_function[pinned_distance_register_tile_kernel](
-            z.unsafe_ptr(), q.unsafe_ptr(), yt.unsafe_ptr(), qn.unsafe_ptr(), yn.unsafe_ptr(),
-            Int32(r), Int32(n), Int32(n), Int32(d), Int32(root),
-            grid_dim=((n + RT_TILE_COLS - 1) // RT_TILE_COLS, (r + RT_ROWS - 1) // RT_ROWS, 1),
-            block_dim=(RT_TPB, 1, 1),
-        )
+        comptime if METADATA:
+            var qm = ctx.enqueue_create_buffer[DType.float32](r)
+            var ym = ctx.enqueue_create_buffer[DType.float32](n)
+            ctx.enqueue_function[vector_exponent_minimum_kernel](q.unsafe_ptr(), qm.unsafe_ptr(), Int32(r), Int32(d), grid_dim=((r + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+            ctx.enqueue_function[vector_exponent_minimum_kernel](y.unsafe_ptr(), ym.unsafe_ptr(), Int32(n), Int32(d), grid_dim=((n + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+            ctx.enqueue_function[pinned_distance_register_tile_kernel[METADATA]](
+                z.unsafe_ptr(), q.unsafe_ptr(), yt.unsafe_ptr(), qn.unsafe_ptr(), yn.unsafe_ptr(),
+                qm.unsafe_ptr(), ym.unsafe_ptr(),
+                Int32(r), Int32(n), Int32(n), Int32(d), Int32(root),
+                grid_dim=((n + RT_TILE_COLS - 1) // RT_TILE_COLS, (r + RT_ROWS - 1) // RT_ROWS, 1),
+                block_dim=(RT_TPB, 1, 1),
+            )
+            ctx.synchronize()
+            _ = qm^
+            _ = ym^
+        else:
+            ctx.enqueue_function[pinned_distance_register_tile_kernel[False]](
+                z.unsafe_ptr(), q.unsafe_ptr(), yt.unsafe_ptr(), qn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), yn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                qn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), yn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                Int32(r), Int32(n), Int32(n), Int32(d), Int32(root),
+                grid_dim=((n + RT_TILE_COLS - 1) // RT_TILE_COLS, (r + RT_ROWS - 1) // RT_ROWS, 1),
+                block_dim=(RT_TPB, 1, 1),
+            )
     else:
         transposed_index_distance_into(ctx, z, q, y, yt, qn, yn, r, n, d, root, arm == 1)
 

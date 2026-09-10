@@ -1,0 +1,47 @@
+{
+  "gemm-baseline.gz": {
+    "unpacked_bytes": 1262032,
+    "unpacked_sha256": "44bd784e162199e89c32f13ed257c26459f45db74c3b52ae0fb70dbf2c51bc27",
+    "packed_sha256": "9dbde31247d55e037289463d7e64c687bba8f2a461eb9deb167fd7df7bd9c245"
+  },
+  "gemm-scalar.gz": {
+    "unpacked_bytes": 1077712,
+    "unpacked_sha256": "15c5f1e34ea06aee99bf8b4ac10b3f4ae4731434e6f3a639b63977b7e21efd0b",
+    "packed_sha256": "7074c82d55819f15dc19d76f297acc8c8bf6a88a8e5279a14a906752ce0fbd6b"
+  },
+  "gemm_identical.mojo.gz": {
+    "unpacked_bytes": 122091,
+    "unpacked_sha256": "8c04719e678eba14dc011ad4e5c84dd3a94c04fa51893b393da7f7c5e781f6dd",
+    "packed_sha256": "d5dd9abc3973f82aa424686e7f5cf175ef4976e65844c01582d553772287a5f7"
+  },
+  "gemm_tuned_probe.mojo.gz": {
+    "unpacked_bytes": 10215,
+    "unpacked_sha256": "1b36251c5ba38faad962e12f8e3cfc55bd11a78bb57d269b0cc9f134600a6042",
+    "packed_sha256": "7b76f229028091cd926f153d0988d37fca429704a683b2297ad4e2bb8dd1b5ce"
+  },
+  "cuda124-rejected/input.ptx.gz": {
+    "unpacked_bytes": 325119,
+    "unpacked_sha256": "ad1eb77f4c35a0f25602062bdf3aa867d1d89f16c258f073c6f86ab16a080f5e",
+    "packed_sha256": "3e71a9bea380a7cc2b25c1521076bd591ed17a32322b50e5eb47dac02cf6a12f"
+  },
+  "scalar-cuda126/input.ptx.gz": {
+    "unpacked_bytes": 228689,
+    "unpacked_sha256": "e5f93b86bb67b62a7da5893eaba16d90e481ab6f176e1959f579ee9fc9de2e95",
+    "packed_sha256": "af80a064f3c5017a7164ed3af66249421b45880911a98841f80dd1727a45094e"
+  },
+  "cuda126/input.ptx.gz": {
+    "unpacked_bytes": 325119,
+    "unpacked_sha256": "ad1eb77f4c35a0f25602062bdf3aa867d1d89f16c258f073c6f86ab16a080f5e",
+    "packed_sha256": "3e71a9bea380a7cc2b25c1521076bd591ed17a32322b50e5eb47dac02cf6a12f"
+  },
+  "scalar-cuda126/sass.log.gz": {
+    "unpacked_bytes": 1421035,
+    "unpacked_sha256": "4f03f42cb68cbe334ea0909f76532721b2b86a746da4e8e15152ad30ccaa0928",
+    "packed_sha256": "f26cb45c3f0550e3600fda47f6dd9e3dc7ff9242c1702e9a59ce3d5b78e1dbe6"
+  },
+  "cuda126/sass.log.gz": {
+    "unpacked_bytes": 1931755,
+    "unpacked_sha256": "bf0d4d1dd6446c16eb5d89e20f07c56b87c3ca65d780690527481d96f1efcce4",
+    "packed_sha256": "0c1e9f5b30762aa9eb27f6418d1b688bc4f25f23b325b9b3fb1148761aec154e"
+  }
+}

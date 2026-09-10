@@ -4,11 +4,11 @@ from max.gpu.host import DeviceContext
 from std.gpu import thread_idx, block_idx, block_dim
 from std.memory import bitcast
 from checks.numerics import ftz
-from neighbors.checks.pinned_distance_tile import _rt_load, _rt_step, _rt_accumulate_tile, RT_ROWS, RT_COLS
+from neighbors.checks.pinned_distance_tile import _rt_load, _rt_step, _rt_accumulate_tile, _rt_accumulate_metadata_tile, vector_exponent_minimum_kernel, RT_ROWS, RT_COLS
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
 
 
-def oracle_kernel(words: MutPointer[UInt32, MutAnyOrigin], output: MutPointer[UInt32, MutAnyOrigin], packed: MutPointer[Float32, MutAnyOrigin], count: Int32):
+def oracle_kernel(words: MutPointer[UInt32, MutAnyOrigin], output: MutPointer[UInt32, MutAnyOrigin], packed: MutPointer[Float32, MutAnyOrigin], minima: MutPointer[Float32, MutAnyOrigin], count: Int32):
     var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if row >= Int(count):
         return
@@ -16,19 +16,21 @@ def oracle_kernel(words: MutPointer[UInt32, MutAnyOrigin], output: MutPointer[UI
     var b = _rt_load(bitcast[DType.float32](words.unsafe_load(row * 5 + 1)))
     var c = ftz(bitcast[DType.float32](words.unsafe_load(row * 5 + 2)))
     var v = _rt_step(a, b, c)
-    output.unsafe_store(row * 3, bitcast[DType.uint32](v))
+    output.unsafe_store(row * 4, bitcast[DType.uint32](v))
     # Simulate pre-round FTZ only where the exact oracle says the unrounded
     # result is subnormal (including zero), never for exact normal inputs.
     if words.unsafe_load(row * 5 + 4) != 0:
         var zero = bitcast[DType.float32](words.unsafe_load(row * 5 + 3) & 0x80000000)
         v = repair_zero_fma(a, b, c, zero)
-    output.unsafe_store(row * 3 + 1, bitcast[DType.uint32](v))
+    output.unsafe_store(row * 4 + 1, bitcast[DType.uint32](v))
     # The production tile's complete admission/accumulation path must also
     # satisfy the oracle. Four features compute two leading zeros, c*1, then a*b+c.
     var r = SIMD[DType.int32, RT_ROWS](0)
     var col = SIMD[DType.int32, RT_COLS](0)
     var tile = _rt_accumulate_tile(packed.unsafe_offset(row * 8), packed.unsafe_offset(row * 8 + 4), r, col, 4, 1)
-    output.unsafe_store(row * 3 + 2, bitcast[DType.uint32](tile[0]))
+    output.unsafe_store(row * 4 + 2, bitcast[DType.uint32](tile[0]))
+    tile = _rt_accumulate_metadata_tile(packed.unsafe_offset(row * 8), packed.unsafe_offset(row * 8 + 4), minima.unsafe_offset(row * 2), minima.unsafe_offset(row * 2 + 1), r, col, 4, 1)
+    output.unsafe_store(row * 4 + 3, bitcast[DType.uint32](tile[0]))
 
 
 def main() raises:
@@ -42,7 +44,7 @@ def main() raises:
     var count = len(data) // 5
     with DeviceContext() as ctx:
         var host = ctx.enqueue_create_host_buffer[DType.uint32](len(data))
-        var actual = ctx.enqueue_create_host_buffer[DType.uint32](count * 3)
+        var actual = ctx.enqueue_create_host_buffer[DType.uint32](count * 4)
         var packed_host = ctx.enqueue_create_host_buffer[DType.float32](count * 8)
         ctx.synchronize()
         for i in range(len(data)):
@@ -57,17 +59,33 @@ def main() raises:
         var packed = ctx.enqueue_create_buffer[DType.float32](count * 8)
         ctx.enqueue_copy(dst_buf=packed, src_ptr=packed_host.unsafe_ptr())
         var words = ctx.enqueue_create_buffer[DType.uint32](len(data))
-        var output = ctx.enqueue_create_buffer[DType.uint32](count * 3)
+        var output = ctx.enqueue_create_buffer[DType.uint32](count * 4)
         ctx.enqueue_copy(dst_buf=words, src_ptr=host.unsafe_ptr())
-        ctx.enqueue_function[oracle_kernel](words.unsafe_ptr(), output.unsafe_ptr(), packed.unsafe_ptr(), Int32(count), grid_dim=((count + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+        var minima = ctx.enqueue_create_buffer[DType.float32](count * 2)
+        ctx.enqueue_function[vector_exponent_minimum_kernel](packed.unsafe_ptr(), minima.unsafe_ptr(), Int32(count * 2), Int32(4), grid_dim=((count * 2 + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+        ctx.enqueue_function[oracle_kernel](words.unsafe_ptr(), output.unsafe_ptr(), packed.unsafe_ptr(), minima.unsafe_ptr(), Int32(count), grid_dim=((count + 127) // 128, 1, 1), block_dim=(128, 1, 1))
         ctx.enqueue_copy(dst_ptr=actual.unsafe_ptr(), src_buf=output)
         ctx.synchronize()
         for row in range(count):
-            for arm in range(3):
-                var got = actual.unsafe_ptr().unsafe_load(row * 3 + arm)
+            for arm in range(4):
+                var got = actual.unsafe_ptr().unsafe_load(row * 4 + arm)
                 if got != data[row * 5 + 3]:
                     print("ZERO_FMA_CANDIDATE_FAIL", row, "arm", arm, data[row * 5], data[row * 5 + 1], data[row * 5 + 2], got, data[row * 5 + 3])
                     raise Error("candidate differs from independent exact integer oracle")
-        print("ZERO FMA CANDIDATE PASS", "cases", count, "arms", 3)
+        # Reuse the same input allocation after mutation: zero/subnormal operands
+        # must be ignored, and adjacent admission boundaries remain distinct.
+        var min_host = ctx.enqueue_create_host_buffer[DType.float32](count * 2)
+        ctx.synchronize()
+        var cases: List[UInt32] = [0, 1, 0x7f800000, 0x7fc00001, 0x00800000, 0x4affffff, 0x4b000000, 0x80000000]
+        for i in range(8):
+            packed_host.unsafe_ptr().unsafe_store(i, bitcast[DType.float32](cases[i]))
+        ctx.enqueue_copy(dst_buf=packed, src_ptr=packed_host.unsafe_ptr())
+        ctx.enqueue_function[vector_exponent_minimum_kernel](packed.unsafe_ptr(), minima.unsafe_ptr(), Int32(2), Int32(4), grid_dim=(1, 1, 1), block_dim=(128, 1, 1))
+        ctx.enqueue_copy(dst_ptr=min_host.unsafe_ptr(), src_buf=minima)
+        ctx.synchronize()
+        if min_host.unsafe_ptr().unsafe_load(0) != 255 or min_host.unsafe_ptr().unsafe_load(1) != 1:
+            raise Error("metadata did not reflect mutated zero/subnormal/nonfinite inputs")
+        print("METADATA MUTATION PASS")
+        print("ZERO FMA CANDIDATE PASS", "cases", count, "arms", 4)
         _ = host^
         _ = words^

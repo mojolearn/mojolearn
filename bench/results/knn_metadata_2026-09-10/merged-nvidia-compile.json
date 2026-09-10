@@ -1,0 +1,18 @@
+{
+  "scope": "Cross-compile only on Apple host; no NVIDIA execution or performance claim",
+  "source_commit": "121d878c",
+  "target_triple": "x86_64-unknown-linux-gnu",
+  "target_cpu": "x86-64-v3",
+  "target_accelerator": "sm_90",
+  "define": "MOJOLEARN_NUMERIC_IDENTICAL=1",
+  "entry": "bench/knn_index_layout_main.mojo",
+  "exit_code": 0,
+  "ptx_sidecars": {
+    "knn-metadata-merged-nvidia_core_column_stats_transpose_ke6A6A6A6A_452a4c7a9ca8217b.ptx": "c9f29a7c9fb28e19e71a7ad46bbbda51e03905467b3ec5a1fce4dc2d9d50ef4c",
+    "knn-metadata-merged-nvidia_neighbors_checks_select_radix_6A6A6A6A_d3b3608d3d3e0045.ptx": "ddb7cd3ed3b39b4b050f403af058de62289fe4a44024721c822bd63d8c4f3671",
+    "knn-metadata-merged-nvidia_neighbors_checks_pinned_distan6A6A6A6A_3c55a81d6a41740d.ptx": "21a85c8856c19416fafd7ae8a90f8b3c900a544a9c74bd112402fd0b6e551784",
+    "knn-metadata-merged-nvidia_neighbors_checks_pinned_distan6A6A6A6A_5efda74c8afcc202.ptx": "e16163a161d88f7f8433ff8d9233afc00cd32a352589334451b3672679b1d0c5",
+    "knn-metadata-merged-nvidia_neighbors_checks_transposed_in6A6A6A6A_26fbbea72db13086.ptx": "051b722ca631fc434ef2223b4703d3b09af0710d8cf15df2f5b9e7a5edba10ee",
+    "knn-metadata-merged-nvidia_core_row_norms_row_norm_kernel6A6A6A6A_1b52a3dc0e3ed302.ptx": "01013327c0117093128a3e0298085798a4b169d185271ca8555b26fd8d1641ca"
+  }
+}

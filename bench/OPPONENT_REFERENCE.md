@@ -100,7 +100,7 @@ worktree branch lane/knn-identical,
 `umap/` (7 rounds). "request" includes host transfers, "device" excludes
 them. k=10 and k=15 are separate rows; do not substitute one for the other.
 
-| index | queries | k | cuML brute NearestNeighbors request | cuML device | IDENTICAL request Sep10 | IDENTICAL device Sep10 | request ratio |
+| index | queries | k | cuML brute NearestNeighbors request | cuML device | Historical Sep10 request | Historical Sep10 device | historical request ratio |
 |---:|---:|---:|---:|---:|---:|---:|---:|
 | 100k x 32 | 32 | 10 | 1.125 | 0.669 | 0.528 | 0.262 | 0.47x |
 | 100k x 32 | 128 | 10 | 0.914 | 0.459 | 0.657 | 0.388 | 0.72x |
@@ -119,7 +119,12 @@ them. k=10 and k=15 are separate rows; do not substitute one for the other.
 | 400k x 32 | 1000 | 15 | 4.183 | 3.750 | 11.216 | 10.203 | 2.68x |
 | 400k x 32 | 4000 | 15 | 10.817 | 9.756 | 40.956 | 39.814 | 3.79x |
 
-The current Sep10 IDENTICAL columns use the eight-query register tile from
+Later 512-query batching supersedes the 400k/4000 rows: final request
+27.525704 ms (k10) and 31.860726 ms (k15), or 2.69x/2.95x the cached
+references. See "Sep10 bounded kNN query batches" below for provenance.
+The full historical grid is retained rather than mixing captures.
+
+The historical Sep10 IDENTICAL columns above use the eight-query register tile from
 `edada38d` with `MOJOLEARN_KNN_IDENTICAL_ROWS8=1` (adopted as default in
 `0e213d65`; original lane commits `8fdfd85f` and `c03bbcfc`). NVIDIA H100 80GB HBM3, driver580.126.09, Mojo1.0.0(ed45d567),
 IDENTICAL, dyadic-v1, two warmups and seven rounds; evidence:
@@ -666,3 +671,35 @@ are own-arm comparisons, not Apple/cuML opponent ratios. Raw samples, phase
 diagnostics, binary hashes and scope: `bench/results/knn_large_gate_audit_2026-09-10/`.
 Historical Apple admission used 400k rows with 1000 queries; these new runs
 cover the full 4000-query target. Decision history: `docs/lanes/PERFORMANCE_GATE_AUDIT_2026-09-10.md`.
+
+### Sep10 Apple kNN request-local metadata: own-arm update, no new opponent
+
+Apple M4 IDENTICAL, dyadic-v1, 400000 index rows / 4000 queries / 32 features,
+Euclidean return_sqrt. This is a paired implementation comparison; cuML was not
+rerun and these Apple timings do not qualify a cuML ratio. Existing matched
+NVIDIA opponent prices remain reusable and unchanged.
+
+| k | Comparison / order | Safe existing preflight request ms | Metadata request ms | Request saving |
+|---|---|---:|---:|---:|
+| 10 | Forced candidate, existing first | 849.940 | 654.728 | 23.0% |
+| 10 | Forced candidate, metadata first | 880.852 | 654.823 | 25.7% |
+| 15 | Forced candidate, existing first | 871.992 | 670.155 | 23.1% |
+| 15 | Forced candidate, metadata first | 914.559 | 695.273 | 24.0% |
+| 10 | Actual scoped default first | 856.831 | 642.981 | 25.0% |
+| 10 | Disabled arm first | 890.776 | 748.700 | 15.9% |
+| 15 | Actual scoped default first | 875.495 | 668.901 | 23.6% |
+| 15 | Disabled arm first | 1071.877 | 903.554 | 15.7% |
+
+Five ordinary request rounds after two warmups per arm, both execution orders;
+phase instrumentation disabled, preparation/allocation included. All complete
+selected index/distance outputs match within and across windows. Independent
+integer oracle passed 396584 cases/four arms, plus 24 full distance-layout cases
+and in-place metadata mutation. Large actual-default reverse-pass device drift
+(0.876–1.116 last/first) limits absolute price claims; all four large request pairs
+still favor metadata. Small controls do not support a broader default.
+
+Adopted only for the exact large Apple IDENTICAL metric/layout/shapes above.
+Other shapes retain existing preflight, and explicit experimental/disable flags
+remain. Source: forced aeddd83e; final aeddd83e plus retained working patch.
+Raw samples, full outputs, source/binary hashes, flags and final policy:
+`bench/results/knn_metadata_2026-09-10/README.md`.

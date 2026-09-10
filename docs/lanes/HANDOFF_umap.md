@@ -74,7 +74,7 @@ the same rows with `nvidia_public_compare.neighborhood_quality`.
 prefix `umap-lane-`, its own state file) and `tools/umap_lane_pod_run.sh`
 (on-pod phases, each writing `<phase>.done`).
 
-## Numbers (L40S, IDENTICAL build, commit 86b9cec5, `bench/results/umap/2026-09-09-l40s-device-optimizer/`)
+## Historical numbers (L40S, IDENTICAL build, commit 86b9cec5, `bench/results/umap/2026-09-09-l40s-device-optimizer/`)
 
 `bench/umap_phase_price_main.mojo`, 32 features, 15 neighbors, 2 components,
 200 epochs, dyadic-v1. Round 0 of every log carries the first-launch JIT
@@ -104,9 +104,12 @@ Opponent, cuML UMAP FAST (`bench/OPPONENT_REFERENCE.md`):
 | 100,000 | 1,673 ms | 321.3 ms (H100 row) | 5.2x, cross-GPU, indicative only |
 | 1,000,000 | 50,868 ms | 7,991.1 ms (L40S row, this lane, 5 rounds) | 6.4x, same GPU |
 
-The 10x target at 100k is met even against the faster GPU's opponent row;
-the same-GPU ratio at 20k and 100k is OWED (either ours on an H100 or cuML
-on an L40S; the reference file says which rows are missing).
+These cross-GPU 20k/100k comparisons do not establish that a same-device
+performance target was met. The same-GPU ratio at those sizes is OWED
+(either ours on an H100 or cuML on an L40S; the reference file says which
+rows are missing). The 1M own-arm value is a single cold-inclusive sample,
+so its 6.4x quotient is historical context, not a warmed median price.
+Later shared kNN changes also mean this is not a current-source UMAP run.
 
 kNN reference at k 10, 5 rounds, ours IDENTICAL, L40S
 (`knnref-l40s-<index>-<queries>-10.log`), beside the H100 cuML row (NOT the

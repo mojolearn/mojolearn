@@ -1,0 +1,5 @@
+column=apple
+comparison=metadata-default
+control=MOJOLEARN_KNN_IDENTICAL_NO_METADATA
+mode=price
+rounds=5
