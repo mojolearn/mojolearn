@@ -1,0 +1,54 @@
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:21:23: warning: `alloc` without a `Layout` is deprecated, use the `Layout`-based `alloc` instead; as a temporary migration step, use `unsafe_alloc`
+            var src = alloc[Float32](n + 16)
+                      ^~~~~
+<unknown>:0: note: 'alloc' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:22:23: warning: `alloc` without a `Layout` is deprecated, use the `Layout`-based `alloc` instead; as a temporary migration step, use `unsafe_alloc`
+            var dst = alloc[Float32](n + 16)
+                      ^~~~~
+<unknown>:0: note: 'alloc' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:26:26: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            copy_f32(src + offset, dst + offset, n)
+                     ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:26:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            copy_f32(src + offset, dst + offset, n)
+                                   ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:35:43: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var result = read_f32(Int(src + offset), n)
+                                      ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:40:26: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            copy_f32(dst + offset, dst + offset, n)
+                     ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:40:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            copy_f32(dst + offset, dst + offset, n)
+                                   ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:44:16: warning: 'free' is deprecated, use 'unsafe_free' instead
+            src.free()
+            ~~~^~~~~
+                unsafe_free
+<unknown>:0: note: 'free' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:45:16: warning: 'free' is deprecated, use 'unsafe_free' instead
+            dst.free()
+            ~~~^~~~~
+                unsafe_free
+<unknown>:0: note: 'free' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:63:17: warning: `alloc` without a `Layout` is deprecated, use the `Layout`-based `alloc` instead; as a temporary migration step, use `unsafe_alloc`
+    var owner = alloc[Float32](1)
+                ^~~~~
+<unknown>:0: note: 'alloc' declared here
+/private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:68:10: warning: 'free' is deprecated, use 'unsafe_free' instead
+    owner.free()
+    ~~~~~^~~~~
+          unsafe_free
+<unknown>:0: note: 'free' declared here
+Imported from /private/tmp/mojolearn-rename-lane-audit-20260910/bindings/checks/hostptr_check.mojo:4:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+PASS hostptr cells 37184 refusals 5

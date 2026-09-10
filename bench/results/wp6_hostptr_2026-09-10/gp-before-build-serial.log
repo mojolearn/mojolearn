@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/private/tmp/mojolearn-rename-lane-audit-20260910/tools/macos_serial_guard.py", line 345, in <module>
+    raise SystemExit(run(args))
+                     ~~~^^^^^^
+  File "/private/tmp/mojolearn-rename-lane-audit-20260910/tools/macos_serial_guard.py", line 223, in run
+    raise RuntimeError('Require normal memory pressure and the declared launch reserve')
+RuntimeError: Require normal memory pressure and the declared launch reserve
