@@ -78,3 +78,13 @@ RDNA gfx1100 and gfx1201 as known-compatible targets; the
 [detector reference](https://mojolang.org/docs/std/sys/info/has_amd_rdna_gpu_accelerator/)
 documents the architecture-specific predicate. Actual cross-target compile
 results are recorded separately from physical-device execution, which is owed.
+
+Bounded performance follow-up: the previous H100 request39.31ms versus
+device38.23ms leaves only1.08ms of host/transfer overhead. Earlier specialized
+phase logs at400k/4000/k10 show distance about19.3ms, selector9.1ms and
+merge0.86ms (112,112,96 launches respectively); those older phase figures
+predate the latest flush improvement and do not substitute for a new profile.
+A single opt-in NVIDIA RT_ROWS8 probe therefore doubles query reuse of each
+index load while keeping RT_COLS4 and each cell's ascending feature chain.
+Larger register pressure may offset the load savings; measurement decides.
+No redux, decoded winner, or Apple chunk4 experiment is reintroduced.
