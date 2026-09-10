@@ -692,8 +692,8 @@ def nystroem_fit_host(
     trace.record_device(ctx, "nys.scaled", dz, q * q)
     # `Z . Q^T`: cell `(i, j)` is `sum_k Z[i][k] Q[j][k]`, and `Q` is stored
     # with eigenvector `k` in COLUMN `k`, so this is `OP_NT` with `Q` as the
-    # right operand. `dq0` is a SECOND upload of the same values because Mojo
-    # refuses one buffer as two mutable kernel arguments (DEVIATION 1684).
+    # right operand. Reuse the same uploaded Q read by the scaling kernel;
+    # its output Z is a separate buffer (DEVIATION 2487).
     identical_gemm_into(ctx, dnorm, dz, dq0, gws, q, q, q, OP_NT)
     ctx.synchronize()
     trace.record_device(ctx, "nys.normalization", dnorm, q * q)
