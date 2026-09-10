@@ -276,11 +276,18 @@ def _forced_absent(monkeypatch):
         monkeypatch.setitem(_buffer._NATIVE, key, None)
 
 
-def _forced_present(monkeypatch):
+def _forced_present(monkeypatch, *, required=True):
+    """Restore the native lookups. With `required` (the default) a missing
+    binding skips the test; with `required=False` it returns False so the
+    test can assert the pure-Python arm on its own and still PASS on a
+    checkout whose binary predates these helpers."""
     for key in _KEYS:
         monkeypatch.delitem(_buffer._NATIVE, key, raising=False)
-    if _buffer._native("cast_f64_to_f32") is None:
-        pytest.skip("base binding not built")
+    if any(_buffer._native(key) is None for key in _KEYS):
+        if required:
+            pytest.skip("base binding not built or predates DEVIATION 2470-2472")
+        return False
+    return True
 
 
 @pytest.mark.parametrize("shape", _shapes())
@@ -299,7 +306,8 @@ def test_as_f32_c_two_arms(monkeypatch, shape, src_order, src_dtype):
     assert copied and py_arr.dtype == "<f4" and py_arr.order == "C"
     _bytes_equal(py_arr.tobytes(), want.tobytes())
 
-    _forced_present(monkeypatch)
+    if not _forced_present(monkeypatch, required=False):
+        return  # the fallback arm above is the whole test on this checkout
     nat_arr, copied = _buffer.as_f32_c(x, name="X")
     assert copied and nat_arr.dtype == "<f4" and nat_arr.order == "C"
     assert nat_arr.tobytes() == py_arr.tobytes()
@@ -327,7 +335,8 @@ def test_as_f32_colmajor_two_arms(monkeypatch, shape, src_order, src_dtype):
     # the storage IS the column-major flat
     assert py_arr._flat().tobytes() == want.T.reshape(-1).tobytes()
 
-    _forced_present(monkeypatch)
+    if not _forced_present(monkeypatch, required=False):
+        return  # the fallback arm above is the whole test on this checkout
     nat_arr, copied = _buffer.as_f32_colmajor(x, name="X")
     assert copied and nat_arr.dtype == "<f4"
     assert nat_arr._has_order("F")

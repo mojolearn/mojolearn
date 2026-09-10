@@ -40,6 +40,18 @@ Behavioral. Each one changes a module's returns from `numpy.ndarray` to
 `mojolearn.Array`, so each needs its surface test run before it lands.
 RUN OWED.
 
+Stage 2 was gated on the converter tax and THAT GATE IS CLEARED
+(2026-09-10, e9f40d69, 313ce4a1, 485caa24). The pure-Python converter cost
+1,235 ms for a float64 cast NumPy does in 5.7 ms at 2M x 20; the native
+host converters of DEVIATION 2470-2472 in `bindings/_mojolearn.mojo`,
+selected by `_buffer._convert` whenever the base binding is built, bring
+it to NumPy's number on the flat cast and 2.5x to 5.2x FASTER than NumPy
+on every layout flip. Numbers in
+`bench/results/native_convert_2026-09-10/run5_m4_warmup.txt`; the brief
+that produced them is `docs/lanes/BRIEF_native_convert_2026-09-10.md`.
+Without the binding the pure-Python path still runs and produces the same
+bytes (119 tests, both arms).
+
 ## Stage 3, the 20 contested files
 
 These need a per-file merge against a `main` that keeps moving, so they
@@ -80,12 +92,17 @@ embedding/rms_norm/linear layer helpers.
 install hint. That is the intended optional-diagnostic shape and is not an
 owed conversion.
 
-## One measurement owed
+## The DEVIATION 1887 measurement, CLOSED
 
 DEVIATION 1887 has a row-tile arm on `main` that the branch does not carry.
 `_arrays.as_f32_colmajor` copies large C-order inputs in 256 KB row tiles for
-cache locality; `_buffer.as_f32_colmajor` does the same ONE copy, produces
-the same bytes, and keeps the same zero-copy borrow, but does not tile.
-Semantics and copy count are unchanged; cache behavior is not. RUN OWED, a
-fit-time measurement at the 1M-2M row floor on a large row-major float64
-input, before stage 2 calls this free.
+cache locality; the pure-Python `_buffer.as_f32_colmajor` does not tile.
+RESOLVED 2026-09-10 by moving the tiling into compiled code: the native
+`cast_colmajor_f64_to_f32` and `transpose_f32` walk 128 x 64 tiles (64 KB
+in, 32 KB out) and measure 24.5 ms against NumPy's 128 ms for the float64
+case and 20.0 vs 53.7 ms for float32, at 2M x 20 on the M4, minimum of 9
+interleaved pairs. The untiled Python path remains only as the fallback for
+an unbuilt checkout. What is still owed is the estimator-level number: no
+estimator on `main` calls `_buffer` yet, so the fit-time effect appears
+only once stage 2 lands, and each converted estimator's surface run will
+show it.

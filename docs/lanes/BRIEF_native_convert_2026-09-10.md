@@ -2,6 +2,22 @@
 
 Written 2026-09-10. Self-contained. Read this file and nothing else is needed.
 
+**EXECUTED 2026-09-10, same day, on `main`: e9f40d69 (the two helpers),
+313ce4a1 (anonymous-mapping output store, flat cast matches NumPy),
+485caa24 (float32 transpose, the conditional third helper, which the gate
+showed was needed). Gate: `python/mojolearn/tests/test_native_convert.py`,
+119 passed. Numbers:
+`bench/results/native_convert_2026-09-10/run5_m4_warmup.txt`, reproduced
+by `time_converters.py` beside it. Outcome against the bar below: flat
+cast EQUALS NumPy (2.95 vs 2.88 ms, 12.07 vs 12.05 ms); every layout flip
+BEATS it (5.06 vs 12.81, 24.5 vs 128.1, 4.57 vs 7.23, 20.0 vs 53.7 ms).
+Two things the brief got wrong, fixed in place: the colmajor oracle needed
+`tobytes(order="F")`, and the timing protocol needed a warm-up round
+because a cold first NumPy sample voided windows the box was not heating.
+One thing the brief did not foresee: the flat cast could not match NumPy
+until the OUTPUT ALLOCATION stopped zero-filling; `_buffer._AnonStore`
+(an anonymous mapping, 3.12+) is that fix.**
+
 ## Why this lane exists
 
 `numpy-free-0.7` replaced NumPy in the Python layer with PURE PYTHON. That is
