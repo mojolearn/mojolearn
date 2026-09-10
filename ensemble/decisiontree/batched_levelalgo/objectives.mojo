@@ -243,10 +243,9 @@ are the same on Metal, PTX and AMDGPU, run to run and vendor to vendor.
 """
 
 from std.gpu import block_dim, thread_idx
-from std.math import log
 from max.gpu.memory import AddressSpace
 
-from checks.numerics import ftz, identical_log, identical_mul_add
+from checks.numerics import ftz, identical_mul_add
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
     Bin,
@@ -304,21 +303,8 @@ def _mul_add_seam[
     return a * b + c
 
 
-@always_inline
-def _log_seam[
-    dt: DType, //
-](x: Scalar[dt]) -> Scalar[dt] where dt.is_floating_point():
-    """`numerics.identical_log` for a generic-dtype seam (DEVIATION 406).
-    Under FAST the wrapper IS `std.math.log`, so the default build's bits
-    are DEVIATION 113's, unchanged; under IDENTICAL it is
-    `portable_logf` -- IDENTITY_PATHS row 12's one arithmetic on every
-    backend. Any non-float32 width keeps the stdlib call (there is no
-    float64 on the device and no portable polynomial measured for it).
-    The `where` clause is DEVIATION 112e's evidence requirement, which
-    both objective structs already carry."""
-    comptime if dt == DType.float32:
-        return identical_log(x.cast[DType.float32]()).cast[dt]()
-    return log(x)
+# Shared body; retain the established local name at every objective call.
+from core.tree_math import tree_log as _log_seam
 
 
 # ----------------------------------------------------------------- CRITERION --
