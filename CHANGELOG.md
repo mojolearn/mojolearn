@@ -25,8 +25,18 @@ and installed-wheel support will be recorded after the artifacts are uploaded.
 - Improved automatic neighbor query batching and IDENTICAL wide full PCA.
 - Added compiled host buffer conversion helpers and staged the NumPy-free
   buffer core. The estimator layer is not yet NumPy-free.
-- Generalized byte-language-model shapes and added reusable device training
-  sessions. These are separate from the classical-ML feature additions.
+- Added `LanguageModelConfig` and `LanguageModelTrainer` aliases with
+  configurable layer counts and token vocabularies, plus optional resident
+  IDENTICAL model/optimizer sessions across Python calls. Inter-layer
+  gradients stay on device; attention and prefill workspace allocation is
+  reduced. Existing small byte-model defaults remain supported. Large-model
+  fit and full-training time remain unqualified.
+- The macOS release workflow now includes the IDENTICAL language-model
+  extension and checks three-layer/vocab257 resident and stateless training
+  in the installed wheel on each supported Python interpreter.
+- Extended IDENTICAL IVF selection through k=1024, added the embedding
+  backward total-key sort plan with scan/sort identity checks, and routed
+  UMAP host math through portable binary64 seams including power.
 - Flattened implementation directories and corrected release build policy pins.
 
 ## 0.7.0 (published 2026-09-09)
