@@ -1,0 +1,51 @@
+KNN_REF_HEADER mode IDENTICAL column apple index 400000 queries 4000 features 32 k 10 rounds 3 fixture dyadic-v1 selector 1 transpose 1 register_tile 1 index_tile 65536
+KNN_PHASE_TIMERS transpose_ms 7.527
+KNN_PHASE_TIMERS distance_ms 732.346 select_ms 327.921 merge_ms 25.342 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_WARMUP request 0 1118.555
+KNN_PHASE_TIMERS transpose_ms 7.039
+KNN_PHASE_TIMERS distance_ms 763.101 select_ms 342.611 merge_ms 24.788 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_WARMUP request 1 1163.143
+KNN_PHASE_TIMERS transpose_ms 7.142
+KNN_PHASE_TIMERS distance_ms 778.043 select_ms 348.847 merge_ms 25.948 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND request 1 1185.427
+KNN_PHASE_TIMERS transpose_ms 7.728
+KNN_PHASE_TIMERS distance_ms 791.468 select_ms 356.863 merge_ms 26.74 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND request 2 1208.274
+KNN_PHASE_TIMERS transpose_ms 7.282
+KNN_PHASE_TIMERS distance_ms 785.025 select_ms 353.376 merge_ms 27.328 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND request 3 1202.895
+KNN_PHASE_TIMERS norms_ms 17.989
+KNN_PHASE_TIMERS transpose_ms 7.601
+KNN_PHASE_TIMERS distance_ms 781.159 select_ms 351.335 merge_ms 27.827 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_WARMUP device 0 1186.239
+KNN_PHASE_TIMERS norms_ms 2.031
+KNN_PHASE_TIMERS transpose_ms 8.13
+KNN_PHASE_TIMERS distance_ms 782.174 select_ms 351.895 merge_ms 26.58 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_WARMUP device 1 1171.095
+KNN_PHASE_TIMERS norms_ms 1.994
+KNN_PHASE_TIMERS transpose_ms 7.913
+KNN_PHASE_TIMERS distance_ms 783.886 select_ms 352.133 merge_ms 25.574 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND device 1 1171.774
+KNN_PHASE_TIMERS norms_ms 2.341
+KNN_PHASE_TIMERS transpose_ms 7.271
+KNN_PHASE_TIMERS distance_ms 800.723 select_ms 369.749 merge_ms 30.415 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND device 2 1210.791
+KNN_PHASE_TIMERS norms_ms 2.037
+KNN_PHASE_TIMERS transpose_ms 7.649
+KNN_PHASE_TIMERS distance_ms 819.764 select_ms 366.185 merge_ms 26.496 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND device 3 1222.564
+KNN_REF_DEVICE_VS_REQUEST mismatched_cells 0
+KNN_REF_FINGERPRINT index_fnv1a64 14071077154797861403 distance_bits_xor 708282
+KNN_REF_ROW0 0 147075 1075752738
+KNN_REF_ROW0 1 347872 1075802578
+KNN_REF_ROW0 2 280582 1075899932
+KNN_REF_ROW0 3 255546 1076098936
+KNN_REF_ROW0 4 158380 1076157127
+KNN_REF_ROW0 5 151319 1076280807
+KNN_REF_ROW0 6 252972 1076309764
+KNN_REF_ROW0 7 194725 1076394742
+KNN_REF_ROW0 8 125716 1076423977
+KNN_REF_ROW0 9 351008 1076424580
+KNN_REF_DUMP_FULL /tmp/mojolearn-knn-large-phases-20260910/n400000-q4000-d32-k10-p1-control.bin 40000
+KNN_REF_RESULT index 400000 queries 4000 k 10 features 32 request_median_ms 1202.895 device_median_ms 1210.791 rounds 3 query_tile 256 index_tile 65536
+KNN REFERENCE PRICE PASS

@@ -1,0 +1,3 @@
+column=apple
+control=MOJOLEARN_KNN_IDENTICAL_NO_PREFLIGHT
+phase_synchronization=enabled; prices are diagnostic only

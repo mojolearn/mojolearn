@@ -1,0 +1,25 @@
+KNN_PHASE_TIMERS transpose_ms 5.945
+KNN_PHASE_TIMERS distance_ms 84.223 select_ms 86.296 merge_ms 7.589 distance_launches 28 select_launches 28 merge_launches 24 query_tile 256 index_tile 65536 n_queries 1000 n_index 400000 k 15
+KNN_PHASE_TIMERS transpose_ms 4.761
+KNN_PHASE_TIMERS distance_ms 79.228 select_ms 81.432 merge_ms 6.075 distance_launches 28 select_launches 28 merge_launches 24 query_tile 256 index_tile 65536 n_queries 1000 n_index 400000 k 15
+KNN_PHASE_TIMERS transpose_ms 4.843
+KNN_PHASE_TIMERS distance_ms 81.413 select_ms 83.311 merge_ms 6.028 distance_launches 28 select_launches 28 merge_launches 24 query_tile 256 index_tile 65536 n_queries 1000 n_index 400000 k 15
+KNN_PHASE_TIMERS transpose_ms 5.17
+KNN_PHASE_TIMERS distance_ms 83.054 select_ms 84.703 merge_ms 6.024 distance_launches 28 select_launches 28 merge_launches 24 query_tile 256 index_tile 65536 n_queries 1000 n_index 400000 k 15
+KNN_PHASE_TIMERS transpose_ms 5.675
+KNN_PHASE_TIMERS distance_ms 84.706 select_ms 86.529 merge_ms 6.303 distance_launches 28 select_launches 28 merge_launches 24 query_tile 256 index_tile 65536 n_queries 1000 n_index 400000 k 15
+KNN_PHASE_TIMERS norms_ms 15.308
+KNN_PHASE_TIMERS transpose_ms 5.156
+KNN_PHASE_TIMERS distance_ms 84.801 select_ms 86.637 merge_ms 6.473 distance_launches 28 select_launches 28 merge_launches 24 query_tile 256 index_tile 65536 n_queries 1000 n_index 400000 k 15
+KNN_PHASE_TIMERS norms_ms 1.845
+KNN_PHASE_TIMERS transpose_ms 5.164
+KNN_PHASE_TIMERS distance_ms 85.317 select_ms 88.308 merge_ms 6.177 distance_launches 28 select_launches 28 merge_launches 24 query_tile 256 index_tile 65536 n_queries 1000 n_index 400000 k 15
+KNN_PHASE_TIMERS norms_ms 1.856
+KNN_PHASE_TIMERS transpose_ms 5.269
+KNN_PHASE_TIMERS distance_ms 90.022 select_ms 92.295 merge_ms 5.97 distance_launches 28 select_launches 28 merge_launches 24 query_tile 256 index_tile 65536 n_queries 1000 n_index 400000 k 15
+KNN_PHASE_TIMERS norms_ms 2.066
+KNN_PHASE_TIMERS transpose_ms 5.73
+KNN_PHASE_TIMERS distance_ms 87.997 select_ms 90.055 merge_ms 5.801 distance_launches 28 select_launches 28 merge_launches 24 query_tile 256 index_tile 65536 n_queries 1000 n_index 400000 k 15
+KNN_PHASE_TIMERS norms_ms 1.967
+KNN_PHASE_TIMERS transpose_ms 5.327
+KNN_PHASE_TIMERS distance_ms 86.897 select_ms 89.254 merge_ms 6.038 distance_launches 28 select_launches 28 merge_launches 24 query_tile 256 index_tile 65536 n_queries 1000 n_index 400000 k 15

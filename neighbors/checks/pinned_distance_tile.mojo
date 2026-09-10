@@ -27,24 +27,16 @@ bits, so their float32 k-NN is not float32 and is not reproducible across
 NVIDIA GPU MODELS either. Our tiled arm inherits their DESIGN, not their
 irreproducibility, and this file is where the two part company.
 
-WHAT THIS KERNEL IS
--------------------
-One thread per output cell. Each thread walks the feature axis ASCENDING and
-accumulates through `identical_mul_add`, so the summation order is a pure
-function of `k` and nothing else -- not the grid, not the block, not the
-device, not the shape. Then the expanded epilogue, the same one
-`core/expand_distances.mojo` applies, folded in so the tile is written once.
-
-It is deliberately the SIMPLEST correct shape rather than a fast one:
-
-- no shared-memory staging, so no page count to pin;
-- no register tile, so no `AccRowsPerTh` to keep in step with a policy;
-- no split of the k axis, so nothing to fold in a chosen order.
-
-Every one of those would be a second thing to pin. `IDENTICAL` is the mode
-that buys reproducibility with speed, and the price is stated in the lane
-file rather than hidden: this reads `k` floats per cell from global memory
-where the vendor matmul reads them once per tile.
+CURRENT IMPLEMENTATIONS
+-----------------------
+The scalar kernel below owns one output cell per thread. The production
+register-tiled kernel later in this file shares loads across RT_ROWS x RT_COLS
+cells (currently 8x4 on NVIDIA, 4x4 on Apple). Both walk each cell's feature
+axis in ascending order, then apply the same expanded-distance epilogue.
+Neither splits or reorders an output's accumulation chain. Apple register
+tiles retain exact zero-FMA repair unless complete-chain exponent admission
+proves the repair unnecessary. Kernel-matrix policy selects the layout and
+tile; the original scalar description is not a description of current dispatch.
 
 THE FAST ARM'S BITS DO NOT MOVE. Nothing here is reachable unless
 `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`; `tiled_brute_force_knn` keeps
@@ -136,7 +128,7 @@ def pinned_distance_tile_kernel(
 # index columns.
 #
 # Each thread owns RT_ROWS query rows x RT_COLS index columns and walks the
-# feature axis ONCE for all sixteen cells. The contract of the kernel above
+# feature axis ONCE for all RT_ROWS * RT_COLS cells. The contract of the kernel above
 # is kept cell for cell: `acc = ftz(fma(ftz(q[f]), ftz(y[f]), acc))` for
 # f ascending, then the same epilogue. What changes is only how many cells
 # share one pass over `f` and which loads they share; no cell's chain is
@@ -219,7 +211,7 @@ def _rt_accumulate_tile(
         # Ignore exponent-zero operands: _rt_load flushes them to signed zero,
         # and a zero product cannot create an underflow-rounding boundary.
         # Minima over the complete feature chain conservatively cover all
-        # sixteen output cells. Admission is data-dependent but exact.
+        # RT_ROWS * RT_COLS output cells. Admission is data-dependent but exact.
         # Exponent255 does not lower the minimum: nonfinite propagation
         # cannot produce the zero result on which the repair differs.
         var q_min = UInt32(255)
@@ -251,7 +243,7 @@ def pinned_distance_register_tile_kernel(
     is_sqrt_in: Int32,
 ):
     """`z[i][j] = ||q_i||^2 + ||y_j||^2 - 2 q_i . y_j`, clamped at zero,
-    sixteen cells per thread, one ascending serial chain per cell."""
+    RT_ROWS * RT_COLS cells per thread, one ascending serial chain per cell."""
     var n_rows = Int(n_rows_in)
     var n_cols = Int(n_cols_in)
     var y_stride = Int(y_stride_in)

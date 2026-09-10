@@ -490,13 +490,10 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     THEIR FALLBACK, reached from `brute_force_knn_impl` below only when the
     fused path's conditions fail (k > 64, or a metric fusion does not cover).
 
-    Their loop tiles both axes. This tiles queries only, because the index
-    axis is what the top-k reduces over and splitting it needs a merge of
-    partial top-k lists (`:278-320`). That merge is NOT ported and is the
-    largest remaining gap on this path; the lane file carries the full
-    reading of their `num_col_tiles` / `temp_out_cols` machinery and what it
-    would take. So `n_index` columns of one query tile must fit `dist_tile`,
-    and `query_tile` is the knob that makes that true.
+    IDENTICAL tiles both axes and merges partial top-k lists below, using
+    the pinned (distance, index) order. The vendor top-k path keeps the full
+    index axis. Distance scratch therefore holds query_tile * index_tile
+    cells, with the index tile selected by kernel-matrix policy.
 
     THE METRIC, 2026-09-01. `metric` follows their `pairwise_metric`
     rewrite at `:112-142` exactly:
@@ -667,8 +664,8 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     # cell. Three spellings of that one chain, chosen by the
                     # kernel matrix: row-major index one cell per thread
                     # (`pinned_distance_tile_kernel`), transposed index one
-                    # cell per thread, and transposed index with a 4x4
-                    # register tile per thread. Same bits from all three.
+                    # cell per thread, and transposed index with an
+                    # RT_ROWS x 4 register tile per thread. Same bits from all three.
                     var is_sqrt_arg = Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0)
                     var layout_distance_launched = False
                     comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:

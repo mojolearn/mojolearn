@@ -1,0 +1,10 @@
+{
+  "default": {
+    "path": "/tmp/mojolearn-knn-large-prices-20260910/default",
+    "sha256": "e3ca35beb243fd3db0aee404c33cf36827f0fc262793bb51cfe2d578a118a14c"
+  },
+  "control": {
+    "path": "/tmp/mojolearn-knn-large-prices-20260910/control",
+    "sha256": "e12b093171ff6dacc870782aa1d6f40a653398f817bf154ec4583e0a9621a986"
+  }
+}
