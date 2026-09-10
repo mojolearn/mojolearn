@@ -67,7 +67,7 @@ check_hw_card_is_emitted OK [IDENTICAL]: 38 stages (hw.input ... 23 iteration st
   census zero s0: ZERO_DIR halvings=0
   census mixed s0: BOTH_CRIT halvings=68
   census reach over 35 standard series: ZERO_DIR=13 HESSIAN_RESET=7 LS_LIMIT=0 RHO_ZERO=0 H_NAN=0 BOTH_CRIT=11 ITER_LIMIT=0 ALPHA_LO=0 ALPHA_HI=1 BETA_LO=16 BETA_HI=0 GAMMA_LO=0 GAMMA_HI=3
-  census THIN (one series only, a bit away from vacuous): ALPHA_HI 
+  census THIN (one series only, a bit away from vacuous): ALPHA_HI
   reach search 128 fits (64 hashed salts, seed = salt, x additive and multiplicative): LS_LIMIT NOT REACHED in 128 fits; RHO_ZERO REACHED, first at salt 102 multiplicative, 12/128 fits, 13 series
   RHO_ZERO pin: CONFIRMED at salt 102 multiplicative
   RHO_ZERO fixture: device 1/7 series, oracle 1/7, H_NAN co-reached on 1 of those 1; mask == oracle

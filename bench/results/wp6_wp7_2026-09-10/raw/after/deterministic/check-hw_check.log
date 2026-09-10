@@ -40,7 +40,7 @@ check_hw_card_is_emitted OK [DETERMINISTIC]: 41 stages (hw.input ... 26 iteratio
   RECORDED [FAST] mixed hw.opt.decisions[0]: 4980768 vs 5767200
   census mixed s0: BOTH_CRIT halvings=76
   census reach over 35 standard series: ZERO_DIR=14 HESSIAN_RESET=7 LS_LIMIT=0 RHO_ZERO=1 H_NAN=1 BOTH_CRIT=13 ITER_LIMIT=0 ALPHA_LO=1 ALPHA_HI=1 BETA_LO=14 BETA_HI=0 GAMMA_LO=3 GAMMA_HI=2
-  census THIN (one series only, a bit away from vacuous): RHO_ZERO H_NAN ALPHA_LO ALPHA_HI 
+  census THIN (one series only, a bit away from vacuous): RHO_ZERO H_NAN ALPHA_LO ALPHA_HI
   reach search 128 fits (64 hashed salts, seed = salt, x additive and multiplicative): LS_LIMIT NOT REACHED in 128 fits; RHO_ZERO REACHED, first at salt 109 additive, 3/128 fits, 3 series
   RHO_ZERO pin: DRIFTED. The recorded witness is salt 102 kind 1, the census now selects salt 109 additive. The branch is still covered, by a DIFFERENT series, and WHICH series reaches a NaN route is a fact about the implementation -- read it before recording it
   RECORDED [FAST] check_hw_decision_branches: RHO_ZERO is set by the device on 1 series and by the HOST ORACLE on 0 at salt 109 additive (sabotage none). The oracle shares no code with the kernel, so the branch is only really reached when both take it.

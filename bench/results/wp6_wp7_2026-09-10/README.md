@@ -62,6 +62,9 @@ runtime-staging failures are retained as diagnostics, not counted as passes.
 - `capture-inventory.json`: frame counts and SHA-256 hashes for output captures.
 - `integration-comparisons.json`: controlled candidate versus integrated main.
 - `raw/`: public text traces, final check/surface logs and recorded exit states.
+  Published logs have trailing whitespace normalized, recorded in
+  `log-whitespace-normalization.json`; original logs remain in the external
+  archive. Trace/card bytes and array-capture hashes are unchanged.
 - `artifacts.json`: SHA-256 hashes and absolute locations for the complete raw
   capture archive and the four native benchmark binaries, retained outside the
   repository at `/Users/andrewhendel/CascadeProjects/mojolearn-evidence/wp6_wp7_2026-09-10/`.

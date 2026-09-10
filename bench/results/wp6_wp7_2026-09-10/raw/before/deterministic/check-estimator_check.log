@@ -106,7 +106,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/mojolearn/./neighbors/impl/detail/fused_l2_knn.mojo:465:21: warning: '@parameter for' is deprecated; use 'comptime for'
                     @parameter
                     ^~~~~~~~~~
-                    comptime 
+                    comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -142,7 +142,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/mojolearn/./neighbors/impl/detail/fused_l2_knn.mojo:514:13: warning: '@parameter for' is deprecated; use 'comptime for'
             @parameter
             ^~~~~~~~~~
-            comptime 
+            comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -151,7 +151,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/mojolearn/./neighbors/impl/detail/fused_l2_knn.mojo:524:17: warning: '@parameter for' is deprecated; use 'comptime for'
                 @parameter
                 ^~~~~~~~~~
-                comptime 
+                comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -160,7 +160,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/mojolearn/./neighbors/impl/detail/fused_l2_knn.mojo:538:17: warning: '@parameter for' is deprecated; use 'comptime for'
                 @parameter
                 ^~~~~~~~~~
-                comptime 
+                comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -169,7 +169,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/mojolearn/./neighbors/impl/detail/fused_l2_knn.mojo:639:21: warning: '@parameter for' is deprecated; use 'comptime for'
                     @parameter
                     ^~~~~~~~~~
-                    comptime 
+                    comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -178,7 +178,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/mojolearn/./neighbors/impl/detail/fused_l2_knn.mojo:670:25: warning: '@parameter for' is deprecated; use 'comptime for'
                         @parameter
                         ^~~~~~~~~~
-                        comptime 
+                        comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -187,7 +187,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/mojolearn/./neighbors/impl/detail/fused_l2_knn.mojo:675:25: warning: '@parameter for' is deprecated; use 'comptime for'
                         @parameter
                         ^~~~~~~~~~
-                        comptime 
+                        comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -196,7 +196,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/mojolearn/./neighbors/impl/detail/fused_l2_knn.mojo:745:21: warning: '@parameter for' is deprecated; use 'comptime for'
                     @parameter
                     ^~~~~~~~~~
-                    comptime 
+                    comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -747,7 +747,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:537:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -756,7 +756,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:550:13: warning: '@parameter for' is deprecated; use 'comptime for'
             @parameter
             ^~~~~~~~~~
-            comptime 
+            comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -900,7 +900,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:301:5: warning: '@parameter if' is deprecated; use 'comptime if'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -909,7 +909,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:432:5: warning: '@parameter if' is deprecated; use 'comptime if'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -958,7 +958,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:518:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -967,7 +967,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:601:13: warning: '@parameter for' is deprecated; use 'comptime for'
             @parameter
             ^~~~~~~~~~
-            comptime 
+            comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -976,7 +976,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:647:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -985,7 +985,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:666:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -994,7 +994,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:283:5: warning: '@parameter if' is deprecated; use 'comptime if'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -1003,7 +1003,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:367:5: warning: '@parameter if' is deprecated; use 'comptime if'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Imported from ./umap/estimator.mojo:10:
 Imported from ./umap/sparse_estimator.mojo:14:
@@ -1012,7 +1012,7 @@ Imported from /root/mojolearn/./neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:375:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 Included from /root/mojolearn/umap/checks/estimator_check.mojo:9:
 Included from ./umap/estimator.mojo:10:
 Included from ./umap/sparse_estimator.mojo:20:

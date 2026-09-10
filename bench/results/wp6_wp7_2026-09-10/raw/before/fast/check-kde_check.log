@@ -88,14 +88,14 @@ check_kde_log_norm_closed_form OK [FAST]: 39 closed-form cases within 2e-5 (wors
 check_kde_oracle_vs_float64 OK [FAST]: 6 kernels x 4 metrics, 1252 finite cells within 2e-4 (worst |diff| 5.196020223863229e-06), 80 -inf cells at <= -1e38
 check_kde_logsumexp_beats_naive OK [FAST]: naive log-sum -inf (underflowed), logsumexp -1708.7214 vs float64 -1708.7213588720942 (row max -1706.8835)
   report gaussian/euclidean: 5 of 37 scores differ; first stage: 0	kde.dists	f32	7400	22201a0fc9f04893   VS   0	kde.dists	f32	7400	569f2ce816bb023a; query 6 device 0xc16eac6b oracle 0xc16eac6a
-  report tophat/euclidean: 0 of 37 scores differ; first stage: 0	kde.dists	f32	7400	22201a0fc9f04893   VS   0	kde.dists	f32	7400	569f2ce816bb023a; 
+  report tophat/euclidean: 0 of 37 scores differ; first stage: 0	kde.dists	f32	7400	22201a0fc9f04893   VS   0	kde.dists	f32	7400	569f2ce816bb023a;
   report epanechnikov/euclidean: 3 of 37 scores differ; first stage: 0	kde.dists	f32	7400	22201a0fc9f04893   VS   0	kde.dists	f32	7400	569f2ce816bb023a; query 14 device 0xc13298db oracle 0xc13298dc
   report exponential/euclidean: 2 of 37 scores differ; first stage: 0	kde.dists	f32	7400	22201a0fc9f04893   VS   0	kde.dists	f32	7400	569f2ce816bb023a; query 4 device 0xc1962dcb oracle 0xc1962dca
   report linear/euclidean: 2 of 37 scores differ; first stage: 0	kde.dists	f32	7400	22201a0fc9f04893   VS   0	kde.dists	f32	7400	569f2ce816bb023a; query 27 device 0xc14d09dc oracle 0xc14d09dd
   report cosine/euclidean: 3 of 37 scores differ; first stage: 0	kde.dists	f32	7400	22201a0fc9f04893   VS   0	kde.dists	f32	7400	569f2ce816bb023a; query 5 device 0xc152c4fe oracle 0xc152c4fd
   report gaussian/sqeuclidean: 2 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	93e594226df58ef6   VS   3	kde.logsumexp	f32	37	0a40ca9bc82c3295; query 13 device 0xc18622b8 oracle 0xc18622b7
   report epanechnikov/sqeuclidean: 1 of 37 scores differ; first stage: 1	kde.logk	f32	7400	3b9ea646f2903f80   VS   1	kde.logk	f32	7400	5ac88fc3fabd8617; query 35 device 0xc14d18fa oracle 0xc14d18fb
-  report exponential/sqeuclidean: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	f569d71f33ce988a   VS   3	kde.logsumexp	f32	37	1284082c9e153ef6; 
+  report exponential/sqeuclidean: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	f569d71f33ce988a   VS   3	kde.logsumexp	f32	37	1284082c9e153ef6;
   report linear/sqeuclidean: 4 of 37 scores differ; first stage: 1	kde.logk	f32	7400	54a3be011011eb60   VS   1	kde.logk	f32	7400	7a13aac8984709f5; query 0 device 0xc13958bf oracle 0xc13958c0
   report cosine/sqeuclidean: 3 of 37 scores differ; first stage: 1	kde.logk	f32	7400	a794ae986ede582b   VS   1	kde.logk	f32	7400	01937ec2024419bf; query 9 device 0xc16e3a4e oracle 0xc16e3a50
   report gaussian/l1: 2 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	b19e864ba819018e   VS   3	kde.logsumexp	f32	37	a93900c22f839cca; query 11 device 0xc18d42eb oracle 0xc18d42ea
@@ -110,13 +110,13 @@ check_kde_logsumexp_beats_naive OK [FAST]: naive log-sum -inf (underflowed), log
   report linear/chebyshev: 1 of 37 scores differ; first stage: 1	kde.logk	f32	7400	5e2005b0ae1d80b8   VS   1	kde.logk	f32	7400	31dca9f9aa7620ff; query 3 device 0xc109d3ad oracle 0xc109d3ac
   report cosine/chebyshev: 11 of 37 scores differ; first stage: 1	kde.logk	f32	7400	5ce3620eaf3e9a86   VS   1	kde.logk	f32	7400	b35f83c9321accd5; query 3 device 0xc10a231f oracle 0xc10a231e
   report gaussian/cosine: 4 of 37 scores differ; first stage: 0	kde.dists	f32	7400	6c9b1d8d307bfcb7   VS   0	kde.dists	f32	7400	8563555ef10baba1; query 0 device 0xc1596ff9 oracle 0xc1596ff8
-  report tophat/cosine: 0 of 37 scores differ; first stage: 0	kde.dists	f32	7400	6c9b1d8d307bfcb7   VS   0	kde.dists	f32	7400	8563555ef10baba1; 
+  report tophat/cosine: 0 of 37 scores differ; first stage: 0	kde.dists	f32	7400	6c9b1d8d307bfcb7   VS   0	kde.dists	f32	7400	8563555ef10baba1;
   report epanechnikov/cosine: 9 of 37 scores differ; first stage: 0	kde.dists	f32	7400	6c9b1d8d307bfcb7   VS   0	kde.dists	f32	7400	8563555ef10baba1; query 0 device 0xc0e98aa1 oracle 0xc0e98aa0
   report exponential/cosine: 1 of 37 scores differ; first stage: 0	kde.dists	f32	7400	6c9b1d8d307bfcb7   VS   0	kde.dists	f32	7400	8563555ef10baba1; query 24 device 0xc18c01b7 oracle 0xc18c01b6
   report linear/cosine: 13 of 37 scores differ; first stage: 0	kde.dists	f32	7400	6c9b1d8d307bfcb7   VS   0	kde.dists	f32	7400	8563555ef10baba1; query 0 device 0xc0e05de6 oracle 0xc0e05de5
   report cosine/cosine: 9 of 37 scores differ; first stage: 0	kde.dists	f32	7400	6c9b1d8d307bfcb7   VS   0	kde.dists	f32	7400	8563555ef10baba1; query 1 device 0xc0e5530e oracle 0xc0e5530d
   report gaussian/minkowski: 8 of 37 scores differ; first stage: 0	kde.dists	f32	7400	4d302e27425d2def   VS   0	kde.dists	f32	7400	27c2ed0bbacc5173; query 6 device 0xc16eac6b oracle 0xc16eac6a
-  report tophat/minkowski: 0 of 37 scores differ; first stage: 0	kde.dists	f32	7400	4d302e27425d2def   VS   0	kde.dists	f32	7400	27c2ed0bbacc5173; 
+  report tophat/minkowski: 0 of 37 scores differ; first stage: 0	kde.dists	f32	7400	4d302e27425d2def   VS   0	kde.dists	f32	7400	27c2ed0bbacc5173;
   report epanechnikov/minkowski: 2 of 37 scores differ; first stage: 0	kde.dists	f32	7400	4d302e27425d2def   VS   0	kde.dists	f32	7400	27c2ed0bbacc5173; query 0 device 0xc12a21a4 oracle 0xc12a21a5
   report exponential/minkowski: 2 of 37 scores differ; first stage: 0	kde.dists	f32	7400	4d302e27425d2def   VS   0	kde.dists	f32	7400	27c2ed0bbacc5173; query 16 device 0xc194d03c oracle 0xc194d03b
   report linear/minkowski: 1 of 37 scores differ; first stage: 0	kde.dists	f32	7400	4d302e27425d2def   VS   0	kde.dists	f32	7400	27c2ed0bbacc5173; query 27 device 0xc14d09de oracle 0xc14d09dd

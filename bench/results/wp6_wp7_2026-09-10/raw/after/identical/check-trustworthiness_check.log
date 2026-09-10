@@ -84,7 +84,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:465:21: warning: '@parameter for' is deprecated; use 'comptime for'
                     @parameter
                     ^~~~~~~~~~
-                    comptime 
+                    comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -116,7 +116,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:514:13: warning: '@parameter for' is deprecated; use 'comptime for'
             @parameter
             ^~~~~~~~~~
-            comptime 
+            comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -124,7 +124,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:524:17: warning: '@parameter for' is deprecated; use 'comptime for'
                 @parameter
                 ^~~~~~~~~~
-                comptime 
+                comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -132,7 +132,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:538:17: warning: '@parameter for' is deprecated; use 'comptime for'
                 @parameter
                 ^~~~~~~~~~
-                comptime 
+                comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -140,7 +140,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:639:21: warning: '@parameter for' is deprecated; use 'comptime for'
                     @parameter
                     ^~~~~~~~~~
-                    comptime 
+                    comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -148,7 +148,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:670:25: warning: '@parameter for' is deprecated; use 'comptime for'
                         @parameter
                         ^~~~~~~~~~
-                        comptime 
+                        comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -156,7 +156,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:675:25: warning: '@parameter for' is deprecated; use 'comptime for'
                         @parameter
                         ^~~~~~~~~~
-                        comptime 
+                        comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -164,7 +164,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
 /root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:745:21: warning: '@parameter for' is deprecated; use 'comptime for'
                     @parameter
                     ^~~~~~~~~~
-                    comptime 
+                    comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -654,7 +654,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:537:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -662,7 +662,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:550:13: warning: '@parameter for' is deprecated; use 'comptime for'
             @parameter
             ^~~~~~~~~~
-            comptime 
+            comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -790,7 +790,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:301:5: warning: '@parameter if' is deprecated; use 'comptime if'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -798,7 +798,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:432:5: warning: '@parameter if' is deprecated; use 'comptime if'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -842,7 +842,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:518:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -850,7 +850,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:601:13: warning: '@parameter for' is deprecated; use 'comptime for'
             @parameter
             ^~~~~~~~~~
-            comptime 
+            comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -858,7 +858,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:647:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -866,7 +866,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:666:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -874,7 +874,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:283:5: warning: '@parameter if' is deprecated; use 'comptime if'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -882,7 +882,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:367:5: warning: '@parameter if' is deprecated; use 'comptime if'
     @parameter
     ^~~~~~~~~~
-    comptime 
+    comptime
 Imported from /root/wp67-compile/metrics/checks/trustworthiness_check.mojo:63:
 Imported from /root/wp67-compile/metrics/impl/stats/detail/trustworthiness_score.mojo:82:
 Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
@@ -890,7 +890,7 @@ Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
 /root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:375:9: warning: '@parameter for' is deprecated; use 'comptime for'
         @parameter
         ^~~~~~~~~~
-        comptime 
+        comptime
 20373 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3157c0000000, nodemask=1)
 == metrics/checks/trustworthiness_check.mojo [IDENTICAL] ==
 check_trust_rank_sum_exact [IDENTICAL]
