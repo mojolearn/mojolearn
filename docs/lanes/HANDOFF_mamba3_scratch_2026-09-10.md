@@ -9,7 +9,7 @@ The constructor's default remains zero initialization. The binding opts in only 
 | Selected stages | Complete producer before consumption |
 | --- | --- |
 | norm_sumsq, norm_out | Existing RMSNorm writes every new-token row/cell |
-| in_proj, out_proj | GEMM with accumulate=False writes every output |
+| in_proj, out_proj | GEMM implements C=op(A)*op(B), with no old-C term, and writes every output |
 | a_out, dt_out | m3_a_dt_kernel writes every M×H cell |
 | gamma_work, betap_work, scale_work | m3_scale_kernel writes every B×T×H cell, including the structural final shift |
 | bcnorm_b, bcnorm_c | m3_bcnorm_kernel writes both full M×N outputs |
@@ -36,7 +36,7 @@ References below name functions, with line numbers at this candidate revision. `
 | Field(s) | Definite write and extent |
 | --- | --- |
 | norm_sumsq, norm_out | m1 `mamba_rms_norm_kernel`:626 owns each token, initializes its local accumulator, stores M sums and all M*D normalized cells. |
-| in_proj, out_proj | block `mamba3_block_forward`:1106 calls `identical_gemm[False]` for both projections: no old output accumulation. All positive output dimensions are written. |
+| in_proj, out_proj | block `mamba3_block_forward`:1106 calls `identical_gemm[False]` for both projections. The False parameter disables vendor dispatch; overwrite follows the GEMM C=op(A)*op(B) contract, not that flag. All positive output dimensions are written. |
 | a_out, dt_out | block `m3_a_dt_kernel`:504 stores both outputs for every cell below M*H. |
 | bcnorm_b, bcnorm_c | block `m3_bcnorm_kernel`:558 owns each token and stores both complete N-element rows. |
 | gamma_work, betap_work, scale_work | siso `m3_scale_kernel`:327 stores all B*T*H cells; its final shifted-beta zero is explicitly stored. |
@@ -70,3 +70,9 @@ Root reports Apple baseline/poison native default and long traces byte-equal, pl
 `LlamaDeviceStages.__init__` in `transformer/impl/transformers/models/llama/modeling_llama.mojo`:1193 also zero-fills projection, norm, MLP and attention scratch. A bounded follow-on could opt out only for fully written linear stages: both norm sums/outputs, q/k/v projections, q/k rotary outputs, context/output projection, residuals and MLP intermediates. These are produced by `llama_rms_norm_kernel`:1315, GEMM with no accumulation, `apply_rotary_pos_emb_kernel`:1601, attention context/scatter or fused forward, `silu_kernel`:2404 and `mlp_gated_kernel`:2431. Attention context needs route-specific proof before inclusion.
 
 Do NOT mechanically apply the Mamba list to transformer cache storage: `kv_append_kernel`:1723 writes only the active packed B*nkv*S*HD prefix, while stage cache buffers have S_cap capacity. The non-window path at line3298 copies whole stage buffers into the persistent cache; an unwritten capacity tail could therefore become observable. Preserve k_cache/v_cache zeros unless a separate capacity-tail proof or exact clearing rule is implemented. Preserve LlamaKVCache's own zeros, lean attention placeholders, and unused packed-head scratch until their backward/materialization consumers are audited. The RoPE table kernel:1473 fully writes both tables, but removing those two fills has much smaller volume than linear stages. Measure current allocation phase before selecting this follow-on; no transformer source changes are proposed here.
+
+## Initial H100 performance rejection
+
+Root reports first medians baseline/uninitialized: narrow 56.767391/236.131446 ms, wide 104.340496/103.713224 ms, tiny 1.1889/1.0680 ms. These are preliminary single-order measurements; output hashes matched so far and poison arm remained pending. Do not enable this candidate by default on this evidence, including a tiny-shape carveout. Final combined GEMM validation should use zero-initialized Mamba3 stages.
+
+Read-only regression inspection finds identical allocation sizes/order and numerical launches, and a synchronized input upload before numerical stage use. No missing allocation-readiness barrier has been established. Deferred allocation, physical placement/first-touch behavior, and external runtime conditions are hypotheses only. Poison restores the fills and synchronization while retaining the new helper/constructor code, making its timing a useful discriminator. If poison restores narrow speed, a bounded next diagnostic is uninitialized allocation with a synchronize per allocation; this separates the removed synchronization from removed memory writes. Existing PHASE_TIMERS synchronizes stage construction, so compare against an uninstrumented arm and do not mistake that extra barrier for a neutral observer. No additional code or device work was performed for this diagnosis.
