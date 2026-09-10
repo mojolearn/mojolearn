@@ -81,7 +81,8 @@ runtime-staging failures are retained as diagnostics, not counted as passes.
 The controlled baseline is d330a49d. The original candidate snapshot is
 4b5063e6, supplemented by the retained kNN source from 5528df19 and the test
 repairs. Integration is 53fb90b2, rebased onto the current main changes;
-subsequent commits change only harness/evidence documentation. The archive
+subsequent commits in this WP6/WP7 lane change only harness/evidence
+documentation. Later unrelated main changes have their own qualification. The archive
 records the actual staged sources and scripts so rewritten local commit IDs
 do not become the sole provenance.
 

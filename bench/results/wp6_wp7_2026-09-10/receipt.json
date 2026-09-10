@@ -24,6 +24,6 @@
     "initial_candidate": "4b5063e6",
     "supplemental_knn": "5528df19",
     "integration": "53fb90b2",
-    "final_product_matches_integration": true
+    "integration_output_captures_match_controlled_candidate": true
   }
 }

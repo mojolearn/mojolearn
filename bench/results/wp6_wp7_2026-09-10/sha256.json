@@ -1,5 +1,5 @@
 {
-  "README.md": "f6d2d1da0183cc11196562142eda7636ecddc4ee7948e4d01d447d09593ee4dd",
+  "README.md": "0d87a644870b93d7438d48a4cbf94cd0df3d339453ed114eac5166d2043c62a4",
   "artifacts.json": "7a60d6f39caafb00c21062a7de1a7269353f09a2632e6184c8c1251f0a242eb3",
   "capture-inventory.json": "175f08fd5ffb2396b784e2672b3d54d0462d7da980696a2929934aa55d003376",
   "cleanup.json": "a7cd10c0aff93d2ad5e6a5c97e8f35a5b847bb60213c42b42eedc940e3f96a01",
@@ -275,7 +275,7 @@
   "raw/integration/host-tests.log": "9c46d253a73d27278240140b7f7626529c5dd32c4eb508e95c75627793a78932",
   "raw/integration/resident-multi.log": "d6dda672444b25ad07d966a87068a5cf108e450bfb91df38d02a7e8416c56ff7",
   "raw/integration/surface-transformer.log": "c65b68b4b8704e11e020ed0fb5b4b3714f5ec86e339f16845a973b026f0a6d56",
-  "receipt.json": "1a04ff97ef741769625fa40d5d3247db41007cc313cd222b8ab1a678422d46d9",
+  "receipt.json": "781fd0ea06f1568197edb8ea31b9f948c2ba80c9b852944736da244a5a1b464f",
   "repeat-runtime-closure.json": "b1f03f0b6b947195c6b127771808f4b0bec14d2603b94d7cd664013ee09c92bf",
   "repeat-runtime-packages.json": "52715cf5ea4496f618845f460e1e30cfb176360d064acb96c2a77db788b9a917",
   "summary.json": "66f7d37664e1ac3d6f95db555bf76a78b61b69507f9c216000e5356eccec1572",
