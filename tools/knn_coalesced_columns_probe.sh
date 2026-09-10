@@ -8,7 +8,8 @@ output=${1:?fresh absolute output directory required}
 [[ "$output" = /* && ! -e "$output" ]]
 mkdir -p "$output"
 mojo --version > "$output/compiler.txt" 2>&1
-git rev-parse HEAD > "$output/source.txt"
+if [[ -f commit.txt ]]; then cat commit.txt > "$output/source.txt"; else git rev-parse HEAD > "$output/source.txt"; fi
+
 for arm in baseline coalesced; do
   flags=(-D MOJOLEARN_NUMERIC_IDENTICAL=1)
   if [[ "$arm" == coalesced ]]; then

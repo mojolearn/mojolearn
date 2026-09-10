@@ -1184,6 +1184,23 @@ comptime TUNED_HW_FTZ_FMA = (
 )
 
 
+# Apply operand seams before shared staging on the measured NVIDIA path.
+# Consumers read the same flushed words without repeating their tests.
+# Explicit opt-in qualifies other columns; the legacy flag supplies A/B control.
+comptime TUNED_STAGE_FTZ = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_GEMM_LEGACY_STAGE_FTZ"]()
+    and (TUNED_HW_FTZ_FMA or is_defined["MOJOLEARN_GEMM_STAGE_FTZ"]())
+)
+
+
+@always_inline
+def _tuned_loaded_operand(v: Float32) -> Float32:
+    comptime if TUNED_STAGE_FTZ:
+        return v
+    return ftz(v)
+
+
 @always_inline
 def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """Contract sections 4 and 5c for one `p`: `ftz(fma(a, b, acc))`, with
@@ -1502,6 +1519,9 @@ def _tuned_g2r[
                         out[s0 * VEC + e0] = src.unsafe_load(
                             oi0 * outer_stride + (p0 + cc0) * k_stride
                         )
+        comptime if TUNED_STAGE_FTZ:
+            comptime for f in range(SLOTS * VEC):
+                out[f] = ftz(out[f])
         return out
     comptime for s in range(NSLOT):
         var idx = tid + s * NTH
@@ -1522,6 +1542,9 @@ def _tuned_g2r[
                             out[s * VEC + e] = src.unsafe_load(
                                 oi * outer_stride + (p0 + cc + e) * k_stride
                             )
+    comptime if TUNED_STAGE_FTZ:
+        comptime for f in range(SLOTS * VEC):
+            out[f] = ftz(out[f])
     return out
 
 
@@ -1823,13 +1846,14 @@ def identical_gemm_tuned_kernel[
                     comptime for e2 in range(VEC):
                         rb[v * VEC + e2] = tb[e2]
                 comptime for e3 in range(VEC):
-                    # 5b, ONCE per staged B value rather than once per use.
+                    # 5b: already flushed at staging when enabled; otherwise
+                    # once per shared-loaded B value rather than once per cell.
                     var bfl = SIMD[DType.float32, CPT](0.0)
                     comptime for v2 in range(NCOL):
-                        bfl[v2] = ftz(rb[v2 * VEC + e3])
+                        bfl[v2] = _tuned_loaded_operand(rb[v2 * VEC + e3])
                     comptime for u2 in range(NR):
                         # 5a, likewise.
-                        var afl = ftz(ra[u2 * VEC + e3])
+                        var afl = _tuned_loaded_operand(ra[u2 * VEC + e3])
                         comptime for v3 in range(NCOL):
                             # 4 (one fused rounding) and 5c (the accumulator
                             # flushed after EVERY step). 5c is per cell per
@@ -1844,11 +1868,11 @@ def identical_gemm_tuned_kernel[
             for cc in range(chunk):
                 var bfl2 = SIMD[DType.float32, CPT](0.0)
                 comptime for v4 in range(NCOL):
-                    bfl2[v4] = ftz(
+                    bfl2[v4] = _tuned_loaded_operand(
                         bs_.unsafe_load(bbase + v4 * TC * SSTRIDE + cc)
                     )
                 comptime for u3 in range(NR):
-                    var afl2 = ftz(
+                    var afl2 = _tuned_loaded_operand(
                         as_.unsafe_load(abase + u3 * TR * SSTRIDE + cc)
                     )
                     comptime for v5 in range(NCOL):

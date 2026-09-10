@@ -9,7 +9,7 @@ nonzero outputs in rows/columns whose required result is zero. Swapping the
 operand roles exercises both loaders. No nonfinite inputs or host-libm oracle.
 """
 from std.collections import List
-from std.gpu.host import DeviceContext
+from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_device_check import _run_device
