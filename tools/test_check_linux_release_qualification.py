@@ -55,9 +55,9 @@ class ReleaseAdmissionTests(unittest.TestCase):
             root = Path(directory)
             wheel = make_wheel(root)
             extensions, sets = gate.inspect_wheel(wheel, root)
-            self.assertEqual(len(extensions), 90)
+            self.assertEqual(len(extensions), 2 * len(gate.surface.MODES) * len(gate.surface.BINDINGS))
             self.assertEqual(len(sets), 6)
-            self.assertEqual(set(sets.values()), {15})
+            self.assertEqual(set(sets.values()), {len(gate.surface.BINDINGS)})
 
     def test_vendor_candidates_missing_modes_and_corrupt_record_refuse(self):
         cases = [dict(vendors=('hip',)), dict(vendors=('cuda',)),

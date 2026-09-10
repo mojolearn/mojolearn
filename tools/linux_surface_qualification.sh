@@ -96,8 +96,10 @@ for path in sorted((out / 'sets').rglob('_mojolearn*.so')):
 commit = next(line.split('=', 1)[1] for line in (out / 'source-provenance.txt').read_text().splitlines() if line.startswith('source_commit='))
 byte_lm = os.environ.get('MOJOLEARN_PACKAGE_BYTE_LM', '0')
 assert byte_lm in ('0', '1'), 'Invalid byte-LM build flag'
-full_count = 46 if byte_lm == '1' else 45
-expected_count = full_count if action == 'build' else (16 if byte_lm == '1' and os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical' else 15)
+sys.path.insert(0, str(root / 'tools'))
+from verify_linux_surface_qualification import MODES, expected_bindings
+full_count = sum(len(expected_bindings(mode, byte_lm == '1')) for mode in MODES)
+expected_count = full_count if action == 'build' else len(expected_bindings(os.environ['MOJOLEARN_BUILD_TIERS'], byte_lm == '1'))
 byte_members = [n for n in outputs if n.endswith('/_mojolearn_byte_lm.so')]
 assert len(byte_members) == (1 if byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical') else 0), 'Incorrect byte-LM inventory'
 assert all('/identical/' in n for n in byte_members), 'Byte-LM is IDENTICAL only'

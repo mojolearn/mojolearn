@@ -295,7 +295,7 @@ def load_set(path, include_byte_lm=False):
                              EXT_NAMES + (('_mojolearn_byte_lm',) if tier == 'identical' else ())}
             for witness, expected_value in (('readback.txt', vendor), ('arch_readback.txt', arch)):
                 rows = [line.split() for line in (adir / witness).read_text().splitlines()]
-                if (len(rows) != 46 or any(len(row) != 3 for row in rows)
+                if (len(rows) != len(expected_rows) or any(len(row) != 3 for row in rows)
                         or {(row[0], row[1]) for row in rows} != expected_rows
                         or any(row[2] != expected_value for row in rows)):
                     raise SystemExit(f'pack_wheel: incomplete release native readback in {adir / witness}')

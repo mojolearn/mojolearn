@@ -9,7 +9,7 @@ import struct
 
 MODES = {'fast': 0, 'deterministic': 2, 'identical': 1}
 BINDINGS = {'_mojolearn' + suffix for suffix in ('', '_gbdt', '_estimators', '_rf', '_trees',
-            '_svm', '_solver', '_metrics', '_tsa', '_linalg', '_arima', '_training', '_gp',
+            '_svm', '_solver', '_metrics', '_preprocessing', '_tsa', '_linalg', '_arima', '_training', '_gp',
             '_mamba', '_transformer')}
 CORPUS_CASES = ('base_b2_l4_d8', 'mamba2/m2_base_b2_l4_d32',
                 'mamba3/m3_base_b2_l4_d32')

@@ -1810,7 +1810,9 @@ if proof.get('complete') is not True or proof.get('build_exit') != 0 or proof.ge
 if before.get('device_architecture') != arch or before.get('vendor') != 'cuda' or before.get('source_inventory') != proof.get('source_inventory'): raise SystemExit('Physical/source witness mismatch')
 if proof.get('source_inventory') != json.loads(pathlib.Path(inventory_path).read_text()): raise SystemExit('Local/archive/build source inventories differ')
 extensions=proof['extensions']
-if len(extensions)!=46: raise SystemExit('Incomplete native payload')
+sys.path.insert(0, str(pathlib.Path.cwd() / 'tools'))
+from verify_linux_surface_qualification import MODES, expected_bindings
+if len(extensions) != sum(len(expected_bindings(mode, True)) for mode in MODES): raise SystemExit('Incomplete native payload')
 for name, digest in extensions.items():
     p=pathlib.PurePosixPath(name)
     if not name.startswith('mojolearn/cuda/'+arch+'/') or '..' in p.parts: raise SystemExit('Wrong architecture/path')
@@ -1819,7 +1821,7 @@ for name, digest in extensions.items():
         h=hashlib.sha256()
         for block in iter(lambda:stream.read(1048576), b''): h.update(block)
     if h.hexdigest()!=digest: raise SystemExit('Fetched native byte mismatch')
-print('BUILT_NOT_INSTALLED: one actual CUDA architecture, 45 retained extensions')
+print('BUILT_NOT_INSTALLED: one actual CUDA architecture,', len(extensions), 'retained extensions')
 RELEASE_ADMIT
         return $?
     fi

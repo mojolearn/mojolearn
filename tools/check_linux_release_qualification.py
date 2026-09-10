@@ -252,7 +252,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
                 and re.fullmatch('[0-9a-f]{40}', proof.get('source_commit', ''))
                 and proof['source_commit'] == payload.get('source_commit'), 'Different architecture source')
         expected = {'mojolearn/' + n: h for n, h in extensions.items() if n.startswith(key + '/')}
-        require(len(expected) == 46 and proof.get('extensions') == expected, 'Architecture build bytes differ')
+        require(len(expected) == sum(len(surface.expected_bindings(mode, True)) for mode in surface.MODES) and proof.get('extensions') == expected, 'Architecture build bytes differ')
         proof_hashes[key] = digest_file(proof_path)
         require(payload['sets'][key] == {'sha256': proof_hashes[key], 'source_sha256': source_sha},
                 'Assembly proof linkage differs')
