@@ -1,0 +1,40 @@
+{
+  "arm": "baseline",
+  "witness": {
+    "mode": 1,
+    "vendor": "cuda",
+    "shared_counts_mask": 0
+  },
+  "artifact": {
+    "path": "/root/mojolearn/build/et-shared/baseline/_mojolearn_trees.so",
+    "sha256": "32a89c63c2b78f27daddfa9e26a832e7759a61437e2e6b84e0814e676580b239"
+  },
+  "samples": [
+    {
+      "repeat": 0,
+      "warmup": true,
+      "fit_ms": 901.411479,
+      "fingerprints": {
+        "model": "1e4988e60b4c5bed89afcaa070999143ee2856d76d4ad5b6d8b5616662ab51cb",
+        "predictions": "d510f3848303499af8702a51c2eb1213e31785b346dc30a57b4fc8762afb5649"
+      },
+      "accuracy": {
+        "train": 0.5531111111111111,
+        "test": 0.573
+      }
+    },
+    {
+      "repeat": 1,
+      "warmup": false,
+      "fit_ms": 7.445311,
+      "fingerprints": {
+        "model": "1e4988e60b4c5bed89afcaa070999143ee2856d76d4ad5b6d8b5616662ab51cb",
+        "predictions": "d510f3848303499af8702a51c2eb1213e31785b346dc30a57b4fc8762afb5649"
+      },
+      "accuracy": {
+        "train": 0.5531111111111111,
+        "test": 0.573
+      }
+    }
+  ]
+}

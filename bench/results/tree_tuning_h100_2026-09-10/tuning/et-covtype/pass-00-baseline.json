@@ -1,0 +1,66 @@
+{
+  "arm": "baseline",
+  "witness": {
+    "mode": 1,
+    "vendor": "cuda",
+    "shared_counts_mask": 0
+  },
+  "artifact": {
+    "path": "/root/mojolearn/build/et-shared/baseline/_mojolearn_trees.so",
+    "sha256": "32a89c63c2b78f27daddfa9e26a832e7759a61437e2e6b84e0814e676580b239"
+  },
+  "samples": [
+    {
+      "repeat": 0,
+      "warmup": true,
+      "fit_ms": 6951.870526,
+      "fingerprints": {
+        "model": "bc154208be5fbb9a2b8c492718cd787d46b8fdfac6d27029183c804c13033e53",
+        "predictions": "a49b3df6752eabcfd5b49930df92c614c3a8bb2b30e01ccae31de49337dec50a"
+      },
+      "accuracy": {
+        "train": 0.7720759364404267,
+        "test": 0.6694204919020327
+      }
+    },
+    {
+      "repeat": 1,
+      "warmup": false,
+      "fit_ms": 5931.995723,
+      "fingerprints": {
+        "model": "bc154208be5fbb9a2b8c492718cd787d46b8fdfac6d27029183c804c13033e53",
+        "predictions": "a49b3df6752eabcfd5b49930df92c614c3a8bb2b30e01ccae31de49337dec50a"
+      },
+      "accuracy": {
+        "train": 0.7720759364404267,
+        "test": 0.6694204919020327
+      }
+    },
+    {
+      "repeat": 2,
+      "warmup": false,
+      "fit_ms": 5832.27502,
+      "fingerprints": {
+        "model": "bc154208be5fbb9a2b8c492718cd787d46b8fdfac6d27029183c804c13033e53",
+        "predictions": "a49b3df6752eabcfd5b49930df92c614c3a8bb2b30e01ccae31de49337dec50a"
+      },
+      "accuracy": {
+        "train": 0.7720759364404267,
+        "test": 0.6694204919020327
+      }
+    },
+    {
+      "repeat": 3,
+      "warmup": false,
+      "fit_ms": 5833.722072,
+      "fingerprints": {
+        "model": "bc154208be5fbb9a2b8c492718cd787d46b8fdfac6d27029183c804c13033e53",
+        "predictions": "a49b3df6752eabcfd5b49930df92c614c3a8bb2b30e01ccae31de49337dec50a"
+      },
+      "accuracy": {
+        "train": 0.7720759364404267,
+        "test": 0.6694204919020327
+      }
+    }
+  ]
+}
