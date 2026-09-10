@@ -77,7 +77,8 @@ samba-*).
 | Symmetric GBDT vs CatBoost | HIGGS 1M, H100, same process | 775 ms Logloss, 806 RMSE | CatBoost GPU 900 / 699 | 0.86x / 1.15x (L40S: 426 vs 781, 318 vs 915); 2M/5M UNRUN | trees lane landed; fold + DEV 2030 fused walker bit-equal on both boxes but untimed on H100, flags NOT flipped |
 | RF vs cuML RF | HIGGS 1M, H100 | 5762 ms | cuML 3314 | 1.7x (structural per the audit) | nobody |
 | Dense GEMM (TUNED plans) | Llama-8B t512, L40S | 1.26-35.6 ms | cuBLAS fp32 0.54-16.9 | 2.1-2.7x | done for now |
-| kNN, few queries; RF/ET; OLS/PCA Gram | | | | at or near parity | none needed |
+| kNN, few queries; OLS/PCA Gram; symmetric GBDT at 1M | | | | at or near parity | none needed |
+| RF/ET identity cost (ours identical vs ours fast) | HIGGS 1M | | | 1.000-1.001, free by design: split scores are integer counts under integer atomics, order-free; the 1.7x vs cuML above is kernel shape (per-node-per-feature launches with global atomics vs cuML's per-level shared-memory histograms plus four streams), all identity-neutral; ET has no valid opponent row | nobody |
 
 The structural floor: identical means one fixed FP32 FMA order on every
 vendor, so tensor cores (TF32, bf16) are unavailable; against the
