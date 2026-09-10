@@ -55,7 +55,9 @@ include construction, host packing, upload, the whole forest, and synchronizatio
 Model hashing and held-out quality/prediction checks are outside the timer.
 Every fit must produce identical full model arrays and complete native Float32
 two-column held-out probability bits across all arms. The full probability call
-runs outside fit timing, separately from the shared quality scorer. Six balanced
+runs once outside fit timing. A cached-prediction proxy supplies that same
+probability array to the existing shared quality scorer, avoiding a second
+native traversal while preserving its metric definitions. Six balanced
 orders (ABC,CBA,BCA,ACB,CAB,BAC) place each arm twice in every position; shorter
 or incomplete cycles retain an order imbalance. One warmup per arm is excluded. Raw `fits.jsonl` is written incrementally, plus a final summary with
 binary/data/driver hashes, argv, actual order, quality, medians and per-arm max/min spread. A spread >1.10

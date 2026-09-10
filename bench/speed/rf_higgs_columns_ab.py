@@ -54,17 +54,20 @@ def load_arm(path, name, config, data):
         with bound_model(model, module):
             return original_fit(model, current_data)
     arm.fit = fit
-    original_score = arm.score
-    def score_bound(model, current_data):
-        with bound_model(model, module):
-            return original_score(model, current_data)
-    arm.score = score_bound
     def full_probabilities(model, current_data):
         with bound_model(model, module):
             return model.predict_proba(current_data._ours_Xtest)
     arm.full_probabilities = full_probabilities
     arm.name = name
     return arm
+
+
+def score_probabilities(probabilities, data):
+    """Reuse the shared scorer without a second native forest traversal."""
+    class CachedPrediction:
+        def predict_proba(self, x):
+            return probabilities
+    return forest.spec.score_sklearn_like(CachedPrediction(), data)
 
 
 def fingerprint(model):
@@ -141,9 +144,9 @@ def main():
         arm.sync()
         ms = (time.perf_counter() - start) * 1000
         model_hash = fingerprint(model)
-        scores = arm.score(model, data)
-        assert scores and all(np.isfinite(value) for _, value, _ in scores)
         probabilities = arm.full_probabilities(model, data)
+        scores = score_probabilities(probabilities, data)
+        assert scores and all(np.isfinite(value) for _, value, _ in scores)
         assert probabilities.dtype == np.float32
         assert probabilities.shape == (len(data.y_test), 2)
         assert np.isfinite(probabilities).all()
