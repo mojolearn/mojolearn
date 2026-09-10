@@ -1,0 +1,1 @@
+PASS actual native runtime byte LM: 2 shapes, 4 full gradient/update steps, 4 eval state-invariance checks

@@ -20,11 +20,17 @@ def load_spec(path):
 
 
 def report(label, ours, ref):
+    if ours.shape != ref.shape or ours.ndim != 3 or ours.size == 0:
+        raise ValueError('admission report requires equal nonempty [B,L,D] arrays')
+    if not (np.isfinite(ours).all() and np.isfinite(ref).all()):
+        raise ValueError('admission report refuses nonfinite outputs')
     diff = np.abs(ours.astype(np.float64) - ref.astype(np.float64))
     allowed = 1e-5 + 5e-4 * np.abs(ref.astype(np.float64))
     where = np.unravel_index(np.argmax(diff), diff.shape)
     out = {'variant': label, 'passed': bool(np.all(diff <= allowed)),
            'outside': int(np.count_nonzero(diff > allowed)), 'total': int(diff.size),
+           'rtol': 5e-4, 'atol': 1e-5,
+           'max_tolerance_multiple': float(np.max(diff / allowed)),
            'max_abs': float(diff.max()), 'rms_abs': float(np.sqrt(np.mean(diff * diff))),
            'max_index': list(map(int, where)), 'ours_at_max': float(ours[where]),
            'ref_at_max': float(ref[where]),
@@ -43,14 +49,19 @@ def main():
     ap.add_argument('--rope-log', help='production inverse-frequency bit export')
     ap.add_argument('--reference64', action='store_true')
     ap.add_argument('--full-rope-log', help='production full-table export for positions0..L-1')
+    ap.add_argument('--stage-errors', action='store_true',
+                    help='numerical-only cumulative and same-input local FP64 stage errors; requires --reference64')
     args = ap.parse_args()
+    if args.stage_errors and (args.arm != 'reference' or not args.reference64):
+        ap.error('--stage-errors requires --arm reference --reference64')
     spec = load_spec(args.spec)
     row = next(r for r in spec.py_rows('llama') if r['name'].startswith(args.shape + '.'))
     b, l, dm = row['b'], row['l'], row['d_model']
     weights = {name: spec.hashed_tensor_numpy(row['seed'], spec.LLAMA_TIDS[name], n, lo, hi).reshape(shape)
                for name, n, lo, hi, shape in spec.llama_spec(row)}
     x = spec.hashed_tensor_numpy(row['seed'], spec.LLAMA_TIDS['x'], b*l*dm, -2.0, 2.0).reshape(b, l, dm)
-    print(json.dumps({'shape': row, 'input_sha256': hashlib.sha256(x.tobytes()).hexdigest(),
+    print(json.dumps({'spec_sha256': hashlib.sha256(Path(args.spec).read_bytes()).hexdigest(),
+                      'shape': row, 'input_sha256': hashlib.sha256(x.tobytes()).hexdigest(),
                       'weights_sha256': {k: hashlib.sha256(v.tobytes()).hexdigest() for k, v in weights.items()}}), flush=True)
     if args.arm == 'ours':
         from mojolearn.transformer import TransformerBlock
@@ -120,6 +131,9 @@ def main():
             ref64 = model64.block(xt.double(), None, b, l)[0].reshape(b, l, dm).cpu().numpy()
             report('matched_constants_fp64', ours, ref64)
             report('torch_fp32_vs_matched_fp64', aligned if args.rope_log or args.full_rope_log else original, ref64)
+            if args.stage_errors:
+                from transformer_admission_stages import stage_errors
+                stage_errors(model, model64, xt, b, l, report)
 
 
 if __name__ == '__main__':

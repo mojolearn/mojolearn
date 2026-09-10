@@ -90,3 +90,58 @@ foreign `checks/fixed_point.mojo` changes were excluded.
    or provenance needs it, and append any newly measured opponent there.
 5. A scalable checkpoint codec/data pipeline before long multi-million-
    parameter quality runs. No long training run is authorized by these checks.
+
+## Continuation results, September 10
+
+The earlier “no model/GPU run” section describes the previous pass. This pass
+ran bounded native Metal checks and measurements, all by root under the shared
+build lock at nice 19 with two build/host workers. Trees and foreign edits were
+excluded. No GPU rental or new opponent timing was made.
+
+- **Runtime numerical checks pass:** default B2/L32/D32 and alternate
+  B3/L7/D24/H3/KV1/HD8/FF40, two updates per shape. All 20 parameter gradients,
+  losses, actual-gradient AdamW parameters/m/v and four evaluation-state
+  invariance checks pass the existing preset tolerances. Negated-gradient and
+  wrong-SiLU-derivative controls are detected. Native arithmetic ran on Metal;
+  independent FP64 autograd ran on CPU. Full captures and binding provenance:
+  `bench/results/byte_runtime_numerical_2026-09-10/`. This does not compare an
+  old binary trajectory or qualify cross-vendor bits. 85 host tests plus
+  11 subtests also pass. Torch was installed only in the temporary validation
+  environment for the FP64 oracle; project dependencies are unchanged.
+- **GEMM swizzle experiment:** forced plan 19 changes only tile visitation on
+  the existing 128×128 KS16 kernel. Dispatch remains unchanged. All three
+  Llama t512 shapes match digests, and all seven stronger GEMM device gates
+  pass with all 20 plans. One 9.49-second M4 measurement window records four
+  alternating samples per arm/shape. Baseline median throughput is
+  0.156–0.162 TFLOP/s; transpose swizzle is 0.159–0.163. These small differences
+  do not establish a default-worthy gain. Evidence, raw timing samples and
+  drift: `bench/results/gemm_swizzle_2026-09-10/`.
+- **GEMM occupancy evidence:** H100 cross-compilation emits PTX with the
+  current 128×128 KS16 kernel's 40 KiB shared allocation and 4 KiB local stack
+  per thread, including local loads/stores and the required RN-FMA followed
+  by FTZ multiplication. PTX virtual registers are not physical allocation;
+  physical register count, additional spills and achieved occupancy still
+  need ptxas/profiler evidence. The Metal assembly invocation emitted no
+  kernel sidecars. No NVIDIA throughput was measured in this pass.
+- **Mamba diagnosis:** the new controlled shape-order probe records binary,
+  input/output hashes, per-call wall/CPU/resource counters and optional
+  continuous GPU telemetry. Two tiny Metal calls pass the retained H100
+  output hash. This is a diagnostic smoke test, not an explanation of the
+  large-shape H100 latency regimes. See `MAMBA3_REGIME_DIAGNOSTIC_2026-09-10.md`.
+- **kNN:** current preflight versus exact-repair/no-preflight produced equal
+  full outputs in both execution orders on the small 65537×129×17, k10
+  Metal fixture. Phase times drifted substantially between passes, and the
+  arm ordering reversed; no speedup or default change is admitted. The next
+  candidate computes exponent minima once per input vector. The old 39%
+  Apple repair penalty predates accepted whole-chain preflight. Evidence:
+  `bench/results/knn_phase_2026-09-10/`.
+- **Transformer:** stage-local versus propagated FP64 error diagnostics are
+  implemented; reporting tests and a small CPU GQA stage smoke pass. Original
+  large GPU fixtures remain numerically unadmitted. No tolerance changed and
+  no opponent ratio is qualified. See `TRANSFORMER_ADMISSION_STAGE_FOLLOWUP_2026-09-10.md`.
+
+Remaining: physical H100 register/spill/occupancy inspection and paired swizzle
+measurement; old/new default trajectory and cross-vendor runtime-shape checks;
+large-shape same-binary Mamba regime reproduction with phase/clock evidence;
+kNN metadata reuse with stable target-shape timings; original Transformer GPU
+stage attribution. Scalable checkpoints remain separate future work.

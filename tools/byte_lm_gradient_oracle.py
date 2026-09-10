@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Independent two-block FP64 gradient and AdamW gate; ROOT EXECUTION ONLY.
 
-Authored without executing tests, builds, models or measurements. Imports are
-inert. Model evaluation requires a real CUDA/HIP device, never CPU or Metal.
+Imports are inert. The bounded runtime-shape gate records actual native Metal
+and independent CPU FP64 checks in bench/results/byte_runtime_numerical_2026-09-10. Existing capture evaluation requires CUDA/HIP. Explicit oracle_device=cpu
+on reference/adamw_reference supports FP64 comparison of native Metal captures.
 External FP64 agreement is a tolerance-correctness claim, not bitwise identity.
 No native model, gradient oracle or numerical arithmetic module is imported.
 """
@@ -37,9 +38,35 @@ OPT_FIELDS = {'kind', 'lr', 'beta1', 'beta2', 'eps', 'weight_decay',
               'momentum', 'dampening', 'nesterov', 'max_norm'}
 
 
-def registry():
+def model_dimensions(model_shape=None):
+    """Independent shape admission; deliberately imports no native registry."""
+    fields = (2, 32, 32, 4, 2, 8, 64) if model_shape is None else tuple(model_shape)
+    if len(fields) != 7 or any(type(x) is not int or not 0 < x <= 1048576 for x in fields):
+        raise ValueError('expected seven positive bounded integer model dimensions')
+    batch, length, dm, heads, kv, hd, ff = fields
+    if length > 8192 or dm != heads * hd or heads % kv or hd % 2:
+        raise ValueError('invalid length, head dimensions or GQA ratio')
+    if max(batch * length * 256, batch * length * dm,
+           batch * length * ff, batch * heads * length * length) >= 2**31:
+        raise ValueError('model extent exceeds int32 indexing')
+    total = 512 * dm + 2 * (2 * dm + 2 * dm * dm + 2 * dm * kv * hd + 3 * dm * ff)
+    if total >= 2**31:
+        raise ValueError('parameter registry exceeds int32 indexing')
+    return fields
+
+
+def registry(model_shape=None):
+    _, _, dm, heads, kv, hd, ff = model_dimensions(model_shape)
+    shapes = [('embed', (256, dm))]
+    for block in range(2):
+        shapes += [(f'block{block}.{name}', shape) for name, shape in (
+            ('norm1_w', (dm,)), ('w_q', (heads * hd, dm)),
+            ('w_k', (kv * hd, dm)), ('w_v', (kv * hd, dm)),
+            ('w_o', (dm, heads * hd)), ('norm2_w', (dm,)),
+            ('w_gate', (ff, dm)), ('w_up', (ff, dm)), ('w_down', (dm, ff)))]
+    shapes += [('lm_head', (256, dm))]
     entries, offset = [], 0
-    for name, shape in SHAPES:
+    for name, shape in shapes:
         size = math.prod(shape)
         entries.append(dict(name=name, shape=list(shape), offset=offset, count=size))
         offset += size
@@ -61,53 +88,61 @@ def _exclusive(path, raw):
         os.fsync(handle.fileno())
 
 
-def _torch_device(expected=None):
+def _torch_device(expected=None, device="cuda"):
     import torch
+    if device == "cpu" and expected is None:
+        return torch, "cpu"
+    if device != "cuda":
+        raise ValueError("oracle device must be cpu or cuda")
     vendor = 'hip' if torch.version.hip else 'cuda'
     if not torch.cuda.is_available() or (expected is not None and vendor != expected):
         raise ValueError('independent oracle requires expected remote NVIDIA/AMD GPU')
     return torch, vendor
 
 
-def _validate_inputs(initial_params, ids):
+def _validate_inputs(initial_params, ids, model_shape=None):
     import numpy as np
+    batch, length, *_ = model_dimensions(model_shape)
+    entries = registry(model_shape)
+    count = entries[-1]["offset"] + entries[-1]["count"]
     params, tokens = np.asarray(initial_params), np.asarray(ids)
-    if params.dtype != np.dtype('float32') or params.shape != (N,) or not np.isfinite(params).all():
-        raise ValueError('initial_params must be finite float32[34944]')
-    if tokens.dtype != np.dtype('int32') or tokens.shape not in ((66,), (2, 33)):
-        raise ValueError('ids must be int32[66] or int32[2,33]')
-    tokens = tokens.reshape(2, 33)
+    if params.dtype != np.dtype('float32') or params.shape != (count,) or not np.isfinite(params).all():
+        raise ValueError(f'initial_params must be finite float32[{count}]')
+    if tokens.dtype != np.dtype('int32') or tokens.shape not in ((batch * (length + 1),), (batch, length + 1)):
+        raise ValueError('ids must match configured int32[batch,length+1]')
+    tokens = tokens.reshape(batch, length + 1)
     if (tokens < 0).any() or (tokens >= 256).any():
         raise ValueError('byte tokens must be in [0,256)')
     return params, tokens
 
 
-def reference(initial_params, ids, *, wrong_silu_block=None):
+def reference(initial_params, ids, *, wrong_silu_block=None, model_shape=None, oracle_device="cuda"):
     """Return (FP64 scalar loss, dict of 20 FP64 shaped parameter gradients).
 
     Mathematical transcription with independent PyTorch autograd. The optional
     control drops only the sigmoid derivative in one block while preserving
     that block's SiLU forward values; wrong_silu_block must be None, 0 or 1.
     """
-    initial, ids = _validate_inputs(initial_params, ids)
+    batch, length, dm, heads, kv, hd, _ = model_dimensions(model_shape)
+    initial, ids = _validate_inputs(initial_params, ids, model_shape)
     if wrong_silu_block not in (None, 0, 1):
         raise ValueError('invalid nonlinear control block')
-    torch, _ = _torch_device()
+    torch, _ = _torch_device(device=oracle_device)
     import torch.nn.functional as F
     weights = {}
-    for entry in registry():
+    for entry in registry(model_shape):
         start, end = entry['offset'], entry['offset'] + entry['count']
         weights[entry['name']] = torch.tensor(initial[start:end].reshape(entry['shape']),
-            dtype=torch.float64, device='cuda', requires_grad=True)
-    tokens = torch.tensor(ids, dtype=torch.long, device='cuda')
+            dtype=torch.float64, device=oracle_device, requires_grad=True)
+    tokens = torch.tensor(ids, dtype=torch.long, device=oracle_device)
     h = F.embedding(tokens[:, :-1], weights['embed'])
-    frequency = 10000.0 ** (-torch.arange(0, 8, 2, dtype=torch.float64, device='cuda') / 8)
-    angle = torch.arange(32, dtype=torch.float64, device='cuda')[:, None] * frequency
+    frequency = 10000.0 ** (-torch.arange(0, hd, 2, dtype=torch.float64, device=oracle_device) / hd)
+    angle = torch.arange(length, dtype=torch.float64, device=oracle_device)[:, None] * frequency
     angle = torch.cat((angle, angle), dim=-1)[None, None]
     cosine, sine = angle.cos(), angle.sin()
-    mask = torch.ones((32, 32), dtype=torch.bool, device='cuda').triu(1)
+    mask = torch.ones((length, length), dtype=torch.bool, device=oracle_device).triu(1)
     def rotate(a):
-        half = torch.cat((-a[..., 4:], a[..., :4]), dim=-1)
+        half = torch.cat((-a[..., hd // 2:], a[..., :hd // 2]), dim=-1)
         return a * cosine + half * sine
     for block in range(2):
         prefix = f'block{block}.'
@@ -118,14 +153,14 @@ def reference(initial_params, ids, *, wrong_silu_block=None):
             eps = 9.999999974752427e-7
             return x * torch.rsqrt(x.square().mean(-1, keepdim=True) + eps) * weights[prefix + name]
         z = norm(h, 'norm1_w')
-        q = linear(z, 'w_q').reshape(2, 32, 4, 8).transpose(1, 2)
-        k = linear(z, 'w_k').reshape(2, 32, 2, 8).transpose(1, 2)
-        v = linear(z, 'w_v').reshape(2, 32, 2, 8).transpose(1, 2)
+        q = linear(z, 'w_q').reshape(batch, length, heads, hd).transpose(1, 2)
+        k = linear(z, 'w_k').reshape(batch, length, kv, hd).transpose(1, 2)
+        v = linear(z, 'w_v').reshape(batch, length, kv, hd).transpose(1, 2)
         q, k = rotate(q), rotate(k)
-        k, v = k.repeat_interleave(2, dim=1), v.repeat_interleave(2, dim=1)
-        scores = q @ k.transpose(-1, -2) / math.sqrt(8)
+        k, v = k.repeat_interleave(heads // kv, dim=1), v.repeat_interleave(heads // kv, dim=1)
+        scores = q @ k.transpose(-1, -2) / math.sqrt(hd)
         probability = scores.masked_fill(mask, -torch.inf).softmax(-1)
-        attended = (probability @ v).transpose(1, 2).reshape(2, 32, 32)
+        attended = (probability @ v).transpose(1, 2).reshape(batch, length, dm)
         residual = h + linear(attended, 'w_o')
         z = norm(residual, 'norm2_w')
         gate = linear(z, 'w_gate')
@@ -134,9 +169,10 @@ def reference(initial_params, ids, *, wrong_silu_block=None):
         h = residual + linear(activated * linear(z, 'w_up'), 'w_down')
     # No final RMSNorm, bias, tied head, dropout or cache carried between steps.
     logits = F.linear(h, weights['lm_head'])
-    loss = F.cross_entropy(logits.reshape(64, 256), tokens[:, 1:].reshape(64), reduction='mean')
+    loss = F.cross_entropy(logits.reshape(batch * length, 256), tokens[:, 1:].reshape(batch * length), reduction='mean')
     loss.backward()
-    torch.cuda.synchronize()
+    if oracle_device == "cuda":
+        torch.cuda.synchronize()
     value = float(loss.detach().cpu())
     gradients = {name: weight.grad.detach().cpu().numpy().copy() for name, weight in weights.items()}
     return value, gradients
@@ -170,15 +206,15 @@ def _validate_config(config):
     return normalized
 
 
-def adamw_reference(initial_p, initial_m, initial_v, actual_grad, optimizer, completed_steps):
+def adamw_reference(initial_p, initial_m, initial_v, actual_grad, optimizer, completed_steps, *, oracle_device="cuda"):
     """Independent FP64 AdamW using ACTUAL captured FP32 gradients/prestate.
 
     Inputs/config must first pass evaluate_capture validation. FP64 mathematical
     operations intentionally do not reproduce native FP32 rounding or FMA seams.
     Decoupled decay, beta bias correction at completed_steps+1, eps outside sqrt.
     """
-    torch, _ = _torch_device()
-    p, m, v, g = [torch.tensor(x, dtype=torch.float64, device='cuda')
+    torch, _ = _torch_device(device=oracle_device)
+    p, m, v, g = [torch.tensor(x, dtype=torch.float64, device=oracle_device)
                    for x in (initial_p, initial_m, initial_v, actual_grad)]
     b1, b2, lr = optimizer['beta1'], optimizer['beta2'], optimizer['lr']
     step = completed_steps + 1
@@ -187,7 +223,8 @@ def adamw_reference(initial_p, initial_m, initial_v, actual_grad, optimizer, com
     unbiased_m = new_m / (1.0 - b1 ** step)
     unbiased_v = new_v / (1.0 - b2 ** step)
     new_p = p * (1.0 - lr * optimizer['weight_decay']) - lr * unbiased_m / (unbiased_v.sqrt() + optimizer['eps'])
-    torch.cuda.synchronize()
+    if oracle_device == "cuda":
+        torch.cuda.synchronize()
     return {key: value.detach().cpu().numpy().copy()
             for key, value in (('post_p', new_p), ('post_m', new_m), ('post_v', new_v))}
 

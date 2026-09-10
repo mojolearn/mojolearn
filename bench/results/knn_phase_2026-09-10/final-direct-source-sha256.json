@@ -1,0 +1,10 @@
+{
+  "gemm/checks/gemm_identical.mojo": "e58cfd4668eed88e2bc0b151804052a439600ba93c012f6e4ba4bd663542330f",
+  "gemm/checks/gemm_tuned_probe.mojo": "55196a59200f805529adbb35e3d3c8d851fcc891584a5220ba4100e0834a2387",
+  "tools/byte_lm_gradient_oracle.py": "c4287a98240038dc8df95760339f607a56cb92a4c0f1eec592435b805607f522",
+  "tools/byte_lm_runtime_numerical_check.py": "79cad90965f3fe3d5b5905aa6173fbdb0540d3216c328b2b6aa37617737d88f7",
+  "tools/mamba3_regime_probe.py": "ed9237b8d60c0ae7dab0b91f8649d41afe259f2e37dc8766047972b52cb6f768",
+  "tools/knn_residual_phase_probe.sh": "c80583ddbdc8c0a025584906f8d860b6ed40b66dc8b65060164db6cf3e077f40",
+  "tools/transformer_admission_stages.py": "517a31a02ed051a31a539eca83605fdb31c82b792c4d3b33831af60f3adfec7f",
+  "tools/transformer_admission_diagnose.py": "79b845fc78b8e9c8c1b16560305146c6b6f98c98b736fc96f22e7ca4fb624397"
+}

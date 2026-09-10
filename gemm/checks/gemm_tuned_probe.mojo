@@ -128,6 +128,7 @@ def main() raises:
         raise Error("gemm_tuned_probe: rounds must be positive")
     print("baseline_selector=" + String(baseline) + " candidate_selector=" + String(forced)
           + " (-2 baseline=current dispatch; -1 baseline=pre-tuned, candidate=current dispatch; >=0 explicit plan)")
+    print("timing=host-synchronized arithmetic-mean-ms; raw samples below; digest passes serve as warmup")
     for i in range(GEMM_SHAPE_COUNT):
         if not _shape_selected(gemm_shape_name(i)):
             continue
@@ -171,13 +172,28 @@ def main() raises:
         var dt = _digest(ctx, dc, mn)
         var ns_p = 0
         var ns_t = 0
-        for _ in range(rounds):
-            var t0 = perf_counter_ns()
-            identical_gemm_with_plan(ctx, dc, da, db, dw, m, n, k, op, old_plan); ctx.synchronize()
-            ns_p += perf_counter_ns() - t0
-            var t1 = perf_counter_ns()
-            _second(ctx, dc, da, db, dw, m, n, k, op, forced); ctx.synchronize()
-            ns_t += perf_counter_ns() - t1
+        for r in range(rounds):
+            var sample_p = 0
+            var sample_t = 0
+            # Alternate ordering within one thermal window; retain raw samples.
+            for arm in range(2):
+                var candidate_first = (r % 2) == 1
+                var candidate = (arm == 0) == candidate_first
+                var t0 = perf_counter_ns()
+                if candidate:
+                    _second(ctx, dc, da, db, dw, m, n, k, op, forced)
+                else:
+                    identical_gemm_with_plan(ctx, dc, da, db, dw, m, n, k, op, old_plan)
+                ctx.synchronize()
+                if candidate:
+                    sample_t = perf_counter_ns() - t0
+                else:
+                    sample_p = perf_counter_ns() - t0
+            ns_p += sample_p
+            ns_t += sample_t
+            print("SAMPLE " + gemm_shape_name(i) + " round=" + String(r)
+                  + " candidate_first=" + String((r % 2) == 1)
+                  + " baseline_ns=" + String(sample_p) + " candidate_ns=" + String(sample_t))
         var ms_p = Float64(ns_p) / (Float64(rounds) * 1.0e6)
         var ms_t = Float64(ns_t) / (Float64(rounds) * 1.0e6)
         var nm = gemm_shape_name(i) + " [" + gemm_plan_name(old_plan) + " -> " + gemm_plan_name(new_plan) + "]"
