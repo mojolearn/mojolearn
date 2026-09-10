@@ -2,8 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CityHash64, CatBoost's OWN variant. PORT OF `util/digest/city.cpp` at
 CatBoost `54a8143a`, the 64-bit unseeded entry point only -- the one
-function `CalcCatFeatureHash` stands on (`libs/cat_feature/
-cat_feature.cpp:6-8`, see `gbdt/cat_feature/cat_feature.mojo`).
+function `VecCityHash` stands on (`libs/helpers/hash.h:6-9`, ported as
+`vec_city_hash_u32` in `gbdt/methods/batch_feature_tensor_builder.mojo`,
+which is what keys a feature tensor here).
 
 THE TRAP THIS FILE EXISTS TO NOT FALL INTO: their `city.h` says it plainly
 -- "These functions provide CityHash 1.0 implementation whose results are
@@ -18,11 +19,13 @@ against their own file compiled by `tools/cityhash_oracle/`
 Why the hash matters at all: every category CatBoost ever stores or looks
 up -- pool loading, the model file's `ctr_data.hash_map`, the apply-time
 combination key chain (`libs/model/ctr_provider.h:94-122`) -- is keyed by
-`CalcCatFeatureHash`, i.e. by THIS function's low 32 bits. This port's
-dense sorted-unique codes are equivalent for training (a CTR value depends
-only on counts), but the moment a model file must interop with theirs, or
-raw strings arrive at `train()`/`predict()` without a prep script, the key
-IS this hash.
+`CalcCatFeatureHash` (`libs/cat_feature/cat_feature.cpp:6-8`), i.e. by
+THIS function's low 32 bits. This repository trains on dense sorted-unique
+codes instead, which are equivalent for training (a CTR value depends only
+on counts), so no wrapper for that truncation is carried here; the low-32
+column of the oracle is still gated inline by `pixi run check-cityhash`,
+against the day a model file must interop with theirs or raw strings
+arrive at `train()`/`predict()` without a prep script.
 
 Byte order: their `UNALIGNED_LOAD64/32` is `ReadUnaligned`
 (`util/system/unaligned_mem.h:13`), a memcpy in NATIVE byte order. Every
