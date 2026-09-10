@@ -10,6 +10,12 @@ if [ "${M3_INCREMENT_ENV_ACTIVE:-0}" != 1 ]; then
 fi
 cd "$repo"
 mkdir -p "$out"
+# The rental archive intentionally omits the corpus; stage its generator and
+# the three surface smoke cases before starting this leg.
+test -f mamba/corpus/gen_corpus.py
+test -d mamba/corpus/base_b2_l4_d8
+test -d mamba/corpus/mamba2/m2_base_b2_l4_d32
+test -d mamba/corpus/mamba3/m3_base_b2_l4_d32
 mojo --version > "$out/compiler.txt" 2>&1
 python3 -c 'import sys,numpy; print(sys.version,numpy.__version__,sys.executable)' > "$out/python.txt"
 sha256sum mamba/impl/mamba_ssm/ops/mamba3_siso.mojo gemm/checks/gemm_identical.mojo bindings/_mojolearn_mamba.mojo python/mojolearn/_mamba_impl.py > "$out/source-sha256.txt"
