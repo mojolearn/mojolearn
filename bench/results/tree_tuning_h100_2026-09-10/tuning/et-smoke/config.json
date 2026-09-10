@@ -1,0 +1,90 @@
+{
+  "dataset": "covtype",
+  "requested_rows": 10000,
+  "shapes": {
+    "X_train": [
+      9000,
+      54
+    ],
+    "X_test": [
+      1000,
+      54
+    ],
+    "y_train": [
+      9000
+    ],
+    "y_test": [
+      1000
+    ]
+  },
+  "classes": [
+    0.0,
+    1.0,
+    2.0,
+    3.0,
+    4.0,
+    5.0,
+    6.0
+  ],
+  "mode": "identical",
+  "vendor": "cuda",
+  "artifacts": {
+    "baseline": {
+      "path": "/root/mojolearn/build/et-shared/baseline/_mojolearn_trees.so",
+      "sha256": "32a89c63c2b78f27daddfa9e26a832e7759a61437e2e6b84e0814e676580b239"
+    },
+    "candidate": {
+      "path": "/root/mojolearn/build/et-shared/candidate/_mojolearn_trees.so",
+      "sha256": "1e5067d43814d975667f39f7e45c2fdfe3b34edf9e81aaf498fdc7404eaa15a8"
+    }
+  },
+  "data": {
+    "X_train": {
+      "path": "/root/trees_out/tuning/et-smoke/X_train.npy",
+      "sha256": "e49f4775365be7a71883a35ce213a1ae68cd9c339d516ce5bd5517899035d42f"
+    },
+    "X_test": {
+      "path": "/root/trees_out/tuning/et-smoke/X_test.npy",
+      "sha256": "707ad873388ba86470442d31ab4ac12e4c6e17f86b2f7cb55ebb9b36d59dc9ae"
+    },
+    "y_train": {
+      "path": "/root/trees_out/tuning/et-smoke/y_train.npy",
+      "sha256": "05e793962c3aa43b84ffe0be41f14b5bb97c971a874621ec1353095f50c4dd0a"
+    },
+    "y_test": {
+      "path": "/root/trees_out/tuning/et-smoke/y_test.npy",
+      "sha256": "fe8b4a02a2a3235267e6dc33d64d739efac0daf8d46ea5dd2f6538fdef750007"
+    }
+  },
+  "warmups": 1,
+  "repeats": 1,
+  "prediction_batch_rows": 65536,
+  "parameters": {
+    "n_estimators": 3,
+    "max_depth": 4,
+    "max_features": "sqrt",
+    "random_state": 181149729,
+    "bootstrap": false,
+    "criterion": "gini"
+  },
+  "timer": "full Python fit including packing and host model export; prediction/hash excluded",
+  "dataset_scale": {
+    "rows": 9000,
+    "features": 54,
+    "input_bytes": 1944000,
+    "large_candidate": false
+  },
+  "source_provenance": {
+    "script_sha256": "8868aedf998221bf97593659b7d25e4fe182856a31b939534c5f44924be4091b",
+    "shipped_commit": "78027916342fe544ad8ebf962d20dc7043003d5a",
+    "git_unavailable": true,
+    "source_hashes": {
+      "tools/speed_gbdt_arm.py": "6be6436d95ecbb0e260d1d0c021a3313193b4cc007635fe81aaca30ab41e66a3",
+      "python/mojolearn/extratrees.py": "f81b6cd1c9d48003f515563a715afc5f8be3a8f1e9f9f07b4806b639c8fc00cf",
+      "python/mojolearn/_forest_protocol.py": "ac6f46a82641396647aad3488afab30378cf0ab2882374404bf550eee66e420e",
+      "bindings/_mojolearn_trees.mojo": "fec91b2c1547b911c70b8e11994690d3d29778c19a0c1757239fd21a8ab2f230",
+      "extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo": "609862491dd0b0a5df9d2789b2cf7c5f33b1a61104c0fce343fe7495be242af7"
+    }
+  },
+  "nvidia_smi": "Thu Sep 10 13:31:49 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  NVIDIA H100 80GB HBM3          On  |   00000000:CB:00.0 Off |                    0 |\n| N/A   49C    P0             78W /  700W |       0MiB /  81559MiB |      0%      Default |\n|                                         |                        |             Disabled |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|  No running processes found                                                             |\n+-----------------------------------------------------------------------------------------+\n"
+}

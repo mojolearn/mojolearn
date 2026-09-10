@@ -1,0 +1,4 @@
+COMMAND: ["/usr/bin/python3", "/root/mojolearn/extratrees/bench/shared_score_ab.py", "--real-worker", "/root/trees_out/tuning/et-smoke/config.json", "baseline", "/root/trees_out/tuning/et-smoke/pass-00-baseline.json"]
+2999 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x509d80000000, nodemask=1)
+{"repeat": 0, "warmup": true, "fit_ms": 1050.540157, "fingerprints": {"model": "1e4988e60b4c5bed89afcaa070999143ee2856d76d4ad5b6d8b5616662ab51cb", "predictions": "d510f3848303499af8702a51c2eb1213e31785b346dc30a57b4fc8762afb5649"}, "accuracy": {"train": 0.5531111111111111, "test": 0.573}}
+{"repeat": 1, "warmup": false, "fit_ms": 7.381694, "fingerprints": {"model": "1e4988e60b4c5bed89afcaa070999143ee2856d76d4ad5b6d8b5616662ab51cb", "predictions": "d510f3848303499af8702a51c2eb1213e31785b346dc30a57b4fc8762afb5649"}, "accuracy": {"train": 0.5531111111111111, "test": 0.573}}

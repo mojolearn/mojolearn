@@ -148,9 +148,22 @@ packing/cache costs need whole-fit measurements, not a histogram-count claim.
 | P5 / after profile: retained non-symmetric work | Extend the existing CatBoost-derived histogram reuse/cache only where profiling still shows rescans. Retain unchanged leaf candidates; invalidate on changed statistics, sampling masks or eligibility. Evaluate a stable best-leaf queue if host selection is material. | Same winning leaf and tie order at every step; no arbitrary batching of Lossguide decisions; both split children invalidated; sabotage checks and full models. |
 | P6 / next: prepared pools and workspaces | Follow LightGBM Dataset/XGBoost quantized-matrix lifetime ideas using owned Mojo buffers. Expose current numeric GBDT pool to Python, then safely reuse capacity for fit scratch. Assess RF quantiles and ET raw-input pools separately. | Explicit frozen data/border/seed contract, mutation/lifetime tests, repeated independent fits, memory plateau, public fit timing including one-time preparation and amortization. |
 | P7 / after profile: host overhead | Profile Python packing, quantization, allocations, transfers and result materialization separately. Avoid duplicate copies and object conversion; use existing contiguous/device input paths where present. | End-to-end improvement with unchanged inputs/models, dtype/layout/NaN validation, ownership tests; report kernel-only time separately. |
-| P8 / later: inference | RF/ET public prediction currently reconstructs trees and copies rows into native lists each call. First traverse borrowed flat buffers directly, then add owned resident GPU models inspired by cuML forest inference. Preserve tree accumulation order and postprocessing; audit GBDT separately. | Public prediction/probability/apply/save-load equivalence, cold/warm and small/large batches, measured memory/throughput; no reassociation in IDENTICAL. |
+| P8 / next shared implementation: GPU inference | RF/ET public prediction currently reconstructs trees and copies rows into native lists each call. Move their shared flat forest layout to owned GPU models, following the [actual dispatch/source audit](GPU_FOREST_INFERENCE_NEXT.md). Preserve RF/ET threshold semantics, tree accumulation order and postprocessing; audit GBDT separately. | Public prediction/probability/apply/save-load equivalence, cold/warm and small/large batches, measured memory/throughput; no reassociation in IDENTICAL. |
 | P9 / later: heterogeneous histograms | Pack feature histogram offsets using actual bin counts instead of padding every feature to the maximum, where profiling shows wasted memory/work. Extend existing layouts rather than duplicating histogram subtraction. | Boundary/bin-offset oracle, constant/one-hot/unequal-bin fixtures, full models and memory/fit measurements in every enabled mode. |
 | P10 / after profile: small frontiers | Single trees cannot benefit from cross-tree overlap; ET best-first expands at most one node per tree per cycle. Profile frontier downloads/launches, then consider fused small-node kernels and device frontier compaction without changing priority. | One-tree and uneven forest workloads, same frontier order/ties and exact leaf budgets, end-to-end latency and identity. |
+
+The [2026-09-10 H100 ET experiment](../../bench/results/tree_tuning_h100_2026-09-10/README.md)
+measured 7.77% lower median fit time for shared integer counts on full
+Covertype (522,911 × 54, seven classes), with complete models and all train/test
+probabilities unchanged across 16 fits. Keep the candidate opt-in until the
+binary/class-count/depth/large-memory grid establishes its useful range. This
+is a change within IDENTICAL, not a measurement of identity cost.
+
+The same campaign's RF warmup measured about 26 seconds for a 500,000-row
+public probability call, outside the roughly 7.65-second fit. That call includes
+host model reconstruction/copies and traversal; it is not a traversal-only
+profile or a measured GPU inference speedup. P8 now has a concrete shared GPU
+implementation audit. Training comparisons continue to exclude prediction.
 
 Single-tree native engines share relevant ET builder paths, but standalone
 public DecisionTree exports are still a separate API task. Test one-tree native
