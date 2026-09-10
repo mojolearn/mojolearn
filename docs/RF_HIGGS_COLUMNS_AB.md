@@ -67,3 +67,7 @@ competitor is included: this is internal candidate tuning, not cuML parity.
 
 Only Python syntax and mocked binding-route checks were run when preparing this
 driver. The real NVIDIA workload remains unexecuted until separately authorized.
+
+Each fit records `prediction_ms` for the single public probability call and
+`verification_ms` for all post-fit checks (including that prediction), separately
+from `fit_ms`. These quantify verification cost without charging it to training.

@@ -143,8 +143,11 @@ def main():
         arm.fit(model, data)
         arm.sync()
         ms = (time.perf_counter() - start) * 1000
+        verification_start = time.perf_counter()
         model_hash = fingerprint(model)
+        prediction_start = time.perf_counter()
         probabilities = arm.full_probabilities(model, data)
+        prediction_ms = (time.perf_counter() - prediction_start) * 1000
         scores = score_probabilities(probabilities, data)
         assert scores and all(np.isfinite(value) for _, value, _ in scores)
         assert probabilities.dtype == np.float32
@@ -156,7 +159,9 @@ def main():
         if expected is None:
             expected = identity
         assert identity == expected, (phase, name, 'model/prediction mismatch')
+        verification_ms = (time.perf_counter() - verification_start) * 1000
         record = dict(arm=name, phase=phase, round=round_index, fit_ms=ms,
+            prediction_ms=prediction_ms, verification_ms=verification_ms,
             model_sha256=identity[0], prediction_sha256=identity[1],
             scores={metric: value for metric, value, _ in scores})
         records.append(record)
