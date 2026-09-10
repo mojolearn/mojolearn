@@ -1,0 +1,29 @@
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -1189,18 +1189,16 @@
+     `a` and `b` already flushed as loaded (5a, 5b) and `acc` already flushed
+     by the previous step or seeded `+0.0`.
+ 
+-    On the NVIDIA column this is PTX `fma.rn.ftz.f32`: one rounding to
+-    nearest-even, subnormal inputs and result flushed to sign-preserving
+-    zero. Because every input is already flushed, the hardware flush of the
+-    inputs is a no-op and the flush of the result is 5c exactly, so the
+-    value is the software seam's value at every input. The gates compare
+-    the bits against the host oracle on the box rather than trusting this
+-    paragraph.
++    NVIDIA uses round-to-nearest FMA followed by explicit output flush.
++    PTX fma.rn.ftz flushes before rounding at some underflow boundaries:
++    (0x3f7fffff * 0x00800000) + 0 rounds to the smallest normal in the
++    software seam but becomes zero with the hardware .ftz modifier.
++    Inputs here are already flushed by callers, as required above.
+     """
+     comptime if TUNED_HW_FTZ_FMA:
+-        return llvm_intrinsic[
+-            "llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False
+-        ](a, b, acc)
++        return ftz(llvm_intrinsic[
++            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
++        ](a, b, acc))
+     return ftz(identical_mul_add(a, b, acc))
+ 
+ 

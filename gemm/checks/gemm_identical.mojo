@@ -97,8 +97,9 @@ are staged `VEC`-wide through two shared pages with one barrier per window,
 the operand flushes 5a/5b are applied once per staged value, and the fold
 stack lives in thread-local memory (`_fold_push_local`, touched once per
 leaf). On the NVIDIA column the per-step seam `ftz(fma(a, b, acc))` is the
-hardware's `fma.rn.ftz.f32` (`lib_hardware_ftz_fma_for`), the same value at
-every input. `choose_gemm_plan` picks them for outputs of 128 K cells and
+explicit NVIDIA FMA path selected by `lib_hardware_ftz_fma_for`. Its
+round-then-flush rule includes the smallest-normal rounding boundary;
+a bare `fma.rn.ftz.f32` is insufficient. `choose_gemm_plan` picks them for outputs of 128 K cells and
 up; `choose_gemm_plan_untuned` is the dispatcher as it stood before.
 
 DEVIATIONS 530 (the register-stack realization of the contract's fold tree),
@@ -1189,18 +1190,20 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     `a` and `b` already flushed as loaded (5a, 5b) and `acc` already flushed
     by the previous step or seeded `+0.0`.
 
-    On the NVIDIA column this is PTX `fma.rn.ftz.f32`: one rounding to
-    nearest-even, subnormal inputs and result flushed to sign-preserving
-    zero. Because every input is already flushed, the hardware flush of the
-    inputs is a no-op and the flush of the result is 5c exactly, so the
-    value is the software seam's value at every input. The gates compare
-    the bits against the host oracle on the box rather than trusting this
-    paragraph.
+    NVIDIA first rounds the FMA without FTZ, then flushes the rounded
+    value with hardware multiply-by-one. A single hardware FTZ FMA can
+    flush before rounding at the smallest-normal boundary, unlike this
+    two-instruction sequence. Inputs here are already flushed by callers.
+    This matches the NVIDIA software seam; other columns' underlying FMA
+    rounding at underflow boundaries remains a separate numerical audit.
     """
     comptime if TUNED_HW_FTZ_FMA:
-        return llvm_intrinsic[
-            "llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False
+        var rounded = llvm_intrinsic[
+            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
         ](a, b, acc)
+        return llvm_intrinsic[
+            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
+        ](rounded, Float32(1.0))
     return ftz(identical_mul_add(a, b, acc))
 
 

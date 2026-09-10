@@ -1,0 +1,3 @@
+11545 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a0e40000000, nodemask=2)
+11545 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x320d00000000, nodemask=1)
+Transformer hd128 public PASS: both windows, all gradients, split caches, ordered mutable-weight refusal

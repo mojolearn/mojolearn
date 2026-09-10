@@ -1,0 +1,19 @@
+../mojolearn-grid/bench/results/e1g/2026-09-07_174841-nvidia-speed-gemmseq/remote/logs/seq.transformer.torch.log
+sha256=30f5b7cd3306533788ec4af1ceabdb786bbee74741d933f039266eaa23a39e8c
+1: FSPEED-HEADER family=seq lane=transformer arm=torch mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+86: FSPEED-AGREE lane=transformer max_abs_diff=2.98023e-07 max_rel_diff=7.45642e-06 n=256
+87: FSPEED-AGREE-GATE lane=transformer shape=lane.b2_l4_d32_kv2 arm=reference-fp32 passed=true rtol=0.0005 atol=1e-05
+133: FSPEED-AGREE lane=transformer max_abs_diff=6.48499e-05 max_rel_diff=0.00430816 n=4096
+134: FSPEED-AGREE-GATE lane=transformer shape=llama8b.prefill.t1 arm=reference-fp32 passed=false rtol=0.0005 atol=1e-05
+180: FSPEED-AGREE lane=transformer max_abs_diff=0.000492573 max_rel_diff=0.0369887 n=32768
+181: FSPEED-AGREE-GATE lane=transformer shape=llama8b.prefill.t8 arm=reference-fp32 passed=false rtol=0.0005 atol=1e-05
+227: FSPEED-AGREE lane=transformer max_abs_diff=0.0107708 max_rel_diff=2.72222 n=524288
+228: FSPEED-AGREE-GATE lane=transformer shape=llama8b.prefill.t128 arm=reference-fp32 passed=false rtol=0.0005 atol=1e-05
+274: FSPEED-AGREE lane=transformer max_abs_diff=0.0370522 max_rel_diff=37.1099 n=2097152
+275: FSPEED-AGREE-GATE lane=transformer shape=llama8b.prefill.t512 arm=reference-fp32 passed=false rtol=0.0005 atol=1e-05
+323: FSPEED-AGREE lane=transformer max_abs_diff=8.01086e-05 max_rel_diff=0.0128057 n=4096
+324: FSPEED-AGREE-GATE lane=transformer shape=llama8b.decode.t1.ctx512 arm=reference-fp32 passed=false rtol=0.0005 atol=1e-05
+374: FSPEED-AGREE lane=transformer max_abs_diff=0.0138197 max_rel_diff=14683 n=16777216
+375: FSPEED-AGREE-GATE lane=transformer shape=narrow.b8_l4096_d512 arm=reference-fp32 passed=false rtol=0.0005 atol=1e-05
+422: FSPEED-AGREE lane=transformer max_abs_diff=0.0285354 max_rel_diff=635.467 n=16777216
+423: FSPEED-AGREE-GATE lane=transformer shape=wide.b8_l1024_d2048 arm=reference-fp32 passed=false rtol=0.0005 atol=1e-05

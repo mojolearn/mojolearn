@@ -783,15 +783,14 @@ def lib_smem_page_fits_for[column: Int, page_bytes: Int]() -> Bool:
 
 
 def lib_hardware_ftz_fma_for[column: Int]() -> Bool:
-    """SCHEDULING row: whether the identical GEMM's per-step seam
-    `ftz(fma(a, b, acc))` (contract 4 + 5c, with `acc` already flushed) may be
-    spelled as the hardware's single flush-to-zero FMA.
+    """Capability row for NVIDIA's explicit round-to-nearest FMA intrinsics.
 
-    NVIDIA only: PTX `fma.rn.ftz.f32` rounds once to nearest-even and flushes
-    subnormal inputs and results to sign-preserving zero, which is exactly
-    the software seam's value at every input, so the bits cannot move and the
-    device gates prove it on the box. Apple and AMD keep the software seam
-    until their column has the same proof.
+    This is not permission to replace round-then-flush with a bare .ftz
+    instruction. At a smallest-normal rounding boundary, fma.rn.ftz can
+    return zero where round-then-flush returns 0x00800000. Callers must
+    preserve explicit round-then-flush semantics or correct that case;
+    see the adversarial seam evidence from 2026-09-09.
+    Other columns retain their existing software spelling.
     """
     return column == COLUMN_NVIDIA
 

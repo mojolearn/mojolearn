@@ -424,3 +424,75 @@ owed for this change; AMD remains unmeasured.
 ### Final Apple HD128/end-to-end validation, 2026-09-09
 
 Root ran the final TQ16/BK32/KS64 kernel:15casesPASS. With direct device-weight binding constructor, original forward/backward cards both cmp unchanged; rebuilt IDENTICAL extension passed116-check surface and focusedHD128 public gradients/split caches/mutable-weight refusals. Evidence:`bench/results/transformer_e2e_2026-09-09/apple/`. NVIDIA same-L40S original-grid ownA/B426.012→175.726ms narrow,264.311→180.683ms wide, full64MiB outputcmp equal. Original and fresh Torch comparison both failed statednumericaladmission; noqualifiedopponentratio. See evidenceREADME for exactprotocol. Pre-existing hardwareFTZ seam boundary is being addressed separately.
+
+### 2026-09-09: Original HD128 transformer public shapes
+
+Original Sep 7 end-to-end rows use HD128, so the earlier HD64 tile did not
+reach them. Final HD128 forward tile is TQ16/BK32/KS64 with 18,624 shared
+bytes, preserving the previous score/context fold order. A forward-only
+support predicate admits this footprint on Apple without changing its
+HD128 backward eager fallback. IDENTICAL binding weight upload now avoids
+nine intermediate host Lists; every caller buffer is reread and checked
+in the original named order on every invocation, with no weight cache.
+
+Same L40S/580.159.03 public API five-round medians, baseline 2bdd7721:
+B8/L4096/D512 426.012 -> 175.726 ms (2.42x); B8/L1024/D2048
+264.311 -> 180.683 ms (1.46x). Both complete 64 MiB outputs cmp identically.
+Evidence, intermediate experiments, scripts, full SHA256, and validation
+logs: `bench/results/transformer_e2e_2026-09-09/`. Final NVIDIA native
+15/15, original forward/backward reference cards, focused HD128 public
+forward/backward/cache/mutable-weight checks, and original surface passed.
+Apple native final 15/15 passed; root is completing cards and Python gates.
+
+The original Torch end-to-end ratios are NOT numerically admitted: original
+Sep 7 raw `2026-09-07_174841-nvidia-speed-gemmseq/remote/logs/seq.transformer.torch.log`
+lines 375/423 explicitly failed the existing 5e-4/1e-5 tolerance. Today's
+once-only same-L40S original comparator also fails both rows, despite all
+20 input witnesses passing. No tolerance was changed. See artifact README
+for exact differences and the unlocalized RoPE hypothesis; report our A/B
+speedups without asserting a qualified opponent ratio.
+
+A separate adverse numerical probe found the pre-existing NVIDIA `.ftz`
+FMA seam differs from software RN-then-flush at normal/subnormal rounding
+boundaries. The tile changes above do not introduce that seam. An isolated
+RN-FMA plus explicit-flush candidate is under validation; do not treat
+historical docstrings claiming universal hardware/software equivalence as
+proof. This follow-up is tracked separately from the frozen end-to-end A/B.
+
+### NVIDIA boundary correction, selected final seam (2026-09-09)
+
+The adversarial follow-up is complete on NVIDIA. A single hardware FTZ FMA
+was incorrect at the smallest-normal rounding boundary. The selected
+implementation uses RN FMA without FTZ followed by hardware FTZ multiply
+by exactly one, preserving RN-then-flush and signed zero. Register-tile
+scores use a preflushed helper because Q/K were already flushed into shared
+memory. The expensive plain bitwise-flush and conditional recomputation
+variants were measured and rejected; no arithmetic order was changed.
+
+The actual attention and GEMM helpers pass 262,144 adversarial finite
+triples and an explicit smallest-normal expected-bit assertion in the new
+`transformer/checks/attention_fma_boundary_check.mojo`. This check is scoped
+to NVIDIA. Apple software FMA itself was found to differ at this boundary;
+that other-column numerical audit remains open, and no shared numerics or
+tree implementation was changed here.
+
+With both corrected attention and root's current GEMM implementation,
+original public medians are **177.617 ms narrow / 188.857 ms wide**, versus
+session baseline **426.012 / 264.311 ms** (2.40x / 1.40x). Both full 64 MiB
+outputs still cmp unchanged. Final NVIDIA fused 15 cases, both original
+forward/backward cards, public HD128 gradients/cache/refusal checks,
+original surface, GEMM 7 gates/19 plans, and wide-split 16 shapes all pass.
+Evidence and every rejected variant:
+`bench/results/attention_exact_fma_2026-09-09/`. Root runs the final Apple
+preflushed-helper cards/binding gates. The earlier Torch admission failure
+is unchanged; do not report a qualified opponent ratio for these rows.
+
+Final HD64 replay after the FMA correction: same original window benchmark
+shape, forward **140.3 ms**, forward+backward **493.7 ms**. These replace
+154.7/444.9 as the current implementation's timings. The stored SDPA
+35.9/114.3 reference is the same L40S/580.159.03 tuple on an earlier
+physical pod; derived 3.91x/4.32x ratios require that qualification.
+Transferred L40S o8q8dklahstpoz deleted HTTP204 and verified absent HTTP404
+at 22:13:17 EDT; all final evidence fetched, no attention rental remains.
+
+Final RN+hardware-multiply selected implementation also passed root Apple15cases, both original forward/backward cards, rebuilt binding116/0 surface and focusedHD128 checks. Evidence:`bench/results/attention_exact_fma_2026-09-09/apple/`. NVIDIA selected final timings supersede pre-correction timings: transformer177.617/188.857ms; HD64forward140.3ms andfwd+bwd493.7ms. The Apple primitive boundary issue remains separate from these ordinary-case gates.

@@ -1,0 +1,60 @@
+FSPEED-HEADER family=seq lane=transformer arm=ours mode=IDENTICAL device=NVIDIA_L40S rounds=5 size=shipped
+FSPEED-NOTE lane=transformer arm=ours entry=mojolearn.transformer.TransformerBlock(weights, n_heads=, n_kv_heads=, head_dim=).forward(x[, state]) -> transformer/ via _mojolearn_transformer; our arm through the public Python API (DEVIATION 2100); cli_lane=transformer rows=large
+10343 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x521e40000000, nodemask=1)
+10343 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a7140000000, nodemask=2)
+FSPEED-WEIGHTS lane=transformer shape=narrow.b8_l4096_d512 tensor=norm1.weight n=512 hash=45692a7eb10b6fc0
+FSPEED-INPUT-SHA256 lane=transformer shape=narrow.b8_l4096_d512 tensor=norm1.weight bytes=2048 sha256=30f5b68cd55cfe14e6c2ef76260f61edca11de068f5f2e357e670097f4f1ae7f
+FSPEED-WEIGHTS lane=transformer shape=narrow.b8_l4096_d512 tensor=norm2.weight n=512 hash=61322c0f49d04949
+FSPEED-INPUT-SHA256 lane=transformer shape=narrow.b8_l4096_d512 tensor=norm2.weight bytes=2048 sha256=265f5c66baedc47baea46766afa7089be3eb398803aecf0fb92302fda6c7e04a
+FSPEED-WEIGHTS lane=transformer shape=narrow.b8_l4096_d512 tensor=q_proj.weight n=262144 hash=ee2a6a7f0685ecc9
+FSPEED-INPUT-SHA256 lane=transformer shape=narrow.b8_l4096_d512 tensor=q_proj.weight bytes=1048576 sha256=13e2076de1497adf6d143247758f6d71a89583dc76da5048c3cd0d67c9999a77
+FSPEED-WEIGHTS lane=transformer shape=narrow.b8_l4096_d512 tensor=k_proj.weight n=65536 hash=416e36e17d187c9e
+FSPEED-INPUT-SHA256 lane=transformer shape=narrow.b8_l4096_d512 tensor=k_proj.weight bytes=262144 sha256=b4ee1b82ffba88167fcbaae799f810d90a892e9f41f4d5c741f90d5b2dae0043
+FSPEED-WEIGHTS lane=transformer shape=narrow.b8_l4096_d512 tensor=v_proj.weight n=65536 hash=4450bc1752c64ddb
+FSPEED-INPUT-SHA256 lane=transformer shape=narrow.b8_l4096_d512 tensor=v_proj.weight bytes=262144 sha256=a59cb655e1ae942fec70dcbf863c5f9322a2345a1c3c1edde3dcd8de8e6dfb9d
+FSPEED-WEIGHTS lane=transformer shape=narrow.b8_l4096_d512 tensor=o_proj.weight n=262144 hash=f6c2fd9b6a82aee3
+FSPEED-INPUT-SHA256 lane=transformer shape=narrow.b8_l4096_d512 tensor=o_proj.weight bytes=1048576 sha256=3eff6a42056ff2bd611d3df9233b3009fa6511cb8c9b4e6ad216de72b38a549b
+FSPEED-WEIGHTS lane=transformer shape=narrow.b8_l4096_d512 tensor=gate_proj.weight n=917504 hash=5ec429ccf833537d
+FSPEED-INPUT-SHA256 lane=transformer shape=narrow.b8_l4096_d512 tensor=gate_proj.weight bytes=3670016 sha256=a0ee9e885dfdc8ddd8ceb18cd6cabcd0f51cdb2303ae0cc88bbd6d328ab80537
+FSPEED-WEIGHTS lane=transformer shape=narrow.b8_l4096_d512 tensor=up_proj.weight n=917504 hash=d5362505b4e361ab
+FSPEED-INPUT-SHA256 lane=transformer shape=narrow.b8_l4096_d512 tensor=up_proj.weight bytes=3670016 sha256=b755bcb9a5d6a3ccc637b5a9850268256cd17763ae1ad2c42ced820eb6de6807
+FSPEED-WEIGHTS lane=transformer shape=narrow.b8_l4096_d512 tensor=down_proj.weight n=917504 hash=e1de8e35a988ed0f
+FSPEED-INPUT-SHA256 lane=transformer shape=narrow.b8_l4096_d512 tensor=down_proj.weight bytes=3670016 sha256=569be23f41898f8665ff274a173fee426e5a0df7b7eef0d8ef7ea2d3ef5031c4
+FSPEED-WEIGHTS lane=transformer shape=narrow.b8_l4096_d512 tensor=x n=16777216 hash=b5d9d4c71b1268d2
+FSPEED-NOTE lane=transformer arm=ours binary read-back shape=narrow.b8_l4096_d512 numeric_mode_used=identical vendor_used=cuda entry=mojolearn.transformer.TransformerBlock(weights, n_heads=, n_kv_heads=, head_dim=).forward(x[, state]) -> transformer/ via _mojolearn_transformer
+FSPEED-NOTE lane=transformer arm=ours one round at shape narrow.b8_l4096_d512 = one public forward() including the weight host-list copy + upload, the non-finite refusal scan and the output download; the return is the synchronization (DEVIATION 2111)
+FSPEED-WARMUP lane=transformer arm=ours shape=narrow.b8_l4096_d512 ms=1308.726406
+FSPEED lane=transformer arm=ours shape=narrow.b8_l4096_d512 round=1 ms=231.329825 hash=9ff40366319cca42
+FSPEED lane=transformer arm=ours shape=narrow.b8_l4096_d512 round=2 ms=241.255967 hash=9ff40366319cca42
+FSPEED lane=transformer arm=ours shape=narrow.b8_l4096_d512 round=3 ms=229.734051 hash=9ff40366319cca42
+FSPEED lane=transformer arm=ours shape=narrow.b8_l4096_d512 round=4 ms=230.425496 hash=9ff40366319cca42
+FSPEED lane=transformer arm=ours shape=narrow.b8_l4096_d512 round=5 ms=243.139427 hash=9ff40366319cca42
+FSPEED-NOTE lane=transformer arm=ours output witness shape=narrow.b8_l4096_d512 n=16777216 hash=617793b27243a5f9
+FSPEED-NOTE lane=transformer arm=ours dump shape=narrow.b8_l4096_d512 n=16777216 path=/root/jobs/attn-public/preflush_dump/seq.transformer.narrow.b8_l4096_d512.f32.bin
+FSPEED-WEIGHTS lane=transformer shape=wide.b8_l1024_d2048 tensor=norm1.weight n=2048 hash=53340b1847f25bec
+FSPEED-INPUT-SHA256 lane=transformer shape=wide.b8_l1024_d2048 tensor=norm1.weight bytes=8192 sha256=e3d55aabebc81ac2cc392857b8f175550225de932b715836fc4c50c02f69b64c
+FSPEED-WEIGHTS lane=transformer shape=wide.b8_l1024_d2048 tensor=norm2.weight n=2048 hash=64afeb1bb847ac6b
+FSPEED-INPUT-SHA256 lane=transformer shape=wide.b8_l1024_d2048 tensor=norm2.weight bytes=8192 sha256=bffbaed25568adb9c72efa3ac041457dadf3b95259314b08968b6ab94870dba9
+FSPEED-WEIGHTS lane=transformer shape=wide.b8_l1024_d2048 tensor=q_proj.weight n=4194304 hash=474f5011cbe8566c
+FSPEED-INPUT-SHA256 lane=transformer shape=wide.b8_l1024_d2048 tensor=q_proj.weight bytes=16777216 sha256=ef1e642895d360006e638567ff8622ce4fd49db6a7ef494f6ac547f44ffec6a9
+FSPEED-WEIGHTS lane=transformer shape=wide.b8_l1024_d2048 tensor=k_proj.weight n=1048576 hash=69c48fa4cfe8e4cc
+FSPEED-INPUT-SHA256 lane=transformer shape=wide.b8_l1024_d2048 tensor=k_proj.weight bytes=4194304 sha256=8672baa8a1491677dcf9efe49a3a01d0b1d1ee43aa7ee83fb6c6a5a6a51890bf
+FSPEED-WEIGHTS lane=transformer shape=wide.b8_l1024_d2048 tensor=v_proj.weight n=1048576 hash=751bd490203d43a3
+FSPEED-INPUT-SHA256 lane=transformer shape=wide.b8_l1024_d2048 tensor=v_proj.weight bytes=4194304 sha256=3281abf01503a14c7e5fa489908f9dfc3daffd88314bca434d39bcc7053941a2
+FSPEED-WEIGHTS lane=transformer shape=wide.b8_l1024_d2048 tensor=o_proj.weight n=4194304 hash=f88d39ebfc2cdc1e
+FSPEED-INPUT-SHA256 lane=transformer shape=wide.b8_l1024_d2048 tensor=o_proj.weight bytes=16777216 sha256=030a5439eef37cecbd7a128cb2807053599106326e5d31c17904b21cbd36fcff
+FSPEED-WEIGHTS lane=transformer shape=wide.b8_l1024_d2048 tensor=gate_proj.weight n=14680064 hash=a8713c702256b309
+FSPEED-WEIGHTS lane=transformer shape=wide.b8_l1024_d2048 tensor=up_proj.weight n=14680064 hash=7fa36f4cc3db5f1e
+FSPEED-WEIGHTS lane=transformer shape=wide.b8_l1024_d2048 tensor=down_proj.weight n=14680064 hash=05ad4d2b74e07d22
+FSPEED-WEIGHTS lane=transformer shape=wide.b8_l1024_d2048 tensor=x n=16777216 hash=b5d9d4c71b1268d2
+FSPEED-NOTE lane=transformer arm=ours binary read-back shape=wide.b8_l1024_d2048 numeric_mode_used=identical vendor_used=cuda entry=mojolearn.transformer.TransformerBlock(weights, n_heads=, n_kv_heads=, head_dim=).forward(x[, state]) -> transformer/ via _mojolearn_transformer
+FSPEED-NOTE lane=transformer arm=ours one round at shape wide.b8_l1024_d2048 = one public forward() including the weight host-list copy + upload, the non-finite refusal scan and the output download; the return is the synchronization (DEVIATION 2111)
+FSPEED-WARMUP lane=transformer arm=ours shape=wide.b8_l1024_d2048 ms=268.278744
+FSPEED lane=transformer arm=ours shape=wide.b8_l1024_d2048 round=1 ms=269.524491 hash=bc8ca0b2b04f1475
+FSPEED lane=transformer arm=ours shape=wide.b8_l1024_d2048 round=2 ms=279.382542 hash=bc8ca0b2b04f1475
+FSPEED lane=transformer arm=ours shape=wide.b8_l1024_d2048 round=3 ms=269.025611 hash=bc8ca0b2b04f1475
+FSPEED lane=transformer arm=ours shape=wide.b8_l1024_d2048 round=4 ms=270.944302 hash=bc8ca0b2b04f1475
+FSPEED lane=transformer arm=ours shape=wide.b8_l1024_d2048 round=5 ms=269.662575 hash=bc8ca0b2b04f1475
+FSPEED-NOTE lane=transformer arm=ours output witness shape=wide.b8_l1024_d2048 n=16777216 hash=fe01eb4a80cbd0a4
+FSPEED-NOTE lane=transformer arm=ours dump shape=wide.b8_l1024_d2048 n=16777216 path=/root/jobs/attn-public/preflush_dump/seq.transformer.wide.b8_l1024_d2048.f32.bin
+FSPEED-DONE lane=transformer arm=ours mode=IDENTICAL

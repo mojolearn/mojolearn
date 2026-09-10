@@ -24,7 +24,8 @@ value tiles staged through threadgroup memory; the score itself is the
 gemm profile's one-leaf chain (`head_dim <= CONTRACT_K_LEAF_MIN`, so
 `P == 1` and the fold is the ascending fma chain seeded `+0.0`, contract
 6 and 7.3), spelled with the same per-step seam the tuned GEMM plans use
-(`fma.rn.ftz.f32` on the NVIDIA column, the software seam elsewhere).
+(NVIDIA rounds the FMA then flushes via hardware multiply-by-one; other
+columns use the software seam).
 
 WHY THE MASKED CELLS MAY BE SKIPPED, AND WHEN THEY MAY NOT. A masked cell
 is `ftz(s + (-FLT_MAX))`, which is exactly `-FLT_MAX` whenever
@@ -168,14 +169,34 @@ def fused_rows_per_block(hd: Int) -> Int:
 @always_inline
 def _step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """`ftz(fma(ftz(a), ftz(b), acc))`, the per-term seam of every chain in
-    the profile (gemm contract 4 + 5c; S19; the backward chains). On the
-    NVIDIA column it is `fma.rn.ftz.f32`, the same value at every input
-    (`gemm_identical.mojo::_tuned_step` carries the argument)."""
+    the profile (gemm contract 4 + 5c; S19; the backward chains).
+    NVIDIA rounds FMA without FTZ, then flushes the rounded result via
+    hardware multiply-by-one. A single hardware FTZ FMA instead flushes
+    before rounding at some smallest-normal boundaries. This matches
+    NVIDIA software; other columns' FMA boundary behavior is a separate
+    numerical audit.
+    """
     comptime if FUSED_HW_FTZ_FMA:
+        var rounded = llvm_intrinsic[
+            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
+        ](ftz(a), ftz(b), acc)
         return llvm_intrinsic[
-            "llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False
-        ](a, b, acc)
+            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
+        ](rounded, Float32(1.0))
     return ftz(identical_mul_add(ftz(a), ftz(b), acc))
+
+
+@always_inline
+def _step_preflushed(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """Ascending RN-then-flush chain on operands already flushed on staging."""
+    comptime if FUSED_HW_FTZ_FMA:
+        var rounded = llvm_intrinsic[
+            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
+        ](a, b, acc)
+        return llvm_intrinsic[
+            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
+        ](rounded, Float32(1.0))
+    return ftz(identical_mul_add(a, b, acc))
 
 
 @always_inline
@@ -478,7 +499,7 @@ def fused_attn_forward_regblocked_kernel[HD: Int](
                         ka[v] = stg.unsafe_load((TQ + tc + v * 16) * STRIDE + p)
                     comptime for u in range(RPT):
                         comptime for v in range(2):
-                            dots[u * 2 + v] = _step(qa[u], ka[v], dots[u * 2 + v])
+                            dots[u * 2 + v] = _step_preflushed(qa[u], ka[v], dots[u * 2 + v])
                 barrier()
             comptime for u in range(RPT):
                 var r = tr + u * 16
