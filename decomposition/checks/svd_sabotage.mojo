@@ -463,7 +463,7 @@ def svd_of_r_sab(
     is what lets `check_full_refuses_unconverged` and
     `check_full_scale_invariance` reach the sweep count at all."""
     if arm == SVD_SAB_NONE:
-        ctx.enqueue_function[one_sided_jacobi_svd_kernel](
+        ctx.enqueue_function[one_sided_jacobi_svd_kernel[False]](
             r.unsafe_ptr(), v.unsafe_ptr(), s.unsafe_ptr(), info.unsafe_ptr(),
             Int32(n_cols), Int32(max_sweeps), tol,
             grid_dim=(1, 1, 1), block_dim=(SVD_TPB, 1, 1),

@@ -206,21 +206,23 @@ def order_truncate_spectrum(
     n_cols: Int,
     n_components: Int,
     singular_scale: Int,
+    spectrum_count: Int = 0,
 ) raises -> PCAResult:
     """`colReverse` + `truncCompExpVars`: the HOST tail of a fit, shared."""
 
+    var count = n_cols if spectrum_count == 0 else spectrum_count
     var order = List[Int]()
-    for i in range(n_cols):
+    for i in range(count):
         order.append(i)
-    for i in range(n_cols):
-        for j in range(i + 1, n_cols):
+    for i in range(count):
+        for j in range(i + 1, count):
             if diag[order[j]] > diag[order[i]]:
                 var t = order[i]
                 order[i] = order[j]
                 order[j] = t
 
     var total = 0.0
-    for i in range(n_cols):
+    for i in range(count):
         total += diag[i]
 
     var components = List[Float64]()
@@ -239,10 +241,10 @@ def order_truncate_spectrum(
         singular_vals.append(sqrt(lam * Float64(singular_scale)))
 
     var noise = 0.0
-    if n_components < n_cols and n_components <= singular_scale:
-        for c in range(n_components, n_cols):
+    if n_components < count and n_components <= singular_scale:
+        for c in range(n_components, count):
             noise += diag[order[c]]
-        noise /= Float64(n_cols - n_components)
+        noise /= Float64(count - n_components)
 
     return PCAResult(
         components^, explained_var^, explained_var_ratio^, singular_vals^, noise
