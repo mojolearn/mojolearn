@@ -106,6 +106,7 @@ commands live in `mamba/checks/mamba3_check.mojo`'s header.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
+from mamba.impl.mamba_ssm.ops.mamba3_fold import m3_fold_step
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -925,7 +926,7 @@ def m3_state_increment_kernel(
             ))
             ksv = ftz(kscale_work.unsafe_load(((bb * t_work + c0 + j) * nh + hh) * n_state + n))
         # Include all padded +0.0 terms, exactly as in the serial kernel.
-        acc = ftz(identical_mul_add(vsv, ksv, acc))
+        acc = m3_fold_step(vsv, ksv, acc)
     increments.unsafe_store(cell, acc)
 
 
@@ -1036,7 +1037,7 @@ def m3_statepass_kernel(
                     )
                 )
             # padded rows: exact zeros enter the fold (contract s3).
-            acc = ftz(identical_mul_add(vsv, ksv, acc))
+            acc = m3_fold_step(vsv, ksv, acc)
         var scale_c = ftz(identical_exp(dl))
         h = ftz(identical_mul_add(scale_c, ftz(h), ftz(acc)))
     h_last.unsafe_store(cell, h)
@@ -1088,15 +1089,7 @@ def m3_qk_s_kernel(
         var tj = bb * t_work + c0 + j
         var acc = Float32(0.0)
         for n in range(n_state):
-            acc = ftz(
-                identical_mul_add(
-                    ftz(rotq_work.unsafe_load((ti * nh + hh) * n_state + n)),
-                    ftz(
-                        kscale_work.unsafe_load((tj * nh + hh) * n_state + n)
-                    ),
-                    acc,
-                )
-            )
+            acc = m3_fold_step(rotq_work.unsafe_load((ti * nh + hh) * n_state + n), kscale_work.unsafe_load((tj * nh + hh) * n_state + n), acc)
         out = ftz(acc)
     qk_s.unsafe_store(cell, out)
 
@@ -1158,7 +1151,7 @@ def m3_yintra_kernel(
                     ((bb * t_work + c * qv + jj) * nh + hh) * p_dim + p
                 )
             )
-        acc = ftz(identical_mul_add(m_ij, xv, acc))
+        acc = m3_fold_step(m_ij, xv, acc)
     yintra.unsafe_store(cell, ftz(acc))
 
 
@@ -1211,17 +1204,13 @@ def m3_ystate_kernel(
     var pbase = ((((bb * nc + c) * nh + hh) * p_dim) + p) * n_state
     var acc = Float32(0.0)
     for n in range(n_state):
-        var qv2 = ftz(
-            rotq_work.unsafe_load(((bb * t_work + t) * nh + hh) * n_state + n)
-        )
-        var hv = ftz(pass_states.unsafe_load(pbase + n))
+        var qv2 = rotq_work.unsafe_load(((bb * t_work + t) * nh + hh) * n_state + n)
+        var hv = pass_states.unsafe_load(pbase + n)
         comptime if SAB3_STATE_TERM_SCALE_FIRST:
             # SABOTAGE: decay into q BEFORE the contraction (contract 8f).
-            acc = ftz(
-                identical_mul_add(ftz(pinned_mul(qv2, e_i)), hv, acc)
-            )
+            acc = m3_fold_step(pinned_mul(ftz(qv2), e_i), hv, acc)
         else:
-            acc = ftz(identical_mul_add(qv2, hv, acc))
+            acc = m3_fold_step(qv2, hv, acc)
     comptime if SAB3_STATE_TERM_SCALE_FIRST:
         ystate.unsafe_store(cell, ftz(acc))
     else:
