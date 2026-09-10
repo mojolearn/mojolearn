@@ -1,0 +1,107 @@
+diff --git a/gemm/checks/gemm_identical.mojo b/gemm/checks/gemm_identical.mojo
+index fc308565..4514ea79 100644
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -112,7 +112,7 @@ CALLER owns and the caller keeps alive past `ctx.synchronize()`.
+ """
+ 
+ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+-from std.memory import stack_allocation
++from std.memory import bitcast, stack_allocation
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+@@ -1207,6 +1207,63 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
+     return ftz(identical_mul_add(a, b, acc))
+ 
+ 
++@always_inline
++def _tuned_operand_exponent(v: Float32) -> UInt32:
++    var bits = bitcast[DType.uint32](v)
++    var exponent = (bits >> 23) & UInt32(255)
++    # Staging flushes subnormals; zero products cannot cross the boundary.
++    if exponent == 0:
++        return UInt32(255)
++    # Exceptional operands always retain the original arithmetic path.
++    if exponent == 255:
++        return UInt32(0)
++    return exponent
++
++
++@always_inline
++def _tuned_fragment_admitted[NA: Int, NB: Int](
++    a: SIMD[DType.float32, NA], b: SIMD[DType.float32, NB]
++) -> Bool:
++    var amin = UInt32(255)
++    var bmin = UInt32(255)
++    comptime for i in range(NA):
++        amin = min(amin, _tuned_operand_exponent(a[i]))
++    comptime for j in range(NB):
++        bmin = min(bmin, _tuned_operand_exponent(b[j]))
++    return amin != 0 and bmin != 0 and amin + bmin >= UInt32(151)
++
++
++@always_inline
++def _tuned_fragment[
++    R: Int, C: Int, V: Int, ADMITTED: Bool
++](
++    ra: SIMD[DType.float32, R * V],
++    rb: SIMD[DType.float32, C * V],
++    mut acc: SIMD[DType.float32, R * C],
++) -> SIMD[DType.float32, R * C]:
++    # A normal float with biased exponent E is an integer times 2^(E-150).
++    # E_a + E_b >= 151 makes every exact product a multiple of 2^-149.
++    # The already-flushed accumulator is on that same lattice. Thus the
++    # exact FMA cannot lie strictly between min_normal - 2^-150 and
++    # min_normal: the only interval where pre-round FTZ differs from
++    # round-then-flush. Signed zero and underflow flushing remain hardware
++    # FMA semantics; every unproved fragment uses the corrected seam.
++    comptime for e in range(V):
++        var bfl = SIMD[DType.float32, C](0.0)
++        comptime for v in range(C):
++            bfl[v] = ftz(rb[v * V + e])
++        comptime for u in range(R):
++            var afl = ftz(ra[u * V + e])
++            comptime for v2 in range(C):
++                comptime if ADMITTED and TUNED_HW_FTZ_FMA:
++                    acc[u * C + v2] = llvm_intrinsic[
++                        "llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False
++                    ](afl, bfl[v2], acc[u * C + v2])
++                else:
++                    acc[u * C + v2] = _tuned_step(afl, bfl[v2], acc[u * C + v2])
++    return acc
++
++
+ 
+ # ===========================================================================
+ # THE SCHEDULING CONSTANTS, ALL FROM `checks/kernel_matrix.mojo`
+@@ -1822,21 +1879,14 @@ def identical_gemm_tuned_kernel[
+                     )
+                     comptime for e2 in range(VEC):
+                         rb[v * VEC + e2] = tb[e2]
+-                comptime for e3 in range(VEC):
+-                    # 5b, ONCE per staged B value rather than once per use.
+-                    var bfl = SIMD[DType.float32, CPT](0.0)
+-                    comptime for v2 in range(NCOL):
+-                        bfl[v2] = ftz(rb[v2 * VEC + e3])
+-                    comptime for u2 in range(NR):
+-                        # 5a, likewise.
+-                        var afl = ftz(ra[u2 * VEC + e3])
+-                        comptime for v3 in range(NCOL):
+-                            # 4 (one fused rounding) and 5c (the accumulator
+-                            # flushed after EVERY step). 5c is per cell per
+-                            # step and is NOT hoisted, because it cannot be.
+-                            acc[u2 * CPT + v3] = _tuned_step(
+-                                afl, bfl[v3], acc[u2 * CPT + v3]
+-                            )
++                comptime if TUNED_HW_FTZ_FMA and is_defined["MOJOLEARN_GEMM_FRAGMENT_ADMISSION"]():
++                    if _tuned_fragment_admitted(ra, rb):
++                        acc = _tuned_fragment[RPT, CPT, VEC, True](ra, rb, acc)
++                    else:
++                        acc = _tuned_fragment[RPT, CPT, VEC, False](ra, rb, acc)
++                else:
++                    acc = _tuned_fragment[RPT, CPT, VEC, False](ra, rb, acc)
++
+         else:
+             # THE RAGGED PATH, and the EMPTY one: `chunk` may be 0. Scalar
+             # shared reads, same ascending `p`, same seams. No zero slot is

@@ -1,0 +1,2 @@
+4244 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1acc40000000, nodemask=2)
+NVIDIA admitted fragment FMA boundary PASS 262144 triples; fragment mismatches 0 GEMM mismatches 0

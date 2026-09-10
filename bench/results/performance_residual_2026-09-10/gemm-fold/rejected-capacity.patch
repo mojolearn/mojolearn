@@ -1,0 +1,34 @@
+diff --git a/gemm/checks/gemm_identical.mojo b/gemm/checks/gemm_identical.mojo
+index fc308565..2cf7ca1f 100644
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -2320,6 +2320,29 @@ def _launch_tuned[
+     parameters imply, so there is no second opinion about how many blocks a
+     shape needs.
+     """
++    # The fold has a slot for each occupied bit of P. Specializing its
++    # capacity changes storage only; leaf boundaries and merge order stay
++    # identical. Keep the full-capacity arm reachable for A/B measurement.
++    comptime if (
++        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++        and FS == TUNED_FOLD_SLOTS
++        and not is_defined["MOJOLEARN_GEMM_FULL_FOLD_STACK"]()
++    ):
++        if p_count <= 1:
++            _launch_tuned[RPT, CPT, TC, KS, 1](
++                ctx, c, a, b, m, n, k, leaf, p_count, st, swizzle, two_d
++            )
++            return
++        if p_count < 16:
++            _launch_tuned[RPT, CPT, TC, KS, 4](
++                ctx, c, a, b, m, n, k, leaf, p_count, st, swizzle, two_d
++            )
++            return
++        if p_count < 256:
++            _launch_tuned[RPT, CPT, TC, KS, 8](
++                ctx, c, a, b, m, n, k, leaf, p_count, st, swizzle, two_d
++            )
++            return
+     comptime NTH = TUNED_TPB
+     comptime TR = NTH // TC
+     comptime BM = RPT * TR

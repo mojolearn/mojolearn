@@ -1,0 +1,3 @@
+[04:55:06 attn-pod] terminating gdkumy79olopt6
+[04:55:06 attn-pod] DELETE -> HTTP 204
+[04:55:12 attn-pod] VERIFIED GONE (GET -> HTTP 404)

@@ -100,24 +100,37 @@ worktree branch lane/knn-identical,
 `umap/` (7 rounds). "request" includes host transfers, "device" excludes
 them. k=10 and k=15 are separate rows; do not substitute one for the other.
 
-| index | queries | k | cuML brute NearestNeighbors request | device |
-|---:|---:|---:|---:|---:|
-| 100k x 32 | 32 | 10 | 1.125 | 0.669 |
-| 100k x 32 | 128 | 10 | 0.914 | 0.459 |
-| 100k x 32 | 1000 | 10 | 1.572 | 1.081 |
-| 100k x 32 | 4000 | 10 | 3.480 | 2.904 |
-| 400k x 32 | 32 | 10 | 1.546 | 1.200 |
-| 400k x 32 | 128 | 10 | 1.531 | 1.159 |
-| 400k x 32 | 1000 | 10 | 4.101 | 3.659 |
-| 400k x 32 | 4000 | 10 | 10.225 | 9.632 |
-| 100k x 32 | 32 | 15 | 1.113 | 0.675 |
-| 100k x 32 | 128 | 15 | 0.922 | 0.470 |
-| 100k x 32 | 1000 | 15 | 1.617 | 1.111 |
-| 100k x 32 | 4000 | 15 | 3.571 | 2.957 |
-| 400k x 32 | 32 | 15 | 1.573 | 1.241 |
-| 400k x 32 | 128 | 15 | 1.532 | 1.197 |
-| 400k x 32 | 1000 | 15 | 4.183 | 3.750 |
-| 400k x 32 | 4000 | 15 | 10.817 | 9.756 |
+| index | queries | k | cuML brute NearestNeighbors request | cuML device | IDENTICAL request Sep10 | IDENTICAL device Sep10 | request ratio |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100k x 32 | 32 | 10 | 1.125 | 0.669 | 0.530 | 0.265 | 0.47x |
+| 100k x 32 | 128 | 10 | 0.914 | 0.459 | 0.683 | 0.415 | 0.75x |
+| 100k x 32 | 1000 | 10 | 1.572 | 1.081 | 2.771 | 2.477 | 1.76x |
+| 100k x 32 | 4000 | 10 | 3.480 | 2.904 | 10.014 | 9.635 | 2.88x |
+| 400k x 32 | 32 | 10 | 1.546 | 1.200 | 1.983 | 1.027 | 1.28x |
+| 400k x 32 | 128 | 10 | 1.531 | 1.159 | 2.593 | 1.632 | 1.69x |
+| 400k x 32 | 1000 | 10 | 4.101 | 3.659 | 10.794 | 9.808 | 2.63x |
+| 400k x 32 | 4000 | 10 | 10.225 | 9.632 | 39.305 | 38.226 | 3.84x |
+| 100k x 32 | 32 | 15 | 1.113 | 0.675 | 0.577 | 0.309 | 0.52x |
+| 100k x 32 | 128 | 15 | 0.922 | 0.470 | 0.728 | 0.457 | 0.79x |
+| 100k x 32 | 1000 | 15 | 1.617 | 1.111 | 3.123 | 2.818 | 1.93x |
+| 100k x 32 | 4000 | 15 | 3.571 | 2.957 | 11.441 | 11.004 | 3.20x |
+| 400k x 32 | 32 | 15 | 1.573 | 1.241 | 2.160 | 1.204 | 1.37x |
+| 400k x 32 | 128 | 15 | 1.532 | 1.197 | 2.764 | 1.802 | 1.80x |
+| 400k x 32 | 1000 | 15 | 4.183 | 3.750 | 12.167 | 11.164 | 2.91x |
+| 400k x 32 | 4000 | 15 | 10.817 | 9.756 | 44.814 | 43.676 | 4.14x |
+
+The Sep10 IDENTICAL columns use source `8266f1c0`, NVIDIA H100 80GB HBM3,
+driver 580.126.09, Mojo 1.0.0 (ed45d567), IDENTICAL mode, dyadic-v1,
+two warmups and seven timed rounds. The opponent is the archived matched
+hardware/driver reference above, not rerun. Evidence and all 16 price logs:
+`bench/results/knn/2026-09-10-residual-final/h100/`.
+Same-pod pristine `5011239a` controls at 400k/4000 queries measured
+49.452488 -> 39.310253 ms (k10, 20.51% less) and 54.973115 -> 44.817340 ms
+(k15, 18.48% less), with matching index and distance fingerprints.
+The repeated final-grid rows above can differ slightly from those control-pair
+medians. This is an own-before/after bit check; opponent admission still compares
+indices only. Previous Sep9 absolute timings came from another pod/session;
+the compiler version is the same, so no compiler regression is inferred.
 
 The k=15 rows were backfilled from the same archived JSON on 2026-09-10,
 without new opponent runs. All rows use dyadic-v1, two warmups and seven
@@ -331,14 +344,21 @@ five timed rounds; median milliseconds.
 Timing scope is the existing torch reference arm in
 the September 7 `tools/speed_torch_seq.py` snapshot; compare only with the corresponding
 public `bench/speed/seq_py_speed_arm.py` shape from the sibling
-`mojolearn-grid` checkout and document the host/device scope of
-both arms. This is a reference scan, not the BF16 Mamba-3 Triton kernel.
+`mojolearn-grid` checkout. Torch weights/input are already on device and
+the timed call returns device y; our public call includes host transfers,
+per-call weight checks and four public reports. These scopes remain
+explicit when quoting the ratio. This is the FP32 reference scan.
 
-| shape | torch FP32 ms | numerical admission |
-|---|---:|---|
-| lane.b2_l4_d32 | 1.477005 | PASS |
-| narrow.b8_l4096_d512 | 16.396241 | PASS |
-| wide.b8_l1024_d2048 | 19.383267 | PASS |
+| shape | torch FP32 ms | numerical admission | IDENTICAL public ms Sep10 | ratio |
+|---|---:|---|---:|---:|
+| lane.b2_l4_d32 | 1.477005 | PASS | 0.981355 | 0.66x |
+| narrow.b8_l4096_d512 | 16.396241 | PASS | 70.828952 | 4.32x |
+| wide.b8_l1024_d2048 | 19.383267 | PASS | 124.409189 | 6.42x |
+
+Sep10 public medians use the final default fresh-prefill/caller-copy path,
+five timed rounds, same H100 model/driver, and matching full output SHA.
+Source, runtime and samples: `bench/results/mamba3/2026-09-10-fresh/`.
+The small lane row measures overhead; do not extrapolate it to large shapes.
 
 Source directory:
 `bench/results/mamba3/2026-09-09-statepass/opponent-admission/`.
@@ -379,3 +399,15 @@ median, input/output admission result and source log with every new row.
 Keep failed admission and failed runs visible and explicitly unqualified.
 Correctness-only opponent runs need no fresh timing; if the comparator or
 fixture changes, create a new row rather than overwriting its history.
+
+### H100 transformer admission diagnosis (2026-09-10, no new timing)
+
+`bench/results/transformer_admission_2026-09-10/` reproduces the original
+H100 input/output witnesses and failed admission. Different pinned RoPE
+inverse constants explain most of the original discrepancy. Supplying
+exact complete production RoPE tables still leaves both shapes outside
+the original tolerance; both FP32 implementations also fail that tolerance
+against a matched FP64 diagnostic with comparable error magnitudes. This
+is numerical evidence, not a new timing row or a qualified speed ratio.
+The comparator defaults and tolerance remain unchanged. Reuse this
+investigation before spending another opponent run on the same mismatch.
