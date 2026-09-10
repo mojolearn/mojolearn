@@ -5,8 +5,9 @@ Widths above this device's native group test shared-memory portability only;
 they do not constitute execution evidence for another physical GPU column.
 """
 from std.gpu import thread_idx
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
-from checks.kernel_matrix import TARGET_COLUMN, column_lane_width, column_lane_width_is_fixed, column_max_block_size, column_is_simulated, column_is_buildable, column_name
+from checks.kernel_matrix import TARGET_COLUMN, column_lane_width, column_lane_width_is_fixed, column_max_block_size, column_is_simulated, column_is_buildable, column_name, COLUMN_AMD_RDNA
 from neighbors.checks.lane_minimum import logical_min_u64
 
 comptime BLOCK = 128 if column_max_block_size(TARGET_COLUMN) < 256 else 256
@@ -48,6 +49,8 @@ def check[WIDTH: Int, FIXED: Bool](ctx: DeviceContext) raises:
 
 
 def main() raises:
+    comptime if is_defined["MOJOLEARN_REQUIRE_RDNA_TARGET"]():
+        comptime assert TARGET_COLUMN == COLUMN_AMD_RDNA and not column_is_simulated(), "RDNA qualification requires a real RDNA compilation target"
     print("DECLARED_COLUMN", column_name(TARGET_COLUMN), "simulated", column_is_simulated(), "backend_declared_buildable", column_is_buildable(TARGET_COLUMN), "block", BLOCK)
     with DeviceContext() as ctx:
         comptime for exponent in range(8):
