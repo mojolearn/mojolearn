@@ -366,12 +366,21 @@ need=''; command -v patchelf >/dev/null || need=\"\$need patchelf\"
 $REMOTE_PY -c 'import ensurepip' 2>/dev/null || need=\"\$need python3-venv python3-pip\"
 if [ -n \"\$need\" ]; then
   timeout -k 10 180 apt-get -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=30 update > /root/apt.log 2>&1
-  timeout -k 10 300 apt-get -qq -o Acquire::Retries=1 install -y --no-install-recommends \$need >> /root/apt.log 2>&1; echo APT_EXIT=\$? need=\$need
+  timeout -k 10 300 apt-get -qq -o DPkg::Lock::Timeout=120 -o Acquire::Retries=1 install -y --no-install-recommends \$need >> /root/apt.log 2>&1; echo APT_EXIT=\$? need=\$need
 fi
 export PATH=/root/.pixi/bin:\$PATH
 command -v pixi >/dev/null || timeout -k 10 120 sh -c 'curl -fsSL --max-time 30 https://pixi.sh/install.sh | sh' > /root/pixi_bootstrap.log 2>&1
 cd /root/mojolearn && $REMOTE_PY $LEG_GUARD --seconds $PREP_SECONDS --rss-gib 12 -- \
   pixi install --locked --environment default > /root/pixi_install.log 2>&1; echo PIXI_INSTALL_EXIT=\$?
+# Match the NVIDIA release builder: a private pinned wheel provides patchelf
+# when the image apt repositories fail. Keep it outside the locked Pixi env.
+if ! command -v patchelf >/dev/null; then
+  tail -40 /root/apt.log
+  .pixi/envs/default/bin/python -m venv /root/release-tools &&
+  timeout -k 10 120 /root/release-tools/bin/python -m pip install --disable-pip-version-check --only-binary=:all: --retries 1 --timeout 20 patchelf==0.17.2.4
+fi
+export PATH=/root/release-tools/bin:\$PATH
+command -v patchelf >/dev/null && patchelf --version
 for t in taskset objdump patchelf pixi; do command -v \$t >/dev/null || echo MISSING_\$t; done
 test -x .pixi/envs/default/bin/mojo && test -x .pixi/envs/default/bin/python && echo PIXI_ENV_OK || echo PIXI_ENV_MISSING" \
   2>&1 | tee "$OUT/prep-console.log" | sed 's/^/[amd prep] /'
@@ -388,13 +397,13 @@ if [ "$LEG_MODE" = qualify ]; then
   # 25 installed jobs on THIS device, from the wheel's own bytes. The driver
   # refuses an architecture override and records the device it actually found,
   # so it cannot be talked into agreeing with us.
-  $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/.pixi/bin:\$PATH; \
+  $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/release-tools/bin:/root/.pixi/bin:\$PATH; \
     MOJOLEARN_EXPECT_VENDOR=$LEG_VENDOR \
     timeout -k 20 $((WORK_SECONDS + 40)) bash tools/linux_surface_qualification.sh qualify-release-linux3 \
       /root/$QUAL_BASE $QUAL_SHA $LEG_VENDOR $REMOTE_OUT /root/proofs $LEG_ARCH > $REMOTE_LOG 2>&1; \
     echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the qualification"; exit 9; }
 else
-$SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/.pixi/bin:\$PATH; \
+$SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/release-tools/bin:/root/.pixi/bin:\$PATH; \
   MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=$WORK_SECONDS \
   timeout -k 20 $((WORK_SECONDS + 40)) bash tools/release061_remote_build.sh $LEG_VENDOR $LEG_ARCH $REMOTE_OUT > $REMOTE_LOG 2>&1; \
   echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the build"; exit 9; }
