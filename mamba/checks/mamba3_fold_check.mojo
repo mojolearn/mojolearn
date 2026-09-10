@@ -13,7 +13,7 @@ from mamba.impl.mamba_ssm.ops.mamba3_fold import M3_HARDWARE_FOLD, m3_fold_step
 from mamba.impl.transformers.models.mamba.modeling_mamba import mamba_upload, mamba_download, mamba_zeros
 
 
-def compare_kernel(out: MutPointer[Float32, MutAnyOrigin], words: MutPointer[Float32, MutAnyOrigin], count_in: Int32):
+def compare_kernel(results: MutPointer[Float32, MutAnyOrigin], words: MutPointer[Float32, MutAnyOrigin], count_in: Int32):
     var count = Int(count_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= count * count * count:
@@ -21,8 +21,8 @@ def compare_kernel(out: MutPointer[Float32, MutAnyOrigin], words: MutPointer[Flo
     var a = words.unsafe_load(i % count)
     var b = words.unsafe_load((i // count) % count)
     var acc = ftz(words.unsafe_load(i // (count * count)))
-    out.unsafe_store(2 * i, m3_fold_step(a, b, acc))
-    out.unsafe_store(2 * i + 1, ftz(identical_mul_add(ftz(a), ftz(b), acc)))
+    results.unsafe_store(2 * i, m3_fold_step(a, b, acc))
+    results.unsafe_store(2 * i + 1, ftz(identical_mul_add(ftz(a), ftz(b), acc)))
 
 
 def main() raises:
@@ -46,5 +46,6 @@ def main() raises:
     var actual = mamba_download(ctx, result, 2 * n)
     for i in range(n):
         if bitcast[DType.uint32](actual[2 * i]) != bitcast[DType.uint32](actual[2 * i + 1]):
+            print("Mismatch:", i, "got", bitcast[DType.uint32](actual[2 * i]), "expected", bitcast[DType.uint32](actual[2 * i + 1]))
             raise Error("Mamba3 fold seam differs at triple " + String(i))
     print("Mamba3 fold PASS:", n, "finite adversarial triples; hardware column engaged:", M3_HARDWARE_FOLD)

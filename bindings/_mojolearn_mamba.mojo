@@ -752,6 +752,36 @@ def mamba2_decode_step_binding(
 # ===========================================================================
 
 
+def _m3_load_weights(ctx: DeviceContext, a: List[Int], dims: Mamba3Dims) raises -> Mamba3DeviceWeights:
+    var dm = dims.d_model
+    var di = dims.d_inner
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_DIRECT_TRANSFER"]():
+        var norm_w = _m3_upload_addr(ctx, a[1], dm)
+        var w_in = _m3_upload_addr(ctx, a[2], dip * dm)
+        var dt_bias = _m3_upload_addr(ctx, a[3], nh)
+        var bnorm_w = _m3_upload_addr(ctx, a[4], M3_D_STATE)
+        var cnorm_w = _m3_upload_addr(ctx, a[5], M3_D_STATE)
+        var b_bias = _m3_upload_addr(ctx, a[6], nh * M3_D_STATE)
+        var c_bias = _m3_upload_addr(ctx, a[7], nh * M3_D_STATE)
+        var d_skip = _m3_upload_addr(ctx, a[8], nh)
+        var w_out = _m3_upload_addr(ctx, a[9], dm * di)
+        return Mamba3DeviceWeights(dims, norm_w^, w_in^, dt_bias^, bnorm_w^, cnorm_w^, b_bias^, c_bias^, d_skip^, w_out^)
+    else:
+        var w = Mamba3Weights(dims)
+        w.norm_w = _m3_read_f32(a[1], dm)
+        w.w_in = _m3_read_f32(a[2], dip * dm)
+        w.dt_bias = _m3_read_f32(a[3], nh)
+        w.bnorm_w = _m3_read_f32(a[4], M3_D_STATE)
+        w.cnorm_w = _m3_read_f32(a[5], M3_D_STATE)
+        w.b_bias = _m3_read_f32(a[6], nh * M3_D_STATE)
+        w.c_bias = _m3_read_f32(a[7], nh * M3_D_STATE)
+        w.d_skip = _m3_read_f32(a[8], nh)
+        w.w_out = _m3_read_f32(a[9], dm * di)
+        return Mamba3DeviceWeights(ctx, w)
+
+
 def _mamba3_run(
     a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
 ) raises -> Int:
@@ -784,16 +814,6 @@ def _mamba3_run(
     var phase_tick = 0
     comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
         phase_tick = Int(perf_counter_ns())
-    var w = Mamba3Weights(dims)
-    w.norm_w = _m3_read_f32(a[1], dm)
-    w.w_in = _m3_read_f32(a[2], dip * dm)
-    w.dt_bias = _m3_read_f32(a[3], nh)
-    w.bnorm_w = _m3_read_f32(a[4], M3_D_STATE)
-    w.cnorm_w = _m3_read_f32(a[5], M3_D_STATE)
-    w.b_bias = _m3_read_f32(a[6], nh * M3_D_STATE)
-    w.c_bias = _m3_read_f32(a[7], nh * M3_D_STATE)
-    w.d_skip = _m3_read_f32(a[8], nh)
-    w.w_out = _m3_read_f32(a[9], dm * di)
 
     var theta_n = b * nh * M3_NUM_ROPE_ANGLES
     var h_n = b * nh * M3_HEADDIM * M3_D_STATE
@@ -803,7 +823,7 @@ def _mamba3_run(
 
     var ctx = DeviceContext()
     m3_phase_tick(ctx, phase_tick, String("surface.weight_lists_and_context"))
-    var dw = Mamba3DeviceWeights(ctx, w)
+    var dw = _m3_load_weights(ctx, a, dims)
     m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
     # The caller's ten-piece state over the fresh zeros (DEVIATION 794).
     var dstate = Mamba3DeviceState(ctx, b, dims)

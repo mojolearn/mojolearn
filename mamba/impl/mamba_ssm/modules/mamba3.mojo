@@ -211,6 +211,32 @@ struct Mamba3DeviceWeights(Movable):
         self.w_out = mamba_upload(ctx, w.w_out)
 
 
+    def __init__(
+        out self, dims: Mamba3Dims,
+        var norm_w: DeviceBuffer[DType.float32],
+        var w_in: DeviceBuffer[DType.float32],
+        var dt_bias: DeviceBuffer[DType.float32],
+        var bnorm_w: DeviceBuffer[DType.float32],
+        var cnorm_w: DeviceBuffer[DType.float32],
+        var b_bias: DeviceBuffer[DType.float32],
+        var c_bias: DeviceBuffer[DType.float32],
+        var d_skip: DeviceBuffer[DType.float32],
+        var w_out: DeviceBuffer[DType.float32],
+    ):
+        """Adopt freshly uploaded buffers; every public call validates anew."""
+        self.dims = dims.copy()
+        self.weights_checked = False
+        self.norm_w = norm_w^
+        self.w_in = w_in^
+        self.dt_bias = dt_bias^
+        self.bnorm_w = bnorm_w^
+        self.cnorm_w = cnorm_w^
+        self.b_bias = b_bias^
+        self.c_bias = c_bias^
+        self.d_skip = d_skip^
+        self.w_out = w_out^
+
+
 struct Mamba3DeviceState(Movable):
     """DEVIATION 832's carried state on the device (the oracle's
     `Mamba3State`, same layouts): theta [B, H, R]; the sealed boundary h
