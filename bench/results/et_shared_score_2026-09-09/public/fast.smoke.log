@@ -1,0 +1,12 @@
+PASS Python accumulator dispatch classes=1
+PASS Python accumulator dispatch classes=2
+PASS Python accumulator dispatch classes=4
+PASS Python accumulator dispatch classes=5
+PASS Python accumulator dispatch classes=8
+PASS Python accumulator dispatch classes=9
+PASS Python accumulator dispatch classes=16
+PASS Python accumulator dispatch classes=17
+PASS Python accumulator dispatch classes=32
+PASS Python regression smoke requested_mode=fast
+loaded_trees_extension /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/_mojolearn_trees.so
+compiled_numeric_mode 0 shared_counts_mask 14

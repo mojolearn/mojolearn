@@ -1,0 +1,15 @@
+numeric_mode FAST
+shared_class_counts_mask 0
+numeric_mode FAST
+shared_class_counts_mask 15
+PASS shared integer score fast:27 complete forests+probabilities and210-cell kernel oracle/sabotages
+numeric_mode DETERMINISTIC
+shared_class_counts_mask 0
+numeric_mode DETERMINISTIC
+shared_class_counts_mask 15
+PASS shared integer score deterministic:27 complete forests+probabilities and210-cell kernel oracle/sabotages
+numeric_mode IDENTICAL
+shared_class_counts_mask 0
+numeric_mode IDENTICAL
+shared_class_counts_mask 15
+PASS shared integer score identical:27 complete forests+probabilities and210-cell kernel oracle/sabotages

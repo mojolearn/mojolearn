@@ -34,6 +34,8 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import shared_class_counts_mask
 
 from max.gpu.host import DeviceContext
 
@@ -396,11 +398,23 @@ def trees_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def trees_numeric_mode_binding() raises -> PythonObject:
+    """Compiled numeric tier, independent of the package directory label."""
+    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+
+
+def trees_shared_counts_mask_binding() raises -> PythonObject:
+    """Compiled score policy: bits0..3 correspond to widths4/8/16/32."""
+    return PythonObject(shared_class_counts_mask())
+
+
 @export
 def PyInit__mojolearn_trees() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_trees")
         m.def_function[trees_vendor_binding]("trees_vendor")
+        m.def_function[trees_numeric_mode_binding]("trees_numeric_mode")
+        m.def_function[trees_shared_counts_mask_binding]("trees_shared_counts_mask")
         m.def_function[et_classifier_fit_binding]("et_classifier_fit")
         m.def_function[et_regressor_fit_binding]("et_regressor_fit")
         m.def_function[et_predict_binding]("et_predict")

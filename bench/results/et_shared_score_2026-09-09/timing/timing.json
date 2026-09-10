@@ -1,0 +1,410 @@
+[
+  {
+    "mode": "fast",
+    "rows": 65536,
+    "classes": 2,
+    "cols": 13,
+    "trees": 16,
+    "depth": 10,
+    "medians_ms": {
+      "baseline": 100.0375,
+      "candidate": 120.97
+    },
+    "speedup": 0.8269612300570389,
+    "baseline_drift_ratio": 1.0000899703097978,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        116.331,
+        98.869,
+        100.042,
+        100.392,
+        99.542,
+        100.033
+      ],
+      "candidate": [
+        87.286,
+        110.939,
+        123.625,
+        143.958,
+        145.998,
+        118.315
+      ]
+    },
+    "fingerprint": "fingerprint 65536 2 16 10 False False False 13098527719493351381"
+  },
+  {
+    "mode": "fast",
+    "rows": 262144,
+    "classes": 2,
+    "cols": 13,
+    "trees": 16,
+    "depth": 10,
+    "medians_ms": {
+      "baseline": 451.22749999999996,
+      "candidate": 424.2285
+    },
+    "speedup": 1.0636425888406837,
+    "baseline_drift_ratio": 1.0023763457083772,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        447.938,
+        451.763,
+        453.169,
+        454.516,
+        446.262,
+        450.692
+      ],
+      "candidate": [
+        457.855,
+        421.542,
+        424.52,
+        419.701,
+        426.529,
+        423.937
+      ]
+    },
+    "fingerprint": "fingerprint 262144 2 16 10 False False False 3324970801962188126"
+  },
+  {
+    "mode": "fast",
+    "rows": 65536,
+    "classes": 5,
+    "cols": 13,
+    "trees": 8,
+    "depth": 8,
+    "medians_ms": {
+      "baseline": 57.753,
+      "candidate": 39.9245
+    },
+    "speedup": 1.4465553732670415,
+    "baseline_drift_ratio": 1.006673137587964,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        58.079,
+        58.377,
+        57.681,
+        57.812,
+        57.694,
+        57.49
+      ],
+      "candidate": [
+        40.099,
+        39.968,
+        39.656,
+        39.881,
+        40.046,
+        39.701
+      ]
+    },
+    "fingerprint": "fingerprint 65536 5 8 8 False False False 13449900366703677050"
+  },
+  {
+    "mode": "fast",
+    "rows": 65536,
+    "classes": 9,
+    "cols": 13,
+    "trees": 8,
+    "depth": 8,
+    "medians_ms": {
+      "baseline": 81.28200000000001,
+      "candidate": 42.3665
+    },
+    "speedup": 1.9185441327463917,
+    "baseline_drift_ratio": 1.136237820393471,
+    "stable": false,
+    "samples_ms": {
+      "baseline": [
+        80.93,
+        80.565,
+        80.52,
+        113.407,
+        91.541,
+        81.634
+      ],
+      "candidate": [
+        41.217,
+        40.871,
+        40.75,
+        43.516,
+        45.041,
+        64.217
+      ]
+    },
+    "fingerprint": "fingerprint 65536 9 8 8 False False False 14219406115855233638"
+  },
+  {
+    "mode": "fast",
+    "rows": 65536,
+    "classes": 17,
+    "cols": 13,
+    "trees": 8,
+    "depth": 8,
+    "medians_ms": {
+      "baseline": 158.297,
+      "candidate": 41.703
+    },
+    "speedup": 3.7958180466633094,
+    "baseline_drift_ratio": 1.0063139780592425,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        159.06,
+        158.489,
+        159.659,
+        158.036,
+        158.105,
+        158.062
+      ],
+      "candidate": [
+        41.507,
+        42.723,
+        42.55,
+        41.704,
+        41.153,
+        41.702
+      ]
+    },
+    "fingerprint": "fingerprint 65536 17 8 8 False False False 13409834696523114002"
+  },
+  {
+    "mode": "fast",
+    "rows": 65536,
+    "classes": 32,
+    "cols": 13,
+    "trees": 8,
+    "depth": 8,
+    "medians_ms": {
+      "baseline": 261.6085,
+      "candidate": 42.5235
+    },
+    "speedup": 6.152092372452879,
+    "baseline_drift_ratio": 1.0002179065677805,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        256.731,
+        262.72,
+        261.637,
+        258.582,
+        262.51,
+        261.58
+      ],
+      "candidate": [
+        42.923,
+        42.525,
+        42.323,
+        42.805,
+        42.522,
+        42.372
+      ]
+    },
+    "fingerprint": "fingerprint 65536 32 8 8 False False False 18151400909519862117"
+  },
+  {
+    "mode": "identical",
+    "rows": 65536,
+    "classes": 2,
+    "cols": 13,
+    "trees": 16,
+    "depth": 10,
+    "medians_ms": {
+      "baseline": 100.743,
+      "candidate": 90.66
+    },
+    "speedup": 1.1112177365982794,
+    "baseline_drift_ratio": 1.003355270363106,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        102.57,
+        100.214,
+        100.439,
+        100.776,
+        100.71,
+        100.927
+      ],
+      "candidate": [
+        87.735,
+        88.434,
+        88.023,
+        99.704,
+        92.886,
+        94.235
+      ]
+    },
+    "fingerprint": "fingerprint 65536 2 16 10 False False False 13098527719493351381"
+  },
+  {
+    "mode": "identical",
+    "rows": 262144,
+    "classes": 2,
+    "cols": 13,
+    "trees": 16,
+    "depth": 10,
+    "medians_ms": {
+      "baseline": 462.1555,
+      "candidate": 430.6475
+    },
+    "speedup": 1.0731642468608318,
+    "baseline_drift_ratio": 1.0209330287626561,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        468.874,
+        466.157,
+        464.266,
+        456.599,
+        454.596,
+        460.045
+      ],
+      "candidate": [
+        453.315,
+        441.042,
+        431.323,
+        429.972,
+        429.825,
+        428.764
+      ]
+    },
+    "fingerprint": "fingerprint 262144 2 16 10 False False False 3324970801962188126"
+  },
+  {
+    "mode": "identical",
+    "rows": 65536,
+    "classes": 5,
+    "cols": 13,
+    "trees": 8,
+    "depth": 8,
+    "medians_ms": {
+      "baseline": 58.08,
+      "candidate": 40.4465
+    },
+    "speedup": 1.435970974002695,
+    "baseline_drift_ratio": 1.0072651342583006,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        58.369,
+        58.412,
+        57.569,
+        58.212,
+        57.854,
+        57.948
+      ],
+      "candidate": [
+        40.413,
+        40.853,
+        39.527,
+        40.48,
+        39.862,
+        40.49
+      ]
+    },
+    "fingerprint": "fingerprint 65536 5 8 8 False False False 13449900366703677050"
+  },
+  {
+    "mode": "identical",
+    "rows": 65536,
+    "classes": 9,
+    "cols": 13,
+    "trees": 8,
+    "depth": 8,
+    "medians_ms": {
+      "baseline": 81.19399999999999,
+      "candidate": 40.431
+    },
+    "speedup": 2.0082115208627043,
+    "baseline_drift_ratio": 1.0083718744589816,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        81.172,
+        80.424,
+        80.866,
+        81.543,
+        86.197,
+        81.216
+      ],
+      "candidate": [
+        39.841,
+        40.471,
+        40.387,
+        40.422,
+        40.44,
+        40.545
+      ]
+    },
+    "fingerprint": "fingerprint 65536 9 8 8 False False False 14219406115855233638"
+  },
+  {
+    "mode": "identical",
+    "rows": 65536,
+    "classes": 17,
+    "cols": 13,
+    "trees": 8,
+    "depth": 8,
+    "medians_ms": {
+      "baseline": 161.906,
+      "candidate": 41.7775
+    },
+    "speedup": 3.875435341990306,
+    "baseline_drift_ratio": 1.010111636426644,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        160.52,
+        163.23,
+        164.395,
+        161.596,
+        162.216,
+        160.43
+      ],
+      "candidate": [
+        40.842,
+        41.226,
+        40.747,
+        42.329,
+        42.836,
+        42.388
+      ]
+    },
+    "fingerprint": "fingerprint 65536 17 8 8 False False False 13409834696523114002"
+  },
+  {
+    "mode": "identical",
+    "rows": 65536,
+    "classes": 32,
+    "cols": 13,
+    "trees": 8,
+    "depth": 8,
+    "medians_ms": {
+      "baseline": 262.33799999999997,
+      "candidate": 42.8705
+    },
+    "speedup": 6.119312814172916,
+    "baseline_drift_ratio": 1.0037349770287456,
+    "stable": true,
+    "samples_ms": {
+      "baseline": [
+        258.16,
+        261.849,
+        264.559,
+        262.827,
+        263.101,
+        261.401
+      ],
+      "candidate": [
+        42.75,
+        43.454,
+        42.991,
+        43.153,
+        42.696,
+        42.456
+      ]
+    },
+    "fingerprint": "fingerprint 65536 32 8 8 False False False 18151400909519862117"
+  }
+]

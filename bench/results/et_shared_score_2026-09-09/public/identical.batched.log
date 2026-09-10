@@ -1,0 +1,15 @@
+[device] the batched forest on Apple M4
+[classification] fit_classification_device vs one-tree builds
+    12 trees, 11 of 11 differ from tree 0; merged vs serial: 0 node diffs, 0 leaf-bit diffs
+[batch width] max_batch_size=3 must not move a tree
+    8 trees at width 3: identical
+[max_leaves] the budget's break order survives merging
+    6 trees at max_leaves=9: identical
+[groups] row_slot_cap at two trees: three groups, same forest
+    5 trees in groups of 2: identical
+[regression] fit_regression_device vs one-tree builds
+    10 trees, 9 of 9 differ from tree 0; merged vs serial: 0 node diffs, 0 leaf-bit diffs
+[sabotage] the two isolation mechanisms, seen to hold the gate
+    scalar-tree moved 2688 / 2052 nodes (clf/reg); shared-row-base moved 2552 / 2638
+device_batched:  45 cells
+device_batched_check: PASS

@@ -1,0 +1,29 @@
+numeric_mode FAST
+shared_class_counts_mask 15
+fingerprint 1537 1 3 7 False False False 9050884847760758230
+fingerprint 1537 1 3 7 True True False 9050884847760758230
+fingerprint 1537 1 3 7 False True True 9050884847760758230
+fingerprint 1537 2 3 7 False False False 16152857606894948613
+fingerprint 1537 2 3 7 True True False 10249514429610504031
+fingerprint 1537 2 3 7 False True True 7703624658873961013
+fingerprint 1537 4 3 7 False False False 16487670102857797971
+fingerprint 1537 4 3 7 True True False 3036789836966474988
+fingerprint 1537 4 3 7 False True True 9879147723120519347
+fingerprint 1537 5 3 7 False False False 11161005855931495355
+fingerprint 1537 5 3 7 True True False 2962761249449375873
+fingerprint 1537 5 3 7 False True True 12541049439225018555
+fingerprint 1537 8 3 7 False False False 10204036448930441361
+fingerprint 1537 8 3 7 True True False 10567308581928645124
+fingerprint 1537 8 3 7 False True True 978330073759614629
+fingerprint 1537 9 3 7 False False False 9033181340925323351
+fingerprint 1537 9 3 7 True True False 11173525938660865720
+fingerprint 1537 9 3 7 False True True 721091101539048015
+fingerprint 1537 16 3 7 False False False 10866336464100025785
+fingerprint 1537 16 3 7 True True False 7947860023327182944
+fingerprint 1537 16 3 7 False True True 4490398223102713104
+fingerprint 1537 17 3 7 False False False 14033069922836406775
+fingerprint 1537 17 3 7 True True False 3109160241023593425
+fingerprint 1537 17 3 7 False True True 7189641901749809401
+fingerprint 1537 32 3 7 False False False 12756841314958200267
+fingerprint 1537 32 3 7 True True False 14088132661406161167
+fingerprint 1537 32 3 7 False True True 11785197926381550648

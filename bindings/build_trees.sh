@@ -126,9 +126,10 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-trees-build.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out="$tmpdir/_mojolearn_trees.so"
 
-# shellcheck disable=SC2086  # both flag strings are deliberately word-split
+# MOJOLEARN_EXTRA_DEFINES carries diagnostic score-policy overrides; empty by default.
+# shellcheck disable=SC2086  # flag strings are deliberately word-split
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
-    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
+    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE ${MOJOLEARN_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn_trees.mojo \
