@@ -294,3 +294,14 @@ rounds minimum, with the versions printed in the log. Commit the log under
 `bench/results/e1g/<stamp>/` (top-level files only) and add the row here
 with the stamp, GPU, driver and versions. Then delete the opponent from the
 round's command line; the round measures us alone.
+
+### L40S attention, driver 580.159.03 (2026-09-09)
+
+A new driver tuple, measured once on the same pod as the register-tiled
+IDENTICAL candidate. Torch 2.4.1+cu124, eager FP32 SDPA, TF32 off, explicit
+sliding-window mask; B=4, L=4096, d_model=1024, heads=16, kv_heads=4,
+head_dim=64, window=2048, intermediate=4096. One warmup, median of three
+rounds: **35.9 ms forward; 114.3 ms forward+backward**.
+
+Source: `bench/results/attnlane_regblock_2026-09-09/jobs/torch_reference.log`;
+GPU/version records and the full harness are in the same directory.
