@@ -1,0 +1,49 @@
+batchJ start 21:35:39
+2
+build flip2011/rf defines='' 21:35:40
+build_exit flip2011.rf=0 21:36:09
+2f192eb0f47c42319691e901cb049fd7390f8db5f423422a3611d01ceaddf34b  /root/bins/flip2011/_mojolearn_rf.so
+identity_break flip2011 lanes=rf-clf,rf-reg 21:36:09
+ib_exit flip2011=0 21:36:13
+
+cells=18 stable=18 moved=0 refused=0
+wrote /root/trees_out/ib/flip2011.json
+ib_diff baseline vs flip2011 exit=0 21:36:13
+19
+ib_diff rf2011 vs flip2011 exit=0 21:36:14
+19
+speed flip2011 rf higgs 1000000 rounds=5 mode=ours 21:36:14
+speed_exit flip2011.rf.higgs.r1000000.ours=0 21:39:49
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=2276.572 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=2 ms=2236.195 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=3 ms=2234.401 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=4 ms=2216.385 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=5 ms=2221.308 hash=3ffa2951595422d4
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538850
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906
+speed baseline rf higgs 1000000 rounds=5 mode=ours 21:39:49
+speed_exit baseline.rf.higgs.r1000000.ours=0 21:43:26
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=2405.861 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=2 ms=2374.808 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=3 ms=2339.586 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=4 ms=2341.814 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=5 ms=2382.015 hash=3ffa2951595422d4
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538850
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906
+rf_perf_candidates_check flip2011src defines='' 21:43:26
+rfgate_exit flip2011src=0 21:43:35
+  arm H2-shared-copies4-fallback(2012) OK: 288 cells match per cell
+  arm H3-sabotage(2012) OK: 115 cells moved, every one an undercount (reach proven)
+  arm S1-sort(2010) OK: ascending and multiset-identical over 4000 hashed keys ( 14 passes )
+  arm S2-sabotage(2010) OK: 348 inversions with the top two passes dropped (reach proven)
+rf_perf_candidates_check: ALL ARMS GREEN
+rf_perf_candidates_check flip2011optout defines='-D MOJOLEARN_2011_HIST_ITEMS1=1' 21:43:35
+rfgate_exit flip2011optout=0 21:43:44
+  arm H2-shared-copies4-fallback(2012) OK: 288 cells match per cell
+  arm H3-sabotage(2012) OK: 115 cells moved, every one an undercount (reach proven)
+  arm S1-sort(2010) OK: ascending and multiset-identical over 4000 hashed keys ( 14 passes )
+  arm S2-sabotage(2010) OK: 348 inversions with the top two passes dropped (reach proven)
+rf_perf_candidates_check: ALL ARMS GREEN
+BATCHJ_DONE 21:43:44

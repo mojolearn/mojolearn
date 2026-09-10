@@ -1,0 +1,7 @@
+5144 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13fc00000000, nodemask=1)
+PASS WP8 uint8 elements 1
+PASS WP8 uint8 elements 15
+PASS WP8 uint8 elements 16
+PASS WP8 uint8 elements 17
+PASS WP8 uint8 elements 65
+PASS WP8 int32 elements 31

@@ -59,6 +59,18 @@ Our identical arm in the same process on that H100: symmetric Logloss 775
 ms (697..1161), RMSE 806, RF 5762 (see `docs/lanes/HANDOFF_trees.md`;
 450-600 ms of each round is host-side outside the fit).
 
+Our identical arm, 2026-09-10 leg, same GPU model and image, driver
+580.126.09, source deb01bcf, ours alone in the process (no opponent
+re-measured; `bench/results/trees_identical/h100_2026-09-10/speed/`, 5 rounds
+RF/ET, 7 symmetric, ms median with min..max): RF 1M 2475 (2385..2532) at the
+shipped source and 2234 (2216..2277) at the flipped HIST_ITEMS_PER_THREAD 4
+default (hash 3ffa2951595422d4 both, the Sep 9 hash); RF 2M 4037 (3890..4135)
+shipped, 3743 (3719..3761) with the flip; ET 1M 3314 (3272..3430), ET 2M 6099
+(5994..6335); symmetric Logloss 1M 478 (459..528), 2M 753 (741..926), RMSE 1M
+396 (377..476). Quote the cuML 1M row above (3314) against the 1M cells and
+the Aug 28 cuML 2M row (4543.0, different container) against the 2M cells,
+naming each. Detail: `docs/lanes/HANDOFF_trees.md`, "2026-09-10 H100 leg".
+
 Extra trees therefore has NO valid NVIDIA opponent row. That measurement
 is owed (a LightGBM build with USE_CUDA, or cuML RF with `split_criterion`
 random thresholds if cuML admits it).

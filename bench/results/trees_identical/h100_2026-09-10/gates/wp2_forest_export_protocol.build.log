@@ -1,0 +1,12 @@
+5211 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19f7c0000000, nodemask=2)
+Imported from /root/mojolearn/checks/forest_export_protocol.mojo:5:
+bindings/forest_export_binding.mojo:93:33: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        memcpy(dest=destination + offset, src=values.unsafe_ptr(), count=len(values))
+                    ~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/checks/forest_export_protocol.mojo:5:
+bindings/forest_export_binding.mojo:93:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=destination + offset, src=values.unsafe_ptr(), count=len(values))
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here

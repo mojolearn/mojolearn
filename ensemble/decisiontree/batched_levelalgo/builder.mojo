@@ -79,12 +79,18 @@ comptime N_BLKS_FOR_COLS = 10
 # `builder.cuh:205` -- "Memory alignment value"
 comptime ALIGN_VALUE = 512
 
-# Histogram work uses the upstream one-item-per-thread mapping. If this is
-# tuned above one, partition-phase workload reuse must remain disabled because
-# its slot mapping requires TPB-granular rows; histogram integer accumulation
-# itself remains order-independent.
-# `-D MOJOLEARN_2011_HIST_ITEMS4=1` selects 4 items per thread; 1 is shipped.
-comptime HIST_ITEMS_PER_THREAD = 4 if is_defined["MOJOLEARN_2011_HIST_ITEMS4"]() else 1
+# Histogram work items per thread (DEVIATION 2011). Upstream maps one item
+# per thread; four is shipped since 2026-09-10. Above one, partition-phase
+# workload reuse stays disabled because its slot mapping requires
+# TPB-granular rows; histogram integer accumulation itself is
+# order-independent, so the forest is the same bytes either way (identity
+# fingerprints 18/18 equal on the H100 with both values; RF HIGGS 1M/2M
+# ours IDENTICAL medians 2475/4036 ms at 1 item, 2274/3743 ms at 4, both
+# candidates' whole range below the baseline's minimum;
+# bench/results/trees_identical/h100_2026-09-10/, docs/lanes/HANDOFF_trees.md).
+# `-D MOJOLEARN_2011_HIST_ITEMS1=1` restores the one-item mapping; the old
+# opt-in `MOJOLEARN_2011_HIST_ITEMS4` is accepted and is now the default.
+comptime HIST_ITEMS_PER_THREAD = 1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
 
 

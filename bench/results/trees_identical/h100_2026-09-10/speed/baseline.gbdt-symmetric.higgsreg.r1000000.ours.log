@@ -1,0 +1,25 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+7646 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78b0c0000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+7718 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x711200000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 ms=1290.237
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=1 ms=476.183 hash=037aa3188d25c889
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=2 ms=379.235 hash=037aa3188d25c889
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=3 ms=401.590 hash=037aa3188d25c889
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=4 ms=395.572 hash=037aa3188d25c889
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=5 ms=377.241 hash=037aa3188d25c889
+FSPEED-ORDER lane=gbdt-symmetric round=6 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=6 ms=402.096 hash=037aa3188d25c889
+FSPEED-ORDER lane=gbdt-symmetric round=7 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=higgsreg-1000000x28 round=7 ms=386.693 hash=037aa3188d25c889
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=rmse value=0.429173
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

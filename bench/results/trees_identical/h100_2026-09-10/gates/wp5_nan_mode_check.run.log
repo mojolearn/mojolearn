@@ -1,0 +1,26 @@
+5719 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x729a80000000, nodemask=1)
+-- gate 1: NaN gets a bin of its own, under both modes --
+  Min 0.003778829646919638  Max 0.0037824369282390543  N2 (no NaNs) 261.4149885417381
+  ok   N2 the same targets without NaNs cost 69178.8233308781 x more -- the NaN bin is what fits them
+  ok   both modes isolate the NaN rows
+
+-- gate 2: a NaN column spends ONE of its borders, not one more --
+  ok   feature 0 has 32 borders either way -- the sentinel came OUT of the budget
+
+-- gate 3: the sentinel is at the end the mode names --
+  ok   Min: borders[0][0] is lowest(), treatment as_false
+  ok   Max: borders[0][-1] is max(), treatment as_true
+
+-- gate 4: a clean column resolves to Forbidden --
+  ok   every column without a NaN is as_is, including in the fit whose feature 0 has them
+
+-- gate 5: a saved model routes a NaN the same way --
+  ok   all 4000 predictions bit-identical through the text format
+
+-- gate 6: a NaN the learn pool never saw is refused --
+  ok   refused
+
+-- sabotages --
+  ok   N1 3979 of 4000 rows differ between Min and Max
+
+nan_mode: PASS

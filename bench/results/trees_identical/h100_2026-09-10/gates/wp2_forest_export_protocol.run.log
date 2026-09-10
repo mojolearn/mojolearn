@@ -1,0 +1,3 @@
+5260 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x724c80000000, nodemask=1)
+5260 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x189b80000000, nodemask=2)
+PASS forest export typed ownership/counts/double-release/copy bytes

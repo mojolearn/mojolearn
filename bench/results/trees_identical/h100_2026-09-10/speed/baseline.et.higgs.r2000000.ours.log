@@ -1,0 +1,22 @@
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+2829 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ad740000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so
+FSPEED-SCALE stage=before rows=2000000 features=28 input_mib=213.6 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=higgs-2000000x28 ms=6978.022
+FSPEED-ORDER lane=et round=1 arms=ours
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=1 ms=6099.374 hash=a9a9ff528583d3bd
+FSPEED-ORDER lane=et round=2 arms=ours
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=2 ms=6334.755 hash=a9a9ff528583d3bd
+FSPEED-ORDER lane=et round=3 arms=ours
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=3 ms=5994.435 hash=a9a9ff528583d3bd
+FSPEED-ORDER lane=et round=4 arms=ours
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=4 ms=6009.303 hash=a9a9ff528583d3bd
+FSPEED-ORDER lane=et round=5 arms=ours
+2829 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x124f80000000, nodemask=1)
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=5 ms=6112.916 hash=a9a9ff528583d3bd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.624325
+FSPEED-ACC lane=et arm=ours metric=auc value=0.758920
+FSPEED-SCALE stage=after rows=2000000 features=28 input_mib=213.6 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

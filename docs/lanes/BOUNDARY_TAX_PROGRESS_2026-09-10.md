@@ -149,3 +149,55 @@ updated the byte-LM host-only fixture to explicitly mock finiteness helpers
 alongside training. Production behavior is unchanged. The merged source
 suite passes 996 tests and 89 subtests, with 53 skips; the NumPy-blocked
 real GPU pipeline smoke also passes. See `final/post-merge-*.log`.
+
+## Addendum: NVIDIA IDENTICAL qualification (2026-09-10 evening, H100 leg)
+
+Box: RunPod NVIDIA H100 80GB HBM3, driver 580.126.09, image
+runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04, source deb01bcf
+(the four IDENTICAL bindings built on the pod). Evidence:
+`bench/results/trees_identical/h100_2026-09-10/` (ib/, gates/, speed/, logs/);
+the batch that ran is `logs/batchI.sh`. Detail in `docs/lanes/HANDOFF_trees.md`,
+section "2026-09-10 H100 leg".
+
+Fingerprints against the Sep 9 H100 set (`h100_2026-09-09/ib/baseline.json`,
+source a9ba6818, before every boundary-tax package): rf-reg, et-reg,
+gbdt-symmetric, gbdt-depthwise, gbdt-lossguide, gbdt-rmse and kmeans equal
+bit for bit (63/63 cells). rf-clf and et-clf moved on every fixture (18
+cells), and in every one of them the moved part is `predict` while `proba`
+agrees. `ib/predict_dtype_witness.txt` re-fits the same 18 models and shows
+the cause: classifier `predict` now returns an int64 `Array` (DEVIATION
+2340, the NumPy-free Python layer, 637de940, merged to main after Sep 9's
+a9ba6818) where Sep 9 returned the label dtype (int32 here); casting today's
+`predict` back to int32 reproduces the Sep 9 `predict` hash on all 18
+cells, and `proba` is equal on all 18. The forest is therefore the same
+bytes; the public output dtype is what changed. The large witness agrees:
+RF HIGGS 1M prediction hash 3ffa2951595422d4 equals Sep 9's on the same GPU
+model, and the 500k-tail logloss/AUC (0.538850 / 0.809906) are the Sep 9
+values. `bench/results/identity_break/apple-m4.identical.json` (e616906e)
+predates DEVIATION 2340 and will show the same 18 `predict` moves against
+any current build; regenerating it is owed to the orchestrator (Apple run).
+
+Native gates, all under `-D MOJOLEARN_NUMERIC_IDENTICAL=1` on the H100
+(`gates/summary.txt`, per-gate build/run logs beside it), every one PASS:
+WP4 `ensemble/checks/oob_check.mojo`; WP1 `extratrees/checks/borrowed_upload_check.mojo`;
+WP8 `extratrees/checks/stage_upload_bytes_check.mojo`; WP2
+`checks/forest_export_protocol.mojo` and `checks/forest_export_public.py
+--mode identical --vendor cuda` (5 estimator cases); WP3
+`checks/forest_inference_model.mojo` in separate-array and packed-sibling
+layouts (RESIDENT_MODE 1, VENDOR cuda); WP5 `checks/gbdt_cindex_staging_check.mojo`
+and `checks/nan_mode_check.mojo`; and `ensemble/checks/rf_perf_candidates_check.mojo`
+on the shipped source. No FAST or DETERMINISTIC gate was run on this leg
+(IDENTICAL only, by directive).
+
+Timing, ours IDENTICAL alone, HIGGS first-N rows, 5 timed rounds after one
+warm-up, Python surface wall (ms median, min..max): RF 1M 2475 (2385..2532),
+RF 2M 4036 (3890..4135), ET 1M 3313 (3272..3430), ET 2M 6099 (5994..6335).
+The Sep 9 RF 1M cell on the same GPU model and image was 5762 (5116..6451)
+with the same prediction hash; the RF per-phase split (`speed/baseline.rf.higgs.r1000000.stage.log`,
+one untimed replicate) puts fit_total at 1.41 s of a 2.34 s round
+(device_wait 0.84 s, other 0.49 s, leaf_values 0.07 s), so about 0.9 s of
+each round is still outside the Mojo fit. Sep 9's rounds interleaved cuML
+and LightGBM arms in the same process; today's did not, so the 5762 to
+2475 change is not attributed to any single package here (it is the whole
+Sep 9 to Sep 10 delta on this cell, same-process opponent arms removed).
+AMD execution and timing remain owed.
