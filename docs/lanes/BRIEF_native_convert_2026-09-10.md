@@ -2,6 +2,16 @@
 
 Written 2026-09-10. Self-contained. Read this file and nothing else is needed.
 
+**SUPERSEDED IN ONE RESPECT, 2026-09-10 (later the same day):** the
+pure-Python fallback arms this brief demanded below ("THE FALLBACK IS NOT
+OPTIONAL", gate step 2) were REMOVED from the package. The package cannot
+import without its binding, so a missing symbol can only mean a binary on
+disk older than the Python beside it, and `_buffer._native` now raises by
+name with the rebuild command instead of running a slower copy of the same
+arithmetic. The converter tests compare against NumPy alone; the nonzero
+scan test (DEVIATION 2489) keeps its retired Python loop as its oracle.
+The rest of this brief stands as the record of what was built.
+
 **EXECUTED 2026-09-10, same day, on `main`: e9f40d69 (the two helpers),
 313ce4a1 (anonymous-mapping output store, flat cast matches NumPy),
 485caa24 (float32 transpose, the conditional third helper, which the gate

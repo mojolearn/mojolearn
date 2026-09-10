@@ -27,7 +27,7 @@ def main():
     from mojolearn import _buffer, _backend
     native = _backend.binding('_mojolearn')
     for name in ('cast_f64_to_f32', 'cast_colmajor_f64_to_f32', 'transpose_f32'):
-        _buffer._NATIVE[name] = getattr(native, name)  # refuse Python fallback
+        _buffer._native(name)  # raises by name on a stale binary; no Python fallback exists
     if args.rows * args.cols < 10_000_000:
         print('Reminder: use representative large data for performance decisions.', flush=True)
     results = []

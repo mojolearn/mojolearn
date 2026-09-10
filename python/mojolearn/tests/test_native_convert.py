@@ -266,83 +266,63 @@ def test_transpose_f32_empty_and_negative():
         fn(0, 0, 2, 2)
 
 
-# --------------------------------------------- through _buffer, both arms
+# --------------------------------------------- through _buffer, vs NumPy
 
-_KEYS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32")
-
-
-def _forced_absent(monkeypatch):
-    for key in _KEYS:
-        monkeypatch.setitem(_buffer._NATIVE, key, None)
+# The pure-Python arm these tests once compared against was removed on
+# 2026-09-10: the package cannot import without its binding, so a missing
+# symbol is a stale build (`_buffer._native` raises by name) and the only
+# oracle worth keeping is NumPy's own conversion.
 
 
-def _forced_present(monkeypatch, *, required=True):
-    """Restore the native lookups. With `required` (the default) a missing
-    binding skips the test; with `required=False` it returns False so the
-    test can assert the pure-Python arm on its own and still PASS on a
-    checkout whose binary predates these helpers."""
-    for key in _KEYS:
-        monkeypatch.delitem(_buffer._NATIVE, key, raising=False)
-    if any(_buffer._native(key) is None for key in _KEYS):
-        if required:
-            pytest.skip("base binding not built or predates DEVIATION 2470-2472")
-        return False
+def _forced_present(monkeypatch):
+    """Kept as a no-op name so the tests below read as before: every
+    helper resolves or `_buffer._native` raises, which IS the test."""
+    for key in ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32"):
+        assert callable(_buffer._native(key))
     return True
+
+
+def test_missing_symbol_is_a_stale_build_not_a_fallback(monkeypatch):
+    monkeypatch.delitem(_buffer._NATIVE, "no_such_helper_2026", raising=False)
+    with pytest.raises(ImportError, match=r"(?s)no `no_such_helper_2026`.*bindings/build\.sh"):
+        _buffer._native("no_such_helper_2026")
 
 
 @pytest.mark.parametrize("shape", _shapes())
 @pytest.mark.parametrize("src_order", ["C", "F"])
 @pytest.mark.parametrize("src_dtype", [np.float64, np.float32])
-def test_as_f32_c_two_arms(monkeypatch, shape, src_order, src_dtype):
+def test_as_f32_c_matches_numpy(shape, src_order, src_dtype):
     x = _matrix(shape, seed=11).astype(src_dtype)
     if src_order == "F":
         x = np.asfortranarray(x)
     if src_dtype is np.float32 and (src_order == "C" or 1 in shape):
         pytest.skip("already float32 in the target layout: a borrow, tested below")
     want = np.ascontiguousarray(x, dtype=np.float32)
-
-    _forced_absent(monkeypatch)
-    py_arr, copied = _buffer.as_f32_c(x, name="X")
-    assert copied and py_arr.dtype == "<f4" and py_arr.order == "C"
-    _bytes_equal(py_arr.tobytes(), want.tobytes())
-
-    if not _forced_present(monkeypatch, required=False):
-        return  # the fallback arm above is the whole test on this checkout
-    nat_arr, copied = _buffer.as_f32_c(x, name="X")
-    assert copied and nat_arr.dtype == "<f4" and nat_arr.order == "C"
-    assert nat_arr.tobytes() == py_arr.tobytes()
-    assert nat_arr.shape == py_arr.shape == tuple(shape)
+    arr, copied = _buffer.as_f32_c(x, name="X")
+    assert copied and arr.dtype == "<f4" and arr.order == "C"
+    _bytes_equal(arr.tobytes(), want.tobytes())
+    assert arr.shape == tuple(shape)
 
 
 @pytest.mark.parametrize("shape", _shapes())
 @pytest.mark.parametrize("src_order", ["C", "F"])
 @pytest.mark.parametrize("src_dtype", [np.float64, np.float32])
-def test_as_f32_colmajor_two_arms(monkeypatch, shape, src_order, src_dtype):
+def test_as_f32_colmajor_matches_numpy(shape, src_order, src_dtype):
     x = _matrix(shape, seed=17).astype(src_dtype)
     if src_order == "F":
         x = np.asfortranarray(x)
     if src_dtype is np.float32 and (src_order == "F" or 1 in shape):
         pytest.skip("already float32 in the target layout: a borrow, tested below")
     want = np.asfortranarray(x, dtype=np.float32)
-
-    _forced_absent(monkeypatch)
-    py_arr, copied = _buffer.as_f32_colmajor(x, name="X")
-    assert copied and py_arr.dtype == "<f4"
-    assert py_arr._has_order("F")
+    arr, copied = _buffer.as_f32_colmajor(x, name="X")
+    assert copied and arr.dtype == "<f4"
+    assert arr._has_order("F")
     # NumPy's tobytes() serializes in C order WHATEVER the memory layout;
     # the column-major bytes need order="F"
-    _bytes_equal(py_arr.tobytes(), want.tobytes(order="F"))
+    _bytes_equal(arr.tobytes(), want.tobytes(order="F"))
     # the storage IS the column-major flat
-    assert py_arr._flat().tobytes() == want.T.reshape(-1).tobytes()
-
-    if not _forced_present(monkeypatch, required=False):
-        return  # the fallback arm above is the whole test on this checkout
-    nat_arr, copied = _buffer.as_f32_colmajor(x, name="X")
-    assert copied and nat_arr.dtype == "<f4"
-    assert nat_arr._has_order("F")
-    assert nat_arr.tobytes() == py_arr.tobytes()
-    assert np.asarray(nat_arr).tobytes() == np.asarray(py_arr).tobytes()
-    assert np.array_equal(np.asarray(nat_arr), want, equal_nan=True)
+    assert arr._flat().tobytes() == want.T.reshape(-1).tobytes()
+    assert np.array_equal(np.asarray(arr), want, equal_nan=True)
 
 
 def test_float32_in_target_order_is_still_a_borrow(monkeypatch):
@@ -370,7 +350,6 @@ def test_native_result_owns_fresh_storage(monkeypatch):
 def test_native_store_behaves_like_an_array_store(monkeypatch):
     """The native converters write into an owned raw allocation. The
     resulting Array must do everything an array.array-backed one does."""
-    import sys
     _forced_present(monkeypatch)
     x = _matrix((300, 7), seed=2471)
     a, copied = _buffer.as_f32_colmajor(x, name="X")
@@ -393,7 +372,6 @@ def test_native_store_behaves_like_an_array_store(monkeypatch):
     assert copied and d.tobytes() == np.ascontiguousarray(want).tobytes()
     # element access and reductions read the right values
     assert a[2, 3] == float(want[2, 3]) or (math.isnan(a[2, 3]) and math.isnan(want[2, 3]))
-    finite = want[np.isfinite(want)]
     assert _buffer.all_finite(a) is False  # the edge values include inf/nan
 
 

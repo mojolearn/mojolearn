@@ -982,8 +982,6 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     probabilities = as_f32_c(probabilities, ndim=probabilities.ndim, name="probabilities")[0]
     packed = empty((len(true), 2), "<f4") if binary else None
     validate = _native("probability_rows_f32")
-    if validate is None:
-        raise RuntimeError("rebuild the base binding for NumPy-free probability validation")
     code = int(validate(_addr_ro(probabilities), _addr(packed) if binary else 0,
                         len(true), 1 if binary else len(selected), int(binary)))
     if code:

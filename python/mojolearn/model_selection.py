@@ -36,8 +36,6 @@ def _take_rows(values, indices):
     values = _materialize(values, "fold data")[0]._as_c()
     output = empty((len(indices), *values.shape[1:]), values.dtype)
     gather = _native("gather_rows_bytes")
-    if gather is None:
-        raise RuntimeError("rebuild the base binding for NumPy-free fold row gathering")
     gather(_addr_ro(values), _addr(output), _addr_ro(indices), len(values),
            len(indices), values.nbytes // len(values))
     return output

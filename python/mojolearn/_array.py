@@ -32,7 +32,6 @@ arithmetic in half precision.
 from __future__ import annotations
 
 import array
-import math
 import struct
 
 # typestr -> array.array typecode of the backing store
@@ -741,15 +740,6 @@ def _flatten(nested):
 def _nest(values, shape):
     if len(shape) == 1:
         return list(values)
-    n = len(shape)
     step = _prod(shape[1:])
     return [_nest(values[i * step:(i + 1) * step], shape[1:]) for i in range(shape[0])]
 
-
-def isfinite_all_py(values):
-    """Reference finiteness test, a Python loop; `_buffer.all_finite` uses
-    it only as the confirmation path."""
-    for v in values:
-        if not math.isfinite(v):
-            return False
-    return True

@@ -192,29 +192,16 @@ def _r2_host(pred, y):
     return 1.0 - ss_res / ss_tot if ss_tot else 0.0
 
 
-_NATIVE = {}
-
-
 def _native_helper(name):
     """A host helper of the base binding (`column_mean_f64`,
-    `center_columns_f32`, `scale_rows_f32`), resolved the way
-    `_buffer.all_finite` resolves its own: through `_backend.binding` for
-    the process's tier, once per name, and None when the binary is not
-    built, is the wrong tier, or predates the helper (`_backend` hands out
-    a stub whose attribute access raises ImportError, so a bare `getattr`
-    default would not do). The helpers are host code with no device
-    context and no tier-dependent arithmetic, so any tier's binary gives
-    the same bits, and each has a Python fallback below that is the SAME
-    arithmetic written a second way (DEVIATION 2450)."""
-    if name in _NATIVE:
-        return _NATIVE[name]
-    try:
-        from . import _backend
-        fn = getattr(_backend.binding("_mojolearn"), name)
-    except Exception:  # not built, wrong tier, no device: the Python path
-        fn = None
-    _NATIVE[name] = fn
-    return fn
+    `center_columns_f32`, `scale_rows_f32`), resolved through
+    `_buffer._native`: once per name for the process's tier, raising by
+    name when the binary predates it. The helpers are host code with no
+    device context and no tier-dependent arithmetic, so any tier's binary
+    gives the same bits (DEVIATION 2450). The Python fallbacks of
+    DEVIATION 2361 that once shadowed them were removed 2026-09-10."""
+    from ._buffer import _native
+    return _native(name)
 
 
 def _column_means_f64(x, rows, cols):
@@ -224,26 +211,14 @@ def _column_means_f64(x, rows, cols):
     round-to-nearest-even addition per element, then one division by
     `rows`. Returns a Python list of `cols` floats.
 
-    DEVIATION 2361: when the loaded `_mojolearn` binary predates the helper
-    (an older build), the SAME arithmetic runs in Python below. It is the
-    definition, not an approximation, so the bits are the helper's bits; it
-    is only slow. A 1-D vector is a `[rows, 1]` matrix here, which is how
+    A 1-D vector is a `[rows, 1]` matrix here, which is how
     `_vector_mean` uses it.
     """
     fn = _native_helper("column_mean_f64")
-    if fn is not None:
-        out = empty((cols,), "<f8")
-        fn(addr_ro(x, name="X"), int(rows), int(cols),
-           addr(out, name="column means"))
-        return out.tolist()
-    acc = [0.0] * cols
-    flat = x.ravel().tolist()
-    base = 0
-    for _r in range(rows):
-        for c in range(cols):
-            acc[c] = acc[c] + flat[base + c]
-        base += cols
-    return [a / float(rows) for a in acc]
+    out = empty((cols,), "<f8")
+    fn(addr_ro(x, name="X"), int(rows), int(cols),
+       addr(out, name="column means"))
+    return out.tolist()
 
 
 def _weight_total(weights):
@@ -338,18 +313,11 @@ def _center(x, mu32):
     """
     rows, cols = _dims(x)
     fn = _native_helper("center_columns_f32")
-    if fn is not None:
-        mean = Array.from_list([float(m) for m in mu32], "<f8")
-        out = empty(x.shape, "<f4")
-        fn(addr_ro(x, name="X"), int(rows), int(cols),
-           addr_ro(mean, name="column means"), addr(out, name="centered X"))
-        return out
-    if x.ndim == 1:
-        m = mu32[0]
-        return Array.from_list([v - m for v in x.tolist()], "<f4")
-    return Array.from_list(
-        [[v - m for v, m in zip(row, mu32)] for row in x.tolist()], "<f4"
-    )
+    mean = Array.from_list([float(m) for m in mu32], "<f8")
+    out = empty(x.shape, "<f4")
+    fn(addr_ro(x, name="X"), int(rows), int(cols),
+       addr_ro(mean, name="column means"), addr(out, name="centered X"))
+    return out
 
 
 def _shift(v, mu32):
@@ -371,17 +339,11 @@ def _scale_rows(x, root):
     """
     rows, cols = _dims(x)
     fn = _native_helper("scale_rows_f32")
-    if fn is not None:
-        w = Array.from_list([float(r) for r in root], "<f4")
-        out = empty(x.shape, "<f4")
-        fn(addr_ro(x, name="X"), int(rows), int(cols),
-           addr_ro(w, name="sqrt weights"), addr(out, name="scaled X"))
-        return out
-    if x.ndim == 1:
-        return Array.from_list([v * r for v, r in zip(x.tolist(), root)], "<f4")
-    return Array.from_list(
-        [[v * r for v in row] for r, row in zip(root, x.tolist())], "<f4"
-    )
+    w = Array.from_list([float(r) for r in root], "<f4")
+    out = empty(x.shape, "<f4")
+    fn(addr_ro(x, name="X"), int(rows), int(cols),
+       addr_ro(w, name="sqrt weights"), addr(out, name="scaled X"))
+    return out
 
 
 def _check_sample_weight(sample_weight, n_rows, estimator):
