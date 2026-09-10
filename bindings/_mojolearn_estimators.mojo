@@ -7,6 +7,8 @@ does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
 
+# DEVIATION 2486: shared byte-preserving host copies.
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from std.os import abort
 from std.math import isfinite
 from std.python import Python, PythonObject
@@ -41,21 +43,15 @@ from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float32 buffer address")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f32_ptr(addr)
 
 
 def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int32 buffer address")
-    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return i32_ptr(addr)
 
 
 def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float64 buffer address")
-    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f64_ptr(addr)
 
 
 def dbscan_fit_binding(
@@ -557,22 +553,18 @@ def kde_score_samples_binding(
     var train = List[Float32]()
     var query = List[Float32]()
     var weights = List[Float32]()
-    for i in range(n_train * n_features):
-        train.append(tp.unsafe_load(i))
-    for i in range(n_query * n_features):
-        query.append(qp.unsafe_load(i))
+    train = read_f32(Int(tp), max(0, n_train * n_features))
+    query = read_f32(Int(qp), max(0, n_query * n_features))
     if has_weights:
         var wp = _f32_ptr(Int(py=weights_addr))
-        for i in range(n_train):
-            weights.append(wp.unsafe_load(i))
+        weights = read_f32(Int(wp), max(0, n_train))
     var out = List[Float32]()
     with GILReleased(Python()):
         out = kde_score_samples_host(
             train, n_train, query, n_query, n_features, bandwidth, kname,
             mname, weights, has_weights,
         )
-    for i in range(n_query):
-        op.unsafe_store(i, out[i])
+    copy_f32(out.unsafe_ptr(), op, n_query)
     return PythonObject(n_query)
 
 
