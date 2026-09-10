@@ -23,6 +23,7 @@ fi
 if [ ! -f tools/speed_torch_seq.py ]; then
   cp bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py tools/
 fi
+mkdir -p python/mojolearn/identical
 export PYTHONPATH="$repo/python" MOJOLEARN_NUMERIC_MODE=identical
 for arm in baseline tiled; do
   extra=()
