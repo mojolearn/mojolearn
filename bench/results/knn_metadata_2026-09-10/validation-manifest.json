@@ -1,0 +1,18 @@
+{
+  "source_commit": "aeddd83e50a8810444a2c7dece519a617207730f",
+  "column": "Apple M4, IDENTICAL",
+  "fixture_generator": "tools/knn_zero_fma_oracle.py",
+  "oracle_cases": 396584,
+  "oracle_arms": 4,
+  "layout_cases": 24,
+  "validation_binaries": {
+    "/tmp/knn-metadata-oracle": "1daf458a7a017cb14bc22ac425e587694f3bcda6e687f9d76dc05fece15ae364",
+    "/tmp/knn-metadata-layout": "6852b0aabba2ab1cca81c3792598f4d5e4cf0c7d75366c66d270c053214cbc07"
+  },
+  "files": {
+    "bench/knn_zero_fma_oracle.txt": "c7b29cb94ee6c8a222258ce99e472d45fa7375c94f84df15176e24f49d5fee10",
+    "tools/knn_zero_fma_oracle.py": "a491a3e316214923df9656faac32472a703b823ab75711ec7b118890b7a6c67d",
+    "neighbors/checks/zero_fma_candidate_check.mojo": "f23c2cfef488f152dee1879d93f320afce09ef2ec392ea3c07b9728106d735f7",
+    "bench/knn_index_layout_main.mojo": "be76d4fb415fb51704b9e44823e01e353a81e13fa85d052cf3ae6fafa633ad64"
+  }
+}

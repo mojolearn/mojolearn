@@ -953,10 +953,18 @@ def knn_distance_preflight_for[column: Int, identical: Bool]() -> Bool:
 
 @always_inline
 def knn_distance_metadata_for[column: Int, identical: Bool]() -> Bool:
-    """Forced experiment: reuse per-request exponent minima; large pricing owed."""
+    """Force request-local exponent minima outside the measured default scope."""
     comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_PREFLIGHT_METADATA"]():
         return knn_distance_preflight_for[column, identical]()
     return False
+
+
+@always_inline
+def knn_distance_metadata_default_for[column: Int, identical: Bool]() -> Bool:
+    """Apple capability; runtime dispatch additionally requires measured shapes."""
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_METADATA"]():
+        return False
+    return knn_distance_preflight_for[column, identical]()
 
 
 @always_inline

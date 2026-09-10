@@ -84,3 +84,28 @@ builds/tests; root ran them. No FAST, DETERMINISTIC, or tree work.
 
 All lane evidence was fetched. Own L40S almtzr6iqth0k9 was terminated and
 verified DELETE204 / GET404 on September9 at22:21 EDT. No kNN rental remains.
+
+## September 10: request-local exponent metadata continuation
+
+The Apple register tile previously rescanned every query/index feature chain
+for each 4×4 tile. Candidate aeddd83e computes each vector's minimum nonzero
+biased exponent once per request, then reads those minima for the identical
+tile admission. Unsafe chains still use exact integer zero-FMA repair; neither
+FMA order nor selection changes. Minima occupy the tail of existing request
+scratch, are recomputed on input mutation, and survive until final synchronize.
+
+Large ordinary paired evidence, validation details, full selected outputs and
+binary/source hashes are in `bench/results/knn_metadata_2026-09-10/README.md`.
+The original forced comparison saves 23.0–25.7% request time on the actual
+400k/4k/d32 k10/k15 targets in both execution orders. No opponent was rerun.
+The scoped default passed NO_METADATA comparisons (15.7–25.0% lower request
+time; reverse-pass device drift is retained in the evidence), using exactly these
+large Apple IDENTICAL Euclidean return_sqrt targets on the transposed register
+path. Forced metadata remains available outside that scope; other shapes retain
+existing complete-chain preflight. Small controls do not drive adoption.
+
+Phase timers still report distance/selection/merge classes, not upfront metadata
+preparation; ordinary request/device prices include metadata preparation and
+allocation. Use `MOJOLEARN_KNN_PROBE_COMPARISON=metadata-default` with
+`MOJOLEARN_KNN_PROBE_MODE=price` for the scoped default versus safe disabled arm.
+NVIDIA is unchanged. Trees remain untouched.

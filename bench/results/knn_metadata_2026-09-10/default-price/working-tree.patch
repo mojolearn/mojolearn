@@ -1,0 +1,209 @@
+diff --git a/bench/knn_reference_price_main.mojo b/bench/knn_reference_price_main.mojo
+index afff3d89..7524938c 100644
+--- a/bench/knn_reference_price_main.mojo
++++ b/bench/knn_reference_price_main.mojo
+@@ -36,6 +36,8 @@ from neighbors.impl.neighbors.detail.knn_brute_force import (
+     KNN_METHOD_AUTO,
+     KNN_PHASE_TIMERS,
+     KNN_REGISTER_TILE_IDENTICAL,
++    KNN_PREFLIGHT_METADATA,
++    KNN_PREFLIGHT_METADATA_DEFAULT,
+     METRIC_FROM_IS_SQRT,
+     brute_force_knn_impl,
+     compute_norms_for_metric,
+@@ -83,6 +85,8 @@ def main() raises:
+         "selector", Int(EXPERIMENTAL_SMALLK_IDENTICAL),
+         "transpose", Int(EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL),
+         "register_tile", Int(KNN_REGISTER_TILE_IDENTICAL),
++        "metadata_forced", Int(KNN_PREFLIGHT_METADATA),
++        "metadata_default_capable", Int(KNN_PREFLIGHT_METADATA_DEFAULT),
+         "index_tile", KNN_INDEX_TILE_IDENTICAL,
+     )
+     with DeviceContext() as ctx:
+diff --git a/checks/kernel_matrix.mojo b/checks/kernel_matrix.mojo
+index 43fcd539..3a7385ec 100644
+--- a/checks/kernel_matrix.mojo
++++ b/checks/kernel_matrix.mojo
+@@ -953,12 +953,20 @@ def knn_distance_preflight_for[column: Int, identical: Bool]() -> Bool:
+ 
+ @always_inline
+ def knn_distance_metadata_for[column: Int, identical: Bool]() -> Bool:
+-    """Forced experiment: reuse per-request exponent minima; large pricing owed."""
++    """Force request-local exponent minima outside the measured default scope."""
+     comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_PREFLIGHT_METADATA"]():
+         return knn_distance_preflight_for[column, identical]()
+     return False
+ 
+ 
++@always_inline
++def knn_distance_metadata_default_for[column: Int, identical: Bool]() -> Bool:
++    """Apple capability; runtime dispatch additionally requires measured shapes."""
++    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_METADATA"]():
++        return False
++    return knn_distance_preflight_for[column, identical]()
++
++
+ @always_inline
+ def knn_distance_hardware_flush_for[column: Int, identical: Bool]() -> Bool:
+     """Fully rounded NVIDIA FMA followed by exact hardware FTZ multiplication."""
+diff --git a/neighbors/impl/neighbors/detail/knn_brute_force.mojo b/neighbors/impl/neighbors/detail/knn_brute_force.mojo
+index 5eb1c99f..b9d773b7 100644
+--- a/neighbors/impl/neighbors/detail/knn_brute_force.mojo
++++ b/neighbors/impl/neighbors/detail/knn_brute_force.mojo
+@@ -80,6 +80,7 @@ from checks.kernel_matrix import (
+     knn_auto_follows_their_dispatch_for,
+     knn_distance_register_tile_for,
+     knn_distance_metadata_for,
++    knn_distance_metadata_default_for,
+     knn_index_tile_columns_for,
+     knn_smallk_select_for,
+     knn_transposed_index_for,
+@@ -135,6 +136,7 @@ comptime KNN_REGISTER_TILE_IDENTICAL = knn_distance_register_tile_for[
+     TARGET_COLUMN, IDENTICAL_BUILD
+ ]()
+ comptime KNN_PREFLIGHT_METADATA = knn_distance_metadata_for[TARGET_COLUMN, IDENTICAL_BUILD]()
++comptime KNN_PREFLIGHT_METADATA_DEFAULT = knn_distance_metadata_default_for[TARGET_COLUMN, IDENTICAL_BUILD]()
+ comptime KNN_INDEX_TILE_IDENTICAL = knn_index_tile_columns_for[
+     TARGET_COLUMN, IDENTICAL_BUILD
+ ]()
+@@ -548,23 +550,29 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
+         )
+     var tiled_index = index_tile < n_index
+     var part_cells = query_tile * k if tiled_index else 1
+-    var metadata_cells = n_queries + n_index if KNN_PREFLIGHT_METADATA else 0
++    # Promotion uses the two actual large Apple targets, not the small controls.
++    # Broader shapes retain current preflight pending their own request evidence.
++    var use_metadata = KNN_PREFLIGHT_METADATA
++    comptime if KNN_PREFLIGHT_METADATA_DEFAULT:
++        use_metadata = use_metadata or (use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and mtr == DIST_L2_SQRT_EXPANDED and n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15))
++    var metadata_cells = n_queries + n_index if use_metadata else 0
+     var part_dist = ctx.enqueue_create_buffer[DType.float32](part_cells + metadata_cells)
+     var part_idx = ctx.enqueue_create_buffer[DType.uint32](part_cells)
+ 
+     # Metadata is rebuilt for every request, including in-place input mutations.
+     # The existing scratch allocation owns metadata until final synchronize.
+-    var q_minima = part_dist.unsafe_ptr().unsafe_offset(part_cells if KNN_PREFLIGHT_METADATA else 0).unsafe_origin_cast[MutAnyOrigin]()
+-    var y_minima = part_dist.unsafe_ptr().unsafe_offset(part_cells + n_queries if KNN_PREFLIGHT_METADATA else 0).unsafe_origin_cast[MutAnyOrigin]()
+-    comptime if KNN_PREFLIGHT_METADATA:
+-        ctx.enqueue_function[vector_exponent_minimum_kernel](
+-            queries.unsafe_ptr(), q_minima, Int32(n_queries), Int32(n_features),
+-            grid_dim=((n_queries + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+-        )
+-        ctx.enqueue_function[vector_exponent_minimum_kernel](
+-            index.unsafe_ptr(), y_minima, Int32(n_index), Int32(n_features),
+-            grid_dim=((n_index + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+-        )
++    var q_minima = part_dist.unsafe_ptr().unsafe_offset(part_cells if use_metadata else 0).unsafe_origin_cast[MutAnyOrigin]()
++    var y_minima = part_dist.unsafe_ptr().unsafe_offset(part_cells + n_queries if use_metadata else 0).unsafe_origin_cast[MutAnyOrigin]()
++    comptime if KNN_PREFLIGHT_METADATA or KNN_PREFLIGHT_METADATA_DEFAULT:
++        if use_metadata:
++            ctx.enqueue_function[vector_exponent_minimum_kernel](
++                queries.unsafe_ptr(), q_minima, Int32(n_queries), Int32(n_features),
++                grid_dim=((n_queries + 127) // 128, 1, 1), block_dim=(128, 1, 1),
++            )
++            ctx.enqueue_function[vector_exponent_minimum_kernel](
++                index.unsafe_ptr(), y_minima, Int32(n_index), Int32(n_features),
++                grid_dim=((n_index + 127) // 128, 1, 1), block_dim=(128, 1, 1),
++            )
+ 
+     var ns_distance = 0
+     var ns_select = 0
+@@ -689,23 +697,61 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
+                     comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
+                         if use_transposed_index:
+                             comptime if KNN_REGISTER_TILE_IDENTICAL:
+-                                ctx.enqueue_function[pinned_distance_register_tile_kernel[KNN_PREFLIGHT_METADATA]](
+-                                    dist_tile.unsafe_ptr(),
+-                                    queries.unsafe_ptr().unsafe_offset(q * n_features),
+-                                    transposed_index.value().unsafe_offset(c),
+-                                    query_norm.unsafe_ptr().unsafe_offset(q),
+-                                    index_norm.unsafe_ptr().unsafe_offset(c),
+-                                    q_minima.unsafe_offset(q if KNN_PREFLIGHT_METADATA else 0),
+-                                    y_minima.unsafe_offset(c if KNN_PREFLIGHT_METADATA else 0),
+-                                    Int32(rows), Int32(cols), Int32(n_index),
+-                                    Int32(n_features), is_sqrt_arg,
+-                                    grid_dim=(
+-                                        (cols + RT_TILE_COLS - 1) // RT_TILE_COLS,
+-                                        (rows + RT_ROWS - 1) // RT_ROWS,
+-                                        1,
+-                                    ),
+-                                    block_dim=(RT_TPB, 1, 1),
+-                                )
++                                comptime if KNN_PREFLIGHT_METADATA or KNN_PREFLIGHT_METADATA_DEFAULT:
++                                    if use_metadata:
++                                        ctx.enqueue_function[pinned_distance_register_tile_kernel[True]](
++                                            dist_tile.unsafe_ptr(),
++                                            queries.unsafe_ptr().unsafe_offset(q * n_features),
++                                            transposed_index.value().unsafe_offset(c),
++                                            query_norm.unsafe_ptr().unsafe_offset(q),
++                                            index_norm.unsafe_ptr().unsafe_offset(c),
++                                            q_minima.unsafe_offset(q if use_metadata else 0),
++                                            y_minima.unsafe_offset(c if use_metadata else 0),
++                                            Int32(rows), Int32(cols), Int32(n_index),
++                                            Int32(n_features), is_sqrt_arg,
++                                            grid_dim=(
++                                                (cols + RT_TILE_COLS - 1) // RT_TILE_COLS,
++                                                (rows + RT_ROWS - 1) // RT_ROWS,
++                                                1,
++                                            ),
++                                            block_dim=(RT_TPB, 1, 1),
++                                        )
++                                    else:
++                                        ctx.enqueue_function[pinned_distance_register_tile_kernel[False]](
++                                            dist_tile.unsafe_ptr(),
++                                            queries.unsafe_ptr().unsafe_offset(q * n_features),
++                                            transposed_index.value().unsafe_offset(c),
++                                            query_norm.unsafe_ptr().unsafe_offset(q),
++                                            index_norm.unsafe_ptr().unsafe_offset(c),
++                                            q_minima.unsafe_offset(q if use_metadata else 0),
++                                            y_minima.unsafe_offset(c if use_metadata else 0),
++                                            Int32(rows), Int32(cols), Int32(n_index),
++                                            Int32(n_features), is_sqrt_arg,
++                                            grid_dim=(
++                                                (cols + RT_TILE_COLS - 1) // RT_TILE_COLS,
++                                                (rows + RT_ROWS - 1) // RT_ROWS,
++                                                1,
++                                            ),
++                                            block_dim=(RT_TPB, 1, 1),
++                                        )
++                                else:
++                                    ctx.enqueue_function[pinned_distance_register_tile_kernel[False]](
++                                        dist_tile.unsafe_ptr(),
++                                        queries.unsafe_ptr().unsafe_offset(q * n_features),
++                                        transposed_index.value().unsafe_offset(c),
++                                        query_norm.unsafe_ptr().unsafe_offset(q),
++                                        index_norm.unsafe_ptr().unsafe_offset(c),
++                                        q_minima.unsafe_offset(q if use_metadata else 0),
++                                        y_minima.unsafe_offset(c if use_metadata else 0),
++                                        Int32(rows), Int32(cols), Int32(n_index),
++                                        Int32(n_features), is_sqrt_arg,
++                                        grid_dim=(
++                                            (cols + RT_TILE_COLS - 1) // RT_TILE_COLS,
++                                            (rows + RT_ROWS - 1) // RT_ROWS,
++                                            1,
++                                        ),
++                                        block_dim=(RT_TPB, 1, 1),
++                                    )
+                             else:
+                                 ctx.enqueue_function[transposed_index_distance_kernel](
+                                     dist_tile.unsafe_ptr(),
+diff --git a/tools/knn_residual_phase_probe.sh b/tools/knn_residual_phase_probe.sh
+index b40d326c..bb7c1407 100644
+--- a/tools/knn_residual_phase_probe.sh
++++ b/tools/knn_residual_phase_probe.sh
+@@ -32,11 +32,13 @@ esac
+ comparison=${MOJOLEARN_KNN_PROBE_COMPARISON:-legacy}
+ case "$comparison" in
+   legacy) ;;
+-  metadata)
++  metadata|metadata-default)
+     [[ "$column" == apple ]] || { echo 'metadata experiment is Apple only' >&2; exit 2; }
+     control=MOJOLEARN_EXPERIMENTAL_KNN_PREFLIGHT_METADATA
++    [[ "$comparison" != metadata-default ]] || control=MOJOLEARN_KNN_IDENTICAL_NO_METADATA
++    [[ "$mode" == price ]] || { echo 'metadata comparisons require ordinary price mode' >&2; exit 2; }
+     ;;
+-  *) echo 'comparison must be legacy or metadata' >&2; exit 2 ;;
++  *) echo 'comparison must be legacy, metadata, or metadata-default' >&2; exit 2 ;;
+ esac
+ [[ "$output" = /* && ! -e "$output" ]]
+ mkdir -p "$output"

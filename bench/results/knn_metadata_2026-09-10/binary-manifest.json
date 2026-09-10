@@ -1,0 +1,10 @@
+{
+  "default": {
+    "local_path": "/tmp/knn-metadata-prices-20260910/default",
+    "sha256": "337dea4952919658ac1ede069a070045d64f8f3e65cee8fd338259306e253e48"
+  },
+  "control": {
+    "local_path": "/tmp/knn-metadata-prices-20260910/control",
+    "sha256": "2d720255764f593a4b8cf45b94277891df7805fe892c4b7437e0e7e122f9d14d"
+  }
+}

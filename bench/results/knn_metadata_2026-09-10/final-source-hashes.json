@@ -1,0 +1,7 @@
+{
+  "checks/kernel_matrix.mojo": "ad1fe0412ca9f4c620dda4c59cfdcd58a5e1aa24590d328b0e7c0ee3fe1eb4ab",
+  "neighbors/checks/pinned_distance_tile.mojo": "c3c99b4800b8a3675d08c7d8f640c7fc44ef6eccae99a54792431bf6ab8ab996",
+  "neighbors/impl/neighbors/detail/knn_brute_force.mojo": "504c12a9d0c568e04b5edc9aed23c0ce584f27b8c86fbe372abbc9c27f1ce49b",
+  "bench/knn_reference_price_main.mojo": "c5f3f7960a1accd42f4bf52919711e2421087b7000b45e9f028fccfabd4e97d9",
+  "tools/knn_residual_phase_probe.sh": "215c7d31ecbfbe71852791ef6ffb6dc280e6acc9a23c36ae267798b19ce1cb1c"
+}

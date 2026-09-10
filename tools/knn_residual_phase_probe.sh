@@ -32,11 +32,13 @@ esac
 comparison=${MOJOLEARN_KNN_PROBE_COMPARISON:-legacy}
 case "$comparison" in
   legacy) ;;
-  metadata)
+  metadata|metadata-default)
     [[ "$column" == apple ]] || { echo 'metadata experiment is Apple only' >&2; exit 2; }
     control=MOJOLEARN_EXPERIMENTAL_KNN_PREFLIGHT_METADATA
+    [[ "$comparison" != metadata-default ]] || control=MOJOLEARN_KNN_IDENTICAL_NO_METADATA
+    [[ "$mode" == price ]] || { echo 'metadata comparisons require ordinary price mode' >&2; exit 2; }
     ;;
-  *) echo 'comparison must be legacy or metadata' >&2; exit 2 ;;
+  *) echo 'comparison must be legacy, metadata, or metadata-default' >&2; exit 2 ;;
 esac
 [[ "$output" = /* && ! -e "$output" ]]
 mkdir -p "$output"

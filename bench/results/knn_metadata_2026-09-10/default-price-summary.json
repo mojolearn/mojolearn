@@ -1,0 +1,568 @@
+{
+  "scope": "ordinary request/device timing",
+  "all_large_targets_present": true,
+  "paired_full_outputs_match": true,
+  "default_decision": "not automated; review target results, drift, and numerical evidence",
+  "rows": [
+    {
+      "shape": {
+        "index": 400000,
+        "queries": 4000,
+        "features": 32,
+        "k": 10
+      },
+      "order": 0,
+      "first_arm": "default",
+      "arms": {
+        "default": {
+          "samples_ms": {
+            "request": [
+              644.035,
+              643.985,
+              641.413,
+              641.775,
+              642.981
+            ],
+            "device": [
+              626.197,
+              629.087,
+              628.182,
+              627.339,
+              629.235
+            ]
+          },
+          "median_ms": {
+            "request": 642.981,
+            "device": 628.182
+          },
+          "last_over_first": {
+            "request": 0.9983634429805834,
+            "device": 1.0048515083911294
+          },
+          "full_output_sha256": "c8af7c3d3137e6ea26159ee6c2282137c734af2cb707c1669c3be74dabb020a2"
+        },
+        "control": {
+          "samples_ms": {
+            "request": [
+              856.831,
+              859.948,
+              860.989,
+              848.854,
+              839.277
+            ],
+            "device": [
+              823.49,
+              824.946,
+              824.653,
+              821.947,
+              823.958
+            ]
+          },
+          "median_ms": {
+            "request": 856.831,
+            "device": 823.958
+          },
+          "last_over_first": {
+            "request": 0.9795128794359681,
+            "device": 1.000568312912118
+          },
+          "full_output_sha256": "c8af7c3d3137e6ea26159ee6c2282137c734af2cb707c1669c3be74dabb020a2"
+        }
+      },
+      "default_over_control": {
+        "request": 0.7504175269102075,
+        "device": 0.7623956560892667
+      }
+    },
+    {
+      "shape": {
+        "index": 400000,
+        "queries": 4000,
+        "features": 32,
+        "k": 10
+      },
+      "order": 1,
+      "first_arm": "control",
+      "arms": {
+        "default": {
+          "samples_ms": {
+            "request": [
+              777.062,
+              721.578,
+              748.7,
+              743.808,
+              760.657
+            ],
+            "device": [
+              761.671,
+              825.693,
+              920.682,
+              855.728,
+              850.358
+            ]
+          },
+          "median_ms": {
+            "request": 748.7,
+            "device": 850.358
+          },
+          "last_over_first": {
+            "request": 0.9788884284651675,
+            "device": 1.1164374119534548
+          },
+          "full_output_sha256": "c8af7c3d3137e6ea26159ee6c2282137c734af2cb707c1669c3be74dabb020a2"
+        },
+        "control": {
+          "samples_ms": {
+            "request": [
+              890.776,
+              884.64,
+              888.515,
+              907.47,
+              896.172
+            ],
+            "device": [
+              859.76,
+              879.723,
+              914.044,
+              903.976,
+              923.412
+            ]
+          },
+          "median_ms": {
+            "request": 890.776,
+            "device": 903.976
+          },
+          "last_over_first": {
+            "request": 1.0060576396310634,
+            "device": 1.0740346143109705
+          },
+          "full_output_sha256": "c8af7c3d3137e6ea26159ee6c2282137c734af2cb707c1669c3be74dabb020a2"
+        }
+      },
+      "default_over_control": {
+        "request": 0.8405031118934503,
+        "device": 0.9406864784020814
+      }
+    },
+    {
+      "shape": {
+        "index": 400000,
+        "queries": 4000,
+        "features": 32,
+        "k": 15
+      },
+      "order": 0,
+      "first_arm": "default",
+      "arms": {
+        "default": {
+          "samples_ms": {
+            "request": [
+              662.403,
+              666.329,
+              682.329,
+              668.901,
+              669.699
+            ],
+            "device": [
+              645.861,
+              646.427,
+              647.717,
+              650.683,
+              648.869
+            ]
+          },
+          "median_ms": {
+            "request": 668.901,
+            "device": 647.717
+          },
+          "last_over_first": {
+            "request": 1.011014442869371,
+            "device": 1.0046573488722805
+          },
+          "full_output_sha256": "bfb848a13019378f930b4c9948b9f98a7d2cf3110be586b16e8a776b354340c3"
+        },
+        "control": {
+          "samples_ms": {
+            "request": [
+              882.874,
+              875.495,
+              882.613,
+              871.64,
+              874.689
+            ],
+            "device": [
+              872.736,
+              865.178,
+              868.612,
+              864.519,
+              870.317
+            ]
+          },
+          "median_ms": {
+            "request": 875.495,
+            "device": 868.612
+          },
+          "last_over_first": {
+            "request": 0.9907291414176881,
+            "device": 0.9972282568840979
+          },
+          "full_output_sha256": "bfb848a13019378f930b4c9948b9f98a7d2cf3110be586b16e8a776b354340c3"
+        }
+      },
+      "default_over_control": {
+        "request": 0.7640260652545131,
+        "device": 0.7456919775457858
+      }
+    },
+    {
+      "shape": {
+        "index": 400000,
+        "queries": 4000,
+        "features": 32,
+        "k": 15
+      },
+      "order": 1,
+      "first_arm": "control",
+      "arms": {
+        "default": {
+          "samples_ms": {
+            "request": [
+              882.338,
+              903.554,
+              889.776,
+              904.869,
+              905.46
+            ],
+            "device": [
+              1067.076,
+              1149.994,
+              1003.627,
+              931.941,
+              934.531
+            ]
+          },
+          "median_ms": {
+            "request": 903.554,
+            "device": 1003.627
+          },
+          "last_over_first": {
+            "request": 1.0262053770777186,
+            "device": 0.8757867293426147
+          },
+          "full_output_sha256": "bfb848a13019378f930b4c9948b9f98a7d2cf3110be586b16e8a776b354340c3"
+        },
+        "control": {
+          "samples_ms": {
+            "request": [
+              1010.203,
+              1039.932,
+              1078.04,
+              1071.877,
+              1079.126
+            ],
+            "device": [
+              1093.751,
+              1101.35,
+              1079.629,
+              1104.348,
+              1155.284
+            ]
+          },
+          "median_ms": {
+            "request": 1071.877,
+            "device": 1101.35
+          },
+          "last_over_first": {
+            "request": 1.068226881131812,
+            "device": 1.0562586914206251
+          },
+          "full_output_sha256": "bfb848a13019378f930b4c9948b9f98a7d2cf3110be586b16e8a776b354340c3"
+        }
+      },
+      "default_over_control": {
+        "request": 0.8429642580258743,
+        "device": 0.9112698052390249
+      }
+    },
+    {
+      "shape": {
+        "index": 400000,
+        "queries": 1000,
+        "features": 8,
+        "k": 15
+      },
+      "order": 0,
+      "first_arm": "default",
+      "arms": {
+        "default": {
+          "samples_ms": {
+            "request": [
+              146.982,
+              147.097,
+              147.171,
+              147.324,
+              147.256
+            ],
+            "device": [
+              140.017,
+              142.472,
+              143.925,
+              141.537,
+              141.256
+            ]
+          },
+          "median_ms": {
+            "request": 147.171,
+            "device": 141.537
+          },
+          "last_over_first": {
+            "request": 1.0018641738444163,
+            "device": 1.0088489254876194
+          },
+          "full_output_sha256": "9ecf0074370b9156c233449ae9420668631165ea4ab838092b198fa891ef6ad2"
+        },
+        "control": {
+          "samples_ms": {
+            "request": [
+              157.014,
+              154.17,
+              153.051,
+              152.877,
+              154.37
+            ],
+            "device": [
+              143.157,
+              141.705,
+              141.272,
+              144.572,
+              143.332
+            ]
+          },
+          "median_ms": {
+            "request": 154.17,
+            "device": 143.157
+          },
+          "last_over_first": {
+            "request": 0.9831607372590979,
+            "device": 1.0012224341108014
+          },
+          "full_output_sha256": "9ecf0074370b9156c233449ae9420668631165ea4ab838092b198fa891ef6ad2"
+        }
+      },
+      "default_over_control": {
+        "request": 0.9546020626581048,
+        "device": 0.9886837528028668
+      }
+    },
+    {
+      "shape": {
+        "index": 400000,
+        "queries": 1000,
+        "features": 8,
+        "k": 15
+      },
+      "order": 1,
+      "first_arm": "control",
+      "arms": {
+        "default": {
+          "samples_ms": {
+            "request": [
+              202.942,
+              208.017,
+              209.214,
+              220.026,
+              218.115
+            ],
+            "device": [
+              198.663,
+              200.218,
+              201.917,
+              203.346,
+              201.32
+            ]
+          },
+          "median_ms": {
+            "request": 209.214,
+            "device": 201.32
+          },
+          "last_over_first": {
+            "request": 1.0747652038513467,
+            "device": 1.0133744079169245
+          },
+          "full_output_sha256": "9ecf0074370b9156c233449ae9420668631165ea4ab838092b198fa891ef6ad2"
+        },
+        "control": {
+          "samples_ms": {
+            "request": [
+              202.979,
+              206.639,
+              206.404,
+              212.534,
+              206.044
+            ],
+            "device": [
+              193.964,
+              197.261,
+              198.65,
+              199.6,
+              199.21
+            ]
+          },
+          "median_ms": {
+            "request": 206.404,
+            "device": 198.65
+          },
+          "last_over_first": {
+            "request": 1.0151000842451683,
+            "device": 1.0270462560062692
+          },
+          "full_output_sha256": "9ecf0074370b9156c233449ae9420668631165ea4ab838092b198fa891ef6ad2"
+        }
+      },
+      "default_over_control": {
+        "request": 1.013614077246565,
+        "device": 1.013440724893028
+      }
+    },
+    {
+      "shape": {
+        "index": 65537,
+        "queries": 129,
+        "features": 17,
+        "k": 10
+      },
+      "order": 0,
+      "first_arm": "default",
+      "arms": {
+        "default": {
+          "samples_ms": {
+            "request": [
+              7.12,
+              7.504,
+              7.309,
+              7.066,
+              7.108
+            ],
+            "device": [
+              4.535,
+              4.533,
+              4.467,
+              4.474,
+              4.914
+            ]
+          },
+          "median_ms": {
+            "request": 7.12,
+            "device": 4.533
+          },
+          "last_over_first": {
+            "request": 0.998314606741573,
+            "device": 1.0835722160970231
+          },
+          "full_output_sha256": "1f8d0f97797cc7addb1fe2da281c0a80bbe608655a244928634b682b5e797047"
+        },
+        "control": {
+          "samples_ms": {
+            "request": [
+              6.979,
+              7.589,
+              7.166,
+              7.085,
+              7.164
+            ],
+            "device": [
+              5.557,
+              4.519,
+              4.486,
+              4.493,
+              4.469
+            ]
+          },
+          "median_ms": {
+            "request": 7.164,
+            "device": 4.493
+          },
+          "last_over_first": {
+            "request": 1.0265080957157184,
+            "device": 0.8042109051646572
+          },
+          "full_output_sha256": "1f8d0f97797cc7addb1fe2da281c0a80bbe608655a244928634b682b5e797047"
+        }
+      },
+      "default_over_control": {
+        "request": 0.9938581797878281,
+        "device": 1.0089027375918096
+      }
+    },
+    {
+      "shape": {
+        "index": 65537,
+        "queries": 129,
+        "features": 17,
+        "k": 10
+      },
+      "order": 1,
+      "first_arm": "control",
+      "arms": {
+        "default": {
+          "samples_ms": {
+            "request": [
+              8.536,
+              8.909,
+              8.307,
+              10.032,
+              8.389
+            ],
+            "device": [
+              6.113,
+              6.276,
+              5.632,
+              6.23,
+              5.792
+            ]
+          },
+          "median_ms": {
+            "request": 8.536,
+            "device": 6.113
+          },
+          "last_over_first": {
+            "request": 0.9827788191190253,
+            "device": 0.9474889579584491
+          },
+          "full_output_sha256": "1f8d0f97797cc7addb1fe2da281c0a80bbe608655a244928634b682b5e797047"
+        },
+        "control": {
+          "samples_ms": {
+            "request": [
+              9.169,
+              9.942,
+              9.973,
+              9.093,
+              9.072
+            ],
+            "device": [
+              6.138,
+              6.328,
+              6.23,
+              6.172,
+              6.29
+            ]
+          },
+          "median_ms": {
+            "request": 9.169,
+            "device": 6.23
+          },
+          "last_over_first": {
+            "request": 0.9894208746864434,
+            "device": 1.0247637666992506
+          },
+          "full_output_sha256": "1f8d0f97797cc7addb1fe2da281c0a80bbe608655a244928634b682b5e797047"
+        }
+      },
+      "default_over_control": {
+        "request": 0.9309630275929762,
+        "device": 0.9812199036918138
+      }
+    }
+  ]
+}
