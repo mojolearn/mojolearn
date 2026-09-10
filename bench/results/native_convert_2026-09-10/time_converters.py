@@ -1,10 +1,15 @@
 """Time the host converters, DEVIATION 2470/2471/2472, against NumPy INSIDE ONE
 THERMAL WINDOW, per docs/lanes/BRIEF_native_convert_2026-09-10.md.
 
-Three arms per shape, interleaved, at least PAIRS rounds:
+Two arms per shape, interleaved, at least PAIRS rounds:
     numpy    -> np.ascontiguousarray / np.asfortranarray (x, dtype=float32)
-    native   -> _buffer.as_f32_c / as_f32_colmajor with the binding present
-    python   -> the same, with the binding forced absent (_NATIVE[key]=None)
+    native   -> _buffer.as_f32_c / as_f32_colmajor
+
+run1..run5 in this directory were taken with a third arm, `python`, the
+pure-Python converter the binding replaced, forced by `_NATIVE[key]=None`.
+That arm and the forcing mechanism were removed from the package on
+2026-09-10 (a missing symbol is a stale build, not a fallback), so this
+script now times two arms; the recorded runs keep their third column.
 
 Reports the MINIMUM per arm (the least thermally damaged sample), the pair
 count, and the spread between the first and last NumPy sample. A spread
@@ -39,23 +44,16 @@ def _ms(fn, *args):
     return (time.perf_counter() - t0) * 1e3, r
 
 
-def _force_absent():
-    for k in KEYS:
-        _buffer._NATIVE[k] = None
-
-
 def _force_present():
     for k in KEYS:
-        _buffer._NATIVE.pop(k, None)
-    if _buffer._native(KEYS[0]) is None:
-        sys.exit("base binding not built; nothing to time")
+        _buffer._native(k)  # raises by name if the binding predates it
 
 
 def run_case(label, x, numpy_fn, ours_fn, ref_bytes):
-    """Interleave the three arms PAIRS times; return per-arm minimums and
+    """Interleave the two arms PAIRS times; return per-arm minimums and
     the NumPy first/last spread. Every sample is checked against the
     NumPy bytes so a fast wrong answer cannot post a time."""
-    samples = {"numpy": [], "native": [], "python": []}
+    samples = {"numpy": [], "native": []}
     # One untimed round first. Runs 1-4 voided windows on a COLD first NumPy
     # sample (3.84 ms then a flat 3.1; 82.8 then a flat 54) followed by no
     # upward trend: page-cache and allocator warm-up, not heat. The drift
@@ -63,21 +61,13 @@ def run_case(label, x, numpy_fn, ours_fn, ref_bytes):
     numpy_fn(x)
     _force_present()
     ours_fn(x)
-    _force_absent()
-    ours_fn(x)
     for _ in range(PAIRS):
         t, r = _ms(numpy_fn, x)
         assert r.tobytes(order="F" if r.flags.f_contiguous and not r.flags.c_contiguous else "C") == ref_bytes
         samples["numpy"].append(t)
-        _force_present()
         t, (a, _) = _ms(ours_fn, x)
         assert a.tobytes() == ref_bytes, "native arm bytes differ from NumPy"
         samples["native"].append(t)
-        _force_absent()
-        t, (a, _) = _ms(ours_fn, x)
-        assert a.tobytes() == ref_bytes, "python arm bytes differ from NumPy"
-        samples["python"].append(t)
-    _force_present()
     first, last = samples["numpy"][0], samples["numpy"][-1]
     spread = abs(last - first) / min(first, last)
     mins = {k: min(v) for k, v in samples.items()}
@@ -136,7 +126,7 @@ def main():
         ))
 
     print(f"pairs per case: {PAIRS}; minimum of each arm reported (ms)")
-    print(f"{'case':<52} {'numpy':>9} {'native':>9} {'python':>10} {'np spread':>10}")
+    print(f"{'case':<52} {'numpy':>9} {'native':>9} {'np spread':>10}")
     for label, mins, spread, _ in rows:
         # the drift rule is about heat; a case that finishes in under a
         # millisecond (the zero-copy borrow) reports timer noise, not heat
@@ -144,11 +134,11 @@ def main():
         flag = "  VOID" if drifted else ("  (sub-ms, drift rule n/a)" if spread > 0.20 else "")
         void |= drifted
         print(f"{label:<52} {mins['numpy']:>9.3f} {mins['native']:>9.3f} "
-              f"{mins['python']:>10.3f} {spread*100:>9.1f}%{flag}")
+              f"{spread*100:>9.1f}%{flag}")
     print("\nall samples (ms), in run order, for every case:")
     for label, _, _, samples in rows:
         print(f"  {label}")
-        for arm in ("numpy", "native", "python"):
+        for arm in ("numpy", "native"):
             print(f"    {arm:<7} " + " ".join(f"{t:8.3f}" for t in samples[arm]))
     if void:
         print("\nAT LEAST ONE WINDOW VOID: NumPy drifted more than 20% first to "

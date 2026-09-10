@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import array
 import ctypes
-import math
 from functools import lru_cache
 
 from ._array import Array, _CODE, normalize_dtype
@@ -421,13 +420,16 @@ def _convert(a, dtype, order):
     copy. Returns `(Array, copied)`.
 
     A conversion to float32 goes through the base binding's host
-    converters when the binding is built (DEVIATION 2470-2472): the flat
-    float64 cast, ONE fused cast-and-transpose when a float64 block wants
-    the other layout, or the tiled float32 transpose when only the layout
-    changes. Without the binding the pure-Python path below
-    runs and produces the same bytes; the native path is a speed choice,
-    never a different answer, and `tests/test_native_convert.py` holds the
-    two to byte equality.
+    converters (DEVIATION 2470-2472): the flat float64 cast, ONE fused
+    cast-and-transpose when a float64 block wants the other layout, or the
+    tiled float32 transpose when only the layout changes.
+    `tests/test_native_convert.py` holds them to byte equality with
+    NumPy's `astype`/`asfortranarray`. Every other conversion (integer
+    or float16 sources, rank-1 or rank-N relabels) is the Array's own
+    `astype` and `_as_order`. There is no Python copy of the native
+    converters: the package cannot import without its binding, so a
+    missing symbol is a stale build and `_native` says so by name
+    (fallback arms removed 2026-09-10).
     """
     if a.dtype == dtype and a._has_order(order):
         # a (1, n) or (n, 1) block is both C- and F-contiguous; relabeling
@@ -444,9 +446,10 @@ def _convert(a, dtype, order):
 
 def _native_to_f32(a, order):
     """`a` (float64 or float32) as a float32 Array in `order` through the
-    native converters, or None when the binding is not built (the caller
-    then takes the pure-Python path). The result always owns fresh
-    storage. Called only when a conversion is actually needed."""
+    native converters, or None for the one case they do not cover (a
+    float32 source that only needs a relabel or a rank-1/-N reorder, which
+    `_as_order` does). The result always owns fresh storage. Called only
+    when a conversion is actually needed."""
     # A 2-D block whose layout must flip. An F-order [rows, cols] block IS
     # a C-order [cols, rows] matrix, so the same kernel serves both
     # directions with the dimensions swapped (DEVIATION 2471, 2472).
@@ -457,16 +460,12 @@ def _native_to_f32(a, order):
         fn = _native(
             "cast_colmajor_f64_to_f32" if a.dtype == "<f8" else "transpose_f32"
         )
-        if fn is None:
-            return None
         store = _output_store("f", a.size)
         fn(a._addr, store.buffer_info()[0], rows, cols)
         return Array._owned(store, a.shape, "<f4", order)
     if a.dtype == "<f4":
         return None  # a relabel or a rank-1/-N reorder: the Python path
     fn = _native("cast_f64_to_f32")
-    if fn is None:
-        return None
     # the flat cast keeps a's storage order; a relabel or reorder follows
     store = _output_store("f", a.size)
     fn(a._addr, store.buffer_info()[0], a.size)
@@ -633,11 +632,9 @@ def frombytes(raw, dtype, shape):
 def all_finite(arr):
     """True when every element of a float32/float64 Array is finite.
 
-    Uses the base binding's `all_finite_f32` / `all_finite_f64` when it
-    loads (DEVIATION 2303's helpers); otherwise `math.fsum` over the
-    storage memoryview, a C loop, whose result is finite only if every
-    input was, with the Python loop run ONLY to confirm a non-finite or
-    overflowed sum (DEVIATION 2307).
+    The base binding's `all_finite_f32` / `all_finite_f64` (DEVIATION
+    2303's helpers). The `math.fsum` fallback of DEVIATION 2307 was
+    removed 2026-09-10 with every other Python copy of a native helper.
     """
     if not isinstance(arr, Array) or arr.dtype not in ("<f4", "<f8"):
         raise TypeError(
@@ -646,38 +643,34 @@ def all_finite(arr):
         )
     if arr.size == 0:
         return True
-    fn = _native_all_finite(arr.dtype)
-    if fn is not None:
-        return int(fn(arr._addr, arr.size)) == 1
-    try:
-        total = math.fsum(arr._mv)
-    except (OverflowError, ValueError):
-        total = math.nan
-    if math.isfinite(total):
-        return True
-    from ._array import isfinite_all_py
-    return isfinite_all_py(arr._mv)
+    fn = _native("all_finite_f32" if arr.dtype == "<f4" else "all_finite_f64")
+    return int(fn(arr._addr, arr.size)) == 1
 
 
 _NATIVE = {}
 
 
 def _native(key):
-    """The base binding's host helper `key`, cached, or None when the
-    binding is not built, is the wrong tier, or lacks the symbol. Setting
-    `_NATIVE[key] = None` forces the pure-Python path for that helper,
-    which is how the tests and the timing script compare the two arms."""
-    if key in _NATIVE:
-        return _NATIVE[key]
-    fn = None
+    """The base binding's host helper `key`, resolved once per process
+    through `_backend.binding` for the running tier and cached in
+    `_NATIVE` (a test may plant a callable there to observe a call).
+
+    There is NO Python fallback. The package refuses to import without its
+    binding, so the only way this symbol can be missing is a binary on
+    disk older than the Python beside it, and running a slower copy of the
+    same arithmetic would hide that. It raises by name with the rebuild
+    command instead (fallback arms removed 2026-09-10)."""
+    fn = _NATIVE.get(key)
+    if fn is not None:
+        return fn
+    from . import _backend
     try:
-        from . import _backend
         fn = getattr(_backend.binding("_mojolearn"), key)
-    except Exception:  # not built, wrong tier, no device: the host path
-        fn = None
+    except Exception as exc:
+        raise ImportError(
+            f"mojolearn: the base binding has no `{key}`; the compiled "
+            "_mojolearn extension is older than this Python layer. "
+            "Rebuild it with\n    sh bindings/build.sh"
+        ) from exc
     _NATIVE[key] = fn
     return fn
-
-
-def _native_all_finite(dtype):
-    return _native("all_finite_f32" if dtype == "<f4" else "all_finite_f64")

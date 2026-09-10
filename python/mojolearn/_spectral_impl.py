@@ -23,7 +23,6 @@ The binding lives in `bindings/_mojolearn_metrics.mojo` alongside the
 metrics functions and is loaded through `_metrics_impl._get_binding`.
 """
 
-from ._array import Array
 from ._buffer import (
     _native, addr, addr_ro, all_finite, as_f32_c, as_f64_c, as_i32_c, empty,
 )
@@ -85,46 +84,29 @@ def _coo_triples(A):
     # one rounding each. -0.0 is a zero, NaN is not (it compares unequal).
     dense, _ = as_f64_c(A, ndim=2, name="X")
     n = int(shape[0])
-    count_fn = _native("nonzero_f64_count")
-    fill_fn = _native("nonzero_f64_fill")
-    if count_fn is not None and fill_fn is not None and dense.size:
-        # DEVIATION 2489: the scan in Mojo, two calls, count then fill into
-        # buffers this side allocates; the Python loop below is the oracle
-        # it is gated against byte-for-byte (tests/test_native_nonzero.py).
-        src = addr_ro(dense, name="X")
-        nnz = int(count_fn(src, dense.size))
-        rows = empty((nnz,), "<i4")
-        cols = empty((nnz,), "<i4")
-        vals = empty((nnz,), "<f4")
-        if nnz == 0:
-            # Nothing to write, and an empty Array has no address to hand
-            # the binding (its pointer helpers refuse a null by design).
-            return rows, cols, vals, n
-        wrote = int(fill_fn(
-            src, n, n,
-            [addr(rows, name="rows"), addr(cols, name="cols"),
-             addr(vals, name="vals")],
-            nnz,
-        ))
-        if wrote != nnz:
-            raise RuntimeError(
-                f"mojolearn SpectralClustering: nonzero_f64_fill wrote "
-                f"{wrote} of {nnz} entries"
-            )
+    # DEVIATION 2489: the scan in Mojo, two calls, count then fill into
+    # buffers this side allocates. The Python loop this replaced
+    # (DEVIATION 2373) lives on only as the oracle in
+    # tests/test_native_nonzero.py, which holds the two to byte equality.
+    nnz = int(_native("nonzero_f64_count")(addr_ro(dense, name="X"), dense.size)) if dense.size else 0
+    rows = empty((nnz,), "<i4")
+    cols = empty((nnz,), "<i4")
+    vals = empty((nnz,), "<f4")
+    if nnz == 0:
+        # Nothing to write, and an empty Array has no address to hand the
+        # binding (its pointer helpers refuse a null by design).
         return rows, cols, vals, n
-    # DEVIATION 2373 -- the pure-Python scan, a PYTHON LOOP over the dense
-    # n x n matrix, kept as the fallback when the base binding predates
-    # DEVIATION 2489 and as the oracle for it.
-    r_idx, c_idx, values = [], [], []
-    for r, row in enumerate(dense.tolist()):
-        for c, v in enumerate(row):
-            if v != 0.0:
-                r_idx.append(r)
-                c_idx.append(c)
-                values.append(v)
-    rows = Array.from_list(r_idx, "<i4")
-    cols = Array.from_list(c_idx, "<i4")
-    vals = Array.from_list(values, "<f4")
+    wrote = int(_native("nonzero_f64_fill")(
+        addr_ro(dense, name="X"), n, n,
+        [addr(rows, name="rows"), addr(cols, name="cols"),
+         addr(vals, name="vals")],
+        nnz,
+    ))
+    if wrote != nnz:
+        raise RuntimeError(
+            f"mojolearn SpectralClustering: nonzero_f64_fill wrote "
+            f"{wrote} of {nnz} entries"
+        )
     return rows, cols, vals, n
 
 

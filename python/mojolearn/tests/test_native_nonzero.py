@@ -1,18 +1,16 @@
 """DEVIATION 2489: the Mojo nonzero scan behind `_spectral_impl._coo_triples`
-against the pure-Python loop it replaces, on raw bytes, never on values.
+against the pure-Python loop it replaced, on raw bytes, never on values.
 
-The oracle is the Python loop itself, run with the native lookups forced
-absent (`_buffer._NATIVE[key] = None`). Both arms must produce identical
-int32 row bytes, int32 column bytes and float32 value bytes, including the
-scan order. Values are planted so that every branch of the nonzero test is
-exercised: exact zeros, -0.0 (a zero), NaN (NOT a zero), subnormals, values
-that are nonzero in float64 but narrow to 0.0f (kept as an explicit zero,
-as np.nonzero on the source dtype kept them), float32 rounding ties chosen
-so round-to-nearest-even and round-half-away disagree, and overflow to inf.
-
-On a checkout whose base binding predates DEVIATION 2489 the two-arm tests
-still PASS by asserting the Python arm alone, and say so via skip on the
-native-only tests.
+The oracle is the Python loop that used to live in `_coo_triples`
+(DEVIATION 2373), kept HERE and nowhere else: the package has no Python
+fallback for a native helper (removed 2026-09-10). Both must produce
+identical int32 row bytes, int32 column bytes and float32 value bytes,
+including the scan order. Values are planted so that every branch of the
+nonzero test is exercised: exact zeros, -0.0 (a zero), NaN (NOT a zero),
+subnormals, values that are nonzero in float64 but narrow to 0.0f (kept as
+an explicit zero, as np.nonzero on the source dtype kept them), float32
+rounding ties chosen so round-to-nearest-even and round-half-away
+disagree, and overflow to inf.
 """
 import array
 import math
@@ -23,20 +21,23 @@ import pytest
 
 from mojolearn import _buffer
 from mojolearn._array import Array
+from mojolearn._buffer import as_f64_c
 from mojolearn._spectral_impl import _coo_triples
 
-_KEYS = ("nonzero_f64_count", "nonzero_f64_fill")
 
-
-def _forced_absent(monkeypatch):
-    for key in _KEYS:
-        monkeypatch.setitem(_buffer._NATIVE, key, None)
-
-
-def _forced_present(monkeypatch):
-    for key in _KEYS:
-        monkeypatch.delitem(_buffer._NATIVE, key, raising=False)
-    return all(_buffer._native(key) is not None for key in _KEYS)
+def _oracle(A):
+    """The retired DEVIATION 2373 loop, verbatim: the definition of the
+    answer, only slow."""
+    dense, _ = as_f64_c(A, ndim=2, name="X")
+    r_idx, c_idx, values = [], [], []
+    for r, row in enumerate(dense.tolist()):
+        for c, v in enumerate(row):
+            if v != 0.0:
+                r_idx.append(r)
+                c_idx.append(c)
+                values.append(v)
+    return (Array.from_list(r_idx, "<i4"), Array.from_list(c_idx, "<i4"),
+            Array.from_list(values, "<f4"), dense.shape[0])
 
 
 def _f32_ties():
@@ -89,18 +90,14 @@ def _as_bytes(triple):
 
 
 def _run_both(monkeypatch, A):
-    _forced_absent(monkeypatch)
-    ref = _as_bytes(_coo_triples(A))
-    present = _forced_present(monkeypatch)
-    got = _as_bytes(_coo_triples(A))
-    return ref, got, present
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
 
 
 @pytest.mark.parametrize("n", [1, 2, 3, 7, 16, 33, 64, 129])
 @pytest.mark.parametrize("seed", [0, 1, 2])
 def test_dense_scan_bytes_match_python_loop(monkeypatch, n, seed):
     A = _matrix(n, seed * 1000 + n)
-    ref, got, present = _run_both(monkeypatch, A)
+    ref, got, _ = _run_both(monkeypatch, A)
     assert got == ref
     # The Python arm on its own is a real assertion too: the planted NaNs
     # must be present and the -0.0s absent.
@@ -109,8 +106,6 @@ def test_dense_scan_bytes_match_python_loop(monkeypatch, n, seed):
     flat = [v for row in A for v in row]
     expect_nnz = sum(1 for v in flat if v != 0.0)
     assert len(rows) == 4 * expect_nnz
-    if not present:
-        pytest.skip("base binding predates DEVIATION 2489; Python arm only")
 
 
 def test_every_planted_value_in_one_row(monkeypatch):
@@ -120,7 +115,7 @@ def test_every_planted_value_in_one_row(monkeypatch):
     for i, v in enumerate(planted):
         A[i][i] = v          # diagonal carries each planted value once
         A[0][i] = v          # row 0 carries them all in order
-    ref, got, present = _run_both(monkeypatch, A)
+    ref, got, _ = _run_both(monkeypatch, A)
     assert got == ref
     rows, cols, vals, _ = ref
     r = array.array("i"); r.frombytes(rows)
@@ -137,8 +132,6 @@ def test_every_planted_value_in_one_row(monkeypatch):
     # NaN kept with a NaN payload (any), infinities kept.
     assert any(math.isnan(x) for x in v)
     assert any(math.isinf(x) and x > 0 for x in v)
-    if not present:
-        pytest.skip("base binding predates DEVIATION 2489; Python arm only")
 
 
 def test_ties_round_to_even_not_away(monkeypatch):
@@ -147,24 +140,20 @@ def test_ties_round_to_even_not_away(monkeypatch):
     A = [[0.0] * n for _ in range(n)]
     for i, t in enumerate(ties):
         A[i][i] = t
-    ref, got, present = _run_both(monkeypatch, A)
+    ref, got, _ = _run_both(monkeypatch, A)
     assert got == ref
     v = array.array("f"); v.frombytes(ref[2])
     for t, x in zip(ties, v):
         # round-half-away would land on the odd neighbor; RNE on the even
         assert struct.unpack("<I", struct.pack("<f", x))[0] & 1 == 0
         assert abs(x - t) <= abs(struct.unpack("<f", struct.pack("<f", t))[0] - t)
-    if not present:
-        pytest.skip("base binding predates DEVIATION 2489; Python arm only")
 
 
 def test_all_zero_and_all_nonzero(monkeypatch):
     for A in ([[0.0] * 5 for _ in range(5)], [[-0.0] * 3 for _ in range(3)],
               [[1.0] * 4 for _ in range(4)]):
-        ref, got, present = _run_both(monkeypatch, A)
+        ref, got, _ = _run_both(monkeypatch, A)
         assert got == ref
-    if not present:
-        pytest.skip("base binding predates DEVIATION 2489; Python arm only")
 
 
 def test_sparse_input_is_duck_typed_not_imported(monkeypatch):
@@ -201,8 +190,6 @@ def test_sparse_input_is_duck_typed_not_imported(monkeypatch):
 def test_direct_binding_refusals():
     count_fn = _buffer._native("nonzero_f64_count")
     fill_fn = _buffer._native("nonzero_f64_fill")
-    if count_fn is None or fill_fn is None:
-        pytest.skip("base binding predates DEVIATION 2489")
     src = Array.from_list([1.0, 0.0, 2.0, 3.0], "<f8")
     a = _buffer.addr_ro(src, name="src")
     assert count_fn(a, 0) == 0
