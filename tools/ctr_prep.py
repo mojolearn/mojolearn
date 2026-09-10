@@ -40,7 +40,7 @@ THE FORMULAS ARE THEIRS, PINNED FROM SOURCE (CatBoost 54a8143a):
   with the default prior {0.0, 1}:  count / (n + 1)
   (`cuda/ctrs/kernel/ctr_calcers.cu:100` NonWeightedBinFreqCtrsImpl;
   default priors `private/libs/options/cat_feature_options.cpp:127-129`).
-  NOTE, established while porting: the DEFAULT dispatch is not that kernel.
+  NOTE, established while implementing: the DEFAULT dispatch is not that kernel.
   `counter_calc_method` defaults to `SkipTest`
   (`cat_feature_options.cpp:233`), which sends FeatureFreq to
   `TWeightedBinFreqCalcer` and `WeightedBinFreqCtrsImpl` (`:56-67`),

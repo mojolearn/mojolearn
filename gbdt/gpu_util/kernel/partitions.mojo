@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`UpdatePartitionOffsets`: sorted bins to per-bin start offsets.
 
-PORT OF `catboost/cuda/cuda_util/kernel/partitions.cu` at CatBoost
+FOLLOWS `catboost/cuda/cuda_util/kernel/partitions.cu` at CatBoost
 `54a8143a` -- the `TVecOffsetWriter` arm of `UpdatePartitionOffsets`
 (`:81-107`, kernel) and the `ui32*` entry that dispatches it (`:155-176`).
 The `TPartitionOffsetWriter` arm (writing `TDataPartition` records for the
-tree learner) has no caller in this port and is NOT PORTED YET; the tree
+tree learner) has no caller in this implementation and is NOT IMPLEMENTED YET; the tree
 path derives its partitions elsewhere.
 
 Who calls this: `TWeightedBinFreqCalcer::VisitEqualUpToPriorFreqCtrs`
@@ -128,7 +128,7 @@ def launch_update_partition_offsets(
         #
         # Unreached today -- the CTR path never passes size 0 -- which is
         # exactly why it survived: a divergence in a branch nothing takes
-        # is invisible until something takes it. Found by the lane porting
+        # is invisible until something takes it. Found by the lane implementing
         # `pointwise_optimization_subsets`, which needs this entry.
         # ================================================================
         ctx.enqueue_function[_fill_u32_kernel](

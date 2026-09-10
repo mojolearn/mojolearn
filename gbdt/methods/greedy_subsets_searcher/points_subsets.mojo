@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The state a growing tree carries between its two phases.
 
-PORT OF `TPointsSubsets`, `TLeaf` and `TBestSplitProperties` from
+FOLLOWS `TPointsSubsets`, `TLeaf` and `TBestSplitProperties` from
 `catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.h:40`
 and `catboost/cuda/gpu_data/gpu_structures.h:64` at CatBoost `54a8143a`.
-Transliterated. Do not improve.
+Followed statement for statement.
 
 Every function in their level loop takes `TPointsSubsets*`. It is the reason
 `ComputeOptimalSplits` and `SplitLeaves` are two functions and not one long
-body, and porting it is what lets ours be two functions as well.
+body, and implementing it is what lets ours be two functions as well.
 
 Their comments on the fields are kept verbatim where they had them, because
 they say which buffer is already reduced and which is not.
@@ -66,7 +66,7 @@ struct EHistogramsType(Copyable, ImplicitlyCopyable, Movable):
 
     What is still true is that the LIVE path carries these three states on
     `split_properties_helper.LeafRecord` and not on the `TLeaf` below, so
-    this enum is the transliterated shape and `LeafRecord.histograms_type`
+    this enum is the statement-for-statement shape and `LeafRecord.histograms_type`
     is the field actually read.
     """
 
@@ -156,7 +156,7 @@ struct TPointsSubsets(Movable):
     `EPtrType::CudaHost`. Measured 2026-08-19: a Mojo kernel handed an
     `enqueue_create_host_buffer` pointer writes nothing, silently, and
     `map_to_host` is 2x slower than the copy it would replace. So this one
-    is filled by an explicit copy. See `archive/reference/gbdt/NOT_PORTED.md`.
+    is filled by an explicit copy. See `archive/reference/gbdt/`gbdt/NOT_IMPLEMENTED.tsv``.
 
     Their `Partitions` is one `TDataPartition` array of `{Offset, Size}`
     pairs; ours is two parallel `UInt32` buffers, which is how

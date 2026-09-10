@@ -3,7 +3,7 @@
 """The metrics' float sums over `n`, with ONE order on every vendor and on
 every LAUNCH.
 
-DEVIATION 653 (metrics lane, 2026-08-23). NOT A PORT. RAFT's metric sums are
+DEVIATION 653 (metrics lane, 2026-08-23). NO REFERENCE FILE. RAFT's metric sums are
 `thrust::reduce` (`scores.cuh:69-70`, the batched silhouette's `:265`) and
 `mapThenSumReduce` (`kl_divergence.cuh:62`, `entropy.cuh:133`,
 `silhouette_score.cuh:294`) -- a CUB block fold whose partials land in ONE

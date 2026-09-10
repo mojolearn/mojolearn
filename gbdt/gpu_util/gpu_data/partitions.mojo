@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A leaf is a contiguous range of the index array.
 
-PORT OF `catboost/cuda/cuda_util/gpu_data/partitions.h` at CatBoost
-`54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/cuda_util/gpu_data/partitions.h` at CatBoost
+`54a8143a`. Followed statement for statement.
 
     struct TDataPartition {
         ui32 Offset;
@@ -61,7 +61,7 @@ device transfer, because both ends are host memory.
 
 **What ours does.** `update_partitions_after_split_kernel` takes
 `host_offset` and `host_size` and writes them exactly where theirs writes
-`partsCpu`, so the device half is a faithful port. The driver allocates them
+`partsCpu`, so the device half is a faithful implementation. The driver allocates them
 with `enqueue_create_buffer`, so they are a SECOND DEVICE ARRAY that no host
 read ever touches. We pay their write and collect none of their benefit, and
 the host still learns a leaf size through an `enqueue_copy` and a drain.
@@ -142,7 +142,7 @@ struct DataPartition(Copyable, Movable):
 struct FeatureInBlock(Copyable, Movable):
     """`TFeatureInBlock`, the per-feature descriptor the histogram kernel reads.
 
-    Ported from its use sites in `hist_binary.cu` and
+    Implemented from its use sites in `hist_binary.cu` and
     `compute_hist_loop_two_stats.cuh` rather than from a header, so the field
     set is what those kernels actually touch:
 

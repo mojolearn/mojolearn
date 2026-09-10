@@ -48,7 +48,7 @@ from neighbors.checks.knn_check import (
     check_knn,
     check_knn_reach_by_sabotage,
     check_launch_config_values,
-    check_vendor_topk_matches_ported,
+    check_vendor_topk_matches_ours,
 )
 
 
@@ -56,7 +56,7 @@ def main() raises:
     check_hardware_matrix()
     check_knn()
     check_knn_reach_by_sabotage()
-    check_vendor_topk_matches_ported()
+    check_vendor_topk_matches_ours()
     # THE FUSED ARM EXISTS ONLY ON A 32-LANE COLUMN (IDENTITY_PATHS row
     # 23): `fused_l2_knn` refuses at entry on a 64-wide wavefront, by
     # design, and the eight checks below call it by name. On the MI325X

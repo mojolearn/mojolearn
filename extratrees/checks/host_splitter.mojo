@@ -12,8 +12,7 @@ lane's counter-based keyed draws instead of their sequential `our_rand_r`
 stream (DEVIATION 130). Its JOB is to be the reference the device kernels of
 `impl/decisiontree/batched_levelalgo/` are measured against, per node and per
 candidate feature; in that comparison it is the authority, and
-`extratrees/DERIVATION_MAP.tsv` carries its row (upstream `scikit-learn`,
-`partial`) with the four branches of theirs that are not here. It sits under
+ It sits under
 `checks/` because of that ROLE and for no other reason: THE DIRECTORY NAME IS
 NOT A PROVENANCE CLAIM, and it once read like one: this directory was called
 `mojo_only/` and then `original/` before `checks/`, and under either of those
@@ -40,8 +39,8 @@ THE SPEC, BRANCH BY BRANCH, AND WHERE EACH ONE WENT
 | `:661-662` n_left/n_right | `count`-relative, same arithmetic              |
 | `:664-666` min_samples_leaf | a `continue`, NOT a redraw                   |
 | `:671-672` reset/update   | the score pass IS the update                   |
-| `:674-677` min_weight_leaf| DEVIATION 154 -- `sample_weight` unported      |
-| `:679-689` monotonic_cst  | DEVIATION 154 -- `monotonic_cst` unported      |
+| `:674-677` min_weight_leaf| DEVIATION 154 -- `sample_weight` unimplemented      |
+| `:679-689` monotonic_cst  | DEVIATION 154 -- `monotonic_cst` unimplemented      |
 | `:691` proxy              | `ProxyImpurityImprovement` (+ exact form, 144) |
 | `:693` `>` first-wins     | DEVIATION 133/145/153 -- a total order         |
 | `:694-700` missing_go_to_left | DEVIATION 136 -- the field does not exist  |
@@ -182,7 +181,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 # OURS. The scan makes ONE pass per candidate over the node's rows in
 #   `row_ids` order, counting and accumulating, and MOVES NOTHING. The
 #   winning split is handed to `partition_samples`
-#   (`builder_kernels_impl.cuh:43-88`, already ported) by the caller, once.
+#   (`builder_kernels_impl.cuh:43-88`, already implemented) by the caller, once.
 #
 # WHY. Their partition and their count are the same operation because they
 #   partition first and read `pos` out of it. cuML's partition is the other
@@ -257,7 +256,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 #
 # OURS. The first and the last are here. The middle two are not:
 #     - `min_weight_leaf` compares `criterion.weighted_n_left/right` against
-#       a threshold. With `sample_weight=None` -- the only case this port
+#       a threshold. With `sample_weight=None` -- the only case this implementation
 #       supports, and the case DEVIATION 144's exact integer comparator
 #       stands on -- `weighted_n_left == n_left`, and sklearn's own default
 #       `min_weight_fraction_leaf=0.0` makes `min_weight_leaf` zero, so the
@@ -268,7 +267,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 #
 # WHY NOT REFUSE BY NAME, the way `max_n_bins` is refused (DEVIATION 138)?
 #   Because there is no name to refuse: neither parameter appears in this
-#   port's parameter struct. A refusal needs a field to refuse.
+#   implementation's parameter struct. A refusal needs a field to refuse.
 #
 # PRICE, AND IT IS A REAL GAP, NOT A ZERO. A user coming from sklearn who
 #   sets `min_weight_fraction_leaf` or `monotonic_cst` gets no error from
@@ -495,8 +494,8 @@ def _refuse_missing(colid: Int32, extent: FeatureRange) raises:
     sklearn would take `:630` (`has_missing = n_missing != 0`), then draw a
     second random number at `:649` to send the missing rows left or right,
     then partition with `missing_go_to_left` (`:657-658`). None of that is
-    ported. Refusing by name is `gbdt/`'s discipline and rule 3's: an
-    unported path must be VISIBLE.
+    implemented. Refusing by name is `gbdt/`'s discipline and rule 3's: an
+    unimplemented path must be VISIBLE.
     """
     if extent.n_missing != 0:
         raise Error(

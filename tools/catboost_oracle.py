@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CatBoost's ACTUAL OUTPUT, dumped so the port can be compared against it.
+"""CatBoost's ACTUAL OUTPUT, dumped so the implementation can be compared against it.
 
 WHY THIS EXISTS, AND WHAT IT REPLACES
 -------------------------------------
@@ -13,10 +13,10 @@ we agree with us.
 
 That is not a comparison against CatBoost. This file is.
 
-It trains CatBoost at settings the port can actually match, then dumps what
+It trains CatBoost at settings the implementation can actually match, then dumps what
 it DECIDED, not what it cost:
 
-  * the quantization borders per feature, so our port can be fed the SAME
+  * the quantization borders per feature, so our implementation can be fed the SAME
     compressed index rather than its own borders. Without this the split
     indices are not comparable and nothing downstream means anything.
   * every tree's splits, as (float_feature_index, border), in depth order.
@@ -26,12 +26,12 @@ it DECIDED, not what it cost:
 
 WHAT MATCHES AND WHAT CANNOT
 ----------------------------
-Settings are pinned to the ones the port implements, and every one of these
-is a value the port also uses rather than a convenience:
+Settings are pinned to the ones the implementation implements, and every one of these
+is a value the implementation also uses rather than a convenience:
 
-  loss_function   RMSE            the only objective ported
-  grow_policy     SymmetricTree   the only policy ported
-  boosting_type   Plain           ordered boosting is not ported
+  loss_function   RMSE            the only objective implemented
+  grow_policy     SymmetricTree   the only policy implemented
+  boosting_type   Plain           ordered boosting is not implemented
   bootstrap_type  No              OUR DEPARTURE, and the reason it is here.
                                   CatBoost's default is Bayesian at
                                   bagging_temperature 1.0, applied before the
@@ -107,7 +107,7 @@ def main() -> int:
     # ORACLE_BORDERS=100 generates the ONE-BYTE fixture (bench/oracle100.txt),
     # which is the range CatBoost's own dispatch sends to the hist_2 family
     # (`hist_one_byte.cu:315-323`), so the second fixture is what gates that
-    # port against CatBoost rather than against our other kernel.
+    # implementation against CatBoost rather than against our other kernel.
     border_count = int(os.environ.get("ORACLE_BORDERS", "15"))
     out_path = os.environ.get("ORACLE_OUT", "bench/oracle.txt")
 
@@ -121,7 +121,7 @@ def main() -> int:
     # so twelve of sixteen features came back with ZERO borders and feature 0
     # came back with 14 instead of 15. Compared against a real binarizer that
     # reads as a total mismatch on every feature, which is what it did, and
-    # the fault was here rather than in the port.
+    # the fault was here rather than in the implementation.
     #
     # `Pool.save_quantization_borders` writes the grid itself, 15 per feature
     # for all 16, which is the thing our `best_split` is supposed to
@@ -165,7 +165,7 @@ def main() -> int:
         # devastating to Cosine, whose candidate gaps are order 1 against
         # scores of order 146, and negligible to L2, whose gaps are order 300
         # against scores of order 21000. Leaving it at the default is what
-        # made our port look like it was computing L2.
+        # made our implementation look like it was computing L2.
         random_strength=0.0,
         score_function=__import__('os').environ.get('ORACLE_SCORE', 'Cosine'),
         logging_level="Silent",

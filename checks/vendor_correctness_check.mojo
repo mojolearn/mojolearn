@@ -1079,7 +1079,7 @@ def warp_check_kernel(
     out_sum.unsafe_store(g, warp_sum(v))
     out_scan.unsafe_store(g, warp_prefix_sum(v))
 
-    # The butterfly min every ported RAFT reducer uses: XOR over the whole
+    # The butterfly min every implemented RAFT reducer uses: XOR over the whole
     # lane group, which is a total-order idempotent fold, so the answer is
     # the group minimum in EVERY lane.
     var m = v
@@ -2179,7 +2179,7 @@ def check_compile_established(mut rows: List[Verdict]) raises:
     rows.append(
         Verdict(
             "nn.softmax.softmax",
-            "(no counterpart in this port)",
+            "(no counterpart in this implementation)",
             V_UNCHECKED,
             (
                 "imports; takes an InputFn closure rather than an input"
@@ -2193,7 +2193,7 @@ def check_compile_established(mut rows: List[Verdict]) raises:
     rows.append(
         Verdict(
             "nn.concat.concat",
-            "(no counterpart in this port)",
+            "(no counterpart in this implementation)",
             V_UNCHECKED,
             (
                 "imports; same reason as softmax. Listed here only because"
@@ -2575,7 +2575,7 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
     # below from the same predicate -- and the vendor arm
     # (transpose_kernel x2 + gemm_nt) is then run EXPLICITLY at the same
     # shape, because a dispatched wrapper run covers one arm only
-    # (PORTING_RULES.md 8). Operands are the SAME matrix, so the diagonal is
+    # (ENGINEERING_RULES.md 8). Operands are the SAME matrix, so the diagonal is
     # a same-sign sum and the tolerance must cover plain accumulation-order
     # spread: measured worst 4.09e-6 relative at 32x32x10007 on two
     # independent routes, so the budget is 1e-5, not the 2e-6 the

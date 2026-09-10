@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`MergeLabels::run`, which is one call, kept as its own file like theirs.
 
-PORT OF `cuml/cpp/src/dbscan/mergelabels/runner.cuh` at cuML `00094f7`.
-Transliterated.
+FOLLOWS `cuml/cpp/src/dbscan/mergelabels/runner.cuh` at cuML `00094f7`.
+Followed statement for statement.
 
 Their whole file is:
 

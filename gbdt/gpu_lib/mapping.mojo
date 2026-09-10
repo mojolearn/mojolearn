@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """How a buffer's objects are spread over the devices.
 
-PORT OF `catboost/cuda/cuda_lib/mapping.h` at CatBoost `54a8143a`.
-Transliterated where it transliterates. See the DEVIATION BLOCK.
+FOLLOWS `catboost/cuda/cuda_lib/mapping.h` at CatBoost `54a8143a`.
+Followed statement for statement where it follow statement for statements. See the DEVIATION BLOCK.
 
 A mapping answers, in `TSlice`, three questions about a buffer:
 
@@ -18,7 +18,7 @@ Their three mappings differ only in the answers:
     TMirrorMapping    every device holds a copy of all of them
     TStripeMapping    consecutive disjoint stripes, one per device
 
-The reason to port this at one device is that the questions are asked
+The reason to implement this at one device is that the questions are asked
 regardless. `ParallelStripeView(subsets->PartitionsCpu, TSlice(newId, newId +
 1))` (`split_properties_helper.cpp:821`) is a stripe view of one leaf, and its
 `MemoryOffset` is what makes the read touch one partition instead of all of
@@ -41,15 +41,15 @@ onto it. The degenerate answers are still computed by their arithmetic rather
 than short-circuited, so the file stops being degenerate the day a second
 device exists.
 
-**3. `Transform`, `Apply`, `At` and `NonEmptyDevices` are not ported.**
+**3. `Transform`, `Apply`, `At` and `NonEmptyDevices` are not implemented.**
 `Transform` and `Apply` (`mapping.h:74-80`, `:145-149`, `:195-199`,
 `:293-305`) take a callback over slices; `At` (`mapping.h:43-46`) returns
 `NKernelHost::TObjectsMeta` from `cuda_kernel_buffer.h` and `NonEmptyDevices`
 (`mapping.h:63-72`) returns a `TDevicesList`. All four have exactly one class
-of caller, `TCudaBuffer` (`cuda_buffer.h`), which is not ported. See
-NOT_PORTED.md.
+of caller, `TCudaBuffer` (`cuda_buffer.h`), which is not implemented. See
+`gbdt/NOT_IMPLEMENTED.tsv`.
 
-**4. `TSingleMapping`'s slices constructor is not ported.** Theirs
+**4. `TSingleMapping`'s slices constructor is not implemented.** Theirs
 (`mapping.h:98-112`) takes one `TSlice` per device, CB_ENSUREs that at most
 one is non-empty, and adopts that device. At one device it is
 `TSingleMapping(0, slices[0].Size(), size)` and adds nothing that the

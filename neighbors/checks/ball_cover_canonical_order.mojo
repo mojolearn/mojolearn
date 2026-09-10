@@ -33,8 +33,8 @@ twice" -- so `index` alone is a TOTAL order and there is no tie class for a
 distance half to break.
 
 What the composite would cost is real. The fill kernel does not emit distances,
-so stores would have to be added at five sites inside a body whose banner says
-"Partial. Do not improve."; `nnz * 4` extra bytes would be written on the hot
+so stores would have to be added at five sites inside a body marked partial;
+`nnz * 4` extra bytes would be written on the hot
 kernel in BOTH modes, because a `comptime` cannot remove a store from a kernel
 FAST also runs, so FAST would pay for IDENTICAL's key; four entry points and
 two callers would change signature; and the resulting 64-bit key is wider than

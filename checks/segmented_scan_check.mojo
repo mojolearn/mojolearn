@@ -9,7 +9,7 @@ a start one element past one, two starts in a row (a segment of length 1),
 and a carry that crosses several empty blocks. So the fixture plants all of
 those on purpose rather than hoping a random pattern contains them.
 
-Three rules from `PORTING_RULES.md:7` shape this file, and each of them
+Three rules from `ENGINEERING_RULES.md:7` shape this file, and each of them
 already caught something real in this repository:
 
   * COMPARE PER CELL, against a tally computed independently on the host.
@@ -21,7 +21,7 @@ already caught something real in this repository:
     number. Uniform values would hide it. They are also small integers, so
     every partial sum is exact in float32 and the comparison can be `!=`
     rather than a tolerance -- a tolerance is where a real drift hides.
-  * EXERCISE BOTH SIDES OF EVERY SWITCH (`PORTING_RULES.md:8`). `inclusive`
+  * EXERCISE BOTH SIDES OF EVERY SWITCH (`ENGINEERING_RULES.md:8`). `inclusive`
     is a switch and so is the flag source, so there are four named checks:
     {vector, scatter} x {inclusive, exclusive}.
 

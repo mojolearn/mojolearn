@@ -156,7 +156,7 @@ reverted; the check itself was not touched.
 
 THE LAST ONE IS WORTH KEEPING. Their dispatcher skips the scan for binary
 features (`pointwise_kernels.cpp:70`) and removing that guard changes no
-cell here -- because a binary feature has ONE fold and the ported scan
+cell here -- because a binary feature has ONE fold and the implemented scan
 kernel returns early on `folds <= 1`, so the extra launch is a no-op at
 every cell. The guard is a launch saved, not a value protected, and no
 output check can distinguish the two. It is transcribed because it is
@@ -164,7 +164,7 @@ theirs and because the kernel's `folds <= 1` early-out is OURS (the
 greedy-subsets scan's, adopted here) rather than CatBoost's -- their warp
 scan would run 32 lanes over a 1-fold feature and write the same value
 back. Leaning on our early-out to justify dropping their guard would be
-depending on a deviation to excuse skipping a port.
+depending on a deviation to excuse skipping an implementation.
 
 RUN IT
 
@@ -453,7 +453,7 @@ def apply_scan(
 
     A running prefix per (feature, stat) over the feature's own folds,
     SKIPPING one-hot features and features with a single fold -- theirs at
-    `split_properties_helpers.cuh:126` and the ported kernel's own guard.
+    `split_properties_helpers.cuh:126` and the implemented kernel's own guard.
     """
     for f in range(len(folds)):
         var nf = Int(folds[f])

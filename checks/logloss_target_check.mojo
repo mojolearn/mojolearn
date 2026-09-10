@@ -4,7 +4,7 @@
 
     pixi run check-logloss-target
 
-WHAT GATES WHAT. The kernel is the port of `CrossEntropyImpl`
+WHAT GATES WHAT. The kernel is the implementation of `CrossEntropyImpl`
 (`pointwise_targets.cu:327-390`), the one kernel Logloss and CrossEntropy
 reach on their GPU. No CatBoost fit can gate its DERIVATIVES bitwise -- the
 kernel's own deviation block explains why (`__expf` vs `std.math.exp`) -- so

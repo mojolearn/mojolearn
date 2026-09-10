@@ -6,7 +6,7 @@
 STANDS IN FOR `cuml/cpp/src_prims/linalg/batched/matrix.cuh::b_gels`
 (`:644-669`) at cuML 265b9da6 (v26.08.00). Theirs is a nine-line wrapper
 over `raft::linalg::detail::cublasgelsBatched`; there is no upstream
-arithmetic to transliterate, only an upstream CONTRACT: non-transpose
+arithmetic to follow statement for statement, only an upstream CONTRACT: non-transpose
 mode, overdetermined only (`ASSERT(m > n)`), `A` copied so the caller's
 matrix survives, the solution written into the first `n` rows of `C` in
 place, one `devInfoArray` entry per problem.
@@ -20,7 +20,7 @@ matrix produces an unusable solution and NOTHING reads the failure code.
 The routine's factorization, its association order, and what it does with a
 tiny pivot are all unreadable.
 
-OURS (PORTING_RULES 0b-i, the same rule DEVIATION 674 was taken under).
+OURS (ENGINEERING_RULES 0b-i, the same rule DEVIATION 674 was taken under).
 HOUSEHOLDER QR WITH BACK SUBSTITUTION, one thread per series, serial
 ascending, every multiply-add `identical_mul_add`, every intermediate
 through `ftz`.
@@ -44,7 +44,7 @@ reasons:
      `kappa(A)`, not `kappa(A)^2`: the same problem loses about 3.5 digits
      instead of all of them.
   2. THE UPSTREAM DESIGN. cuBLAS `gelsBatched` is itself a QR-based solver.
-     `assume-our-code-is-broken` says theirs is right about DESIGN. Porting
+     `assume-our-code-is-broken` says theirs is right about DESIGN. Implementing
      the design means QR; substituting a normal-equations route because the
      tree happens to own one is exactly the "improvement" this repository
      bans.

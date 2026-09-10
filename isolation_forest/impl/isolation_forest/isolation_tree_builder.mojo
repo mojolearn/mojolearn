@@ -12,7 +12,7 @@ rapidsai/cuml v26.08.00, branch for branch and loop for loop:
 `traverse_global_tree` (`:342-355`), `compute_path_lengths_global_kernel`
 (`:357-375`) and `build_isolation_forest_global` (`:377-420`). The
 compaction pair (`:422-502`) is host bookkeeping for Treelite export and
-is NOT ported (NOT_IMPLEMENTED.tsv).
+is NOT implemented (NOT_IMPLEMENTED.tsv).
 
 Their design, kept: all trees in ONE launch (`<<<n_trees, 128>>>`), the
 subsample gathered into a contiguous per-tree buffer by every thread of
@@ -58,7 +58,7 @@ right_child;}` in one `rmm::device_buffer`. Ours: `node_feature` (Int32),
 `node_threshold` (Float32), `node_left` (Int32), `node_right` (Int32),
 same indices, same `tree_offsets`. WHAT is said is unchanged (every field,
 every index); HOW changed because a whole-struct load through a pointer
-in a kernel is a known Metal-compiler wall (PORTING_RULES.md rule 4) and
+in a kernel is a known Metal-compiler wall (ENGINEERING_RULES.md rule 4) and
 because the identity card hashes each field as its own dtype
 (`if.treeNNN.structure.{feat,thr,left,right}`), which a packed struct of
 mixed dtypes could not express without a byte view.
@@ -79,7 +79,7 @@ two DIFFERENT FORESTS from the same seed: not a rounding difference, a
 different tree.
 
 This is a REPRODUCIBILITY DEFECT OF THEIRS, and the standing rule is to
-fix it rather than port it. Fixed here by making the order explicit and
+fix it rather than implementation it. Fixed here by making the order explicit and
 naming it: the first draw is the high word (two named locals, so no
 reader and no compiler has a choice left). That is also what the Python
 reference (`checks/xorwow_reference.py`) and the host oracle assume,
@@ -220,7 +220,7 @@ def curand_u64(mut rng_state: curandStateXORWOW) -> UInt64:
     word. Theirs is one expression, `(static_cast<uint64_t>(curand(s)) <<
     32) | curand(s)`, whose two operands C++ leaves UNSEQUENCED -- there
     is no spelling in Mojo (or in any language) that reproduces "either
-    order", so the order is a choice this port had to make and name."""
+    order", so the order is a choice this implementation had to make and name."""
     var first = UInt64(curand(rng_state))
     var second = UInt64(curand(rng_state))
     comptime if SAB_U64_SWAP:
@@ -396,7 +396,7 @@ def build_tree_iterative_global(
                 observed_max_depth if observed_max_depth > depth else depth
             )
 
-            # `:158`, ported verbatim. THIS BRANCH IS UNREACHABLE, and the
+            # `:158`, implemented verbatim. THIS BRANCH IS UNREACHABLE, and the
             # proof is short enough to keep next to it so nobody writes a
             # gate that can never fire (adjudicated 2026-08-24; the
             # repo-wide card audit flagged it as a possible dangling-node
@@ -754,7 +754,7 @@ def build_isolation_trees_global_kernel(
     )
 
     # The stream POSITION this tree finished at. `if.rng.probe` verifies the
-    # PORT (that our XORWOW is cuRAND's); this verifies that a tree consumed
+    # IMPLEMENTATION (that our XORWOW is cuRAND's); this verifies that a tree consumed
     # the draws we think it did. A vendor that took one extra rejection in
     # `sample_bounded`, or one fewer, lands here and nowhere else.
     if tid == 0:

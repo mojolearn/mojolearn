@@ -13,7 +13,7 @@ round:
    {0,1}, {0.5,1}, {1,1} and one `FeatureFreq` at {0,1} -- and the two ctr
    types must get DIFFERENT binarization grids, Uniform 15 for Borders and
    MinEntropy 15 for FeatureFreq. The count is the assertion that matters:
-   a port that emits one column per cat feature is not slightly off, it is
+   an implementation that emits one column per cat feature is not slightly off, it is
    missing two thirds of what their learner splits on.
 2. **TARGET BINARIZATION**, against CatBoost's own borders in
    `bench/ctr_target_oracle.txt`, at budgets 1, 2 and 3. Budget 1 is the

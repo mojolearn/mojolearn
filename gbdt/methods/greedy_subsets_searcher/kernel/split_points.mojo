@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Reorder each leaf's index range so its two children are contiguous.
 
-PORT OF `catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu`
-at CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu`
+at CatBoost `54a8143a`. Followed statement for statement.
 
 This is what keeps `TDataPartition{Offset, Size}` true after a split. A leaf
 IS a contiguous range, so splitting one means physically partitioning its
@@ -96,7 +96,7 @@ def split_and_make_sequence_kernel(
 
     # `const TCFeature feature = Ldg(splitFeatures + blockIdx.y);`
     #
-    # Their signature is ONE `const TCFeature*`. The port used to carry the
+    # Their signature is ONE `const TCFeature*`. The implementation used to carry the
     # four fields as four parallel arrays, which is four pointers derived
     # from one allocation, and `enqueue_function` refuses those as aliasing
     # mutable arguments. Matching their type fixes that structurally.
@@ -134,7 +134,7 @@ def split_and_make_sequence_kernel(
             if at < size:
                 # `loadIndex[k] = loadIndices ? __ldg(loadIndices + i +
                 #  k * BlockSize) : i + k * BlockSize` (`split_points.cu:511`).
-                # The port always carries the array; the root seeds it with
+                # The implementation always carries the array; the root seeds it with
                 # the identity.
                 var load_index = Int(ldg(load_indices + (offset + at)))
                 # `featureVal[k] = __ldg(compressedIndex + loadIndex[k]) &
@@ -184,7 +184,7 @@ def update_partitions_after_split_kernel(
     writes both partitions; only one can, because a sorted flag array has
     exactly one transition.
 
-    **`partsCpu` is part of the port and is NOT DONE YET.** They write the
+    **`partsCpu` is part of the implementation and is NOT DONE YET.** They write the
     new partitions to device memory AND to pinned host memory in the same
     store (`split_points.cu:372`, `:379`), so the host learns every leaf's
     size with no device-to-host copy at all. That is what lets the next
@@ -192,7 +192,7 @@ def update_partitions_after_split_kernel(
     without a readback in the critical path.
 
     The kernel here takes `host_offset` / `host_size` and writes them, so the
-    device half is ported. What is missing is the driver allocating those as
+    device half is implemented. What is missing is the driver allocating those as
     PINNED host memory rather than ordinary device buffers, which is where
     the trick actually pays. Listed in archive/plans/UNWIRED.md.
     """
@@ -369,7 +369,7 @@ def split_points_grid_x(n_leaf_slots: Int, sm_count: Int) -> Int:
     ties an occupancy knob to the row count, which is the one thing the
     stride already handles.
 
-    `replication_for` in `greedy_search_helper.mojo` ports the histogram
+    `replication_for` in `greedy_search_helper.mojo` implements the histogram
     kernels' shape of the same idea (`hist_binary.cu:95`), which is
     `blocksPerSm * SMCount()` divided out over the other grid axes. This is
     their OTHER shape, and it is written the way their file writes it rather
@@ -427,7 +427,7 @@ def copy_in_leaves_kernel(
     Note both sides stride by `lineSize`, theirs too. Their SINGLE-LEAF
     `CopyLeafImpl` (`split_points.cu:269`) writes `dst + i + k * size`, a
     COMPACTED scratch stride, because it scratches one leaf. That variant is
-    not ported (there is no single-leaf split path here), and its stride must
+    not implemented (there is no single-leaf split path here), and its stride must
     not be mixed into this one.
     """
     var stat_base = Int(stat_base_in)
@@ -445,7 +445,7 @@ def copy_in_leaves_kernel(
         for k in range(num_stats):
             # `WriteThrough(dst + i + k * lineSize,
             #  __ldg(src + i + k * lineSize))` (`split_points.cu:42`). The
-            # LOAD half ports; the store half has no Mojo spelling, which is
+            # LOAD half implements; the store half has no Mojo spelling, which is
             # the deviation block on `gather_inplace_kernel`.
             dst.unsafe_store(
                 offset + i + k * line_size,
@@ -587,7 +587,7 @@ def gather_index_in_leaves_kernel(
 #: DEAD. The whole else-branch is only entered when `maxLeafSize <= 1024`
 #: (`split_points.cpp:65`), so `maxLeafSize > 6144`, `> 3072` and `> 1024` can
 #: never be true inside it and `FAST_PATH(1024)` is the only reachable arm.
-#: Only 1024 is ported. The other three are noise in their file, not a
+#: Only 1024 is implemented. The other three are noise in their file, not a
 #: capability we are missing.
 comptime GATHER_INPLACE_SIZE = 1024
 
@@ -622,7 +622,7 @@ def gather_inplace_kernel(
     Four launches become one for every leaf that fits, and the criterion is
     the LEAF, not the dataset: whatever `n_rows` is, the level eventually gets
     fine enough that every leaf takes this path and the levels after it are
-    the many-leaves levels, where the launch count hurts most. This port
+    the many-leaves levels, where the launch count hurts most. This implementation
     measured about 30 ms of every 129 ms tree as fixed per-level launch
     overhead; this is aimed at it.
 
@@ -946,9 +946,9 @@ def update_partition_stats_from_split_kernel(
     """Both children's partition stats from the split record. FAST ARM ONLY.
 
     ===================== DEVIATION 1901 =====================
-    THE OTHER HALF OF `TSplitPointsKernel`, REPLACED RATHER THAN PORTED.
+    THE OTHER HALF OF `TSplitPointsKernel`, REPLACED RATHER THAN IMPLEMENTED.
     Their split updates `subsets->PartitionStats` inside the split ("Update
-    part stats", `split_properties_helper.cpp:918`); this port never carried
+    part stats", `split_properties_helper.cpp:918`); this implementation never carried
     that half, and the driver instead re-reduces EVERY leaf's rows at the top
     of EVERY level (`compute_partition_stats` over `d_all_ids`,
     `greedy_search_helper_depthwise.mojo` DEVIATION 352) -- an
@@ -962,7 +962,7 @@ def update_partition_stats_from_split_kernel(
     (`cuda_best_split_finder.cu:434-443`), and pay O(1) per split for the
     same information.
 
-    This kernel is that mechanism on this port's planes. The split leaf's
+    This kernel is that mechanism on this implementation's planes. The split leaf's
     slot holds its SCANNED histogram (built when the leaf was scored, and a
     leaf splits only after it was scored), so the winning cell's inclusive
     prefix IS the sum over the rows that fail the `>` test -- exactly the
@@ -1037,7 +1037,7 @@ def update_partition_stats_from_split_kernel(
 #
 # `split_points.cu:658-689` calls `cub::DeviceRadixSort::SortPairs` once per
 # leaf, from a host loop, to sort each leaf's range by the split flag. There
-# is no CUB in Mojo, so there is no line-for-line port of that call and a
+# is no CUB in Mojo, so there is no line-for-line implementation of that call and a
 # reviewer diffing this file against theirs will find no counterpart for what
 # follows. It lives HERE rather than in `checks/` because it replaces a
 # step of THIS module, and moving it elsewhere would leave the reorder
@@ -1076,7 +1076,7 @@ def update_partition_stats_from_split_kernel(
 #: `const int blockSize = 512` with `const int N = 1`, the shape they reorder
 #: at (`split_points.cu:722-723`, and again `reorder_one_bit.cu:35-36`). It
 #: was 256 here, which put this file and `gpu_util/kernel/reorder_one_bit.mojo`
-#: -- the same partition, ported twice -- on two different block sizes.
+#: -- the same partition, implemented twice -- on two different block sizes.
 comptime PARTITION_BLOCK = 512
 
 

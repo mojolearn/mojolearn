@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What the worker can be asked to do, and the tag it dispatches on.
 
-PORT OF `catboost/cuda/cuda_lib/task.h` at CatBoost `54a8143a`, plus the two
+FOLLOWS `catboost/cuda/cuda_lib/task.h` at CatBoost `54a8143a`, plus the two
 command payloads that live in `tasks_impl/request_stream_task.h`.
-Transliterated where it transliterates. See the DEVIATION BLOCK.
+Followed statement for statement where it follow statement for statements. See the DEVIATION BLOCK.
 
 `ECommandType` is not decoration. `gpu_single_worker.cpp:69-141` is a
 `switch (task->GetCommandType())` with one case per value, and the two cases
@@ -291,7 +291,7 @@ def request_stream_command() -> TCommand:
     into a promise the caller already holds
     (`TRequestStreamCommand::SetStreamId` -> `StreamId.SetValue(id)`,
     `request_stream_task.h:41-43`), and the promise half of their design is
-    `future/local_promise_future.h`, which is not ported. See NOT_PORTED.md.
+    `future/local_promise_future.h`, which is not implemented. See `gbdt/NOT_IMPLEMENTED.tsv`.
     `TCudaManager.request_stream` therefore calls `request_stream_impl`
     straight, which is the same code the case runs.
     """

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Host <-> device copies for the spectral lane. Plumbing, not a port: RAFT
+"""Host <-> device copies for the spectral lane. Plumbing, not an implementation: RAFT
 receives device pointers and never uploads anything. The same four helpers
 `metrics/checks/device_io.mojo` carries (a copy, not an import: metrics/
 is frozen and this lane must not depend on an edit there)."""

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which ONE leaf Lossguide splits next, and when it stops.
 
-PORT OF the `EGrowPolicy::Lossguide` arms of
+FOLLOWS the `EGrowPolicy::Lossguide` arms of
 `catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp` at
-CatBoost `54a8143a`. Transliterated. Do not improve.
+CatBoost `54a8143a`. Followed statement for statement.
 
 ============================ DEVIATION 316 ============================
 **Theirs is ONE file and ours is three.** `TGreedySearchHelper` holds every
@@ -16,8 +16,7 @@ The reason is a checkout state, not a design: `greedy_search_helper.mojo` was
 mid-edit by a third session when both non-symmetric lanes opened, and a lane
 that edits another lane's live file trades a merge conflict for a silent
 overwrite. **This split folds back into `greedy_search_helper.mojo` when that
-file is quiet**, and `DERIVATION_MAP.tsv` points all three rows at the same
-upstream file so the fold is a rename and not an archaeology exercise.
+file is quiet**.
 =======================================================================
 
 ===================== DEVIATION 319, CLOSED =====================
@@ -121,7 +120,7 @@ def find_best_leaf_to_split(leaves: List[TLeaf]) raises -> Int:
     Lossguide tree therefore keeps splitting after every remaining split
     makes the objective worse**, until `MaxLeaves` or `IsTerminalLeaf`
     stops it. That is their design and it is what `max_leaves` is FOR. A
-    port that "helpfully" added `score < 0` here would grow smaller trees
+    implementation that "helpfully" added `score < 0` here would grow smaller trees
     than CatBoost on every dataset and would look like a tuning difference
     rather than a defect.
 
@@ -130,12 +129,12 @@ def find_best_leaf_to_split(leaves: List[TLeaf]) raises -> Int:
     (`gpu_structures.h:80-93`). On this path the two fields hold the SAME
     number -- `ComputeOptimalSplit` assigns `bestScore = gain; bestGain =
     gain` (`compute_scores.cu:468-472`) where the OBLIVIOUS kernel assigns
-    `bestScore = score; bestGain = gain` (`:142-144`) -- so this port,
+    `bestScore = score; bestGain = gain` (`:142-144`) -- so this implementation,
     which carries one number, is correct here and would NOT be if these
     records ever came from the oblivious kernel. Checked against their
     source, not assumed.
 
-    ============ THE SIGN, AND IT IS NOT THIS PORT'S ============
+    ============ THE SIGN, AND IT IS NOT THIS IMPLEMENTATION'S ============
     **A `TLeaf.best_split` HOLDS THEIR SIGN, NOT OURS.** The kernel's gain is
     theirs negated (see `kernel/compute_scores.mojo`'s sign block), but the
     HOST REDUCE negates it back before storing:
@@ -149,7 +148,7 @@ def find_best_leaf_to_split(leaves: List[TLeaf]) raises -> Int:
     comparison. Both of those only make sense on their sign.
 
     So the record that reaches this function is CatBoost's own number and
-    their code ports VERBATIM: an ARGMIN with strict `<`, seeded at `+inf`.
+    their code implements VERBATIM: an ARGMIN with strict `<`, seeded at `+inf`.
 
     **THIS FUNCTION WAS WRITTEN AS AN ARGMAX AND WAS WRONG.** I reasoned "our
     kernel's sign is flipped, so flip the comparison" and never traced the
@@ -214,7 +213,7 @@ def select_leaves_to_split_traced(
     """`select_leaves_to_split` with the LEAF QUEUE and the WINNER on the
     identity-trace ladder. Same decision, verbatim -- it delegates.
 
-    NOT A PORT, like everything on the ladder: CatBoost ships one GPU backend
+    NO REFERENCE FILE, like everything on the ladder: CatBoost ships one GPU backend
     and needs no cross-backend address for a diverging bit. The two stages
     this adds are the ones `archive/research/LOSSGUIDE.md`'s stage table owed and the driver's
     existing records cannot supply:
@@ -268,7 +267,7 @@ def find_max_depth(leaves: List[TLeaf]) raises -> Int:
 
     Read twice per iteration by their `ComputeOptimalSplits` and
     `SplitLeaves`, both times only to index `FixedBinarySplits` and to
-    number a log line -- neither of which this lane ports. It is here
+    number a log line -- neither of which this lane implements. It is here
     because their loop is here and because the Lossguide log line's
     `iteration` is `subsets.Leaves.size()` and NOT this
     (`:596-600`), which is a distinction a reader will otherwise have to

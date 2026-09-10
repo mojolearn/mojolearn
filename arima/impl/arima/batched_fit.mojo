@@ -24,7 +24,7 @@ from a third party in the middle of a certified path would put the fitted
 coefficients outside anything this repository can reproduce or gate. The
 SHAPE is theirs and is kept -- host state machine per series, ONE BATCHED
 DEVICE EVALUATION per candidate point -- and the ALGORITHM is cuML's own
-L-BFGS, already ported in `glm/impl/glm/qn/`, re-spelled per series in
+L-BFGS, already implemented in `glm/impl/glm/qn/`, re-spelled per series in
 `arima/impl/arima/lbfgs_host.mojo`. Read that file's banner for why calling
 `glm::min_lbfgs` B times is not the answer; the short version is that it is
 typed on a concrete `GLMWithData`, it evaluates the objective itself from
@@ -34,7 +34,7 @@ inside the line search, and its vector work is device reductions sized for
 WHAT IS NOT scipy's, AND IS NOT PRETENDED TO BE. scipy's L-BFGS-B is not
 cuML's L-BFGS: it is a different line search (More-Thuente / `dcsrch`
 inside `mainlb`), a different history update and different stopping
-constants. Substituting cuML's own already-ported solver is a REAL
+constants. Substituting cuML's own already-implemented solver is a REAL
 DEVIATION and it means the iterate sequence differs from cuML's, not only
 the last bits. What is claimed is a converged maximum-likelihood fit that
 this repository can reproduce bit for bit on every vendor, gated against
@@ -597,7 +597,7 @@ def batched_fit(
     """`ARIMA.fit` (`arima.pyx:860-958`) with `method = "ml"`,
     `start_params = None`, `simple_differencing = True` and no exog, which
     is every arm this lane can reach. `method = "css"` and `"css-ml"` are
-    refused by name (the CSS log-likelihood is not ported); a caller-supplied
+    refused by name (the CSS log-likelihood is not implemented); a caller-supplied
     `start_params` is not offered, because `set_fit_params` has no door here
     yet.
 
@@ -612,7 +612,7 @@ def batched_fit(
     `params` is BOTH the scratch step 1 writes and the output step 5 fills,
     which is theirs (`self`'s own parameter arrays play both roles).
 
-    STEP 2 IS WHY DEVIATION 675's INVERSE HALF IS NO LONGER OFF THE PORTED
+    STEP 2 IS WHY DEVIATION 675's INVERSE HALF IS NO LONGER OFF THE IMPLEMENTED
     PATH. Until this function existed, nothing in the lane called
     `two_atanh`; `arima/README.md` recorded that and said the decision to
     accept `identical_log` rather than land `identical_log1p` inverts the

@@ -628,7 +628,7 @@ def check_linkage_entry_matches_stages() raises:
 
 
 def check_linkage_union_find_matches_a_naive_one() raises:
-    """DEVIATION 622. The ported `UnionFind` (textbook compression) and the
+    """DEVIATION 622. The implemented `UnionFind` (textbook compression) and the
     compression-free `NaiveUnionFind` return the same roots on every
     fixture's sorted MST, so the `children` rows are identical. Host only."""
     for fix in range(FIX_COUNT):
@@ -648,7 +648,7 @@ def check_linkage_union_find_matches_a_naive_one() raises:
             if ua != na or ub != nb:
                 raise Error(
                     "check_linkage_union_find_matches_a_naive_one "
-                    + fixture_name(fix) + ": row " + String(i) + " ported ("
+                    + fixture_name(fix) + ": row " + String(i) + " implemented ("
                     + String(ua) + "," + String(ub) + ") naive (" + String(na)
                     + "," + String(nb) + ")"
                 )
@@ -657,7 +657,7 @@ def check_linkage_union_find_matches_a_naive_one() raises:
             U.perform_union(ua, ub)
             N.union(na, nb)
         # and no slot outside [0, 2m-1) was ever touched: the List would
-        # have trapped; the ported find never indexes -1 or 2m-2 by design
+        # have trapped; the implemented find never indexes -1 or 2m-2 by design
         print(
             "check_linkage_union_find_matches_a_naive_one OK: "
             + fixture_name(fix) + " " + String(m - 1)
@@ -1308,7 +1308,7 @@ def check_linkage_signed_zero_mst() raises:
             )
         print(
             "check_linkage_signed_zero_mst [" + _mode_name() + "] OK: " + name
-            + ": " + got + " -- the -0.0 edge wins by KEY (-1 < 0), device ==" 
+            + ": " + got + " -- the -0.0 edge wins by KEY (-1 < 0), device =="
             " Kruskal bitwise, children == host dendrogram, MST block 256 == 64"
         )
 

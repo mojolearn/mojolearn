@@ -2,8 +2,8 @@
 
 GPU KernelDensity derived from cuML.
 
-`DERIVATION_MAP.tsv` identifies the ported upstream paths and `NOT_IMPLEMENTED.tsv` lists kernels,
-metrics, and options that are deliberately refused. `estimator.mojo` is the public Mojo surface.
+`NOT_IMPLEMENTED.tsv` lists kernels, metrics, and options that are deliberately
+refused. `estimator.mojo` is the public Mojo surface.
 
 ## Verify
 

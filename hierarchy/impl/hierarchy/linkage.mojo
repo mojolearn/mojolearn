@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """cuML's `ML::linkage::single_linkage`, the C++ entry.
 
-PORT OF `cuml/cpp/src/hierarchy/linkage.cu` and
+FOLLOWS `cuml/cpp/src/hierarchy/linkage.cu` and
 `cuml/cpp/include/cuml/cluster/linkage.hpp`, cuML `00094f7` (the
 `cuml-v26.08.00` checkout carries the same two files). cuML's file is a
 forwarder: it builds the mdspan views and calls
@@ -10,8 +10,8 @@ forwarder: it builds the mdspan views and calls
 `Linkage::KNN_GRAPH` when `use_knn` and `Linkage::PAIRWISE` otherwise, and
 `c` only when `use_knn` (`linkage.cu:16-42`). So is this.
 
-THE DEFAULTS, AND WHICH IS PORTED. `linkage.hpp:51-52` defaults
-`use_knn = false, c = 15`, and that PAIRWISE arm is rung 1, ported and
+THE DEFAULTS, AND WHICH IS IMPLEMENTED. `linkage.hpp:51-52` defaults
+`use_knn = false, c = 15`, and that PAIRWISE arm is rung 1, implemented and
 gated here. cuML's PYTHON layer defaults the other way --
 `AgglomerativeClustering(connectivity="knn")`, `agglomerative.pyx:123` --
 so their Python default path is the KNN_GRAPH arm, which is rung 2 and is

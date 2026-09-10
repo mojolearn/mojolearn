@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CityHash64, CatBoost's OWN variant. PORT OF `util/digest/city.cpp` at
+"""CityHash64, CatBoost's OWN variant. FOLLOWS `util/digest/city.cpp` at
 CatBoost `54a8143a`, the 64-bit unseeded entry point only -- the one
-function `VecCityHash` stands on (`libs/helpers/hash.h:6-9`, ported as
+function `VecCityHash` stands on (`libs/helpers/hash.h:6-9`, implemented as
 `vec_city_hash_u32` in `gbdt/methods/batch_feature_tensor_builder.mojo`,
 which is what keys a feature tensor here).
 
 THE TRAP THIS FILE EXISTS TO NOT FALL INTO: their `city.h` says it plainly
 -- "These functions provide CityHash 1.0 implementation whose results are
-*different* from the mainline version of CityHash." A port written from
+*different* from the mainline version of CityHash." An implementation written from
 Google's published CityHash (1.1+, which changed `HashLen0to16` and the
 mixing constants) or checked against any public CityHash test vector would
 be a DIFFERENT hash agreeing on nothing. Every function below is

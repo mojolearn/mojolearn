@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The TOTAL ORDER on MST edges, and why the MST needs one.
 
-NOT A PORT. RAFT's Boruvka (`raft/sparse/solver/detail/mst_solver_inl.cuh`,
+NO REFERENCE FILE. RAFT's Boruvka (`raft/sparse/solver/detail/mst_solver_inl.cuh`,
 `mst_kernels.cuh`) never needed this file because it breaks ties with a
 random alteration of the weights (`alteration()`, `:212-238`). This file is
 what replaces that alteration. Read the DEVIATION BLOCK below before
@@ -32,10 +32,10 @@ tie, BOTH edges are added in one round and the result can be a cycle, or
 an edge count above `v - 1` (the `RAFT_EXPECTS` at `:143`). The alteration
 makes all weights distinct so that cannot happen.
 
-WHY IT CANNOT BE PORTED AS-IS. Which of two equal-weight edges wins is
+WHY IT CANNOT BE IMPLEMENTED AS-IS. Which of two equal-weight edges wins is
 decided by `rand[row] + rand[col]`, a cuRAND XORWOW stream. There is no
-cuRAND on Metal or HIP, and even a faithful XORWOW port would make the MST
-a function of the RNG implementation rather than of the input: two
+cuRAND on Metal or HIP, and even a faithful XORWOW implementation would make the MST
+a function of the RNG implement it rather than of the input: two
 equal-weight edges are ordered by two random draws, and a second vendor
 with a second generator picks the other edge. The edge SET then differs,
 so the dendrogram differs, so the labels differ -- on EXACTLY the inputs a

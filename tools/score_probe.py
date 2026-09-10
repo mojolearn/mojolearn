@@ -4,13 +4,13 @@
 
 WHY THIS EXISTS
 ---------------
-`checks/oracle_check.mojo` found that our port's trees match CatBoost run
+`checks/oracle_check.mojo` found that our implementation's trees match CatBoost run
 with `score_function=L2` at depths 0 to 2, and diverge from CatBoost run at
 its DEFAULT `Cosine` at depth 0, the root. Depth 0 is one leaf holding every
 row, so the split is a pure argmax over a histogram both sides compute from
 identical inputs. There is nothing accumulated to blame.
 
-This script removes the GPU, the port and Mojo from the question entirely. It
+This script removes the GPU, the implementation and Mojo from the question entirely. It
 recomputes the ROOT split in numpy directly from the oracle's own data, using
 the formulas transcribed from `catboost/cuda/methods/kernel/score_calcers.cuh`,
 and prints the argmax for each score function in float64 and float32.
@@ -29,7 +29,7 @@ disagrees with their Cosine.
 
 That rules out three things at once. It is NOT float32 versus their double,
 because float64 gives the same answer. It is NOT our GPU kernel, because no
-kernel runs here. It is NOT the port's score-function selection, because this
+kernel runs here. It is NOT the implementation's score-function selection, because this
 script has no selection.
 
 WHAT IS RULED OUT ON THEIR SIDE, read from their source at 54a8143a

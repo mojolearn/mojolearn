@@ -34,12 +34,11 @@ it. `P0` is the stage most likely to move between vendors, because it is
 DEVIATION 674's hand-written LU where theirs is a closed cuBLAS batched
 `getrf`/`getri`.
 
-Not a port: cuML ships one backend and needs no card.
+Not an implementation: cuML ships one backend and needs no card.
 
 STATUS: RUN IN BOTH MODES ON THREE VENDORS. This file emits a 229-stage card
 (138 when it first ran on 2026-08-23; the 2026-08-24 round added the four
-DECISION stages, `Fs` and `P_final`). See `arima/README.md`'s status block,
-`arima/DERIVATION_MAP.tsv` and IDENTITY_PATHS row 58.
+DECISION stages, `Fs` and `P_final`). See `arima/README.md`'s status block and IDENTITY_PATHS row 58.
 
 THREE VENDORS, SAME COMMIT. At `221aa141` the e1 legs produced an
 `arima.identical.card` on an Apple M4, on an AMD MI325X and on NVIDIA, and

@@ -250,7 +250,7 @@ DEVIATION 831 splits "resumable" into two claims the references conflate:
    s < t the scale `γ_s + β'_{s+1}` using only tokens <= t, so per-token
    outputs are prefix-stable and the resumption replay reproduces them.
 2. **The upstream `Input_States` continuation** (four tensors in, S22's
-   correction) is SUPPORTED, transliterated, corpus-checked — and NOT
+   correction) is SUPPORTED, followed statement for statement, corpus-checked — and NOT
    claimed bit-equal to an unbroken prefill, not even at a chunk
    boundary. The argument: in an unbroken run the boundary token's K-row
    is folded ONCE at `pinned_mul(k, ftz(γ+β'))`; across the seam it is
@@ -369,7 +369,7 @@ The mamba2 gate list transposed; every command RUN OWED.
     owed by name: softplus band [8,14]; dd_A near 0 AND at -20000;
     trap saturating both directions; angle 2π-crossing; signed-zero
     plants BY SIGN BIT; nonzero-Input_States continuation (tolerance,
-    per section 5); L in {1, 4, 63, 64, 65, 129, 257}. 
+    per section 5); L in {1, 4, 63, 64, 65, 129, 257}.
     `pixi run check-mamba3-corpus`. RUN OWED.
 
 FAST-mode arms recorded, not asserted. Nothing above earns a
@@ -496,7 +496,7 @@ arithmetic lands on it. Then, smallest first, one gate per phase:
    (Apple and AMD MI325X/gfx942 at `c6e86966` -- the RUN RECORD at the end
    of this file); the NVIDIA column is RUN OWED.
 
-DERIVATION_MAP.tsv rows land WITH each file, not after.
+
 
 ---
 

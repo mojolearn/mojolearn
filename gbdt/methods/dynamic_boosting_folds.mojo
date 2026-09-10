@@ -3,14 +3,14 @@
 """The FOLD machinery of CatBoost's ORDERED boosting: `CreateFolds` and the
 fold/permutation structures immediately around it.
 
-PORT OF `catboost/cuda/methods/dynamic_boosting.h` at CatBoost `54a8143a`,
+FOLLOWS `catboost/cuda/methods/dynamic_boosting.h` at CatBoost `54a8143a`,
 lines `:75-119` (`TFold`, `TFoldAndPermutationStorage`), `:177-185`
 (`MinEstimationSize`), `:189-223` (`CreateFolds`) and `:283-289` / `:573-575`
 (the permutation counts the fold grid is sized by). Supporting reads:
 `catboost/cuda/gpu_data/samples_grouping.h:13-127` (`IQueriesGrouping` and its
 two implementations), `catboost/cuda/utils/helpers.h:3-6` (`CeilDivide`),
 `catboost/libs/helpers/math_utils.h:14-16` (`NCB::IntLog2`),
-`catboost/cuda/cuda_lib/slice.h:9` (`TSlice`). Transliterated. Do not improve.
+`catboost/cuda/cuda_lib/slice.h:9` (`TSlice`). Followed statement for statement.
 
 WHY THIS FILE IS ITS OWN THING, AND WHY IT NEEDS NO GPU
 ------------------------------------------------------
@@ -61,7 +61,7 @@ neither is duplicated here; this file only computes the two integers they take
 as input, and the check reads the existing helper to show the two offsets
 diverge at a real fold count.
 
-WHAT THIS FILE DELIBERATELY DOES NOT PORT
+WHAT THIS FILE DELIBERATELY DOES NOT IMPLEMENTATION
 -----------------------------------------
 * `TDynamicBoosting::Fit` (`:234-540`), the boosting loop itself.
 * `TFeatureParallelObliviousTreeSearcher` and `WriteFoldBasedInitialBins`'
@@ -86,7 +86,7 @@ with five pure virtuals and two implementations, `TWithoutQueriesGrouping`
 `const&` and dispatches virtually.
 
 OURS: one struct with a `kind` tag, built by `IQueriesGrouping.without_queries`
-or `IQueriesGrouping.queries`, dispatching on the tag. `PORTING_RULES` rule 4
+or `IQueriesGrouping.queries`, dispatching on the tag. `ENGINEERING_RULES` rule 4
 names this workaround: Mojo has no dynamic trait objects, and a tagged union
 is what their worker switches on anyway. NOT ARITHMETIC -- every one of the
 five accessors is transcribed branch for branch below.
@@ -245,7 +245,7 @@ struct IQueriesGrouping(Copyable, Movable):
     `GetQueryOffset` and `NextQueryOffsetForLine`. `GetQueryId` is here
     because `NextQueryOffsetForLine` is written in terms of it in their
     grouped implementation (`samples_grouping.h:123-129`), and `GetQuerySize`
-    because dropping one member of a five-member interface is how a port
+    because dropping one member of a five-member interface is how an implementation
     starts drifting.
     """
 
@@ -453,7 +453,7 @@ def min_estimation_size(doc_count: Int, min_fold_size: Int) -> Int:
     code and is gated.
 
     `Config.MinFoldSize` is `min_fold_size` here rather than a field, because
-    `TBoostingOptions` is not ported (`boosting_options.cpp:24` is its default,
+    `TBoostingOptions` is not implemented (`boosting_options.cpp:24` is its default,
     100, and it is a GPU-only option).
     """
     if doc_count < 500:
@@ -483,7 +483,7 @@ def create_folds(
     const IQueriesGrouping&)`; `Config.BoostingType`, `Config.MinFoldSize` and
     `NCudaLib::GetCudaManager().GetDeviceCount()` are members and a global
     there, and are parameters here so that both sides of every branch can be
-    reached from a check (`PORTING_RULES` rule 8). `growth_rate` is
+    reached from a check (`ENGINEERING_RULES` rule 8). `growth_rate` is
     `Config.FoldLenMultiplier` at the one call site (`:594`).
 
     WHAT `growth_rate` ADMITS. `CB_ENSURE(growthRate > 1.0)` here (`:202`) and
@@ -495,7 +495,7 @@ def create_folds(
     THE MULTI-DEVICE ARM (`:194-198`). Skipped at one device, which is every
     run this repository makes. It raises the first fold to the offset of group
     `min(16 * devCount, queryCount / 2)` so that each device has several
-    groups. Ported and parameterised so a check can run it; `dev_count` is
+    groups. Implemented and parameterised so a check can run it; `dev_count` is
     `GetDeviceCount()`.
 
     THE PLAIN ARM (`:204-208`). One fold, both slices `[0, sampleCount)`. Note
@@ -593,7 +593,7 @@ def fold_count_for_folds(fold_list_size: Int, boosting_type: EBoostingType) -> I
     every bin with 0. `initParts.size() == 1`.
 
     The DEVICE half of both -- `bins.Reset(...)` and the `FillBuffer` calls --
-    is not ported here. Only this count is, because it is what
+    is not implemented here. Only this count is, because it is what
     `TOptimizationSubsets.fold_count` and `fold_bits` are computed from.
     """
     if boosting_type == EBoostingType.Plain:
@@ -640,7 +640,7 @@ struct TFoldAndPermutationStorage[TData: Copyable & Deinitable](Movable):
     the shape this file exists to size: `FoldData[p]` has one entry per fold
     of permutation `p`, `Estimation` has none.
 
-    `Foreach` (`:114-118`) is NOT ported. It visits every fold entry and then
+    `Foreach` (`:114-118`) is NOT implemented. It visits every fold entry and then
     `Estimation`, and its two call sites sweep DEVICE buffers
     (`dynamic_boosting_progress.h`'s save/load). There are no device buffers
     on this path; `permutation_count`, `fold_count_for_permutation` and `get`
@@ -730,9 +730,9 @@ def learn_permutation_id(random_value: Int, learn_permutation_count_in: Int) -> 
     adds the model back to all three (`:447-465`). It is only the STRUCTURE
     SEARCH that never sees it.
 
-    This is transcribed, not corrected. `PORTING_RULES` 0b: copy, do not
+    This is transcribed, not corrected. `ENGINEERING_RULES` 0b: copy, do not
     improve. Whether the `- 1` is deliberate or a typo in their tree is not
-    this port's question to answer, and a port that quietly used
+    this implementation's question to answer, and an implementation that quietly used
     `% learnPermutationCount` would train a different model from CatBoost on
     the default configuration.
     """

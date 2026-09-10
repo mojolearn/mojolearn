@@ -24,7 +24,7 @@ per cell.
 THE THREE ARMS
 ---------------
 ARM 1 -- the generator, against RAFT's own source.
-  `PCGenerator` is the highest-risk construct in the port: one wrong bit
+  `PCGenerator` is the highest-risk construct in the implementation: one wrong bit
   moves a sampled row, a moved row moves a quantile, and a moved
   quantile moves every split threshold built on it. Nothing downstream
   would notice, so nothing downstream is trusted to. The expected values
@@ -76,7 +76,7 @@ THE COLUMNS, and what each one is for
                                  distinct values. The sort orders `-0.0`
                                  strictly before `+0.0` (bit order) and
                                  `thrust::unique` then collapses them
-                                 because `-0.0 == +0.0`. A port that
+                                 because `-0.0 == +0.0`. An implementation that
                                  deduped on bits, or that sorted with a
                                  `<` that calls them equal, differs here
                                  and nowhere else.
@@ -102,7 +102,7 @@ THE COLUMNS, and what each one is for
 
 WHAT IS NOT CHECKED HERE, said plainly
 ---------------------------------------
-  * The distributed arm. It is not ported (DEVIATION 108) and
+  * The distributed arm. It is not implemented (DEVIATION 108) and
     `compute_quantiles` raises on it; the raise is checked, the
     collectives are not, because there are none.
   * Any timing. Out of scope for this round by instruction.
@@ -155,7 +155,7 @@ def _expect_u64_stream() -> List[UInt64]:
     """`PCGenerator g(0, 0, 0); g.next_u64() x4`.
 
     The pairing arm: `next_u64` is `a | (b << 32)` with `a` drawn FIRST
-    (`rng_device.cuh:613-615`). A port that swapped them produces a
+    (`rng_device.cuh:613-615`). An implementation that swapped them produces a
     perfectly good stream that disagrees with every one of these.
     """
     return [
@@ -249,7 +249,7 @@ def reference_bin_index(bin: Int, sample_count: Int, max_n_bins: Int) -> Int:
     THIS FUNCTION EXISTS BECAUSE A SABOTAGE CAUGHT ITS ABSENCE. The
     first version of this file imported `quantile_bin_index` from
     `quantiles.mojo` and used it to build the expected values. Deleting
-    their `- 1` from the port then ran the check GREEN: the sabotage
+    their `- 1` from the implementation then ran the check GREEN: the sabotage
     moved BOTH sides of the comparison by the same amount, so the
     comparison could not see it. A check that shares a mechanism with
     the thing it checks verifies that the mechanism is consistent with
@@ -514,7 +514,7 @@ def flush_subnormal(v: Float32) -> Float32:
       * the smallest NORMAL, `0x00800000`, behaves correctly in all of
         the above, so the boundary is exactly the subnormal range.
 
-    The consequence for this port is confined to ONE line: the
+    The consequence for this implementation is confined to ONE line: the
     `thrust::unique` comparison in `computeQuantilesBatchedKernel`
     (`quantiles.cuh:104`). The sort is unaffected -- it compares INTEGER
     keys, never floats, which is why arm 2 matches cell for cell on the
@@ -632,7 +632,7 @@ def reference_pipeline(
     an IEEE float32 device -- what their code computes. `True` adds the
     measured subnormal flush of THIS device to the `unique` comparison
     and nowhere else. Both are run and both are reported, because the
-    difference between them is not a defect in this port and must not be
+    difference between them is not a defect in this implementation and must not be
     hidden inside one number.
     """
     var global_rows = UInt64(n_rows)

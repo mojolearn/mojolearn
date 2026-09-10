@@ -8,8 +8,8 @@ the Python surface; this file is the entry it should reach, shaped like
 `kde/estimator.mojo::kde_score_samples_host` and
 `neighbors/estimator.mojo::knn_search`.
 
-Nothing here is a port. `ivf/impl/` mirrors cuVS and is governed by COPY,
-DO NOT IMPROVE; this file is host-side policy cuVS has no counterpart for,
+Nothing here is an implementation. `ivf/impl/` mirrors cuVS and is governed by COPY,
+This file is host-side policy cuVS has no counterpart for,
 in the same category as `checks/`.
 
 THE POLICY CHOICES
@@ -20,7 +20,7 @@ THE POLICY CHOICES
    DEVIATION 1787 makes it a NUMERIC parameter: it decides which vectors
    are summed over, so it is part of the answer. A defaulted numeric
    parameter is an answer nobody chose. `IvfFlatSearchParams.default()`
-   still carries their 20 for anyone porting against their surface.
+   still carries their 20 for anyone implementing against their surface.
 
 2. **`n_probes > n_lists` RAISES; THEIRS CLAMPS.**
    `ivf_flat_search.cuh:331` does `std::min(params.n_probes,

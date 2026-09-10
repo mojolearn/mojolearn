@@ -170,7 +170,7 @@ def print_metrics(rf_metrics: RF_metrics):
     """`ML::print(const RF_metrics)`, `randomforest.cu:633-641`.
 
     Renamed; DEVIATION 119f. Theirs logs at DEBUG level through
-    `CUML_LOG_DEBUG` and this port has no logger, so it prints.
+    `CUML_LOG_DEBUG` and this implementation has no logger, so it prints.
     """
     if rf_metrics.rf_type == CLASSIFICATION:
         print("Accuracy:", rf_metrics.accuracy)
@@ -250,10 +250,10 @@ struct RF_params(ImplicitlyCopyable, Movable):
         reach the device from here and nowhere else. `criteria_check`
         arm F holds them to it.
         """
-        # `n_streams` IS honored since DEVIATION 117 was ported: the
+        # `n_streams` IS honored since DEVIATION 117 was implemented: the
         # forest loop pipelines that many trees over the one Metal queue,
         # mirroring their omp/stream pool (`randomforest.cuh:336-367`).
-        # The refusal that stood here guarded the serial port and is gone
+        # The refusal that stood here guarded the serial implementation and is gone
         # with it; no output bit depends on the value, because their
         # per-tree and per-node RNG is a pure hash of (seed, treeid[,
         # nodeid]) (`randomforest.cuh:120-122`,
@@ -292,7 +292,7 @@ def set_rf_params(
       * copy n_trees / bootstrap / max_samples / seed
       * `n_streams = min(cfg_n_streams, omp_get_max_threads())` -- the
         omp term models their host worker threads and drops out under
-        the pipelined loop (DEVIATION 117, PORTED)
+        the pipelined loop (DEVIATION 117, IMPLEMENTED)
       * clamp `n_streams` down to `n_trees` if there are fewer trees
         than streams (`randomforest.cu:585`) -- KEPT
       * `validity_check`
@@ -327,7 +327,7 @@ def set_rf_params(
     # and the omp term drops out; what survives is `randomforest.cu:585`,
     # the clamp to the tree count. (The old text here modeled their
     # non-OpenMP `#else` build, which pins n_streams to 1 -- that was the
-    # serial port's story and it is gone with it.)
+    # serial implementation's story and it is gone with it.)
     var n_streams = cfg_n_streams
     if n_trees < n_streams:
         n_streams = n_trees
@@ -374,7 +374,7 @@ def compute_max_features_log2(n_cols: Int) -> Float64:
     `n_sampled_cols` below). One ulp low at a power of two turns 4.0 into
     3.9999998 and takes a column away.
 
-    HISTORY. The first port called `std.math.log2`, which this repository
+    HISTORY. The first implementation called `std.math.log2`, which this repository
     measured at ~5e-8 absolute error on the float64 host path -- enough to
     cross that edge. The recorded fix was the host libm's `log2` through
     `external_call` (CPython's `math.log2` is libm's, so libm was the
@@ -511,7 +511,7 @@ def check_random_seed(random_state: Int) raises -> UInt64:
     `fnv1a32` directly, not `fnv1a32_combine`), so the high 32 bits are
     DISCARDED. That is lossless only because this check ran first and
     capped the seed below 2^32. A caller who reaches the C API directly
-    silently loses half their seed, and this port reproduces that
+    silently loses half their seed, and this implementation reproduces that
     truncation faithfully (`random_utils.mojo:107-120`).
 
     So this is not a bounds check for its own sake -- it is the reason the
@@ -608,7 +608,7 @@ def class_weight_explicit(
             raise ValueError(f"The classes, ..., are not in class_weight")
 
     A Mojo `Dict` keyed by an arbitrary label type has no counterpart here
-    -- this port's labels are already the indices `y_ind` holds -- so the
+    -- this implementation's labels are already the indices `y_ind` holds -- so the
     mapping becomes a full per-class vector and the partial-coverage error
     cannot arise. What CAN arise is the wrong length, which is refused.
 
@@ -694,10 +694,10 @@ def preprocess_labels(
     `[7, 3, 7, 3]` becomes `[0, 1, 0, 1]`, not `[1, 0, 1, 0]`.
 
     Their Python layer does its own label encoding and never calls this;
-    it is a C-API helper, and it is ported because it is part of that
+    it is a C-API helper, and it is implemented because it is part of that
     surface, not because anything here needs it.
 
-    `verbosity` is dropped -- this port has no logger (DEVIATION 119f).
+    `verbosity` is dropped -- this implementation has no logger (DEVIATION 119f).
     """
     if len(labels) < n_rows:
         raise Error(
@@ -771,7 +771,7 @@ def default_rf_params_classifier(n_cols: Int) raises -> RF_params:
     `split_criterion='gini'` maps to GINI
     (`randomforest_common.pyx:105-106`). `n_streams` is 4 in their
     default and is passed as 4 here so their clamp is the thing that
-    reduces it, not a value this port quietly substituted.
+    reduces it, not a value this implementation quietly substituted.
     """
     return set_rf_params(
         max_depth=INT32_MAX,
@@ -852,7 +852,7 @@ struct RandomForestMetaData[dtype: DType, label_dtype: DType](
     # --- OOB. NOT in their C++ struct ------------------------------------
     # These are Python ATTRIBUTES on the estimator, set by
     # `_compute_oob_score` (`randomforest_common.pyx:741-753`): the C++
-    # side only ever fills the mask buffer. This port has no Python layer,
+    # side only ever fills the mask buffer. This implementation has no Python layer,
     # so they land on the thing a fit returns. DEVIATION 311.
     #
     # `has_oob` is False unless `fit_forest(oob_score=True)` ran, and the
@@ -939,7 +939,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
     ):
         """`RandomForest::fit`, `randomforest.cuh:286-370`.
 
-        THIS USED TO RAISE. The body is now `fit_forest`, which IS the port
+        THIS USED TO RAISE. The body is now `fit_forest`, which IS the implementation
         of their `:286-370` -- error checking, `n_sampled_rows`, quantiles
         once for the whole forest, the row sampler, and the per-tree loop.
         It is a free function because the objective type has to come from
@@ -976,12 +976,12 @@ struct RandomForest[dtype: DType, label_dtype: DType](
     ) raises:
         """`RandomForest::predict`, `randomforest.cuh:382-436`.
 
-        Ported statement for statement. `input` is ROW-MAJOR
+        Implemented statement for statement. `input` is ROW-MAJOR
         (`randomforest.cuh:375`, and the indexing at `:407` proves it).
         """
         self.error_checking(n_rows, n_cols)
         # `randomforest.cu:482` -- the C-API wrapper's assert, hoisted
-        # here because this port has no separate wrapper layer.
+        # here because this implementation has no separate wrapper layer.
         if len(forest.trees) == 0:
             raise Error("Cannot predict! No trees in the forest.")
         if len(predictions) < n_rows:
@@ -1356,7 +1356,7 @@ def compute_oob_score[
 
       * PER-TREE PREDICTIONS. Theirs calls `nvforest_model
         .predict_per_tree(X)` (`:703`), the treelite/nvForest path this
-        port declines (DEVIATION 119b). Ours walks each tree on the host
+        implementation declines (DEVIATION 119b). Ours walks each tree on the host
         with `DecisionTree.predict_one`, which is the same traversal
         their `decisiontree.cuh:370-389` defines -- `<=` goes left, right
         is `left_child_id + 1`, a leaf adds its whole `vector_leaf` row
@@ -1526,7 +1526,7 @@ def compute_feature_importances[
 ) raises:
     """`ML::compute_feature_importances`, `randomforest.cu:799-860`.
 
-    Pure host code over `sparsetree`, so it ports whole. Their structure,
+    Pure host code over `sparsetree`, so it implements whole. Their structure,
     which is not the obvious one:
 
       * PER TREE, two parallel accumulators are built: `finite` (sum of
@@ -1825,7 +1825,7 @@ struct RowSampler(Movable):
     var weight_sum: Float64
     # `:224` -- `std::vector<rmm::device_uvector<int>> selected_rows_`,
     # ONE PER STREAM. The pipelined forest loop (DEVIATION 117) is their
-    # stream pool expressed on one queue, so the slot dimension is ported
+    # stream pool expressed on one queue, so the slot dimension is implemented
     # with it: each in-flight tree reads its own row buffer. `h_rows` is
     # DEVIATION 305's host staging and stays single -- the arms that use
     # it synchronize, so it is never live for two slots at once.
@@ -1863,7 +1863,7 @@ struct RowSampler(Movable):
         `n_trees_for_masks` is 0 when OOB was not asked for, which is
         their `bootstrap_masks == nullptr`. Theirs is allocated by the
         PYTHON layer (`randomforest_common.pyx:568`,
-        `cp.zeros((n_estimators, n_rows), bool)`) and passed in; this port
+        `cp.zeros((n_estimators, n_rows), bool)`) and passed in; this implementation
         has no Python layer, so `fit_forest` allocates it and hands the
         size here -- the same place the `n_bins` clamp went, and for the
         same reason (DEVIATION 309).
@@ -2068,7 +2068,7 @@ struct RowSampler(Movable):
         # the stream and `sample()` returns without a sync (`:163-165`);
         # everything that reads the mask or `selected_rows` is enqueued on
         # this same queue afterwards, so ordering is the queue's. A sync
-        # here was this port's own wait, with no counterpart in their
+        # here was this implementation's own wait, with no counterpart in their
         # source -- archive/reference/HOST_AND_DEVICE.md's rule two says exactly this wait
         # is in scope to delete. Nothing host-side reads the mask before
         # `fit_forest`'s post-loop synchronize.
@@ -2306,7 +2306,7 @@ def fit_forest[
 
     FLOAT32 FEATURES ONLY, and that is inherited rather than chosen here.
     cuML instantiates for `float` and `double` (their `-double.cu` TUs);
-    this port has no float64 on device at all, so `computeQuantiles` is
+    this implementation has no float64 on device at all, so `computeQuantiles` is
     float32-only upstream of this function and the `double` instantiations
     are declined where the bins are (DEVIATION 114). The LABEL type is
     `O.LabelT` and is free -- Int32 for classification, Float32 for
@@ -2318,7 +2318,7 @@ def fit_forest[
     1. **THE QUANTILES ARE COMPUTED ONCE FOR THE WHOLE FOREST** (`:317-325`),
        before the tree loop and outside it, from the FULL dataset and the
        FOREST's seed -- not per tree and not from the tree's bootstrap
-       sample. Every tree in the forest bins against the same edges. A port
+       sample. Every tree in the forest bins against the same edges. An implementation
        that recomputed them per tree would produce a defensible-looking
        forest that is not theirs, and nothing downstream would say so.
        Note also the hard-coded `4` at `:322`: `oversampling_factor` is a
@@ -2330,7 +2330,7 @@ def fit_forest[
        why `rf_params` is `mut`.
 
     The `#pragma omp parallel for num_threads(n_streams)` at `:337` is
-    DEVIATION 117, PORTED: K = n_streams trees pipelined over the one
+    DEVIATION 117, IMPLEMENTED: K = n_streams trees pipelined over the one
     queue (see the driver below), and no output bit depends on it because
     every tree's rows and every node's columns are pure hashes of
     `(seed, tree_id)` and `(seed, tree_id, node_id)`.
@@ -2389,7 +2389,7 @@ def fit_forest[
     # where n_rows is finally known -- not in `__init__`. Their C++ side
     # never checks it: `validity_check` only bounds it to (0, 1024]
     # (`decisiontree.cu:26-27`), so a C-API caller keeps whatever they
-    # passed. This port sits at the C-API shape but is the only door a
+    # passed. This implementation sits at the C-API shape but is the only door a
     # caller has, so the clamp lives here or nowhere, and without it the
     # quantile pass below asks for more bins than there are rows.
     if rf_params.tree_params.max_n_bins > Int32(n_rows):
@@ -2511,7 +2511,7 @@ def fit_forest[
             instr.trace.record_device(ctx, "forest.binned", d_bins)
 
     var has_sw = len(sample_weight_host) > 0
-    # DEVIATION 117, PORTED: cuML's shipped forest loop is
+    # DEVIATION 117, IMPLEMENTED: cuML's shipped forest loop is
     # `#pragma omp parallel for num_threads(n_streams)` over trees with a
     # stream pool (`randomforest.cuh:336-367`), and their Python default
     # is n_streams=4 (`randomforestclassifier.py:94`). One Metal queue and
@@ -2547,7 +2547,7 @@ def fit_forest[
     # MISS AND CHANGES THE MODEL. When bootstrapping, the weights are
     # already expressed by DRAWING rows in proportion to them, so feeding
     # them to the objective as well would apply them twice. When not
-    # bootstrapping, the objective is the only place they can act. A port
+    # bootstrapping, the objective is the only place they can act. An implementation
     # that always passed the weights down would double-count on the
     # default path and look merely "differently regularised".
     var objective_sees_weights = has_sw and not rf_params.bootstrap

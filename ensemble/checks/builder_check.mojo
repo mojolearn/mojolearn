@@ -44,7 +44,7 @@ comptime `sabotage` hook -- sabotaging a copy proves nothing about the
 original -- and each with its own predicted movement.
 
 TWO OF THE FIRST FOUR SABOTAGES FAILED, and both failures were defects in
-THIS FILE rather than in the port:
+THIS FILE rather than in the implementation:
 
   * the `break`-vs-`continue` arm measured nothing, because the two are
     genuinely equivalent (above). Replaced with one that drops the budget

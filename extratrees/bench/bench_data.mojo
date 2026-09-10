@@ -6,7 +6,7 @@ Both arms of every comparison read the SAME bytes off disk, and these are the
 functions the Mojo side reads them with. `sklearn_arm.py` takes the same
 subset the same way on the scikit-learn side.
 
-Nothing here is timed and nothing here is a port -- it is fixture handling, in
+Nothing here is timed and nothing here is an implementation -- it is fixture handling, in
 the same category as `checks/fixtures.mojo`.
 """
 
@@ -79,7 +79,7 @@ def dense_class_ids(
 
     THE MAPPING IS COMPUTED, NOT ASSUMED. covtype's fixture is 1-based and
     epsilon's is `-1 / +1`; a hardcoded `- 1.0` relabels one of them and a
-    `- min` turns epsilon into class ids `0` and `2`, which the port's
+    `- min` turns epsilon into class ids `0` and `2`, which the implementation's
     `class_ids_for` refuses by name and scikit-learn would silently accept as
     three classes with one empty. `numpy.unique(y, return_inverse=True)` is
     the same function on the scikit-learn side, and it sorts too, so the two

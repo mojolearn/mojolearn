@@ -290,7 +290,7 @@ def check_sum_order_is_visible(ctx: DeviceContext) raises:
     construction (pinned_sum.mojo::sabotage_shifted_host_tree_sum says
     why), so what is tried is what a launch-dependent partition would do:
     shift the chunk boundaries by 1, 7, 64 values. Serial is the fold a
-    naive port would write. A fixture that separated none of these would
+    naive implementation would write. A fixture that separated none of these would
     have no teeth."""
     print("check_sum_order_is_visible [" + _mode_name() + "]")
     var xs = hashed_floats(N, 5, -10, 10)

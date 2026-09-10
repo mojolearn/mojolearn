@@ -5,7 +5,7 @@ identity, launch invariance, signed zero, the card.
 
 DEVIATIONS 680-686's gates. The checks, in order:
 
-    check_if_xorwow_matches_curand     the ported XORWOW (`curand_init` ->
+    check_if_xorwow_matches_curand     the implemented XORWOW (`curand_init` ->
                                        `curand` -> `curand_uniform`) against
                                        `checks/xorwow_reference.tsv`: the
                                        first 1024 draws AND their uniform
@@ -546,7 +546,7 @@ def check_if_xorwow_matches_curand() raises:
 # ---------------------------------------------------------------------------
 # 1b. THE SAME REFERENCE, ON THE DEVICE
 #
-# `check_if_xorwow_matches_curand` above runs the port on the HOST. That is
+# `check_if_xorwow_matches_curand` above runs the implementation on the HOST. That is
 # not the stream the forest is built from: `curand_init` walks
 # `_curand_matvec_inplace` 160 bit-tests deep against a table in GLOBAL
 # memory, inside a kernel, and a GPU compiler that reassociates or

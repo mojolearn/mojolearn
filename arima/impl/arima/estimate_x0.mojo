@@ -3,13 +3,13 @@
 """`estimate_x0`, `start_params`, `arma_least_squares`, `test_invparams`:
 the starting point a `fit` needs before the optimizer can run.
 
-PORT OF `cuml/cpp/src/arima/batched_arima.cu` at cuML 265b9da6 (v26.08.00):
+FOLLOWS `cuml/cpp/src/arima/batched_arima.cu` at cuML 265b9da6 (v26.08.00):
 `test_invparams` (:628-657), `_arma_least_squares` (:664-839), `_start_params`
-(:845-946), `estimate_x0` (:948-1008). COPY, DO NOT IMPROVE, except at the
+(:845-946), `estimate_x0` (:948-1008). Followed closely, except at the
 one closed call, which is `b_gels` and is DEVIATION 678 in
 `arima/impl/linalg/batched/least_squares.mojo`.
 
-NOT PORTED FROM THIS CHAIN, refused by name: the `order.n_exog > 0` block of
+NOT IMPLEMENTED FROM THIS CHAIN, refused by name: the `order.n_exog > 0` block of
 `_start_params` (:857-931), which regresses the endogenous series on the
 exogenous ones and subtracts the fitted component. Exog is refused by
 `validate_order` for the whole lane, so that block cannot be reached; the
@@ -20,7 +20,7 @@ is likewise unreachable, because a non-finite `y` is refused by name.
 THE SEAM THIS FILE EXISTS TO GET RIGHT, AND WOULD GET WRONG BY COPYING
 =============================================================================
 `test_invparams` and `invtransform` are THE SAME MATHEMATICS WITH A
-DIFFERENT ASSOCIATION, and the already-ported `invtransform` spelling is the
+DIFFERENT ASSOCIATION, and the already-implemented `invtransform` spelling is the
 WRONG one to paste in here.
 
     test_invparams  (batched_arima.cu:645)

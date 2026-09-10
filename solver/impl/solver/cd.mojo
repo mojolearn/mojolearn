@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cuml/cpp/src/solver/cd.cuh` -- `cdFit` and `cdPredict`, coordinate descent
-for Lasso / ElasticNet (cuML 26.08.00, pinned in `solver/DERIVATION_MAP.tsv`).
+for Lasso / ElasticNet (cuML 26.08.00).
 
-COPY, DO NOT IMPROVE. The control plane below is `cdFit` line for line
+The control plane below is `cdFit` line for line
 (`cd.cuh:115-274`); every RAFT primitive it calls is under
 `solver/impl/{linalg,stats,glm,functions}/` with its own header, and the
 only thing cuML never needed -- a reduction whose shape is the same on
@@ -27,7 +27,7 @@ so what is minimized is `n_rows` times scikit-learn's ElasticNet objective
 and the two libraries agree on `alpha` and `l1_ratio` exactly (scikit-learn
 `_cd_fast.pyx` uses the same `l1_reg = alpha l1_ratio n`, `l2_reg = alpha
 (1 - l1_ratio) n` in its coordinate update). Their docstring is off by the
-factor `n`; the code is what is ported. Where they DIFFER is the stopping
+factor `n`; the code is what is implemented. Where they DIFFER is the stopping
 rule, the soft-threshold guard and `tol`'s default -- `solver/README.md`
 has the table.
 
@@ -332,14 +332,14 @@ def cd_fit_traced(
         raise Error(
             "Parameter sample_weight: REFUSED BY NAME. cd.cuh:136-163 and"
             " :240-251 (the weighted preprocess, the sqrt-weight scaling of"
-            " input and labels, and their undo) are not ported"
+            " input and labels, and their undo) are not implemented"
         )
     if shuffle:
         raise Error(
             "Parameter shuffle: REFUSED BY NAME (cuML selection='random')."
             " std::shuffle's algorithm is unspecified by the C++ standard,"
             " so cuML's permutation is not a pure function of its seed; only"
-            " the cyclic order (shuffle=false, selection='cyclic') is ported."
+            " the cyclic order (shuffle=false, selection='cyclic') is implemented."
             " See solver/impl/solver/shuffle.mojo"
         )
     if alpha < Float32(0.0):

@@ -17,7 +17,7 @@ Integer addition is associative and exact, so a fixed-point accumulation is
 order-independent by construction: however the partial sums combine — across
 lanes, across blocks, across vendors — the total is the same bits.
 
-THIS IS A PORT OF A PRECEDENT IN THIS REPOSITORY, NOT A NEW IDEA
+THIS FOLLOWS A PRECEDENT IN THIS REPOSITORY, NOT A NEW IDEA
 -----------------------------------------------------------------
 `checks/fixed_point.mojo` at the repository root already solves this for the
 GBDT learner, where CatBoost flushes histograms with a float `atomicAdd` that

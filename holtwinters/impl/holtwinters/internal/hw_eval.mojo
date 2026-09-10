@@ -77,7 +77,7 @@ hw_oracle.mojo` is written to the same rule, term for term.
 their shared-memory kernel indexes it `pseason[s * blockDim.x]` from
 `pseason + threadIdx.x`, the global one `pseason[s * batch_size]` from
 `pseason + tid`; both are PLACEMENT (no arithmetic) and the global one is
-the one ported (NOT_IMPLEMENTED.tsv). Its contents are a pure function of the
+the one implemented (NOT_IMPLEMENTED.tsv). Its contents are a pure function of the
 series, never of the block.
 """
 

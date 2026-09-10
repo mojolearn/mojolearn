@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Host oracles for the KPSS test. NOT A PORT.
+"""Host oracles for the KPSS test. NO REFERENCE FILE.
 
 Two oracles, written before the kernels were gated and gated first:
 

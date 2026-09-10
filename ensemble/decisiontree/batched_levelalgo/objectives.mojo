@@ -364,7 +364,7 @@ trait ObjectiveLike(Copyable & Deinitable):
     """What `buildHistogramsKernel`, `findBestSplitsKernel` and
     `leafKernel` require of `typename ObjectiveT`.
 
-    NOT A PORT OF A CUML CONSTRUCT. Their three kernels take an
+    NO CUML CONSTRUCT TO FOLLOW. Their three kernels take an
     unconstrained `typename ObjectiveT` and use it structurally:
     `::BinT` (`:296`, `:363`, `:219`), `NumClasses()` (`:307`, `:369`),
     `IncrementHistogram(...)` (`:341`, `:234`), `Gain(...)` (`:385`) and

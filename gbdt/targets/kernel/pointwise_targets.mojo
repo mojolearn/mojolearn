@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Pointwise objectives: value, first derivative, second derivative.
 
-PORT OF `catboost/cuda/targets/kernel/pointwise_targets.cu` at CatBoost
-`54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/targets/kernel/pointwise_targets.cu` at CatBoost
+`54a8143a`. Followed statement for statement.
 
 ## The two kernels, and their fork
 
@@ -69,7 +69,7 @@ from core.pinned_reduce import two_phase_halving_sum
 # IDENTICAL both route through the Cephes polynomials in
 # `checks/numerics.mojo` (measured <= 2 ulp, same bits everywhere).
 # The isfinite guard structure around the `log(1 + exp)` scores is kept
-# exactly as ported -- only the transcendental calls are routed. The
+# exactly as implemented -- only the transcendental calls are routed. The
 # routing covers `exp`/`log` only; Lq's `**` (their `__powf`/`powf`)
 # stays the stdlib operator and is recorded as row 12's open pow tail.
 #
@@ -176,7 +176,7 @@ def pinned_block_sum[block_size: Int](value: Float32) -> Float32:
     else:
         return block_sum[block_size=block_size](value)
 
-#: the pointwise objectives this port trains. Their `ELossFunction`
+#: the pointwise objectives this implementation trains. Their `ELossFunction`
 #: spellings: RMSE dispatches `TRmseTarget`; Logloss and CrossEntropy both
 #: dispatch `ApproximateCrossEntropy` (`pointwise_target_impl.h:333-345`),
 #: differing only in `UseBorder()` -- Logloss thresholds the target at the
@@ -214,9 +214,9 @@ comptime OBJECTIVE_MULTICLASS_OVA = 13
 #: and is deliberately NOT here: `TPointwiseTargetsImpl::Init`
 #: (`pointwise_target_impl.h:259-299`) has no `NumErrors` case, so its
 #: `default:` arm throws "Unsupported loss function" before training can
-#: reach it. It is a METRIC that borrows the target kernel, and this port
-#: has no metric path for it to arrive by. Porting the arm would leave a
-#: branch no caller reaches, which PORTING_RULES 3 forbids.
+#: reach it. It is a METRIC that borrows the target kernel, and this implementation
+#: has no metric path for it to arrive by. Implementing the arm would leave a
+#: branch no caller reaches, which ENGINEERING_RULES 3 forbids.
 
 
 def objective_from_name(name: String) raises -> Int:
@@ -256,7 +256,7 @@ def objective_from_name(name: String) raises -> Int:
     if name == "MultiClassOneVsAll":
         return OBJECTIVE_MULTICLASS_OVA
     raise Error(
-        "unknown loss '" + name + "': this port trains RMSE, Logloss,"
+        "unknown loss '" + name + "': this implementation trains RMSE, Logloss,"
         " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
         " Expectile, Tweedie, Huber, MultiClass and MultiClassOneVsAll"
     )
@@ -311,7 +311,7 @@ def objective_is_cross_entropy(objective: Int) -> Bool:
 # =========================================================================
 # THE OBJECTIVES: `Score`, `Der`, `Der2`, one comptime arm each.
 #
-# PORT OF the nine objective structs of `pointwise_targets.cu:11-240`.
+# FOLLOWS the nine objective structs of `pointwise_targets.cu:11-240`.
 # Theirs are C++ structs with three `__device__ __forceinline__` methods,
 # instantiated by `PointwiseTargetKernel`'s switch (`:447-519`) and passed
 # BY VALUE into the one generic kernel. Mojo has no zero-cost struct-by-
@@ -323,7 +323,7 @@ def objective_is_cross_entropy(objective: Int) -> Bool:
 # THEIR ONE FLOAT PARAMETER. Their kernel takes a single `float alpha`
 # (`:451`) and every parameterized objective reads it: Quantile/MAE/
 # LogLinQuantile/Expectile as the quantile level, Lq as `q`, Huber as
-# `delta`, Tweedie as `variancePower`. This port keeps that one slot.
+# `delta`, Tweedie as `variancePower`. This implementation keeps that one slot.
 # =========================================================================
 
 
@@ -542,7 +542,7 @@ def target_der2[objective: Int](
         # the E2 fixture (predictions in [-786, 669] for a target in
         # [3.7, 10.6]). Measured 2026-08-23; see DEVIATION 257
         # (`gbdt/options/catboost_options.mojo`) for the whole chain and
-        # for the one piece of it that WAS ours. Not a port defect; do
+        # for the one piece of it that WAS ours. Not an implementation defect; do
         # not "fix" this arm.
         var diff = t - p
         if abs(diff) < alpha:
@@ -585,7 +585,7 @@ def pointwise_target_kernel[
 
     ## Which of their two MSE kernels this is, because they have two
 
-    `MseImpl` (`pointwise_targets.cu:285-321`) is the obvious one to port
+    `MseImpl` (`pointwise_targets.cu:285-321`) is the obvious one to implement
     and it is UNREACHED IN THEIR OWN TREE. Its only entry point is
     `MseTargetKernel` (`:415-428`) behind `ApproximateMse`
     (`targets/kernel.h:828`), and `ApproximateMse` has no caller anywhere
@@ -596,7 +596,7 @@ def pointwise_target_kernel[
     `case ELossFunction::RMSE: TRmseTarget target;` (`:496-500`) out of
     `PointwiseTargetKernel`, which `ApproximatePointwise`
     (`targets/kernel.h:840`) launches. **The two kernels compute the same
-    three numbers**, term for term, which is why the RMSE port was
+    three numbers**, term for term, which is why the RMSE implementation was
     numerically right while its citation was wrong.
 
     ================= DEVIATION BLOCK =================
@@ -685,7 +685,7 @@ def pointwise_target_kernel[
     drifted rows can dominate `sum |der|` and drive the scale down until
     ordinary gradients quantize toward zero. CatBoost never meets this
     because it flushes histograms with a float `atomicAdd`, so there is no
-    source to port an answer from. `checks/pointwise_target_check.mojo`
+    source to implement an answer from. `checks/pointwise_target_check.mojo`
     measures the surviving resolution per objective; read it before
     trusting a fit on one of the three.
     """
@@ -815,7 +815,7 @@ def deterministic_sum_lanes_kernel[
     """Fold interleaved per-block partials in ONE FIXED ORDER.
 
     NO CATBOOST COUNTERPART: they accept the float atomic's arrival-order
-    nondeterminism in `functionValue`; this port cannot, because the
+    nondeterminism in `functionValue`; this implementation cannot, because the
     magnitudes feed `fixed_scale` and the dithered histograms behind the
     bit-reproducibility claim. One block; thread `t` walks slots
     `t, t + 256, ...` in ascending order and the shared tree fold has one
@@ -1056,7 +1056,7 @@ def cross_entropy_kernel[
 
 # =========================================================================
 # THE HOST DISPATCH: their `PointwiseTargetKernel` switch and the
-# CrossEntropy/Pointwise fork above it, both ported as host functions.
+# CrossEntropy/Pointwise fork above it, both implemented as host functions.
 #
 # `PointwiseTargetKernel` (`pointwise_targets.cu:447-519`) is a HOST switch
 # on `ELossFunction` that constructs the objective struct and launches the

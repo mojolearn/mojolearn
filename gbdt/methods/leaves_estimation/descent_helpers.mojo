@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Newton walker: iterate leaf values against an estimation oracle.
 
-PORT OF `catboost/cuda/methods/leaves_estimation/descent_helpers.{h,cpp}` at
-CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/leaves_estimation/descent_helpers.{h,cpp}` at
+CatBoost `54a8143a`. Followed statement for statement.
 
 BOTH ARMS. Their `TDirectionEstimator::UpdateMoveDirection` switches on
 `HessianBlockSize` (`descent_helpers.cpp:75-81`):
@@ -297,7 +297,7 @@ def newton_like_walker_estimate(
 ) raises -> List[Float32]:
     """The instrumented entry: the same walk, plus the two instruments.
 
-    NOT A PORT -- the walk is the overload above, called unchanged. What
+    NO REFERENCE FILE -- the walk is the overload above, called unchanged. What
     this adds, per the LEBILL pattern (PREP_BILL 2026-08-22 step 32):
 
     * the fit-level `StageTimes`' enabled flag is COPIED into the

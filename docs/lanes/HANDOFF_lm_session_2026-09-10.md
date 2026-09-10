@@ -2,7 +2,7 @@
 
 `LanguageModelTrainer(..., resident=True)` now retains an owned native
 DeviceContext and ByteTrainer across Python calls. This retains model weights,
-Adam state and workspaces. The default remains reconstruction per call pending
+Adam state and workspaces. The public API default remains reconstruction per call pending
 target-model and target-GPU timing qualification. No numerical kernel, fold,
 tolerance or attention dispatch changed. Trees untouched.
 
@@ -112,3 +112,53 @@ complete target-model steps under the same five-minute experiment deadline.
 GEMM occupancy and attention cost remain the largest qualified component gaps;
 Transformer numerical admission remains unresolved. No full-training wall-time
 forecast follows from this pilot.
+
+## Follow-up: adopt resident execution in the Metal capture runner
+
+The user requested using the improvement if a reasonably large pilot supports
+it. A second, larger-model pilot at commit `37b6b223` ran on the same M4:
+B1/L2048/DM384/H=KV6/HD64/FF1024, eight layers, V8192,
+**20,453,376 parameters**. These are synthetic token batches, not a trained
+corpus. Context length is representative; model size and vocabulary remain
+below the target 125M-scale workload. This is not target-model qualification.
+
+The entire process took **62.14 seconds** with a 300-second deadline, one
+warmup pair and three timed pairs, alternating order. Complete train_step
+medians were **8.11532 s reconstructed versus 6.76856 s resident**, or
+**16.60% less time**. All three paired resident calls were faster (10.2%, 9.5%,
+16.6%); all four comparisons including warmup matched full parameters, moments,
+flags, gradients and loss bytes, and step counters. Samples remain in the
+capture: reconstructed 8.69354/7.46476/8.11532 s; resident
+7.80687/6.75766/6.76856 s. This short result supports adoption in the measured
+Apple workflow, not a guaranteed 16% gain or a full-training forecast.
+Both-arm process maximum RSS was 4,832,346,112 bytes, not GPU peak memory.
+
+`tools/byte_lm_real_text_capture.py` now uses resident execution by default for
+Metal, including checkpoint continuation. `--no-resident` restores per-call
+reconstruction; `--resident` explicitly opts in on any supported vendor.
+CUDA/HIP defaults and the public constructor default stay unchanged. The
+capture runner remains the fixed real-text correctness fixture, not a
+125M training runner. Runtime metadata records the actual state lifetime.
+For generalized Apple training, use the already available API directly:
+
+```python
+trainer = LanguageModelTrainer(parameters, shape=config, resident=True)
+# Reuse trainer for successive train_step calls; close() releases GPU state.
+```
+
+As a separate memory cleanup, Python input-mutation admission now compares
+one byte snapshot at a time instead of materializing a second tuple containing
+all parameter/moment snapshots at once. Exact comparisons and the original
+immutable snapshots remain. This avoids two simultaneously live
+parameter-sized temporary byte strings (about 156 MiB at this pilot size),
+not the underlying transfers. No timing improvement is claimed for this
+cleanup; the larger pilot measured the preceding wrapper, retained with hashes.
+
+Validation: **100 host tests passed**, including failed-native-call and
+mutated-input controls. The actual Metal real-text runner completed one step
+with default resident execution and with `--no-resident`; all 19 numerical/data
+artifacts and the final checkpoint compared byte for byte (19 files total).
+These small runs verify runner wiring, not speed. Evidence:
+`bench/results/lm_session_adoption_2026-09-10/`. No opponent was run, and no
+opponent ratio changed. Next: consolidate redundant native state readbacks and
+bound token-by-vocabulary loss storage before a target-model pilot. Trees untouched.

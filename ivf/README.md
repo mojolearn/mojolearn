@@ -1,7 +1,6 @@
 # IVF
 
-GPU inverted-file indexing and search derived from cuVS. `DERIVATION_MAP.tsv` and
-`NOT_IMPLEMENTED.tsv` define provenance and scope.
+GPU inverted-file indexing and search. `NOT_IMPLEMENTED.tsv` defines the scope.
 
 ```bash
 pixi run check-ivf

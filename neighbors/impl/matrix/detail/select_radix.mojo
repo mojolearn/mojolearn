@@ -2,23 +2,22 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Radix top-k, one block per row.
 
-PORT OF `raft/matrix/detail/select_radix.cuh` at RAFT `9aa17e5`. Partial.
-Do not improve.
+FOLLOWS `raft/matrix/detail/select_radix.cuh` at RAFT `9aa17e5`. Partial.
 
 **THIS IS A `gbdt/` FILE WHOSE UPSTREAM IS RAFT, WHICH REFINES THE RULE IN
 `cluster/README.md`.** That rule said a RAFT call is not a `gbdt/` file
 because RAFT is a general library this tree does not mirror. That is still
 right for a call we merely STAND IN FOR, like `raft::linalg::norm`. It is
-wrong for a file we actually READ AND TRANSLITERATE, which is what this is,
+wrong for a file we actually READ AND FOLLOW STATEMENT FOR STATEMENT, which is what this is,
 and which makes it a derivative work of RAFT with the attribution duty that
 follows. The refined rule:
 
     a RAFT call we stand in for   ->  checks/, naming the call
-    a RAFT file we transliterate  ->  gbdt/,  with raft as its upstream
+    a RAFT file we follow statement for statement  ->  gbdt/,  with raft as its upstream
 
 WHY THIS ONE FIRST, AND THE OTHER ONE IS **NOT** RULED OUT
 ----------------------------------------------------------
-RAFT ships two top-k families. This file ported the radix one.
+RAFT ships two top-k families. This file implemented the radix one.
 
 **CORRECTED 2026-08-19.** This section used to say that
 `matrix/detail/select_warpsort.cuh`, the FAISS WarpSelect design, was **not
@@ -37,12 +36,12 @@ small one: `select_k-inl.cuh:38` routes `k > 256` to radix and `2 < k <= 256`
 to the warp family, so every k a k-NN user actually asks for (10, 50, 100)
 goes to warpsort in RAFT's own dispatch and radix is their second choice
 across the entire practical range. Nothing here has measured the two against
-each other, and warpsort IS now ported (`select_warpsort.mojo`) but cannot yet be instantiated at a launch site without crashing the compiler; see archive/plans/UNWIRED.md.
+each other, and warpsort IS now implemented (`select_warpsort.mojo`) but cannot yet be instantiated at a launch site without crashing the compiler; see archive/plans/UNWIRED.md.
 
 What remains TRUE about the choice made here: `select_radix.cuh` has **ZERO**
 warp intrinsics. Counted, not assumed. It synchronizes with
 `__syncthreads()` and counts with CUB block collectives, which is the pair
-Mojo has shipped all along, so it was the cheaper of the two to port and it
+Mojo has shipped all along, so it was the cheaper of the two to implement and it
 went first for that reason and no longer for the false one. The bar is not
 WarpSelect on an NVIDIA card, because that card cannot run here at all. The
 bar is `argpartition` on a CPU.
@@ -87,7 +86,7 @@ DEVIATIONS
    (`archive/reference/PORTING.md 1`) and makes the block scan exactly one element per thread.
    A pass costs a full sweep of the survivors, so this trades one extra pass
    for a much smaller scan. Measure before changing it.
-2. `vectorized_process` is not ported. It is a 16-byte-load optimization
+2. `vectorized_process` is not implemented. It is a 16-byte-load optimization
    whose only effect is bandwidth, and their own comment says they avoid it
    in two of the three branches because it costs registers.
 
@@ -105,7 +104,7 @@ What that bought: the loop ran 2 barriers x 8 rounds = **16 barriers per
 radix pass per row**, against one collective call. The counts are integers,
 so the result is bit-for-bit the same sequence the loop produced and there is
 no fidelity cost anywhere in it. The scan is now the same KIND of thing
-upstream's is, so it is ordinary ported code, not a substitution to declare.
+upstream's is, so it is ordinary implemented code, not a substitution to declare.
 See `archive/reference/VENDOR_LIBRARIES.md`.
 
 `Atomic.fetch_add` on the SHARED histogram is NOT in that category and stays.
@@ -187,7 +186,7 @@ def radix_topk_one_block_kernel(
     One block per row is what makes the counters and the histogram fit in
     shared memory and lets every synchronization be a `barrier()` instead of
     a grid-wide one. Their multi-block `radix_topk` exists for a single very
-    long row and is not ported.
+    long row and is not implemented.
     """
     var length = Int(len_in)
     var k = Int(k_in)

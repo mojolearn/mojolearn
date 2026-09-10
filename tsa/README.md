@@ -1,6 +1,6 @@
 # Time-series analysis
 
-Shared GPU time-series primitives and estimators. `DERIVATION_MAP.tsv` and `NOT_IMPLEMENTED.tsv`
+Shared GPU time-series primitives and estimators. `NOT_IMPLEMENTED.tsv`
 are the concise source of truth for supported behavior.
 
 ```bash

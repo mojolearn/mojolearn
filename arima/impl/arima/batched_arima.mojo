@@ -3,21 +3,21 @@
 """`batched_loglike`, `predict`, `batched_loglike_grad`, `batched_diff`: the
 C++ entry points the Python `ARIMA` class calls.
 
-PORT OF `cuml/cpp/src/arima/batched_arima.cu` at cuML 265b9da6 (v26.08.00):
+FOLLOWS `cuml/cpp/src/arima/batched_arima.cu` at cuML 265b9da6 (v26.08.00):
 `batched_diff` (:60-70), `predict` (:86-267), `batched_loglike` (the
 `ARIMAParams` overload :393-469 and the packed-vector overload :471-513),
-`batched_loglike_grad` (:515-591). COPY, DO NOT IMPROVE.
+`batched_loglike_grad` (:515-591).
 
-NOT PORTED, refused by name: `method == CSS` (`conditional_sum_of_squares`,
+NOT IMPLEMENTED, refused by name: `method == CSS` (`conditional_sum_of_squares`,
 `sum_of_squares_kernel` :270-391; only `MLE` is offered, `truncate` must
 be 0), `information_criterion` (:592-625), `detect_missing` (NaN is
 refused, not detected), exogenous regressors, `level > 0` (confidence
 intervals). See `arima/NOT_IMPLEMENTED.tsv`.
 
 CORRECTED 2026-09-01. This header used to list `estimate_x0` /
-`_start_params` / `_arma_least_squares` (`:627-1010`) as unported because
+`_start_params` / `_arma_least_squares` (`:627-1010`) as unimplemented because
 they reach cuBLAS `b_gels`, and to say "there is no `fit`". Both sentences
-are now false. That chain is ported in `arima/impl/arima/estimate_x0.mojo`,
+are now false. That chain is implemented in `arima/impl/arima/estimate_x0.mojo`,
 the closed `b_gels` is written out as a Householder QR (DEVIATION 678,
 `arima/impl/linalg/batched/least_squares.mojo`), the optimizer is
 DEVIATION 679 in `arima/impl/arima/batched_fit.mojo`, and `batched_fit` is
@@ -54,7 +54,7 @@ unordered against it and any of them may land its `0.0` AFTER. `d_y_p[0]`
 can therefore come back 0.0 instead of the prediction or the sentinel, on
 their hardware, for any batch of more than one series. It is a genuine
 data race with an observable result, it is in `arima/NOT_IMPLEMENTED.tsv` as an
-upstream defect, and the statement is not ported: `assume-our-code-is-
+upstream defect, and the statement is not implemented: `assume-our-code-is-
 broken`'s rule is to fix their bug rather than mirror it, and the fix here
 is to not write the cell at all.
 """
@@ -151,7 +151,7 @@ def _refuse_non_finite(
 ) raises:
     """Ours (ADDENDUM 11), as tsa's `kpss_test` does: theirs lets NaN in
     (`detect_missing`, the `isnan(yt)` arms) because NaN MEANS missing
-    there; missing observations are not ported, so a non-finite input is
+    there; missing observations are not implemented, so a non-finite input is
     refused by name instead of silently taking the missing-data arms."""
     var h = ctx.enqueue_create_host_buffer[DType.float32](n if n > 0 else 1)
     if n > 0:
@@ -164,7 +164,7 @@ def _refuse_non_finite(
             raise Error(
                 "batched_loglike: " + name + " contains a non-finite value at index "
                 + String(i)
-                + "; missing observations are not ported and are refused by name (arima/NOT_IMPLEMENTED.tsv)"
+                + "; missing observations are not implemented and are refused by name (arima/NOT_IMPLEMENTED.tsv)"
             )
     _ = h^
 
@@ -225,7 +225,7 @@ def in_sample_prediction_kernel(
     period2_in: Int32,
 ):
     """`:206-228`, one thread per series (DEVIATION 676 for the sentinel);
-    their `d_y_p[0] = 0.0` (`:207`) is the upstream race above, not ported."""
+    their `d_y_p[0] = 0.0` (`:207`) is the upstream race above, not implemented."""
     var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if bid >= Int(batch_size_in):
         return

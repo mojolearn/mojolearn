@@ -27,7 +27,7 @@ GATES:
       leaves no tail, offsets at 0 and at every residue class that matters.
   L2  `compute_histogram_2` over the same sweep. Its head quantum is 128 and
       its tail quantum is 64 -- they are NOT the same number, which is the
-      kind of asymmetry a port silently symmetrises.
+      kind of asymmetry an implementation silently symmetrises.
   L3  `compute_histogram_4` over the same sweep, head and tail both 128.
   L4  the three entry points agree with each other per bin. They load 1, 2
       and 4 points per iteration and must sum identically.
@@ -73,7 +73,7 @@ breaking the loop and watching the gate go red:
     `blockIdx.x % BLOCKS_PER_FEATURE`   cases cannot see it, which is
                                         exactly why L5 exists
   `_2`'s tail quantum symmetrised L2 only, 394 bins. Its head is 128 and
-    from 64 to 128                      its tail is 64; a port that made
+    from 64 to 128                      its tail is 64; an implementation that made
                                         them agree would look tidier and
                                         be wrong
 

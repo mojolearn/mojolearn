@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Every branch of `validity_check`, accepted and refused, one case each.
 
-`PORTING_RULES.md` rule 8: a switch is exercised on BOTH sides by a named case
+`ENGINEERING_RULES.md` rule 8: a switch is exercised on BOTH sides by a named case
 per side, with the value set explicitly inside the case. "The suite covers it"
 is not coverage. A validator is nothing but switches, so this file is a table:
 one accepted configuration per parameter at its boundary, and one refused
@@ -45,7 +45,7 @@ def main() raises:
 
     # --- the default must validate ---------------------------------------
     # Their documented default (max_depth = -1) does NOT, by their own
-    # assertion `decisiontree.cu:29`. This port takes the branch, not the
+    # assertion `decisiontree.cu:29`. This implementation takes the branch, not the
     # comment, so its default is a concrete depth and must pass.
     var d = DecisionTreeParams()
     assert_true(accepts(d), "the shipped default must pass its own validator")
@@ -154,7 +154,7 @@ def main() raises:
     for ok in [CRITERION_GINI, CRITERION_ENTROPY, CRITERION_MSE, CRITERION_END]:
         var p = DecisionTreeParams()
         p.split_criterion = Int32(ok)
-        assert_true(accepts(p), "a ported criterion must pass")
+        assert_true(accepts(p), "a implemented criterion must pass")
         accepted += 1
     for bad in [
         CRITERION_MAE,
@@ -166,7 +166,7 @@ def main() raises:
         p.split_criterion = Int32(bad)
         assert_true(
             not accepts(p),
-            "an unported criterion must be REFUSED, never downgraded to MSE",
+            "an unimplemented criterion must be REFUSED, never downgraded to MSE",
         )
         refused += 1
     for bad in [Int32(-1), Int32(8), Int32(9999)]:

@@ -3,8 +3,7 @@
 GPU PCA and dense SVD primitives derived from RAFT.
 
 The implementation uses explicit eigensolver and sign conventions so equivalent mathematical
-factorizations do not masquerade as bitwise-identical outputs. `DERIVATION_MAP.tsv` records
-provenance and `NOT_IMPLEMENTED.tsv` defines the supported boundary.
+factorizations do not masquerade as bitwise-identical outputs.tsv` defines the supported boundary.
 
 ## Verify
 

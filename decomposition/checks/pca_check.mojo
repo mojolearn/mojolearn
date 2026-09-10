@@ -121,7 +121,7 @@ def _latent(row: Int, k: Int) -> Float64:
     # makes every latent column an ARITHMETIC PROGRESSION differing only by a
     # constant offset, so the four columns were near-perfectly dependent, the
     # covariance was not `diag(v)`, and the planted eigenvalues were not the
-    # true ones. The check failed at 145 against a planted 100 and the port
+    # true ones. The check failed at 145 against a planted 100 and the implementation
     # was right. A fixture needs a real mixer, not a modular stride.
     var z = (
         UInt64(row) * 0x9E3779B97F4A7C15
@@ -856,7 +856,7 @@ def check_pca_wide() raises:
         # Gram matrix of non-orthogonal directions and have no closed form.
         # An earlier version of this check predicted `sd[k]^2 * n_cols / 3`,
         # which is what they would be if the loadings WERE orthogonal, and it
-        # failed at 787 against a predicted 1194. The port was right and the
+        # failed at 787 against a predicted 1194. The implementation was right and the
         # prediction was wrong.
         if r.explained_var[WIDE_RANK - 1] < 20.0 * r.explained_var[WIDE_RANK]:
             raise Error(
@@ -1211,7 +1211,7 @@ def check_sign_flip_rule_and_ties() raises:
     """The rule, and the tie the rule has to have an answer for.
 
     scikit-learn's `svd_flip(U, Vt, u_based_decision=False)` -- the
-    convention this port adopts, and the one cuML's `pcaFit` has none of --
+    convention this implementation adopts, and the one cuML's `pcaFit` has none of --
     is "make the entry of largest ABSOLUTE value positive". That rule is
     INCOMPLETE on its own: two entries can share the largest magnitude with
     opposite signs, and then "the" largest entry does not exist. Resolved by

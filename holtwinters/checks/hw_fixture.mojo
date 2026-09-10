@@ -3,7 +3,7 @@
 """Hashed fixtures for the Holt-Winters gates and the card, ASSEMBLED FROM
 INTEGERS.
 
-NOT A PORT. A host `level + trend * t + season + noise` chain is a
+NO REFERENCE FILE. A host `level + trend * t + season + noise` chain is a
 contraction decision (IDENTITY_PATHS row 32's lesson), so every value here
 is built in INTEGER arithmetic and converted exactly: the planted pattern
 and the hashed noise are small integers, the sum is far below 2^24, and the

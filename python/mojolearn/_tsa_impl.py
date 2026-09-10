@@ -23,12 +23,12 @@ WHAT IS NOT HERE, AND WHY IT IS NOT
                            own extension `_mojolearn_arima`, and has `fit`,
                            `predict` and `forecast`. This entry used to say
                            the lane had no `fit` because `estimate_x0` and
-                           the batched L-BFGS were unported; both landed
+                           the batched L-BFGS were unimplemented; both landed
                            2026-09-01 and the false paragraph is DELETED
                            (the deletion `arima/README.md`'s hand-off
                            section requested), not reworded.
     AutoARIMA              its `p / q / P / Q / k` search and the
-                           information-criterion arms are NOT PORTED
+                           information-criterion arms are NOT IMPLEMENTED
                            (`arima/NOT_IMPLEMENTED.tsv`). The differencing
                            half of that search IS here, as `kpss_test` and
                            `select_d`.
@@ -60,7 +60,7 @@ is a claim about the source and not a measurement of three GPUs.
 
 UPSTREAM IS RETIRING WHAT ExponentialSmoothing MIRRORS. The pinned tree's
 `holtwinters.pyx` carries a `.. deprecated:: 26.08` and says
-`cuml.tsa.ExponentialSmoothing` will be removed in cuML 26.12. The port is
+`cuml.tsa.ExponentialSmoothing` will be removed in cuML 26.12. The implementation is
 faithful to v26.08.00 and stays valid; what expires is the ability to
 check our numbers against a real cuML run.
 """
@@ -231,14 +231,14 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
                                   `seasonal_test="seas"`, which is
                                   statsmodels' STL on the host; that is not
                                   a GPU path in cuML either and it is not
-                                  ported (`tsa/NOT_IMPLEMENTED.tsv`). Pass the `D`
+                                  implemented (`tsa/NOT_IMPLEMENTED.tsv`). Pass the `D`
                                   you want.
         s               honored   seasonal period
         d_max           honored   None (the default) means `2 - D`, which
                                   is cuML's `d_options = range(0, 2 - D + 1)`
         pval_threshold  honored   default 0.05, cuML's
         the p/q/P/Q/k   REFUSED   auto_arima's information-criterion grid
-        search                    is not ported
+        search                    is not implemented
                                   (`arima/NOT_IMPLEMENTED.tsv`). The ARIMA
                                   fit it searches over EXISTS since
                                   2026-09-01 (`mojolearn.ARIMA`, backed by
@@ -332,7 +332,7 @@ class ExponentialSmoothing:
                                    beta / gamma is optimized. `ML::
                                    HoltWinters::fit` optimizes all three,
                                    so the arm is unreachable from cuML's
-                                   own surface; the port raises naming it
+                                   own surface; the implementation raises naming it
                                    rather than quietly running BFGS
                                    instead.
 
@@ -354,7 +354,7 @@ class ExponentialSmoothing:
                                   cuML writes this only in the arm its fit
                                   does not take.
 
-    A cuML DEFECT THAT IS PORTED FAITHFULLY AND NOT FIXED. When the line
+    A cuML DEFECT THAT IS IMPLEMENTED FAITHFULLY AND NOT FIXED. When the line
     search hits its iteration limit, `hw_optim.cuh:485-508` stores the LAST
     trial point rather than the one that minimized the loss. That is
     rapidsai/cuml#888 and it is flagged in their own comment. It is

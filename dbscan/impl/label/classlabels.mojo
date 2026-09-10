@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`make_monotonic`: renumber labels onto a monotonically increasing set.
 
-PORT OF `raft/label/detail/classlabels.cuh::make_monotonic` and
+FOLLOWS `raft/label/detail/classlabels.cuh::make_monotonic` and
 `map_label_kernel` at RAFT `661a3b8`. Replaced in its unique-value step; see
-deviation 33. Do not improve.
+deviation 33.
 
 WHY THIS IS NOT OPTIONAL, WHICH `dbscan/NOT_IMPLEMENTED.tsv` GOT WRONG
 ---------------------------------------------------------------
@@ -43,7 +43,7 @@ comptime LABEL_TPB = 256
 #   assigns `i + 1` for position `i`; an exclusive scan of the occupancy
 #   flags computes that same position without materializing the array. It is
 #   O(N) instead of O(N * n_clusters), and it needs neither a device sort nor
-#   a device stream-compaction, which is the only reason a port of their
+#   a device stream-compaction, which is the only reason an implementation of their
 #   literal route would have had to reach for a substitute at all.
 #   `MAX_LABEL` is excluded exactly as their `filter_op` excludes it (the
 #   caller passes `val == MAX_LABEL`); since `MAX_LABEL` sorts last in their

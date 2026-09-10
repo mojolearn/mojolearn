@@ -9,9 +9,8 @@ binding should reach, shaped like `cholesky/estimator.mojo` and
 `kde/estimator.mojo::kde_score_samples_host`.
 
 **THERE IS NO UPSTREAM GAUSSIAN PROCESS.** cuML, cuVS and RAFT implement
-none at the pinned commits, so `PORTING_RULES.md`'s COPY DO NOT IMPROVE does
-not apply here, because there is nothing to copy.
-`gaussian_process/DERIVATION_MAP.tsv` carries the grep. scikit-learn's
+none at the pinned commits, so `ENGINEERING_RULES.md` 0b's settled-answer rule does
+not apply here, because there is nothing to copy. scikit-learn's
 `sklearn/gaussian_process/_gpr.py` is the SEMANTICS reference and the ORACLE
 and is never the design source; every step below cites the line of it that
 says what the step means.
@@ -52,7 +51,7 @@ unit diagonal (`cholesky/README.md`'s first correction, and
 `kernels.mojo`'s header derives it), and in float32 `1.0 + 1e-10` rounds to
 exactly `1.0`: the gap above 1.0 is `2^-23 = 1.19e-7`, three orders of
 magnitude larger than the ridge. So on a float32 GP, sklearn's default ridge
-adds nothing at all, and a user who ported a working float64 script would
+adds nothing at all, and a user who implemented a working float64 script would
 get an unridged factorization and a pivot refusal with no idea why.
 `check_duplicate_inputs_need_the_ridge` asserts the no-op by bits.
 
@@ -289,7 +288,7 @@ def gp_validate_alpha(alpha: Float32) raises:
                 " ridge) and 0x"
                 + gp_hex32_bits(pinned)
                 + " (2^-20).\n"
-                "  If you are porting a scikit-learn script, its default"
+                "  If you are implementing a scikit-learn script, its default"
                 " is alpha=1e-10 and on this column that value is a NO-OP:"
                 " every kernel matrix here has a unit diagonal, the"
                 " float32 gap above 1.0 is 2^-23 = 1.19e-7, and 1.0 +"
@@ -380,7 +379,7 @@ def gp_validate_targets(y: List[Float32], n_train: Int) raises:
             + String(len(y))
             + " values for "
             + String(n_train)
-            + " training rows. **MULTI-OUTPUT IS NOT PORTED**"
+            + " training rows. **MULTI-OUTPUT IS NOT IMPLEMENTED**"
             " (gaussian_process/NOT_IMPLEMENTED.tsv, DEVIATION 1763):"
             " scikit-learn's fit accepts y of shape (n_samples, n_targets)"
             " and sums the per-target log marginal likelihoods"
@@ -450,13 +449,13 @@ def gp_validate_optimizer(
         )
     if normalize_y:
         raise Error(
-            "gpr_fit_host: refusing normalize_y=True. **NOT PORTED**"
+            "gpr_fit_host: refusing normalize_y=True. **NOT IMPLEMENTED**"
             " (DEVIATION 1764). scikit-learn centers and scales y by its"
             " training mean and standard deviation (_gpr.py:275-285) and"
             " undoes it in predict (_gpr.py:81, :100, :125). The scaling"
             " is a MEAN and a STANDARD DEVIATION over the training"
             " targets -- two folds over n values, and a fold is exactly"
-            " what IDENTITY_PATHS row 21 is about -- so porting it means"
+            " what IDENTITY_PATHS row 21 is about -- so implementing it means"
             " pinning two more summation orders and a division, and every"
             " predicted value passes through both. It is a real feature"
             " and it belongs in a later rung. Refused by name rather than"
@@ -676,7 +675,7 @@ def gpr_fit_host(
     # cannot pass one `DeviceBuffer` as two `mut` arguments of one call, and
     # `gp_kernel_matrix` needs both operands mutable because
     # `DeviceBuffer.unsafe_ptr()` is how every kernel in this repository
-    # receives a buffer. This is `PORTING_RULES` rule 4's shape: it changes
+    # receives a buffer. This is `ENGINEERING_RULES` rule 4's shape: it changes
     # HOW the call is spelled and not WHAT is computed -- the two buffers
     # hold identical bytes, so every cell of `K` is the same number it
     # would be -- and it costs `n_train * d` floats of device memory,
@@ -811,7 +810,7 @@ def _y_dot_alpha(
     argument.** Both `y` and `dual` are already on the host at this point --
     `cholesky_solve_host` returned one of them -- so a device round trip
     would upload two `n`-vectors and drain the queue to fold `n` products.
-    That is the shape of mistake `PORTING_RULES` rule 2's corollary
+    That is the shape of mistake `ENGINEERING_RULES` rule 2's corollary
     describes ("nine drains per level became two by DELETING our
     inventions"). `chol_logdet` is on the DEVICE for the opposite reason:
     its input is `diag(L)`, which is already there, and three lanes needed
@@ -1115,7 +1114,7 @@ def gpr_predict_host(
 # ===========================================================================
 # WHAT THIS LANE REFUSES, AS ENTRY POINTS RATHER THAN AS ABSENCES
 #
-# PORTING_RULES rule 3's other failure mode is an unported thing that is
+# ENGINEERING_RULES rule 3's other failure mode is an unimplemented thing that is
 # INVISIBLE. A caller reaching for classification or for posterior sampling
 # should meet a named refusal that says where the work went, not a missing
 # symbol and a guess.
@@ -1129,12 +1128,12 @@ def gpr_classify_host(
     y: List[Int32],
     kernel: GPKernelSpec,
 ) raises -> List[Int32]:
-    """`GaussianProcessClassifier`, scikit-learn `_gpc.py`. **NOT PORTED.**
+    """`GaussianProcessClassifier`, scikit-learn `_gpc.py`. **NOT IMPLEMENTED.**
 
     Always raises. DEVIATION 1766.
     """
     raise Error(
-        "gpr_classify_host: Gaussian process CLASSIFICATION is NOT PORTED"
+        "gpr_classify_host: Gaussian process CLASSIFICATION is NOT IMPLEMENTED"
         " (DEVIATION 1766, gaussian_process/NOT_IMPLEMENTED.tsv). This lane is"
         " rung 1: exact dense REGRESSION only.\n"
         "  It is not a thin wrapper over the regressor. scikit-learn's"
@@ -1157,11 +1156,11 @@ def gpr_classify_host(
 def gpr_sample_y_host(
     model: GPRegressor, x_star: List[Float32], n_star: Int, n_samples: Int
 ) raises -> List[Float32]:
-    """`sample_y`, scikit-learn `_gpr.py:502`. **NOT PORTED.** Always
+    """`sample_y`, scikit-learn `_gpr.py:502`. **NOT IMPLEMENTED.** Always
     raises. DEVIATION 1766's sibling; see `gaussian_process/NOT_IMPLEMENTED.tsv`.
     """
     raise Error(
-        "gpr_sample_y_host: sample_y is NOT PORTED"
+        "gpr_sample_y_host: sample_y is NOT IMPLEMENTED"
         " (gaussian_process/NOT_IMPLEMENTED.tsv). It draws from the full"
         " posterior COVARIANCE (scikit-learn _gpr.py:530 calls"
         " rng.multivariate_normal on predict(..., return_cov=True)), and"

@@ -853,7 +853,7 @@ def check_grad_matches_float64(ctx: DeviceContext) raises:
 
 def check_jones_inverse_is_below_the_fd_step() raises:
     """DEVIATION 675, REAFFIRMED WITH A MEASUREMENT NOW THAT `fit` PUTS THE
-    INVERSE ON THE PORTED PATH.
+    INVERSE ON THE IMPLEMENTED PATH.
 
     `arima/README.md` accepted `identical_exp` / `identical_log` for tanh
     and atanh, and said the reasoning inverts the day the optimizer lands,

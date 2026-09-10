@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A tree whose leaves do NOT all share one split list.
 
-PORT OF `catboost/cuda/models/non_symmetric_tree.h` (and its one-function
+FOLLOWS `catboost/cuda/models/non_symmetric_tree.h` (and its one-function
 `non_summetric_tree.cpp` -- their spelling of the basename, kept only in
-this citation) at CatBoost `54a8143a`. Transliterated. Do not improve.
+this citation) at CatBoost `54a8143a`. Followed statement for statement.
 
 This is the model `EGrowPolicy::Depthwise` and `EGrowPolicy::Lossguide`
 build, where `SymmetricTree` builds `TObliviousTreeModel`. The searcher is
@@ -29,12 +29,12 @@ walk accumulates as `bin += node.left_subtree` every time it goes right
 (`add_model_value.cu:378`). `leaves_count()` is `len(nodes) + 1` because a
 binary tree with L leaves has L-1 internal nodes (`non_symmetric_tree.h:36`).
 
-WHAT IS PORTED
+WHAT IS IMPLEMENTED
 --------------
 `TNonSymmetricTreeStructure` (nodes, split types, `LeavesCount`, `VisitBins`)
 and `TNonSymmetricTree` (structure, values, weights, dim). `GetHash`,
 `Rescale`, `ShiftLeafValues`, `UpdateLeaves`, `UpdateWeights` and
-`ComputeBins` are NOT written: the first is a hash-map key this port does not
+`ComputeBins` are NOT written: the first is a hash-map key this implementation does not
 need (see `data/leaf_path.mojo`), the next four are the boosting loop's and
 this lane does not own the boosting driver, and `ComputeBins` is the DEVICE
 apply, which lives with its kernel in `models/kernel/add_bin_values.mojo`
@@ -61,7 +61,7 @@ struct TVisitedLeaf(Copyable, Movable):
     (`model_builder`'s validation and the checks' leaf walk) both want the
     whole list anyway. A Mojo closure parameter would buy laziness that no
     caller uses and would make the walk's own state harder to read, which is
-    the opposite of what a transliteration is for.
+    the opposite of what a statement-for-statement match is for.
 
     THE COST IS BOUNDED AND STATED: one `TLeafPath` per leaf, so
     `O(leaves * depth)` host memory, on a host structure whose leaf count is

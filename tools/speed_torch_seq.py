@@ -35,7 +35,7 @@ same reason and its docstring is the longer argument.
 
 THE ATTENTION BACKEND IS NAMED, NEVER CHOSEN SILENTLY
 ======================================================
-Our port is EAGER: contract section 6 pins `eager_attention_forward` and
+Our implementation is EAGER: contract section 6 pins `eager_attention_forward` and
 excludes FlashAttention, SDPA and paged attention, because an online
 softmax's rescale count is the KV tile count, which is an execution-plan
 quantity. So:
@@ -555,7 +555,7 @@ class LlamaEager:
     def attention_eager(self, q, kfull, vfull, B, L):
         """EAF:204-210 spelled out, the mask ADDITIVE and by ABSOLUTE
         position, exactly as `eager_attention_forward` does it. This is the
-        arm our port is comparable with."""
+        arm our implementation is comparable with."""
         c = self.cfg
         H, HKV, hd = c["n_heads"], c["n_kv"], c["head_dim"]
         n_rep = H // HKV
@@ -849,7 +849,7 @@ def run_llama_row(torch, dev, lane, row, args, consts):
                 pick = lambda r: r
             elif lane == "mlp":
                 # The REAL mlp input: norm2(x + o_proj(attn)), taken from one
-                # untimed whole-block call, which is what our port's
+                # untimed whole-block call, which is what our implementation's
                 # `stages.norm2_out` holds when `llama_mlp_forward` reads it.
                 h2 = m.block(xin, kv, B, L, sdpa=sdpa)[4]
                 call = lambda m=m, h2=h2: m.mlp(h2)
@@ -1012,7 +1012,7 @@ def run_mamba_row(torch, dev, lane, row, args, consts):
             if lane == "mamba":
                 # The block with the fused scan in it. NOTE that this arm
                 # folds the gate INTO the scan (`z=gate`), which is what a
-                # deployment does and which our port refuses to do because
+                # deployment does and which our implementation refuses to do because
                 # seam S12 is a recorded stage of its own (DEVIATION 723).
                 # So this arm does the same MATH in fewer kernels, and that
                 # difference is part of what is being measured.
@@ -1027,7 +1027,7 @@ def run_mamba_row(torch, dev, lane, row, args, consts):
                     return x + o
                 pick = lambda r: r
                 note(lane, arm, "this arm fuses the z gate into selective_scan_cuda; "
-                                "our port keeps S12 as its own kernel (DEVIATION 723)")
+                                "our implementation keeps S12 as its own kernel (DEVIATION 723)")
             else:
                 def call(u=u, delta=delta, A=A, Bt=Bt, Ct=Ct, Dv=Dv):
                     return fused(u, delta, A, Bt, Ct, Dv, z=None, delta_bias=None,

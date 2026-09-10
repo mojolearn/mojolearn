@@ -5,8 +5,8 @@
 ## Provenance
 
 - [ ] Original `original` work; the file names the call or need it serves.
-- [ ] Derived/ported work; exact upstream file, commit and license are below,
-      and `DERIVATION_MAP.tsv` / `NOT_IMPLEMENTED.tsv` are updated.
+- [ ] Derived/implemented work; exact upstream file, commit and license are below,
+      and `NOT_IMPLEMENTED.tsv` are updated.
 - [ ] No implementation code changed.
 
 Upstream details:

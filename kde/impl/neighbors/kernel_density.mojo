@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """cuML's `KernelDensity`: the six log-kernels, their norms, the logsumexp.
 
-PORT OF cuML `python/cuml/cuml/neighbors/kernel_density.py` at cuML
+FOLLOWS cuML `python/cuml/cuml/neighbors/kernel_density.py` at cuML
 `00094f7` (the 25.08 Python layer: `*_log_kernel` at `:43-99`,
 `logVn`/`logSn`/`norm_log_probabilities` at `:112-141`,
 `logsumexp_kernel` at `:144-156`, `KernelDensity.fit` at `:220-262`,
-`KernelDensity.score_samples` at `:264-363`). Do not improve. Five
+`KernelDensity.score_samples` at `:264-363`). Five
 numbered departures: DEVIATIONS 600-602 (below), 603 (`logsumexp_kernel`)
 and 604 (the refusals above `kde_float32_min`).
 
@@ -17,14 +17,14 @@ and does ONE thing: it casts the enums and calls
 `cuvs::distance::kde(...)` (`kde.cu:45-55`); the Cython
 `kernel_density.pyx` (26.08) validates and forwards. The algorithm itself
 lives in cuVS 26.08, and the cuVS checkout this tree is pinned to
-(`PORTING_RULES.md` 0a: `upstream/cuvs` at `94c2819`, 25.08) predates it
+(`ENGINEERING_RULES.md` 0a: `upstream/cuvs` at `94c2819`, 25.08) predates it
 and has no `kde`. The 25.08 cuML Python file above IS the algorithm the
 26.08 fused kernel was written to reproduce -- the same six log-kernels
 with the same `FLOAT_MIN` sentinel, the same normalization, the same
 per-row logsumexp -- and is the version read symbol by symbol here.
 `kde/impl/kde/kde.mojo` carries the 26.08 entry's shape (enum values,
 signature, `sum_weights` passed in) over this algorithm. When cuVS 26.08
-is cloned the fused kernel is the next port; `kde/NOT_IMPLEMENTED.tsv` names it.
+is cloned the fused kernel is the next implementation; `kde/NOT_IMPLEMENTED.tsv` names it.
 
 THE SIX LOG-KERNELS, TRANSCRIBED WITH THEIR CUPY SEMANTICS
 ----------------------------------------------------------
@@ -53,7 +53,7 @@ three, and sklearn is the oracle for SEMANTICS, not bits):
 
 The whole thing is FLOAT32 (DEVIATION 600, below): their numba
 `logsumexp_kernel` accumulates `sum = 0.0` in float64 and writes a float64
-`log_probabilities`; Metal has no float64 on the device, so this port is
+`log_probabilities`; Metal has no float64 on the device, so this implementation is
 float32 end to end and the Float64 host reference in
 `kde/checks/kde_oracle.mojo` measures what that costs.
 
@@ -279,13 +279,13 @@ def kernel_name(kernel: Int) -> String:
 
 def metric_from_name(name: String) raises -> Int:
     """`cuml.metrics.pairwise_distances`'s dense table
-    (`metrics/pairwise_distances.pyx:68-86`), the SIX ported rows; every
+    (`metrics/pairwise_distances.pyx:68-86`), the SIX implemented rows; every
     other row of THEIR table is refused BY NAME so a caller learns it is
-    unported rather than unknown.
+    unimplemented rather than unknown.
 
     `cosine` (`:70`) and `minkowski` (`:78`) joined the table on
     2026-09-01. They were refused here with the words "is in cuML's
-    pairwise_distances table but is NOT PORTED"; that sentence is now
+    pairwise_distances table but is NOT IMPLEMENTED"; that sentence is now
     false for those two and is deleted rather than annotated.
     """
     if name == "euclidean" or name == "l2":
@@ -313,8 +313,8 @@ def metric_from_name(name: String) raises -> Int:
         raise Error(
             "kde: metric='"
             + name
-            + "' is in cuML's pairwise_distances table but is NOT PORTED"
-            " (kde/NOT_IMPLEMENTED.tsv); ported: euclidean, l2, sqeuclidean, l1,"
+            + "' is in cuML's pairwise_distances table but is NOT IMPLEMENTED"
+            " (kde/NOT_IMPLEMENTED.tsv); implemented: euclidean, l2, sqeuclidean, l1,"
             " cityblock, manhattan, chebyshev, cosine, minkowski"
         )
     raise Error("Unknown metric: " + name)
@@ -432,7 +432,7 @@ def compute_log_kernel(x: Float32, h: Float32, kernel: Int) -> Float32:
 
 
 # ============ DEVIATION 602 (2026-08-23): THE COSINE KERNEL'S NORM IS WRONG
-# ============ UPSTREAM FOR EVEN d, AND IS NOT PORTED AS WRITTEN ============
+# ============ UPSTREAM FOR EVEN d, AND IS NOT IMPLEMENTED AS WRITTEN ============
 # THEIRS (`kernel_density.py:131-137`, copied from scikit-learn
 # `_binary_tree.pxi:465-470`):
 #
@@ -460,7 +460,7 @@ def compute_log_kernel(x: Float32, h: Float32, kernel: Int) -> Float32:
 # and d = 4 (`log(2 pi^2 (2/pi - 6(2/pi)^3 + 6(2/pi)^4)) + 4 log h`).
 #
 # OURS: `I_{d-1}` by its power series (see `_cosine_radial_integral_fast`
-# for why not the corrected recurrence). ASSUME-OUR-CODE-IS-BROKEN's corollary is "do not port their
+# for why not the corrected recurrence). ASSUME-OUR-CODE-IS-BROKEN's corollary is "do not implement their
 # BUGS": a `cosine` KDE in 2 or 4 dimensions would otherwise be
 # misnormalized or NaN by construction, and scikit-learn -- the oracle
 # for semantics -- has the same defect, so agreement with it would be
@@ -850,7 +850,7 @@ def kde_fit_validate(
         and metric != DIST_COSINE_EXPANDED
         and metric != DIST_LP_UNEXPANDED
     ):
-        raise Error("kde: metric value " + String(metric) + " is not ported")
+        raise Error("kde: metric value " + String(metric) + " is not implemented")
     if n_train <= 0:
         raise Error("kde: X must have at least one row (n_train)")
     if n_features <= 0:

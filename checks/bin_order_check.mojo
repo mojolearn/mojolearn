@@ -11,7 +11,7 @@ stamped from that same builder a few lines below (`:218`), and `AddGroup`
 runs once per group in group order (`:341`). Two numbers off one cursor
 cannot disagree.
 
-This port has two walks, so they CAN disagree, and for one day they did:
+This implementation has two walks, so they CAN disagree, and for one day they did:
 `build_layout` numbered bins in INPUT FEATURE ORDER while
 `launch_histograms_for_blocks` wrote them in POLICY-BLOCK ORDER. The two
 agree exactly when the input order already is block order, which is what a

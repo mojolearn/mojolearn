@@ -103,7 +103,7 @@ product, and `exp2` is not `exp`; `SAB_S5_EXP2`); the `B * (delta * u)`
 pairing at S8 (`:309`, `:321`; `SAB_S8_CUDA_PAIRING`); the SIMD tree fold
 `(state * C_vals).reduce_add()` at S10 (`:323`) in place of the serial
 ascending fma chain (`SAB_S10_DESCENDING` breaks the same clause a different
-way). NOT PORTED AT ALL, because they serve a backward pass and a schedule
+way). NOT IMPLEMENTED AT ALL, because they serve a backward pass and a schedule
 this profile does not have: the `TILE_SIZE = 8` staging with its pre-loaded
 B/C tiles and buffered stores (`:243-330`), the `cum_a` / `cum_b` running
 products, the `x` checkpoint tensor and its chunking, the group/`n_groups`
@@ -124,7 +124,7 @@ at the door rather than implemented and left untested (`reached-but-inert`).
 `z` and `delta_bias` are presence flags and True raises, because S12 and S14
 are the block's recorded stages; `delta_softplus` True raises for the same
 reason; `return_last_state` False raises because `h_state` is in-and-out on
-every call. Three branches of `selective_scan_ref` are likewise NOT ported
+every call. Three branches of `selective_scan_ref` are likewise NOT implemented
 and cannot be reached from this signature: the complex-`A` arm (`:152-156`,
 `:185-186` -- FP32 real only, contract section 3), the non-variable `B`/`C`
 arm (`:163-164`, `:176-177` -- Mamba-1's `x_proj` always makes both
@@ -167,7 +167,7 @@ things shared with the host side are the seam functions in
 # ===========================================================================
 # OFF in every build that does not name them. Each is a specific way to break
 # a seam this file pins, reachable by a plausible implementer -- three of the
-# five are what you get by porting from the CUDA kernel or from MAX instead
+# five are what you get by implementing from the CUDA kernel or from MAX instead
 # of from the reference, which is exactly the mistake this lane's contract
 # was written to prevent. A gate that has never failed is a gate nobody has
 # tested.

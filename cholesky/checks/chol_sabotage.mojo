@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Cholesky kernels with their pins BROKEN ON PURPOSE, for the check.
 
-NOT A PORT, NOT REACHED by any driver, by `cholesky/estimator.mojo` or by the
+NO REFERENCE FILE, NOT REACHED by any driver, by `cholesky/estimator.mojo` or by the
 card. Copies of `cholesky/checks/potrf.mojo`'s panel kernel and of
 `cholesky/checks/trsm.mojo`'s two solve kernels, each carrying arms that
 `cholesky_check.mojo` selects through the `sabotage` argument threaded down

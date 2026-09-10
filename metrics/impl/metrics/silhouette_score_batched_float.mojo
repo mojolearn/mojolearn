@@ -5,7 +5,7 @@
 n_labels, scores, chunk, metric)` forwards to
 `cuvs::stats::silhouette_score_batched` (= RAFT's batched detail). The
 `float` instantiation; `silhouette_score_batched_double.cu` and the
-unbatched `silhouette_score.cu` are NOT ported (NOT_IMPLEMENTED.tsv: no Float64
+unbatched `silhouette_score.cu` are NOT implemented (NOT_IMPLEMENTED.tsv: no Float64
 on device; the unbatched path is never dispatched by cuML's Python).
 `scores` may be a buffer of >= n_rows floats and receives the per-sample
 coefficients (cuML's `silhouette_samples`); RAFT's `nullptr` arm allocates

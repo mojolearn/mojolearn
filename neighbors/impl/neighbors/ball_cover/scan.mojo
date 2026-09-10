@@ -8,7 +8,7 @@ STANDS IN FOR `thrust::exclusive_scan` at
 
 WHY THIS IS HAND-WRITTEN
 ------------------------
-Thrust is open, so `exclusive_scan` is a port candidate rather than a
+Thrust is open, so `exclusive_scan` is an candidate to implement rather than a
 substitution candidate. Its structure here is trivial and is copied: theirs
 is a single device-wide scan launched from the host between two kernel
 launches (`:1354` then `:1376` then `:1385`), reading its input from global

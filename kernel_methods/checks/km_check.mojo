@@ -272,7 +272,7 @@ def _all_fixtures() -> List[Int]:
 
 
 def _all_kernels() -> List[Int]:
-    """The five ported kernels, at parameters that are all in range on every
+    """The five implemented kernels, at parameters that are all in range on every
     fixture. `degree = 3` and `coef0 = 1` are scikit-learn's defaults;
     `gamma = 0.25` is a power of two so that a caller reading a printed
     number is not also reading a rounding of `1 / n_features`."""

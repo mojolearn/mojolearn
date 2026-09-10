@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IVF-FLAT's build: train the coarse quantizer, assign, lay the lists out.
 
-PORT OF `cuvs/src/neighbors/ivf_flat/ivf_flat_build.cuh` at cuVS `6ba2ce2`:
+FOLLOWS `cuvs/src/neighbors/ivf_flat/ivf_flat_build.cuh` at cuVS `6ba2ce2`:
 `build` (`:390-444`) and the `extend`-on-build path it takes (`:180-345`),
 reduced to the one call `build` makes with `add_data_on_build = true` and
 `adaptive_centers = false`.
@@ -12,7 +12,7 @@ THEIR THREE STEPS, AND WHICH OF OURS IS WHICH
 
 | theirs | line | ours |
 |---|---|---|
-| train the quantizer on a strided subsample | `:414-437` | the WHOLE dataset (DEVIATION 1781) through the ported k-means |
+| train the quantizer on a strided subsample | `:414-437` | the WHOLE dataset (DEVIATION 1781) through the implemented k-means |
 | `kmeans::predict` the labels, in batches | `:222-224` | `cluster/impl/cluster/kmeans.mojo::predict`, one call |
 | `build_index_kernel` scatters into the lists | `:317-325` | `ivf/checks/list_layout.mojo::build_list_layout` (DEVIATIONS 1782/1783) |
 
@@ -20,10 +20,9 @@ THEIR THREE STEPS, AND WHICH OF OURS IS WHICH
 `build` at `:432-436` fills `cuvs::cluster::kmeans::balanced_params` and
 calls `cuvs::cluster::kmeans::fit`, which dispatches to KMEANS-BALANCED --
 a hierarchical, balanced-cluster-size quantizer with its own mesocluster
-recursion. This tree has no port of it (`cluster/DERIVATION_MAP.tsv` mirrors
-`cuvs::cluster::kmeans`, the Lloyd/k-means++ estimator, and nothing else),
-so this build trains the ported Lloyd k-means instead. That is a departure
-from `PORTING_RULES.md` 0b-i -- their dispatch goes somewhere we do not
+recursion. This tree has no implementation of it,
+so this build trains the implemented Lloyd k-means instead. That is a departure
+from `ENGINEERING_RULES.md` 0b-i -- their dispatch goes somewhere we do not
 have -- and it is stated at the top of `ivf/README.md` and in
 `ivf/NOT_IMPLEMENTED.tsv` rather than buried. Two consequences a reader must
 carry:
@@ -144,7 +143,7 @@ def compute_row_norms(
     """`core/row_norms.mojo::row_norm_kernel`, one block per row.
 
     THE SAME LAUNCH `neighbors/.../knn_brute_force.mojo::compute_norms`
-    MAKES, spelled here only because importing across two ported trees for
+    MAKES, spelled here only because importing across two implemented trees for
     a four-line launch is a dependency with no payoff. The KERNEL is the
     k-NN lane's and is not re-implemented; `NORM_TPB` is read from the
     kernel matrix, which is where every block size in this tree lives.

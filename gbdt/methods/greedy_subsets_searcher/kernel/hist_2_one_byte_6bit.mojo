@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The 6-bit specialization of the fused two-stat one-byte accumulator.
 
-PORT OF `hist_2_one_byte_6bit.cu` at CatBoost `54a8143a`,
-`TPointHist2OneByte<6, BlockSize>`. Transliterated. Do not improve.
+FOLLOWS `hist_2_one_byte_6bit.cu` at CatBoost `54a8143a`,
+`TPointHist2OneByte<6, BlockSize>`. Followed statement for statement.
 
 The family CatBoost's one-byte dispatch takes at `32 < maxBins <= 64`
 (`hist_one_byte.cu:317-319`).

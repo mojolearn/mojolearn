@@ -182,7 +182,7 @@ def check_knn_tie_set_is_lowest_index() raises:
     the two lowest of the class, in that order.
 
     Under FAST this asserts NOTHING about which two come back, because
-    nothing in the ported selector promises anything -- it reports what it
+    nothing in the implemented selector promises anything -- it reports what it
     saw. That asymmetry is the point of the check: the same fixture is
     undetermined in one mode and pinned in the other.
     """
@@ -232,7 +232,7 @@ def check_knn_tie_set_is_lowest_index() raises:
         )
     else:
         print(
-            "check_knn_tie_set_is_lowest_index OK (FAST): the ported",
+            "check_knn_tie_set_is_lowest_index OK (FAST): the implemented",
             "selector returned indices",
             Int(i0[0]),
             "and",

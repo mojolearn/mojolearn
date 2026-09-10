@@ -53,9 +53,9 @@ Their constant-feature policies differ: sklearn's vector helper replaces
 ranges below ten times the dtype epsilon with one, whereas that cuML source
 replaces only exact zero. Both sources support NaN-aware statistics and
 incremental updates beyond this bounded implementation. These references
-define behavior to compare; they do not establish a literal source port or
+define behavior to compare; they do not establish a literal source implementation or
 full sklearn/cuML parity. The native header and
-[derivation map](../../preprocessing/DERIVATION_MAP.tsv) record local
+native header record local
 `MINMAX-1` (near-constant rule), `MINMAX-2` (integer extrema) and `MINMAX-3`
 (Float32/FTZ and finite-input/output limits) deviations.
 

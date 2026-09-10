@@ -28,7 +28,7 @@ WHAT THIS IS FOR. Before optimizing a kernel, know which one. cuML's
 kernels are deliberately plain -- across the whole batched-levelalgo
 directory there is not one `__ldg`, `__restrict__` or `__launch_bounds__`,
 and exactly one `#pragma unroll` -- so any change we make past them stops
-being a port of their algorithm and starts being our own design, which is a
+being an implementation of their algorithm and starts being our own design, which is a
 deviation and has to be priced as one. That trade is only worth making
 where the time actually is, and until this file existed nobody here knew.
 
@@ -182,7 +182,7 @@ def report(trace, who="rf_bench"):
         print("  On Metal every commit is a trip through the driver. One encoder")
         print("  per buffer means nothing is being batched, and CUDA's near-free")
         print("  stream launch -- which is what cuML's design assumes -- is not")
-        print("  what this port actually gets.")
+        print("  what this implementation actually gets.")
 
     print()
     print("=" * 78)
@@ -215,7 +215,7 @@ def report(trace, who="rf_bench"):
     print("  the Shader Timeline instrument, and the stock 'Metal System Trace'")
     print("  template records it Disabled -- the trace's own settings block says")
     print("  so. `metal-gpu-intervals` labels each dispatch by ENCODER, and this")
-    print("  port issues one unnamed encoder per launch, so the durations above")
+    print("  implementation issues one unnamed encoder per launch, so the durations above")
     print("  cannot be joined to these names. Saying which kernel is hot needs")
     print("  either a custom template with Shader Timeline on, or debug labels")
     print("  set on the Metal objects. Until then the numbers in section 1 are")

@@ -4,7 +4,7 @@
 `laplacian_normalized` reaches on the 26.08 path: `diagonal` (`:156-177`),
 `scale_by_diagonal_symmetric` (`:194-216`) and `set_diagonal` (the COO
 arm). All three are `map_offset` lambdas over the nnz entries -- one thread
-per entry, no fold -- and are transliterated as one-thread-per-entry kernels.
+per entry, no fold -- and are followed statement for statement as one-thread-per-entry kernels.
 
 `diagonal` in theirs is `diag_ptr[rows[idx]] = values[idx]` whenever `rows ==
 cols`: with one diagonal entry per row (which `compute_graph_laplacian`
@@ -61,7 +61,7 @@ def coo_scale_by_diagonal_symmetric_kernel(
     col_scale`, each a single rounding; `1.0f / d` is a correctly rounded
     division (row 10: correct on normals on every column measured). Seams
     flushed. The `== 0` arms are unreachable after `zero_to_one_functor`
-    (`laplacian.cuh:272-273`) but are transliterated, not removed."""
+    (`laplacian.cuh:272-273`) but are followed statement for statement, not removed."""
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if idx >= Int(nnz_in):
         return

@@ -3,10 +3,10 @@
 """Spectral clustering on the GPU, mirroring cuML's `SpectralClustering`.
 
 The estimator is `SpectralClustering`. It is backed by `spectral/`, which
-ports cuML 26.08's `ML::SpectralClustering::fit_predict` down through
+implements cuML 26.08's `ML::SpectralClustering::fit_predict` down through
 cuVS's `cluster::spectral::detail::fit_predict` (the kNN connectivity
 graph, the normalized graph Laplacian, RAFT's thick-restart Lanczos, and
-`cluster/`'s already-ported k-means) with every closed vendor library along
+`cluster/`'s already-implemented k-means) with every closed vendor library along
 that path replaced by a named, numbered stand-in (DEVIATIONS 770-781).
 
 **THIS LANE HAS RUN ON ONE APPLE M4 AND NOWHERE ELSE.** Read that before
@@ -93,7 +93,7 @@ class SpectralClustering:
     An eigenproblem has no unique answer. If `v` is a unit eigenvector then
     so is `-v`; if two eigenvalues are equal then every orthonormal basis of
     their shared subspace is equally correct. RAFT pins neither convention,
-    because RAFT ships one backend and has never had to. This port pins
+    because RAFT ships one backend and has never had to. This implementation pins
     both, and `spectral/IDENTICAL_SPECTRAL_CONTRACT.md` (profile
     `mojolearn.identical.spectral.fp32.v1`) is where they live.
 
@@ -121,9 +121,9 @@ class SpectralClustering:
     itself a pure function of the input bits and the pinned sweep schedule.
     `+0.0` and `-0.0` compare EQUAL, so two zero eigenvalues of opposite
     sign are ordered by index and not by sign bit, deliberately. The `LM`
-    and `SM` solver modes are REFUSED by name rather than ported, because
+    and `SM` solver modes are REFUSED by name rather than implemented, because
     theirs sorts by magnitude with `thrust::sort`, which is not stable, and
-    porting it would mean inventing a tie-break.
+    implementing it would mean inventing a tie-break.
 
     **WHAT THE PROFILE CLAIMS ABOUT DEGENERACY, exactly.** Given the same
     input bits and the same profile, the same eigenvector bits come out,
@@ -135,7 +135,7 @@ class SpectralClustering:
     components has eigenvalue zero with multiplicity `c`, so a
     `n_components <= c` embedding of such a graph lies entirely inside a
     degenerate subspace. That is a property of spectral embedding, not of
-    this port, and it is the shape most likely to surprise you.
+    this implementation, and it is the shape most likely to surprise you.
 
     **WHAT COVERAGE THAT SITS ON, stated as narrowly as the evidence.**
 
@@ -167,7 +167,7 @@ class SpectralClustering:
         done (`spectral/NOT_IMPLEMENTED.tsv`, "this lane's own gaps").
 
     **ON DEVIATION 780, so nobody re-inflates it.** That deviation once
-    claimed five constants as this port's own: `ncv = min(n - k, max(2k+1,
+    claimed five constants as this implementation's own: `ncv = min(n - k, max(2k+1,
     20))`, `max_iterations = 10 * n_samples`, the plumbed `tolerance`, the
     Jacobi sweep cap, and the `ncv` admissibility bound. THREE OF THE FIVE
     WERE STRUCK on 2026-08-23. They are VERBATIM cuVS 26.08, down to the
@@ -176,7 +176,7 @@ class SpectralClustering:
     literals. What remains ours is the host Jacobi's 60-sweep cap and this
     lane's own `ncv` admissibility guard, both in code that stands where a
     CLOSED vendor library does. Reading the wrong tree invents ORIGINALITY
-    a port does not have, which is exactly as bad as missing a real
+    an implementation does not have, which is exactly as bad as missing a real
     deviation.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY
@@ -291,7 +291,7 @@ class SpectralClustering:
                 f"refused; it must be one of {list(_AFFINITIES)}. cuML's own "
                 "surface accepts exactly these two, and 'rbf' / "
                 "'precomputed_nearest_neighbors' / a callable are different "
-                "affinity constructions that nothing here ports."
+                "affinity constructions that nothing here implements."
             )
         if assign_labels != "kmeans":
             raise NotImplementedError(
@@ -405,7 +405,7 @@ class SpectralClustering:
             if not np.isfinite(vals).all():
                 raise ValueError(
                     "mojolearn SpectralClustering: the precomputed affinity "
-                    "matrix has a non-finite entry (the ported path refuses "
+                    "matrix has a non-finite entry (the implemented path refuses "
                     "it by name, because sqrt of a non-finite degree is a "
                     "NaN and no NaN may reach a recorded value)"
                 )
@@ -447,7 +447,7 @@ class SpectralClustering:
             if not np.isfinite(x).all():
                 raise ValueError(
                     "mojolearn SpectralClustering: X contains NaN or "
-                    "infinity (the ported path refuses it by name before any "
+                    "infinity (the implemented path refuses it by name before any "
                     "recorded stage)"
                 )
             n = int(x.shape[0])

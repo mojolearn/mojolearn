@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The forest: many ExtraTrees, and the vote that turns them into a model.
 
-A PORT of cuML `cpp/src/randomforest/randomforest.cuh`, pinned at `00094f7`:
+A IMPLEMENTATION of cuML `cpp/src/randomforest/randomforest.cuh`, pinned at `00094f7`:
 
 | ours | theirs |
 |---|---|
@@ -26,7 +26,7 @@ is honoured too, since DEVIATION 460** (2026-08-23): the `:64-67` arm draws
 `n_sampled_rows` rows with replacement through RAFT's Philox `uniformInt`,
 seeded by the `:59-62` fnv1a32 chain over `(seed, tree_id)` — the host form is
 `core.philox.uniform_int_host`, the device form `launch_uniform_int`, BOTH the
-RF lane's ports (`ensemble/`), reused rather than re-invented, with the seed
+RF lane's implements (`ensemble/`), reused rather than re-invented, with the seed
 chain in `checks/pcg_rng.mojo::row_sample_seed`. `n_sampled_rows` is
 sklearn's `max_samples` resolved to a count (None = `n_rows`). What is easy to
 miss either way: **each tree needs its OWN `row_ids` buffer**, because
@@ -37,7 +37,7 @@ miss either way: **each tree needs its OWN `row_ids` buffer**, because
 Their `predict` (`:229-242`) declares `row_prediction(num_outputs)` INSIDE the
 row loop — value-initialised to zero — calls the per-tree predictor once per
 tree into that same buffer with `+=`, and only then divides by `n_trees`. The
-accumulation across trees IS the forest. That is why `flatnode.mojo` ports the
+accumulation across trees IS the forest. That is why `flatnode.mojo` implements the
 accumulating form under a name that says so; this file is its only caller so
 far, and it must not reach for the zeroing convenience wrapper.
 
@@ -219,7 +219,7 @@ def fit_classification(
     Theirs runs the loop under OpenMP across `n_streams` CUDA streams
     (`:161-167`). Ours is serial, and that is not a deviation to record but a
     consequence of a fact already in the traps register: **Metal has no
-    streams**, so their overlap has nothing to port onto. The trees are
+    streams**, so their overlap has nothing to implement onto. The trees are
     independent either way — tree `i` reads `x` and writes its own `row_ids`
     and its own tree — so the answer does not depend on the order they run in,
     which is the property that makes the serial form a faithful stand-in
@@ -292,7 +292,7 @@ def class_ids_for(
     which is a `MAX_ACC`-wide shared-memory array — an out-of-range label is an
     out-of-bounds shared write, not a wrong answer. The host path indexes host
     `List`s instead and is refused elsewhere or crashes loudly. This is a guard
-    on a cast this file owns, not a change to a ported file, and it is stated
+    on a cast this file owns, not a change to a implemented file, and it is stated
     rather than left to be discovered because it means the two arms can refuse
     DIFFERENT inputs: a label of `7.0` with `n_classes == 3` reaches the host
     trainer and is refused here.

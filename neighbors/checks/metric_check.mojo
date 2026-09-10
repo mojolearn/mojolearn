@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The six ported distances and the distance weights, gated and sabotaged.
+"""The six implemented distances and the distance weights, gated and sabotaged.
 
 Run: `pixi run check-metric` (and `check-metric-identical`).
 
@@ -790,11 +790,11 @@ def check_metric_refusals() raises:
     ]
     for nm in names:
         _ = knn_metric_from_name(nm)
-    var unported: List[String] = [
+    var unimplemented: List[String] = [
         "canberra", "jensenshannon", "correlation", "inner_product",
         "haversine", "braycurtis",
     ]
-    for nm in unported:
+    for nm in unimplemented:
         var r = False
         try:
             _ = knn_metric_from_name(nm)
@@ -804,7 +804,7 @@ def check_metric_refusals() raises:
         if not r:
             raise Error(
                 "check_metric_refusals: metric='" + nm + "' is in cuML's"
-                " VALID_METRICS['brute'] and is NOT ported here, so it must"
+                " VALID_METRICS['brute'] and is NOT implemented here, so it must"
                 " be refused BY NAME"
             )
     var unknown = False
@@ -1061,7 +1061,7 @@ def check_knn_distance_weights() raises:
                 " the zero element."
             )
 
-    # clause 3: the per-element rule a careless port would write
+    # clause 3: the per-element rule a careless implementation would write
     var per_elem = List[Float32](capacity=nq * k)
     for i in range(nq):
         for j in range(k):

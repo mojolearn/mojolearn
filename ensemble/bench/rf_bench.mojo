@@ -18,7 +18,7 @@ any library I know of. The baseline is scikit-learn on the same M4, which
 is the strongest thing that actually runs here.
 
 THAT COMPARISON IS NOT APPLES TO APPLES AND THE NUMBER MUST CARRY THE
-CAVEAT: scikit-learn searches EXACT split thresholds, while this port
+CAVEAT: scikit-learn searches EXACT split thresholds, while this implementation
 (following cuML) bins each feature into at most `max_n_bins` quantiles and
 searches those. That is an algorithmic difference in our favour on time and
 potentially against us on accuracy, which is why accuracy is reported beside
@@ -117,7 +117,7 @@ def _params(n_cols: Int, n_bins: Int = MAX_N_BINS) -> RF_params:
         max_samples=Float32(1.0),
         seed=UInt64(20260821),
         # Their Python default (randomforestclassifier.py:94), honored by
-        # the pipelined forest loop since DEVIATION 117 was ported. The
+        # the pipelined forest loop since DEVIATION 117 was implemented. The
         # output is bit-identical at any value; rule 5 says run THEIR
         # defaults.
         n_streams=Int32(4),
@@ -649,7 +649,7 @@ def main() raises:
         # DOUBLES.
         #
         # If it does, the gap to scikit-learn's exact split search is the
-        # ported design and not a defect. If it does not -- if accuracy is
+        # implemented design and not a defect. If it does not -- if accuracy is
         # flat in the bin count, or moves the wrong way -- then something
         # here is broken and the binning story was a comfortable guess.
         for nb in [32, 64, 128, 256, 512]:

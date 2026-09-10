@@ -3,14 +3,14 @@
 """`ARIMAOrder` and `ARIMAParams`: the order, and the parameters with their
 pack/unpack.
 
-PORT OF `cuml/cpp/include/cuml/tsa/arima_common.h` (`ARIMAOrder` :26-51,
+FOLLOWS `cuml/cpp/include/cuml/tsa/arima_common.h` (`ARIMAOrder` :26-51,
 `ARIMAParams` :53-148) and `cuml/cpp/src/arima/arima_common.cu`
 (`ARIMAParams::pack` / `::unpack`, one thread per series) at cuML 265b9da6
 (v26.08.00). `ARIMAMemory` (:151-295, their arena over one `char*`) is not
 mirrored: every buffer it carves is a `DeviceBuffer` owned by the struct
 that uses it, which is the same set of allocations without the arena.
 
-COPY, DO NOT IMPROVE. Their `DataT` is `double` (the Python surface is
+Their `DataT` is `double` (the Python surface is
 `float64` only, `arima.pyx:326`); ours is Float32 on the device --
 **DEVIATION 670**, stated once here and carried by every file in `arima/`:
 
@@ -107,7 +107,7 @@ struct ARIMAOrder(Copyable, Movable, ImplicitlyCopyable):
 
 def validate_order(order: ARIMAOrder) raises:
     """`arima.pyx:306-324`'s checks, raised by name, plus this lane's own
-    refusals (each named for its UNPORTED row)."""
+    refusals (each named for its UNIMPLEMENTED row)."""
     if order.P + order.D + order.Q > 0 and order.s < 2:
         raise Error("ARIMA: invalid period for seasonal ARIMA: s=" + String(order.s))
     if order.d + order.D > 2:
@@ -119,16 +119,16 @@ def validate_order(order: ARIMAOrder) raises:
     if order.p > 8 or order.P > 8 or order.q > 8 or order.Q > 8:
         raise Error("ARIMA: invalid order, required p, q, P, Q <= 8")
     if order.n_exog != 0:
-        raise Error("ARIMA: exog (n_exog=" + String(order.n_exog) + ") is not ported; refused by name (arima/NOT_IMPLEMENTED.tsv)")
+        raise Error("ARIMA: exog (n_exog=" + String(order.n_exog) + ") is not implemented; refused by name (arima/NOT_IMPLEMENTED.tsv)")
     if order.rd() > 8:
         raise Error(
             "ARIMA: rd = d + s*D + max(p + s*P, q + s*Q + 1) = " + String(order.rd())
-            + " > 8 selects cuML's block-per-series Kalman kernel, which is not ported; refused by name (arima/NOT_IMPLEMENTED.tsv)"
+            + " > 8 selects cuML's block-per-series Kalman kernel, which is not implemented; refused by name (arima/NOT_IMPLEMENTED.tsv)"
         )
     if order.r() > 5:
         raise Error(
             "ARIMA: r = max(p + s*P, q + s*Q + 1) = " + String(order.r())
-            + " > 5 selects cuML's Schur/Sylvester Lyapunov solver, which is not ported; refused by name (arima/NOT_IMPLEMENTED.tsv)"
+            + " > 5 selects cuML's Schur/Sylvester Lyapunov solver, which is not implemented; refused by name (arima/NOT_IMPLEMENTED.tsv)"
         )
 
 

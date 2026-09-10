@@ -16,7 +16,7 @@ WHAT IS BEHIND EACH ENTRY, AND WHAT IS NOT
     holtwinters_forecast  the same lane's `ML::HoltWinters::forecast`.
     kpss_test             tsa/, DEVIATIONS 671-672. cuML
                           `ML::Stationarity::kpss_test`, float32.
-    select_d              the same lane's port of auto_arima's "Choose the
+    select_d              the same lane's implementation of auto_arima's "Choose the
                           hyper-parameter d" block.
 
 `arima/` IS SERVED BY ITS OWN EXTENSION, `bindings/_mojolearn_arima.mojo`

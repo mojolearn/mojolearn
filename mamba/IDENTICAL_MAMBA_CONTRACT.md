@@ -36,7 +36,7 @@ judge section 7) and is NOT earned by anything built on one machine.
 Checkouts live in `/Users/andrewhendel/CascadeProjects/upstream/`. The
 CUDA kernel `csrc/selective_scan/selective_scan_fwd_kernel.cuh` is cited
 where its rounding order DIFFERS from the reference's, because a reader
-porting from the kernel would otherwise assume they agree. They do not
+implementing from the kernel would otherwise assume they agree. They do not
 (section 4, seams S7-S8 and S11).
 
 ## 2. What one block call is

@@ -16,7 +16,7 @@ matrix, a new `V[k]` is the residual re-orthogonalized against the Ritz
 vectors, and the iteration continues from `k + 1`. Convergence is `res =
 ||beta_k|| <= tol` or `iter >= maxIter` where `iter` counts Lanczos steps
 (`ncv`, then `+= ncv - k` per restart). This is CuPy's `eigsh` structure,
-which the RAFT file is a port of.
+which the RAFT file is an implementation of.
 
 THE LAYOUT, which is most of what can go wrong here. Theirs: `V` is `ncv x
 n` ROW-MAJOR (row `j` = Lanczos vector `j`), and cuBLAS reads the same bytes
@@ -68,7 +68,7 @@ given. cuVS passes the user's seed (`spectral_embedding.cuh:70`).
 OURS: `v0[i] = splitmix64(seed, i) >> 40` as a 24-bit integer times `2^-24`
 -- a host hashed uniform in `[0, 1)` that is a pure function of `(seed, n)`
 and performs no host rounding -- uploaded once, recorded as `spectral.
-lanczos.v0`. RAFT's Philox + uniform mapping is not ported: it is ~600
+lanczos.v0`. RAFT's Philox + uniform mapping is not implemented: it is ~600
 lines of generator whose only output here is a start vector, and the
 eigenpairs Lanczos CONVERGES TO do not depend on it (to the tolerance).
 The bits of the trajectory do, which is why the card records it. The
@@ -128,20 +128,20 @@ vendor library does, not in the mirrored driver:
       `nrerror` (`checks/symmetric_eig_host.mojo`, contract seam J6);
   (b) `lanczos_smallest`'s admissibility guard below, which admits
       `ncv == n` where `lanczos_types.hpp:50` says `n_components + 1 < ncv
-      < n`, strict at both ends. Unreachable through the ported driver,
+      < n`, strict at both ends. Unreachable through the implemented driver,
       since theirs computes `ncv <= n - k < n`; it can only be reached by
       a direct caller.
 The `NCV` and `MAXITER` sabotage arms below KEEP THEIR VALUE and change
 their meaning: they no longer test a choice of ours, they inject cuVS
 25.08's older spelling and so test that this lane mirrors the 26.08 one.
-============ THEIR TRANSPOSED LAUNCH BOUNDS, NOT PORTED, NO BITS MOVED ====
+============ THEIR TRANSPOSED LAUNCH BOUNDS, NOT IMPLEMENTED, NO BITS MOVED ====
 `lanczos_solve_ritz` launches `kernel_triangular_populate` as
 `<<<blockSize, numBlocks>>>` (`:161-162`) with `blockSize = 256` and
 `numBlocks = ceil(ncv / 256)`: the two arguments are SWAPPED relative to
 its neighbor `kernel_triangular_beta_k` (`:165-168`), so it runs 256
 blocks of `ceil(ncv/256)` threads instead of the reverse. It happens to
 COVER every row, because `256 * ceil(ncv/256) >= ncv` at every `ncv`, and
-the kernel writes each cell once, so NO BIT MOVES. Recorded, not ported:
+the kernel writes each cell once, so NO BIT MOVES. Recorded, not implemented:
 ours builds the projected matrix in a host loop over all `ncv` rows.
 ============ DEVIATION 774: A RESTART BREAKDOWN IS REFUSED, NOT DIVIDED ====
 THEIRS: after the restart, `V[k + 1] = u / beta[k]` (`:681-687`) with NO
@@ -638,7 +638,7 @@ def lanczos_solve_ritz(
     else:
         raise Error(
             "lanczos: which=" + lanczos_which_name(which)
-            + " is not ported (a thrust sort by magnitude cuVS never reaches);"
+            + " is not implemented (a thrust sort by magnitude cuVS never reaches);"
             " LA and SA are"
         )
     eigenvalues_k.clear()

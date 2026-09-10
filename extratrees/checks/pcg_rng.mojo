@@ -33,7 +33,7 @@ Every arithmetic line below is a transcription of an upstream, pinned:
     `PCGenerator(seed, subsequence, 0)` -> `key_for`
 
 `key_for`, `SplitKey` and `uniform_threshold` at the bottom of the file are
-OURS, not a port. They are marked as such.
+OURS, not an implementation. They are marked as such.
 
 Checked cell-for-cell against the upstreams' own arithmetic by
 `extratrees/checks/pcg_rng_check.mojo` against
@@ -127,7 +127,7 @@ struct PCGenerator(Copyable, Movable):
     Constructed from `(seed, subsequence, offset)` exactly as their lower-level
     constructor at `:569-572`. Their other constructor, which takes a
     `DeviceState<PCGenerator>` and adds `rng_state.base_subsequence`, is not
-    ported; see DEVIATION 141.
+    implemented; see DEVIATION 141.
     """
 
     var pcg_state: UInt64
@@ -454,7 +454,7 @@ def uniform_threshold(key: SplitKey, min_value: Float32, max_value: Float32) -> 
 #
 # ---------------------------------------------------------------------------
 #
-# 141. Only the three-argument constructor is ported, and there is no `half`.
+# 141. Only the three-argument constructor is implemented, and there is no `half`.
 #
 #   Theirs. `PCGenerator` has a second constructor taking
 #   `DeviceState<PCGenerator>` (`rng_device.cuh:557-560`) which forms
@@ -467,14 +467,14 @@ def uniform_threshold(key: SplitKey, min_value: Float32, max_value: Float32) -> 
 #
 #   Why. `DeviceState` and `Rng` are RAFT's whole-array RNG driver -- they exist
 #   to give one generator per CUDA thread of a fill kernel. Nothing in this lane
-#   fills an array with noise; every draw here is keyed. Porting the driver
-#   would be porting a caller we do not have. `half` has no use here either:
+#   fills an array with noise; every draw here is keyed. Implementing the driver
+#   would be implementing a caller we do not have. `half` has no use here either:
 #   thresholds are compared against feature values, which are `Float32`.
 #
-#   Price. Anyone who later wants RAFT's `Rng` array fills must port the
+#   Price. Anyone who later wants RAFT's `Rng` array fills must implementation the
 #   `DeviceState` constructor, and MUST notice that its offset argument is the
 #   subsequence, not zero, or they will silently get a different stream. This
-#   is an omission, not a behaviour change: no ported call site takes the
+#   is an omission, not a behaviour change: no implemented call site takes the
 #   missing path, so nothing here can be wrong because of it.
 #
 # ---------------------------------------------------------------------------

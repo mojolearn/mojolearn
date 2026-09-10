@@ -4,7 +4,7 @@
 device, under profile `mojolearn.identical.mamba1.fp32.v1`. **COPY, DO NOT
 IMPROVE.**
 
-PORT OF huggingface/transformers at `d56c55b`,
+FOLLOWS huggingface/transformers at `d56c55b`,
 `src/transformers/models/mamba/modeling_mamba.py`. Partial, inference only.
 What is mirrored here, symbol by symbol:
 
@@ -33,7 +33,7 @@ into kernels, and the two share only the seam functions themselves
 (`ftz`, `identical_mul_add`, `identical_exp`, `identical_div`,
 `identical_rsqrt`, `identical_silu`, `identical_softplus`), by design.
 
-THE SEAM SPLIT ACROSS THE TWO PORTED FILES
+THE SEAM SPLIT ACROSS THE TWO IMPLEMENTED FILES
 -------------------------------------------
 This file owns S1-S4 (RMSNorm), S12 (the z gate), S13 (the conv tap chain),
 S14 (the softplus), S15 (`A = -exp(A_log)`), S16 (the residual add) and the
@@ -182,7 +182,7 @@ from gemm.checks.gemm_oracle import OP_NN, OP_NT
 # `MambaConfig`'s constants and its derived shape
 # (`configuration_mamba.py`: `state_size` 16, `conv_kernel` 4,
 # `layer_norm_epsilon` 1e-5, `intermediate_size = expand * hidden_size`,
-# `time_step_rank = ceil(hidden_size / 16)`). This lane has no ported
+# `time_step_rank = ceil(hidden_size / 16)`). This lane has no implemented
 # `configuration_mamba.mojo`; the values live once, in the fixture, and are
 # read from there rather than copied, because a config constant with two
 # homes is a config constant that drifts.

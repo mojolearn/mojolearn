@@ -3,7 +3,7 @@
 """The dead-device canary: a fit must RAISE, never return silent garbage.
 
 ================= DEVIATION 2002 =================
-NOT A PORT. CatBoost and cuML both assume a CUDA runtime whose API calls
+NO REFERENCE FILE. CatBoost and cuML both assume a CUDA runtime whose API calls
 return error codes and whose host wrappers throw on them; a dying CUDA
 context surfaces as an exception long before a fit returns. On this
 toolchain that assumption is FALSE and it was measured false: during the

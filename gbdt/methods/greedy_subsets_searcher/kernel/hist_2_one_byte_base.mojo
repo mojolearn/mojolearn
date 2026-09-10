@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The fused TWO-STAT one-byte histogram: both stat columns in one pass.
 
-PORT OF `hist_2_one_byte_base.cuh` (`TPointHist2OneByteBase`, the
+FOLLOWS `hist_2_one_byte_base.cuh` (`TPointHist2OneByteBase`, the
 `ComputeHist2OneByteBits` launch plumbing) and the two-stat kernel loop it
 runs under, `compute_hist_loop_two_stats.cuh`
 (`ComputeSplitPropertiesDirectLoadsTwoStastImpl`,
 `ComputeSplitPropertiesTwoStatsGatherImpl`, `TComputeHistogramTwoStatsImpl`
-and its `AlignMemoryAccess`), at CatBoost `54a8143a`. Transliterated. Do not
+and its `AlignMemoryAccess`), at CatBoost `54a8143a`. Followed statement for statement. Do not
 improve.
 
 The per-bit accumulators live beside this file exactly as theirs do:
@@ -34,7 +34,7 @@ which processes stat columns TWO AT A TIME (`numBlocks.z = numStats / 2`,
 each block reading `stats` and `stats + statLineSize`), and the
 `TPointHistOneByte` PASS family only above 128. Until 2026-08-19 this
 repository routed everything through the PASS family, which is the
-wrong-kernel-family misport PORTING_RULES 0b-i describes. When `numStats` is
+wrong-kernel-family misimplementation ENGINEERING_RULES 0b-i describes. When `numStats` is
 odd, their `HIST2_PASS` macro first covers stat 0 with a one-stat
 `PASS(Bits, 1)` launch and then runs this family over the remaining even
 count with `SkipFirst = true` (`hist_one_byte.cu:306-312`); the `skip_first`
@@ -53,7 +53,7 @@ participation at `threadIdx.x < 256`.
 DEVIATION (load batch): their `Unroll` is 1 below Volta and 2 at or above
 (`hist_2_one_byte_base.cuh:28-35`), their `LoadSize` is `FourElements` on
 everything after Maxwell (`:41-47`), and `TLoadSizeHist2<FourElements>` is 8
-at or above Volta (`tuning_policy_enums.cuh:73-80`). This port takes the
+at or above Volta (`tuning_policy_enums.cuh:73-80`). This implementation takes the
 MODERN side of each arch test, the same choice `hist_one_byte.mojo` records
 for the PASS family: UNROLL 2, LOAD 4, batch 8. Scheduling, not numeric: the
 same values are added in the same per-lane order.
@@ -610,7 +610,7 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
     1)` prelude, shifting every pair up by one column (`:530`, `:548-550`).
 
     `stat_count_in` is their `statCount = gridDim.z * 2 + (SkipFirst ? 1 :
-    0)` (`:548`), passed as an argument because every kernel in this port
+    0)` (`:548`), passed as an argument because every kernel in this implementation
     takes it that way; the launch constructs the grid from the same number,
     so the two agree by construction.
     """

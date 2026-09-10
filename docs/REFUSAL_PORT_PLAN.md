@@ -1,4 +1,4 @@
-# Historical refusal matrix: current port and evidence plan
+# Historical refusal matrix: current implementation and evidence plan
 
 Source-only audit. No tests, builds, measurements, models or provisioning were
 run. Root qualifies completed changes serially on authorized NVIDIA/AMD hosts,
@@ -28,12 +28,12 @@ The paper's metadata traces the original removed `E3_RESULTS.md` document to
 revision `d878991361ea27f434949b17d92e773047c0b836`; restoring provenance does
 not constitute a new run. Keep historical counts unchanged.
 
-## The five tree rows are not five missing parameter ports
+## The five tree rows are not five missing parameter implements
 
 | Exact cell | Historical refusal | Current decision |
 | --- | --- | --- |
-| `et_clf_maxleaf` | `max_leaf_nodes=64` requires sklearn best-first growth, not cuML breadth-first `max_leaves` | Already implemented since Sept 1 in the ExtraTrees path; refresh installed/card evidence rather than port twice |
-| `gbdt_multiclass_lossguide` | MultiClass with Lossguide lacks the corresponding CatBoost GPU trainer | Retain unsupported combination; a multiclass nonsymmetric objective/search/leaf port is substantial separate work |
+| `et_clf_maxleaf` | `max_leaf_nodes=64` requires sklearn best-first growth, not cuML breadth-first `max_leaves` | Already implemented since Sept 1 in the ExtraTrees path; refresh installed/card evidence rather than implementation twice |
+| `gbdt_multiclass_lossguide` | MultiClass with Lossguide lacks the corresponding CatBoost GPU trainer | Retain unsupported combination; a multiclass nonsymmetric objective/search/leaf implementation is substantial separate work |
 | `gbdt_quantile_newton` | Newton leaf estimation is not supported for Quantile | Retain refusal; do not invent a nonzero Hessian or alias Newton to another estimator |
 | `gbdt_rmse_depthwise_pointwise` | The selected pointwise searcher is oblivious; Depthwise requires the nonsymmetric searcher | Retain incompatible-option refusal; ordinary Depthwise already has its own route |
 | `gbdt_rmse_nan_forbidden_refused` | NaN data with `nan_mode='Forbidden'` | Retain intentional input refusal; Min/Max are separate supported policies |
@@ -56,7 +56,7 @@ They are not missing GPU algorithms and must not be silently relabelled.
   state/draws, selected samples/features, candidate thresholds/gains, frontier
   choice, partitions, leaf outputs and serialized model. Check unchanged
   outputs and an effective altered-stage control. This is instrumentation,
-  not a port to GPU.
+  not an implementation to GPU.
 - [ ] Separately qualify the existing GPU ExtraTrees API, including best-first
   growth and heldout prediction, with actual binary/mode/vendor witnesses.
   Do not count those GPU cases as retroactive coverage of the CPU rows.
@@ -75,7 +75,7 @@ They are not missing GPU algorithms and must not be silently relabelled.
 | `knn_clf_weights_distance_refused` | Distance-weighted classifier vote | Current neighbors source exposes distance weights; qualify zero-distance/tie handling and all-zero/infinite edge rules |
 | `knn_k300` | Selection capacity beyond 256 | Inspect actual selection dispatch and capacity; qualify K=257/300 with full distance/index records before changing a bound |
 | `knn_metric_cosine`, `knn_metric_minkowski_p1` | Distinct cosine and L1 metric math; p=1 maps to the L1 family | Current brute-force neighbors source supports these metrics; preserve separate indexed-route refusals and refresh device evidence |
-| `logreg_l1_refused` | OWL-QN rather than L-BFGS | A real nonsmooth optimizer port; changing the accepted penalty string is insufficient |
+| `logreg_l1_refused` | OWL-QN rather than L-BFGS | A real nonsmooth optimizer implementation; changing the accepted penalty string is insufficient |
 | `ols_onecol_refused`, `ols_wide_refused` | Former OLS fallback restrictions at one-column and underdetermined shapes | Current linear-model source documents scalar/minimum-norm paths; different mathematical cases, refresh both rather than duplicate a generic SVD request |
 | `ols_sw_refused` | Weighted least squares | Current linear-model source validates and rescales weights; retain weighted centering/zero-mass checks |
 | `pca_c8_wide`, `tsvd_c8_wide` | **Same** 200-column IDENTICAL Gram capacity restriction | One shared Gram-kernel capacity/dispatch investigation, two consumers; do not substitute vendor GEMM under IDENTICAL |
@@ -102,7 +102,7 @@ the refusal count with engineering work.
    For Gram capacity, preserve current accumulation profile while changing
    staging/dispatch; gate both PCA and TSVD consumers.
 3. Treat OWL-QN, decomposition alternatives and multiclass nonsymmetric trees
-   as separate algorithm ports with independent references, not small flags.
+   as separate algorithm implements with independent references, not small flags.
 4. Root runs meaningful correctness tests before any timing, with full raw
    model/output/stage comparisons across authorized GPUs and effective negative
    controls. Keep unsupported index algorithms and intentional invalid-input

@@ -20,7 +20,7 @@ Two more things the lane says about itself and this class inherits:
   * DEVIATION 750 is OPEN. cuML's `curand_u64` builds a 64-bit draw out of
     two unsequenced `curand()` calls, and C++ does not say which becomes
     the high word. Both readings conform and they give DIFFERENT FORESTS
-    from the same seed. This port takes the first draw as the high word,
+    from the same seed. This implementation takes the first draw as the high word,
     by name, and that choice has never been checked against a cuML binary.
     Until it is, agreement with cuML is a belief, not a measurement. It is
     one number off a real NVIDIA GPU to close.
@@ -47,7 +47,7 @@ _WANT_PREDICT = 2
 
 
 class IsolationForest(NumericModeMixin):
-    """Isolation Forest backed by the ported cuML path
+    """Isolation Forest backed by the implemented cuML path
     (`isolation_forest/`, DEVIATIONS 680-686 and 750-751), the
     scikit-learn surface.
 
@@ -77,7 +77,7 @@ class IsolationForest(NumericModeMixin):
         sample_weight   refused   in fit(); `UnsupportedOnGPU` upstream too
         n_jobs          refused   scikit-learn's thread count; there is no
                                   CPU path in this library to spread
-        verbose         refused   anything truthy; this port prints no log
+        verbose         refused   anything truthy; this implementation prints no log
                                   lines, so accepting it would be
                                   accepting-and-ignoring
         output_type     refused   a cuML-internal array-type selector; this
@@ -86,7 +86,7 @@ class IsolationForest(NumericModeMixin):
                                   scikit-learn's; the forest here is four
                                   flat device arrays (DEVIATION 685)
         as_treelite(),  absent    the Treelite / nvForest export is not
-        as_nvforest()             ported (isolation_forest/NOT_IMPLEMENTED.tsv)
+        as_nvforest()             implemented (isolation_forest/NOT_IMPLEMENTED.tsv)
 
     Non-finite cells of `X` are refused by name inside the Mojo entry
     (DEVIATION 680), with the row and column, rather than being split on.
@@ -275,7 +275,7 @@ class IsolationForest(NumericModeMixin):
             )
         if verbose:
             raise NotImplementedError(
-                "mojolearn IsolationForest: verbose is refused; this port "
+                "mojolearn IsolationForest: verbose is refused; this implementation "
                 "prints no log lines, so accepting it would be accepting-"
                 "and-ignoring"
             )

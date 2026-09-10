@@ -5,7 +5,7 @@
 same text and is what cuML 26.08 links). THIS IS THE PATH cuML's Python
 takes: `silhouette_score.pyx::_silhouette_coeff` calls the batched entry
 with `chunksize = 40000` for every `silhouette_score` / `silhouette_samples`
-call (PORTING_RULES 0b-i), with `metric = L2SqrtUnexpanded` for the default
+call (ENGINEERING_RULES 0b-i), with `metric = L2SqrtUnexpanded` for the default
 `'euclidean'`.
 
 THEIRS (:167-266):
@@ -234,7 +234,7 @@ def silhouette_score_launch[
             "silhouette_score: metric "
             + String(metric)
             + " is refused; only DistanceType::L2SqrtUnexpanded (5, cuML"
-            " 'euclidean'/'l2') is ported (NOT_IMPLEMENTED.tsv)"
+            " 'euclidean'/'l2') is implemented (NOT_IMPLEMENTED.tsv)"
         )
     if chunk < 1:
         raise Error(

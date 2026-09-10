@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The four kernels behind `ELeavesEstimation::Exact` on their GPU.
 
-PORT OF `catboost/cuda/methods/kernel/exact_estimation.cu` at CatBoost
-`54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/kernel/exact_estimation.cu` at CatBoost
+`54a8143a`. Followed statement for statement.
 
 WHAT EXACT IS. For MAE, MAPE and Quantile the second derivative is
 identically zero, so a Newton step is meaningless and even the Gradient
@@ -198,7 +198,7 @@ def make_end_of_bins_flags_kernel(
     resets its carry on. Theirs launches 128 threads per block and lets
     all of them write the same word; the race is benign because the value
     is a constant, and it is left alone here for the same reason -- except
-    that this port's segmented scan reads a BIT rather than a whole word
+    that this implementation's segmented scan reads a BIT rather than a whole word
     (`segmented_scan.mojo`'s `flag_mask`), so the constant is
     `flag_bit_in` and not a literal 1.
 

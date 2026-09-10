@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The 7-bit pointwise accumulator: `TPointHist<0, 2, BlockSize>`.
 
-PORT OF `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_7bit.cu` at
-CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_7bit.cu` at
+CatBoost `54a8143a`. Followed statement for statement.
 
 Up to 128 bins per feature, 128 as the absent marker, and **the whole 1024
 slots of a warp slice go to ONE copy.** This is the end of the progression:

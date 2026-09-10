@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Apply a stored oblivious tree to rows, by EVALUATING it.
 
-PORT OF `AddObliviousTreeImpl`, `catboost/cuda/models/kernel/add_model_value.cu:70-120`
+FOLLOWS `AddObliviousTreeImpl`, `catboost/cuda/models/kernel/add_model_value.cu:70-120`
 at CatBoost `54a8143a`, which is the kernel their own `AppendModels` reaches
 on the learn set as well as the test set
 (`add_oblivious_tree_model_doc_parallel.cpp:191-192`).
@@ -77,7 +77,7 @@ def compute_bins_and_add_kernel(
     as the estimator's: `leaf_values` is BIN-MAJOR --
     `[leaf * dimCount + dim]`, which is what `MakeEstimationResult`
     produced and what the model stores -- while the cursor is PLANE-MAJOR,
-    one contiguous column per class. A port that read both the same way
+    one contiguous column per class. An implementation that read both the same way
     would predict with the classes rotated and nothing would assert.
 
     `dim_count_in == 1, cursor_stride_in == 0` is the single-dimensional
@@ -232,7 +232,7 @@ def compute_non_symmetric_decision_tree_bins_kernel(
     `const TTreeNode* nodes`, and walks them by POINTER ARITHMETIC. Ours
     takes seven parallel planes and walks an INDEX.
 
-    Two reasons, both already established in this port and neither of them a
+    Two reasons, both already established in this implementation and neither of them a
     preference:
 
     * `split_points.mojo`'s deviation block: binding a whole `CFeature` to a

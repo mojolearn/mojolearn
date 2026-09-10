@@ -4,7 +4,7 @@
 
 `estimator.mojo` exists because DEVIATION 154 recorded a debt — a caller
 arriving from sklearn with `min_weight_fraction_leaf` or `monotonic_cst` got no
-error from this port, because neither had a field to refuse. This file is what
+error from this implementation, because neither had a field to refuse. This file is what
 holds that promise: it enumerates every parameter in sklearn's constructor and
 requires each to be either honoured with a checked effect, or refused with a
 message that names it.
@@ -162,7 +162,7 @@ def main() raises:
     print("    ", round_trips, "resolutions round-tripped through the ratio")
 
     # ---- every refusal, by name ------------------------------------------
-    print("[refusals] every unported sklearn parameter, one case each")
+    print("[refusals] every unimplemented sklearn parameter, one case each")
     var base = ExtraTreesConfig()
     assert_true(not refused(base), "the shipped default must be accepted")
     cells += 1

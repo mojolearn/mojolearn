@@ -3,8 +3,8 @@
 """`set_unavailable`, `set_upper`, `set_lower`: the flag kernels of the
 working-set selection.
 
-PORT OF `cuml/cpp/src/svm/ws_util.cuh` at cuML v26.08.00. `update_priority`
-is NOT ported: it serves `PrioritySelect`, which `FIFO_strategy = true`
+FOLLOWS `cuml/cpp/src/svm/ws_util.cuh` at cuML v26.08.00. `update_priority`
+is NOT implemented: it serves `PrioritySelect`, which `FIFO_strategy = true`
 never calls ("only FIFO is tested so far", `workingset.h:36`); see
 `svm/NOT_IMPLEMENTED.tsv`.
 

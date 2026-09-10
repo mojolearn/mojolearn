@@ -1,0 +1,81 @@
+{
+  "passed": true,
+  "files": {
+    "final.checkpoint.json": {
+      "bits_match": true,
+      "sha256": "6e9e5c933b9ae83336489c25e84810e9c884153ea63bce327d7065dff1700464"
+    },
+    "frozen-initial-parameters.f32": {
+      "bits_match": true,
+      "sha256": "b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424"
+    },
+    "heldout-schedule.i32": {
+      "bits_match": true,
+      "sha256": "e5512f24fc86b195635277ac775ef3dc6bbbbfb3696bb9621be21bfe0e0165d2"
+    },
+    "initial/initial_flags.i32": {
+      "bits_match": true,
+      "sha256": "5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8"
+    },
+    "initial/initial_m.f32": {
+      "bits_match": true,
+      "sha256": "67b858a53a3257e5b4eae997fee97e409e77ddff5eac0d60f603353edab3caa3"
+    },
+    "initial/initial_p.f32": {
+      "bits_match": true,
+      "sha256": "b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424"
+    },
+    "initial/initial_v.f32": {
+      "bits_match": true,
+      "sha256": "67b858a53a3257e5b4eae997fee97e409e77ddff5eac0d60f603353edab3caa3"
+    },
+    "step000001/grad.f32": {
+      "bits_match": true,
+      "sha256": "b490931ef128408818f43497b8cf27414a46b24208a90cf86c9f31f56d972071"
+    },
+    "step000001/ids.i32": {
+      "bits_match": true,
+      "sha256": "629dd8ec3ebe598fc3b81db4239201619bf5f3063d32a803fa5e6923a5867fd2"
+    },
+    "step000001/initial_flags.i32": {
+      "bits_match": true,
+      "sha256": "5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8"
+    },
+    "step000001/initial_m.f32": {
+      "bits_match": true,
+      "sha256": "67b858a53a3257e5b4eae997fee97e409e77ddff5eac0d60f603353edab3caa3"
+    },
+    "step000001/initial_p.f32": {
+      "bits_match": true,
+      "sha256": "b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424"
+    },
+    "step000001/initial_v.f32": {
+      "bits_match": true,
+      "sha256": "67b858a53a3257e5b4eae997fee97e409e77ddff5eac0d60f603353edab3caa3"
+    },
+    "step000001/loss.f32": {
+      "bits_match": true,
+      "sha256": "499938680fa574fc4e6fcc0a01c442dc01244692d26634478dfb5baa6b60ff96"
+    },
+    "step000001/post_flags.i32": {
+      "bits_match": true,
+      "sha256": "5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8"
+    },
+    "step000001/post_m.f32": {
+      "bits_match": true,
+      "sha256": "367d81a272b15be435bf967358bf9a550ff0f130ea38fe1d1e0249488159964a"
+    },
+    "step000001/post_p.f32": {
+      "bits_match": true,
+      "sha256": "ad6eab975e5aa78809dc3d2341ee9ec31aee1d4b4d6ec26a1c86ed33d688ff37"
+    },
+    "step000001/post_v.f32": {
+      "bits_match": true,
+      "sha256": "68c45557491e8f76dc9bbe8e51641148e5031551a38ed4d677b34831226e9ce9"
+    },
+    "train-schedule.i32": {
+      "bits_match": true,
+      "sha256": "f7c606fa1b250285fa6decdc688ba6db0576753b8101e8844bae5ca8dc580f82"
+    }
+  }
+}

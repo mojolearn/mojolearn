@@ -50,7 +50,7 @@ exactly that against the one-block kernel, cell by cell, rather than
 asserting the two partitions are "equivalent".
 
 WHAT IS KEPT. `split_not_valid` is called on the same four fields, in
-the same place, so a node the ported kernel skips is a node this skips.
+the same place, so a node the implemented kernel skips is a node this skips.
 `node_split_kernel` STAYS in the tree and stays checked: it is the
 oracle this is compared against, and deleting the thing you are
 verified against leaves nothing to verify against tomorrow.
@@ -91,7 +91,7 @@ def _block_scan[
     """`(exclusive_prefix_of_this_thread, block_total)` over `TPB` flags.
 
     cuML calls `cub::BlockScan(...).ExclusiveSum(flag, prefix, aggregate)`
-    (`builder_kernels_impl.cuh:69-71`), and rule 0b-i says port the CALL, not a
+    (`builder_kernels_impl.cuh:69-71`), and rule 0b-i says implementation the CALL, not a
     hand-written replacement: MAX's `prefix_sum` and `sum` are the
     counterparts. CUB returns the aggregate through a third argument; MAX
     spells it as a separate broadcast reduction, so this is two collectives

@@ -127,7 +127,7 @@ feature slices alongside the measurement work.
 | Workload-selected / R1 | One ranking objective with groups/pairs and group-aware splitting. | Choose CatBoost or LambdaRank algorithm explicitly; GPU derivatives and metrics; independent gradients, ties and group integrity. AUC is a classification score, not this feature. |
 | Later / L1–L4 | Portable adapter archives/inspection, continuation, extension hooks, SHAP. | Version training state and retained metadata before continuation/attribution. Preserve mode and category schema. |
 | Later / F9 | Feature weights, fixed splits and feature-use penalties. | Distinguish score multipliers from sampling weights and penalties; pin the chosen upstream dispatch. |
-| Deferred / F10, R2–R3, C4, S1–S2 | Linear leaves; objective-by-objective multi-target/survival/uncertainty; DART/GOSS; text/embeddings; sparse; distributed. | Separate designs and workload justification. Keep these visible without labeling general CPU support as a GPU port obligation. |
+| Deferred / F10, R2–R3, C4, S1–S2 | Linear leaves; objective-by-objective multi-target/survival/uncertainty; DART/GOSS; text/embeddings; sparse; distributed. | Separate designs and workload justification. Keep these visible without labeling general CPU support as a GPU implementation obligation. |
 
 ### Implemented per-tree sampling and remaining node sampling
 

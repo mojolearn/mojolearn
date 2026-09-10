@@ -535,7 +535,7 @@ def kde_score_samples_binding(
         4  has_weights (0/1; weights_addr is read only when 1)
 
     `kernel` and `metric` are the sklearn/cuML names; the host entry
-    refuses every unported one BY NAME (kde/estimator.mojo). Returns
+    refuses every unimplemented one BY NAME (kde/estimator.mojo). Returns
     n_query. Added 2026-08-23 by the identity lane on the kde lane's
     hand-off (kde/README.md).
     """

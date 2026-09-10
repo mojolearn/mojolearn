@@ -4,7 +4,7 @@
 
 ================= DEVIATION BLOCK (whole file) =================
 NO CATBOOST COUNTERPART. This family is the recons' borrowed design, not a
-port of `hist_one_byte.cu`:
+implementation of `hist_one_byte.cu`:
 
 * **DEV 1911 -- fixed-point gradient pairs, packed one word per row.**
   XGBoost converts every float `(grad, hess)` to fixed-point integers ONCE
@@ -14,11 +14,11 @@ port of `hist_one_byte.cu`:
   and LightGBM packs the discretized pair into ONE word per row so the hist
   kernel loads it in one instruction (`cuda_histogram_constructor.cu:291-294`
   -- recon_lightgbm_cuda.md b2). `quantize_pair_kernel` mirrors the DESIGN
-  on this port's planes: both stat planes of a row become two Int32 through
+  on this implementation's planes: both stat planes of a row become two Int32 through
   the SAME `hist2_quantize(stat, fixed_scale, hist2_dither(position))` the
   shared-Int32 arms already apply inline -- same scale (`choose_scale`'s
   bound, the round's magnitude contract), same dithered-floor rounding
-  (this port's measured stand-in for XGBoost's rounding constant: plain
+  (this implementation's measured stand-in for XGBoost's rounding constant: plain
   truncation and round-to-nearest both failed, `hist2_quantize`'s docstring
   carries the numbers), same positions, same draws -- packed into one
   UInt64 via SIMD bitcast (lane 0 = stat plane 0 / weight-hess, lane 1 =
@@ -34,7 +34,7 @@ port of `hist_one_byte.cu`:
   the per-cell totals this family flushes are BIT-IDENTICAL to that arm's
   for the same rows -- which is the gate the orchestrator can hold it to.
 
-  XGBoost quantizes once per ROUND; this port re-permutes the stat planes
+  XGBoost quantizes once per ROUND; this implementation re-permutes the stat planes
   at every split, so the quantize pass runs per LEVEL over exactly the
   rows being built (grid y = the non-zero compute leaves). One extra
   8 B/row write + read per level, in exchange for every feature-group

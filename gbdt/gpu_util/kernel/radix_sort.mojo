@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """LSD radix sort over `(bin, permutation position)`: their `ReorderBins`.
 
-PORT OF the path `TCtrBinBuilder` takes to put the rows in CTR order,
+FOLLOWS the path `TCtrBinBuilder` takes to put the rows in CTR order,
 `catboost/cuda/ctrs/ctr_bins_builder.h:223`:
 
     GatherWithMask(Bins, DecompressedTempBins, Indices, Mask, Stream);
@@ -31,8 +31,8 @@ sortedness for that reason.
 
 # =========================================================================
 # DEVIATION BLOCK: theirs is `cub::DeviceRadixSort::SortPairs`
-# (`cuda_util/kernel/sort_templ.cuh:26`). CUB is OPEN and therefore a port
-# candidate under PORTING_RULES 0b-i, and MAX ships no device sort
+# (`cuda_util/kernel/sort_templ.cuh:26`). CUB is OPEN and therefore an implementation
+# candidate under ENGINEERING_RULES 0b-i, and MAX ships no device sort
 # (archive/reference/VENDOR_LIBS.md, re-checked 2026-08-20), so there is nothing to call.
 #
 # What is written here is NOT a fresh design: it is CatBoost's OWN
@@ -61,8 +61,8 @@ sortedness for that reason.
 #    the check exercises on both sides.
 # 3. NO DESCENDING ARM. `TRadixSortContext::Descending`
 #    (`cuda_util/kernel/sort.cuh:25`) exists, and `ReorderBinsImpl` passes
-#    `false` (`sort.cpp:558`). An unported arm nothing dispatches to is
-#    left unported rather than written blind.
+#    `false` (`sort.cpp:558`). An unimplemented arm nothing dispatches to is
+#    left unimplemented rather than written blind.
 # =========================================================================
 
 ## What is reused rather than rewritten

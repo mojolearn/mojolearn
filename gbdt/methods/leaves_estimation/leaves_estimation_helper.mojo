@@ -2,21 +2,21 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ComputeWeightedQuantile` and `ComputeExactApprox`: the Exact driver.
 
-PORT OF `catboost/cuda/methods/leaves_estimation/leaves_estimation_helper.h`
+FOLLOWS `catboost/cuda/methods/leaves_estimation/leaves_estimation_helper.h`
 at CatBoost `54a8143a` -- `ComputeWeightedQuantile` (`:64-146`) and
-`ComputeExactApprox` (`:148-185`). Transliterated. Do not improve.
+`ComputeExactApprox` (`:148-185`). Followed statement for statement.
 
-Only those two functions are ported. The rest of their header is pairwise
+Only those two functions are implemented. The rest of their header is pairwise
 and groupwise machinery (`MakeSupportPairsMatrix`, `ReorderPairs`,
 `FilterZeroLeafBins`) belonging to the ranking oracles, which are NOT
-PORTED; porting a function nothing reaches is the defect PORTING_RULES 3
+IMPLEMENTED; implementing a function nothing reaches is the defect ENGINEERING_RULES 3
 names.
 
 ## The step of theirs this file DOES NOT do, and why that is right
 
 Theirs opens with `ComputeByLeafOrder` (`:88-94`): radix-sort the bin ids,
 carry an index permutation, and `Gather` targets and weights into leaf
-order. This port skips it, because the rows ARRIVE in leaf order --
+order. This implementation skips it, because the rows ARRIVE in leaf order --
 `split_points`' gather leaves `row_index` exactly bin-sorted, and
 `doc_parallel_boosting` gathers target / weights / cursor by it before the
 oracle is built. Their factory sorts; we inherit. That is the same
@@ -66,7 +66,7 @@ struct ExactQuantileScratch(Movable):
     Theirs allocates inside the function (`:78-134`, eleven
     `TSingleBuffer::Create` calls). Ours cannot: the Exact estimator runs
     once per TREE here, and the per-tree fixed cost is the number this
-    port is judged on (`PERF_2026-08-20_fixed-cost.md`), so the buffers
+    implementation is judged on (`PERF_2026-08-20_fixed-cost.md`), so the buffers
     belong to the fit. No arithmetic depends on where they live.
     """
 
@@ -283,7 +283,7 @@ def compute_exact_approx(
         # the point `EstimateExact` calls in (`pointwise_oracle.cpp:
         # 204-210`) the buffer named `values` holds `target - cursor`, and
         # `ComputeWeightsWithTargets` divides by `max(1, |that|)`. This
-        # port read that as a defect against `TMAPETarget::Der`, which
+        # implementation read that as a defect against `TMAPETarget::Der`, which
         # divides by `max(1, |raw target|)` (`pointwise_targets.cu:
         # 151-154`), and went looking for which of the two their CPU does.
         # THEIR CPU DOES THE SAME AS THEIR GPU:

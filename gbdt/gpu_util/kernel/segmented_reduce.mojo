@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`SegmentedReduceVector(..., Sum)`: per-segment sums over ragged offsets.
 
-PORT OF THE CALL, not the library. Their entry is
+FOLLOWS THE CALL, not the library. Their entry is
 `catboost/cuda/cuda_util/reduce.h:27` (`SegmentedReduceVector`), whose Sum
 arm is `cub::DeviceSegmentedReduce::Sum` over
 `[SegmentStarts[s], SegmentStarts[s+1])`. THE VENDOR CHECK WAS RUN

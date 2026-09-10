@@ -3,13 +3,13 @@
 """`linearFwd`, `linearBwd`, `GLMDims`, `GLMBase::getLossAndDZ`/`loss_grad`,
 `GLMWithData`: the objective the L-BFGS solver calls.
 
-PORT OF `cuml/cpp/src/glm/qn/glm_base.cuh` at cuML `00094f7`. Dense
+FOLLOWS `cuml/cpp/src/glm/qn/glm_base.cuh` at cuML `00094f7`. Dense
 row-major `X`, no sample weights (`add_sample_weights` and the weighted arm
 of `getLossAndDZ` are refused by name in `qn.mojo`). `C == 1` is the path
 below, kernel for kernel; `C > 1` (the softmax objective) dispatches on
 `dims.C` to the kernels `glm_softmax.mojo` carries (DEVIATION 706), and
 `getLossAndDZ` / `gradNorm` dispatch on the loss id to `glm_logistic.mojo`,
-`glm_linear.mojo`, `glm_svm.mojo`, `glm_softmax.mojo`. Do not improve.
+`glm_linear.mojo`, `glm_svm.mojo`, `glm_softmax.mojo`.
 
 LOGISTIC-BITS AUDIT (2026-08-23, the QN-losses resume). This file is
 shared with the CERTIFIED binary-logistic path (leg 11, 144aa5b), so every
@@ -311,7 +311,7 @@ struct GLMWithData(Movable):
     (`qn.cuh:61-86`), and the loss itself selected by `loss` (their
     template argument) in `get_loss_and_dz` / `grad_norm`. Owns the `Z`
     scratch their `qn_fit_x` allocates (`qn.cuh:117-118`, `n_targets x N`)
-    and this port's extra per-row / per-cell scratch. `svr_eps` is the
+    and this implementation's extra per-row / per-cell scratch. `svr_eps` is the
     SVR losses' `sensitivity` and is read by nothing else."""
 
     var dims: GLMDims

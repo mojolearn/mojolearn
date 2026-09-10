@@ -16,7 +16,7 @@ cp.percentile(score_samples(X), 100 * contamination)` else `-0.5`
 -C++predict(threshold = -offset_)` (`:1023-1042`). `warm_start` and
 `sample_weight` raise `UnsupportedOnGPU` there (`:592-595`) and raise by
 name here. Treelite / nvForest export (`as_treelite`, `as_nvforest`,
-`_score_samples_nvforest`) is NOT ported (NOT_IMPLEMENTED.tsv).
+`_score_samples_nvforest`) is NOT implemented (NOT_IMPLEMENTED.tsv).
 
 Host only; the device work is `impl/isolation_forest/`. The percentile
 is numpy/cupy's default `linear` interpolation computed in Float64 over
@@ -350,7 +350,7 @@ def iforest_run_host(
 
     Every refusal here is `IsolationForestEstimator.fit`'s, which is cuML's
     `fit` transcribed, plus DEVIATION 680's finiteness scan inside the
-    ported `fit`. `warm_start` and `sample_weight` have no argument on this
+    implemented `fit`. `warm_start` and `sample_weight` have no argument on this
     entry at all; the Python layer refuses them by name before it gets here,
     which is where their `UnsupportedOnGPU` sits too (`:592-595`).
     """

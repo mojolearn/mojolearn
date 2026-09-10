@@ -7,7 +7,7 @@ Every kernel so far is proven REACHABLE by `launch_probe` and proven correct
 by nothing. Reachability is not correctness, exactly as compiling was not
 reachability.
 
-This checks the one property the whole port is FOR: that 32 binary features
+This checks the one property the whole implementation is FOR: that 32 binary features
 survive being packed into a single `UInt32` and read back out. If this is
 wrong, the read-density advantage is imaginary and everything downstream is
 computing on garbage.

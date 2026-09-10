@@ -43,7 +43,7 @@ Then the two searchers diverge:
 
 So "does the model move" is the WRONG gate on one arm and the right gate on
 the other, and a check that demanded movement everywhere would have been
-failed by a correct port.
+failed by a correct implementation.
 
 ## Gates
 
@@ -64,7 +64,7 @@ failed by a correct port.
        term (`score_calcers.cuh:40-69`), so under `score_function=L2` a
        non-zero `random_strength` must change NOTHING even on the
        doc-parallel arm, where R2 says it otherwise changes almost
-       everything. Without this gate, a port that added the noise to every
+       everything. Without this gate, an implementation that added the noise to every
        calcer would pass R1-R4. Run at `random_strength = 1e6`, because at
        1.0 a deliberately leaked noise term moved nothing -- see the
        comment at the call.

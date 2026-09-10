@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The batch-size policy and the workspace allocation.
 
-PORT OF `cuml/cpp/src/dbscan/dbscan.cuh::compute_batch_size` and
+FOLLOWS `cuml/cpp/src/dbscan/dbscan.cuh::compute_batch_size` and
 `dbscanFitImpl` at cuML `00094f7`. Partial (single node, no
-`core_sample_indices`). Do not improve.
+`core_sample_indices`).
 
 `sample_weight` is plumbed since 2026-09-01 and `metric` carries an L1 arm
 that has no upstream (DEVIATION 27, `dbscan/impl/neighbors/
@@ -65,7 +65,7 @@ def compute_batch_size(
     anymore". Their `///@todo: expose neigh_per_row to the user` still
     stands, and `<= 0` still means `n_rows`.
 
-    Index type is Int32 throughout this port, so `sizeof(Index_) == 4` and
+    Index type is Int32 throughout this implementation, so `sizeof(Index_) == 4` and
     `MAX_LABEL == 2147483647`.
 
     `eps_nn_method` is theirs (`dbscan.cuh:37`) and it gates ONE thing,
@@ -128,7 +128,7 @@ def compute_batch_size(
     # bound is the ACTUAL edge count, refused at the query site
     # (runner.mojo, the `nnz1 > MAX_LABEL` raise). Their `:86-94` info about
     # a smaller sufficient index type is dead for Index_ == int32 and is not
-    # ported.
+    # implemented.
     if eps_nn_method != EPS_NN_RBC:
         # To avoid overflow, we need: batch_size <= MAX_LABEL / n_rows
         # (floor div)

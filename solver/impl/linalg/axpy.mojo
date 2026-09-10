@@ -10,7 +10,7 @@ current coefficient (`cd.cuh:201`, `coef_loc`) and the negated new one
 never reads a float back to the host. cuBLAS is CLOSED and MAX has no
 `axpy`; the mirror is the elementwise kernel below, one thread per row,
 which reads `alpha` from device memory exactly as their pointer mode does.
-The host/device split is part of the algorithm (PORTING_RULES 2) and is
+The host/device split is part of the algorithm (ENGINEERING_RULES 2) and is
 kept: nothing in `cdFit`'s inner loop syncs.
 
 `y[i] = alpha * x[i] + y[i]`: under IDENTICAL one rounding through

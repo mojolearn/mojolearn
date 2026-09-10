@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Building the random ball cover index, and the eps query entry points.
 
-PORT OF `cuvs/src/neighbors/ball_cover/ball_cover.cuh` at cuVS `94c2819`:
+FOLLOWS `cuvs/src/neighbors/ball_cover/ball_cover.cuh` at cuVS `94c2819`:
 `sample_landmarks` (`:62`), `construct_landmark_1nn` (`:121`),
 `k_closest_landmarks` (`:180`), `compute_landmark_radii` (`:212`),
 `rbc_build_index` (`:330`), `perform_rbc_eps_nn_query` (`:277`, `:300`) and
-`rbc_eps_nn_query` (`:533`, `:550`). Partial. Do not improve.
+`rbc_eps_nn_query` (`:533`, `:550`). Partial.
 
 WHAT THE CALLER GETS AND WHAT CUML'S CALLER DOES WITH IT
 ---------------------------------------------------------
@@ -62,7 +62,7 @@ and `search` at k = 1. That path materializes an `m x n_landmarks` distance
 matrix. At m = 200,000 that is 200,000 x 447 float32 = 357 MB, for an argmin
 that keeps two values. `rbc_landmark_1nn_kernel` below computes the same
 argmin without materializing anything, which is the shape RAFT itself uses
-when k = 1 — `fusedDistanceNN`, already ported in this repository at
+when k = 1 — `fusedDistanceNN`, already implemented in this repository at
 `cluster/impl/distance/fused_distance_nn/simt_kernel.mojo`. It is not
 tiled because it does not need to be: `n_landmarks` is sqrt(m) and the
 landmark matrix is small enough to stay in cache for every query row.
@@ -133,13 +133,13 @@ uniform fixture and 4.5x on a 12-blob clustered one, which puts
 `sum |group|^2` at 1.18x and 1.42x the balanced `m^1.5` and the rank kernel
 at 4.4 ms and 6.4 ms at m = 200,000.
 
-So a per-group bitonic sort, or a port of CUB's `DeviceRadixSort` (open, and
+So a per-group bitonic sort, or an implementation of CUB's `DeviceRadixSort` (open, and
 the same digit-histogram shape as the RAFT radix SELECT already at
 `neighbors/impl/matrix/detail/select_radix.mojo`), is worth at most 1% of a
 fit here. `DeviceRadixSort` is still the general device sort this repository
 lacks — `nn.argsort[target="gpu"]` is wrong above 256 elements — and it
-should be ported for that reason, by whoever needs it. It should not be
-ported for this.
+should be implemented for that reason, by whoever needs it. It should not be
+implemented for this.
 
 **THE ORDER IS LOAD-BEARING AND IS NOT AN OPTIMIZATION.** Ascending order
 within each landmark group is what makes the query kernel's backward walk

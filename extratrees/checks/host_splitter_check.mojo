@@ -17,7 +17,7 @@ WHAT AUTHORITY EACH SECTION USES, because "it agrees with itself" is not one
    plain loop over a materialised `List[Int]` of node rows, reading the
    fixture's ROW-MAJOR accessor (the oracle reads cuML's COLUMN-MAJOR
    `Dataset`), accumulating in `Float64` with no objective object involved.
-   Class counts are compared PER CLASS, not as a total -- `PORTING_RULES.md`
+   Class counts are compared PER CLASS, not as a total -- `ENGINEERING_RULES.md`
    rule 8, earned here: a uniform fixture once reported 0 wrong of 512 on a
    kernel a hashed fixture showed to be 490 wrong of 512.
 3. **Order independence.** The same node, the same key, the columns supplied
@@ -215,7 +215,7 @@ struct Tally(Copyable, Movable):
     def gini_proxy(self) -> Float64:
         """`_criterion.pyx:147-163` over `:647-687`: `-nR*gini_R - nL*gini_L`.
         Gini does NOT override the base proxy, so this is the shape, not the
-        sum-of-squares one a port usually assumes."""
+        sum-of-squares one an implementation usually assumes."""
         var gl = Float64(0.0)
         var gr = Float64(0.0)
         if self.n_left > 0:
@@ -281,7 +281,7 @@ def extremes_for(
 ) -> FeatureRange:
     """`_partitioner.pyx:150-163`, written as two independent `if`s rather
     than their `elif` chain. Equivalent for NaN-free input, which is the only
-    input this port accepts (DEVIATION 136), and a different shape of loop --
+    input this implementation accepts (DEVIATION 136), and a different shape of loop --
     which is the point."""
     var lo = fixture.value(rows[0], col)
     var hi = lo

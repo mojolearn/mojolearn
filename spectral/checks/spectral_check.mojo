@@ -867,7 +867,7 @@ def check_spectral_device_equals_oracle() raises:
     var emb = List[Float32]()
     var n_out = transform_dataset(ctx, params, data, n, 4, emb, tr)
     # read the device's W back out of its own card lines? No -- rebuild it
-    # through the same ported graph builder (a second device run, same
+    # through the same implemented graph builder (a second device run, same
     # bits under IDENTICAL, and `check_spectral_launch_invariance` covers
     # the repeat) so the oracle has the COO to run on.
     var tr2 = IdentityTrace.disabled()
@@ -1049,7 +1049,7 @@ def _n_components_of(g: CooGraph) -> Int:
 
 def check_spectral_disconnected_graph_records_the_limit() raises:
     """THE BLOBS VERDICT, 2026-08-24, recorded as a property of the
-    algorithm we mirror rather than as a defect of the port.
+    algorithm we mirror rather than as a defect of the implementation.
 
     Three well-separated blobs with `n_neighbors = 10` produce a kNN graph
     with THREE CONNECTED COMPONENTS and no cross-blob edge at all. RAFT's
@@ -1111,7 +1111,7 @@ def check_spectral_disconnected_graph_records_the_limit() raises:
         "check_spectral_disconnected_graph_records_the_limit OK: blobs at"
         " n_neighbors=10 give a kNN graph with EXACTLY 3 CONNECTED"
         " COMPONENTS (asserted, structural), so L's null space is"
-        " triple-degenerate. RECORDED (not asserted): the ported"
+        " triple-degenerate. RECORDED (not asserted): the implemented"
         " single-vector Lanczos returned " + String(near_zero) + " of 3"
         " near-zero Ritz values, eigenvalues of L = " + ritz
         + "-- a multiplicity a single-vector Krylov method cannot resolve"

@@ -50,7 +50,7 @@ alongside cuML commit
 [00094f7e third-party preprocessing](https://github.com/rapidsai/cuml/blob/00094f7e4e4b5da3a968d193a4da6085fa38f11b/python/cuml/cuml/_thirdparty/sklearn/preprocessing/_data.py)
 and its corresponding `utils/extmath.py`. The native header also cites
 [cuML v26.08.00](https://github.com/rapidsai/cuml/tree/v26.08.00/python/cuml/cuml/_thirdparty/sklearn).
-The [derivation map](../../preprocessing/DERIVATION_MAP.tsv) records the
+The native header records the
 implementation-specific `STD-1`, `STD-2` and `STD-3` policies.
 
 sklearn accumulates moments in Float64, applies a correction to its centered
@@ -58,7 +58,7 @@ sum of squares and detects indistinguishable constant features using a
 Float64 error bound involving mean, variance and sample count. The inspected
 cuML scaler uses its older exact-zero scale helper. A Float32 GPU policy is
 not automatically equivalent to either implementation. This is an independent
-bounded implementation, not a literal source port or broad sklearn/cuML
+bounded implementation, not a literal source implementation or broad sklearn/cuML
 numerical-parity claim.
 
 The GPU implementation uses a separate centered variance pass:

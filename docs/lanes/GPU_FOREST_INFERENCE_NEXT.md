@@ -51,7 +51,7 @@ Read source: `upstream/cuml-v26.08.00`, pin `265b9da6`.
   input to host, walks rows/trees, adds sequentially and divides. This is the
   path our host code follows. It is **not** the current cuML Python production
   GPU inference path. Do not label a GPU translation of this fallback as a
-  literal nvForest port or infer identical association to nvForest.
+  literal nvForest implementation or infer identical association to nvForest.
 
 ## Resolved nvForest source and actual GPU algorithm
 
@@ -89,7 +89,7 @@ The following paths are relative to that pinned nvForest checkout:
   `detail/evaluate_tree.hpp:35–65` then uses `<` and child offsets, with missing
   value/default-child handling. Copying `<` onto our unconverted thresholds
   would break equality routing. An initial direct-flat-array implementation
-  must retain our `<=`, or port conversion and prove its edge cases.
+  must retain our `<=`, or implementation conversion and prove its edge cases.
 * `detail/infer.hpp:52–158` specializes vector-leaf and categorical variants.
   `detail/infer/gpu.cuh:103–179` chooses block size and chunking from device
   shared-memory/occupancy limits. It initially considers one row and selects

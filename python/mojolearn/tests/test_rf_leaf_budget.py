@@ -56,7 +56,7 @@ THE ALIAS HAD A CERTIFIED GREEN CELL STANDING ON IT FOR MONTHS.
 IDENTICAL (388 stages) on every column -- `bench/results/e1/
 e2_verdicts_round1.md`, `e2_verdicts_round2.md` and the dated
 `e3_verdicts_trees.md` files. One line above it in the same tables sits its
-extratrees twin, `et_clf_maxleaf`, scored REFUSED=, because the ET port
+extratrees twin, `et_clf_maxleaf`, scored REFUSED=, because the ET implementation
 refused the parameter by name until 2026-09-01. A reader of those tables
 would conclude that RF had the capability and ET did not. The truth was the
 reverse.

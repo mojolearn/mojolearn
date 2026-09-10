@@ -65,7 +65,7 @@ THE ORACLE IS A SECOND SPELLING, NOT A SECOND CALL
 than calling `rbc_cmp_dist` on host pointers. Calling the device's own
 function would make bit-equality trivially true and would prove nothing about
 the FORMULA; spelling it a second time means a wrong formula fails here even
-though a faithful transliteration of it would not. The transcendental is the
+though a faithful statement-for-statement match of it would not. The transcendental is the
 one exception: Lp's `pow` is `identical_pow` in both places, because a second
 spelling of a transcendental is a second ANSWER, not a second opinion.
 
@@ -228,7 +228,7 @@ def _host_cmp_dist(
     Same accumulation order over the same operand bits, so a boundary point
     cannot land on one side on the host and the other on the device, but a
     second spelling rather than a second call, so a wrong FORMULA fails here
-    where a faithful transliteration of a wrong formula would not. `pow` is
+    where a faithful statement-for-statement match of a wrong formula would not. `pow` is
     the one shared call; see the module docstring.
     """
     var acc = Float32(0.0)

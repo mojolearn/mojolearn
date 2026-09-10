@@ -21,8 +21,7 @@ byte-identical Apple M4 against AMD MI325X on the other 3,486 lines. See
 delegated the exposure decision and the orchestrator took it: expose.
 
 **THERE IS NO UPSTREAM GAUSSIAN PROCESS.** cuML, cuVS and RAFT implement
-none at the pinned commits (`gaussian_process/DERIVATION_MAP.tsv` carries
-the grep), so this lane is ORIGINAL WORK per `ok-to-add-capability`.
+none at the pinned commits, so this lane is ORIGINAL WORK per `ok-to-add-capability`.
 scikit-learn's `sklearn/gaussian_process/_gpr.py` is the SEMANTICS
 reference and the oracle, never the design source; every name this surface
 shares with scikit-learn means what scikit-learn means by it.
@@ -227,7 +226,7 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   ConstantKernel(1.0) * RBF(1.0).
                                   DotProduct, RationalQuadratic,
                                   ExpSineSquared and the general Matern
-                                  are unported
+                                  are unimplemented
                                   (gaussian_process/NOT_IMPLEMENTED.tsv)
         alpha           honored   the RIDGE added to the training diagonal,
                                   which IS the Cholesky profile's jitter --
@@ -249,7 +248,7 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   kernel_ is therefore the kernel you passed
         n_restarts_     refused   anything but 0; it exists to serve the
           optimizer               refused optimizer
-        normalize_y     refused   anything truthy. NOT PORTED: it centers
+        normalize_y     refused   anything truthy. NOT IMPLEMENTED: it centers
                                   and scales y with host reductions whose
                                   last bits would sit inside a cross-vendor
                                   identity claim (DEVIATION 1764 names it)
@@ -260,14 +259,14 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   nothing it could mean here
         n_targets       refused   anything but None; it exists to shape
                                   sample_y's prior draws, and sample_y is
-                                  unported
+                                  unimplemented
         random_state    refused   anything but None; only sample_y draws
                                   random numbers upstream, and sample_y is
-                                  unported
+                                  unimplemented
         sparse X        refused   dense row-major float32 only
                                   (_arrays.py::as_f32_c)
         2-D y           refused   by name; multi-target GP fits are not
-                                  ported (single-target only)
+                                  implemented (single-target only)
         non-finite X/y  refused   on the HOST in Mojo, naming the flat index
         /length scales            (DEVIATION 1768), before any launch
 
@@ -363,7 +362,7 @@ class GaussianProcessRegressor(NumericModeMixin):
                 "mojolearn GaussianProcessRegressor: kernel must be a "
                 "composition of mojolearn's RBF, Matern, ConstantKernel and "
                 "WhiteKernel (a scikit-learn kernel object carries bounds "
-                "and a theta this port deliberately has no use for; "
+                "and a theta this implementation deliberately has no use for; "
                 "DEVIATION 1761)"
             )
         if not (optimizer is None
@@ -391,7 +390,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         if normalize_y:
             raise NotImplementedError(
                 "mojolearn GaussianProcessRegressor: normalize_y=True is "
-                "refused; NOT PORTED (DEVIATION 1764). It centers and "
+                "refused; NOT IMPLEMENTED (DEVIATION 1764). It centers and "
                 "scales y with host reductions whose last bits would sit "
                 "inside a cross-vendor identity claim. Normalize y yourself "
                 "and pass the result, so the numbers that ran are numbers "
@@ -410,14 +409,14 @@ class GaussianProcessRegressor(NumericModeMixin):
             raise NotImplementedError(
                 "mojolearn GaussianProcessRegressor: n_targets is refused; "
                 "it shapes sample_y's prior draws, and sample_y is not "
-                "ported (gaussian_process/estimator.mojo::gpr_sample_y_host "
+                "implemented (gaussian_process/estimator.mojo::gpr_sample_y_host "
                 "carries the closure condition). y is single-target here"
             )
         if random_state is not None:
             raise NotImplementedError(
                 "mojolearn GaussianProcessRegressor: random_state is "
                 "refused; the only consumer of randomness upstream is "
-                "sample_y, which is not ported. fit and predict draw no "
+                "sample_y, which is not implemented. fit and predict draw no "
                 "random numbers"
             )
         self.kernel = kernel
@@ -489,7 +488,7 @@ class GaussianProcessRegressor(NumericModeMixin):
             raise ValueError(
                 "mojolearn GaussianProcessRegressor: y must be 1-D, got "
                 f"{t.ndim}-D shape {t.shape}; multi-target GP fits are not "
-                "ported (the n_targets refusal in __init__ is this same "
+                "implemented (the n_targets refusal in __init__ is this same "
                 "boundary)"
             )
         if t.shape[0] != n_rows:
@@ -567,7 +566,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         if not hasattr(self, "alpha_"):
             raise ValueError(
                 "mojolearn GaussianProcessRegressor: call fit() first (the "
-                "unfitted-prior arm of sklearn's predict is not ported: it "
+                "unfitted-prior arm of sklearn's predict is not implemented: it "
                 "exists to serve sample_y, which is refused)"
             )
         q, _ = as_f32_c(X, "X")
@@ -661,7 +660,7 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     def sample_y(self, X, n_samples=1, random_state=0):
         raise NotImplementedError(
-            "mojolearn GaussianProcessRegressor: sample_y is NOT PORTED "
+            "mojolearn GaussianProcessRegressor: sample_y is NOT IMPLEMENTED "
             "(gaussian_process/NOT_IMPLEMENTED.tsv). It draws from the full "
             "posterior COVARIANCE, and this lane computes only its DIAGONAL "
             "(DEVIATION 1759); it also needs a second Cholesky and a normal "

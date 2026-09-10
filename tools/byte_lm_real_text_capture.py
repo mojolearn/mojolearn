@@ -244,7 +244,7 @@ def save_exclusive_checkpoint(trainer, path):
     return dict(file=path.name, bytes=len(raw), sha256=sha(raw))
 
 
-def load_foreign_checkpoint(cls, source, destination):
+def load_foreign_checkpoint(cls, source, destination, *, resident=False):
     # Capture one bounded regular inode into immutable bytes. Decode and hash
     # the exact same object without reopening a caller-controlled path.
     fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -267,7 +267,7 @@ def load_foreign_checkpoint(cls, source, destination):
             raise ValueError('incoming checkpoint length changed')
     finally:
         os.close(fd)
-    trainer = cls.from_checkpoint_bytes(raw)
+    trainer = cls.from_checkpoint_bytes(raw, resident=resident)
     exclusive(destination, raw)
     return trainer, dict(file=destination.name, bytes=len(raw), sha256=sha(raw),
                         loaded_from_sealed_capture=False, loaded_from_immutable_bytes=True,
@@ -317,7 +317,10 @@ def main():
     parser.add_argument('--steps', type=int, choices=(1, 128), default=128)
     parser.add_argument('--action', choices=('continuous', 'head64', 'resume128', 'zero-moments65'), default='continuous')
     parser.add_argument('--resume-checkpoint', type=Path)
+    parser.add_argument('--resident', action=argparse.BooleanOptionalAction, default=None,
+                        help='retain GPU model/optimizer across calls (default: on for Metal, off for CUDA/HIP)')
     args = parser.parse_args()
+    resident = args.expected_vendor == 'metal' if args.resident is None else args.resident
     validate_platform_vendor(args.expected_vendor)
     if (args.action in ('resume128', 'zero-moments65')) != (args.resume_checkpoint is not None) or (args.steps == 1 and args.action != 'continuous'):
         raise ValueError('head64 checkpoint required exactly for resume128/zero-moments65; steps1 only continuous')
@@ -343,10 +346,10 @@ def main():
     incoming = None
     if args.action in ('resume128', 'zero-moments65'):
         trainer, incoming = load_foreign_checkpoint(SmallByteLanguageModelTrainer,
-                             args.resume_checkpoint, args.output / 'incoming.checkpoint.json')
+                             args.resume_checkpoint, args.output / 'incoming.checkpoint.json', resident=resident)
     else:
         trainer = SmallByteLanguageModelTrainer(initialization, data_schedule=schedule,
-                       lr=.003, betas=(.9, .999), eps=1e-8, weight_decay=.01)
+                       lr=.003, betas=(.9, .999), eps=1e-8, weight_decay=.01, resident=resident)
     state = trainer.state_dict()
     expected_opt = dict(kind=2, lr=float(np.float32(.003)), beta1=float(np.float32(.9)),
         beta2=float(np.float32(.999)), eps=float(np.float32(1e-8)), weight_decay=float(np.float32(.01)),

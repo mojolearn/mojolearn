@@ -6,7 +6,7 @@ MIRRORS `catboost/cuda/methods/leaves_estimation/`, which in CatBoost is a
 whole subsystem: `TLeavesEstimation` with a descent loop, an ordered variant,
 exact estimation for some objectives, and per-objective backtracking.
 
-**Only the pointwise Newton step is ported**, which is what their whole
+**Only the pointwise Newton step is implemented**, which is what their whole
 subsystem reduces to at `leaf_estimation_iterations = 1`, which is RMSE's
 default (`catboost_options.cpp:61`).
 
@@ -46,18 +46,18 @@ MSE rather than a general one. The day an objective arrives whose `der2` is
 not its weight, the estimator has to become a second pass over the final
 partition, and this note is where the reader should start.
 
-NOT ported, and named so nobody assumes otherwise: `leaf_estimation_iterations
+NOT implemented, and named so nobody assumes otherwise: `leaf_estimation_iterations
 > 1` and with it the whole backtracking walker, ordered boosting's separate
 estimation, and exact estimation for MAE and quantile. Those change the VALUE
 a leaf gets and none of them change the tree structure.
 
-NOT PORTED, and it is a real one: `MakeZeroAverage`
+NOT IMPLEMENTED, and it is a real one: `MakeZeroAverage`
 (`doc_parallel_leaves_estimator.cpp:25-37`) shifts every leaf by
 `-sum(point) / count` after estimation, so the tree's leaf values average to
 zero. It is a CROSS-LEAF reduction and this kernel is one thread per leaf,
 so it cannot go here; it needs a second pass. CatBoost turns it on only for
 PairLogit and YetiRank (`NeedZeroAverage`, `train_template.h:29-40`), so it
-is off for every objective this port can reach.
+is off for every objective this implementation can reach.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -135,7 +135,7 @@ def compute_leaf_values_kernel(
     # So a leaf's value is `+sum(der) / (sum(der2) + l2)`, the weighted mean
     # residual, and adding it to the prediction moves toward the target.
     #
-    # It was `-g` here, ported before any target existed to fix the
+    # It was `-g` here, implemented before any target existed to fix the
     # convention. With CatBoost's `der` that inverts every step: measured on
     # `boosting_check`, the loss GREW by about 1.68x per iteration, from 231
     # to 55839 over twelve trees, instead of falling.

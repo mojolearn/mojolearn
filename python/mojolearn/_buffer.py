@@ -40,6 +40,8 @@ from __future__ import annotations
 import array
 import ctypes
 import math
+import mmap
+import sys
 
 from ._array import Array, _CODE, normalize_dtype
 
@@ -400,14 +402,103 @@ def _has_buffer(obj):
 
 def _convert(a, dtype, order):
     """`a` itself when it already has `dtype` and `order`, else a converted
-    copy. Returns `(Array, copied)`."""
+    copy. Returns `(Array, copied)`.
+
+    A float64 -> float32 conversion goes through the base binding's host
+    converters when the binding is built (DEVIATION 2470, 2471): the flat
+    cast, or ONE fused cast-and-transpose when a C-order source wants
+    column-major output. Without the binding the pure-Python path below
+    runs and produces the same bytes; the native path is a speed choice,
+    never a different answer, and `tests/test_native_convert.py` holds the
+    two to byte equality.
+    """
     if a.dtype == dtype and a._has_order(order):
         # a (1, n) or (n, 1) block is both C- and F-contiguous; relabeling
         # it is free and is not a copy
         return a._as_order(order), False
+    if a.dtype == "<f8" and dtype == "<f4" and a.size:
+        out = _native_f64_to_f32(a, order)
+        if out is not None:
+            return out, True
     if a.dtype != dtype:
         a = a.astype(dtype)  # keeps a's order; the cast is done once
     return a._as_order(order), True
+
+
+def _native_f64_to_f32(a, order):
+    """`a` (float64) as a float32 Array in `order` through the native
+    converters, or None when the binding is not built (the caller then
+    takes the pure-Python path). The result always owns fresh storage."""
+    if order == "F" and a.order == "C" and a.ndim == 2 and not a._both_orders():
+        fn = _native("cast_colmajor_f64_to_f32")
+        if fn is None:
+            return None
+        store = _output_store("f", a.size)
+        rows, cols = a.shape
+        fn(a._addr, store.buffer_info()[0], rows, cols)
+        return Array._owned(store, a.shape, "<f4", "F")
+    fn = _native("cast_f64_to_f32")
+    if fn is None:
+        return None
+    # the flat cast keeps a's storage order; a relabel or reorder follows
+    store = _output_store("f", a.size)
+    fn(a._addr, store.buffer_info()[0], a.size)
+    return Array._owned(store, a.shape, "<f4", a.order)._as_order(order)
+
+
+class _AnonStore(mmap.mmap):
+    """An owned block the native converters write into, backed by an
+    ANONYMOUS MAPPING instead of an `array.array`.
+
+    Every way of allocating an `array.array` from Python writes every byte
+    once (a zero fill or a copy), and at 2,000,000 x 20 that pass costs
+    about as much as the cast itself: 9.8 ms of a 16 ms total on the M4,
+    against NumPy's 11.6 ms, which allocates uninitialized memory and
+    touches each page for the first time inside its own copy loop. An
+    anonymous mapping gets the same treatment from the kernel: the pages
+    are zero by construction and materialize on the converter's first
+    write, so there is no separate fill pass. Measured at 40,000,000
+    elements: 13.0 ms end to end against NumPy's 12.8 ms.
+
+    It quacks like the `array.array` the `Array` class expects: a typed
+    buffer (`__buffer__`, Python 3.12+) and `buffer_info()`. Only the
+    native converters build one; nothing else needs to know.
+    """
+
+    __slots__ = ("_code", "_n")
+
+    def __new__(cls, code, n):
+        return super().__new__(cls, -1, max(1, n * array.array(code).itemsize))
+
+    def __init__(self, code, n):
+        self._code = code
+        self._n = n
+
+    def __buffer__(self, flags):
+        return mmap.mmap.__buffer__(self, flags).cast(self._code)
+
+    def buffer_info(self):
+        return _AnonStore._address(self), self._n
+
+    @staticmethod
+    def _address(m):
+        raw = mmap.mmap.__buffer__(m, 0)
+        try:
+            return ctypes.addressof(ctypes.c_char.from_buffer(raw))
+        finally:
+            raw.release()
+
+
+def _output_store(code, n):
+    """Fresh storage for `n` elements of `code` for a native converter to
+    fill: an `_AnonStore` where the interpreter lets a Python class export
+    a buffer (3.12+), else the zero-filled `array.array` every other Array
+    uses. The bytes written are identical either way; only the cost of
+    getting the block differs."""
+    if sys.version_info >= (3, 12):
+        return _AnonStore(code, n)
+    from ._array import _new_store
+    return _new_store(code, n)
 
 
 def _as_typed(obj, dtype, order, ndim, name):
@@ -534,8 +625,11 @@ def all_finite(arr):
 _NATIVE = {}
 
 
-def _native_all_finite(dtype):
-    key = "all_finite_f32" if dtype == "<f4" else "all_finite_f64"
+def _native(key):
+    """The base binding's host helper `key`, cached, or None when the
+    binding is not built, is the wrong tier, or lacks the symbol. Setting
+    `_NATIVE[key] = None` forces the pure-Python path for that helper,
+    which is how the tests and the timing script compare the two arms."""
     if key in _NATIVE:
         return _NATIVE[key]
     fn = None
@@ -546,3 +640,7 @@ def _native_all_finite(dtype):
         fn = None
     _NATIVE[key] = fn
     return fn
+
+
+def _native_all_finite(dtype):
+    return _native("all_finite_f32" if dtype == "<f4" else "all_finite_f64")

@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Apply a NON-SYMMETRIC tree to rows: compute each row's bin, add its leaf.
 
-PORT OF `catboost/cuda/models/add_non_symmetric_tree_doc_parallel.{h,cpp}`
-at CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/models/add_non_symmetric_tree_doc_parallel.{h,cpp}`
+at CatBoost `54a8143a`. Followed statement for statement.
 
 Two of their three entry points are here, collapsed to one device and one
 task each, which is what the caller in `doc_parallel_boosting` has:
@@ -19,7 +19,7 @@ task each, which is what the caller in `doc_parallel_boosting` has:
   first, then `AddBinModelValues(taskValues, TempBins, cursor)`. This is
   `add_non_symmetric_tree_to_cursor` below, the apply `predict` and the
   held-out arm use. `AddBinModelValues` is `add_bin_model_value_kernel`
-  (`AddBinModelValueImpl`, `add_model_value.cu:14-53`), already ported for
+  (`AddBinModelValueImpl`, `add_model_value.cu:14-53`), already implemented for
   the estimator's `MoveTo`.
 
 The third, the streamed multi-task `AddTask`/`Proceed` pairing over several
@@ -129,7 +129,7 @@ def compute_non_symmetric_bins_for_model(
             )
         # their `feature.Offset` is a COLUMN index and the kernel adds the
         # row; ours is the column times the row count, which is how this
-        # port lays the compressed index out
+        # implementation lays the compressed index out
         h_off.unsafe_ptr().unsafe_store(i, UInt32(Int(f.offset) * n_rows))
         h_mask.unsafe_ptr().unsafe_store(i, f.mask)
         h_shift.unsafe_ptr().unsafe_store(i, f.shift)

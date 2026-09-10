@@ -2,15 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The FOLD side of the oblivious searcher: N tasks, 2N partitions.
 
-PORT OF `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}` at
+FOLLOWS `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}` at
 CatBoost `54a8143a` -- `TOptimizationTask`, `AddTask`/`SetTarget`,
 `WriteFoldBasedInitialBins` (`:338-364`), `WriteSingleTaskInitialBins`
-(`:366-...`) and `ForeachOptimizationPartTask` (`:15-27`). Transliterated.
-Do not improve.
+(`:366-...`) and `ForeachOptimizationPartTask` (`:15-27`). Followed statement for statement.
 
 **THIS IS RUNG 2, and rung 2 turned out not to be a second searcher.**
 
-`archive/plans/NEXT_TWO.md` priced it as porting `TFeatureParallelObliviousTreeSearcher`,
+`archive/plans/NEXT_TWO.md` priced it as implementing `TFeatureParallelObliviousTreeSearcher`,
 713 lines, beside the doc-parallel one already here. Reading it says
 otherwise: their searcher is ONE object with TWO modes on it
 (`:88-100`) --
@@ -48,7 +47,7 @@ downstream index reads `CurrentDepth + FoldBits`.
 **THE PAIRING IS WHY THE DYNAMIC SCORER STEPS FOLDS BY TWO.**
 `find_optimal_split_solar_kernel` and the dynamic cosine one read
 `(fold, fold + 1)` as `(estimate, test)`
-(`gbdt/methods/kernel/pointwise_scores.mojo`, ported and gated before this
+(`gbdt/methods/kernel/pointwise_scores.mojo`, implemented and gated before this
 file existed). Fold `2k` is task `k`'s ESTIMATE half and `2k + 1` is its TEST
 half. The two halves of ordered boosting meet exactly here: this file lays
 the pairs out and that kernel consumes them.

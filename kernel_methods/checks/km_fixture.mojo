@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Five data sets, and every bit of every one of them is accounted for.
 
-NOT A PORT. cuML's kernel-ridge test (`python/cuml/tests/test_kernel_ridge.py`)
+NO REFERENCE FILE. cuML's kernel-ridge test (`python/cuml/tests/test_kernel_ridge.py`)
 is a hypothesis-driven comparison against scikit-learn at
 `assert_allclose(..., rtol=1e-3)`, which is the right test for a library
 shipping one backend and says nothing this lane needs.

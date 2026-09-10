@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`core[i] = vd[i] >= min_pts`, which is the whole of their file.
 
-PORT OF `cuml/cpp/src/dbscan/corepoints/compute.cuh` at cuML `00094f7`.
-Transliterated.
+FOLLOWS `cuml/cpp/src/dbscan/corepoints/compute.cuh` at cuML `00094f7`.
+Followed statement for statement.
 
 Kept as its own file, mirroring theirs, even though it is four lines. The
-mirror is the point: `ls` answers "did we port this", and a reviewer can put
+mirror is the point: `ls` answers "did we implement this", and a reviewer can put
 this beside `compute.cuh`. Collapsing it into the caller would save nothing
 and would lose that.
 
@@ -30,7 +30,7 @@ propagation, the merge, the relabel -- is byte-for-byte the unweighted path.
 WHY THE FLOAT IS COMPARED DIRECTLY AND THEIR CAST IS NOT REPRODUCED.
 `compute.cuh:50` reads `mask[...] = (Index_)vd[idx] >= min_pts`, so on the
 weighted instantiation a Float32 sum is truncated to Int32 before the
-compare. That is not a bug of theirs and it is not ported as one: for
+compare. That is not a bug of theirs and it is not implemented as one: for
 `min_pts >= 1` and a non-negative sum, `trunc(w) >= p` and `w >= p` are the
 same predicate, because `trunc` is monotone and `trunc(p) == p` for integer
 `p`. Comparing the float directly is the same answer and does not depend on

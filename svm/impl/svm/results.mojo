@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`Results`: dual coefficients, support vectors, and the intercept `b`.
 
-PORT OF `cuml/cpp/src/svm/results.cuh` at cuML v26.08.00: `Get`,
+FOLLOWS `cuml/cpp/src/svm/results.cuh` at cuML v26.08.00: `Get`,
 `CombineCoefs`, `GetDualCoefs`, `GetSupportVectorIndices`,
 `CollectSupportVectorMatrix` (dense arm), `CalcB`, `SelectUnboundSV`,
 `SelectByCoef`, `SelectReduce`, and the SVR `raft::linalg::add(coef, coef +
 n_rows)` arm, which is `combine_coefs_svr_kernel` below and which this
-paragraph called unported until `fea6becc` (2026-08-31). The sparse
-support-matrix arm is not ported (`svm/NOT_IMPLEMENTED.tsv`). The
-PRECOMPUTED early return is not ported with its kernel.
+paragraph called unimplemented until `fea6becc` (2026-08-31). The sparse
+support-matrix arm is not implemented (`svm/NOT_IMPLEMENTED.tsv`). The
+PRECOMPUTED early return is not implemented with its kernel.
 
     raft::linalg::binaryOp(coef = a * y)   -> combine_coefs_kernel
     set_flag / cub::DeviceSelect::Flagged   -> flag_* + SelectScratch.select_*

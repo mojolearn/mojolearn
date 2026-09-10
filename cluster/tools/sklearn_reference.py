@@ -9,7 +9,7 @@ first time and reports green forever.
 
 WHY SCIKIT-LEARN AND NOT CUVS
 -----------------------------
-cuVS is the thing being ported and would be the better oracle, but its GPU
+cuVS is the thing being implemented and would be the better oracle, but its GPU
 arms do not run on Apple silicon, which is the entire premise of this work.
 scikit-learn runs everywhere and implements the same algorithm.
 

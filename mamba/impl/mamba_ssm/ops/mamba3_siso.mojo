@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Mamba-3 SISO core ON THE DEVICE -- seams S7-S20 and S22 plus the
 four report pieces -- under profile `mojolearn.identical.mamba3.siso.fp32.v1`
-(`mamba/IDENTICAL_MAMBA3_CONTRACT.md`). **COPY, DO NOT IMPROVE.**
+(`mamba/IDENTICAL_MAMBA3_CONTRACT.md`).
 
 Upstream: the chunked schedule SHAPE is
 `mamba_ssm/ops/triton/mamba3/mamba3_siso_fwd.py::mamba3_siso_fwd_kernel`

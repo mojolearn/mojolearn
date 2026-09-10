@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device machinery k-means|| gets from vendor libraries, named call by call.
 
-NOT A PORT of one file. `initScalableKMeansPlusPlus`
+DOES NOT FOLLOW one file. `initScalableKMeansPlusPlus`
 (`cuvs/src/cluster/detail/kmeans.cuh:568-785`) leans on four vendor calls that
 have no shipped Mojo counterpart, and each kernel here names the one it
 replaces:

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The split-K Gram path, per cell against a Float64 host oracle.
 
-BOTH SIDES OF THE DISPATCH, BY NAME. `PORTING_RULES.md 8`: a switch is
+BOTH SIDES OF THE DISPATCH, BY NAME. `ENGINEERING_RULES.md 8`: a switch is
 exercised on both sides by a named check per side, with the switch set
 explicitly inside the check. So `check_gram_splitk_oracle` calls
 `gemm_tn_splitk` DIRECTLY, `check_gram_vendor_arm` calls
@@ -12,7 +12,7 @@ real `gemm_tn` wrapper once per arm, printing which arm it took.
 
 THE FIXTURE IS HASHED AND SCATTERED (splitmix64), the output is poisoned
 before every call, and every cell is compared -- the uniform-fixture lesson
-(`PORTING_RULES.md 7`): a check whose expected value repeats verifies a
+(`ENGINEERING_RULES.md 7`): a check whose expected value repeats verifies a
 total and nothing about placement, and a poison that survives is a cell
 that was never written, which is worse than a wrong one.
 

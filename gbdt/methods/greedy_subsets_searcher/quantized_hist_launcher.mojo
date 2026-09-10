@@ -86,7 +86,7 @@ def qh_replicas(
       * the OCCUPANCY target is CatBoost's own
         `CeilDivide(maxActiveBlocks, numBlocks.x * numBlocks.y)` with
         `maxActiveBlocks = 2 * SMCount` and the gather arm doubled
-        (`hist_one_byte.cu:291, 356` -- `replication_for`'s port,
+        (`hist_one_byte.cu:291, 356` -- `replication_for`'s implementation,
         restated here because this family's grid has no stat axis);
       * the MIN-WORK CAP is XGBoost's `grid_size = min(occupancy_blocks,
         ceil(items / kMinItemsPerBlock))` (`histogram.cu:405-419`,

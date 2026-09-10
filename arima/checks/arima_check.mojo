@@ -469,7 +469,7 @@ def check_predict_device_equals_oracle(ctx: DeviceContext, mut trace: IdentityTr
         # the filter ran with `phi_2 = -20`, which is a violently explosive
         # AR(2). DEVIATION 673 caught it and raised: "innovation variance
         # F <= 0 at step 0". That refusal firing on a fixture mistake, in
-        # the one place an unported NaN would otherwise have propagated
+        # the one place an unimplemented NaN would otherwise have propagated
         # silently, is DEVIATION 673 earning itself.
         var ph = batched_jones_transform_host(order.without_diff(), f.batch_size, False, ph_raw)
         var start = 0

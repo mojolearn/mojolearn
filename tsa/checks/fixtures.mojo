@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Hashed time-series fixtures and host<->device plumbing for the tsa and
-arima lanes. NOT A PORT.
+arima lanes. NO REFERENCE FILE.
 
 Every innovation is a splitmix64 hash of `(series, t, salt)`, so no two
 cells repeat, a permutation of cells moves every per-cell comparison, and

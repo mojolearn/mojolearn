@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Their `fill.cu`, the parts this port reaches.
+"""Their `fill.cu`, the parts this implementation reaches.
 
 `MakeSequence` is how CatBoost materialises an identity (or offset) index ON
 THE DEVICE (`cuda_util/kernel/fill.cu:37-55`). The boosting loop resets the
 row index every iteration because tree growth permutes it in place; this
-port used to UPLOAD a host-built identity array for that, 3.2 MB of H2D per
+implementation used to UPLOAD a host-built identity array for that, 3.2 MB of H2D per
 tree at 800k rows, which is not their design -- theirs never leaves the
 device.
 """

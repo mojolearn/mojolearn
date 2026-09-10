@@ -30,7 +30,7 @@ The four arms:
      is not associative and carries a worked counterexample. A claim in a
      comment is a hypothesis; this arm RUNS it. Two groupings of the same
      three candidates, and the check passes when they DISAGREE -- that is,
-     it fails if the port accidentally made the operator associative,
+     it fails if the implementation accidentally made the operator associative,
      which would mean it is no longer their algorithm.
 
   C. THE DEVICE REDUCTION. One block per node, hashed gains per lane, all
@@ -38,7 +38,7 @@ The four arms:
      is genuinely order-independent -- which makes an exact per-node
      comparison against a host reduction legitimate. This is the arm that
      proves `warp_reduce` + `eval_best_split` were ENQUEUED and work; a
-     kernel is not ported until it has been enqueued, and compiling is not
+     kernel is not implemented until it has been enqueued, and compiling is not
      evidence.
 
   D. SABOTAGE, one per mechanism. A digest cannot tell a working reduction
@@ -122,7 +122,7 @@ def _reduce_kernel(
     sabotage_in: Int32,
 ):
     """One block per node. Each thread builds one hashed candidate and the
-    block reduces them through the ported `eval_best_split`."""
+    block reduces them through the implemented `eval_best_split`."""
     var node = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var n_slots = Int(n_slots_in)
@@ -324,7 +324,7 @@ def arm_a_the_order() raises -> Int:
 def arm_b_non_associativity() raises -> Int:
     """RUN the DEVIATION 105 counterexample rather than asserting it.
 
-    Passes when the two groupings DISAGREE. If they agree, this port has
+    Passes when the two groupings DISAGREE. If they agree, this implementation has
     accidentally made their operator associative, which means it is no
     longer their operator -- so agreement is the failure.
     """
@@ -357,7 +357,7 @@ def arm_b_non_associativity() raises -> Int:
     if a.split_start == b2.split_start and a.quesval == b2.quesval:
         print(
             "  arm B FAILED: the two groupings AGREE. DEVIATION 105 says"
-            " their operator is not associative; if this port made it"
+            " their operator is not associative; if this implementation made it"
             " associative it is no longer their algorithm."
         )
         return 1

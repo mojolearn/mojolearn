@@ -9,8 +9,8 @@ against, at every size, in `jacobi_check.mojo`. It is not a CPU fallback --
 there is no CPU path in this repository -- and the two are not expected to
 agree bit for bit.
 
-NOT A PORT of a file. cuML calls `raft::linalg::eigJacobi`, which is
-cuSOLVER's `syevj`, and cuSOLVER is closed with no source to transliterate.
+DOES NOT FOLLOW a file. cuML calls `raft::linalg::eigJacobi`, which is
+cuSOLVER's `syevj`, and cuSOLVER is closed with no source to follow statement for statement.
 
 **Jacobi is NOT the arm cuML's dispatch takes, and the sentence that used to
 sit here saying it was "THEIR algorithm choice, not our substitute" is
@@ -31,7 +31,7 @@ this arm. The device version uses exactly those. This host reference keeps a
 tighter `1e-12` over 60 sweeps on purpose: an oracle that stops where the
 thing it is checking stops cannot tell you the thing stopped too early.
 
-ORDERING, WHICH IS PART OF THE PORT AND NOT A DETAIL
+ORDERING, WHICH IS PART OF THE IMPLEMENTATION AND NOT A DETAIL
 ----------------------------------------------------
 `syevj` returns eigenvalues ASCENDING, and `calEig` then calls
 `raft::matrix::colReverse` to put the components in DESCENDING order of

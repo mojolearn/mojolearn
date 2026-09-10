@@ -561,8 +561,8 @@ def check_gmm_refusals() raises:
     """Every refusal fires BY NAME, and the acceptances prove they are not
     simply always firing.
 
-    Eight refusal families: the three unported covariance types, the two
-    unported initializations, a collapsed component, non-finite input, and
+    Eight refusal families: the three unimplemented covariance types, the two
+    unimplemented initializations, a collapsed component, non-finite input, and
     `n_components` out of range at both ends.
     """
     var n_refused = 0
@@ -579,7 +579,7 @@ def check_gmm_refusals() raises:
             var _t = covariance_type_from_name(nm)
         except e:
             raised = True
-            if String(e).find("NOT PORTED") < 0 and String(e).find(
+            if String(e).find("NOT IMPLEMENTED") < 0 and String(e).find(
                 "not one of"
             ) < 0:
                 raise Error(
@@ -597,7 +597,7 @@ def check_gmm_refusals() raises:
             " a refusal set that fires on everything proves nothing"
         )
 
-    # (2) the two unported initializations
+    # (2) the two unimplemented initializations
     var init_names: List[String] = [
         String("k-means++"), String("random_from_data"), String("nonsense"),
     ]
@@ -1018,7 +1018,7 @@ def check_mstep_vs_oracle() raises:
     soft input on `FIX_OVERLAP` and on an exactly one-hot input on
     `FIX_SEPARATED`. Both divisor arms are driven -- `_initialize`'s
     `n_samples` and `_m_step`'s `sum(nk)` -- because they are two code paths
-    in scikit-learn and `PORTING_RULES.md` rule 8 says a non-default path is
+    in scikit-learn and `ENGINEERING_RULES.md` rule 8 says a non-default path is
     an unchecked path.
     """
     var ctx = DeviceContext()
@@ -1423,7 +1423,7 @@ def check_recovers_planted_parameters() raises:
         )
 
     # THE OTHER FOUR ENTRY POINTS GET A CALLER HERE, and that is not
-    # tidiness: PORTING_RULES rule 3 says a file no caller reaches is not
+    # tidiness: ENGINEERING_RULES rule 3 says a file no caller reaches is not
     # done, and `predict`, `predict_proba`, `bic` and `aic` are the surface a
     # binding will actually call. On a fixture this separated the labels are
     # a hard fact -- the eight rows of cluster `c` must all carry the same

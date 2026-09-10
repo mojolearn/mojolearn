@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Write one feature's bins into the packed compressed index.
 
-PORT OF `WriteCompressedIndexImpl` in
+FOLLOWS `WriteCompressedIndexImpl` in
 `catboost/cuda/gpu_data/kernel/binarize.cu` at CatBoost `54a8143a`.
-Transliterated. Do not improve.
+Followed statement for statement.
 
 **This is the kernel that creates the read-density advantage.** Everything
 downstream reads `cindex[feature.Offset + row]` and extracts its feature by
@@ -32,7 +32,7 @@ silently, with no bounds error to catch it.
 **Their multi-feature variant uses `atomicOr`** (`binarize.cu:93`) when
 several features are written concurrently into the same word. Metal HAS
 integer atomics, so unlike the float `atomicAdd` in the histogram flush, that
-one ports directly if we ever need it. Recorded because it is the one place
+one implements directly if we ever need it. Recorded because it is the one place
 CatBoost's atomics are portable to us and it would be easy to assume
 otherwise after archive/reference/PORTING.md item 7.
 """

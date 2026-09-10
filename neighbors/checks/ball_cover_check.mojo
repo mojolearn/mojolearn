@@ -941,7 +941,7 @@ def check_ball_cover_at_scale() raises:
 
     `nn.argsort` was correct at 256 elements and wrong at 257, which is the
     reason this exists: a check that only ever runs at one size cannot see a
-    size-dependent bug, and this port has three size-dependent pieces — the
+    size-dependent bug, and this implementation has three size-dependent pieces — the
     exclusive scan's dynamic chunk, the landmark-per-block rank kernel, and
     the query's per-warp CSR offsets.
 

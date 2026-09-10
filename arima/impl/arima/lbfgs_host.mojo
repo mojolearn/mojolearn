@@ -7,7 +7,7 @@ offset into a flat batched array.
 
 STANDS IN FOR `cuml/cpp/src/glm/qn/qn_util.cuh` and `qn_linesearch.cuh` at
 the granularity this lane needs. **Every function here is a per-series
-re-spelling of one already ported in `glm/impl/glm/qn/`, and the glm
+re-spelling of one already implemented in `glm/impl/glm/qn/`, and the glm
 function it mirrors is named on it.** The gate
 `check_lbfgs_rules_match_glm` sweeps both spellings over a grid of inputs
 and asserts they agree BITWISE, so this is a duplication that cannot drift
@@ -27,7 +27,7 @@ Three reasons, and the third is decisive.
      candidate point -- and `batched_loglike_grad` exists only to serve that
      shape. Calling a direct solver B times evaluates the Kalman filter on a
      batch of ONE, B times over, and throws away the batching this whole
-     port is built on.
+     implementation is built on.
   2. Mojo has no generator, so a reverse-communication `min_lbfgs` cannot
      be a yield; it would have to become an explicit state machine with a
      saved program counter across the line search. That is a rewrite of a

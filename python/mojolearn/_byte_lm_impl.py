@@ -402,7 +402,9 @@ class SmallByteLanguageModelTrainer:
         expected = working['completed_steps'] + int(train)
         if isinstance(completed, (bool, np.bool_)) or not isinstance(completed, (int, np.integer)) or completed != expected:
             raise RuntimeError('Byte-LM returned an invalid completed-step counter')
-        if before != tuple(array.tobytes() for array in inputs):
+        # Compare one snapshot at a time: constructing a second tuple keeps
+        # all three parameter-sized byte copies alive simultaneously.
+        if any(saved != array.tobytes() for saved, array in zip(before, inputs)):
             raise RuntimeError('Byte-LM native call changed an input state/token buffer')
         if not np.isfinite(out_loss).all():
             raise RuntimeError('Byte-LM returned a nonfinite/unwritten loss')

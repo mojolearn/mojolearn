@@ -7,7 +7,7 @@
 Every other check in this directory compares against an ANALYTIC fixture --
 an answer computed by hand -- or against a LIBRARY PRIMITIVE's compiled
 output (CCCL's `shuffle_iterator`, RAFT's Philox). Those establish that the
-port is self-consistent and faithful to source that was read. **They are not
+implementation is self-consistent and faithful to source that was read. **They are not
 a comparison against cuML.**
 
 This one is. `ensemble/bench/cuml_oracle.txt` is produced by
@@ -24,7 +24,7 @@ WHAT THIS DOES AND DOES NOT SETTLE, because the distinction is the whole
 point of running it:
 
   IT SETTLES the arithmetic -- the gains, the tie-break total order, the
-  midpoint rule, the bin search. That is where a port silently diverges,
+  midpoint rule, the bin search. That is where an implementation silently diverges,
   and it is what no analytic fixture could pin down, because an analytic
   fixture only knows the answers *I* could derive.
 
@@ -595,7 +595,7 @@ def main() raises:
             "cuml_oracle_check: " + String(fails) + " failure(s) against cuML"
         )
     print(
-        "cuml_oracle_check: MATCHES cuML on every path this port claims"
+        "cuml_oracle_check: MATCHES cuML on every path this implementation claims"
         " bit-identity for"
     )
     print(

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CatBoost's POINTWISE split scorer and its five score calcers, ported.
+"""CatBoost's POINTWISE split scorer and its five score calcers, implemented.
 
-PORT OF `catboost/cuda/methods/kernel/pointwise_scores.cu` (698 lines) and
+FOLLOWS `catboost/cuda/methods/kernel/pointwise_scores.cu` (698 lines) and
 `catboost/cuda/methods/kernel/score_calcers.cuh` (188 lines) at CatBoost
-`54a8143a`. Transliterated. Do not improve.
+`54a8143a`. Followed statement for statement.
 
 WHICH FAMILY THIS IS
 --------------------
@@ -15,12 +15,12 @@ share (`archive/reference/PORTING.md` 91 B): `TFeatureParallelObliviousTreeSearc
 scans.
 
 It is NOT `greedy_subsets_searcher/kernel/compute_scores.cu`. Those are two
-separate upstream files with two separate histogram layouts, and this port
+separate upstream files with two separate histogram layouts, and this implementation
 shares no line with the other one. Where they DO overlap is
 `score_calcers.cuh`, which upstream `#include`s into both
 (`compute_scores.cu:9` and `pointwise_scores.cu:2`) -- so the calcer
-arithmetic below is the same arithmetic our greedy port inlined, and the
-two ports disagree on SIGN by design; see the next section.
+arithmetic below is the same arithmetic our greedy implementation inlined, and the
+two implements disagree on SIGN by design; see the next section.
 
 THE HISTOGRAM LAYOUT, WHICH IS FIXED AND NOT NEGOTIABLE
 -------------------------------------------------------
@@ -45,7 +45,7 @@ first. Copying an index expression across the two families transposes the
 histogram, and a transposition moves no total, so a check that sums cannot
 see it ([[uniform-test-data-hides-permutation]]).
 
-THE SIGN IS THEIRS, AND IT IS THE OPPOSITE OF OUR GREEDY PORT
+THE SIGN IS THEIRS, AND IT IS THE OPPOSITE OF OUR GREEDY IMPLEMENTATION
 -------------------------------------------------------------
 "in GPU catboost all scores are inverse, lower is better". Every calcer
 here returns a NEGATED objective, the sentinel for "unusable" is `+FLT_MAX`
@@ -56,7 +56,7 @@ so that it loses every comparison, and the argmin keeps the SMALLEST gain
 negation into every calcer and flips every comparison, because its host side
 was written against "larger is better". THIS FILE DOES NOT. It has no host
 side yet (see UNWIRED below), so there is nothing to accommodate, and
-PORTING_RULES 0b says copy. **Whoever wires this up: the two files in this
+ENGINEERING_RULES 0b says copy. **Whoever wires this up: the two files in this
 repository disagree about the sign of a score, on purpose, and the
 disagreement is upstream's own convention preserved here and inverted
 there.**
@@ -69,13 +69,13 @@ rare one -- constant features, duplicated columns and small-integer
 gradient sums all produce exact float equality -- so a reduction that keeps
 the lower `tid` instead makes the split depend on block geometry.
 
-WHAT IS IN THIS PORT
+WHAT IS IN THIS IMPLEMENTATION
 --------------------
 Everything in both files:
 
   `TSolarScoreCalcer`, `TL2ScoreCalcer` (both `MetaExponent` arms),
   `TLOOL2ScoreCalcer`, `TSatL2ScoreCalcer`, `TCosineScoreCalcer`
-      -> `ScoreCalcer[score_function]`, one tagged union (PORTING_RULES 4).
+      -> `ScoreCalcer[score_function]`, one tagged union (ENGINEERING_RULES 4).
   `ComputeSum<BLOCK_SIZE>`          -> `_compute_sum[block_size]`
   `FindOptimalSplitSolarImpl`       -> `find_optimal_split_solar_kernel`
   `TDirectHistLoader`,
@@ -92,7 +92,7 @@ Everything in both files:
 
 UNWIRED. Nothing in this repository calls any of it yet. The callers are
 `pointwise_kernels.{h,cpp}` -> `pointwise_scores_calcer.h` ->
-`oblivious_tree_doc_parallel_structure_searcher`, none of which are ported.
+`oblivious_tree_doc_parallel_structure_searcher`, none of which are implemented.
 `archive/plans/UNWIRED.md` already carries the whole pointwise family; this file joins it.
 Gated in isolation by `checks/pointwise_scores_check.mojo`.
 
@@ -186,7 +186,7 @@ one place Float64 is legitimate is a HOST oracle, and the gate uses one.
 DEVIATION 95: THEIR STRUCT POINTERS BECOME FLAT TYPED ARRAYS.
 ==========================================================================
 A Mojo kernel argument cannot be a pointer to a non-trivial struct, and
-PORTING_RULES 4 already records that `enqueue_function` refuses derived
+ENGINEERING_RULES 4 already records that `enqueue_function` refuses derived
 pointers as aliasing. Their four struct arguments are therefore passed as
 the flat arrays their C++ memory image already is:
 
@@ -236,7 +236,7 @@ PTX with no counterpart on Metal and no vendor-agnostic Mojo spelling.
     silently dropped because it is the one thing in `ComputeSum` that is
     not the sum.
 
-The 16-wide manual unroll around it IS ported (`:23-32`), including their
+The 16-wide manual unroll around it IS implemented (`:23-32`), including their
 comment's reason for it, because the unroll changes the ORDER of a float
 summation and therefore the answer. Their `#pragma unroll` on the inner 16
 is not expressible; the loop is written out as a Mojo `comptime for` over
@@ -311,7 +311,7 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
     argument becomes a comptime `score_function` and every method is a
     `comptime if` over their five bodies, in their order.
 
-    `Combine` is NOT ported. Its only callers are the pairwise/multiclass
+    `Combine` is NOT implemented. Its only callers are the pairwise/multiclass
     reducers in `compute_scores.cu`, and this file's three kernels never
     call it -- each thread owns one candidate end to end and combines
     nothing.
@@ -495,7 +495,7 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
         ranking between bins of one feature.
 
         `AdvanceSeed(&seed, 4)` is four whole advances BEFORE the draw, and
-        `NextNormal` then consumes two more. A port that skips the four, or
+        `NextNormal` then consumes two more. An implementation that skips the four, or
         that draws normal-then-advance, produces a different tree.
         """
         var out = self.score
@@ -595,7 +595,7 @@ def _compute_sum[
         }
 
     Their own comment says the manual unroll is there because nvcc 11.4+
-    refuses `#pragma unroll 16` on that loop shape. It is ported anyway,
+    refuses `#pragma unroll 16` on that loop shape. It is implemented anyway,
     and not because of nvcc: the unroll fixes the ORDER in which one
     thread's strided elements are added, and float addition is not
     associative. Collapsing it into the tail loop alone would give a
@@ -1168,13 +1168,13 @@ def _block_argmin_and_store[
     and what makes it portable (`archive/reference/PORTING.md` 11 and 92: a threadgroup
     barrier reached by only some threads is undefined, and on Metal it does
     not merely warn). Their `ScanHistogramsImpl` in the same family gets
-    this wrong; this loop gets it right, so it transliterates unchanged.
+    this wrong; this loop gets it right, so it follow statement for statements unchanged.
 
     ON A TIE THE SMALLER INDEX WINS. See the module docstring.
 
     THE `index < binFeatureCount` GUARD IS NOT DEAD in their code even
     though `bestIndex` starts at 0: it is how a launch with
-    `binFeatureCount == 0` avoids reading `bf[0]`. Ported.
+    `binFeatureCount == 0` avoids reading `bf[0]`. Implemented.
     """
     var s_scores = stack_allocation[
         block_size,
@@ -1342,7 +1342,7 @@ def partition_update_kernel[
 
     The third is the one that matters: with no per-document count column a
     partition's Count is its ROW COUNT, which is what every downstream
-    leaf-value divisor expects. Ported as three explicit `have_*` flags
+    leaf-value divisor expects. Implemented as three explicit `have_*` flags
     because a Mojo kernel argument cannot be a null pointer -- passing a
     dummy buffer and a flag is the same test, spelled where the launcher
     can see it.
@@ -1479,7 +1479,7 @@ def find_optimal_split_dynamic(
 
     `<<< resultSize, blockSize >>>`: `resultSize` BLOCKS, each producing one
     `TBestSplitProperties`. The host reduces the `resultSize` records
-    afterwards (in `pointwise_scores_calcer.h`, not ported yet).
+    afterwards (in `pointwise_scores_calcer.h`, not implemented yet).
     """
     if score_function == SCORE_FUNCTION_SOLAR_L2:
         ctx.enqueue_function[
@@ -1730,7 +1730,7 @@ def find_optimal_split(
             Dynamic
         }
 
-    Three arms, every one of them exercised by the gate (PORTING_RULES 8:
+    Three arms, every one of them exercised by the gate (ENGINEERING_RULES 8:
     a non-default path is an unchecked path, and reach is per-branch).
     """
     if fold_count == 1:

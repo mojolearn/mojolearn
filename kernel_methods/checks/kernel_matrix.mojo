@@ -5,15 +5,15 @@
 **READ THIS BEFORE ADDING A KERNEL HERE.** This file is a DISPATCHER and an
 argument for why it is only a dispatcher. The matrix product, the RBF
 expansion, the L1 distance, the row norms and the two polynomial epilogues all
-live in files this lane does not own or has ported beside the caller, and
+live in files this lane does not own or has implemented beside the caller, and
 `km_kernel_matrix` below is the ten lines that route between them.
 
     kernel      the dot / distance                       the epilogue
     ---------   --------------------------------------   -----------------------
     LINEAR      svm kernel_op (identical_gemm OP_NT)      none
     RBF         svm kernel_op (gemm + THEIR expansion)    theirs, in svm/
-    POLYNOMIAL  svm kernel_op at a LINEAR KernelParams    ported here, cuVS
-    SIGMOID     svm kernel_op at a LINEAR KernelParams    ported here, cuVS
+    POLYNOMIAL  svm kernel_op at a LINEAR KernelParams    implemented here, cuVS
+    SIGMOID     svm kernel_op at a LINEAR KernelParams    implemented here, cuVS
     LAPLACIAN   kde pairwise_distance at DIST_L1          here (DEVIATION 1665)
 
 **NOTE THE THIRD AND FOURTH ROWS.** The polynomial and sigmoid kernels need
@@ -36,10 +36,10 @@ WHAT IS NOT HERE, AND WHERE IT IS
 - The contraction: `gemm/checks/gemm_identical.mojo`, profile
   `mojolearn.identical.gemm.fp32.v1`.
 - The RBF expansion and the squared row norms: `svm/impl/distance/
-  kernel_matrices.mojo::rbf_kernel_expanded_kernel`, `row_norms_l2sq`, a port
+  kernel_matrices.mojo::rbf_kernel_expanded_kernel`, `row_norms_l2sq`, an implementation
   of cuVS `kernel_matrices.cu` under that lane's DEVIATION 630.
 - The Manhattan distance the laplacian kernel needs: `kde/impl/distance/
-  distance.mojo::pairwise_distance` at `DIST_L1`, a port of RAFT's `l1.cuh`,
+  distance.mojo::pairwise_distance` at `DIST_L1`, an implementation of RAFT's `l1.cuh`,
   one thread per cell with an ascending feature walk and every seam already
   flushed.
 - `KernelParams` itself: `svm/impl/svm/svm_parameter.mojo`, which is
@@ -61,7 +61,7 @@ WHAT IS NOT HERE, AND WHERE IT IS
 # diagonal fix that cuVS does not have.
 #
 # THIS LANE COMPUTES THE EXPANDED ONE, cuVS's, with NO clamp at zero --
-# because that is the arm already ported, already gated and already carrying
+# because that is the arm already implemented, already gated and already carrying
 # a DEVIATION (630) in this repository, and a second RBF would be a second
 # thing to get wrong. The difference is not cosmetic: the expansion
 # catastrophically cancels for nearby rows, so `|x|^2 + |y|^2 - 2 x.y` can
@@ -84,17 +84,17 @@ WHAT IS NOT HERE, AND WHERE IT IS
 
 # =========================================================================
 # DEVIATION 1665: THE LAPLACIAN KERNEL HAS NO UPSTREAM EPILOGUE, SO IT IS
-# WRITTEN HERE OVER A PORTED DISTANCE.
+# WRITTEN HERE OVER A IMPLEMENTED DISTANCE.
 #
 # cuVS's `kernel_matrices.cu` has four kernel types -- linear, polynomial,
 # tanh and RBF -- and no laplacian. cuML has one
 # (`pairwise_kernels.py:51-56`) and it is `exp(-gamma * manhattan)` in Python
 # over `pairwise_distances`. So the ALGORITHM is upstream and the KERNEL is
-# not, and the honest form of the port is: call the ported Manhattan distance
+# not, and the honest form of the implementation is: call the implemented Manhattan distance
 # (`kde/impl/distance/distance.mojo`, RAFT's `l1.cuh`) and write the
 # four-token epilogue here.
 #
-# `PORTING_RULES 0b-i` is satisfied by that shape rather than violated by it:
+# `ENGINEERING_RULES 0b-i` is satisfied by that shape rather than violated by it:
 # cuML's dispatch for `metric="laplacian"` reaches a device-wide distance
 # computation followed by a device-wide elementwise `exp`, unfused, in two
 # passes, and so does this. Their fused arm does not exist.
@@ -205,9 +205,9 @@ def km_kernel_from_name(name: String) raises -> Int:
     raise Error(
         "kernel_methods: unsupported kernel '"
         + name
-        + "'. This lane ports linear, polynomial (alias poly), rbf, sigmoid"
+        + "'. This lane implements linear, polynomial (alias poly), rbf, sigmoid"
         " and laplacian. scikit-learn's cosine, chi2 and additive_chi2, and"
-        " every callable kernel, are UNPORTED and carry rows in"
+        " every callable kernel, are UNIMPLEMENTED and carry rows in"
         " kernel_methods/NOT_IMPLEMENTED.tsv; 'precomputed' is refused separately"
         " because it is a shape contract rather than a kernel and nothing"
         " here validates it (DEVIATION 1683)"
@@ -266,7 +266,7 @@ def km_validate_kernel_params(kp: KernelParams, what: String) raises:
             what
             + ": kernel value "
             + String(kp.kernel)
-            + " is not one of the five this lane ports (linear="
+            + " is not one of the five this lane implements (linear="
             + String(KM_KERNEL_LINEAR)
             + ", polynomial="
             + String(KM_KERNEL_POLYNOMIAL)
@@ -441,7 +441,7 @@ def km_kernel_matrix(
     elem_tpb: Int = KM_EPILOGUE_TPB,
     sabotage: Int = KMSAB_NONE,
 ) raises:
-    """`out[m x n] = K(a_i, b_j)`, row-major, for the five ported kernels.
+    """`out[m x n] = K(a_i, b_j)`, row-major, for the five implemented kernels.
 
     ASYNCHRONOUS. `ws` must hold at least `km_kernel_workspace_floats(m, n,
     k)` floats and every buffer must outlive the caller's own
@@ -513,7 +513,7 @@ def km_kernel_matrix(
 
     if kp.kernel == KM_KERNEL_RBF and not via_copy:
         # THEIR CODE, CALLED. `kernel_op` issues the pinned GEMM and svm's
-        # ported expansion epilogue in one call.
+        # implemented expansion epilogue in one call.
         kernel_op(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
         return
 

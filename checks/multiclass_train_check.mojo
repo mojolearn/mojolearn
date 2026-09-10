@@ -35,7 +35,7 @@ two layouts in play (`leaf_values` bin-major, cursor plane-major).
 THE OTHER GATES, all analytic:
 
 1. **Probabilities sum to one**, every row. The softmax is over
-   `numClasses`, of which only `numClasses - 1` are stored; a port that
+   `numClasses`, of which only `numClasses - 1` are stored; an implementation that
    forgot the pinned class's `exp(-maxApprox)` term fails this.
 2. **The model's `dim` is `numClasses - 1`**, not `numClasses`. The leaf
    carries `numClasses` inside the WALKER and `numClasses - 1` once
@@ -391,7 +391,7 @@ def check_multiclass_train(ctx: DeviceContext) raises:
             )
 
         # THE DEVICE EVALUATOR MUST REFUSE THIS MODEL, and refusing is the
-        # PORTED behaviour rather than a limitation of ours: their own
+        # IMPLEMENTED behaviour rather than a limitation of ours: their own
         # `libs/model/cuda/evaluator.cpp:28` is
         #
         #     CB_ENSURE(ModelTrees->GetDimensionsCount() == 1,
@@ -404,7 +404,7 @@ def check_multiclass_train(ctx: DeviceContext) raises:
         # stride. A model whose `leaf_values` is `n_leaves * dim` fed to
         # that walk would silently predict the FIRST class's approxes.
         #
-        # PORTING_RULES 8: both sides of the switch, by a named check per
+        # ENGINEERING_RULES 8: both sides of the switch, by a named check per
         # side. `check-model-io` and `check-catboost-apply` exercise the
         # one-dimensional side; this is the other one.
         # BOTH SIDES, and numClasses = 2 is what supplies the second one:

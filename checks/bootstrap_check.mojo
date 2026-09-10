@@ -260,7 +260,7 @@ def check_bootstrap() raises:
 def check_bernoulli_and_poisson(ctx: DeviceContext) raises:
     """The two arms `launch_bootstrap` gained on 2026-08-21.
 
-    PORTING_RULES 8: every switch is exercised on BOTH sides by a named
+    ENGINEERING_RULES 8: every switch is exercised on BOTH sides by a named
     check per side, and "the suite covers it" is not coverage. Bayesian was
     the only arm this file ran, so adding two arms to the kernel without
     adding them here would have left them on the unchecked side of exactly

@@ -3,8 +3,8 @@
 Spectral embedding and clustering derived from cuVS and cuML.
 
 `IDENTICAL_SPECTRAL_CONTRACT.md` defines the reproducible path, including graph construction,
-eigensolver conventions, sign handling, and downstream clustering. `DERIVATION_MAP.tsv` and
-`NOT_IMPLEMENTED.tsv` define provenance and scope.
+eigensolver conventions, sign handling, and downstream clustering.
+`NOT_IMPLEMENTED.tsv` defines the scope.
 
 ## Verify
 

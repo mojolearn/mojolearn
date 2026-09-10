@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Soundness probe: cuVS's cross-block mutex handoff, on Metal, through Mojo.
 
-NO CUVS COUNTERPART. This is the gate in front of porting the
+NO CUVS COUNTERPART. This is the gate in front of implementing the
 `gridDim.x > 1` arm of `fusedL2kNN` (`fused_l2_knn.cuh:226-338`), whose
 producer/consumer protocol per row-tile is:
 
@@ -70,7 +70,7 @@ Two sabotage arms prove the probe has teeth:
 CO-RESIDENCY IS ASSUMED, AS THEIRS ASSUMES IT. A spinning producer only
 terminates if the consumer runs. cuVS caps the whole grid at
 `numSMs * blocksPerSM` (`pairwise_distance_base.cuh:296-322`) so every block
-is resident; the port does the same with M4 inputs. The last config here
+is resident; the implementation does the same with M4 inputs. The last config here
 deliberately OVERSUBSCRIBES 2x to see whether Metal's scheduler still makes
 progress; a hang there is a finding about the envelope, not about the
 in-envelope protocol.
@@ -81,7 +81,7 @@ from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier
 
-comptime MTX_TPB = 256  # = FKNN_THREADS, the block shape the port launches
+comptime MTX_TPB = 256  # = FKNN_THREADS, the block shape the implementation launches
 comptime MTX_WMAX = 64  # exchange words per (row, producer), = max numOfNN
 comptime MTX_YMAX = 16
 comptime MTX_POISON_VAL = Float32(-7777.0)

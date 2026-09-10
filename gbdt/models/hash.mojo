@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`CalcHash`: the model-side combination key fold.
 
-PORT OF `catboost/libs/model/hash.h:11-14` at `54a8143a` -- the
+FOLLOWS `catboost/libs/model/hash.h:11-14` at `54a8143a` -- the
 "specially designed hash function for low collision rate" their apply path
 folds a feature combination with -- plus the exact widening rule its one
 caller applies to a category hash on the way in.
@@ -14,15 +14,15 @@ an element is either a category's `CalcCatFeatureHash` value or a binary
 split's 0/1 arm. A SIMPLE ctr's key is the bare category hash and never
 takes this fold.
 
-THE SIGN-EXTENSION QUIRK, ported on purpose: `ctr_provider.h:107` feeds a
+THE SIGN-EXTENSION QUIRK, implemented on purpose: `ctr_provider.h:107` feeds a
 category hash through `(ui64)(int)`, so a ui32 hash at or above 2^31
-enters the fold as `0xffffffff________`. A port that widens with a zero
+enters the fold as `0xffffffff________`. An implementation that widens with a zero
 extension agrees on exactly the half of all hashes below 2^31 and silently
 disagrees on the rest -- `cat_hash_chain_element` is that cast, kept as its
 own named function so it cannot be inlined away as a "cleanup". The binary
 split arm (`:113-120`) is a bare 0/1 and takes no extension.
 
-Not reached by `train()`: this port's tree CTRs do not exist yet, and its
+Not reached by `train()`: this implementation's tree CTRs do not exist yet, and its
 own model format keys tables by dense code. The fold becomes live when
 tree-CTR tables land in the model file (archive/research/RECON_CTRS.md step 6). Gated by
 `pixi run check-cityhash` chain rows against their compiled source.

@@ -2,10 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The doc-parallel oblivious searcher: one split per level, all leaves at once.
 
-PORT OF `catboost/cuda/methods/
+FOLLOWS `catboost/cuda/methods/
 oblivious_tree_doc_parallel_structure_searcher.{h,cpp}` at CatBoost
-`54a8143a` -- `TDocParallelObliviousTreeSearcher::FitImpl`. Transliterated.
-Do not improve.
+`54a8143a` -- `TDocParallelObliviousTreeSearcher::FitImpl`. Followed statement for statement.
 
 **THIS IS THE FIRST CALLER OF THE POINTWISE FAMILY.** Everything under it --
 six accumulators, three drivers, the host launch layer, the scorer, the
@@ -74,7 +73,7 @@ So the `folds` parameter below is a DEVIATION to be DELETED, not a feature.
 What is NOT a deviation is everything under it -- `create_fold_based_subsets`,
 `make_fold_doc_indices`, the fold stripe, the histogram fold axis and the
 dynamic scorer -- because both searchers share that stack (`archive/reference/PORTING.md` 91 B)
-and it is ported from the feature-parallel side. Moving the arm is three
+and it is implemented from the feature-parallel side. Moving the arm is three
 lines in the other searcher's `Fit`; until someone does, this one refuses at
 DEVIATION 126 anyway and can never grow a tree.
 
@@ -141,7 +140,7 @@ struct PointwiseTreeWorkspace(Movable):
     CatBoost never rebuilds this state per tree -- its `TCudaManager`
     memory pool hands `CreateSubsets` and the score helpers recycled
     device memory, so their per-tree cost is a handful of fills. This
-    port has no manager, and constructing fresh was measured at 17-26
+    implementation has no manager, and constructing fresh was measured at 17-26
     ms/tree (PREP_BILL step 21: ~17 buffer allocations in
     `create_subsets`, ~10 more plus four layout uploads AND a full
     drain per `PolicyScoreHelper`, per tree). Same shape as the greedy
@@ -425,7 +424,7 @@ def fit_oblivious_tree_structure_traced(
                 + " but `PolicyScoreHelper` was built at "
                 + String(calcer.helpers[i].hist_helper.fold_count)
                 + ". `TScoreHelper` takes foldCount"
-                " (`histograms_helper.h:361`) and this port hard-codes 1"
+                " (`histograms_helper.h:361`) and this implementation hard-codes 1"
                 " at `pointwise_scores_calcer.mojo`\'s"
                 " `ComputeHistogramsHelper(policy, 1, max_depth)`,"
                 " `compute_hist2(..., plan.part_count, 1, ...)` and"
@@ -504,7 +503,7 @@ def fit_oblivious_tree_structure_traced(
     # SAME per-feature normal -- the noise would have been a fixed
     # per-feature offset for the whole tree instead of a fresh draw per
     # level. Nothing caught it because no caller ever passed a non-zero
-    # `score_std_dev`, which is exactly PORTING_RULES 8: a branch nothing
+    # `score_std_dev`, which is exactly ENGINEERING_RULES 8: a branch nothing
     # reaches is a branch nothing checks.
     #
     # DEVIATION 139: theirs is one `TGpuAwareRandom` for the whole fit and
@@ -761,9 +760,9 @@ def split_stat_planes(
     gradient), and the pointwise kernels cannot take two views of one
     buffer: they declare `target` and `weight` on independent origins and
     Mojo refuses the aliasing at `enqueue_function` itself (DEVIATION 97.2,
-    `PORTING_RULES` 4).
+    `ENGINEERING_RULES` 4).
 
-    So this is a BRIDGE between two internal conventions, not a port of
+    So this is a BRIDGE between two internal conventions, not an implementation of
     anything. It cost a full round trip through HOST memory when it was
     written -- `enqueue_copy` has no device-to-device form taking a source
     pointer -- which at 800k rows was 6.4 MB down and back per tree plus

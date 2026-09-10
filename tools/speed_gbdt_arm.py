@@ -780,7 +780,7 @@ def lane_config(lane, size):
                          value is 0.03 but a CatBoost user with the rate
                          unset gets a value FITTED from the pool
                          (`options_helper.cpp:252-288`, about 0.097 at 800k
-                         rows), which is not ported. Pinning it removes the
+                         rows), which is not implemented. Pinning it removes the
                          whole question.
       l2 1.0             CatBoost `l2_leaf_reg`, XGBoost `reg_lambda`,
                          LightGBM `lambda_l2`. Same quantity, three
@@ -1139,7 +1139,7 @@ def lightgbm_arms(lane, cfg, data, devices):
 
 def cuml_rf_arm(lane, cfg, data):
     """cuML's RandomForest on the GPU: NVIDIA's own forest, and the library
-    `ensemble/` is a port of. The honest opponent for the `rf` lane.
+    `ensemble/` is an implementation of. The honest opponent for the `rf` lane.
 
     `n_streams` is left at cuML's default for the primary competitor baseline.
     A separately labeled one-stream arm can diagnose scheduling effects.
@@ -1259,16 +1259,16 @@ def cuml_iforest_arm(cfg, data):
     """cuML's IsolationForest, IF this cuML has one.
 
     DEVIATION 1837, AND IT IS A DISAGREEMENT WITH THE BRIEF. The brief for
-    this file states that cuML has no IsolationForest. Our own port says
+    this file states that cuML has no IsolationForest. Our own implementation says
     otherwise: `python/mojolearn/_iforest_impl.py` cites
     `isolation_forest.pyx:663-702` for cuML's `max_samples` resolution, and
-    `isolation_forest/` is described throughout as a port of cuML's. Both
+    `isolation_forest/` is described throughout as an implementation of cuML's. Both
     cannot be right, and the cheap way to settle it is to try the import on
     the box and print what happens. If it is absent the arm REFUSES by name
     and the lane falls back to sklearn alone; if it is present the lane gets
     the GPU-versus-GPU column every other lane has.
 
-    Settling it also closes a real open question the port carries: DEVIATION
+    Settling it also closes a real open question the implementation carries: DEVIATION
     750, cuML's `curand_u64` word order, has never been checked against a
     cuML binary because there has never been one on the same machine."""
     try:

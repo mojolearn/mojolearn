@@ -38,7 +38,7 @@ struct LanczosSolverConfig(Copyable, Movable):
     Their `ncv` doc note (`:50`) is `n_components + 1 < ncv < n`, STRICT at
     both ends, and this lane's guard in `detail/lanczos.mojo` admits
     `ncv == n` -- DEVIATION 780 (b), one of the two clauses that survive
-    that deviation's correction. UNREACHABLE through the ported driver:
+    that deviation's correction. UNREACHABLE through the implemented driver:
     cuVS 26.08 computes `ncv = min(n - n_components, max(2k + 1, 20))`
     (`detail/spectral_embedding.cuh:67`), which is always below `n`. Only a
     direct caller of `lanczos_smallest` can reach it."""

@@ -43,7 +43,7 @@ mirrors upstream rather than inventing a rule.
 staggers each row's start so threads reading down a column of shared memory
 do not all land in the same bank.
 
-NOT PORTED FROM THIS HEADER: nothing. `contractions.cuh` is the policy
+NOT IMPLEMENTED FROM THIS HEADER: nothing. `contractions.cuh` is the policy
 structs and the three policy families; `detail/contractions.cuh`'s loader is
 `NOT_IMPLEMENTED.tsv`'s first row and lives, for the one instantiation this
 repository needs, in `simt_kernel.mojo`.

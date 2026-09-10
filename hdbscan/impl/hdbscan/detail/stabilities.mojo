@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Cluster stabilities, and the two reductions that decide them.
 
-PORT OF `cuml-v26.08.00/cpp/src/hdbscan/detail/stabilities.cuh`
+FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/stabilities.cuh`
 (cuML `265b9da`): `compute_stabilities` (`:49-137`) and
 `get_stability_scores` (`:153-200`), plus
 `detail/kernels/stabilities.cuh::stabilities_functor` (`:22-49`).
-Transliterated, their order, with two declared replacements.
+Followed statement for statement, their order, with two declared replacements.
 
 ======================================================================
 THE STABILITY SUM IS A SUMMATION ORDER. (IDENTITY hazard 3, second half.)
@@ -29,7 +29,7 @@ SERIAL FOLD IN CONDENSED-TREE ORDER, NOT A FLOAT `atomicAdd`.
 ======================================================================
 WHAT THEIRS DOES: the block above. One float atomic per condensed edge.
 
-WHY IT CANNOT BE PORTED AS-IS. A float `atomicAdd` is order-dependent by
+WHY IT CANNOT BE IMPLEMENTED AS-IS. A float `atomicAdd` is order-dependent by
 construction and the order is the scheduler's. It is IDENTITY_PATHS rows
 1, 8 and 36's defect, and this lane may not reintroduce it. It is also
 BANNED OUTRIGHT on this path by the lane's brief: no floating-point
@@ -69,7 +69,7 @@ births_parent_min.data() + 1, n_clusters - 1, offsets + 1, stream, Min)`
 fold shape is CUB's choice, followed by a `thrust::transform` taking
 `birth < births_parent_min ? birth : births_parent_min` (`:119-126`).
 
-WHY IT CANNOT BE PORTED AS-IS. Two reasons, and the second is the one a
+WHY IT CANNOT BE IMPLEMENTED AS-IS. Two reasons, and the second is the one a
 reader will not guess. (a) The fold SHAPE is a library's and varies with
 the segment length and the target; a min over floats is associative and
 commutative EXCEPT on a `(+0.0, -0.0)` pair, where IDENTITY_PATHS row 39

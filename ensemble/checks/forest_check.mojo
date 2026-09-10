@@ -42,7 +42,7 @@ Together they pin the seed chain from both sides: it must reach the sampler
      weight-dependent arms still raise by name. The no-bootstrap arm is the
      identity.
   E. FIT THEN PREDICT: train a forest on a separable fixture and predict it
-     back through the ported traversal. Every row must be classified
+     back through the implemented traversal. Every row must be classified
      correctly -- this is the only arm that runs the estimator end to end.
 """
 
@@ -359,8 +359,8 @@ def arm_c_sampled_rows() raises -> Int:
     return fails
 
 
-def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
-    """The three arms that are not ported must RAISE, by name.
+def arm_d_unimplemented_arms(ctx: DeviceContext) raises -> Int:
+    """The three arms that are not implemented must RAISE, by name.
 
     A silently-wrong sampler is the worst outcome available here: it would
     train a forest that looks entirely normal on rows nobody asked for.
@@ -416,7 +416,7 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
         # device's geometry is one call away (DEVIATION 184) -- but
         # `RowSampler` calls `launch_uniform_int`, which is pinned to
         # RNG_STRIDE. Feeding it a stride-256 row compared two different
-        # launch geometries and reported 444 wrong rows; the port was right
+        # launch geometries and reported 444 wrong rows; the implementation was right
         # and this filter is the fix. The mismatch began at index 256
         # exactly, which is what a stride difference looks like.
         if stride != RNG_STRIDE:
@@ -539,7 +539,7 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
                 " per cell across", oracle_rows, "cuML call sites",
             )
 
-    # Weighted bootstrap is PORTED now (`randomforest.cuh:125-138`), so it
+    # Weighted bootstrap is IMPLEMENTED now (`randomforest.cuh:125-138`), so it
     # must draw rather than raise -- and every drawn index must be a legal
     # row. Its distributional behaviour is checked in `sample_weight_check`;
     # what matters here is that all four arms of their dispatch produce
@@ -568,7 +568,7 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
     _ = s2^
     _ = h2^
 
-    # The zero-weight arm (`randomforest.cuh:144-154`) IS PORTED now, so it
+    # The zero-weight arm (`randomforest.cuh:144-154`) IS IMPLEMENTED now, so it
     # must NOT raise -- but it must also refuse to run before
     # `prepare_weights` has established which rows survive, because a
     # sampler that silently emitted `n_sampled_rows` identity indices there
@@ -588,7 +588,7 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
         )
     _ = s3^
 
-    # and the arm that IS ported must produce the identity, per cell
+    # and the arm that IS implemented must produce the identity, per cell
     var s4 = RowSampler(ctx, False, UInt64(7), 100, 100, False)
     s4.sample(ctx, Int32(3))
     var h = ctx.enqueue_create_host_buffer[DType.int32](100)
@@ -618,7 +618,7 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
 
 
 def arm_e_fit_then_predict(ctx: DeviceContext) raises -> Int:
-    """Train a forest, then predict it back through the ported traversal."""
+    """Train a forest, then predict it back through the implemented traversal."""
     var n_rows = 400
     var n_cols = 3
     var d = Data(n_rows, n_cols, 2)
@@ -752,7 +752,7 @@ def arm_g_python_layer_params() raises -> Int:
 
     Four transforms cuML applies BETWEEN a user's arguments and the C++
     `RF_params`. They are not decoration: each one changes the model a
-    user gets, and none of them is in their C++ layer, so a port that
+    user gets, and none of them is in their C++ layer, so an implementation that
     stops at the C-API shape silently drops all four.
 
     The expected values are arithmetic and written out by hand, not read
@@ -912,7 +912,7 @@ def main() raises:
     fails += arm_a_identical(ctx)
     fails += arm_b_differ(ctx)
     fails += arm_c_sampled_rows()
-    fails += arm_d_unported_arms(ctx)
+    fails += arm_d_unimplemented_arms(ctx)
     fails += arm_e_fit_then_predict(ctx)
     fails += arm_f_bootstrapped_forest(ctx)
     fails += arm_g_python_layer_params()

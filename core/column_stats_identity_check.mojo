@@ -94,7 +94,7 @@ def _mode_name() -> String:
 
 
 def _hash64(i: Int, f: Int) -> UInt64:
-    """A deterministic 64-bit mix. Not a port; the fixture generator."""
+    """A deterministic 64-bit mix. Not an implementation; the fixture generator."""
     var h = UInt64(i) * UInt64(0x9E3779B97F4A7C15) + UInt64(f + 1) * UInt64(
         0xBF58476D1CE4E5B9
     )
@@ -307,7 +307,7 @@ def check_column_stats_fold_shape() raises:
 
     Under FAST the fold is Modular's shape, which is theirs to change, so
     that arm requires only that the answer is numerically the same sum
-    (a loose relative bound, which a broken port still fails) and REPORTS
+    (a loose relative bound, which a broken implementation still fails) and REPORTS
     the bits. It also re-asserts the fixture separates, which is what gives
     the IDENTICAL arm's equality its teeth.
 
@@ -498,7 +498,7 @@ def check_column_stats_fold_shape() raises:
                 + String(worst_mean_rel)
                 + ", xty "
                 + String(worst_xty_rel)
-                + ". That is a broken port, not a fold shape."
+                + ". That is a broken implementation, not a fold shape."
             )
         print(
             "check_column_stats_fold_shape OK (FAST): the library fold ran"
@@ -695,7 +695,7 @@ def check_xty_contraction_pin() raises:
                 + _show(hnaive.unsafe_ptr().unsafe_load(0))
                 + ". Under IDENTICAL every multiply-add on this path goes"
                 " through `identical_mul_add`, so this is a broken pin or"
-                " a broken port."
+                " a broken implementation."
             )
         if separating == 0:
             print(

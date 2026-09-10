@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cub::BlockReduce<T, TPB>::Sum`: the block-wide sum cuML's RF counts with.
 
-PORT OF `cub/cub/block/block_reduce.cuh` and its default algorithm
+FOLLOWS `cub/cub/block/block_reduce.cuh` and its default algorithm
 `cub/cub/block/specializations/block_reduce_warp_reductions.cuh`
 (`BLOCK_REDUCE_WARP_REDUCTIONS`, `block_reduce.cuh:291`) at NVIDIA/cccl
 `d10a88a945caa4ea63dd2a909cf789c6dbe085a4`, cloned read-only into
 `~/CascadeProjects/upstream/cccl` for this lane.
 
-CUB IS OPEN SOURCE, SO IT IS A PORT TARGET, NOT A VENDOR CALL. The rule
+CUB IS OPEN SOURCE, SO IT IS A IMPLEMENTATION TARGET, NOT A VENDOR CALL. The rule
 that says "substitute the platform primitive for a vendor call" applies to
 cuBLAS and cuSOLVER, whose kernels nobody can read. `block_reduce.cuh` can
 be read, so it is transcribed. `max.gpu.primitives.block.sum` was NOT
@@ -81,7 +81,7 @@ algorithm does not select it.
 #     (`builder_kernels_impl.cuh:62`), so the shipped path pays nothing.
 #   * For a FLOAT element type it would NOT be identical: 128 threads fold
 #     as 4 warp aggregates on Apple and 2 on CDNA, which is a different
-#     summation tree. No float instantiation is reachable from this port
+#     summation tree. No float instantiation is reachable from this implementation
 #     today. If one is added it needs a NUMERIC row in
 #     `checks/kernel_matrix.mojo` pinning the lane width, exactly as
 #     `replication_lanes` is pinned to 32 there for the histogram. Declared,

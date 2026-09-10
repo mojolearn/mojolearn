@@ -30,7 +30,7 @@ WHAT IS COMPARED
 ----------------
 The PARTITION, not the label values. Cluster ids from `weak_cc` are
 `min(vertex index) + 1` over each component and the monotonic relabelling
-that would renumber them `0..k-1` is not ported. Comparing numbers instead of
+that would renumber them `0..k-1` is not implemented. Comparing numbers instead of
 the partition would be testing a renumbering convention, and it is the same
 reason the k-means check compares centroids as a permutation.
 """
@@ -177,7 +177,7 @@ def check_dbscan() raises:
     # --- noise is -1, and the cluster ids are EXACTLY 0..k-1 -------------
     # This is what `final_relabel` + `relabelForSkl` (`runner.cuh:410-416`)
     # buy, and it is the half that could not be checked before they were
-    # ported: the old port compared the PARTITION because its label VALUES
+    # implemented: the old implementation compared the PARTITION because its label VALUES
     # were `min(vertex index) + 1` and matched neither cuML nor sklearn.
     for i in range(BLOBS * PER_BLOB, n):
         if hl.unsafe_ptr().unsafe_load(i) != Int32(-1):
@@ -1036,7 +1036,7 @@ def _run_two_loop_arm(
 def check_dbscan_rbc_two_loop_arms() raises:
     """BOTH upstream arms of loop 2's RBC dispatch, one named fixture each.
 
-    PORTING_RULES 8: a switch is exercised on both sides or one side is
+    ENGINEERING_RULES 8: a switch is exercised on both sides or one side is
     unchecked, and the RBC arm's loop 2 now has a switch --
     `algo.cuh:119-122` sends a batch down the ONE-PASS `max_k` form when
     loop 1's bound fits the spare room, and down the two-pass count + fill
@@ -2203,7 +2203,7 @@ def check_dbscan_uniform_weight_matches_unweighted() raises:
     batch against `core` by dataset.
 
     BOTH ARMS, because they are two different producers: the dense
-    `coalescedReduction` port on `brute` and the `accumulateWeights` port on
+    `coalescedReduction` implementation on `brute` and the `accumulateWeights` implementation on
     `rbc`, and the `rbc` arm additionally exercises DEVIATION 29's
     `need_ja_compute` fill in loop 1 which the unweighted path never runs.
 
@@ -2255,7 +2255,7 @@ def check_dbscan_uniform_weight_matches_unweighted() raises:
             raise Error(
                 names[mi] + ": " + String(differ) + " of " + String(n)
                 + " labels changed when every sample_weight is 1.0, first at"
-                " point " + String(first_bad) + " (" 
+                " point " + String(first_bad) + " ("
                 + String(plain.unsafe_ptr().unsafe_load(first_bad))
                 + " -> "
                 + String(uniform.unsafe_ptr().unsafe_load(first_bad))
@@ -2341,7 +2341,7 @@ def check_dbscan_duplicate_equals_weight_two() raises:
     scikit-learn's own reason for having `sample_weight` at all -- "remove
     (near-)duplicate points and use sample_weight instead"
     (`_dbscan.py:157-158`) -- so this is the property the parameter is FOR,
-    and it does not share our spelling with anything in the port.
+    and it does not share our spelling with anything in the implementation.
 
     The equivalence is exact rather than approximate: a duplicate at distance
     0 has the same neighbourhood as its original, so every neighbour's degree

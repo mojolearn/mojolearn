@@ -3,11 +3,11 @@
 """The LINEAR and RBF kernel matrices: `GramMatrixBase::linear`,
 `RBFKernel::evaluate`, `rbf_kernel_expanded`, `matrixRowNormL2`.
 
-PORT OF `cuvs/cpp/src/distance/detail/kernels/kernel_matrices.cu` at cuVS
+FOLLOWS `cuvs/cpp/src/distance/detail/kernels/kernel_matrices.cu` at cuVS
 `94c2819` (the `cuvs::distance::kernels` cuML 26.08 links; RAFT's
 `distance/detail/kernels/kernel_matrices.cuh` is the same code one
 repository earlier). Dense, row-major, FP32. POLYNOMIAL and TANH are NOT
-ported (refused by name in `svm_parameter.mojo`; `svm/NOT_IMPLEMENTED.tsv`).
+implemented (refused by name in `svm_parameter.mojo`; `svm/NOT_IMPLEMENTED.tsv`).
 
 THE ROUNDING SEQUENCE (svm/README.md, identity content section 1). Theirs:
 
@@ -181,4 +181,4 @@ def kernel_op(
             grid_dim=_grid(m * n), block_dim=KM_TPB,
         )
     elif kp.kernel != KERNEL_LINEAR:
-        raise Error("svm kernel_op: unported kernel " + String(kp.kernel))
+        raise Error("svm kernel_op: unimplemented kernel " + String(kp.kernel))

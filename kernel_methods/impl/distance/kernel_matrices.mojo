@@ -3,20 +3,19 @@
 """The POLYNOMIAL and TANH epilogues: `polynomial_kernel_nopad`,
 `tanh_kernel_nopad`, `PolynomialKernel::evaluate`, `TanhKernel::evaluate`.
 
-PORT OF `cuvs/cpp/src/distance/detail/kernels/kernel_matrices.cu` at cuVS
+FOLLOWS `cuvs/cpp/src/distance/detail/kernels/kernel_matrices.cu` at cuVS
 `6ba2ce2` (`upstream/cuvs-v26.08.00`), lines 18-92 and 136-190. Dense,
 row-major, FP32.
 
 **THIS FILE COMPLETES A MIRROR THAT ALREADY EXISTS AND IS PARTIAL.**
 `svm/impl/distance/kernel_matrices.mojo` mirrors the SAME upstream file and
-ports only its LINEAR and RBF halves; its header says so in one line
-("POLYNOMIAL and TANH are NOT ported (refused by name in
+implements only its LINEAR and RBF halves; its header says so in one line
+("POLYNOMIAL and TANH are NOT implemented (refused by name in
 `svm_parameter.mojo`; `svm/NOT_IMPLEMENTED.tsv`)"). That refusal is the SVM lane's
 and it is correct for the SVM lane, whose solver never reaches those kernels.
 Kernel ridge and Nystroem do. **`svm/` is NOT edited by this lane** -- the two
-epilogues are ported HERE, beside the callers that need them, and
-`kernel_methods/DERIVATION_MAP.tsv` records the file as a SECOND PARTIAL MIRROR
-of one upstream file rather than pretending either half is complete.
+epilogues are implemented HERE, beside the callers that need them, and
+
 DEVIATION 1664.
 
 The linear dot product these two epilogues sit on top of is NOT re-spelled
@@ -100,7 +99,7 @@ def polynomial_epilogue_kernel(
     gain: Float32,
     offset: Float32,
 ):
-    """PORT OF `polynomial_kernel_nopad` (`kernel_matrices.cu:27-34`).
+    """FOLLOWS `polynomial_kernel_nopad` (`kernel_matrices.cu:27-34`).
 
     `inout[tid] = pow(gain * inout[tid] + offset, exponent)`, one thread per
     cell. Theirs strides a grid-stride loop over `len`; ours is one thread per
@@ -129,7 +128,7 @@ def tanh_epilogue_kernel(
     gain: Float32,
     offset: Float32,
 ):
-    """PORT OF `tanh_kernel_nopad` (`kernel_matrices.cu:66-72`).
+    """FOLLOWS `tanh_kernel_nopad` (`kernel_matrices.cu:66-72`).
 
     `inout[tid] = tanh(gain * inout[tid] + offset)`, one thread per cell.
 

@@ -29,11 +29,11 @@ THE STREAM IS A PURE FUNCTION OF (seed, tree_id). `subsequence = tree_id
 = blockIdx.x` is a semantic key, not a scheduling accident: one block per
 tree, thread 0 the only consumer, and the consumption order is the serial
 stack walk. Nothing here depends on block size, grid shape or launch
-order, so the brief's DEVIATION 680 re-keying is NOT NEEDED; the port
+order, so the brief's DEVIATION 680 re-keying is NOT NEEDED; the implementation
 keeps their key and the launch-invariance gate measures it (block 32 /
 128 / 256 give the same bytes, `isolation_forest/checks/if_check.mojo`).
 
-What is ported and how it was verified (all integer arithmetic):
+What is implemented and how it was verified (all integer arithmetic):
   * `curand_init` (seed scramble `:823-834`, then `skipahead_sequence`,
     then `skipahead`), `curand` (`:863-874`, the Marsaglia xorwow step
     with the Weyl `d += 362437`), `curand_uniform` (`x * 2^-32f + 2^-33f`:
@@ -80,8 +80,8 @@ Half of DEVIATION 683's "the rebuilt tables equal the header's" was
 therefore an unverified claim (the Python reference checked
 `precalc_xorwow_matrix` only).
 
-Closed rather than deleted, because the table is part of the ported
-`curand_init` contract and a future caller (any port that passes a nonzero
+Closed rather than deleted, because the table is part of the implemented
+`curand_init` contract and a future caller (any implementation that passes a nonzero
 `offset`) would inherit an untested one:
   * `xorwow_reference.py` now parses `precalc_xorwow_offset_matrix` too and
     asserts all 32 rebuilt `A^(4^i)` matrices equal the header's, word for
@@ -118,7 +118,7 @@ nearest float to 2.3283064e-10 is 2^-32; spacing there is 2^-55)."""
 struct curandStateXORWOW(Copyable, Movable):
     """`struct curandStateXORWOW { unsigned int d, v[5]; ... }`
     (`curand_kernel.h:150-156`). The Box-Muller cache fields are not
-    ported: nothing in the isolation forest draws a normal."""
+    implemented: nothing in the isolation forest draws a normal."""
 
     var d: UInt32
     var v0: UInt32

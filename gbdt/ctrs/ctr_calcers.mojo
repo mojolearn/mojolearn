@@ -25,7 +25,7 @@ frequency half of the GPU default lands on `TWeightedBinFreqCalcer` here.
 
 ## WHICH HALF RUNS WHERE, AND WHY
 
-`THistoryBasedCtrCalcerGpu` is the port of `THistoryBasedCtrCalcer`: it runs
+`THistoryBasedCtrCalcerGpu` is the implementation of `THistoryBasedCtrCalcer`: it runs
 `GatherTrivialWeights`, both segmented scans, `GetGatheredBinSample`,
 `FillBinarizedTargetsStats` and `DivideWithPriors` on the device, through
 the kernels their own code calls. It is what `train()` computes a `Borders`
@@ -107,7 +107,7 @@ def compute_simple_ctrs(
     ADDRESS NOTE: this driver's mirror address is under `gbdt/gpu_data/`,
     beside their `batch_binarized_ctr_calcer.cpp`. It lives here because
     this round owns `gbdt/ctrs/` and creating a second lane's file is a
-    merge conflict, not a port. Move it when the lanes rejoin.
+    merge conflict, not an implementation. Move it when the lanes rejoin.
     """
     var n_rows = len(cat_codes)
     var builder = TCtrBinBuilder(n_rows)
@@ -365,7 +365,7 @@ struct THistoryBasedCtrCalcer(Movable):
     so `ScannedScatteredWeights[r]` is the DENOMINATOR before the prior:
     how many rows precede `r` in its category. The `groupIds` fix is
     skipped -- `NeedFixForGroupwiseCtr()` is false for every configuration
-    this port reaches, see `kernel/ctr_calcers.mojo`.
+    this implementation reaches, see `kernel/ctr_calcers.mojo`.
 
     ## THIS ONE IS THE HOST REFERENCE
 
@@ -375,10 +375,10 @@ struct THistoryBasedCtrCalcer(Movable):
     (`checks/ctr_device_check.mojo`), and to be compared itself against
     an independent O(n^2) tally (`checks/ctr_check.mojo`). A host
     reference used to CHECK a device answer is not a CPU path
-    (`PORTING_RULES.md` 0b-ii).
+    (`ENGINEERING_RULES.md` 0b-ii).
 
     `set_float_sample` / `VisitFloatFeatureMeanCtrs` (`:170-205`) is not
-    ported: `FloatTargetMeanValue` is not in any default description.
+    implemented: `FloatTargetMeanValue` is not in any default description.
     """
 
     var indices: List[UInt32]
@@ -542,7 +542,7 @@ struct THistoryBasedCtrCalcer(Movable):
 
 
 struct THistoryBasedCtrCalcerGpu(Movable):
-    """`THistoryBasedCtrCalcer<TMapping>` ON THE DEVICE, which is the port.
+    """`THistoryBasedCtrCalcer<TMapping>` ON THE DEVICE, which is the implementation.
 
     Their class, their buffers (`ctr_calcers.h:265-283`), their launch
     order. The `Gpu` suffix is ours; CatBoost has one class because it has
@@ -550,7 +550,7 @@ struct THistoryBasedCtrCalcerGpu(Movable):
 
     Every step below is a kernel their own code calls, and none of them is
     new: `GatherTrivialWeights`, `FillBinarizedTargetsStats`,
-    `MakeMeansAndScatter` and `GatherWithMask` were ported and gated by
+    `MakeMeansAndScatter` and `GatherWithMask` were implemented and gated by
     `checks/ctr_kernels_check.mojo`, and
     `SegmentedScanAndScatterNonNegativeVector` by
     `pixi run check-segscan`. What this class adds is the wiring, which was
@@ -559,7 +559,7 @@ struct THistoryBasedCtrCalcerGpu(Movable):
 
     var indices: DeviceBuffer[DType.uint32]
     """Their `Indices`, a const view of the bin builder's -- taken by
-    `ConstCopyView()` in their constructor (`:42`). This port holds a copy
+    `ConstCopyView()` in their constructor (`:42`). This implementation holds a copy
     of the bin builder instead of a view, so the buffer below is the
     builder's own and the builder must outlive the calcer."""
 
@@ -636,7 +636,7 @@ struct THistoryBasedCtrCalcerGpu(Movable):
         `ScannedScatteredWeights[r]` leaves holding the DENOMINATOR before
         the prior: how many rows precede `r` in its category, in the CTR
         estimation permutation's order. `NeedFixForGroupwiseCtr()` is false
-        for every configuration this port reaches, so the `FixGroupwiseCtr`
+        for every configuration this implementation reaches, so the `FixGroupwiseCtr`
         branch is unreachable rather than skipped -- see
         `kernel/ctr_calcers.mojo`.
         """
@@ -892,7 +892,7 @@ def compute_simple_ctrs_gpu(
 
 
 struct TWeightedBinFreqCalcerGpu(Movable):
-    """`TWeightedBinFreqCalcer<TMapping>` ON THE DEVICE, which is the port
+    """`TWeightedBinFreqCalcer<TMapping>` ON THE DEVICE, which is the implementation
     that retires the last line of `archive/reference/PORTING.md` deviation 52.
 
     Their class (`ctr_calcers.h:285-379`), their buffers, their launch
@@ -902,7 +902,7 @@ struct TWeightedBinFreqCalcerGpu(Movable):
 
     Every launch in `visit_equal_up_to_prior_freq_ctrs` is one their own
     `VisitEqualUpToPriorFreqCtrs` makes (`:307-341`), and only two needed
-    porting on the way: `UpdatePartitionOffsets`
+    implementing on the way: `UpdatePartitionOffsets`
     (`gpu_util/kernel/partitions.mojo`) and the Sum arm of
     `SegmentedReduceVector` (`gpu_util/kernel/segmented_reduce.mojo`,
     their cub call hand-written because MAX ships no segmented reduce --

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Fit instrumentation for `ensemble/`: identity checkpoints + stage timers.
 
-NOT A PORT. cuML carries neither instrument: their determinism story is
+NO REFERENCE FILE. cuML carries neither instrument: their determinism story is
 per-backend and their timing story is `TimerCPU`/`train_time`, declined here
 as DEVIATION 303. This file is the lane's implementation of the repository's
 standing build order -- every fit path grows `core/identity_trace.mojo`

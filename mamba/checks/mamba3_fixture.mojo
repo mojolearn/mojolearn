@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Hashed fixtures for the Mamba-3 (SISO) identity block, profile
 `mojolearn.identical.mamba3.siso.fp32.v1`
-(`mamba/IDENTICAL_MAMBA3_CONTRACT.md`). NOT A PORT.
+(`mamba/IDENTICAL_MAMBA3_CONTRACT.md`). NO REFERENCE FILE.
 
 The shape of this file is `mamba/checks/mamba2_fixture.mojo`'s, on purpose,
 and it IMPORTS the Mamba-1 fixture's generator machinery

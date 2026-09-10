@@ -5,7 +5,7 @@
     pixi run -e bench loss-oracle-gen      # regenerate bench/oracle_losses.txt
     pixi run check-loss-oracle             # this file
 
-WHY IT EXISTS. Nine objectives were ported -- Quantile, MAE, LogLinQuantile,
+WHY IT EXISTS. Nine objectives were implemented -- Quantile, MAE, LogLinQuantile,
 MAPE, Poisson, Lq, Expectile, Tweedie, Huber -- and every gate on them
 compared our device against a tally written in this repository or against
 libm through FFI. Both are worth having and neither is CatBoost: a libm
@@ -49,7 +49,7 @@ WHAT AGREEMENT IS EXPECTED, AND WHERE IT IS NOT.
   * MAE, MAPE and Quantile take `ELeavesEstimation::Exact` on both arms
     (`catboost_options.cpp:289-300`). Their GPU exact estimator sorts on a
     key that keeps only bits [10, 32) of the float and binary-searches a
-    fixed sixteen iterations; ours ports that, and their CPU's
+    fixed sixteen iterations; ours implements that, and their CPU's
     `CalcSampleQuantile` (`libs/helpers/quantile.cpp`) is a different
     implementation of the same definition. Approximate on both sides.
   * Their kernels use `__expf` / `__powf` fast-math where ours use
@@ -82,7 +82,7 @@ THE MAPE DEFECT, found by this check and still open.
   gets the member's declared 0 (`targets/pointwise_target_impl.h:364`) --
   and MAPE's kernel does not read it, which is why that is harmless there.
 
-  This port collapsed the two into one float. `gbdt/train.mojo:715` passes
+  This implementation collapsed the two into one float. `gbdt/train.mojo:715` passes
   `alpha=loss_desc.kernel_alpha()` -- correctly 0.0 for MAPE -- into
   `fit`, which hands the same float to `make_bin_optimized_oracle`
   (`doc_parallel_boosting.mojo:580`), and `estimate_exact` forwards it as
@@ -103,7 +103,7 @@ THE MAPE DEFECT, found by this check and still open.
   libm oracle passes. `checks/exact_estimation_check.mojo` passes alpha
   explicitly and calls `compute_weighted_quantile` with
   `use_mape_weights = False` on every one of its arms, so the MAPE branch
-  had no caller in any check -- `PORTING_RULES.md` 8, a non-default path is
+  had no caller in any check -- `ENGINEERING_RULES.md` 8, a non-default path is
   an unchecked path.
 
   THE FIX is to carry the estimator's alpha separately from the kernel's:
@@ -117,7 +117,7 @@ THE TWEEDIE ROW CLOSES DEVIATION 62. `archive/reference/PORTING.md` 62 records t
 reads `variance_power` into a member nothing reads again
 (`pointwise_target_impl.h:288-291`), so their GPU trains at
 `variancePower = 0` whatever the user passes, while their CPU uses it
-(`private/libs/algo/tensor_search_helpers.cpp:308`). This port threads it,
+(`private/libs/algo/tensor_search_helpers.cpp:308`). This implementation threads it,
 matching their CPU, and that decision was priced by argument with no
 fixture behind it. It has one now: threading the parameter reproduces their
 CPU's Tweedie fit to a relative RMS of 8e-08 with all 48 splits identical.
@@ -500,7 +500,7 @@ def run_arm(
     # sides rather than defaulted: `GetEstimationMethodDefaults`
     # (`catboost_options.cpp:31-244`) is keyed on TASK TYPE and Tweedie's
     # entry differs -- 1 Newton iteration on CPU, 20 on GPU (`:221-231`),
-    # and this port takes the GPU number. Defaulting both sides would
+    # and this implementation takes the GPU number. Defaulting both sides would
     # compare a 20-iteration fit against a 1-iteration fit and report a
     # configuration difference as a loss defect.
     var tm = train(
@@ -739,7 +739,7 @@ def main() raises:
     # DEVIATION 62, measured. `archive/reference/PORTING.md` 62: their GPU drops Tweedie's
     # variance_power (`pointwise_target_impl.h:288-291` reads it into a
     # member nothing reads again) and trains at 0; their CPU honours it
-    # (`private/libs/algo/tensor_search_helpers.cpp:308`). This port
+    # (`private/libs/algo/tensor_search_helpers.cpp:308`). This implementation
     # threads it, which is the CPU behaviour, and the deviation was an
     # OPEN ITEM because no fixture had been run through both arms.
     # ---------------------------------------------------------------

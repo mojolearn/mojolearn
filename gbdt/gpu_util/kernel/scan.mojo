@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ScanVector` over `ui32`: the unsegmented device-wide prefix sum.
 
-PORT OF `catboost/cuda/cuda_util/kernel/scan.cu:10-19` (`NKernel::ScanVector`)
+FOLLOWS `catboost/cuda/cuda_util/kernel/scan.cu:10-19` (`NKernel::ScanVector`)
 reached from `cuda_util/scan.h:14-60` (`TScanVectorKernel`, the
 `IsNonNegativeSegmentedScan == false` arm at `:52-58`) at CatBoost `54a8143a`.
 
@@ -49,7 +49,7 @@ answer stops being zero and nothing would have said so.
 
 An exclusive `ui32` sum overflows above 2^32; theirs does too (`ScanVector`
 is instantiated at `ui32` with a `ui32` output, `scan.cu:98-104`), and the
-only input this port scans is a 0/1 flag per row.
+only input this implementation scans is a 0/1 flag per row.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`svdEig`: the SVD of a tall matrix through the eigendecomposition of its Gram.
 
-PORT OF `raft/cpp/include/raft/linalg/detail/svd.cuh::svdEig` at RAFT
+FOLLOWS `raft/cpp/include/raft/linalg/detail/svd.cuh::svdEig` at RAFT
 `661a3b8`. Partial: `svdEig` only (`svdQR`, `svdJacobi` and `svdReconstruction`
-are not ported; see `glm/NOT_IMPLEMENTED.tsv`). Do not improve.
+are not implemented; see `glm/NOT_IMPLEMENTED.tsv`).
 
 Their steps, copied (`svd.cuh:112-171`):
 
@@ -37,7 +37,7 @@ sums over columns IN INDEX ORDER, so the order is a rounding order, and
 mirroring theirs is how a cross-vendor card stays comparable stage for
 stage.
 
-WHAT IS NOT PORTED: `gen_left_vec == false` returns before `U`; both callers
+WHAT IS NOT IMPLEMENTED: `gen_left_vec == false` returns before `U`; both callers
 here pass `true` and the flag is honored anyway. The two-stream overlap is
 absent as in `lstsq.mojo`.
 """

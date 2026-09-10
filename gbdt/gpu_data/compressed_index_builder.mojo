@@ -2,21 +2,21 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Assign features to grouping policies and lay out the compressed index.
 
-PORT OF the layout half of
+FOLLOWS the layout half of
 `catboost/cuda/gpu_data/compressed_index_builder.h` at CatBoost `54a8143a`.
 
 **This is the step that makes a MIXED dataset work**, and its absence is why
-this port's tree loop has only ever handled uniform binary features. Given a
+this implementation's tree loop has only ever handled uniform binary features. Given a
 fold count per feature it decides, for each one, which policy it belongs to,
 which `UInt32` column it shares, which bits inside that column it owns, and
 where its bins live in the histogram.
 
 Their builder also owns the writing of the data (`WriteBinsVector` ->
-`TCudaFeaturesLayoutHelper::WriteToCompressedIndex`), which the port covers
-with `binarize.write_compressed_index_kernel`. What is ported here is the
+`TCudaFeaturesLayoutHelper::WriteToCompressedIndex`), which the implementation covers
+with `binarize.write_compressed_index_kernel`. What is implemented here is the
 LAYOUT DECISION, which is host-side arithmetic and needs no device at all.
 
-NOT ported, and named so nobody assumes otherwise: their docParallel and
+NOT implemented, and named so nobody assumes otherwise: their docParallel and
 featureParallel layouts differ in how columns are striped across devices, and
 this is the single-device layout. Multi-device striping is a different
 function in the same header.
@@ -80,7 +80,7 @@ def build_layout(
     down (`:218`), with `AddGroup` called once per group in group order
     (`:341`). The two therefore agree by construction and cannot drift.
 
-    This walk is the port of that invariant. It visits POLICIES in the order
+    This walk is the implementation of that invariant. It visits POLICIES in the order
     `feature_blocks.blocks_for` emits blocks, and features in input order
     within a policy, which is the order `launch_histograms_for_blocks`
     accumulates `block_first_bin` in. Assigning `first_fold_index` in INPUT

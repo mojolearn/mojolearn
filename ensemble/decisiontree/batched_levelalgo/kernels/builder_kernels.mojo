@@ -10,7 +10,7 @@ checked out read-only at `~/CascadeProjects/upstream/cuml-v26.08.00`.
 Their file is a header of declarations plus four small definitions. The
 declarations (`:96-104`, `:106-114`, `:135-147`, `:149-160`) are the four
 kernel launchers, whose bodies live in `builder_kernels_impl.cuh` and are
-ported in `builder_kernels_impl.mojo`. What is HERE is everything that has
+implemented in `builder_kernels_impl.mojo`. What is HERE is everything that has
 a body in their header and is not a launcher:
 
   * `InstanceRange`, `NodeWorkItem`, `WorkloadInfo`, `SharedMemoryConfig`
@@ -18,10 +18,10 @@ a body in their header and is not a launcher:
     (`:31-57`).
   * `lower_bound` (`:118-133`) -- the bin search every histogram thread runs
     once per instance.
-  * `alignPointer` (`:60-64`) -- NOT ported; see the deviation block.
-  * `sample_features` (`:66-94`) -- the per-node feature sampler. PORTED,
+  * `alignPointer` (`:60-64`) -- NOT implemented; see the deviation block.
+  * `sample_features` (`:66-94`) -- the per-node feature sampler. IMPLEMENTED,
     and held cell for cell to CCCL's own compiled output; see DEVIATION 121.
-  * `packHistograms` / `unpackHistograms` (`:162-194`) -- NOT ported; the
+  * `packHistograms` / `unpackHistograms` (`:162-194`) -- NOT implemented; the
     multi-GPU all-reduce path.
 
 WHAT `WorkloadInfo` IS FOR, because the name does not say it. The builder
@@ -37,7 +37,7 @@ be segmented by `workload_info[slot / TPB].nodeid`
 
 ================= DEVIATION BLOCK (whole file) =================
 
-DEVIATION 120. `alignPointer` (`:60-64`) is not ported. Theirs exists
+DEVIATION 120. `alignPointer` (`:60-64`) is not implemented. Theirs exists
 because their histogram kernel carves several typed arrays out of ONE
 `extern __shared__ char[]` block (`builder_kernels_impl.cuh:221`, `:298`)
 and must hand-align each cast. Mojo's `stack_allocation` is typed and
@@ -51,7 +51,7 @@ the padding would have been an "improvement" that silently changes which
 path their dispatch takes.
 
 DEVIATION 121 (OPENED AND NOW CLOSED). `sample_features` (`:66-94`) IS
-ported, below. Their body is:
+implemented, below. Their body is:
 
     uint32_t rng_seed = fnv1a32_hash(seed, treeid, nodeid);
     cuda::shuffle_iterator<IdxT> shuffled_features(
@@ -59,12 +59,12 @@ ported, below. Their body is:
     column_samples[sample_idx] = shuffled_features[column_index];
 
 `fnv1a32_hash` is `random_utils.mojo`. The other two are CCCL --
-`cuda::std::minstd_rand` and `cuda::shuffle_iterator` -- and are ported in
+`cuda::std::minstd_rand` and `cuda::shuffle_iterator` -- and are implemented in
 `core/shuffle_iterator.mojo` against CCCL 3.4.3
 (`9d65c77f`), the version rapids-cmake v26.08.00 resolves for cuML
 v26.08.00. They live in `checks/` rather than in a mirrored path
 because CCCL is a general library this tree does not mirror file for file,
-the same way `cluster/checks/` holds ported RAFT primitives.
+the same way `cluster/checks/` holds implemented RAFT primitives.
 
 THIS FILE WAS HELD OPEN ON PURPOSE UNTIL THAT WAS EXACT, because the
 failure mode is uniquely bad: a plausible-looking sampler that is not
@@ -77,7 +77,7 @@ WHAT CLOSED IT: `ensemble/tools/shuffle_oracle/` compiles CCCL's own
 headers -- host-only, no CUDA toolkit, no GPU, because
 `cuda::shuffle_iterator` is `_CCCL_HOST_DEVICE` -- and dumps their output
 into `ensemble/bench/shuffle_oracle.txt`. `shuffle_check.mojo` compares the
-port against it at four separable layers and reports **1085 of 1085 cells
+implementation against it at four separable layers and reports **1085 of 1085 cells
 matching**: the raw LCG stream at 8 seeds, the 24 Feistel keys at 4 seeds,
 847 permutation indices at 30 adversarial `n` (exact powers of two, either
 side of a power of two, everything under the Feistel's `max(8, bit_width)`
@@ -91,7 +91,7 @@ output from a different compiler and language, so the match IS the reach
 proof -- 1085 of somebody else's integers do not agree by accident.
 
 DEVIATION 122. `packHistograms` / `unpackHistograms` (`:162-194`) and
-`reduction_buffer_size_v` (`:163-164`) are not ported. They exist only to
+`reduction_buffer_size_v` (`:163-164`) are not implemented. They exist only to
 pack a `BinT` into a homogeneous `double` buffer for
 `comm.allreduce` on the multi-GPU path (`builder.cuh:553-568`), which
 `Builder::distributed` gates on a RAFT communicator with more than one rank
@@ -117,7 +117,7 @@ standard semantics will get the last bin wrong.
 # All four structs below are `ImplicitlyCopyable`, not merely `Copyable`.
 # Theirs are C++ aggregates of scalars -- trivially copyable PODs passed and
 # returned by value throughout `builder.cuh` (`:70-78`, `:91-143`, `:393-407`)
-# -- so requiring an explicit `.copy()` at every read would be this port
+# -- so requiring an explicit `.copy()` at every read would be this implementation
 # imposing a ceremony their code does not have, on types where a copy is a
 # register move.
 
@@ -272,7 +272,7 @@ def sample_features_kernel(
         UInt64(Int(i32.cast[DType.uint32]()))          -> 0xFFFFFFFFDEADBEEF
 
     Both were caught only because this check compares against CCCL's own
-    compiled output. A check that compared this port against itself would
+    compiled output. A check that compared this implementation against itself would
     have agreed with the bug on both sides -- which is the argument for
     incumbent oracles in one sentence. Same family as this repository's
     recorded `&+`-is-bitwise-AND and `String(Float32)` traps: assume a Mojo

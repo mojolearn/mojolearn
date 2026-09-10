@@ -34,7 +34,7 @@ FOUR GATES, and why each is shaped the way it is:
       `TRmseTarget::Der2` returns 1.0f, so `weight * der2 == weight`
       exactly. This is an analytic identity forced by their arithmetic,
       not a tally of ours. **A gate written on RMSE alone would pass
-      whether or not anything was ported; this file exists because this
+      whether or not anything was implemented; this file exists because this
       repository has been burned by exactly that shape.**
 
   S4  BOTH SEARCHERS: S2 and S3 each run twice, greedy
@@ -426,7 +426,7 @@ def _s2_s3_s4(ctx: DeviceContext) raises -> Int:
                 "  FAIL: S3 (", searcher, ") RMSE Newton is not"
                 " bit-identical to Cosine; TRmseTarget::Der2 is 1.0f, so"
                 " weight * der2 == weight EXACTLY -- any difference means"
-                " the port changed something it must not",
+                " the implementation changed something it must not",
             )
             failures += 1
 

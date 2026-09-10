@@ -117,7 +117,7 @@ def compute_optimal_splits_kernel[
         or score_function == SCORE_FUNCTION_NEWTON_L2
     ), (
         "score_function has no calcer here; only Cosine, NewtonCosine, L2"
-        " and NewtonL2 are ported"
+        " and NewtonL2 are implemented"
     )
 
     var bin_feature_count = Int(bin_feature_count_in)
@@ -325,7 +325,7 @@ def compute_target_variance_kernel(
 
 
 def target_variance_blocks(size: Int, sm_count: Int) -> Int:
-    """`min(4 * TArchProps::SMCount(), CeilDivide(size, blockSize))` (`compute_scores.cu:291`). Inert at this port's default `random_strength = 0`; CatBoost's default is 1.0, so the row must hold before that default is wired."""
+    """`min(4 * TArchProps::SMCount(), CeilDivide(size, blockSize))` (`compute_scores.cu:291`). Inert at this implementation's default `random_strength = 0`; CatBoost's default is 1.0, so the row must hold before that default is wired."""
     comptime _identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var sm = partition_chunks_sm_for[_identical](sm_count)
     var by_data = (size + TARGET_VARIANCE_BLOCK - 1) // TARGET_VARIANCE_BLOCK
@@ -373,7 +373,7 @@ def _leafwise_scan_part[
         or score_function == SCORE_FUNCTION_NEWTON_L2
     ), (
         "score_function has no calcer here; only Cosine, NewtonCosine, L2"
-        " and NewtonL2 are ported"
+        " and NewtonL2 are implemented"
     )
 
     var tid = Int(thread_idx.x)

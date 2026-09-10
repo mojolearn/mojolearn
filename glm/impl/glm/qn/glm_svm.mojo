@@ -3,10 +3,10 @@
 """`SVCL1Loss`, `SVCL2Loss`, `SVRL1Loss`, `SVRL2Loss`: the hinge family,
 per row.
 
-PORT OF `cuml/cpp/src/glm/qn/glm_svm.cuh` at cuML `00094f7`. Whole file:
+FOLLOWS `cuml/cpp/src/glm/qn/glm_svm.cuh` at cuML `00094f7`. Whole file:
 the four `Lz`/`Dlz` pairs and their `gradNorm`s (`nrm1` for the L1 pair,
 `squaredNorm * 0.5` for the L2 pair -- dispatched in `glm_base.mojo::
-GLMWithData.grad_norm`). Do not improve.
+GLMWithData.grad_norm`).
 
 THEIR EIGHT FUNCTORS, copied (`glm_svm.cuh:19-128`); `s = 2 * y - 1`,
 `t = y - z`, `eps` the SVR `sensitivity` (`svr_eps` in `qn_fit_x`):

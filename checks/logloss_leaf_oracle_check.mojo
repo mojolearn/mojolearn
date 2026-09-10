@@ -9,7 +9,7 @@ THE GAP THIS CLOSES
 -------------------
 CatBoost's default leaf estimator for Logloss is Newton with TEN iterations
 and `AnyImprovement` backtracking (`catboost_options.cpp:157-164`, then
-`:315-329`); RMSE gets one. This port implements the whole ten-iteration
+`:315-329`); RMSE gets one. This implementation implements the whole ten-iteration
 descent walker and, until this file, NOTHING had compared its output to
 CatBoost's.
 
@@ -20,7 +20,7 @@ iteration fails all twelve of its leaves. It is not a gate against
 CatBoost: a ten-iteration Newton descent with backtracking has many places
 to be subtly wrong in a way that a same-author reimplementation reproduces
 faithfully. `checks/loss_oracle_check.mojo` does compare leaves against
-CatBoost, but only TREE 0 and only for the nine losses ported on 2026-08-21,
+CatBoost, but only TREE 0 and only for the nine losses implemented on 2026-08-21,
 of which Logloss is not one.
 
 WHICH ARM OF THEIRS, AND WHY THAT IS NOT A DETAIL HERE
@@ -39,7 +39,7 @@ implementations of the same descent:
                    on `FunctionValue <= nextFuncValue` (NON-STRICT,
                    maximizing), loss measured by the target kernel's
                    unnormalized `functionValue`
-    ours           the GPU one, transliterated
+    ours           the GPU one, followed statement for statement
                    (`gbdt/methods/leaves_estimation/descent_helpers.mojo`)
 
 Both walk the same Newton direction, halve the same step, and run the same
@@ -169,7 +169,7 @@ taking THEIR width: their walker's acceptance value is a FLOAT32 scalar
 `pointwise_targets.cu:275-279`, then `static_cast<float>` at
 `pointwise_oracle.cpp:106`), and our Float64 host fold was giving
 AnyImprovement sub-float32 resolution their GPU does not have. Folding in
-Float32 is the faithful port; where the walk stalls against CatBoost's
+Float32 is the faithful implementation; where the walk stalls against CatBoost's
 FastLogf-noise CPU walk shifts on two more extreme leaves, and per
 archive/reference/PORTING.md 140 matching their CPU is not the goal.
 
@@ -178,7 +178,7 @@ That is the tight-L2 / loose-L1 signature, and the cause is located.
 THE WALKS STOP AT DIFFERENT ITERATIONS. On tree 0 seven of eight leaves
 agree to better than 1.2e-06 and ONE does not: leaf 2, the extreme leaf
 (235 rows, nearly one class), whose Newton iterate is still moving after
-six steps. An independent float64 transliteration of BOTH their walkers,
+six steps. An independent float64 statement-for-statement match of BOTH their walkers,
 run on their own tree-0 partition at a zero cursor, says:
 
     steps  leaf 2 / learning_rate
@@ -216,11 +216,11 @@ against the target kernel's `functionValue` computed in float32 on device.
 Same failure mode, different precision and a different tie rule, so it
 stalls two steps later.
 
-WHAT THAT MEANS FOR THE VERDICT. This is NOT a defect in the port: the
+WHAT THAT MEANS FOR THE VERDICT. This is NOT a defect in the implementation: the
 walker, the direction, the halving and the acceptance rule are their GPU's
 and the audit of `descent_helpers.mojo` against
 `descent_helpers.cpp:128-204` stands. It is a CPU-versus-GPU divergence
-inside CatBoost that any faithful GPU port inherits, and this machine
+inside CatBoost that any faithful GPU implementation inherits, and this machine
 cannot run their GPU to check the other side. It is priced as
 `archive/reference/PORTING.md` 140, and the check is left RED rather than given an
 allowance for the three cells, because an allowance would also swallow the

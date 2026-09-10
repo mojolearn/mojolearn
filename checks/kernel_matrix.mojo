@@ -803,7 +803,7 @@ def lib_hardware_ftz_fma_for[column: Int]() -> Bool:
 
 
 def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
-    """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's selector is the ported RAFT WARPSORT (`select_warpsort.mojo`, `warpsort_topk_block_kernel`) instead of the ported RAFT radix (`select_radix.mojo`) for `2 < k <= 256`."""
+    """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's selector is the implemented RAFT WARPSORT (`select_warpsort.mojo`, `warpsort_topk_block_kernel`) instead of the implemented RAFT radix (`select_radix.mojo`) for `2 < k <= 256`."""
     comptime if identical:
         return False
     return column == COLUMN_NVIDIA

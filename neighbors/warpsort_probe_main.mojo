@@ -3,7 +3,7 @@
 """Entry point for the warp-sort top-k checks.
 
 Separate from `knn_main.mojo` on purpose: warpsort is not wired into
-`knn_brute_force.mojo` yet, and this main is what makes the port REACHABLE
+`knn_brute_force.mojo` yet, and this main is what makes the implementation REACHABLE
 without touching a file another lane is in.
 """
 

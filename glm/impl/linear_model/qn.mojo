@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`qn_params` and `qn_loss_type`: the solver's public parameter block.
 
-PORT OF `cuml/cpp/include/cuml/linear_model/qn.h` at cuML `00094f7`. The
-struct and the enum, with their defaults (`qn.h:80-96`). Do not improve.
+FOLLOWS `cuml/cpp/include/cuml/linear_model/qn.h` at cuML `00094f7`. The
+struct and the enum, with their defaults (`qn.h:80-96`).
 
 The values a `mojolearn.LogisticRegression` hands in come from cuML's
 Python layer, not from these defaults: `logistic_regression.py:275-340`

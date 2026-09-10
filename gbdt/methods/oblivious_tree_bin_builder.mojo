@@ -3,7 +3,7 @@
 """`TTreeUpdater`: the per-document bin array the FEATURE-PARALLEL searcher
 splits on, and the compressed-bit chain that fills it.
 
-PORT OF, in one file because they are one call chain:
+FOLLOWS, in one file because they are one call chain:
 
     `catboost/cuda/gpu_data/oblivious_tree_bin_builder.{h,cpp}`
         `IBinarySplitProvider`, `TSplitHelper::Split`,
@@ -21,7 +21,7 @@ PORT OF, in one file because they are one call chain:
     `catboost/cuda/cuda_util/compression_helpers_gpu.cpp`
         `CompressedSizeImpl<ui64>` (`:249-254`)
 
-at CatBoost `54a8143a`. Transliterated. Do not improve.
+at CatBoost `54a8143a`. Followed statement for statement.
 
 WHY THIS FILE EXISTS AT ALL, AND WHY `archive/reference/PORTING.md` 91 B IS WRONG ABOUT IT
 ------------------------------------------------------------------------
@@ -88,7 +88,7 @@ layout: 128 adjacent threads write 128 adjacent words. Reading it as
 `bits[k / 64] >> (k % 64)` gives a well-formed bin array made of the wrong
 documents -- every count is right, every placement is wrong.
 
-DEVIATION 122: the `TScopedCacheHolder` is not ported, so nothing is cached.
+DEVIATION 122: the `TScopedCacheHolder` is not implemented, so nothing is cached.
 DEVIATION 123: `CompressBlock`'s four-register accumulator is one register
 here.
 """
@@ -225,7 +225,7 @@ def write_compressed_split_kernel(
         return TakeEqual ? (featureVal == Value) : featureVal > Value;
 
     `TakeEqual` is `feature.OneHotFeature`. That the two kernels share a
-    predicate is what makes this port's identity gate an identity at all.
+    predicate is what makes this implementation's identity gate an identity at all.
     """
     var block = Int(block_idx.x)
     var tid = Int(thread_idx.x)
@@ -312,7 +312,7 @@ def create_compressed_split(
     side is not reachable from this rung** (there are no CTR columns in the
     feature-parallel searcher until rung 4), so it is gated separately in
     `checks/feature_parallel_identity_check.mojo` against the identity
-    permutation rather than left as an unrun branch -- `PORTING_RULES.md` 8.
+    permutation rather than left as an unrun branch -- `ENGINEERING_RULES.md` 8.
     """
     var num_blocks = compressed_split_blocks(doc_count)
     if num_blocks == 0:

@@ -5,7 +5,7 @@
 DEVIATIONS 600-604's gates, plus 552/553 for the two metrics added
 2026-09-01. The checks, in order:
 
-    check_kde_refusals                 every unported kernel / metric /
+    check_kde_refusals                 every unimplemented kernel / metric /
                                        parameter RAISES BY NAME; bandwidth
                                        <= 0, a non-positive weight, a
                                        Minkowski p that is non-finite,
@@ -13,7 +13,7 @@ DEVIATIONS 600-604's gates, plus 552/553 for the two metrics added
                                        an all-zero row under cosine
                                        (DEVIATION 553). It read
                                        "a metric_arg != 2.0" until Lp was
-                                       ported, and that is now the
+                                       implemented, and that is now the
                                        opposite of the truth: any finite
                                        positive normal p is accepted
     check_kde_zero_sign_cannot_leak    the two facts row 13's argument
@@ -401,11 +401,11 @@ def _expect_raise(what: String, kernel_s: String, metric_s: String, h: Float32, 
 def check_kde_refusals() raises:
     var none = List[Float32]()
     _expect_raise("kernel='triangular'", "triangular", "euclidean", Float32(1.0), none, False)
-    # `cosine` and `minkowski` USED TO BE REFUSED HERE and are ported as of
+    # `cosine` and `minkowski` USED TO BE REFUSED HERE and are implemented as of
     # 2026-09-01; the two `_expect_raise` lines are deleted rather than
     # commented, and the two names now appear in the resolve list below.
-    _expect_raise("metric='canberra' (in their table, unported)", "gaussian", "canberra", Float32(1.0), none, False)
-    _expect_raise("metric='nan_euclidean' (in their table, unported)", "gaussian", "nan_euclidean", Float32(1.0), none, False)
+    _expect_raise("metric='canberra' (in their table, unimplemented)", "gaussian", "canberra", Float32(1.0), none, False)
+    _expect_raise("metric='nan_euclidean' (in their table, unimplemented)", "gaussian", "nan_euclidean", Float32(1.0), none, False)
     _expect_raise("metric='haversine' (unknown)", "gaussian", "haversine", Float32(1.0), none, False)
     _expect_raise("bandwidth=0", "gaussian", "euclidean", Float32(0.0), none, False)
     _expect_raise("bandwidth=-1", "gaussian", "euclidean", Float32(-1.0), none, False)
@@ -428,7 +428,7 @@ def check_kde_refusals() raises:
     kde_fit_validate(N_TRAIN, N_FEATURES, Float32(1.0842021724855044e-19), KDE_KERNEL_GAUSSIAN, DIST_L2_SQRT_UNEXPANDED, ok_w, True)
     # DEVIATION 552: p by VALUE at the 26.08 entry. `metric_arg=3.0` used to
     # be refused HERE with "is read only by metric='minkowski', which is NOT
-    # PORTED"; it is now accepted for Lp and discarded for everything else,
+    # IMPLEMENTED"; it is now accepted for Lp and discarded for everything else,
     # exactly as every `distance_impl` overload but one does upstream. What
     # is still refused is a p that cannot be one arithmetic.
     var ctx = DeviceContext()
@@ -483,7 +483,7 @@ def check_kde_refusals() raises:
     kde_validate_data(zero_train, 4, 3, DIST_L2_SQRT_UNEXPANDED, "train")
     kde_validate_data(zero_train, 4, 3, DIST_LP_UNEXPANDED, "train")
 
-    # and the nine ported names resolve
+    # and the nine implemented names resolve
     var metric_names: List[String] = ["euclidean", "l2", "sqeuclidean", "l1", "cityblock", "manhattan", "chebyshev", "cosine", "minkowski"]
     for name in metric_names:
         _ = metric_from_name(name)
@@ -558,7 +558,7 @@ def check_kde_log_norm_closed_form() raises:
     gaussian (2 pi)^(d/2) h^d; tophat V_d h^d (2h, pi h^2, 4/3 pi h^3);
     epanechnikov d=1 4h/3; linear d=1 h; exponential d=1 2h, d=2 2 pi h^2,
     d=3 8 pi h^3; cosine d=1 4h/pi, d=2 (4 - 8/pi) h^2, d=4 (DEVIATION
-    602). The ported constant is `factor + d log h` = log(volume), so each
+    602). The implemented constant is `factor + d log h` = log(volume), so each
     row is `log(volume)`."""
     from std.math import log, pi
     var tol = 2e-5

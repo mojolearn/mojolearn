@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host-side facade every caller goes through.
 
-PORT OF `catboost/cuda/cuda_lib/cuda_manager.h` and the parts of
-`cuda_manager.cpp` that back it, at CatBoost `54a8143a`. Transliterated where
-it transliterates. See the DEVIATION BLOCK.
+FOLLOWS `catboost/cuda/cuda_lib/cuda_manager.h` and the parts of
+`cuda_manager.cpp` that back it, at CatBoost `54a8143a`. Followed statement for statement where
+it follow statement for statements. See the DEVIATION BLOCK.
 
 `TCudaManager` is what `greedy_search_helper.cpp` actually talks to:
 `NCudaLib::GetCudaManager().DefaultStream().Synchronize()`
@@ -25,7 +25,7 @@ call sites would have to change if it were not.
 **One stream numbering, not two.** Theirs keeps `TVector<TDistributedObject
 <ui32>> Streams` (`cuda_manager.h:124`) mapping a manager-level stream id to a
 per-device stream id, because device 0's stream 3 need not be device 1's
-stream 3. With one device the two numberings are equal, so this port has
+stream 3. With one device the two numberings are equal, so this implementation has
 exactly one: the worker's index into its own `streams`
 (`gpu_single_worker.cpp:88`). `request_stream` and `free_stream` therefore go
 straight to the worker.
@@ -40,7 +40,7 @@ stream is still out, which is where a missed call is caught.
 (`cuda_manager.h:231-251`, `cuda_manager.cpp:45-82`) exist so several host
 threads can each drive a subset of the devices. One device, one thread. The
 profiler's `add`, which is the only piece of that machinery with a
-single-device meaning, IS ported.
+single-device meaning, IS implemented.
 ======================================================================
 """
 
@@ -130,9 +130,9 @@ struct TCudaManager(Movable):
         (`cuda_manager.h:305-310`).
 
         Their searcher calls this behind `if (!IsOnlyDefaultStream())`
-        (`split_properties_helper.cpp:1143`, `:1257`), a condition this port
+        (`split_properties_helper.cpp:1143`, `:1257`), a condition this implementation
         can never satisfy; see the DEVIATION BLOCK in `gpu_base.mojo`. It is
-        ported anyway because `MakeSplit` calls the same drain unguarded
+        implemented anyway because `MakeSplit` calls the same drain unguarded
         (`split_properties_helper.cpp:961`).
         """
         self.stream_synchronize(DEFAULT_STREAM)

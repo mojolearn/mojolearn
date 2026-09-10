@@ -87,7 +87,7 @@ def cd_fit_binding(
         8  has_sample_weight  (0/1; 1 is REFUSED BY NAME by the same file)
 
     Slots 7 and 8 are plumbed through rather than hardcoded to 0 so that the
-    ported refusals stay REACHABLE from this surface. A refusal only the
+    implemented refusals stay REACHABLE from this surface. A refusal only the
     Python layer can raise is a refusal the Mojo entry never proves it has.
     """
     if len(params) != 9:
@@ -182,10 +182,10 @@ def linkage_fit_binding(
                       by get_distance_graph in the same file)
 
     Slot 4 is plumbed through rather than hardcoded to 0 for the same reason
-    `cd_fit`'s slots 7 and 8 are: the ported refusal has to stay reachable.
+    `cd_fit`'s slots 7 and 8 are: the implemented refusal has to stay reachable.
     `c` (the k-NN graph's `k = log(n) + c`) is NOT a slot, because it is
     forwarded only when `use_knn` is true (`linkage.cu:40`, `use_knn ? c :
-    0`) and that arm raises; the port's default 15 is used.
+    0`) and that arm raises; the implementation's default 15 is used.
     """
     if len(params) != 5:
         raise Error(

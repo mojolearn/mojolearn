@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Cluster extraction: stabilities, selection, and the point labels.
 
-PORT OF `cuml-v26.08.00/cpp/src/hdbscan/detail/extract.cuh`
+FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/extract.cuh`
 (cuML `265b9da`): `TreeUnionFind` (`:49-86`), `do_labelling_on_host`
 (`:88-167`) and `extract_clusters` (`:246-314`). `_compute_inverse_label_
 map` (`:172-221`) is the CPU/GPU-interop half of `extract_clusters` and is
 not reached by a fit; `hdbscan/NOT_IMPLEMENTED.tsv` has the row.
-Transliterated, their order. Do not improve.
+Followed statement for statement, their order.
 
 WHAT IS DELIBERATELY NOT CALLED. Their `:311` runs
 `Membership::get_probabilities`, which is `detail/membership.cuh` -- a CUB
@@ -182,7 +182,7 @@ def do_labelling_on_host(
     # UNINITIALIZED when the epsilon is zero and is then not read; ours is
     # not computed at all, because `cluster_selection_epsilon != 0` is
     # refused by name upstream in `select_clusters`. The branch below is
-    # transcribed so the shape of their function survives the port.
+    # transcribed so the shape of their function survives the implementation.
     var n_in_clusters = 0
     for i in range(len(in_clusters)):
         if in_clusters[i] != Int32(0):

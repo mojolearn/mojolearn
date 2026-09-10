@@ -3,8 +3,8 @@
 """Coordinate descent on the GPU: Lasso and ElasticNet, mirroring cuML's
 `solver='cd'` arm (`cuml/cpp/src/solver/cd.cuh::cdFit`).
 
-The port is `solver/` (DEVIATIONS 610-613 and 880); `solver/README.md`,
-`solver/DERIVATION_MAP.tsv` and `solver/NOT_IMPLEMENTED.tsv` are the record. The
+The implementation is `solver/` (DEVIATIONS 610-613 and 880); `solver/README.md`,
+`solver/NOT_IMPLEMENTED.tsv` are the record. The
 upstream is cuML pinned at `v26.08.00` = `265b9da`, and every line number
 cited in this file was read in that checkout.
 
@@ -54,7 +54,7 @@ class ElasticNet:
     """Elastic-net regression by coordinate descent on the GPU.
 
     Mirrors `cuml.linear_model.ElasticNet(solver='cd')` on top of
-    `cuml/cpp/src/solver/cd.cuh::cdFit`; the Mojo port is
+    `cuml/cpp/src/solver/cd.cuh::cdFit`; the Mojo implementation is
     `solver/impl/solver/cd.mojo` and the host surface is
     `solver/estimator.mojo`.
 
@@ -80,7 +80,7 @@ class ElasticNet:
     by a positive constant does not move its minimizer, so **`alpha` and
     `l1_ratio` mean the same thing in `sklearn.linear_model.ElasticNet`, in
     `cuml.linear_model.ElasticNet` and here.** Their docstring is off by the
-    factor `n`; the code is what was ported.
+    factor `n`; the code is what was implemented.
 
     WHERE THE THREE STILL DIFFER, all of it carried from cuML on purpose:
 
@@ -100,7 +100,7 @@ class ElasticNet:
                         with `n` and with the square of the data, so a
                         column of tiny-unit data can be zeroed where the
                         same design in larger units is not. Carried as
-                        theirs (COPY, DO NOT IMPROVE) and recorded on the
+                        theirs, and recorded on the
                         identity card as `cd.squared`. scikit-learn instead
                         skips only a column whose norm is exactly 0.
 
@@ -116,7 +116,7 @@ class ElasticNet:
         l1_ratio        honored   0 <= l1_ratio <= 1; NaN refused by name
                                   (DEVIATION 613)
         fit_intercept   honored   True centers X and y ON THE DEVICE through
-                                  the ported `preProcessData` /
+                                  the implemented `preProcessData` /
                                   `postProcessData`. NOTE this is unlike
                                   `mojolearn.LinearRegression` and
                                   `mojolearn.Ridge`, whose centering is a
@@ -132,17 +132,17 @@ class ElasticNet:
                                   the C++ standard does not specify, so
                                   their permutation is a function of the
                                   toolchain and not of the seed and cannot
-                                  be gated bitwise. An exact port is
+                                  be gated bitwise. An exact implementation is
                                   DEVIATION 611, reserved and NOT spent.
         solver          honored   'auto' and 'cd'. 'qn' is REFUSED BY NAME:
                                   cuML's 'auto' picks 'qn' for SPARSE input
                                   (`elastic_net.py:243-244`), and 'qn' under
                                   an l1 penalty is OWL-QN, which is not
-                                  ported (`glm/NOT_IMPLEMENTED.tsv`). Sparse input
+                                  implemented (`glm/NOT_IMPLEMENTED.tsv`). Sparse input
                                   is refused with it.
         sample_weight   refused   the weighted `preProcessData`, the
                                   sqrt-weight scaling of X and y and its
-                                  undo are not ported (cd.mojo raises)
+                                  undo are not implemented (cd.mojo raises)
         positive        refused   cuML raises `UnsupportedOnGPU` too
                                   (`elastic_net.py:143`)
         warm_start      refused   cuML raises `UnsupportedOnGPU` too
@@ -184,7 +184,7 @@ class ElasticNet:
     ----------
     coef_ : ndarray (n_features,) float32
     intercept_ : float
-        `mean(y) - mu_X . coef` from the ported `postProcessData`, computed
+        `mean(y) - mu_X . coef` from the implemented `postProcessData`, computed
         on the DEVICE; 0.0 exactly when `fit_intercept` is False.
     n_iter_ : int
         Epochs actually run. **This number is a property of the arithmetic,
@@ -197,7 +197,7 @@ class ElasticNet:
 
     IDENTITY: with `MOJOLEARN_IDENTITY_TRACE=<path>` set, a `fit` through
     this class writes the same `cd.*` identity card
-    `solver/cd_main.mojo` writes (`solver/estimator.mojo` hands the ported
+    `solver/cd_main.mojo` writes (`solver/estimator.mojo` hands the implemented
     entry a live trace). Under FAST the reductions are the vendor's and no
     cross-vendor claim is made.
     """
@@ -217,15 +217,15 @@ class ElasticNet:
             raise ValueError(f"Expected 0.0 <= l1_ratio <= 1.0, got {l1_ratio}")
         if solver not in ("auto", "cd", "qn"):
             raise ValueError(f"solver={solver!r} is not supported")
-        # Then the refusals that are this port's, each by name.
+        # Then the refusals that are this implementation's, each by name.
         if solver == "qn":
             raise NotImplementedError(
-                "mojolearn ElasticNet: solver='qn' is not ported. cuML's "
+                "mojolearn ElasticNet: solver='qn' is not implemented. cuML's "
                 "solver='auto' picks 'qn' only for SPARSE input "
                 "(elastic_net.py:243-244), and 'qn' under an l1 penalty is "
                 "OWL-QN (min_owlqn, qn_solvers.cuh), which glm/NOT_IMPLEMENTED.tsv "
-                "lists as not ported. solver='cd' (cuML's 'auto' for dense "
-                "input) is the ported arm; see solver/NOT_IMPLEMENTED.tsv"
+                "lists as not implemented. solver='cd' (cuML's 'auto' for dense "
+                "input) is the implemented arm; see solver/NOT_IMPLEMENTED.tsv"
             )
         if selection == "random":
             raise NotImplementedError(
@@ -236,7 +236,7 @@ class ElasticNet:
                 "std::shuffle's algorithm, so their permutation is a "
                 "function of the toolchain rather than of the seed and "
                 "cannot be gated bitwise or certified across vendors. An "
-                "exact port is DEVIATION 611, reserved and not spent; see "
+                "exact implementation is DEVIATION 611, reserved and not spent; see "
                 "solver/NOT_IMPLEMENTED.tsv"
             )
         if positive:
@@ -310,7 +310,7 @@ class ElasticNet:
     def fit(self, X, y, sample_weight=None):
         if sample_weight is not None:
             raise NotImplementedError(
-                "mojolearn ElasticNet: sample_weight is not ported "
+                "mojolearn ElasticNet: sample_weight is not implemented "
                 "(cd.cuh:156-194 and :274-287 -- the weighted "
                 "preProcessData, the sqrt-weight scaling of input and "
                 "labels and its undo; solver/NOT_IMPLEMENTED.tsv). "
@@ -321,7 +321,7 @@ class ElasticNet:
                 "mojolearn ElasticNet: sparse X is refused. cdFit is dense "
                 "only; cuML routes sparse input to solver='qn' and raises "
                 "for solver='cd' (elastic_net.py:265-269), and 'qn' is not "
-                "ported"
+                "implemented"
             )
         _keep, work_x, self.input_copied_, self.fortran_copied_ = (
             self._as_fortran(X, "X"))

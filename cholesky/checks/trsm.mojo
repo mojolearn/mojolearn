@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Triangular solves with multiple right-hand sides, one order everywhere.
 
-NOT A PORT, and the reason is DEVIATION 1631: every triangular solve in
+NO REFERENCE FILE, and the reason is DEVIATION 1631: every triangular solve in
 cuML, cuVS and RAFT is `cublastrsm` -- `raft/linalg/detail/
 cholesky_r1_update.cuh:77` for the rank-one update, `cuml/src/solver/
 lars_impl.cuh:349` and `:369` for the two LARS back-solves, and
 `cusolverDnpotrs` for cuVS's ScaNN solve (`cuvs/src/neighbors/scann/detail/
 scann_avq.cuh:190`). cuBLAS and cuSOLVER are CLOSED. There is no source to
-transliterate, so `PORTING_RULES` 0b-i's narrow exception applies and the
+follow statement for statement, so `ENGINEERING_RULES` 0b-i's narrow exception applies and the
 question becomes what to call instead -- and under `NUMERIC_IDENTICAL` the
 answer cannot be MAX's equivalent either, for the reason
 `neighbors/checks/pinned_distance_tile.mojo` gives about `linalg.matmul`:

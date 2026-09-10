@@ -3,7 +3,7 @@
 """Launch the brute-force k-NN, and sabotage it.
 
 NO CUVS COUNTERPART. Same discipline as `cluster/checks/kmeans_check.mojo`
-and for the same reason: a kernel is not ported until it has been enqueued
+and for the same reason: a kernel is not implemented until it has been enqueued
 (`archive/reference/PORTING.md 9`), and a correct answer is not by itself evidence that a
 kernel ran.
 
@@ -11,7 +11,7 @@ THE FIXTURE IS RANDOM, AND THE FIRST ONE WAS NOT, AND THAT COST A RUN
 ---------------------------------------------------------------------
 The first fixture put 4096 index points on a LINE at spacing 100, so the
 true k nearest were known in closed form and needed no tolerance. It failed,
-60 of 512 neighbors wrong, and the port was right.
+60 of 512 neighbors wrong, and the implementation was right.
 
 The expanded identity computes `||x||^2 + ||y||^2 - 2 x.y`. On that fixture
 the norms were about 1e10 and the distances about 1e3, so in float32, whose
@@ -19,7 +19,7 @@ ulp at 1e10 is roughly 1024, every distance collapsed onto a coarse grid:
 the true 900 came back as 0.0, the true 16900 as 16384, and ties at the
 quantized minimum were then broken arbitrarily.
 
-**That is a property of the metric, not of this port, and it does not go away
+**That is a property of the metric, not of this implementation, and it does not go away
 by rescaling.** For N collinear points the closest-pair squared distance is
 about `(range/N)^2` while the norm is about `range^2`, so the ratio is `1/N^2`
 regardless of scale. At N=4096 that is 6e-8 against float32's 1.2e-7 relative
@@ -408,11 +408,11 @@ def check_knn_reach_by_sabotage() raises:
     )
 
 
-def check_vendor_topk_matches_ported() raises:
+def check_vendor_topk_matches_ours() raises:
     """The two selection paths must return the same neighbour SET.
 
-    cuVS calls `select_k`, a vendor primitive, so the faithful port calls
-    `nn.topk.top_k`. Keeping the ported RAFT radix select reachable is what
+    cuVS calls `select_k`, a vendor primitive, so the faithful implementation calls
+    `nn.topk.top_k`. Keeping the implemented RAFT radix select reachable is what
     makes that checkable: a vendor call whose answer nothing verifies is a
     vendor call nobody should trust.
 
@@ -464,10 +464,10 @@ def check_vendor_topk_matches_ported() raises:
         oi32, KNN_QUERIES, n, KNN_FEATURES, KNN_K, KNN_TILE, buf_len, False,
         False,
     )
-    var ported = ctx.enqueue_create_host_buffer[DType.uint32](
+    var implemented = ctx.enqueue_create_host_buffer[DType.uint32](
         KNN_QUERIES * KNN_K
     )
-    ctx.enqueue_copy(dst_ptr=ported.unsafe_ptr(), src_buf=oi)
+    ctx.enqueue_copy(dst_ptr=implemented.unsafe_ptr(), src_buf=oi)
     ctx.synchronize()
 
     tiled_brute_force_knn(
@@ -487,19 +487,19 @@ def check_vendor_topk_matches_ported() raises:
             var got = Int(vendor.unsafe_ptr().unsafe_load(i * KNN_K + slot))
             var found = False
             for t in range(KNN_K):
-                if Int(ported.unsafe_ptr().unsafe_load(i * KNN_K + t)) == got:
+                if Int(implemented.unsafe_ptr().unsafe_load(i * KNN_K + t)) == got:
                     found = True
             if not found:
                 disagree += 1
     if disagree != 0:
         raise Error(
             String(disagree) + " of " + String(KNN_QUERIES * KNN_K)
-            + " neighbours differ between nn.topk.top_k and the ported RAFT"
+            + " neighbours differ between nn.topk.top_k and the implemented RAFT"
             " radix select. They solve the same problem on the same"
             " distances, so a disagreement is a bug in one of them."
         )
     print(
-        "check_vendor_topk_matches_ported OK: nn.topk.top_k and the ported"
+        "check_vendor_topk_matches_ours OK: nn.topk.top_k and the implemented"
         " RAFT radix select agree on all "
         + String(KNN_QUERIES * KNN_K)
         + " neighbours"
@@ -1798,7 +1798,7 @@ def check_fused_k_ceiling() raises:
 # `launchConfigGenerator` (`pairwise_distance_base.cuh:295-322`, M4 inputs)
 # now chooses the grid, and `grid_x` selects between the single-block column
 # sweep and the mutex merge -- a parameter that selects a kernel path, so
-# the checks below enumerate BOTH sides of it explicitly (PORTING_RULES 8).
+# the checks below enumerate BOTH sides of it explicitly (ENGINEERING_RULES 8).
 # ---------------------------------------------------------------------------
 
 

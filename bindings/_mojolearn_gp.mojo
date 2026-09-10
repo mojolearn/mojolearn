@@ -7,9 +7,7 @@ A THIRTEENTH extension module, and a separate one on purpose. The header of
 reason here: an independently changing binding must not become a merge
 point. `gaussian_process/` is ORIGINAL WORK (cuML, cuVS and RAFT implement
 no Gaussian process at the pinned commits; `gaussian_process/
-DERIVATION_MAP.tsv` carries the grep) over the Cholesky lane's factor/solve
-and the identical GEMM, and it shares no binding-level code with any
-sibling. All thirteen binaries land in one wheel.
+ All thirteen binaries land in one wheel.
 
 THIS FILE CLOSES THE "OWED" HALF OF COMMIT 22a5b550 -- UNDER A RENEGOTIATED
 ABI, AND THE RENEGOTIATION IS A MEASURED RESULT, NOT A PREFERENCE. That

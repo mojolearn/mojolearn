@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Host oracles for the six ported distances, and for the distance weights.
+"""Host oracles for the six implemented distances, and for the distance weights.
 
 NO UPSTREAM. Two SPELLINGS, not two imports, which is this tree's whole
 oracle contract (`kde/checks/kde_oracle.mojo` says the same about itself):

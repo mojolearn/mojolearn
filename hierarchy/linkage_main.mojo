@@ -86,7 +86,7 @@ def main() raises:
     trace.record_device[DType.float32](ctx, "linkage.x", x)
 
     # The two intermediate stages the entry does not hand back: recomputed
-    # here through the SAME ported kernels, so the card carries the distance
+    # here through the SAME implemented kernels, so the card carries the distance
     # bytes a cross-vendor diff needs to localize a divergence.
     var indptr = ctx.enqueue_create_buffer[DType.int32](m + 1)
     var indices = ctx.enqueue_create_buffer[DType.int32](m * m)

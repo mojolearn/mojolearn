@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""References for the `fit` gates. NOT A PORT, and deliberately NOT a copy
+"""References for the `fit` gates. NO REFERENCE FILE, and deliberately NOT a copy
 of the device spelling.
 
 `archive/research/arima/SABOTAGES.md` opens by saying that this lane's expected values are

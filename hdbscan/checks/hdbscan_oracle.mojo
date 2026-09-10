@@ -3,8 +3,8 @@
 """The host oracle: HDBSCAN, serially, twice -- in Float32 bits and in
 Float64.
 
-NOT A PORT. cuML checks HDBSCAN against scikit-learn-contrib in Python
-and accepts a tolerance; this tree checks a port against a host
+NO REFERENCE FILE. cuML checks HDBSCAN against scikit-learn-contrib in Python
+and accepts a tolerance; this tree checks an implementation against a host
 computation whose every bit is predictable, which is what the identity
 claim needs. Four things live here:
 
@@ -30,7 +30,7 @@ claim needs. Four things live here:
    HERE, and it is honest to say exactly what kind of control it is and
    what it is not.
 
-   IT SHARES THE TRAVERSAL WITH THE PORT, AND THAT IS NOT A WEAKNESS TO
+   IT SHARES THE TRAVERSAL WITH THE IMPLEMENTATION, AND THAT IS NOT A WEAKNESS TO
    HIDE. A level-by-level BFS from the root DEFINES the condensed tree's
    numbering; an oracle walking a different order would be checking a
    different algorithm. What differs is everything around it: the case
@@ -52,7 +52,7 @@ claim needs. Four things live here:
    from the Float64 one is a bug the bit gates cannot see.
 
 NO FLOAT64 EVER GOES TO THE DEVICE. Metal has none. Everything in part 4
-is host-only, which is what `PORTING_RULES.md` 0b-ii permits an oracle to
+is host-only, which is what `ENGINEERING_RULES.md` 0b-ii permits an oracle to
 be.
 """
 
@@ -235,7 +235,7 @@ def oracle_condense(
 ) raises -> OracleCondensed:
     """`condense.cuh:91-212`, spelled with the BFS levels MATERIALIZED.
 
-    The port carries one `process_queue` and rebuilds it; this walks a
+    The implementation carries one `process_queue` and rebuilds it; this walks a
     `List` of levels and concatenates them. Same order, different
     bookkeeping -- see this file's header for exactly what that does and
     does not control.
@@ -326,7 +326,7 @@ def oracle_condense(
             max_p = parents[i]
     var n_clusters = Int(max_p) - Int(min_p) + 1
 
-    # The (parent, child) sort, by SELECTION SORT rather than the port's
+    # The (parent, child) sort, by SELECTION SORT rather than the implementation's
     # merge sort on a packed key. A different sorting algorithm on the
     # same total order: if the packing is wrong the two disagree.
     var order = List[Int](capacity=n_edges)

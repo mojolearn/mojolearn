@@ -193,7 +193,7 @@ def check_permutation_count() raises:
     #
     # so the two fits estimate identical leaves on identical rows and can
     # only differ through the structure. A loop that searched on the
-    # estimation permutation -- which is what this port did before the
+    # estimation permutation -- which is what this implementation did before the
     # permutation loop existed -- gives the SAME model for both.
     var three_at_2 = _predict(ctx, x, y, 2, cat, 3, 2)
     var four_at_2 = _predict(ctx, x, y, 2, cat, 4, 2)

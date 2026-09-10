@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Segmented scan: their two CTR entry points, three-phase and decoupled.
 
-PORT OF `catboost/cuda/cuda_util/kernel/segmented_scan.cu:22`
+FOLLOWS `catboost/cuda/cuda_util/kernel/segmented_scan.cu:22`
 (`SegmentedScanCub`, reached from `cuda_util/segmented_scan.h:8`
 `SegmentedScanVector`) and `cuda_util/kernel/scan.cu:47`
 (`SegmentedScanAndScatterNonNegativeVector`, reached from
@@ -67,7 +67,7 @@ scan. Both run `cub::DeviceScan::InclusiveScan` and then shift:
 **Slot 0 is never written by the shift.** In their code it is covered only
 because `UpdateBordersMaskImpl` always flags `i == 0`
 (`ctr_calcers.cu:139`, `i == 0 ||`), so `ZeroSegmentStarts` reaches it.
-Ported as-is: `launch_segmented_scan_vector` leaves `output[0]` alone when
+Implemented as-is: `launch_segmented_scan_vector` leaves `output[0]` alone when
 the caller did not flag row 0, exactly as theirs does.
 
 ## What is ours, and it is the same gap `reorder_one_bit.mojo` records
@@ -99,7 +99,7 @@ device-wide scan (`archive/reference/VENDOR_LIBS.md` 3b/3c), so it is written ou
 # weights `cum` reaches 8e5 while a segment sum is order 1, so float32
 # leaves about 0.06 of absolute error on a quantity of size 1. Their
 # operator accumulates FROM the segment start and has no such term. Trading
-# the answer for a library call is not a port.
+# the answer for a library call is not an implementation.
 # =========================================================================
 
 # =========================================================================
@@ -349,7 +349,7 @@ def zero_segment_starts_kernel(
     size_in: Int32,
     output: MutPointer[Float32, MutAnyOrigin],
 ):
-    """`ZeroSegmentStartsImpl` (`segmented_scan.cu:11-19`), transliterated.
+    """`ZeroSegmentStartsImpl` (`segmented_scan.cu:11-19`), followed statement for statement.
 
     Runs AFTER the shift, and it is what makes the exclusive answer 0 at
     every segment start.

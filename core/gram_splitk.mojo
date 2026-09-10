@@ -7,7 +7,7 @@ HAND-WRITTEN, UNDER THE CLOSED-LIBRARY EXCEPTION, WITH THE MEASUREMENT
 Their route is a CLOSED library call: `raft/stats/detail/cov.cuh:65-66` asks
 cuBLAS for `CUBLAS_OP_T, CUBLAS_OP_N`, and `raft/linalg/detail/lstsq.cuh:
 293-309` asks the same for `covA <- A^T A`. There is no kernel of theirs to
-port, so `PORTING_RULES.md 0b-i` says call the MAX equivalent -- and the MAX
+implementation, so `ENGINEERING_RULES.md 0b-i` says call the MAX equivalent -- and the MAX
 equivalent is MEASURED unusable at this shape:
 
 - `bench/results/LANE_covariance-unblock_2026-08-19.md`, orchestrator

@@ -34,7 +34,7 @@ The **current** `gemm_remote_leg.sh` profile 4 accepts AMD, invokes the HIP
 serial guard, validates HIP Torch oracle metadata, and applies the successful
 1 GiB runtime-pool override. The frozen source contains the training runner,
 AMD guard and vendor-generic admission. Reuse these numerical sources with a
-separately retained transport overlay; there is no need to port MLP arithmetic.
+separately retained transport overlay; there is no need to implement MLP arithmetic.
 
 However, current profile 4 does **not forward an explicit interpreter or
 `MOJOLEARN_GPU_ARCHS`** into its remote runner. Setting them on the local shell

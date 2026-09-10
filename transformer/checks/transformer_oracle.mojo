@@ -3,7 +3,7 @@
 """The NORMATIVE host Float32 oracle of one Llama-shaped decoder block under
 profile `mojolearn.identical.transformer.fp32.v1`.
 
-NOT A PORT. HuggingFace ships no oracle; the ALGORITHM this file spells is
+NO REFERENCE FILE. HuggingFace ships no oracle; the ALGORITHM this file spells is
 theirs, cited seam by seam below and in
 `transformer/IDENTICAL_TRANSFORMER_CONTRACT.md` against
 huggingface/transformers `d56c55bf564ddb176759eb6ec199442682564916`, whose

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The planted samples, ASSEMBLED FROM BITS, each with a job it alone does.
 
-NOT A PORT. IDENTITY_PATHS row 32's lesson applies verbatim, and
+NO REFERENCE FILE. IDENTITY_PATHS row 32's lesson applies verbatim, and
 `kde/checks/kde_fixture.mojo` states it: a host `target += v * w` chain is a
 contraction decision, so a fixture built by host arithmetic can hand two
 machines different inputs before the first kernel runs. `mix64` and

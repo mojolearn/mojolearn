@@ -26,7 +26,7 @@ lane's directory; the exact diff is in the hand-off note in
 optional weights as host lists, validates exactly as cuML's `fit` and
 `score_samples` do (`kde/impl/neighbors/kernel_density.mojo::
 kde_fit_validate`, `kernel_from_name`, `metric_from_name` -- every
-unported choice REFUSED BY NAME) plus DEVIATION 604's finiteness rules
+unimplemented choice REFUSED BY NAME) plus DEVIATION 604's finiteness rules
 (`kde_validate_data`: no NaN/inf in the data, the sqeuclidean magnitude
 bound, a normal bandwidth and normal finite weights), uploads, runs `ML::KDE::score_samples`
 (`kde/impl/kde/kde.mojo`) with the environment's identity trace
@@ -84,7 +84,7 @@ def kde_score_samples_host(
     sample_weight).score_samples(X_query)`, one shot, host in and host out.
     Row-major `train` (`n_train x n_features`) and `query` (`n_query x
     n_features`). Raises, by name, on everything cuML's validation raises
-    on and on every unported metric/kernel.
+    on and on every unimplemented metric/kernel.
 
     `metric_arg` is Minkowski's `p`, their name for it. cuML's
     `KernelDensity` has no `p` parameter at all; it takes `metric_params`

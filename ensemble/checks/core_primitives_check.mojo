@@ -58,7 +58,7 @@ from core.scan_by_key import (
 
 # ---------------------------------------------------------------------------
 # The mixer. SplitMix64's finalizer; used only to make fixtures scattered
-# and non-uniform, never as a port of anything.
+# and non-uniform, never as an implementation of anything.
 # ---------------------------------------------------------------------------
 def mix(x: Int) -> Int:
     var h = UInt64(x + 1) * UInt64(0x9E3779B97F4A7C15)

@@ -4,7 +4,7 @@
 
 The shape is `hierarchy/estimator.mojo`'s and `dbscan/estimator.mojo`'s:
 host pointers in, device buffers owned here for exactly one call, results
-read back, nothing retained. The ported entry is
+read back, nothing retained. The implemented entry is
 `hdbscan/impl/hdbscan/runner.mojo::fit_hdbscan` (cuML `runner.h:152-234`)
 and this file re-decides none of it.
 
@@ -135,7 +135,7 @@ def hdbscan_fit_host(
 
 def hdbscan_probabilities_host(n_rows: Int) raises:
     """`Membership::get_probabilities` (`membership.cuh:39-98`) and
-    `probabilities_` at the Python surface. NOT PORTED; raises by name.
+    `probabilities_` at the Python surface. NOT IMPLEMENTED; raises by name.
 
     DEVIATION 1610. It is a CUB segmented MAX over the same condensed-tree
     CSR `compute_stabilities` already builds (`deaths[c]`), followed by
@@ -147,7 +147,7 @@ def hdbscan_probabilities_host(n_rows: Int) raises:
     sitting in a field a caller will plot.
     """
     raise Error(
-        "hdbscan.probabilities: NOT PORTED (DEVIATION 1610), refused by"
+        "hdbscan.probabilities: NOT IMPLEMENTED (DEVIATION 1610), refused by"
         " name for " + String(n_rows) + " points. Their"
         " Membership::get_probabilities (membership.cuh:39-98) is a CUB"
         " segmented Max over the condensed tree's parent CSR plus a"

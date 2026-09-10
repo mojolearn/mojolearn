@@ -7,7 +7,7 @@
 
 WHY IT IS BUILT THE WAY IT IS
 -----------------------------
-Rule 8 (`PORTING_RULES.md` 7, and `extratrees/README.md`): **a check whose
+Rule 8 (`ENGINEERING_RULES.md` 7, and `extratrees/README.md`): **a check whose
 expected value is the same in every cell verifies the total and nothing about
 placement.** The case that earned the rule reported 0 wrong of 512 on a
 uniform fixture and 490 wrong of 512, same kernel, on a hashed one. So:
@@ -1361,7 +1361,7 @@ def check_entropy_scattered() -> Int:
 
         # sklearn's impurities: -sum p log2(p) per child, in BITS.
         # THIS REFERENCE SAID `nats` AND DIVIDED BY NOTHING UNTIL 2026-09-01,
-        # which is how the port's dropped `/ ln(2)` survived a green check:
+        # which is how the implementation's dropped `/ ln(2)` survived a green check:
         # sklearn's `log` in `_criterion.pyx` is not libm's, it is
         # `sklearn/tree/_utils.pyx:64-65`, `ln(x) / ln(2.0)`. Per term, where
         # their inline `log` puts the division.

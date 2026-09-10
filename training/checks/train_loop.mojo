@@ -256,7 +256,7 @@ def arm_by_name(name: String) raises -> Int:
         + " clip_on. **A misspelled arm name must NEVER be treated as"
         + " 'none'**: the operator would then record a clean run as 'the"
         + " arm did not bite', which is the exact inverse of the truth."
-        + " That is tools/gemm_ladder.sh:71's scar, ported to an env var."
+        + " That is tools/gemm_ladder.sh:71's scar, implemented to an env var."
     )
 
 

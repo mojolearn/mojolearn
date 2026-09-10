@@ -55,7 +55,7 @@ from . import _backend
 from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
-# cuML's `KernelType` values (kernel_params.hpp). Only two are ported.
+# cuML's `KernelType` values (kernel_params.hpp). Only two are implemented.
 _KERNEL_LINEAR = 0
 _KERNEL_POLYNOMIAL = 1
 _KERNEL_RBF = 2
@@ -64,31 +64,31 @@ _KERNEL_PRECOMPUTED = 4
 
 _KERNELS = {"linear": _KERNEL_LINEAR, "rbf": _KERNEL_RBF}
 
-# The names cuML accepts that this port does not, and the reason each is
+# The names cuML accepts that this implementation does not, and the reason each is
 # refused. Refused BY NAME rather than silently downgraded to 'rbf'.
 _REFUSED_KERNELS = {
     "poly": (
-        "POLYNOMIAL is not ported in rung 1; it is one identical_pow away "
-        "(svm/NOT_IMPLEMENTED.tsv spells the kernel out) and was left unported "
+        "POLYNOMIAL is not implemented in rung 1; it is one identical_pow away "
+        "(svm/NOT_IMPLEMENTED.tsv spells the kernel out) and was left unimplemented "
         "rather than written without a gate"
     ),
     "polynomial": (
-        "POLYNOMIAL is not ported in rung 1 (svm/NOT_IMPLEMENTED.tsv); cuML spells "
+        "POLYNOMIAL is not implemented in rung 1 (svm/NOT_IMPLEMENTED.tsv); cuML spells "
         "this kernel 'poly'"
     ),
     "sigmoid": (
-        "TANH is not ported in rung 1: there is no identical_tanh in "
+        "TANH is not implemented in rung 1: there is no identical_tanh in "
         "checks/numerics.mojo, so the kernel has no bit-pinned spelling "
         "yet (svm/NOT_IMPLEMENTED.tsv)"
     ),
     "tanh": (
-        "TANH is not ported in rung 1 (svm/NOT_IMPLEMENTED.tsv); cuML spells this "
+        "TANH is not implemented in rung 1 (svm/NOT_IMPLEMENTED.tsv); cuML spells this "
         "kernel 'sigmoid'"
     ),
     "precomputed": (
-        "PRECOMPUTED is not ported: kernelcache.cuh's "
+        "PRECOMPUTED is not implemented: kernelcache.cuh's "
         "extractColumnsForPrecomputed and svc_impl.cuh's precomputed "
-        "predict arm are both unported (svm/NOT_IMPLEMENTED.tsv)"
+        "predict arm are both unimplemented (svm/NOT_IMPLEMENTED.tsv)"
     ),
 }
 
@@ -192,7 +192,7 @@ def _as_labels(y):
             "asserts the same thing (svc_impl.cuh: 'Only binary "
             "classification is implemented at the moment'); their multiclass "
             "is a Python-layer one-vs-one/one-vs-rest wrapper and is not "
-            "ported (svm/NOT_IMPLEMENTED.tsv)"
+            "implemented (svm/NOT_IMPLEMENTED.tsv)"
         )
     f = np.ascontiguousarray(a, dtype=np.float32)
     if not np.isfinite(f).all():
@@ -205,7 +205,7 @@ def _as_labels(y):
 
 
 class SVC(NumericModeMixin):
-    """Binary C-support vector classification, backed by the ported cuML
+    """Binary C-support vector classification, backed by the implemented cuML
     SMO solver and cuVS kernel matrices (`svm/`, DEVIATIONS 630-637;
     `svm/README.md`), the scikit-learn surface.
 
@@ -232,21 +232,21 @@ class SVC(NumericModeMixin):
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below
         class_weight    refused   upstream it becomes `sample_weight`, and
-                                  `sample_weight` is not ported: the
+                                  `sample_weight` is not implemented: the
                                   weighted `InitPenalty` arm (C_vec = C * w)
-                                  has no port (svm/NOT_IMPLEMENTED.tsv)
+                                  has no implementation (svm/NOT_IMPLEMENTED.tsv)
         max_iter        honored   cuML's total inner-iteration cap; -1 (the
                                   default) is no limit
         nochange_steps  honored   cuML's convergence rule, transcribed with
                                   its n_small_diff counter
         verbose         refused   anything truthy. It selects LOG LINES
-                                  upstream (CUML_LOG_DEBUG); this port
+                                  upstream (CUML_LOG_DEBUG); this implementation
                                   prints none, so accepting it would be
                                   accepting-and-ignoring
         random_state    refused   anything but None. The binary C-SVC solver
                                   draws no random numbers; cuML threads
                                   `random_state` only into its multiclass
-                                  wrapper, which is not ported
+                                  wrapper, which is not implemented
         decision_       refused   anything but 'ovo'. It picks between
           function_shape          cuML's one-vs-one and one-vs-rest
                                   multiclass wrappers; there is no
@@ -257,7 +257,7 @@ class SVC(NumericModeMixin):
                                   package returns NumPy
         sample_weight   refused   in fit(); see class_weight
         sparse X        refused   `svcFitSparse` / `svcPredictSparse` and
-                                  every CSR arm are unported; dense
+                                  every CSR arm are unimplemented; dense
                                   row-major float32 only
 
     Non-finite cells of `X` are refused by name inside the Mojo entry
@@ -286,7 +286,7 @@ class SVC(NumericModeMixin):
     prediction half is honored here, exactly, and it is a real knob: it
     sets the prediction batch size, and `check_device_is_launch_invariant`
     holds the answer fixed over it from 0.001 MiB to 200 MiB. The training
-    half is NOT ported -- the solver always runs cuML's own
+    half is NOT implemented -- the solver always runs cuML's own
     `n_cache_sets == 0` path -- so `cache_size` does not affect training
     time here the way it does upstream. It cannot affect training RESULTS
     upstream either (`svm/NOT_IMPLEMENTED.tsv` carries that determinism
@@ -355,7 +355,7 @@ class SVC(NumericModeMixin):
         if k not in _KERNELS:
             raise ValueError(
                 f"mojolearn SVC: kernel={kernel!r} is not a kernel name; "
-                f"this port carries {sorted(_KERNELS)} and refuses cuML's "
+                f"this implementation carries {sorted(_KERNELS)} and refuses cuML's "
                 f"other three by name ({sorted(_REFUSED_KERNELS)})"
             )
         if isinstance(gamma, str):
@@ -389,15 +389,15 @@ class SVC(NumericModeMixin):
         if degree != 3:
             raise NotImplementedError(
                 f"mojolearn SVC: degree={degree!r} is refused; it is read only "
-                "by the POLYNOMIAL kernel, which is not ported. Passing it "
-                "with a ported kernel would be a parameter accepted and "
+                "by the POLYNOMIAL kernel, which is not implemented. Passing it "
+                "with a implemented kernel would be a parameter accepted and "
                 "ignored"
             )
         if coef0 != 0.0:
             raise NotImplementedError(
                 f"mojolearn SVC: coef0={coef0!r} is refused; it is read only "
                 "by the POLYNOMIAL and TANH kernels, neither of which is "
-                "ported"
+                "implemented"
             )
         C = float(C)
         if not np.isfinite(C):
@@ -435,7 +435,7 @@ class SVC(NumericModeMixin):
         if verbose:
             raise NotImplementedError(
                 "mojolearn SVC: verbose is refused; upstream it selects "
-                "CUML_LOG_DEBUG lines and this port prints none, so honoring "
+                "CUML_LOG_DEBUG lines and this implementation prints none, so honoring "
                 "it is impossible and accepting it would be accepting-and-"
                 "ignoring"
             )
@@ -449,13 +449,13 @@ class SVC(NumericModeMixin):
                 "mojolearn SVC: random_state is refused; the binary C-SVC "
                 "solver draws no random numbers, and cuML threads this "
                 "parameter only into its multiclass wrapper, which is not "
-                "ported"
+                "implemented"
             )
         if class_weight is not None:
             raise NotImplementedError(
                 "mojolearn SVC: class_weight is refused; upstream it becomes "
                 "sample_weight, and the weighted InitPenalty arm "
-                "(C_vec = C * w) is not ported (svm/NOT_IMPLEMENTED.tsv)"
+                "(C_vec = C * w) is not implemented (svm/NOT_IMPLEMENTED.tsv)"
             )
         if decision_function_shape != "ovo":
             raise NotImplementedError(
@@ -496,8 +496,8 @@ class SVC(NumericModeMixin):
     def fit(self, X, y, sample_weight=None):
         if sample_weight is not None:
             raise NotImplementedError(
-                "mojolearn SVC: sample_weight is not ported; the weighted "
-                "InitPenalty arm (C_vec = C * w) has no port "
+                "mojolearn SVC: sample_weight is not implemented; the weighted "
+                "InitPenalty arm (C_vec = C * w) has no implementation "
                 "(svm/NOT_IMPLEMENTED.tsv). class_weight is the same refusal"
             )
         x, self.input_copied_ = as_f32_c(X, "X")
@@ -652,7 +652,7 @@ def _as_targets(y, n_rows):
 
 
 class SVR(NumericModeMixin):
-    """Epsilon-support vector regression, backed by the ported cuML SMO
+    """Epsilon-support vector regression, backed by the implemented cuML SMO
     solver and cuVS kernel matrices (`svm/`, DEVIATIONS 630-637;
     `svm/README.md`), the scikit-learn surface.
 
@@ -675,7 +675,7 @@ class SVR(NumericModeMixin):
                                   (DEVIATION 636)
         epsilon         honored   the half-width of the insensitive tube,
                                   cuML's `param.epsilon`, the parameter the
-                                  whole rung-2 port exists for. Passed
+                                  whole rung-2 implementation exists for. Passed
                                   through UNCLAMPED so that
                                   `svm/impl/svm/svm_parameter.mojo::
                                   check_rung1_scope`'s two refusals -- not
@@ -700,7 +700,7 @@ class SVR(NumericModeMixin):
                                   and `svm/impl/svm/svm_parameter.mojo`
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below. The TRAINING LRU it
-                                  also names upstream is unported and
+                                  also names upstream is unimplemented and
                                   `svm/impl/svm/svm_parameter.mojo` refuses
                                   a non-zero one; `svm/estimator.mojo` pins
                                   the training value at 0 so that refusal
@@ -714,7 +714,7 @@ class SVR(NumericModeMixin):
                                   it is here because the solver reads it
         verbose         refused   `_svm_impl.py`, for anything truthy. It
                                   selects LOG LINES upstream
-                                  (CUML_LOG_DEBUG); this port prints none,
+                                  (CUML_LOG_DEBUG); this implementation prints none,
                                   so accepting it would be
                                   accepting-and-ignoring
         output_type     refused   `_svm_impl.py`. A cuML-internal
@@ -726,14 +726,14 @@ class SVR(NumericModeMixin):
                                   heuristic and cuML has no such thing:
                                   there is no row for it in
                                   `svm/NOT_IMPLEMENTED.tsv` because there is
-                                  nothing upstream of this port to leave
-                                  unported. `SVC` omits it for the same
+                                  nothing upstream of this implementation to leave
+                                  unimplemented. `SVC` omits it for the same
                                   reason
         sample_weight   refused   `_svm_impl.py`, in fit(). The weighted
                                   `InitPenalty` arm (C_vec = C * w) has no
-                                  port (`svm/NOT_IMPLEMENTED.tsv`)
+                                  implementation (`svm/NOT_IMPLEMENTED.tsv`)
         sparse X        refused   `svrFitSparse` and every CSR arm are
-                                  unported; dense row-major float32 only.
+                                  unimplemented; dense row-major float32 only.
                                   `_arrays.py::as_f32_c` is what refuses
         non-finite X    refused   `svm/impl/svm/svr_impl.mojo` at fit and
                                   `svm/impl/svm/svc_impl.mojo` at predict
@@ -783,7 +783,7 @@ class SVR(NumericModeMixin):
     from 0.001 MiB to 200 MiB ON THE REGRESSION PATH, which is a separate
     gate from the classifier's because SVR runs `UpdateF` twice per batch
     and so interleaves twice as many launches. The training half is NOT
-    ported.
+    implemented.
 
     DEVIATION 873: the fitted model crosses back to the host and is uploaded
     again at every `predict`, because the binding retains no device pointer.
@@ -841,7 +841,7 @@ class SVR(NumericModeMixin):
         if k not in _KERNELS:
             raise ValueError(
                 f"mojolearn SVR: kernel={kernel!r} is not a kernel name; "
-                f"this port carries {sorted(_KERNELS)} and refuses cuML's "
+                f"this implementation carries {sorted(_KERNELS)} and refuses cuML's "
                 f"other three by name ({sorted(_REFUSED_KERNELS)})"
             )
         if isinstance(gamma, str):
@@ -876,15 +876,15 @@ class SVR(NumericModeMixin):
         if degree != 3:
             raise NotImplementedError(
                 f"mojolearn SVR: degree={degree!r} is refused; it is read only "
-                "by the POLYNOMIAL kernel, which is not ported. Passing it "
-                "with a ported kernel would be a parameter accepted and "
+                "by the POLYNOMIAL kernel, which is not implemented. Passing it "
+                "with a implemented kernel would be a parameter accepted and "
                 "ignored"
             )
         if coef0 != 0.0:
             raise NotImplementedError(
                 f"mojolearn SVR: coef0={coef0!r} is refused; it is read only "
                 "by the POLYNOMIAL and TANH kernels, neither of which is "
-                "ported"
+                "implemented"
             )
         C = float(C)
         if not np.isfinite(C):
@@ -929,7 +929,7 @@ class SVR(NumericModeMixin):
         if verbose:
             raise NotImplementedError(
                 "mojolearn SVR: verbose is refused; upstream it selects "
-                "CUML_LOG_DEBUG lines and this port prints none, so honoring "
+                "CUML_LOG_DEBUG lines and this implementation prints none, so honoring "
                 "it is impossible and accepting it would be accepting-and-"
                 "ignoring"
             )
@@ -963,8 +963,8 @@ class SVR(NumericModeMixin):
     def fit(self, X, y, sample_weight=None):
         if sample_weight is not None:
             raise NotImplementedError(
-                "mojolearn SVR: sample_weight is not ported; the weighted "
-                "InitPenalty arm (C_vec = C * w) has no port "
+                "mojolearn SVR: sample_weight is not implemented; the weighted "
+                "InitPenalty arm (C_vec = C * w) has no implementation "
                 "(svm/NOT_IMPLEMENTED.tsv)"
             )
         x, self.input_copied_ = as_f32_c(X, "X")

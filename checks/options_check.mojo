@@ -177,7 +177,7 @@ def check_options() raises:
     c3.check()
     print("    accepted: leaf_estimation Newton x10, Gradient, Exact")
 
-    # `Simple` IS still refused, and for a reason that is not "unported":
+    # `Simple` IS still refused, and for a reason that is not "unimplemented":
     # it turns the estimator OFF (`greedy_subsets_searcher.h:67-69`) and
     # that branch has no check of its own.
     var c4 = CatBoostOptions.default()
@@ -188,7 +188,7 @@ def check_options() raises:
     c5.leaf_estimation_iterations = -5
     expect_refusal(c5, String("leaf_estimation_iterations=-5"))
 
-    # `random_strength` IS PORTED NOW, so 1.0 at the default score
+    # `random_strength` IS IMPLEMENTED NOW, so 1.0 at the default score
     # function must be ACCEPTED. What stays refused is the pairing where
     # no calcer of CatBoost's carries a noise term at all.
     var e_ok = CatBoostOptions.default()
@@ -227,7 +227,7 @@ def check_options() raises:
         k.determinism = levels[i]
         k.check()
     print("    all three determinism levels accepted")
-    print("  every unported option refuses by name")
+    print("  every unimplemented option refuses by name")
     check_newton_availability()
     print("  Newton availability matches their Validate (DEVIATION 257)")
 

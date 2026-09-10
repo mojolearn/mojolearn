@@ -56,7 +56,7 @@ Behavioral source: installed sklearn 1.8.0,
 `:540-690` (`cross_val_score`) and `:820-865` (`_fit_and_score`). We inspected
 those implementations. CV-1 bounds this to serial dense supervised execution
 with propagated errors; CV-2 adds pre-fit overlap and duplicate checks. This
-is host orchestration around existing Mojo GPU implementations, not a port of
+is host orchestration around existing Mojo GPU implementations, not an implementation of
 a sklearn training kernel.
 
 [Local evidence](../../bench/results/serial_cv_2026-09-10/RESULTS.md) covers

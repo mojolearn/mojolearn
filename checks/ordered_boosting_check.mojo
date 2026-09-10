@@ -154,8 +154,8 @@ def closed_form_fold_rights(n: Int, m0: Int) -> List[Int]:
     series stops at the first `R_k == n`. `check-dynamic-boosting-folds` F3
     derives the same identity; it is repeated here because THIS file's fold
     count, fold bits, partition sizes and total index size are all functions
-    of it, and a gate that took them from the port would be checking the
-    port against itself.
+    of it, and a gate that took them from the implementation would be checking the
+    implementation against itself.
     """
     var out = List[Int]()
     var k = 0
@@ -181,7 +181,7 @@ def drain(
     mut hb_gt: HostBuffer[DType.float32],
 ) raises:
     """Module level because a nested closure cannot capture a
-    `DeviceContext` (`PORTING_RULES` rule 4)."""
+    `DeviceContext` (`ENGINEERING_RULES` rule 4)."""
     ctx.enqueue_copy(dst_buf=hb_bins, src_buf=subsets.bins)
     ctx.enqueue_copy(dst_buf=hb_idx, src_buf=subsets.indices)
     ctx.enqueue_copy(dst_buf=hb_parts, src_buf=subsets.partitions)
@@ -892,7 +892,7 @@ def main() raises:
     for _ in range(deep_parts * fold_count * hist_line * 2):
         want2.append(Float32(0.0))
     # EVERY SPAN HERE IS HOST-DERIVED. Reading the offsets back out of
-    # `subsets.Partitions` would make the model share the port's answer,
+    # `subsets.Partitions` would make the model share the implementation's answer,
     # and a fold axis that landed in the wrong partition would agree with
     # itself. `host_bin` is the independent model O4 already checked.
     for i in range(n_docs):
@@ -948,7 +948,7 @@ def main() raises:
     # THE SEARCHER'S TWO REFUSALS. Both are fold-gated, so both are checked
     # WITH folds and the score-function one is checked WITHOUT them too --
     # a guard that fires on every call would pass the first half of this
-    # gate and be a different bug (`PORTING_RULES` rule 8).
+    # gate and be a different bug (`ENGINEERING_RULES` rule 8).
     var fc_list = List[Int]()
     for _ in range(N_HB):
         fc_list.append(16)

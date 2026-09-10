@@ -3,8 +3,8 @@
 """The one-byte DRIVER: which accumulator runs, on which features, and where
 the result goes.
 
-PORT OF `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_templ.cuh` at
-CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_templ.cuh` at
+CatBoost `54a8143a`. Followed statement for statement.
 
 The six accumulators know how to add a point. This file is everything else:
 
@@ -33,7 +33,7 @@ block is claimed by its WIDEST feature, so four features of 3, 5, 40 and 200
 folds all go to the 8-bit kernel together.
 
 DEVIATION (arch): their `TLoadEntriesTrait` and `TUnrollsTrait` are
-`__CUDA_ARCH__` ladders. This port takes the modern arm of each, the same
+`__CUDA_ARCH__` ladders. This implementation takes the modern arm of each, the same
 choice `hist_2_one_byte_base.mojo` records for the other family:
 
     5, 6, 7 bit     FourElements, outer unroll 1, both passes

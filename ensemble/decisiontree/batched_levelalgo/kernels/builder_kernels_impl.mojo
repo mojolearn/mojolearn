@@ -7,7 +7,7 @@ MIRRORS
 `cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels_impl.cuh`
 at rapidsai/cuml `v26.08.00` (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`),
 checked out read-only at `~/CascadeProjects/upstream/cuml-v26.08.00`.
-Their file is 470 lines; every construct in it is either ported below with
+Their file is 470 lines; every construct in it is either implemented below with
 a `builder_kernels_impl.cuh:<line>` citation or named in the deviation
 block as declined with a price.
 
@@ -270,7 +270,7 @@ delete. The paragraph describing them is deleted rather than annotated,
 because it described code that is not in this file.
 
 --- 129b. `ScanBin`, SO `pdf_to_cdf` CAN SEE A BIN ------------------
-`core/block_scan.pdf_to_cdf` -- which IS `:259-283`, already ported, and
+`core/block_scan.pdf_to_cdf` -- which IS `:259-283`, already implemented, and
 is used rather than rewritten -- is generic over `BlockScanElement`
 (`zero()`, `plus()`). `bins.mojo`'s `Bin` declares `__init__` and
 `__add__` and does not declare that trait. `ScanBin[B]` is a
@@ -281,7 +281,7 @@ TYPE per cell, so a layout surprise is visible rather than assumed away.
 PRICE: one adapter struct. MERGE-TIME item, same as 129a.
 
 --- 129c. `lower_bound` IS DUPLICATED TO CARRY AN ADDRESS SPACE -----
-`builder_kernels.mojo`'s `lower_bound` -- their `:118-133`, already ported
+`builder_kernels.mojo`'s `lower_bound` -- their `:118-133`, already implemented
 -- takes `MutPointer[Scalar[dtype], ao]`, whose address space defaults to
 GENERIC. The histogram kernel's shared arm calls it on a THREADGROUP
 pointer (`:340`, after `quantiles_for_split = shared_quantiles` at
@@ -372,7 +372,7 @@ copy of a POD that the optimiser folds into the loads it already needed.
 
 NOT A DEVIATION EITHER, recorded because the number looks like a choice:
 `raft::WarpSize` at `:365` is a hardcoded 32 and `n_split_warps` is
-`ceildiv(TPB, WarpSize)`. This port uses Mojo's queried `WARP_SIZE`, per
+`ceildiv(TPB, WarpSize)`. This implementation uses Mojo's queried `WARP_SIZE`, per
 this repository's standing rule and per DEVIATION 104 in `split.mojo`,
 which already priced the width for the reduction this scratch feeds.
 =================================================================

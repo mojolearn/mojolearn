@@ -19,7 +19,7 @@ by name) plus DEVIATION 664's finiteness / positivity rules, uploads, runs
 with the given trace, and returns every output as host lists.
 `holtwinters_forecast_host` re-uploads the fitted components and runs
 `ML::HoltWinters::forecast` (the one-shot form; a bindings layer that
-keeps the `DeviceBuffer`s can call the ported entries directly).
+keeps the `DeviceBuffer`s can call the implemented entries directly).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

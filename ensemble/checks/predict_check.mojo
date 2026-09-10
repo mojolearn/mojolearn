@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Does the ported flat-tree walk route every row to the node cuML's
+"""Does the implemented flat-tree walk route every row to the node cuML's
 walk routes it to -- and would this check notice if it did not?
 
     tools/with_build_lock.sh pixi run mojo run -I . \\
@@ -402,7 +402,7 @@ def check_single_tree(
 ) raises:
     """Per-ROW comparison against a HAND-WRITTEN expected leaf index.
 
-    The ported walk is run through the real entry point,
+    The implemented walk is run through the real entry point,
     `DecisionTree.predict`, so the offsets, the `predict_all` loop and
     the `+=` accumulation are all in the path -- not just `predict_one`.
     """
@@ -435,7 +435,7 @@ def check_single_tree(
                 )
         # The sabotage harness must agree with the real walk when it is
         # not sabotaging anything, or every sabotage result below is
-        # measuring the harness instead of the port.
+        # measuring the harness instead of the implementation.
         var mirrored = walk_with_sabotage(tree, rows, r * n_cols, SAB_NONE)
         if mirrored != expected_leaf[r]:
             failures += 1
@@ -1113,11 +1113,11 @@ def main() raises:
 
     # ---------------- n_streams is HONORED now -------------------------
     #
-    # DEVIATION 117, PORTED: the forest loop pipelines n_streams trees
+    # DEVIATION 117, IMPLEMENTED: the forest loop pipelines n_streams trees
     # over the one queue, mirroring their omp/stream pool
     # (`randomforest.cuh:336-367`). This block used to assert that
     # `check()` REFUSES n_streams=4 and that `set_rf_params` clamps it to
-    # 1 -- both were the SERIAL port's contract and the port of the
+    # 1 -- both were the SERIAL implementation's contract and the implementation of the
     # parallel design falsified them. What must hold now: `check()`
     # accepts 4, `set_rf_params` passes 4 through (only the `:585` clamp
     # to n_trees survives; the omp clamp modeled host worker threads the
@@ -1189,9 +1189,9 @@ def main() raises:
     else:
         print("set_rf_params clamps n_streams to n_trees, as theirs does")
 
-    # ---------------- fit is PORTED now --------------------------------
+    # ---------------- fit is IMPLEMENTED now --------------------------------
     # This block used to assert that `RandomForest.fit()` RAISES. It no
-    # longer does: the method forwards to `fit_forest`, the port of
+    # longer does: the method forwards to `fit_forest`, the implementation of
     # `randomforest.cuh:286-370`. The assertion is deleted rather than
     # inverted, because what `fit` DOES is checked where it can be checked
     # properly -- `forest_check` (classification, bagged, per cell against
@@ -1199,7 +1199,7 @@ def main() raises:
     # predict's regression arm) and `criteria_check` (all six criteria). A
     # one-line "it did not raise" here would add nothing and go stale again.
     print(
-        "RandomForest.fit is PORTED; behaviour is checked in forest_check,"
+        "RandomForest.fit is IMPLEMENTED; behaviour is checked in forest_check,"
         " regression_check and criteria_check"
     )
 
@@ -1237,7 +1237,7 @@ def main() raises:
     )
     want_i("clf.split_criterion", clf.tree_params.split_criterion, GINI, failures)
     # Their Python default n_streams=4 (`randomforestclassifier.py:94`)
-    # flows through since DEVIATION 117 was ported.
+    # flows through since DEVIATION 117 was implemented.
     want_i("clf.n_streams (their default)", Int(clf.n_streams), 4, failures)
     want_i("reg.split_criterion", reg.tree_params.split_criterion, MSE, failures)
     if clf.tree_params.min_impurity_decrease != 0.0:
@@ -1253,7 +1253,7 @@ def main() raises:
         failures += 1
         print("  FAIL default seed should be 0 (random_state=None)")
     # THE DISAGREEMENT THAT MATTERS: the classifier's max_features is
-    # 'sqrt' and the regressor's is 1.0. A port that took one value for
+    # 'sqrt' and the regressor's is 1.0. An implementation that took one value for
     # both would pass every other assertion above.
     if reg.tree_params.max_features != 1.0:
         failures += 1
@@ -1651,7 +1651,7 @@ def main() raises:
         json_refused = True
     if not json_refused:
         failures += 1
-        print("  FAIL: get_tree_json is NOT PORTED and must raise")
+        print("  FAIL: get_tree_json is NOT IMPLEMENTED and must raise")
 
     var fitp_refused = False
     try:
@@ -1665,7 +1665,7 @@ def main() raises:
     # max_features by the round schedule, max_n_bins by the quantiles,
     # min_samples_leaf and min_impurity_decrease by the gains,
     # split_criterion by their switch, max_batch_size by Pop. So it must
-    # NOT raise. The method stays, so a future unported field has somewhere
+    # NOT raise. The method stays, so a future unimplemented field has somewhere
     # to be refused BY NAME.
     if fitp_refused:
         failures += 1

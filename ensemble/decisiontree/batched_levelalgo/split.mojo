@@ -26,7 +26,7 @@ care about the order the operands arrive in, and `Split::update`
 Steps 1, 2 and 4 are a plain maximum on a total order, and a maximum is
 associative, commutative and idempotent, so the answer does not depend on
 grouping. **Step 3 is not**, and that is a real property of their code
-rather than of this port -- see the DEVIATION BLOCK below, which carries a
+rather than of this implementation -- see the DEVIATION BLOCK below, which carries a
 worked counterexample and an OPEN item.
 
 The other half of the story is that the histogram counts feeding these
@@ -51,7 +51,7 @@ and the measurement was right.
 ================= DEVIATION BLOCK (whole file) =================
 
 DEVIATION 104. `raft::WarpSize` is a hardcoded 32 in their source
-(`split.cuh:210, 236-238`). This port does not transcribe the constant; it
+(`split.cuh:210, 236-238`). This implementation does not transcribe the constant; it
 uses Mojo's queried `WARP_SIZE`, per this repository's standing rule that
 no wavefront width may be assumed (32 on NVIDIA and Apple, 64 on AMD CDNA,
 32 on AMD RDNA).
@@ -73,7 +73,7 @@ answer is identical at any width.
 
 DEVIATION 105. THEIR REDUCTION OPERATOR IS NOT ASSOCIATIVE, AND THEIR OWN
 CROSS-BLOCK REDUCTION ORDER IS ARBITRARY. Recorded here because it bounds
-what this port is allowed to claim.
+what this implementation is allowed to claim.
 
 `update` merges an equivalent split RANGE (`:174-177`) only when the two
 candidates agree on `global_nLeft`; otherwise it falls through to the
@@ -102,8 +102,8 @@ comment at `:123-125` says the midpoint rule exists "so deterministic
 tie-breaking does not pick an edge", so determinism is plainly their
 INTENT.
 
-THIS PORT DOES NOT ACT ON THIS. Their structure is transcribed verbatim,
-non-associativity included, because copying is the charter and because a
+THIS IMPLEMENTATION DOES NOT ACT ON THIS. Their structure is transcribed verbatim,
+non-associativity included, because rule 0b says not to redesign it and because a
 "fix" here would be an invention that silently diverges from their answer
 in the common case too. It is recorded as an OPEN item in
 `archive/plans/ensemble/PLAN.md` to be settled the only way this repository settles
@@ -148,7 +148,7 @@ DEVIATION 106. Their `atomicCAS` / `__threadfence()` / `atomicExch` mutex
 (`:251`, `:270-271`) is not expressible on Metal in that spelling: Mojo 1.0
 comptime-asserts that `threadfence` "is only implemented on NVIDIA GPUs",
 the Apple backend rejects strong compare-exchange by name, and it rejects
-`acquire` success ordering on a compare-exchange. This port therefore uses
+`acquire` success ordering on a compare-exchange. This implementation therefore uses
 the translation this repository already established and enqueued for
 cuVS's own cross-block mutex (`neighbors/mutex_probe_main.mojo`): spin on
 an ACQUIRE load until the mutex reads free, claim it with a WEAK RELAXED
@@ -161,9 +161,9 @@ and their own code discards the exchanged value too, so no ABA hides in the
 relaxed claim. This changes HOW the handoff is said, never WHAT is said.
 
 DEVIATION 107. `printSplits` (`:291-308`) is a debug printer built on
-`raft::linalg::writeOnlyUnaryOp` and is NOT ported. Price of declining it:
+`raft::linalg::writeOnlyUnaryOp` and is NOT implemented. Price of declining it:
 one debug aid, replaceable by a host-side copy and print at any call site
-that wants it. `initSplit` (`:284-289`) IS ported, because the builder
+that wants it. `initSplit` (`:284-289`) IS implemented, because the builder
 needs it every level.
 
 NOT A DEVIATION, recorded so a reader does not go looking: `local_nLeft` is
@@ -223,8 +223,8 @@ def count_left[
     `CountLeft` takes `BinT const*` and calls `.Count()`, and `Gain`
     (`objectives.cuh:168`, `:369`) hands it the bin histogram directly. The
     wrong-shaped version sat here unreached while `objectives.mojo` carried
-    a private duplicate of the right one -- an unported file is visible, a
-    MIS-ported one is not, and an unreached one hides the mismatch. Their
+    a private duplicate of the right one -- an unimplemented file is visible, a
+    MIS-implemented one is not, and an unreached one hides the mismatch. Their
     layout is restored: `CountLeft` lives in `split.cuh` (which
     `#include`s `bins.cuh` at `:8`) and `objectives.cuh` calls it.
 
@@ -634,7 +634,7 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         # `resetLocalLeftCountsKernel`
         # (`kernels/builder_kernels_impl.cuh:48-53`) zeroes that
         # field immediately before `countLocalLeftKernel` fills
-        # it, and this port has that kernel.
+        # it, and this implementation has that kernel.
         #
         # This comment used to say "the same seven fields, in
         # their order", which is not what `:254-259` does.

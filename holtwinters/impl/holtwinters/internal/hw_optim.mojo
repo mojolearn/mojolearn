@@ -7,7 +7,7 @@ global-scratch optim kernel and `holtwinters_optim_gpu`. ONE THREAD PER
 SERIES; every loop is serial; nothing crosses a thread. The public seasonal
 fit (`HoltWintersFitHelper`, all three of alpha/beta/gamma optimized) takes
 the BFGS arm (`single_param = false`); the parabolic-golden single-parameter
-arm is UNPORTED (unreachable from `ML::HoltWinters::fit`; NOT_IMPLEMENTED.tsv).
+arm is UNIMPLEMENTED (unreachable from `ML::HoltWinters::fit`; NOT_IMPLEMENTED.tsv).
 
 THE PINNED ARITHMETIC (row 9 / row 10). Every 3-term dot is `_dot3`: the
 first product stored, the next two fused onto it, ascending (`a1*b1`, then
@@ -51,11 +51,11 @@ WHY, in order:
   (a) HARDWARE. Metal has no float64 (mojolearn's standing hardware
       limit). Their H11/H33 arm is not portable AT ALL -- it cannot be
       mirrored on one of the three vendors this lane must be identical on,
-      so "port it exactly" is not among the options.
+      so "implementation it exactly" is not among the options.
   (b) It is a BUG, not a design choice, by the repo's own test: the same
       formula for the same symmetric matrix must not depend on whether
       someone typed `2` or `2.`. The standing rule is to fix their bugs,
-      numbered and recorded, not to port them.
+      numbered and recorded, not to implement them.
   (c) Their double arm is not even reproducible for THEM across GPU
       models: fp64 throughput differs, but more to the point a build with
       `--fmad` or a different nvcc would contract the double chain
@@ -63,7 +63,7 @@ WHY, in order:
 COST, priced: our H11 and H33 lose the extra float64 precision their
 subtrahend had. That precision was never load-bearing -- `H` is an
 APPROXIMATION of an inverse Hessian, and the very next iteration
-overwrites it -- but it does mean this port's fitted parameters are not
+overwrites it -- but it does mean this implementation's fitted parameters are not
 expected to be their bits on NVIDIA. It is one of the two places the
 lane's numbers are not cuML's (the other is DEVIATION 660's `R1Qt`), and
 the README says so under its own heading.
@@ -473,7 +473,7 @@ def holtwinters_bfgs_optim_device(
         ls_halvings += i
         if i >= linesearch_iter_limit:
             # cuml#888: `x = nx` below stores the LAST nx, not the one that
-            # minimised loss. Their bug, ported faithfully; recorded so a
+            # minimised loss. Their bug, implemented faithfully; recorded so a
             # fixture that reaches it can be identified from the card.
             decisions |= HW_DEC_LS_LIMIT
         # end of line search
@@ -657,7 +657,7 @@ def holtwinters_optim_gpu_global_kernel(
             shift = 2
             ptrend = start_trend.unsafe_load(tid)
 
-        # Optimization (the BFGS arm; `single_param` is UNPORTED)
+        # Optimization (the BFGS arm; `single_param` is UNIMPLEMENTED)
         var niter = 0
         var decisions = 0
         var ls_halvings = 0
@@ -766,7 +766,7 @@ def holtwinters_optim_gpu(
     if n_optim <= 1:
         raise Error(
             "holtwinters_optim_gpu: single_param (parabolic_interpolation_golden_optim)"
-            " is NOT PORTED; only the three-parameter BFGS arm (optim_alpha ="
+            " is NOT IMPLEMENTED; only the three-parameter BFGS arm (optim_alpha ="
             " optim_beta = optim_gamma = true) runs here"
         )
     if tpb <= 0:

@@ -161,7 +161,7 @@ def struct_in_shared_memory_must_be_trivial(column: Int) -> Bool:
     in threadgroup/shared memory.
 
     A TOOLCHAIN row rather than a hardware one, and it is here because it
-    cost a compile cycle and will cost another one for whoever ports the
+    cost a compile cycle and will cost another one for whoever implements the
     split kernel next. Mojo 1.0 refuses, by name:
 
         error: value of type 'Split[...]' cannot be copied or moved into a

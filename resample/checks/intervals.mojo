@@ -13,7 +13,7 @@ the SciPy expression it reproduces so a reader can diff them line by line.
 EVERYTHING IN THIS FILE EXCEPT THE JACKKNIFE RUNS ON THE HOST, and that is a
 decision rather than a leftover. The inputs are the bootstrap distribution
 (already back on the host, because the caller is returned it) and four
-scalars. PORTING_RULES 0b-ii is explicit that host work the GPU path needs is
+scalars. ENGINEERING_RULES 0b-ii is explicit that host work the GPU path needs is
 not a "CPU path", and IDENTITY_PATHS row 18 is equally explicit about the one
 thing that makes host arithmetic dangerous: a HOST LIBM call, whose last bits
 differ between macOS and glibc. So the rule this file keeps is narrow and
@@ -304,7 +304,7 @@ def basic_interval(
 
     NOTE THE SWAP, which is theirs and is not a typo: the basic (Hall)
     interval reflects the percentile interval through the point estimate, so
-    the UPPER percentile becomes the LOWER endpoint. A port that kept the
+    the UPPER percentile becomes the LOWER endpoint. An implementation that kept the
     order would return an interval whose ends are crossed whenever the
     distribution is skewed, and it would still look plausible.
 
@@ -405,7 +405,7 @@ def permutation_pvalue(
 
     `adjustment = 1` unconditionally: their `exact_test` arm enumerates all
     partitions and this lane never does (`_all_partitions_concatenated` is
-    not ported; see resample/NOT_IMPLEMENTED.tsv).
+    not implemented; see resample/NOT_IMPLEMENTED.tsv).
 
     THE COMPARISONS ARE COMPARISONS, so nothing here can move between
     vendors. The two divisions are `identical_div` because a vendor may

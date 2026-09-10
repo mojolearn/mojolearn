@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The host oracles for the batched Kalman filter. NOT A PORT.
+"""The host oracles for the batched Kalman filter. NO REFERENCE FILE.
 
 `kalman_host_f32` replays `init_batched_kalman_matrices_kernel`,
 `kalman_init_state_kernel` and `batched_kalman_loop_kernel`
@@ -628,7 +628,7 @@ def kalman_host_f64(
 
 
 # ---------------------------------------------------------------------------
-# predict's host replay (NOT A PORT: the oracle for `in_sample_prediction_
+# predict's host replay (NO REFERENCE FILE: the oracle for `in_sample_prediction_
 # kernel` + `copy_forecast_kernel`, which the audit of 2026-08-23 found had
 # no oracle at all -- `predict` was the one entry point no gate could see)
 # ---------------------------------------------------------------------------

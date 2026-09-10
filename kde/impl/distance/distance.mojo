@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`pairwise_distance` for the metrics KDE reaches: the per-metric dispatch.
 
-PORT OF cuVS `cpp/src/distance/detail/distance.cuh::distance_impl` at cuVS
+FOLLOWS cuVS `cpp/src/distance/detail/distance.cuh::distance_impl` at cuVS
 `94c2819`, the `L2SqrtUnexpanded`, `L2Expanded`, `L1`, `Linf`,
 `CosineExpanded` (`:180-226`) and `LpUnexpanded` (`:643-667`) tags
 (`distance-inl.cuh:261-311` is the `switch` that reaches them). Partial. Do
@@ -11,7 +11,7 @@ not improve.
 COSINE AND MINKOWSKI, 2026-09-01. `metric='cosine'` and
 `metric='minkowski'` were REFUSED BY NAME in this lane until now, and the
 refusal string said they were "in cuML's pairwise_distances table but NOT
-PORTED". They are ported. Both ops live with every other op in
+IMPLEMENTED". They are implemented. Both ops live with every other op in
 `neighbors/impl/distance/detail/distance_ops.mojo` (cuVS's own layout: one
 `distance_ops/` directory, every consumer reaching it), and this file's
 dispatch is `distance_impl`'s per-metric prologue -- which norms to compute
@@ -233,7 +233,7 @@ def pairwise_distance(
         raise Error(
             "kde pairwise_distance: metric value "
             + String(metric)
-            + " is not one of the six ported DistanceType values"
+            + " is not one of the six implemented DistanceType values"
             " (L2SqrtUnexpanded, L2Expanded, L1, Linf, CosineExpanded,"
             " LpUnexpanded)"
         )

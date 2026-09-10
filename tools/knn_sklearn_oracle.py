@@ -108,7 +108,7 @@ def main():
     lines.append(f"  clf multi-output (3-class, 2-class) predict {'==' if mo_ok else '!='} sklearn")
     # WEIGHTS AND METRICS, 2026-09-01. `weights='distance'` and
     # `metric='cosine'` USED TO BE IN THE REFUSAL LOOP BELOW. They are
-    # ported, so they moved up here and became the strongest check either
+    # implemented, so they moved up here and became the strongest check either
     # of them can have: the whole estimator against scikit-learn's, which
     # is where the semantics came from (`_base.py:74-114`).
     for kw in (

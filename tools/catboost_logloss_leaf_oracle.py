@@ -9,7 +9,7 @@ WHY THIS FILE EXISTS
 CatBoost's default leaf estimator for Logloss is Newton with **TEN**
 iterations and `AnyImprovement` backtracking
 (`private/libs/options/catboost_options.cpp:157-164`, then `:315-329`).
-RMSE gets one. This port implements the whole ten-iteration descent walker
+RMSE gets one. This implementation implements the whole ten-iteration descent walker
 (`gbdt/methods/leaves_estimation/{descent_helpers,step_estimator,
 pointwise_oracle}.mojo`) and until this file existed NOTHING had ever
 compared its output to CatBoost's.
@@ -32,8 +32,8 @@ beside every number in this repository. It matters more here than usual:
 CatBoost's CPU and GPU leaf estimators are two DIFFERENT implementations of
 the same descent (theirs at `private/libs/algo/approx_calcer/
 gradient_walker.h` versus `cuda/methods/leaves_estimation/
-descent_helpers.cpp`, which is the one this port mirrors), so a gap here is
-first a CPU-versus-GPU question and only then a port question. What makes
+descent_helpers.cpp`, which is the one this implementation mirrors), so a gap here is
+first a CPU-versus-GPU question and only then an implementation question. What makes
 the comparison legitimate anyway is that the two agree on the arithmetic
 that matters at unit weights: their CPU's Newton denominator is
 `-sumDer2 + l2 * (sumAllWeights / allDocCount)`
@@ -47,7 +47,7 @@ The pins are `tools/catboost_arm.py:55-75`'s, one for one, with the single
 deliberate exception that `leaf_estimation_iterations` is 10 on the L1 arm
 rather than 1 -- ten is the whole point of the file.
 
-  boosting_type      Plain      ordered boosting is not ported
+  boosting_type      Plain      ordered boosting is not implemented
   bootstrap_type     No         their default reweights the target BEFORE
                                 the derivatives; a defaults run lines up
                                 with nothing
@@ -55,7 +55,7 @@ rather than 1 -- ten is the whole point of the file.
   has_time           True       keeps them from permuting rows
   boost_from_average False      their Logloss default is True; it starts
                                 the cursor at the prior log-odds, which is
-                                real behaviour this port does not
+                                real behaviour this implementation does not
                                 implement and would show up as a constant
                                 offset in every leaf
   random_strength    0.0        their last source of randomness here
@@ -187,7 +187,7 @@ def build():
     arms. Ten of sixty-four leaves came back exactly zero that way. Tied
     leaf values defeat a PLACEMENT check -- a permutation that moves two
     zeros is invisible -- so the target was spread until no two leaves in a
-    tree tie. The choice was made before any comparison against our port
+    tree tie. The choice was made before any comparison against our implementation
     was run and is not a fixture picked by what it scores.
     """
     x = np.empty((ROWS, FEATS), dtype=np.float32)

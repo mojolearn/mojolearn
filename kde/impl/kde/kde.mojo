@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ML::KDE::score_samples`: cuML 26.08's C++ entry, over the 25.08 algorithm.
 
-PORT OF cuML `cpp/include/cuml/neighbors/kde.hpp` and `cpp/src/kde/kde.cu`
-at cuML `265b9da` (v26.08.00). Partial. Do not improve.
+FOLLOWS cuML `cpp/include/cuml/neighbors/kde.hpp` and `cpp/src/kde/kde.cu`
+at cuML `265b9da` (v26.08.00). Partial.
 
 Their file is a delegation: it wraps the six pointers in mdspans and calls
 `cuvs::distance::kde(handle, query, train, weights, output, bandwidth,
@@ -18,7 +18,7 @@ DistanceType value, `metric_arg` as Minkowski's `p`.
 
 `metric_arg` USED TO BE REFUSED UNLESS 2.0, and that refusal is gone as of
 2026-09-01. It read "is read only by metric='minkowski', which is NOT
-PORTED"; `LpUnexpanded` is ported now (`neighbors/impl/distance/detail/
+IMPLEMENTED"; `LpUnexpanded` is implemented now (`neighbors/impl/distance/detail/
 distance_ops.mojo`), so the argument is forwarded to the distance dispatch
 and VALIDATED there by value (DEVIATION 552: p must be finite, positive
 and normal). A non-Lp metric still accepts and discards it, which is what
@@ -75,7 +75,7 @@ def score_samples(
 
     `weights == nullptr` is `has_weights == False` (Mojo's launch refuses a
     null pointer argument, so the buffer is passed and ignored). The `T =
-    double` instantiation is NOT ported: no float64 on the device column
+    double` instantiation is NOT implemented: no float64 on the device column
     this tree is built on (DEVIATION 600).
     """
     kde_score_samples_device(

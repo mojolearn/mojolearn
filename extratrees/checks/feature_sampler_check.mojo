@@ -3,12 +3,12 @@
 """The two per-node feature samplers, and the dispatch that picks between them.
 
 `extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo`
-ports cuML's `excess_sample_with_replacement_kernel`
+implements cuML's `excess_sample_with_replacement_kernel`
 (`builder_kernels.cuh:152-248`), `algo_L_sample_kernel` (`:268-317`) and the
 dispatch at `builder.cuh:398-471`. This checks all three, and it is built
 around one rule and one fact.
 
-THE RULE is `PORTING_RULES.md` 8: a parameter that selects a kernel is a
+THE RULE is `ENGINEERING_RULES.md` 8: a parameter that selects a kernel is a
 parameter the checks enumerate, and a check that cannot NAME the kernel it ran
 can pass about a different one. There are THREE arms, not two -- the excess
 kernel is instantiated at `MAX_SAMPLES_PER_THREAD = 1` and at `= 72`, and the
@@ -24,8 +24,8 @@ PREVIOUS iteration's flag, a 0 or a 1 -- as the predecessor of the block
 minimum (`builder_kernels.cuh:231-232`, and CUB's own
 `block_adjacent_difference.cuh:393-419` confirms `output[0] =
 difference_op(input[0], tile_predecessor_item)`), so a sampled column 0 is
-flagged a duplicate and dropped. The port copies that, because
-`PORTING_RULES.md` 0b is COPY, DO NOT IMPROVE, and the check ASSERTS it, so
+flagged a duplicate and dropped. The implementation copies that, because
+`ENGINEERING_RULES.md` 0b says not to freelance on a settled sampling rule, and the check ASSERTS it, so
 that a later "fix" turns red instead of silently forking from cuML.
 
 The uniformity section is a smoke test and says so where it runs. It is not a
@@ -104,7 +104,7 @@ def assert_one_sample(
 
     Distinctness is checked with an `n`-wide seen-array rather than by
     comparing a count of uniques, because a count is an aggregate and
-    `PORTING_RULES.md` 7 is explicit that an aggregate verifies the total and
+    `ENGINEERING_RULES.md` 7 is explicit that an aggregate verifies the total and
     nothing about placement.
     """
     var seen = List[Int](length=n, fill=0)
@@ -379,7 +379,7 @@ def main() raises:
     )
     cells += 1
 
-    # The two key chains are NOT the same function, and a port that used one
+    # The two key chains are NOT the same function, and an implementation that used one
     # for both would still pass every property test in this file.
     assert_true(
         excess_subsequence(0, 3, 5) != algo_l_subsequence(3, 5),
@@ -516,7 +516,7 @@ def main() raises:
     # =====================================================================
     # Both kernels read `work_items[...].idx` (`:165`, `:279`), so the SAME
     # node id at two different positions in the batch must produce the SAME
-    # columns, and a different node id must produce different ones. A port
+    # columns, and a different node id must produce different ones. An implementation
     # that keyed on the loop counter would pass every property above.
     print("[keying] node id, not batch position")
     for arm_case in [(1000, 20), (20000, ALGO_L_FRONTIER_K)]:
@@ -804,7 +804,7 @@ def main() raises:
     # structural biases in place on the reasoning that they are what
     # `builder_kernels.cuh:231-232` and `:201-203` do and that COPY, DO NOT
     # IMPROVE therefore required reproducing them. Andrew, 2026-08-21: **do
-    # not port bugs, fix them.** Deviations 164 and 165 are the fixes and this
+    # not implementation bugs, fix them.** Deviations 164 and 165 are the fixes and this
     # section is now the regression guard for them, in the direction that
     # makes the learner right.
     #

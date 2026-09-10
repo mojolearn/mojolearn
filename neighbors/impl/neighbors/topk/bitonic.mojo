@@ -8,7 +8,7 @@ Batcher's, published as
     Batcher, K. E., "Sorting networks and their applications",
     AFIPS Spring Joint Computer Conference, 1968.
 
-Nothing here is transliterated from an implementation; the stage/stride
+Nothing here is followed statement for statement from an implementation; the stage/stride
 recurrence, the index-to-(register, lane) map and the direction derivation
 below are each rederived from that paper's construction.
 

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The mixture kernels with their pins BROKEN ON PURPOSE, for the check.
 
-NOT A PORT, NOT REACHED by any driver, by `mixture/estimator.mojo` or by the
+NO REFERENCE FILE, NOT REACHED by any driver, by `mixture/estimator.mojo` or by the
 card. Copies of `mixture/checks/estep.mojo`'s and `mstep.mojo`'s kernels,
 each carrying arms that `gmm_check.mojo` selects through the `sabotage`
 argument threaded down from `gmm_e_step` / `gmm_m_step` and that nothing else

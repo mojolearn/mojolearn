@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The DBSCAN driver: neighborhood, core points, CSR, label propagation.
 
-PORT OF `cuml/cpp/src/dbscan/runner.cuh::run` at cuML `00094f7`. Partial
-(single GPU). Do not improve.
+FOLLOWS `cuml/cpp/src/dbscan/runner.cuh::run` at cuML `00094f7`. Partial
+(single GPU).
 
 THEIR STRUCTURE, WHICH IS TWO LOOPS OVER THE BATCHES AND NOT ONE
 ----------------------------------------------------------------
@@ -30,7 +30,7 @@ rather than paraphrased:
 
 so that loop 2's first iteration finds batch 0's `adj` and `vd` already
 resident and skips one neighborhood pass. Two passes over the data are
-unavoidable and are NOT a defect of the port: the core mask over the WHOLE
+unavoidable and are NOT a defect of the implementation: the core mask over the WHOLE
 dataset has to exist before any batch is labelled, because `weak_cc`'s
 `filter_op` reads `core[j]` for neighbours `j` in every other batch.
 
@@ -62,7 +62,7 @@ and the second disjunct is the entire reason the weighted ball-cover arm
 works. Loop 1 normally asks the ball cover only to COUNT: it fills `ia` and
 `vd` and emits no columns, because the integer degree is all the core-point
 test needs. A WEIGHTED degree needs the neighbour IDS, so with weights on,
-every batch of loop 1 must also FILL `ja`. That is their line, ported.
+every batch of loop 1 must also FILL `ja`. That is their line, implemented.
 
 WHERE OURS DIFFERS, AND IT IS THE SAME PLACE DEVIATION 39 ALREADY DIFFERS.
 Theirs fills into the resizable `adj_graph` and grows it later
@@ -87,13 +87,13 @@ wrong that gate is what would say so. IT HAS NOT SAID ANYTHING YET:
 (`DeadArgumentElimination surveyUse failed`, an LLVM pass assertion) and the
 gate-side workaround on top of `dfb47fc9` is unverified.
 
-NOT PORTED, and named in `dbscan/NOT_IMPLEMENTED.tsv`: the multi-GPU arms
+NOT IMPLEMENTED, and named in `dbscan/NOT_IMPLEMENTED.tsv`: the multi-GPU arms
 (`CorePoints::exchange`, `MergeLabels::tree_reduction`) and the
 `core_indices` output (`runner.cuh:419-442`, a `thrust::copy_if` stream
 compaction of the core mask). `sample_weight` sat on this list until
 2026-09-01 and is now above. The two-loop `max_k` dispatch
 (`runner.cuh:257`, `:289`, `:327`, `:335`) briefly sat on this list and is
-now PORTED below: loop 2 reuses batch 0's CSR from loop 1 and takes the
+now IMPLEMENTED below: loop 2 reuses batch 0's CSR from loop 1 and takes the
 one-pass arm for the rest whenever `algo.cuh:119`'s spare guard admits it.
 """
 
@@ -180,10 +180,10 @@ from neighbors.impl.neighbors.ball_cover.scan import (
 #:     }
 #:
 #: and `runner.cuh:235` builds the index only `if constexpr (float && int64_t)`.
-#: **This port is int32-label.** So a caller who asks cuML for `algorithm='rbc'`
+#: **This implementation is int32-label.** So a caller who asks cuML for `algorithm='rbc'`
 #: on an int32-label build gets BRUTE_FORCE with a warning, every time. Their
 #: dispatch sends our parameters to brute force and to nothing else; the RBC
-#: arm we ported is one their dispatch would not hand us.
+#: arm we implemented is one their dispatch would not hand us.
 #:
 #: That does not make the default wrong -- `check_dbscan_rbc_matches_brute`
 #: compares the two labellings POINT FOR POINT and the measurement above is
@@ -193,7 +193,7 @@ from neighbors.impl.neighbors.ball_cover.scan import (
 #:
 #: The one restriction that survives as a genuine cost-free match is the
 #: METRIC: `runner.cuh:152-156` downgrades anything but
-#: L2Sqrt{Expanded,Unexpanded}, and L2 is all this port does.
+#: L2Sqrt{Expanded,Unexpanded}, and L2 is all this implementation does.
 comptime EPS_NN_BRUTE_FORCE = 0
 comptime EPS_NN_RBC = 1
 
@@ -223,7 +223,7 @@ def rbc_take_one_pass(
     A named host function rather than two inline lines so the checks can
     assert which arm a fixture routes to with the SAME arithmetic the runner
     uses (`dbscan_check.mojo::check_dbscan_rbc_two_loop_arms`), per
-    PORTING_RULES 8: a parameter that selects a kernel is a parameter the
+    ENGINEERING_RULES 8: a parameter that selects a kernel is a parameter the
     checks enumerate.
     """
     if max_k <= 0:
@@ -332,7 +332,7 @@ their code branches on is this Bool.
 
     `batch_size = 0` means one batch over the whole dataset.
 
-    `phase_timing` (archive/reference/PORTING.md 38) is the port of the instrumentation cuML
+    `phase_timing` (archive/reference/PORTING.md 38) is the implementation of the instrumentation cuML
     hangs on this function: their `verbosity` parameter gates a
     `CUML_LOG_DEBUG("- Batch %d / %ld ...")` per batch per loop, and every
     phase sits in an nvtx range (`Trace::Dbscan::VertexDeg` :255/:330,
@@ -358,7 +358,7 @@ their code branches on is this Bool.
 
     `<i>` is 1-based, as their "- Batch %d" prints `i + 1`. Every phase
     already ends on a `ctx.synchronize()`, so the timestamps add no sync
-    that the port does not already perform. Off (the default), nothing
+    that the implementation does not already perform. Off (the default), nothing
     prints and nothing is measured.
     """
     var batch = batch_size if batch_size > 0 else n_rows
@@ -384,7 +384,7 @@ their code branches on is this Bool.
     # to the n^2 arm. We keep the RBC arm reachable anyway; see DEVIATION 35
     # at the top of this file for the measurement that is its only support,
     # and for why "their dispatch takes this path" is NOT among the reasons.
-    # The metric guard cannot fire because L2 is all this port does, and the
+    # The metric guard cannot fire because L2 is all this implementation does, and the
     # third is copied verbatim below.
     var sparse_rbc_mode = eps_nn_method == EPS_NN_RBC
     if sparse_rbc_mode and n_features > Int(MAX_LABEL) // n_rows:
@@ -539,7 +539,7 @@ their code branches on is this Bool.
                     "dbscan: the ball-cover neighbourhood has "
                     + String(nnz1)
                     + " edges in one batch, which does not fit the int32 CSR"
-                    " this port uses. cuML requires int64 labels for RBC"
+                    " this implementation uses. cuML requires int64 labels for RBC"
                     " (runner.cuh:143-150) for exactly this reason. Use a"
                     " smaller eps, a smaller batch, or the BRUTE_FORCE arm."
                 )

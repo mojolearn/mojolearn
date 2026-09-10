@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host oracle for single linkage, and the fixtures it is gated on.
 
-NOT A PORT. cuVS ships one GPU backend and checks it against scikit-learn
-in Python; this tree checks a port on one Apple GPU against a host
+NO REFERENCE FILE. cuVS ships one GPU backend and checks it against scikit-learn
+in Python; this tree checks an implementation on one Apple GPU against a host
 computation that is BIT-FOR-BIT predictable, which is what the identity
 claim needs. Three things live here:
 
@@ -27,7 +27,7 @@ claim needs. Three things live here:
 
 3. THE DENDROGRAM AND LABELS, serially, from that sorted edge list: a
    compression-free union-find for the `children` rows (DEVIATION 622's
-   control) and a serial transliteration of `extract_flattened_clusters`'
+   control) and a serial statement-for-statement match of `extract_flattened_clusters`'
    cut-and-inherit for the labels; plus a Float64 reference MST
    (`sqrt(sum (x_i - x_j)^2)` in double, direct form) for tolerance sanity
    on the MST's total weight.

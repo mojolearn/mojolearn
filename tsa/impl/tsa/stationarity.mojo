@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ML::Stationarity::kpss_test`: the public entry.
 
-PORT OF `cuml/cpp/src/tsa/stationarity.cu` at cuML 265b9da6 (v26.08.00),
+FOLLOWS `cuml/cpp/src/tsa/stationarity.cu` at cuML 265b9da6 (v26.08.00),
 the `float` overload (`:36-48`) and its helper (`:17-32`): a pass-through
 to `MLCommon::TimeSeries::kpss_test`. The `double` overload is not offered
 (no Float64 on Metal; DEVIATION 670 in `arima/`). The Python surface

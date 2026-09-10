@@ -24,7 +24,7 @@ class PCA(NumericModeMixin):
     The default is cuML's `pcaFit` route (covariance, then an eigensolver)
     with the eigensolver being cuML's JACOBI arm (`svd_solver='jacobi'`,
     cuSOLVER syevj there, a device Jacobi here). cuML's own 'auto' reaches
-    the divide-and-conquer `eigDC` (syevd), which is NOT ported
+    the divide-and-conquer `eigDC` (syevd), which is NOT implemented
     (decomposition/NOT_IMPLEMENTED.tsv); this class accepts 'auto' and runs
     the Jacobi arm, and says so here.
 
@@ -394,7 +394,7 @@ class TruncatedSVD(NumericModeMixin):
     omitted because the fit kernel does not compute cuML's
     transformed-data definition of that quantity (tsvd.cuh's
     `explained_var` comes from the transformed matrix's column variances,
-    a second pass this port does not make).
+    a second pass this implementation does not make).
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.

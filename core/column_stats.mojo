@@ -11,13 +11,13 @@ semantics. Same rule as `core/row_norms.mojo`.
 THE GRAM PRODUCT IS NOT IN THIS FILE ANY MORE
 ---------------------------------------------
 `raft::stats::cov` and `tsvd_fit` both ask cuBLAS for `A^T A`. This file used
-to carry a hand-written contraction for that shape, a port of the
+to carry a hand-written contraction for that shape, an implementation of the
 `isRowMajor == false` arm of `raft/linalg/detail/contractions.cuh` with a
 split-K row partition of our own on top, on the belief that MAX's matmul could
 not do it because `transpose_a` is unsupported. **`transpose_a` is still
 unsupported and that belief was still wrong**: `Xt = transpose(X)` makes
 `Xt . Xt^T` the N-T shape MAX does support, and `transpose_kernel` below is
-the twenty lines that get there. The ported contraction and its split-K
+the twenty lines that get there. The implemented contraction and its split-K
 reduction were dead code by then and are deleted. About 250 lines, none of
 it reached.
 
@@ -301,7 +301,7 @@ def diagonal_to_vector_kernel(
 
     cuSOLVER hands back a separate eigenvalue array; Jacobi leaves them on
     the diagonal of the matrix it consumed. One kernel bridges the two
-    conventions so the rest of the port reads like theirs.
+    conventions so the rest of the implementation reads like theirs.
 
     AUDITED FOR DEVIATION 523, NO CHANGE. There is no arithmetic here at
     all -- one strided load, one store -- so there is no fold and no
@@ -363,7 +363,7 @@ def transpose_kernel(
 ):
     """`dst[n_cols x n_rows] = src[n_rows x n_cols]^T`, tiled through shared.
 
-    NOT A PORT. `linalg.transpose` exists, compiles, and SIGNALS at runtime on
+    NO REFERENCE FILE. `linalg.transpose` exists, compiles, and SIGNALS at runtime on
     device buffers — it dispatches into a HOST strided-copy path. This is the
     twenty-line kernel that `core/gemm.mojo` named as the alternative route
     and that nobody had written.

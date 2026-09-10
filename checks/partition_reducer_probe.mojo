@@ -13,7 +13,7 @@ DEVIATION 98 declined the faithful one on occupancy grounds: at depth 0 there
 is exactly ONE partition, so their grid is one threadgroup for the whole
 dataset. That was never measured on this path. This measures it.
 
-BOTH ARE PORTED AND BOTH ARE CORRECT -- `check-pointwise-subsets` gates the
+BOTH ARE IMPLEMENTED AND BOTH ARE CORRECT -- `check-pointwise-subsets` gates the
 one in use and `check-pointwise-scores` R1-R4 gates the other -- so nothing
 here can change a result. It is purely which is faster at the part counts a
 tree actually walks: 1, 2, 4, ... up to `1 << max_depth`.

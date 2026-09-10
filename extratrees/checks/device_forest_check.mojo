@@ -854,7 +854,7 @@ def main() raises:
     var c3 = cfg.copy()
     c3.has_class_weight = True
     # c4 (bootstrap=True) and c11 (entropy) were refusals until DEVIATIONS
-    # 460 / 459 ported them; they are now REACH cases in section 11 below.
+    # 460 / 459 implemented them; they are now REACH cases in section 11 below.
     var c5 = cfg.copy()
     c5.oob_score = True
     var c6 = cfg.copy()
@@ -864,7 +864,7 @@ def main() raises:
     var c8 = cfg.copy()
     c8.ccp_alpha = 0.01
     # c9 (max_leaf_nodes) WAS a refusal cell here until 2026-09-01, exactly
-    # as c4 and c11 were. DEVIATION 466 ported it -- best-first growth is a
+    # as c4 and c11 were. DEVIATION 466 implemented it -- best-first growth is a
     # second growth mode in `builder.mojo` -- so it is now a REACH case in
     # section 11 below, and it is REMOVED FROM THIS LOOP rather than left in
     # it. THIS FILE WENT RED ON THAT REMOVAL BEING MISSED: `estimator_check`
@@ -898,7 +898,7 @@ def main() raises:
         " arm too -- a parameter honoured on one path and inert on the other"
         " is what estimator.mojo exists to prevent",
     )
-    print("    ", refused, "of", tried, "unported parameters refused by name")
+    print("    ", refused, "of", tried, "unimplemented parameters refused by name")
 
     # The default config is ACCEPTED on the device arm -- rule 8 wants both
     # sides of every switch, and a refusal count is meaningless if everything

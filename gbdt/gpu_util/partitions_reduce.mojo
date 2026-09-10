@@ -10,7 +10,7 @@ MIRRORS `catboost/cuda/cuda_util/partitions_reduce.h`, whose
 # DEVIATION BLOCK: their implementation is a CUB segmented reduce.
 #
 # `partitions_reduce.h` delegates to `SegmentedReduce` in `cuda_util/reduce.h`,
-# which is CUB. There is no CUB in Mojo, so there is no line-for-line port and
+# which is CUB. There is no CUB in Mojo, so there is no line-for-line implementation and
 # a reviewer diffing against their header will find no counterpart for what
 # follows. Same situation as the stable partition in `split_points.mojo`.
 #

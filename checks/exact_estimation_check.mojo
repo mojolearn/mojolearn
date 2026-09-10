@@ -7,7 +7,7 @@
 NO CATBOOST COUNTERPART: a gate, so it lives in `checks/`.
 
 WHAT IS UNDER TEST. `compute_weighted_quantile`
-(`gbdt/methods/leaves_estimation/leaves_estimation_helper.mojo`), the port of
+(`gbdt/methods/leaves_estimation/leaves_estimation_helper.mojo`), the implementation of
 `leaves_estimation_helper.h:64-146`, and everything it drives: the segmented
 radix sort (DEVIATION 65), `MakeEndOfBinsFlags`, the segmented weight scan,
 `ComputeNeedWeights`, and the sixteen-iteration binary search. That is the
@@ -23,7 +23,7 @@ the host computes it by a completely different route -- an O(n^2) insertion
 order and a running sum -- rather than by re-implementing their kernels.
 
 TWO PROPERTIES OF THEIRS THE FIXTURE HAS TO RESPECT, and both are recorded
-in the port rather than smoothed over:
+in the implement it rather than smoothed over:
 
   1. **THE SORT IGNORES THE BOTTOM TEN MANTISSA BITS.** Their call is
      `SegmentedRadixSort(..., 10, 32)` (`:110-112`), so two residuals that
@@ -291,7 +291,7 @@ def run_mape_case(
 ) raises -> Int:
     """`ComputeExactApprox`'s MAPE ARM, which had no caller in any check.
 
-    PORTING_RULES 8, and it cost a real defect: this file called
+    ENGINEERING_RULES 8, and it cost a real defect: this file called
     `compute_weighted_quantile` with `use_mape_weights=False` on every arm,
     so `compute_exact_approx`'s `is_mape` branch -- the one that runs
     `ComputeWeightsWithTargets` first -- was never executed by anything.

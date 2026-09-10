@@ -63,7 +63,7 @@ or RAFT and no PyTorch checkout, so **both sides of every comparison here are
 ours.**
 
 Also owed and absent. No `pixi.toml` task, so the gate runs by path only. No
-`embedding/README.md`, no `DERIVATION_MAP.tsv`, no `NOT_IMPLEMENTED.tsv`;
+`embedding/README.md`, no `NOT_IMPLEMENTED.tsv`;
 every other lane in this tree carries all three. No `IDENTITY_PATHS.md` row
 for this profile, which DEVIATION 1300 names. And `SUPPORT_MATRIX.md`,
 `archive/plans/CARD_GAPS.md` and `archive/plans/UNWIRED.md` do not mention `embedding/` at all.
@@ -128,14 +128,14 @@ change rather than an arithmetic pin, and section 12 prices it.
 read; there is no PyTorch checkout, the same gap
 `transformer/IDENTICAL_TRANSFORMER_CONTRACT.md` 5.4 and
 `training/IDENTICAL_LOSS_CONTRACT.md` section 1 both record. This is not a
-port and it claims no agreement with torch.
+implementation and it claims no agreement with torch.
 
 Two things can be said about the reference without reading it, and each
 decides a clause. **Its accumulation buffer is zero filled and it adds into
 it**, which is the `+0.0` seed of 5.1 and not a departure. And **its order is
 the arrival order of atomics**, which is not a spelling at all, so **there is
-no upstream order for this contract to mirror.** `COPY, DO NOT IMPROVE` has
-nothing to copy here, and that is stated so nobody looks for it.
+no reference order for this contract to match.** Nothing was settled here
+before this contract settled it, and that is stated so nobody looks for it.
 
 ---
 
@@ -483,7 +483,7 @@ produced wrong keys here twice, so **nothing in the packing may be written
 
 **DEVIATION 1304. Sorting by `id` ALONE is the same permutation, provided the
 sort is STABLE and the input is in position order.** The argument is already
-written down by the lane that ported it: `radix_sort.mojo`'s header says
+written down by the lane that implemented it: `radix_sort.mojo`'s header says
 CatBoost's `(bin || permutationPosition)` key is never materialized and does
 not have to be, because `Indices` arrives in learn-permutation order and a
 stable sort by bin leaves each bin's rows in that order. **The check must
@@ -977,8 +977,7 @@ Cited from elsewhere and never redefined: 621, 1505, 1938.
 3. **PLAN_SORT is implemented.** Clause (d) now exercises both real plans
    and three launch geometries. Additional vendor evidence and a measured
    dispatch crossover remain owed; the production default stays PLAN_SCAN.
-4. **A `pixi.toml` task, an `embedding/README.md`, a `DERIVATION_MAP.tsv` and
-   a `NOT_IMPLEMENTED.tsv`.** Every other lane carries all four.
+4. **A `pixi.toml` task, an `embedding/README.md`, a `NOT_IMPLEMENTED.tsv`.** Every other lane carries all four.
 5. **An `IDENTITY_PATHS.md` row**, DEVIATION 1300. It must record exactly what
    the 2026-08-28 round did and did not close, which is clause (a) only, on
    Apple and AMD, cards byte-identical, NO NVIDIA, no sabotage arm built.

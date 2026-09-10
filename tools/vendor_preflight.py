@@ -29,7 +29,7 @@ PROBES = [
     ("numpy",       True,  "every arm"),
     ("pandas",      False, "the higgs decode in speed_gbdt_arm"),
     ("sklearn",     False, "the cpu opponents"),
-    ("catboost",    False, "the gbdt-symmetric opponent (port lineage)"),
+    ("catboost",    False, "the gbdt-symmetric opponent (implementation lineage)"),
     ("lightgbm",    False, "the depthwise/lossguide opponent"),
     ("xgboost",     False, "a second gbdt opponent"),
     ("cuml",        False, "the classical + rf opponents"),

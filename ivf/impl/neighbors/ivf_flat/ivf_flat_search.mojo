@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IVF-FLAT's search: coarse select, probe, select again.
 
-PORT OF `cuvs/src/neighbors/ivf_flat/ivf_flat_search.cuh` at cuVS
+FOLLOWS `cuvs/src/neighbors/ivf_flat/ivf_flat_search.cuh` at cuVS
 `6ba2ce2`: `search_impl` (`:40-306`) and `search_with_filtering`
 (`:311-374`). Partial, and one of their two kernels is REFUSED rather than
-ported.
+implemented.
 
 THEIR FIVE STEPS
 -----------------
@@ -20,7 +20,7 @@ THEIR FIVE STEPS
 
 STEP 4, AND WHY IT IS A REFUSAL
 --------------------------------
-`ivfflat_interleaved_scan` cannot be ported into the identical column, and
+`ivfflat_interleaved_scan` cannot be implemented into the identical column, and
 the reasons are three separate rows of `IDENTITY_PATHS.md` at once.
 
   - **It is a warp-sort queue on a numeric path.** Its local top-k is
@@ -37,7 +37,7 @@ the reasons are three separate rows of `IDENTITY_PATHS.md` at once.
     across that many blocks and merges with a second `select_k`. A block
     count that comes from the device is row 3's and row 7's class, and here
     it decides which candidates are compared against which.
-  - **Its data layout is the interleaved group** this port does not build
+  - **Its data layout is the interleaved group** this implementation does not build
     (DEVIATION 1782), and `veclen` is chosen from `dim` by
     `calculate_veclen` (`ivf_flat_index.cpp:36`).
 
@@ -55,7 +55,7 @@ goes through THE SAME TWO KERNELS the tiled brute-force k-NN arm uses:
     `knn_brute_force.mojo`'s at `:170-205` and is cited as such.
   - selection: `neighbors/checks/select_radix_identical.mojo` under
     `IDENTICAL` (DEVIATIONS 500/501 -- the composite `(distance, index)`
-    key and the ranked placement), the ported `select_radix` under `FAST`.
+    key and the ranked placement), the implemented `select_radix` under `FAST`.
 
 **This is DEVIATION 509's choice of arm, inherited.** Under `IDENTICAL` the
 k-NN lane pins AUTO to the TILED arm on every column, because that is the
@@ -255,7 +255,7 @@ def _select_top_k(
             + String(k)
             + " over a row of "
             + String(length)
-            + " elements. The ported radix selector cannot take k > len --"
+            + " elements. The implemented radix selector cannot take k > len --"
             " no bucket satisfies `prev_count < k <= cur_count`, every"
             " later pass drops every element, and last_filter reads a"
             " buffer nothing wrote (knn_brute_force.mojo's own note)."
@@ -330,7 +330,7 @@ def sort_slots_by_distance_then_index(
     this lane editing it.
 
     IT IS A CORRECTNESS REQUIREMENT AND NOT A COURTESY, twice over.
-    (1) Under `FAST` the ported selector does not sort at all -- RAFT's
+    (1) Under `FAST` the implemented selector does not sort at all -- RAFT's
     radix select returns the right `k` in an unspecified order -- so
     without this the card's `ivf.out_*` stages and the returned arrays
     would carry an atomic arrival order. (2) scikit-learn's `kneighbors`
@@ -373,7 +373,7 @@ def ivf_flat_search_traced(
     Row-major `queries` of `n_queries x dim`. Returns `n_queries x k`
     distances and ORIGINAL row ids, ascending by `(distance, index)`.
 
-    THEIR BATCHING HEURISTIC IS NOT PORTED (`:343-353`): `max_queries` comes
+    THEIR BATCHING HEURISTIC IS NOT IMPLEMENTED (`:343-353`): `max_queries` comes
     from `get_workspace_free_bytes`, which is a device memory number, and a
     number that decides how the query set is cut is a number this lane must
     not take from the hardware. Every query is served in one pass here.
@@ -568,8 +568,8 @@ def ivf_flat_search_traced(
         if n_cand < k:
             # DEVIATION 1794. Their `postprocess_neighbors_kernel` fills
             # the short slots with `kOutOfBoundsRecord`
-            # (`ivf_common.cuh:106-108`); that fill is not ported and the
-            # ported selector cannot take `k > len` at all. Refusing names
+            # (`ivf_common.cuh:106-108`); that fill is not implemented and the
+            # implemented selector cannot take `k > len` at all. Refusing names
             # the two numbers a caller can act on.
             raise Error(
                 "ivf_flat search: query "
@@ -581,7 +581,7 @@ def ivf_flat_search_traced(
                 + " vectors between them, fewer than k = "
                 + String(k)
                 + ". Their kOutOfBoundsRecord short-fill"
-                " (ivf_common.cuh:106-108) is not ported. Raise n_probes,"
+                " (ivf_common.cuh:106-108) is not implemented. Raise n_probes,"
                 " or lower k, or rebuild with fewer lists."
             )
 

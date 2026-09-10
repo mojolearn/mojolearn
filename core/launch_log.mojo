@@ -8,7 +8,7 @@ from the command line (the `--instrument 'GPU'` spelling records nothing
 into `gpu-shader-profiler-interval` either -- measured 2026-08-22), and
 MAX exposes no Metal debug-label API. So a trace knows every dispatch's
 DURATION but not its NAME: `metal-gpu-intervals` labels rows by encoder,
-and this port issues one unnamed encoder per launch.
+and this implementation issues one unnamed encoder per launch.
 
 What the trace cannot name, the host can: Metal's compute channel on this
 device is a single in-order queue, so DEVICE EXECUTION ORDER IS HOST

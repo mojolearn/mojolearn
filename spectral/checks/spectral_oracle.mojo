@@ -4,7 +4,7 @@
 host, in Float32 through the IDENTICAL helpers (the bit-for-bit reference
 the device arm is gated against) and in Float64 (the tolerance reference).
 
-NOT A PORT. cuVS ships one backend and needs no second opinion. This file
+NO REFERENCE FILE. cuVS ships one backend and needs no second opinion. This file
 is `spectral/impl/sparse/solver/detail/lanczos.mojo` re-spelled with
 every device launch replaced by a host loop that performs the SAME
 ARITHMETIC IN THE SAME ORDER:
@@ -377,7 +377,7 @@ def _host_solve_ritz[
     elif which == LANCZOS_LA:
         first = ncv - k
     else:
-        raise Error("oracle: which not ported")
+        raise Error("oracle: which not implemented")
     eigenvalues_k.clear()
     eigenvectors_k.clear()
     for c in range(k):

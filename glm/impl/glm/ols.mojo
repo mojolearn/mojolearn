@@ -3,12 +3,11 @@
 """`olsFit`: the entry point, its guards, its SAMPLE WEIGHTS and its SOLVER
 DISPATCH.
 
-PORT OF `cuml/cpp/src/glm/ols.cuh::olsFit` at cuML `00094f7`. Partial.
-Do not improve.
+FOLLOWS `cuml/cpp/src/glm/ols.cuh::olsFit` at cuML `00094f7`. Partial.
 
 WHY THIS FILE EXISTS, AND IT IS NOT A WRAPPER
 ---------------------------------------------
-`glm/impl/linalg/detail/lstsq.mojo` ports RAFT's `lstsqEig`, which is cuML's
+`glm/impl/linalg/detail/lstsq.mojo` implements RAFT's `lstsqEig`, which is cuML's
 `algo = 1`. It was reachable directly and nothing stood between a caller and
 it. **That skipped their dispatch, and their dispatch contains a correctness
 guard.** `ols.cuh:112-113`:
@@ -17,7 +16,7 @@ guard.** `ols.cuh:112-113`:
     if (n_cols > n_rows || n_cols == 1) selectedAlgo = 0;
 
 so a 4,000 x 5,000 design, or a single column, must not reach `lstsqEig`.
-Before that guard was ported a caller got a plausible-looking vector of
+Before that guard was implemented a caller got a plausible-looking vector of
 garbage from a singular inverse. **That is the same failure as the
 eigensolver's old 32-feature cap: an ordinary input, silently wrong, no
 error.**
@@ -32,7 +31,7 @@ not a reason to refuse in this repository** -- the tree hand-writes LU,
 whether a portable route exists here. For both shapes it does, and neither
 route is `lstsqSvdJacobi`:
 
-    n_cols == 1      -> OLS_ALGO_EIG, the ported `lstsq_eig`. DEVIATION 551.
+    n_cols == 1      -> OLS_ALGO_EIG, the implemented `lstsq_eig`. DEVIATION 551.
     n_cols > n_rows  -> OLS_ALGO_MIN_NORM_EIG, `lstsq_min_norm`, ORIGINAL
                         to this library. DEVIATION 550.
 
@@ -49,7 +48,7 @@ one-column limit either: at `n = 1` the strict upper triangle is empty, the
 off-diagonal norm is 0, the sweep loop exits at sweep 0 with `Q = [1]`, and
 the answer is the exact scalar least squares `(A^T b) / (A^T A)`. So the
 switch is theirs to need and ours not to. Recorded as a DEVIATION because
-it is a place where this port deliberately does NOT follow their dispatch.
+it is a place where this implementation deliberately does NOT follow their dispatch.
 
 **`n_cols > n_rows` (DEVIATION 550).** The old refusal's reason -- "`A^T A`
 is singular by construction" -- is true and is about the Gram of the
@@ -87,7 +86,7 @@ Both of these are true:
     Python `LinearRegression(algorithm='eig')`  linear_regression.pyx:309 -> algo 1
 
 `_get_algorithm_int` (`:336-343`) maps `'eig'` to 1, which is `lstsqEig`,
-which is what this repository ported. **A user calling cuML from Python gets
+which is what this repository implemented. **A user calling cuML from Python gets
 the SOLVER we have.** A user calling their C++ directly gets the one we do
 not.
 
@@ -101,7 +100,7 @@ wrapped around the solver. cuML's default Python fit is
       -> postProcessData  (intercept = mean(y) - mu_X . coef; then UNDO the
                      centering of X and y in place)
 
-This port refuses `fit_intercept` and defaults it to False, so what it
+This implementation refuses `fit_intercept` and defaults it to False, so what it
 mirrors is the `fit_intercept=False` BRANCH of the Python default path --
 which on their side skips both wrappers and sets `*intercept = 0`
 (`ols.cuh:156`). It is a real arm of theirs; it is not the arm a Python user
@@ -110,7 +109,7 @@ centering on the host instead and says so (DEVIATION 517).
 
 SAMPLE WEIGHTS ARE A RESCALE, NOT A SOLVER (`ols.cuh:99-110`, `:129-141`)
 --------------------------------------------------------------------------
-Ported here 2026-09-01. Their block, in their order, and every step of it is
+Implemented here 2026-09-01. Their block, in their order, and every step of it is
 outside the solve:
 
     w <- sqrt(w)                     raft::linalg::sqrt          `:100`
@@ -126,7 +125,7 @@ outside the solve:
 The last three exist because `olsFit` mutates the caller's buffers and
 documents that it does ("this vector is modified during the computation",
 `ols.cuh:41-42`). Ours mutates the caller's `DeviceBuffer`s too, so they are
-ported rather than dropped; they are not observable through
+implemented rather than dropped; they are not observable through
 `glm/estimator.mojo`, which copies.
 
 WHY A RESCALE IS THE WHOLE STORY. Minimising `sum_i w_i (b_i - a_i . x)^2`
@@ -337,14 +336,14 @@ def ols_fit_weighted_traced(
 
     if fit_intercept:
         raise Error(
-            "olsFit: fit_intercept is not ported. It needs preProcessData and"
+            "olsFit: fit_intercept is not implemented. It needs preProcessData and"
             " postProcessData from cuml glm/preprocess.cuh; see"
             " glm/NOT_IMPLEMENTED.tsv. python/mojolearn/linear_model.py"
             " centers X and y on the HOST instead (DEVIATION 517)"
         )
     if normalize:
         raise Error(
-            "olsFit: normalize is not ported, and theirs is only reachable"
+            "olsFit: normalize is not implemented, and theirs is only reachable"
             " with fit_intercept; see glm/NOT_IMPLEMENTED.tsv"
         )
     if has_sample_weight and len(sample_weight) < n_rows:
@@ -383,7 +382,7 @@ def ols_fit_weighted_traced(
     #
     #     if (n_cols > n_rows || n_cols == 1) selectedAlgo = 0;
     #
-    # and this is where this port deliberately parts from it. Both shapes
+    # and this is where this implementation deliberately parts from it. Both shapes
     # still OVERRIDE whatever the caller asked for, exactly as theirs does;
     # what changes is which solver they are overridden TO, because algo 0 is
     # a one-sided Jacobi SVD we do not have and both shapes have a portable
@@ -429,13 +428,13 @@ def ols_fit_weighted_traced(
         raise Error(
             "olsFit: algo 2 is lstsqQR, a Householder QR of the design"
             " matrix, which is not written here. Nothing forces a caller to"
-            " it; algo 1 (lstsq_eig) is the ported solver"
+            " it; algo 1 (lstsq_eig) is the implemented solver"
         )
     elif selected_algo == OLS_ALGO_SVD_QR:
         raise Error(
             "olsFit: algo 3 is lstsqSvdQR, a full SVD of the design matrix,"
             " which is not written here. Nothing forces a caller to it;"
-            " algo 1 (lstsq_eig) is the ported solver"
+            " algo 1 (lstsq_eig) is the implemented solver"
         )
     else:
         # `ols.cuh:123-125`, their default arm.

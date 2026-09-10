@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Border selection: turning a raw float column into split points.
 
-PORT OF `library/cpp/grid_creator/binarization.cpp` at CatBoost `54a8143a`,
+FOLLOWS `library/cpp/grid_creator/binarization.cpp` at CatBoost `54a8143a`,
 the `GreedyLogSum` path, which is CatBoost's DEFAULT
 (`catboost/private/libs/options/data_processing_options.cpp:15`).
 
 **This runs on the HOST in CatBoost and it runs on the host here.** Border
 selection is a sort plus a priority queue over at most `border_count` bins;
-there is nothing in it a GPU wants. Porting their host code as host code is
+there is nothing in it a GPU wants. Implementing their host code as host code is
 the point, not a compromise.
 
 Everything before this file assumed a dataset that was ALREADY binned. This

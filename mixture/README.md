@@ -3,8 +3,7 @@
 Cross-vendor full-covariance Gaussian-mixture estimation.
 
 The lane implements the numerically sensitive EM path with explicit covariance regularization,
-component ordering, and convergence behavior. `DERIVATION_MAP.tsv` records provenance and
-`NOT_IMPLEMENTED.tsv` records refusals.
+component ordering, and convergence behavior.tsv` records refusals.
 
 ## Verify
 

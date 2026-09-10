@@ -27,7 +27,7 @@ continuing tree work in later sessions.
 - Use CatBoost GPU source as the baseline for existing algorithm behavior.
   Its current non-symmetric GPU registration includes the same 11 objectives
   as MojoLearn. Multiclass and Lq absence from that registry is not a missing
-  port of an existing CatBoost GPU registration. Broader CatBoost feature
+  implementation of an existing CatBoost GPU registration. Broader CatBoost feature
   parity remains incomplete (categorical combinations, ranking, etc.).
 - IDENTICAL means MojoLearn's cross-device numeric contract, not bitwise
   agreement with CatBoost, LightGBM or XGBoost. Preserve existing default

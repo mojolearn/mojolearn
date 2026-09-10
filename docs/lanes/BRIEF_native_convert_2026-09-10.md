@@ -102,7 +102,13 @@ STOP and report, do not add a tolerance.
     assert bytes(ours) == ref.tobytes()
 
     ref = np.asfortranarray(x, dtype=np.float32)
-    assert bytes(ours_colmajor) == ref.tobytes()
+    assert bytes(ours_colmajor) == ref.tobytes(order="F")
+
+(`ndarray.tobytes()` serializes in C order WHATEVER the memory layout, so
+without `order="F"` that second line compares column-major bytes against
+row-major bytes and fails on every matrix with both dimensions above 1.
+The first draft of this brief had exactly that bug and the first gate run
+showed 30 failures that were all the oracle's.)
 
 Cover, for both helpers: float64 input, an empty buffer, a single element, a
 single row, a single column, values that round exactly halfway (so

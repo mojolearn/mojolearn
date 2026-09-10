@@ -401,7 +401,7 @@ def arm_d_mae_refused() raises -> Int:
         print(
             "  arm D FAILED: MAE was accepted. cuML refuses it at"
             " decisiontree.cu:28 and randomforest_common.pyx:147; there is"
-            " no upstream MAE path to port, so accepting it would train"
+            " no upstream MAE path to implement, so accepting it would train"
             " something that is not MAE."
         )
         return 1
@@ -415,7 +415,7 @@ def arm_e_criterion_end(ctx: DeviceContext) raises -> Int:
     resolve it to GINI for an integer LabelT and MSE for a float one
     before any objective is built.
 
-    This port carried the sentinel and resolved it NOWHERE: a params struct
+    This implementation carried the sentinel and resolved it NOWHERE: a params struct
     left at the C++ default reached training with `split_criterion == 7`
     and passed every validator on the way. So the resolution is checked by
     the only thing that can see it -- the TREE. Fitting at CRITERION_END

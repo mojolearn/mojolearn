@@ -23,7 +23,7 @@ expression, not a different order.
   256 and two kernels take four elements per thread, so the sizes below are
   chosen to leave a ragged tail in every launcher: a bounds test that only
   ever runs on a full block is not a bounds test.
-* **BOTH SIDES OF EVERY SWITCH** (`PORTING_RULES.md` rule 8). The two
+* **BOTH SIDES OF EVERY SWITCH** (`ENGINEERING_RULES.md` rule 8). The two
   nullable-pointer kernels run with and without their index map; the
   border-mask extractor runs start and end; the binarized-target stats run
   Borders and Buckets.

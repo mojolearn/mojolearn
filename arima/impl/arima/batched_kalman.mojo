@@ -3,17 +3,17 @@
 """The batched Kalman filter for ARIMA: state-space matrices, initial state
 and covariance, the per-series filter loop, the log-likelihood, the forecast.
 
-PORT OF `cuml/cpp/src/arima/batched_kalman.cu` at cuML 265b9da6 (v26.08.00):
+FOLLOWS `cuml/cpp/src/arima/batched_kalman.cu` at cuML 265b9da6 (v26.08.00):
 `Mv_l` / `MM_l` / `numerical_stability` (:34-92),
 `batched_kalman_loop_kernel` (:117-333, the `rd <= 8` one-thread-per-series
 kernel their dispatch takes at `:772`), `batched_kalman_loop` (:746-819),
 `_lyapunov_wrapper` (:845-886, the `r <= 5` direct arm),
 `_batched_kalman_filter` (:889-1139), `init_batched_kalman_matrices`
-(:1141-1245), `batched_kalman_filter` (:1248-1303). COPY, DO NOT IMPROVE.
+(:1141-1245), `batched_kalman_filter` (:1248-1303).
 Layout is theirs: series `b` contiguous in `ys`/`pred` (`bid * nobs`),
 `T` at `bid * rd * rd` column-major, `Z`/`R`/`alpha` at `bid * rd`.
 
-NOT PORTED, each refused by name one layer up (`arima_common.mojo::
+NOT IMPLEMENTED, each refused by name one layer up (`arima_common.mojo::
 validate_order`, `batched_arima.mojo`): the `rd > 8` block-per-series
 kernel (`_batched_kalman_device_loop_large_kernel`, `linalg/block.cuh`);
 the `r > 5` Schur Lyapunov arm; exogenous regressors (`d_exog`, `d_beta`,
@@ -21,7 +21,7 @@ the two cuBLAS gemms at `:925-970`); confidence intervals (`level > 0`,
 `d_F_fc`, `confidence_intervals` kernel, host `erfinv`); MISSING
 OBSERVATIONS (`isnan(yt)` arms at `:191,193,219,236,246`; NaN is refused at the
 surface so those arms would be unreachable, and an unreached branch is an
-unchecked one -- PORTING_RULES 8). `arima/NOT_IMPLEMENTED.tsv` lists each.
+unchecked one -- ENGINEERING_RULES 8). `arima/NOT_IMPLEMENTED.tsv` lists each.
 
 PRECISION: DEVIATION 670 (`arima_common.mojo`): Float32 where theirs is
 `double`.
@@ -108,7 +108,7 @@ non-positive diffuse diagonal entry, and the diffuse block is initialized to
 `kappa = 1e6` by construction, so it is hard to reach by accident and no
 current fixture reaches it. That is recorded as OWED rather than claimed:
 the branch is written and unreached, and an unreached branch is an unchecked
-one (PORTING_RULES 8).
+one (ENGINEERING_RULES 8).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

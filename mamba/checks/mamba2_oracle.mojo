@@ -3,7 +3,7 @@
 """The host Float32 oracle of one Mamba-2 (SSD) block under profile
 `mojolearn.identical.mamba2.fp32.v1`, and the Float64 tolerance reference.
 
-NOT A PORT -- the reference libraries ship no oracle; the ALGORITHM below is
+NO REFERENCE FILE -- the reference libraries ship no oracle; the ALGORITHM below is
 theirs, cited seam by seam in `mamba/IDENTICAL_MAMBA2_CONTRACT.md` (commit
 e3b46e95). This file is the contract's arithmetic order written on the CPU
 through the SAME seam functions the Mamba-1 lane certified

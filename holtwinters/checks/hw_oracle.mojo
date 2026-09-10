@@ -4,7 +4,7 @@
 pinned spelling as the device kernels -- and a Float64 reference through
 the same code, for tolerance sanity.
 
-NOT A PORT (cuML has no host arm). `oracle_fit[DType.float32]` is the
+NO REFERENCE FILE (cuML has no host arm). `oracle_fit[DType.float32]` is the
 float32 arm: every multiply-add through `identical_mul_add`, every stored
 intermediate through `ftz`, the step-size `sqrt` through `identical_sqrt`,
 the clamp through DEVIATION 663's compare chain -- so under IDENTICAL the

@@ -51,11 +51,11 @@ The comparison is on FLOAT BIT PATTERNS, never on decimal text. This repository
 has a standing finding that `String(Float32)` does not round-trip -- 0.46% of
 float32 values come back one ULP wrong and `String(Float32(1.4e-45))` is the
 string `"0.0"` -- so a decimal-only comparison would silently accept exactly the
-one-ulp disagreement a float32-versus-float64 slip in this port would cause.
+one-ulp disagreement a float32-versus-float64 slip in this implementation would cause.
 The dump carries `<decimal>/<hexbits>` and only the hex is evidence.
 
 Python integers are arbitrary precision and Mojo's `UInt64` wraps, so every
-addition, multiplication and shift in the ported hash is masked to 64 bits
+addition, multiplication and shift in the implemented hash is masked to 64 bits
 explicitly. That masking is not decoration: an unmasked `splitmix64` agrees with
 the Mojo one for small inputs and diverges for large ones, which is the shape of
 bug a spot check misses and a cell-for-cell compare does not.
@@ -189,7 +189,7 @@ N_SKLEARN_SEEDS = 21
 
 
 # ---------------------------------------------------------------------------
-# The generator, ported from `extratrees/checks/fixtures.mojo`.
+# The generator, implemented from `extratrees/checks/fixtures.mojo`.
 #
 # Mojo's `UInt64` wraps; Python's `int` does not. Every arithmetic step below is
 # masked to 64 bits EXPLICITLY. Do not remove a mask because "the value is

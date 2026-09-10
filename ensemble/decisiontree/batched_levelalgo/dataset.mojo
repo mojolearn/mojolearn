@@ -46,7 +46,7 @@ weight`. The UNWEIGHTED instantiations -- which are what
 `bootstrap=True` (their default, `randomforest.cuh:140`) selects, since
 `RowSampler::tree_sample_weight()` returns `nullptr` whenever
 bootstrapping is on (`randomforest.cuh:167`) -- never touch this pointer
-at all. So for the path this port ships first the field is inert, and
+at all. So for the path this implementation ships first the field is inert, and
 for the weighted path it is a documented precision reduction on the
 per-row weight only, not on the accumulator. The accumulator's own
 float64 problem is DEVIATION 101 in `bins.mojo` and is the one that

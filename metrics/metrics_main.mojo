@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Every ported metric on one hashed fixture, with an identity card.
+"""Every implemented metric on one hashed fixture, with an identity card.
 
     tools/with_build_lock.sh     pixi run mojo run -I . metrics/metrics_main.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . metrics/metrics_main.mojo
@@ -34,7 +34,7 @@ an occupancy or a core count would differ between two legal launches BY
 CONSTRUCTION and would break the property the invariance gate exists to
 prove. That is `core/identity_trace.mojo` rule 3 read forwards.
 
-Not a port. cuML ships one backend and needs no card. This driver's
+Not an implementation. cuML ships one backend and needs no card. This driver's
 61-stage card is byte-identical on Apple M4, NVIDIA H100 and AMD MI325X at
 commit a0a0eee (E3 round 13, 2026-08-28).
 """

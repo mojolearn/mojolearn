@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IVF-FLAT's parameters, its index, and every refusal by name.
 
-PORT OF `cuvs/include/cuvs/neighbors/ivf_flat.hpp` (`index_params` :28-66,
+FOLLOWS `cuvs/include/cuvs/neighbors/ivf_flat.hpp` (`index_params` :28-66,
 `search_params` :76-82, `index` :137-274) and
 `cuvs/src/neighbors/ivf_flat_index.cpp` (the constructor's
-`check_consistency` at :206-215) at cuVS `6ba2ce2`. Partial. Do not improve.
+`check_consistency` at :206-215) at cuVS `6ba2ce2`. Partial.
 
 WHAT AN IVF-FLAT INDEX IS, IN THEIR WORDS AND IN OURS
 ------------------------------------------------------
@@ -33,12 +33,12 @@ within a list instead. `check_index_carry` sabotages exactly that.
 
 WHAT IS REFUSED HERE, AND WHY IT IS REFUSED HERE
 -------------------------------------------------
-Every unported neighbour of IVF-FLAT in the cuVS tree raises BY NAME from
+Every unimplemented neighbour of IVF-FLAT in the cuVS tree raises BY NAME from
 `ivf_refuse_algorithm` rather than by absence, because absence is a silent
 answer and this repository has paid for those. HNSW is refused
 PERMANENTLY (`ivf/README.md`, and `cpp/include/cuvs/neighbors/hnsw.hpp` is
 the header a future reader will find and wonder about); IVF-PQ, IVF-SQ,
-IVF-RaBitQ, CAGRA, ScaNN, Vamana and NN-Descent are refused as UNPORTED,
+IVF-RaBitQ, CAGRA, ScaNN, Vamana and NN-Descent are refused as UNIMPLEMENTED,
 which is a different sentence and `ivf/NOT_IMPLEMENTED.tsv` says which is which.
 """
 
@@ -68,7 +68,7 @@ comptime IVF_DEFAULT_N_PROBES = 20
 struct IvfFlatIndexParams(Copyable, ImplicitlyCopyable, Movable):
     """`ivf_flat::index_params`, `ivf_flat.hpp:28-66`.
 
-    Every field theirs has is here, including the three this port REFUSES,
+    Every field theirs has is here, including the three this implementation REFUSES,
     because a parameter that silently does not exist is a parameter a
     caller assumes is honoured. `ivf_index_params_validate` names each one.
     """
@@ -110,7 +110,7 @@ struct IvfFlatSearchParams(Copyable, ImplicitlyCopyable, Movable):
     table has a row for it, and two runs at different `n_probes` are two
     different computations that must not be compared as if they were one.
 
-    `metric_udf` (`:80`) is not ported: it is a JIT string compiled into
+    `metric_udf` (`:80`) is not implemented: it is a JIT string compiled into
     their scan.
     """
 
@@ -127,13 +127,13 @@ struct IvfFlatIndex(Movable):
     HOST-RESIDENT BETWEEN BUILD AND SEARCH, **DEVIATION 1804**. Theirs lives
     on the device from `build` to the last `search`; ours is host `List`s
     that the search uploads. That is a real departure from
-    `PORTING_RULES.md` rule 2 and it is named rather than hidden: it costs
+    `ENGINEERING_RULES.md` rule 2 and it is named rather than hidden: it costs
     an upload per search call and it changes no bit, because the upload is
     a copy. Closure condition: hold the `DeviceBuffer`s in this struct and
     give the estimator an explicit `DeviceContext` lifetime, which is a
     surface change and not a numeric one. Not done, because this lane has
     run nothing and a memory-residency choice made without a measurement is
-    the kind of invention `PORTING_RULES.md` 0c is about.
+    the kind of invention `ENGINEERING_RULES.md` 0c is about.
     """
 
     var n_lists: Int
@@ -143,7 +143,7 @@ struct IvfFlatIndex(Movable):
 
     var centers: List[Float32]
     """`index::centers()`, `[n_lists, dim]`, row-major. Produced by the
-    ported k-means; see `ivf_flat_build.mojo` for which entry point."""
+    implemented k-means; see `ivf_flat_build.mojo` for which entry point."""
 
     var center_norms: List[Float32]
     """`index::center_norms()`, `[n_lists]`. SQUARED on `L2Expanded` and
@@ -218,12 +218,12 @@ def ivf_metric_name(metric: Int) -> String:
 
 
 def ivf_metric_from_name(name: String) raises -> Int:
-    """The two metrics this port carries, by their cuVS names.
+    """The two metrics this implementation carries, by their cuVS names.
 
     `search_impl`'s switch (`ivf_flat_search.cuh:109-146`) has three arms:
     L2Expanded / L2SqrtExpanded share one (`alpha=-2, beta=1` over the
     query norms), CosineExpanded is its own, and `default` is the
-    inner-product fall-through. Only the first arm is ported, so cosine and
+    inner-product fall-through. Only the first arm is implemented, so cosine and
     inner product raise here rather than run a different arm's arithmetic.
     """
     if name == "l2_expanded" or name == "euclidean" or name == "sqeuclidean":
@@ -234,18 +234,18 @@ def ivf_metric_from_name(name: String) raises -> Int:
         raise Error(
             "ivf_flat: metric 'cosine' is CosineExpanded, which is"
             " ivf_flat_search.cuh:130-141's own arm (a per-cell divide by"
-            " the norm product) and is NOT PORTED. See ivf/NOT_IMPLEMENTED.tsv."
+            " the norm product) and is NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv."
         )
     if name == "inner_product" or name == "ip":
         raise Error(
             "ivf_flat: metric 'inner_product' takes ivf_flat_search.cuh"
             ":142-145's default arm (alpha=1, beta=0, select_max) and is"
-            " NOT PORTED. See ivf/NOT_IMPLEMENTED.tsv."
+            " NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv."
         )
     raise Error(
         "ivf_flat: unknown metric '"
         + name
-        + "'. This port carries l2_expanded and l2_sqrt_expanded."
+        + "'. This implementation carries l2_expanded and l2_sqrt_expanded."
     )
 
 
@@ -260,39 +260,39 @@ def ivf_refuse_algorithm(name: String) raises:
         raise Error(
             "hnsw: REFUSED PERMANENTLY in this repository. cuVS's"
             " cpp/include/cuvs/neighbors/hnsw.hpp dispatches to the hnswlib"
-            " CPU graph; it is not a GPU algorithm and PORTING_RULES.md"
+            " CPU graph; it is not a GPU algorithm and ENGINEERING_RULES.md"
             " 0b-ii says there is no CPU path here. This is a refusal, not"
-            " an unported item, and it does not become one later."
+            " an unimplemented item, and it does not become one later."
         )
     if name == "ivf_pq" or name == "ivfpq":
         raise Error(
-            "ivf_pq: NOT PORTED. cuvs/src/neighbors/ivf_pq/ is a different"
+            "ivf_pq: NOT IMPLEMENTED. cuvs/src/neighbors/ivf_pq/ is a different"
             " algorithm (product quantization, a codebook per subspace and"
             " a LUT scan), out of this lane's scope by its brief. See"
             " ivf/NOT_IMPLEMENTED.tsv."
         )
     if name == "cagra":
         raise Error(
-            "cagra: NOT PORTED. cuvs/src/neighbors/cagra.cuh is a graph"
+            "cagra: NOT IMPLEMENTED. cuvs/src/neighbors/cagra.cuh is a graph"
             " index, out of this lane's scope by its brief. See"
             " ivf/NOT_IMPLEMENTED.tsv."
         )
     if name == "ivf_sq":
         raise Error(
-            "ivf_sq: NOT PORTED (cuvs/src/neighbors/ivf_sq/, scalar"
+            "ivf_sq: NOT IMPLEMENTED (cuvs/src/neighbors/ivf_sq/, scalar"
             " quantization over an IVF index). See ivf/NOT_IMPLEMENTED.tsv."
         )
     if name == "ivf_rabitq":
         raise Error(
-            "ivf_rabitq: NOT PORTED (cuvs/src/neighbors/ivf_rabitq/). See"
+            "ivf_rabitq: NOT IMPLEMENTED (cuvs/src/neighbors/ivf_rabitq/). See"
             " ivf/NOT_IMPLEMENTED.tsv."
         )
     if name == "scann":
-        raise Error("scann: NOT PORTED. See ivf/NOT_IMPLEMENTED.tsv.")
+        raise Error("scann: NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.")
     if name == "vamana":
-        raise Error("vamana: NOT PORTED. See ivf/NOT_IMPLEMENTED.tsv.")
+        raise Error("vamana: NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.")
     if name == "nn_descent":
-        raise Error("nn_descent: NOT PORTED. See ivf/NOT_IMPLEMENTED.tsv.")
+        raise Error("nn_descent: NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.")
     if name == "ivf_flat":
         return
     raise Error(
@@ -371,7 +371,7 @@ def ivf_index_params_validate(
     params: IvfFlatIndexParams, n_rows: Int, dim: Int
 ) raises:
     """Their `RAFT_EXPECTS` block (`ivf_flat_build.cuh:403-407`) plus the
-    three parameters this port refuses.
+    three parameters this implementation refuses.
 
     Theirs, unchanged:
         n_rows > 0 && dim > 0                      (:403)
@@ -418,7 +418,7 @@ def ivf_index_params_validate(
         raise Error(
             "ivf_flat build: metric "
             + ivf_metric_name(params.metric)
-            + " is not ported; this port carries L2Expanded and"
+            + " is not implemented; this implementation carries L2Expanded and"
             " L2SqrtExpanded (ivf_flat_search.cuh:110-129's arm)."
         )
     if params.kmeans_trainset_fraction != Float64(1.0):
@@ -437,30 +437,30 @@ def ivf_index_params_validate(
             " (ivf_flat_build.cuh:416-418) is a truncated float product,"
             " so near an integer boundary two hosts train the quantizer on"
             " DIFFERENT ROWS and the whole index differs. Only 1.0 (the"
-            " whole dataset, no truncation) is accepted. Closure: port"
+            " whole dataset, no truncation) is accepted. Closure: implementation"
             " their stride as exact integer arithmetic, the way"
             " IDENTITY_PATHS row 18 closed compute_max_features."
         )
     if params.adaptive_centers:
         raise Error(
-            "ivf_flat build: adaptive_centers=True is NOT PORTED"
+            "ivf_flat build: adaptive_centers=True is NOT IMPLEMENTED"
             " (DEVIATION 1793). Their own header says it makes the"
             " centroids depend on the ORDER new data is added in"
             " (ivf_flat.hpp:41-46); that is an order dependence in the"
-            " index itself, and extend() is not ported either."
+            " index itself, and extend() is not implemented either."
         )
     if params.conservative_memory_allocation:
         raise Error(
-            "ivf_flat build: conservative_memory_allocation is NOT PORTED"
+            "ivf_flat build: conservative_memory_allocation is NOT IMPLEMENTED"
             " (DEVIATION 1782). It selects `align_max` for their"
-            " per-list allocation (ivf_flat.hpp:96-100); this port lays the"
+            " per-list allocation (ivf_flat.hpp:96-100); this implementation lays the"
             " lists out CSR and has no per-list allocation to align."
         )
     if not params.add_data_on_build:
         raise Error(
-            "ivf_flat build: add_data_on_build=False is NOT PORTED"
+            "ivf_flat build: add_data_on_build=False is NOT IMPLEMENTED"
             " (DEVIATION 1793). It leaves the index trained and empty for a"
-            " later extend(), and extend() is not ported. See"
+            " later extend(), and extend() is not implemented. See"
             " ivf/NOT_IMPLEMENTED.tsv."
         )
 
@@ -469,7 +469,7 @@ def ivf_search_params_validate(
     sp: IvfFlatSearchParams, n_lists: Int, n_queries: Int, k: Int
 ) raises:
     """Their `RAFT_EXPECTS` at `ivf_flat_search.cuh:329-331` plus the two
-    shape refusals this port owes its own selector.
+    shape refusals this implementation owes its own selector.
 
     THEIRS CLAMPS AND OURS REFUSES, and that is DEVIATION 1793's second
     half. `search_with_filtering` does `n_probes = std::min(params.n_probes,
@@ -490,7 +490,7 @@ def ivf_search_params_validate(
             + String(sp.n_probes)
             + ") exceeds n_lists ("
             + String(n_lists)
-            + "). Theirs clamps at ivf_flat_search.cuh:331; this port"
+            + "). Theirs clamps at ivf_flat_search.cuh:331; this implementation"
             " REFUSES, because n_probes is a numeric parameter"
             " (DEVIATION 1787) and a clamped one is a card that does not"
             " say which computation ran."

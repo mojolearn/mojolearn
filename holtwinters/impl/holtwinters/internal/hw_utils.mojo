@@ -133,7 +133,7 @@ def hw_sabotage_name() -> String:
 
 # #define STMP_EPS (1e-6)   -- a double literal converted to Dtype at use
 comptime STMP_EPS = Float32(Float64(1e-6))
-# #define GOLD 0.38196601125010515...  (parabolic path; UNPORTED, kept for the record)
+# #define GOLD 0.38196601125010515...  (parabolic path; UNIMPLEMENTED, kept for the record)
 comptime GOLD = Float32(Float64(0.381966011250105151795413165634361882279690820194237137864551377294739537181097550292792795810608862515245))
 # #define PG_EPS 1e-10
 comptime PG_EPS = Float32(Float64(1e-10))
@@ -166,14 +166,14 @@ def get_num_blocks(n: Int, max_threads: Int = 512, max_blocks: Int = MAX_BLOCKS_
     grid stops growing and the tail of the batch is never written. That is
     a bug, and not launching with the cap is the fix.
 
-    It is kept because it is their spelling and DERIVATION_MAP.tsv cites it,
+    It is kept because it is their spelling,
     not because anything calls it. It is also UNREACHABLE in effect: the
     cap binds only above `65535 * GET_THREADS_PER_BLOCK(batch_size)`
     series, and `GET_THREADS_PER_BLOCK` returns 512 for any batch past
     1024, so it needs more than 33.5 million series -- at this lane's
     n = 48 that is over 6 GB of input before a single kernel runs. No
     shape this lane will ever run approaches it. NOT_IMPLEMENTED.tsv records it
-    as UNPORTED-IN-EFFECT rather than pretending it is gated."""
+    as UNIMPLEMENTED-IN-EFFECT rather than pretending it is gated."""
     var ret = (n - 1) // get_threads_per_block(n, max_threads) + 1
     return max_blocks if ret > max_blocks else ret
 

@@ -17,7 +17,7 @@ section 9, in card order.
 WHY IT EXISTS. Every other gate in this lane compares our code against our own
 code. A host oracle and a device kernel that agree prove they agree; they do
 not prove either is a transformer. This corpus is the only instrument in the
-fan-out that can say we ported the wrong algorithm. The mamba lane's sibling
+fan-out that can say we implemented the wrong algorithm. The mamba lane's sibling
 corpus found exactly one such thing (a stage-naming disagreement about whether
 `dt_proj.out` includes its bias) and no amount of internal agreement would
 ever have surfaced it.
@@ -574,7 +574,7 @@ def compare(dump, ref, rtol, atol):
     reference and |ref| exceeds the float32 maximum. That second class is not
     a courtesy. Contract 4.1(b) says a masked cell at an extreme score
     overflows to -inf in FP32 BY CONSTRUCTION, and a checker calling that a
-    failure would be measuring the dtype rather than the port. Overflows are
+    failure would be measuring the dtype rather than the implementation. Overflows are
     COUNTED and REPORTED and never silently absorbed.
 
     SIGNED ZEROS ARE COMPARED BY SIGN BIT, separately, because a tolerance

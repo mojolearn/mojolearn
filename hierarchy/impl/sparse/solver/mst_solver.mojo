@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RAFT's Boruvka MST solver: the control plane.
 
-PORT OF `raft/cpp/include/raft/sparse/solver/mst_solver.cuh` (the
+FOLLOWS `raft/cpp/include/raft/sparse/solver/mst_solver.cuh` (the
 `Graph_COO` and `MST_solver` declarations) and
 `raft/cpp/include/raft/sparse/solver/detail/mst_solver_inl.cuh` (their
 bodies), RAFT `661a3b8`, plus the `mst()` entry of
 `raft/cpp/include/raft/sparse/solver/mst.cuh`. One Mojo file for the
-declaration header and its `_inl`, recorded in `hierarchy/DERIVATION_MAP.tsv`.
-Transliterated, their order, their names. Do not improve.
+declaration header and its `_inl`.
+Followed statement for statement, their order, their names.
 
 WHAT IS NOT HERE, BY DECLARED DEVIATION. `alteration()`, `alteration_max()`,
 `alteration_functor`, `curand_generate_uniformX`, the `altered_weights` and
@@ -231,7 +231,7 @@ struct MST_solver(Movable):
         if self.e <= 0:
             raise Error("mst: 0 edges")
 
-        # `:117-121` alteration(): NOT PORTED, DEVIATION 620.
+        # `:117-121` alteration(): NOT IMPLEMENTED, DEVIATION 620.
 
         var max_mst_edges = 2 * self.v - 2 if self.symmetrize_output else self.v - 1
         var mst_result = Graph_COO(ctx, max_mst_edges)

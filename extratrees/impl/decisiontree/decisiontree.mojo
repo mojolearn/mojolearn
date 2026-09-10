@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Tree parameters, their defaults, and the check that refuses the rest.
 
-A PORT of cuML's `cpp/include/cuml/tree/decisiontree.hpp` (the
+A IMPLEMENTATION of cuML's `cpp/include/cuml/tree/decisiontree.hpp` (the
 `DecisionTreeParams` struct and `set_tree_params`'s default arguments),
 `cpp/include/cuml/tree/algo_helper.h` (the `CRITERION` enum) and
 `cpp/src/decisiontree/decisiontree.cu:27-45` (`validity_check`), pinned at
 `00094f7` in `~/CascadeProjects/upstream/cuml`.
 
-WHY THE VALIDATION IS PART OF THE PORT AND NOT PAPERWORK
+WHY THE VALIDATION IS PART OF THE IMPLEMENTATION AND NOT PAPERWORK
 ---------------------------------------------------------
 `gbdt/` learned this the expensive way: an option that is silently accepted and
 silently ignored is indistinguishable, from the caller's side, from an option
@@ -23,9 +23,9 @@ are pure), If `-1`", and their default in `set_tree_params` is `-1`. Their
 (`decisiontree.cu:29`), so the documented default cannot survive validation --
 their Python layer substitutes a concrete depth before the C++ ever sees it.
 Recorded because it is exactly the kind of "the docs describe the intent, the
-branches are the algorithm" gap `PORTING_RULES.md` rule 3 is about, and because
-a port that trusted the header would ship an unlimited-depth default that their
-own code rejects. **This port takes the BRANCH, not the comment**: `max_depth`
+branches are the algorithm" gap `ENGINEERING_RULES.md` rule 3 is about, and because
+an implementation that trusted the header would ship an unlimited-depth default that their
+own code rejects. **This implementation takes the BRANCH, not the comment**: `max_depth`
 must be `>= 0`.
 """
 
@@ -57,9 +57,9 @@ regression, resolved by the caller who knows which it is.
 #   the point of this formulation.
 # WHY REFUSE RATHER THAN IGNORE: a caller who passes `max_n_bins=1024`
 #   expecting a finer search would get a tree that ignored the request, and
-#   nothing would say so. `gbdt/`'s `check()` refuses every unported CatBoost
+#   nothing would say so. `gbdt/`'s `check()` refuses every unimplemented CatBoost
 #   option by name for the same reason.
-# PRICE: a caller porting a cuML configuration across has to delete the line.
+# PRICE: a caller implementing a cuML configuration across has to delete the line.
 #   That is the intended cost -- it is the one line that says the two learners
 #   are different algorithms.
 # ==========================================================================
@@ -165,7 +165,7 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
 
 def validity_check(params: DecisionTreeParams) raises:
     """`decisiontree.cu:27-45`, transcribed assertion for assertion, plus the
-    refusals this port owes its caller.
+    refusals this implementation owes its caller.
 
     Their assertions are kept in their order and with their bounds so that a
     configuration cuML rejects is rejected here for the same stated reason.
@@ -197,22 +197,22 @@ def validity_check(params: DecisionTreeParams) raises:
             + ". Should be >= 2."
         )
 
-    # --- ours: refuse what is not ported, BY NAME ------------------------
+    # --- ours: refuse what is not implemented, BY NAME ------------------------
     # cuML supports four regression criteria beyond MSE (`algo_helper.h:20-29`;
     # the kernels exist as `poisson-*.cu`, `gamma-*.cu`,
-    # `inverse_gaussian-*.cu`). None is ported. sklearn's ExtraTrees has its
+    # `inverse_gaussian-*.cu`). None is implemented. sklearn's ExtraTrees has its
     # own list (`friedman_mse`, `absolute_error`, `poisson`) and none of those
-    # is ported either. A criterion that is silently downgraded to MSE would
+    # is implemented either. A criterion that is silently downgraded to MSE would
     # train a model the caller did not ask for.
     if params.split_criterion == CRITERION_POISSON:
-        raise Error("split_criterion=POISSON is not ported in extratrees/")
+        raise Error("split_criterion=POISSON is not implemented in extratrees/")
     if params.split_criterion == CRITERION_GAMMA:
-        raise Error("split_criterion=GAMMA is not ported in extratrees/")
+        raise Error("split_criterion=GAMMA is not implemented in extratrees/")
     if params.split_criterion == CRITERION_INVERSE_GAUSSIAN:
         raise Error(
-            "split_criterion=INVERSE_GAUSSIAN is not ported in extratrees/"
+            "split_criterion=INVERSE_GAUSSIAN is not implemented in extratrees/"
         )
-    # ENTROPY was refused here until DEVIATION 459 (2026-08-23) ported
+    # ENTROPY was refused here until DEVIATION 459 (2026-08-23) implemented
     # `EntropyObjectiveFunction` (`objectives.cuh:110-193`); it now passes
     # like GINI and MSE do, and `classifier_plan` admits it for the
     # classifier.

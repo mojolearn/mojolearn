@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """cuVS's per-pair distance ops, in ONE place, for every lane that needs one.
 
-PORT OF cuVS `cpp/src/distance/detail/distance_ops/{cosine,lp_unexp,l2_unexp,
+FOLLOWS cuVS `cpp/src/distance/detail/distance_ops/{cosine,lp_unexp,l2_unexp,
 l1,l_inf}.cuh` at cuVS `94c2819`, plus the `DistanceType` enumerators from
-`cpp/include/cuvs/distance/distance.h:22-69`. Partial. Do not improve.
+`cpp/include/cuvs/distance/distance.h:22-69`. Partial.
 
 WHY THIS FILE EXISTS AND WHY IT IS HERE
 ---------------------------------------
@@ -57,7 +57,7 @@ THE TWO NEW OPS
                         Minkowski at general p and none can be invented:
                         `sum |x-y|^p` does not factor into per-row terms
                         for any p except 2. That is not a limitation of
-                        this port, it is why cuVS's own op is called
+                        this implementation, it is why cuVS's own op is called
                         `lp_UNEXP`.
 
 WHICH METRICS CAN USE THE EXPANDED TRICK, WHICH CANNOT
@@ -137,10 +137,10 @@ other end. Two selectors, two different wrong answers, no error either way.
 OURS refuses a zero-norm row by name at the host entry (`cosine_zero_norm_
 row` below finds it), because cosine distance to the origin is undefined
 and returning a vendor-shaped NaN for it is worse than saying so. This is
-NOT porting their bug and it is NOT improving their algorithm: the
+NOT implementing their bug and it is NOT improving their algorithm: the
 arithmetic on every row they can answer is theirs, bit for bit.
 
-WHAT IS NOT PORTED
+WHAT IS NOT IMPLEMENTED
 -------------------
 - Their `Policy4x4` `pairwise_matrix_cuda` register tile. The kernel below
   gives ONE THREAD to ONE OUTPUT CELL and walks the feature axis ascending
@@ -161,7 +161,7 @@ A NOTE ON ONE UPSTREAM BUG WE DO NOT CARRY, AND ONE WE DO
 DO NOT CARRY: `cosine.cuh:83` guards the half arm with
 `std::is_same_v<AccT, float> && std::is_same_v<AccT, half>`, comparing
 `AccT` to itself twice, so it is always false and `:84` is dead. Line 65 in
-the same file gets the same test right. This port is float32 only so the
+the same file gets the same test right. This implementation is float32 only so the
 arm does not exist here at all.
 DO CARRY: cosine's epilogue has NO clamp where the expanded L2 op has two
 (`l2_exp.cuh:132-134`, the `val > 0` mask and the self-neighbour
@@ -197,7 +197,7 @@ from core.pinned_reduce import pinned_block_sum
 # These are the actual cuVS enumerators, not a local renumbering. Only the
 # rows this tree reaches are named; the value gaps (6 = InnerProduct, 8 =
 # Canberra) are theirs and are left as holes ON PURPOSE so that a later
-# port of one of them cannot silently take a number that already means
+# implementation of one of them cannot silently take a number that already means
 # something else.
 #
 # `kde/impl/distance/distance_ops.mojo` used to define its own
@@ -491,7 +491,7 @@ def l2_exp_epilog(
 ) -> Float32:
     """`l2_exp.cuh:125` plus the `val > 0` half of `:132`, and `:142`'s
     sqrt. The SELF-NEIGHBOUR half of their clamp (`:134`, `val*val < eps &&
-    regxn == regyn`) is NOT ported and is a row in
+    regxn == regyn`) is NOT implemented and is a row in
     `neighbors/NOT_IMPLEMENTED.tsv`; `core/expand_distances.mojo` records
     the same omission and this function is written to agree with it bit for
     bit so the two arms of the k-NN tile cannot drift.
@@ -581,7 +581,7 @@ def metric_distance_kernel(
     metric_in: Int32,
     metric_arg_in: Float32,
 ):
-    """`dist[i][j] = op(x_i, y_j)` for every ported `DistanceType`, one
+    """`dist[i][j] = op(x_i, y_j)` for every implemented `DistanceType`, one
     thread per cell, the feature axis walked ASCENDING in that thread.
 
     Stands in for `pairwise_matrix_dispatch` (`distance.cuh:224-225`,

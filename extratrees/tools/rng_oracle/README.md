@@ -9,7 +9,7 @@ defined away. Every line of arithmetic in it is upstream text, not a
 re-derivation. It writes `pcg_reference.txt`, which
 `extratrees/checks/pcg_rng_check.mojo` compares against cell by cell.
 
-That is the point: the Mojo port is checked against **their** arithmetic, not
+That is the point: the Mojo implementation is checked against **their** arithmetic, not
 against a tally we wrote twice.
 
 ## Pins

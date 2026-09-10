@@ -626,12 +626,12 @@ def check_ieee_zero_assumptions() raises:
 def _eq(tag: String, got: Int, want: Int) raises:
     if got != want:
         raise Error(
-            "check_ported_policy: " + tag + " = " + String(got)
+            "check_implemented_policy: " + tag + " = " + String(got)
             + ", upstream's formula gives " + String(want)
         )
 
 
-def check_ported_policy_matches_upstream() raises:
+def check_implemented_policy_matches_reference() raises:
     """`gemm/impl/linalg/contractions.mojo` against RAFT's own arithmetic,
     and against `core/gemm.mojo`'s independent flattening of the same policy.
 
@@ -645,7 +645,7 @@ def check_ported_policy_matches_upstream() raises:
     seven hand-copied integers. Two transcriptions of one upstream table is
     two chances to mis-copy it, so the parameterized one is required to agree
     with the flattened one. If they ever disagree, ONE of them is wrong and
-    upstream decides which -- `PORTING_RULES.md` 0c.
+    upstream decides which -- `ENGINEERING_RULES.md` 0c.
     """
     # Policy4x4<float, 4>, the one RAFT's float distance kernels instantiate.
     _eq("Policy4x4 Nthreads", Policy4x4Float.nthreads, 256)
@@ -694,7 +694,7 @@ def check_ported_policy_matches_upstream() raises:
         raised = True
     if not raised:
         raise Error(
-            "check_ported_policy: assert_col_policy_square did not raise on"
+            "check_implemented_policy: assert_col_policy_square did not raise on"
             " Mblk != Nblk, so RAFT's static_assert is not actually enforced."
         )
 
@@ -702,7 +702,7 @@ def check_ported_policy_matches_upstream() raises:
         "    Policy4x4<float,4>: Nthreads 256, Mblk/Nblk 64, SmemStride 36,"
         " SmemSize 36864 B; agrees with core/gemm.mojo's flattening"
     )
-    print("check_ported_policy_matches_upstream OK [" + _mode_name() + "]")
+    print("check_implemented_policy_matches_reference OK [" + _mode_name() + "]")
 
 
 def check_leaf_partition_is_a_pure_function_of_k() raises:
@@ -2526,7 +2526,7 @@ def main() raises:
         " TREE, adjacent pairing, odd tail CARRIED"
     )
     check_ieee_zero_assumptions()
-    check_ported_policy_matches_upstream()
+    check_implemented_policy_matches_reference()
     check_leaf_partition_is_a_pure_function_of_k()
     check_fold_tree_addressing()
     check_oracle_matches_the_contract_spelling()

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 612: the card records ONE NaN payload, not the vendor's.
 
-NOT A PORT. cuML has no card.
+NO REFERENCE FILE. cuML has no card.
 
 ==========================================================================
 DEVIATION 612 -- NaN canonicalization at the solver's record sites

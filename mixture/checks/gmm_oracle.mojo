@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host oracles: a float32 serial replay and a float64 reference.
 
-NOT A PORT, and there is no upstream test to mirror either.
+NO REFERENCE FILE, and there is no upstream test to mirror either.
 `sklearn/mixture/tests/test_gaussian_mixture.py` samples from
 `np.random.RandomState` and compares at tolerances, which is the right test
 for a library that ships one backend on one machine and says nothing this

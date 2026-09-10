@@ -2,15 +2,15 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`SmoSolver`: the outer decomposition loop.
 
-PORT OF `cuml/cpp/src/svm/smosolver.h` + `smosolver.cuh` at cuML v26.08.00:
+FOLLOWS `cuml/cpp/src/svm/smosolver.h` + `smosolver.cuh` at cuML v26.08.00:
 `Solve`, `UpdateF`, `Initialize`, `InitPenalty` (unweighted arm), `SvcInit`,
 `SvrInit`, the `EPSILON_SVR` doubling and its second `UpdateF` gemv,
 `GetNonzeroDeltaAlpha`, `CheckStoppingCondition`, `GetDefaultMaxIter`,
-`ResizeBuffers`. NOT ported: the weighted `InitPenalty` arm
+`ResizeBuffers`. NOT implemented: the weighted `InitPenalty` arm
 (`sample_weight` refused by name), the log lines
 (`CUML_LOG_DEBUG`/`ERROR`; the "not converging monotonically" advice is a
 message, the counter behind it is kept). This paragraph listed `SvrInit`
-and the doubling as unported until `fea6becc` (2026-08-31), when both were
+and the doubling as unimplemented until `fea6becc` (2026-08-31), when both were
 gated 44 of 44 and the refusal in `solve` came out.
 
     cudaMemsetAsync(delta_alpha, 0)          -> fill_f32_kernel
@@ -593,7 +593,7 @@ struct SmoSolver(Movable):
         var n_rows = self.n_rows
         var n_cols = self.n_cols
         # SVR IS GATED AS OF 2026-08-31 AND THE REFUSAL THAT STOOD HERE IS
-        # GONE. It read "EPSILON_SVR is fully ported and REFUSES because it is
+        # GONE. It read "EPSILON_SVR is fully implemented and REFUSES because it is
         # UNGATED", and that was the honest state for exactly as long as it
         # took to write the gates. What removed it, in `svm/checks/`:
         #

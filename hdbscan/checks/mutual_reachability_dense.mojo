@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The mutual reachability graph as a DENSE matrix, and why it is dense.
 
-NOT A PORT of a file; a port of ONE FUNCTOR (`ReachabilityPostProcess`,
+DOES NOT FOLLOW a file; an implementation of ONE FUNCTOR (`ReachabilityPostProcess`,
 `cuvs cpp/src/neighbors/detail/reachability.cuh:126-135`) applied to the
 connectivity `hierarchy/` already builds and gates. The DEVIATION BLOCK
 below is the whole justification and it is the first thing to read in
@@ -26,16 +26,16 @@ of at most `2 * min_samples * m` edges. `build_mr_linkage`
 to `build_sorted_mst` together with a
 `MutualReachabilityFixConnectivitiesRedOp`.
 
-WHY THAT PATH CANNOT BE PORTED IN THIS RUNG, AND IT IS TWO WALLS RATHER
+WHY THAT PATH CANNOT BE IMPLEMENTED IN THIS RUNG, AND IT IS TWO WALLS RATHER
 THAN ONE.
 
 (a) THE GRAPH IS DISCONNECTED BY CONSTRUCTION AND THE FIX-UP IS NOT
-    PORTED. A symmetrized k-NN graph over well-separated clusters has one
+    IMPLEMENTED. A symmetrized k-NN graph over well-separated clusters has one
     component per cluster -- that is the case HDBSCAN exists for -- so
     Boruvka returns a FOREST and `build_sorted_mst` enters its fix-up
     loop, which calls `connect_knn_graph` / `cross_component_nn` /
-    `merge_msts`. `hierarchy/DERIVATION_MAP.tsv` and `hierarchy/NOT_IMPLEMENTED.tsv`
-    record all three as NOT PORTED, and
+    `merge_msts`. `hierarchy/NOT_IMPLEMENTED.tsv`
+    record all three as NOT IMPLEMENTED, and
     `hierarchy/impl/cluster/detail/mst.mojo::connect_knn_graph` RAISES
     BY NAME. A rung-1 HDBSCAN over the sparse graph would therefore
     refuse on its own headline fixture. It still refuses: the sparse arm
@@ -47,7 +47,7 @@ THAN ONE.
     `DistanceEpilogue` template parameter, and
     `neighbors/impl/neighbors/detail/knn_brute_force.mojo` carries no
     such parameter (`neighbors/NOT_IMPLEMENTED.tsv` records the epilogue
-    template as not ported). Adding one is the NEIGHBORS lane's call, not
+    template as not implemented). Adding one is the NEIGHBORS lane's call, not
     this lane's, and it is named in this lane's README under WHAT THE
     ORCHESTRATOR MUST WIRE.
 
@@ -61,7 +61,7 @@ THAN ONE.
 WHAT OURS DOES. The connectivity is `Linkage::PAIRWISE`
 (`cuvs cpp/src/cluster/detail/connectivities.cuh:110-204`), which cuVS
 ships, which `hierarchy/impl/cluster/detail/connectivities.mojo` has
-already ported and gated bit for bit, and which yields a COMPLETE graph
+already implemented and gated bit for bit, and which yields a COMPLETE graph
 whose MST is connected on the first Boruvka call -- so the fix-up loop's
 body is never entered and (a) does not arise. Their functor is then
 applied to every cell of that matrix by the kernel below. `alpha` and the
@@ -90,7 +90,7 @@ SELECTION, NOT A HARDWARE `max`.
 WHAT THEIRS DOES. `return max(core_dists[col], max(core_dists[row],
 alpha * value));` (`reachability.cuh:129`), the CUDA `max` on floats.
 
-WHY IT CANNOT BE PORTED AS-IS. IDENTITY_PATHS row 39, MEASURED on all
+WHY IT CANNOT BE IMPLEMENTED AS-IS. IDENTITY_PATHS row 39, MEASURED on all
 three columns on 2026-08-23: `max(+0.0, -0.0)` is `-0.0` on Apple (the
 SECOND operand) and `+0.0` on NVIDIA and AMD (IEEE-2019 `maximum`). A
 three-way max is a two-level fold, so the answer to a `(+0, -0)` pair

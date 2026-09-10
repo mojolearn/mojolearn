@@ -1,0 +1,14 @@
+{
+  "measured_commit": "37b6b223",
+  "host_tests_passed": 100,
+  "runner_compared_files": 19,
+  "parameters": 20453376,
+  "tokens_per_step": 2048,
+  "timed_pairs": 3,
+  "warmup_pairs": 1,
+  "synthetic_tokens": true,
+  "target_model_qualified": false,
+  "opponent_rerun": false,
+  "adoption": "Metal real-text capture runner; public API and CUDA/HIP defaults unchanged",
+  "host_cleanup": "sequential byte snapshot comparison; no speed claim"
+}

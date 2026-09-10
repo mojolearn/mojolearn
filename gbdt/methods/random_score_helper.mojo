@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`random_strength`'s magnitude: how big the score noise is.
 
-PORT OF `catboost/cuda/methods/random_score_helper.h` at CatBoost
-`54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/random_score_helper.h` at CatBoost
+`54a8143a`. Followed statement for statement.
 
 Three functions, and between them they decide the ONE scalar every noisy
 score kernel multiplies its normal draw by:
@@ -20,7 +20,7 @@ step approaches `log(n)`. Their `modelSize` argument is
 count and NOT `model_size_reg`.
 
 =================== THE TWO ARMS DO NOT AGREE, MEASURED ==================
-The brief this port was written to said the greedy arm and the doc-parallel
+The brief this implementation was written to said the greedy arm and the doc-parallel
 arm "compute the SAME product by different routes". THAT IS HALF TRUE and
 the half that is false matters.
 
@@ -48,14 +48,14 @@ DIFFERENT: the standard deviation itself, in TWO ways.
      with a non-zero gradient contributes an inf and poisons the whole
      reduction to NaN.
 
-Neither is corrected here. Both are transliterated where their file puts
+Neither is corrected here. Both are followed statement for statement where their file puts
 them: this one here, `compute_target_std_dev` in `greedy_search_helper`.
 =========================================================================
 
 DEVIATION 137 (also stated in archive/reference/PORTING.md): their `ComputeStdDev` is built
 out of two generic device ops, `DivideVector` then
 `DotProduct(tmp, tmp, &weights)` (`cuda_util/transform.h`,
-`cuda_util/dot_product.h`), NEITHER OF WHICH IS PORTED here. This file
+`cuda_util/dot_product.h`), NEITHER OF WHICH IS IMPLEMENTED here. This file
 fuses them into one kernel that never materializes their `tmp`. The
 arithmetic per row is theirs exactly -- `w * (wt/w)^2`, including the
 missing zero guard -- but the accumulation is Float32 with a deterministic
@@ -147,7 +147,7 @@ def std_dev_blocks(size: Int, sm_count: Int) -> Int:
     reduced in float and `deterministic_sum_lanes_kernel` adds the
     partials -- so the machine's core count decides the last bits of the
     score-noise std dev, and through it every noised score of the fit.
-    Inert at this port's default `random_strength = 0`, but CatBoost's
+    Inert at this implementation's default `random_strength = 0`, but CatBoost's
     default is 1.0, so the row must hold BEFORE anyone wires that default.
 
     Under `IDENTICAL` the `sm_count` fed to the formula therefore comes

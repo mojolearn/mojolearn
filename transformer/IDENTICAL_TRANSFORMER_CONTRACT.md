@@ -439,7 +439,7 @@ and `rowsum` as per-thread register arrays (:3161-3166) and calls
 the rescale itself.
 
 Three consequences, each of which makes this a research question rather than
-a porting question.
+a implementing question.
 
 1. **The number of rescalings is the number of KV tiles, and the tile size
    is an execution-plan quantity.** Two vendors with different tile widths
@@ -795,10 +795,10 @@ IDENTITY_PATHS row 40 closed on three vendors at `144aa5b` on 2026-08-23.
     transformer/impl/transformers/models/llama/modeling_llama.mojo
                                                     the device spelling
     transformer/corpus/                             the independent torch reference
-    transformer/DERIVATION_MAP.tsv, NOT_IMPLEMENTED.tsv        upstream to ours
+    transformer/NOT_IMPLEMENTED.tsv                            scope
 
 The `impl/` path mirrors the upstream path exactly, as `mamba/impl/`
-does. PORTED IS OURS; the derivative-work language belongs in `NOTICE`.
+does. IMPLEMENTED IS OURS; the derivative-work language belongs in `NOTICE`.
 
 ### 12.3 The deviation numbers
 

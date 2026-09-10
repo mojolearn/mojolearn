@@ -2,7 +2,7 @@
 
 GPU Holt-Winters exponential smoothing derived from cuML.
 
-The supported seasonal and initialization behavior is captured in `DERIVATION_MAP.tsv` and
+The supported seasonal and initialization behavior is and
 `NOT_IMPLEMENTED.tsv`. This lane is maintained for compatibility even though upstream has marked
 the algorithm for deprecation; expansion should be justified by a concrete user need.
 

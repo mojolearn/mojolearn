@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which host, which device.
 
-PORT OF `catboost/cuda/cuda_lib/device_id.h` at CatBoost `54a8143a`.
-Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/cuda_lib/device_id.h` at CatBoost `54a8143a`.
+Followed statement for statement.
 
 Their `TDeviceId` is a `(HostId, DeviceId)` pair because a CatBoost run may
 span hosts over MPI. Both fields default to -1 (`device_id.h:10-11`), which is
@@ -34,7 +34,7 @@ struct TDeviceId(Copyable, ImplicitlyCopyable, Movable):
         """Their two-argument constructor (`device_id.h:15-23`).
 
         `CB_ENSURE(hostId == 0, "Remote device support is not enabled")` when
-        the build has no MPI. This port has no MPI, so the check is
+        the build has no MPI. This implementation has no MPI, so the check is
         unconditional and it raises.
         """
         if host_id != 0:

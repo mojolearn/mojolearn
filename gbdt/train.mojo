@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The user-facing surface: train from raw floats, predict raw floats.
 
-NOT A PORT -- this is the convenience layer over ported machinery, the
+NO REFERENCE FILE -- this is the convenience layer over implemented machinery, the
 `fit(X, y)` shape callers actually hold. Everything under it is the
-transliterated pipeline: borders from `grid_creator.binarization`
+followed statement for statement pipeline: borders from `grid_creator.binarization`
 (their GreedyLogSum, heap semantics included), device quantization
 through `binarize_float_feature_kernel` (their BinarizeFloatFeatureImpl,
 the same kernel their own predict quantizes with), the compressed index
@@ -490,16 +490,16 @@ def train(
     # estimation shortcut.
     use_pointwise_searcher: Bool = False,
     # `boost_from_average`, tri-state exactly because THEIRS is: -1 is
-    # "not set", resolved by the port of
+    # "not set", resolved by the implementation of
     # `options_helper.cpp::AdjustBoostFromAverageDefaultValue` below --
     # auto-TRUE for the losses on their list whose CalcOptimumConstApprox
-    # arm is ported (RMSE; their list also holds MAE/Quantile/MAPE, whose
-    # constant needs the unported CalcSampleQuantile, so those resolve to
+    # arm is implemented (RMSE; their list also holds MAE/Quantile/MAPE, whose
+    # constant needs the unimplemented CalcSampleQuantile, so those resolve to
     # FALSE with the gap named in `gbdt/metrics/optimal_const_for_loss`).
     # NOTE their list does NOT hold Logloss: an unset option on a Logloss
     # fit is FALSE on their side too, which the higgs 2026-08-22 read
-    # got wrong before this port. 0 and 1 are explicit; 1 raises by name
-    # for losses without a ported constant.
+    # got wrong before this implementation. 0 and 1 are explicit; 1 raises by name
+    # for losses without a implemented constant.
     boost_from_average: Int = -1,
     # ============================ DEVIATION 259 ============================
     # `grow_policy` / `max_leaves` / `min_data_in_leaf`, their
@@ -514,7 +514,7 @@ def train(
     # the non-symmetric policies ONLY (`greedy_search_helper.cpp:685`) and
     # is REFUSED here at any value but 1 under SymmetricTree, where CatBoost
     # accepts and discards it -- their docs say the option "can be used only
-    # with the Lossguide and Depthwise growing policies", and this port
+    # with the Lossguide and Depthwise growing policies", and this implementation
     # refuses what it would otherwise silently drop.
     # =======================================================================
     grow_policy: String = String("SymmetricTree"),
@@ -540,7 +540,7 @@ def train(
     theirs raises (`catboost_options.cpp:82`, `:126`, `:222`).
 
     THE LEAF ESTIMATOR IS CHOSEN BY THE LOSS, not by this signature.
-    `set_leaves_estimation_default` is the port of their
+    `set_leaves_estimation_default` is the implementation of their
     `SetLeavesEstimationDefault` (`catboost_options.cpp:273-360`) and it
     is what decides Newton vs Gradient vs Exact and how many iterations --
     ten for Logloss, twenty for Tweedie, one for RMSE, and Exact for MAE /
@@ -600,7 +600,7 @@ def train(
     identity (`permutation.cpp:14-17`) and is safe on their side only
     because the learn pool was already shuffled at load
     (`private/libs/algo/preprocess.cpp:183-199`, which shuffles whenever the
-    data has a categorical feature and `has_time` is false). This port has
+    data has a categorical feature and `has_time` is false). This implementation has
     no such stage, so a caller can hand us rows sorted by target, where the
     identity order makes every row's ordered statistic read its own
     neighbourhood. `permutation_count - 1` is their ESTIMATION permutation,
@@ -639,7 +639,7 @@ def train(
     `build_ctr_tables` had no histogram arm -- and that reason is gone:
     `predict_floats` now maps a raw category through a `Borders` table the
     same way it does a `FeatureFreq` one. A switch that outlives its
-    reason is a defect (`PORTING_RULES.md` 8), so both sides stay
+    reason is a defect (`ENGINEERING_RULES.md` 8), so both sides stay
     exercised: `checks/ctr_apply_check.mojo` and
     `checks/ctr_train_check.mojo` each run the default AND
     `feature_freq_only()` explicitly.
@@ -682,7 +682,7 @@ def train(
     (`output_file_options.cpp:77`): the shrink may not cut BELOW this many
     trees, because their second tracker only ever sees iterations at or
     past it (`boosting_progress_tracker.cpp:162`). At the default it is
-    inert, which is why it is easy to get wrong and why it is ported now
+    inert, which is why it is easy to get wrong and why it is implemented now
     rather than later.
 
     `best_iteration` in the result is the ERROR tracker's, not the
@@ -835,7 +835,7 @@ def train(
     # **That is an ASSIGNMENT, not a `SetDefault`**: with no CTR-bearing
     # categorical feature it overrides an explicit `permutation_count`
     # too, because four identical permutations of a dataset with no
-    # permutation-dependent column are four identical datasets. This port
+    # permutation-dependent column are four identical datasets. This implementation
     # is Plain (archive/reference/PORTING.md 88), so the second half of their condition
     # holds unconditionally here.
     #
@@ -1085,7 +1085,7 @@ def train(
     # ONE COMPRESSED INDEX PER PERMUTATION. Theirs shares the
     # permutation-INDEPENDENT columns between them and gives each
     # permutation its own dataset for the dependent ones
-    # (`doc_parallel_dataset_builder.cpp:104-124`); this port packs every
+    # (`doc_parallel_dataset_builder.cpp:104-124`); this implementation packs every
     # column into one buffer, so a permutation costs a whole index rather
     # than the dependent slice of one. DEVIATION 89.
     var cindexes = List[DeviceBuffer[DType.uint32]]()
@@ -1143,7 +1143,7 @@ def train(
     #     rawWeights[i] * rawGroupWeights[i] * classWeights[targetClass[i]]
     #
     # `rawGroupWeights` is the querywise family's and is 1 here -- this
-    # port carries no `group_id`, so there is nothing to weight by. The
+    # implementation carries no `group_id`, so there is nothing to weight by. The
     # other two multiply, and a caller may pass either, both, or neither.
     var use_sample_weight = len(sample_weight) > 0
     if use_sample_weight and len(sample_weight) != n_rows:
@@ -1210,13 +1210,13 @@ def train(
     check_child_hessian_objective(min_child_hessian, objective)
 
     # ---- `AdjustBoostFromAverageDefaultValue` (`options_helper.cpp`),
-    # ported 2026-08-22. Their rule, verbatim: if the option is SET,
+    # implemented 2026-08-22. Their rule, verbatim: if the option is SET,
     # keep it; else set TRUE on a single host with no baseline and no
     # continuation for RMSE, MAE, Quantile, MAPE (and three multi losses
-    # this port does not have). Logloss is NOT on the list. This port has
+    # this implementation does not have). Logloss is NOT on the list. This implementation has
     # no baseline column and no continuation, so those guards are
     # trivially met; MAE/Quantile/MAPE resolve FALSE here because their
-    # constant needs the unported CalcSampleQuantile -- a named gap, not
+    # constant needs the unimplemented CalcSampleQuantile -- a named gap, not
     # their rule.
     var bfa: Bool
     if boost_from_average == 1:
@@ -1226,12 +1226,12 @@ def train(
             or objective == OBJECTIVE_CROSSENTROPY
         ):
             # their CB_ENSURE names the allowed list; ours additionally
-            # names the unported-constant gap for the quantile family
+            # names the unimplemented-constant gap for the quantile family
             raise Error(
-                "boost_from_average: ported for RMSE, Logloss and"
+                "boost_from_average: implemented for RMSE, Logloss and"
                 " CrossEntropy only. Their list also allows Quantile,"
                 " MultiQuantile, MAE, MAPE, MultiRMSE (catboost_options"
-                ".cpp:705-709); those need the unported CalcSampleQuantile"
+                ".cpp:705-709); those need the unimplemented CalcSampleQuantile"
                 " and are refused by name."
             )
         bfa = True
@@ -1291,7 +1291,7 @@ def train(
 
     # `TCatBoostOptions::SetLeavesEstimationDefault`'s sibling for
     # sampling (`catboost_options.cpp:779-800`), the two lines of it this
-    # port can reach. `bootstrap_type` empty means "take the
+    # implementation can reach. `bootstrap_type` empty means "take the
     # `bootstrap_bayesian` shorthand", which is what every existing caller
     # passes; a name selects one of their three GPU draws.
     var boot_kind = -1
@@ -1324,7 +1324,7 @@ def train(
         elif bootstrap_type == "MVS":
             # `Y_ASSERT(config.GetBootstrapType() != EBootstrapType::MVS)`
             # (`weak_objective_impl.h:30`): their own GPU oblivious
-            # searcher refuses MVS, so this port has nothing to port.
+            # searcher refuses MVS, so this implementation has nothing to implement.
             raise Error(
                 "MVS is not reachable from their GPU oblivious searcher"
                 " (weak_objective_impl.h:30 asserts it away)"
@@ -1365,7 +1365,7 @@ def train(
     # `hasTestConstTarget` is the reason for the second half: a test set
     # whose target never varies cannot rank iterations, so they leave the
     # default off rather than shrink on a flat curve. `hasTestPairs` is
-    # theirs and not ours -- this port carries no pairwise loss.
+    # theirs and not ours -- this implementation carries no pairwise loss.
     var eval_const_target = True
     for r in range(1, eval_rows):
         if eval_y[r] != eval_y[0]:
@@ -2052,7 +2052,7 @@ def predict_multi_floats(
 
     FOR MULTICLASS `approx_dim` IS `numClasses - 1`, not `numClasses`. The
     last class's approx is pinned at zero and is not stored -- that is the
-    gauge the whole port trains in. A caller turning these into
+    gauge the whole implementation trains in. A caller turning these into
     probabilities appends a zero and softmaxes over all `numClasses`;
     `multiclass_probabilities` does exactly that.
 

@@ -98,7 +98,7 @@ def check_radix_sort(n_bins: Int, first_bit: Int, last_bit: Int) raises:
     var values = build_values(n)
     var passes = last_bit - first_bit
 
-    # REACH, per branch (`PORTING_RULES.md:8`). The ping-pong parity is a
+    # REACH, per branch (`ENGINEERING_RULES.md:8`). The ping-pong parity is a
     # switch, and it is only OBSERVABLE when the last pass actually moves
     # something: if the top bit is zero in every key that pass is the
     # identity, the answer is already in the caller's buffer, and removing

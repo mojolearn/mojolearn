@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Backtracking acceptance tests for the Newton walker.
 
-PORT OF `catboost/cuda/methods/leaves_estimation/step_estimator.{h,cpp}` at
-CatBoost `54a8143a`. Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/methods/leaves_estimation/step_estimator.{h,cpp}` at
+CatBoost `54a8143a`. Followed statement for statement.
 
 Three acceptance rules behind one interface (`step_estimator.cpp:8-66`),
 selected by `ELeavesEstimationStepBacktracking`:

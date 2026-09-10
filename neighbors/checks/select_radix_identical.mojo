@@ -5,8 +5,8 @@
 DEVIATIONS 500 and 501 (IDENTITY_PATHS row 11). Reached only under
 `NUMERIC_IDENTICAL`.
 
-NOT A PORT, and it is deliberately not one. `neighbors/impl/matrix/detail/
-select_radix.mojo` is RAFT's `select_radix.cuh` transliterated, tie handling
+NO REFERENCE FILE, and it is deliberately not one. `neighbors/impl/matrix/detail/
+select_radix.mojo` is RAFT's `select_radix.cuh` followed statement for statement, tie handling
 included, and its module docstring records what that handling costs:
 
     bits <  kth  ->  pos      = atomicAdd(p_out_cnt, 1)
@@ -18,8 +18,8 @@ WHICH of them is returned is decided by atomic arrival order, and WHERE each
 returned element lands is decided by it too. Two runs on one device can
 return different neighbours; two vendors certainly can. That is a real
 property of the upstream, it is why IDENTITY_PATHS row 11 was a REFUSE, and
-the ported file must keep it -- fixing a thing upstream does not do is an
-improvement, and improvements live outside `impl/` (PORTING_RULES).
+the implemented file must keep it -- fixing a thing upstream does not do is an
+improvement, and improvements live outside `impl/` (ENGINEERING_RULES).
 
 This file is that improvement, reached only under `NUMERIC_IDENTICAL`.
 
@@ -88,7 +88,7 @@ comptime NUM_BUCKETS_64 = 1 << BITS_PER_PASS_64
 comptime NUM_PASSES_64 = 64 // BITS_PER_PASS_64
 comptime IDENTICAL_MAX_K = 1024
 
-# `Counter<T, IdxT>`'s fields, the same slots the ported kernel uses. The
+# `Counter<T, IdxT>`'s fields, the same slots the implemented kernel uses. The
 # back-fill counter is gone with the tie class it served.
 comptime CTR_K = 0
 comptime CTR_LEN = 1
@@ -102,7 +102,7 @@ comptime CTR_SLOTS = 5
 def composite_key(value: Float32, index: UInt32, select_min: Bool) -> UInt64:
     """The total order: distance in the high half, index in the low half.
 
-    `twiddle_in` is the ported `cub::Traits<float>::TwiddleIn` -- the same
+    `twiddle_in` is the implemented `cub::Traits<float>::TwiddleIn` -- the same
     function the upstream selector uses -- so the high half orders exactly
     as RAFT's 32-bit key does and this key is a REFINEMENT of theirs, never
     a different ordering. The low half breaks what the high half leaves
@@ -146,12 +146,12 @@ def radix_topk_identical_kernel[RANK_CAPACITY: Int](
 ):
     """One block per row, eight passes over the composite key, ranked output.
 
-    The structure is the ported kernel's: a per-pass histogram over one byte
+    The structure is the implemented kernel's: a per-pass histogram over one byte
     of the key, a block scan over the buckets, `choose_bucket`, and a final
     filter. What differs is the key width (64), the absence of the tie
     back-fill, and the rank pass at the end.
 
-    THE BUFFER CONTRACT IS THE PORTED KERNEL'S. `buf_val` / `buf_idx` hold
+    THE BUFFER CONTRACT IS THE IMPLEMENTED KERNEL'S. `buf_val` / `buf_idx` hold
     `2 * buf_len` pairs per row and the survivors ping-pong between the two
     halves. Pass 0 and pass 1 read the original row; from pass 2 the
     survivors carry their ORIGINAL indices with them, which is what makes

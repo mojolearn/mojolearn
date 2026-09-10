@@ -45,7 +45,7 @@ code under test uses, which rule 8 warns is a tally rather than a gate.
    lambda to the diagonal makes every row sum exactly lambda. This is
    algebra about the multinomial Hessian and holds whatever the code does,
    which makes it the strongest structural gate in the file. It also pins
-   the fact the port nearly got wrong: the Hessian is
+   the fact the implementation nearly got wrong: the Hessian is
    `numClasses x numClasses`, INCLUDING the pinned class's row, and a
    matrix one row short would not have this property.
 

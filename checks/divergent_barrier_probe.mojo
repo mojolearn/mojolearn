@@ -27,7 +27,7 @@ WHAT THIS DOES AND DOES NOT ESTABLISH -- and the distinction is the point.
   IT DOES NOT establish that divergent barriers are safe. They are
   undefined in every relevant programming model -- CUDA's `__syncthreads`
   and Metal's `threadgroup_barrier` both require uniform execution -- and
-  "undefined happens to work today" is not a property a port can build on.
+  "undefined happens to work today" is not a property an implementation can build on.
 
   IT DOES NOT establish that item 11 was wrong, and item 11 is NOT wrong.
   A few hours after this probe was written, a divergent barrier reproduced

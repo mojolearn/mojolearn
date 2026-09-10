@@ -313,10 +313,10 @@ def check_ridge_dispatch_guard() raises:
     if m2.find("algo 0 is ridgeSVD") < 0:
         raise Error("algo 0 did not raise by name; got: " + m2)
     var m3 = _fit_raises(ctx, 64, 4, Float32(1.0), RIDGE_ALGO_EIG, True, False)
-    if m3.find("fit_intercept is not ported") < 0:
+    if m3.find("fit_intercept is not implemented") < 0:
         raise Error("fit_intercept did not raise by name; got: " + m3)
     var m4 = _fit_raises(ctx, 64, 4, Float32(1.0), RIDGE_ALGO_EIG, False, True)
-    if m4.find("normalize is not ported") < 0:
+    if m4.find("normalize is not implemented") < 0:
         raise Error("normalize did not raise by name; got: " + m4)
     var m5 = _fit_raises(ctx, 64, 4, Float32(-1.0), RIDGE_ALGO_EIG, False, False)
     if m5.find("alpha must be non-negative") < 0:

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`WorkingSet`: which `n_ws` training vectors the next block solve gets.
 
-PORT OF `cuml/cpp/src/svm/workingset.h` + `workingset.cuh` at cuML
+FOLLOWS `cuml/cpp/src/svm/workingset.h` + `workingset.cuh` at cuML
 v26.08.00: `SetSize`, `Select` (the FIFO arm), `SimpleSelect`,
-`GatherAvailable`, `Initialize`, `AllocateBuffers`. NOT ported:
+`GatherAvailable`, `Initialize`, `AllocateBuffers`. NOT implemented:
 `PrioritySelect`, `SelectPrevWs`, `ws_priority*` -- the `FIFO_strategy =
 false` arm, which their own header marks untested ("note that only FIFO is
 tested so far", `workingset.h:36`) and nothing dispatches to; see
@@ -227,7 +227,7 @@ struct WorkingSet(Movable):
         n_already_selected_in: Int,
     ) raises:
         """`SimpleSelect` (`workingset.cuh:54-104`). The `ws_priority`
-        memset is the unported priority arm's and is omitted with it."""
+        memset is the unimplemented priority arm's and is omitted with it."""
         var n_already_selected = n_already_selected_in
         var n_needed = self.n_ws - n_already_selected
         var nt = self.n_train

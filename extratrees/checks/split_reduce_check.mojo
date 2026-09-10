@@ -329,7 +329,7 @@ def gini_cand(
     colid: Int32,
 ) -> SplitExact:
     """One REAL candidate: cuML's gain in the float field, sklearn's exact
-    proxy in the key. Both come from the ported objective, not from here."""
+    proxy in the key. Both come from the implemented objective, not from here."""
     left_buf[0] = CountBin(Int32(l0))
     left_buf[1] = CountBin(Int32(l1))
     var n = Int32(Int(tot_buf[0].x) + Int(tot_buf[1].x))

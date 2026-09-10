@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`SvmParameter`, `SvmModel`, `KernelParams`: the parameter and model records.
 
-PORT OF `cuml/cpp/include/cuml/svm/svm_parameter.h`, `svm_model.h` and
+FOLLOWS `cuml/cpp/include/cuml/svm/svm_parameter.h`, `svm_model.h` and
 `cuml/cpp/include/cuml/matrix/kernel_params.hpp` at cuML v26.08.00.
 Every field of theirs is here; every field we do not honor RAISES BY NAME
 in `check_rung1_scope` (called by `svcFit`), never silently ignored.
@@ -23,7 +23,7 @@ happens to it:
                            (`CUML_LOG_DEBUG`), we print none
     kernel POLYNOMIAL,     raised by name (TANH has no identical_tanh;
       TANH, PRECOMPUTED    POLYNOMIAL is one identical_pow away and is left
-                           unported rather than written blind)
+                           unimplemented rather than written blind)
     degree, coef0          only read by the two refused kernels
     sample_weight          the Solve/InitPenalty argument; raised by name
 
@@ -149,8 +149,8 @@ def check_rung1_scope(
     if param.svmType != C_SVC and param.svmType != EPSILON_SVR:
         raise Error(
             "svm: svmType=" + String(param.svmType)
-            + " is not ported (C_SVC and EPSILON_SVR are; NU_SVC/NU_SVR are"
-            + " unported upstream too)"
+            + " is not implemented (C_SVC and EPSILON_SVR are; NU_SVC/NU_SVR are"
+            + " unimplemented upstream too)"
         )
     # `epsilon` IS THE SVR PARAMETER AND ONLY THAT. C_SVC ignores it upstream,
     # so a non-zero value on a classifier is still refused rather than
@@ -178,19 +178,19 @@ def check_rung1_scope(
     if param.cache_size != 0.0:
         raise Error(
             "svm: cache_size=" + String(param.cache_size)
-            + " MiB: the raft::cache LRU is not ported in rung 1; pass 0 (their"
+            + " MiB: the raft::cache LRU is not implemented in rung 1; pass 0 (their"
             + " n_cache_sets == 0 path, taken exactly). See svm/NOT_IMPLEMENTED.tsv"
         )
     if kp.kernel == KERNEL_POLYNOMIAL:
-        raise Error("svm: kernel=POLYNOMIAL is not ported in rung 1 (degree, coef0 unused)")
+        raise Error("svm: kernel=POLYNOMIAL is not implemented in rung 1 (degree, coef0 unused)")
     if kp.kernel == KERNEL_TANH:
-        raise Error("svm: kernel=TANH is not ported in rung 1 (coef0 unused)")
+        raise Error("svm: kernel=TANH is not implemented in rung 1 (coef0 unused)")
     if kp.kernel == KERNEL_PRECOMPUTED:
-        raise Error("svm: kernel=PRECOMPUTED is not ported in rung 1")
+        raise Error("svm: kernel=PRECOMPUTED is not implemented in rung 1")
     if kp.kernel != KERNEL_LINEAR and kp.kernel != KERNEL_RBF:
         raise Error("svm: unknown kernel " + String(kp.kernel))
     if has_sample_weight:
-        raise Error("svm: sample_weight is not ported in rung 1 (InitPenalty's weighted arm)")
+        raise Error("svm: sample_weight is not implemented in rung 1 (InitPenalty's weighted arm)")
     # DEVIATION 636: NaN fails `<= 0.0` and would pass; ask for finite first.
     if not isfinite(param.C):
         raise Error("svm: C must be finite, got " + String(param.C) + " (DEVIATION 636)")

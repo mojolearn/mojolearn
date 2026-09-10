@@ -60,7 +60,7 @@ policies and all three modes receive appropriate correctness checks.
 
 Sources: `python/mojolearn/_metrics_impl.py`, `metrics/`, `core/`,
 `resample/estimator.mojo`, `python/mojolearn/{_mode,randomforest,extratrees,ensemble}.py`.
-Missing F1/precision/recall functions are not all named in `_NOT_PORTED`.
+Missing F1/precision/recall functions are not all named in `_UNSUPPORTED`.
 Some RF metric helpers are host loops; their existence is not a GPU metric API.
 Native resampling infrastructure is useful but is not already KFold. Its
 current permutation-statistic ranking has a 1,024-row limit and quadratic

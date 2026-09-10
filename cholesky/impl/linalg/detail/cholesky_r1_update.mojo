@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Rank-one update of a Cholesky factor.
 
-PORT of `raft/linalg/detail/cholesky_r1_update.cuh::choleskyRank1Update` at
+IMPLEMENTATION of `raft/linalg/detail/cholesky_r1_update.cuh::choleskyRank1Update` at
 RAFT `ebf9268` (`upstream/raft-v26.08.00`), lower-triangular arm. **COPY, DO
 NOT IMPROVE**, with DEVIATIONS 1632, 1633 and 1646 below.
 
@@ -11,8 +11,7 @@ Everything else is a closed-library call: cuVS's only factorization from
 scratch is `cusolverDnpotrf` + `cusolverDnpotrs`
 (`cuvs/src/neighbors/scann/detail/scann_avq.cuh:179-200`) and cuML has none
 at all. So this file, and `raft/matrix/detail/matrix.cuh`'s four triangular
-and diagonal helpers, are the whole of what `cholesky/impl/` can contain,
-and `cholesky/DERIVATION_MAP.tsv` says so rather than implying a wider mirror.
+and diagonal helpers, are the whole of what `cholesky/impl/` can contain says so rather than implying a wider mirror.
 
 WHO CALLS IT UPSTREAM, corrected against the checkout
 ------------------------------------------------------
@@ -21,7 +20,7 @@ which is LARS -- least-angle regression -- growing the Gram matrix of its
 active set one column per step. **NOT the SVM.** `grep -rn cholesky
 cuml/cpp/src/svm/` at this pin returns nothing; cuML's SVM solver is SMO and
 touches no factorization. The brief that opened this lane said SVM, the
-checkout says LARS, and PORTING_RULES rule 1 says the file wins.
+checkout says LARS, and ENGINEERING_RULES rule 1 says the file wins.
 
 `raft::linalg::cholesky_r1_update.cuh:20-21` also states, in the public
 header, that the new mdspan API will NOT be provided for this function -- it
@@ -47,7 +46,7 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 #
 # `cublasCopy`, `cublastrsm` and `cublasdot` are CLOSED. `archive/reference/VENDOR_LIBS.md`'s
 # surviving exception says call the platform equivalent because there is
-# nothing to port; here the equivalents are already in this tree and are
+# nothing to implement; here the equivalents are already in this tree and are
 # pinned, so:
 #
 #   cublasCopy  -> `copy_row_to_vector_kernel` / `copy_vector_to_row_kernel`
@@ -68,7 +67,7 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 # THE HOST ROUND TRIP IS COPIED RATHER THAN OPTIMIZED AWAY. Theirs reads two
 # scalars to the host, computes `sqrt` THERE, and writes one back. That is
 # two drains and a launch per rank, it is the shape of their algorithm, and
-# PORTING_RULES rule 2 says the host/device split is part of the algorithm
+# ENGINEERING_RULES rule 2 says the host/device split is part of the algorithm
 # and not an implementation detail to re-decide. It also makes the pivot
 # decision a HOST compare on a value already flushed and pinned on the
 # device, which is exactly the shape `potrf_lower` uses for `info`.
@@ -111,7 +110,7 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 #     answer and that no caller writes down. So under IDENTICAL the only
 #     accepted values are `eps < 0` (their default, no clamp) and exactly
 #     `CHOL_JITTER_PINNED`; under FAST any finite value is honored, which
-#     is what a LARS port would need.
+#     is what a LARS implementation would need.
 #
 # Their own header agrees with the direction of this, for what it is worth:
 # "for an iterative solver it is probably better to stop early in case of
@@ -136,7 +135,7 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 # of its layout, and preserving a failure's observable state is worth one
 # copy.
 #
-# The `align = 256` workspace padding (`:50-52`) is NOT ported: it exists so
+# The `align = 256` workspace padding (`:50-52`) is NOT implemented: it exists so
 # cuBLAS gets an aligned scalar and there is no such requirement here.
 # `cholesky_rank1_update_workspace_floats` returns `n` floats -- `n-1` for
 # the vector and one for the dot -- rather than their byte count.
@@ -265,11 +264,11 @@ def cholesky_rank1_update(
     Raises by name when the new diagonal would not be positive, naming the
     rank -- their `ASSERT` (`:117`), turned into this tree's refusal.
 
-    UPPER is NOT PORTED. Their `uplo == CUBLAS_FILL_MODE_UPPER` arm stores
+    UPPER is NOT IMPLEMENTED. Their `uplo == CUBLAS_FILL_MODE_UPPER` arm stores
     `A_new` as a COLUMN and solves `U^T x = A_12` with `CUBLAS_OP_T`; it is
     the arm LARS actually uses (`lars_impl.cuh:271`, `fillmode =
     CUBLAS_FILL_MODE_UPPER`). Nothing in this tree stores an upper factor,
-    so porting it would create a second storage convention with no caller.
+    so implementing it would create a second storage convention with no caller.
     `cholesky/NOT_IMPLEMENTED.tsv` records it.
 
     SYNCHRONIZES, twice per call, exactly as theirs does. Records two card

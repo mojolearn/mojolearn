@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The layout and the merge with one pin BROKEN AT A TIME, for the check.
 
-NOT A PORT, NOT REACHED by `ivf/estimator.mojo`, `ivf/ivf_main.mojo` or
+NO REFERENCE FILE, NOT REACHED by `ivf/estimator.mojo`, `ivf/ivf_main.mojo` or
 anything under `ivf/impl/`. `ivf/checks/ivf_check.mojo` selects an arm
 and nothing else can, exactly the arrangement
 `hierarchy/checks/sabotage_tile.mojo` uses: the production functions in
@@ -11,7 +11,7 @@ shipped bits cannot depend on this file.
 
 WHY THE COPIES EXIST RATHER THAN A FLAG ON THE REAL ONES
 ---------------------------------------------------------
-`PORTING_RULES.md` rule 8 is the reason a sabotage exists (a path that runs
+`ENGINEERING_RULES.md` rule 8 is the reason a sabotage exists (a path that runs
 is not a path that is gated) and `[[reached-but-inert]]` is the reason a
 sabotage has to be a SEPARATE spelling: a flag threaded into the production
 function is a branch in the production function, and the day someone passes
@@ -170,7 +170,7 @@ def sabotage_merge_probed_lists(
     The arm concatenates the probed lists end to end in PROBE ORDER, which
     is what their own candidate numbering is
     (`ivf_common.cuh:53-56`'s chunk description) and what a straightforward
-    IVF port would do. It is not wrong for their scan, because their scan
+    IVF implementation would do. It is not wrong for their scan, because their scan
     carries the database id alongside every candidate and postprocesses it.
     It is wrong HERE, because the selector's key is the candidate's
     POSITION and nothing else, so this arm silently substitutes "the

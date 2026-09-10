@@ -41,8 +41,8 @@ vendors at leg 11 (`144aa5b`). That measurement is the GEMM's, not this
 lane's.**
 
 Also owed. No `pixi.toml` task, so the gate runs by path. No `IDENTITY_PATHS`
-rows for the optimizer step or the global-norm clip. No `DERIVATION_MAP.tsv`
-or `NOT_IMPLEMENTED.tsv` entries for `training/`.
+rows for the optimizer step or the global-norm clip. No `NOT_IMPLEMENTED.tsv`
+entries for `training/`.
 
 DEVIATIONS 1170 through 1189 are this lane's.
 
@@ -170,8 +170,7 @@ per-tensor L2 norm, stacks those, and takes the L2 norm of THAT.
 `Float32` they are not**, because each per-tensor `sqrt` rounds and each
 result is squared again inside the outer norm. **CLAUSE 3.1.**
 `total_norm = sqrt( SUM_j ( sqrt(sumsq_j) )^2 )`, not `sqrt( SUM_j sumsq_j )`.
-`COPY, DO NOT IMPROVE` at a place where the improvement is tempting and is one
-line. Sabotage `OPT_SAB_CLIP_FLAT_NORM`, and **at `J = 1` the two forms agree
+This is a place where the tempting improvement is one line and is wrong. Sabotage `OPT_SAB_CLIP_FLAT_NORM`, and **at `J = 1` the two forms agree
 for most `s`, so the fixture must carry at least three tensors of different
 lengths whose norms differ by several binades.**
 
@@ -890,7 +889,7 @@ Cited from elsewhere and never redefined: 258, 550, 741, 824, 826, 1473, 1477,
    `loss_oracle.mojo:167` and `embedding`'s copy are the others.
    `checks/numerics.mojo` is the canonical home and **four copies of one
    predicate have four chances to drift.**
-8. **`DERIVATION_MAP.tsv` and `NOT_IMPLEMENTED.tsv` entries for `training/`.**
+8. **`NOT_IMPLEMENTED.tsv` entries for `training/`.**
 9. **A corpus.** `mamba/corpus` is the model, planted adversarial cases with
    names. This lane needs `adv_subnormal_square` (5.1), `adv_dead_unit_v`
    (3d), `adv_dampening_first_step` (5.4a), `adv_param_order_five` (3.3) and

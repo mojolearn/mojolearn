@@ -20,7 +20,7 @@ value a CatBoost user gets: with `learning_rate` unset CatBoost fits it
 from the pool, `exp(A*log(n) + B)` scaled by the iteration count
 (`libs/train_lib/options_helper.cpp:252-288`), which at 800k rows and
 1000 iterations is about 0.097 and at 100 iterations about 0.38. That
-retune is not ported. So these defaults equal a CatBoost user who
+retune is not implemented. So these defaults equal a CatBoost user who
 passed `learning_rate=0.03, iterations=100` explicitly -- they are not
 "CatBoost's defaults", and any comparison run should pin both arms.
 
@@ -98,10 +98,10 @@ from ._arrays import _addr, _addr_ro, as_f32_colmajor
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
 
-#: CatBoost's `ELossFunction` spellings that this port trains. The list is
+#: CatBoost's `ELossFunction` spellings that this implementation trains. The list is
 #: the reachable set of their GPU pointwise target
 #: (`pointwise_target_impl.h:259-299`), minus the ones whose leaf estimator
-#: or kernel family is not ported.
+#: or kernel family is not implemented.
 LOSSES = (
     "MultiClass",
     "MultiClassOneVsAll",
@@ -167,7 +167,7 @@ SCORE_FUNCTION_LOO_L2 = 4
 SCORE_FUNCTION_SAT_L2 = 5
 SCORE_FUNCTION_L2 = 6
 
-#: The four score functions this port ACTUALLY COMPUTES. Cosine and L2
+#: The four score functions this implementation ACTUALLY COMPUTES. Cosine and L2
 #: have a real calcer in the split kernel -- `TCosineScoreCalcer`
 #: (`score_calcers.cuh:152-167`) and `TL2ScoreCalcer` (`:40-69`) -- and
 #: the Newton spellings pair onto those SAME calcers, differing only in
@@ -176,7 +176,7 @@ SCORE_FUNCTION_L2 = 6
 #: (`greedy_search_helper.cpp:286-296`) makes plane 0 `weight * der2`
 #: instead of the raw weight (`pointwise_target_impl.h:193-201`), which is
 #: CatBoost's own structure (`compute_scores.cu:201-219`). That flag IS
-#: ported and gated per cell and per model by
+#: implemented and gated per cell and per model by
 #: `checks/second_der_weights_check.mojo`; for RMSE alone the Newton
 #: spellings coincide with their pair bit for bit, because
 #: `TRmseTarget::Der2` returns 1.0.
@@ -208,23 +208,23 @@ _SCORE_FUNCTION_NAMES = {
 #: and "it is honored" are different sentences here.
 #:
 #: NewtonCosine and NewtonL2 used to sit in this dict for a different
-#: reason -- `secondDerAsWeights` was unported, so each silently fit its
+#: reason -- `secondDerAsWeights` was unimplemented, so each silently fit its
 #: non-Newton twin -- and left it when that flag landed, gated by
 #: `checks/second_der_weights_check.mojo`.
-_UNPORTED_SCORE_FUNCTIONS = {
+_UNSUPPORTED_SCORE_FUNCTIONS = {
     "SolarL2": (
-        "the greedy searcher this port runs has no SolarL2 arm and falls "
+        "the greedy searcher this implementation runs has no SolarL2 arm and falls "
         "through to Cosine (greedy_search_helper.mojo:3134-3162), so the "
         "fit would silently be a Cosine fit. Its calcer exists only on the "
         "pointwise searcher (pointwise_scores.mojo:1569)"
     ),
     "LOOL2": (
-        "the greedy searcher this port runs has no LOOL2 arm and falls "
+        "the greedy searcher this implementation runs has no LOOL2 arm and falls "
         "through to Cosine (greedy_search_helper.mojo:3134-3162), so the "
         "fit would silently be a Cosine fit"
     ),
     "SatL2": (
-        "the greedy searcher this port runs has no SatL2 arm and falls "
+        "the greedy searcher this implementation runs has no SatL2 arm and falls "
         "through to Cosine (greedy_search_helper.mojo:3134-3162), so the "
         "fit would silently be a Cosine fit"
     ),
@@ -232,7 +232,7 @@ _UNPORTED_SCORE_FUNCTIONS = {
 
 #: their `EGrowPolicy` spellings (`oblivious_tree_options.cpp:23`), in
 #: their enum order -- the binding carries the ORDINAL. `Region`, their
-#: fourth, is absent: no lane ports it (`greedy_search_helper.cpp:325-350`).
+#: fourth, is absent: no lane implements it (`greedy_search_helper.cpp:325-350`).
 #: SymmetricTree is `TObliviousTreeModel`; Depthwise and Lossguide are
 #: `TNonSymmetricTree`, grown by `TGreedySubsetsSearcher<TNonSymmetricTree>`
 #: (`structure_searcher_template.h:66`) and applied by their
@@ -273,7 +273,7 @@ _UNSET = -1.0
 #: unset lets `TOverfittingDetectorOptions::Load`
 #: (`overfitting_detector_options.cpp:24-32`) pick the type from whichever
 #: of `od_pvalue` / `od_wait` was given, while "None" turns the detector
-#: off outright. Wilcoxon is theirs and is not ported.
+#: off outright. Wilcoxon is theirs and is not implemented.
 OD_TYPES = ("None", "IncToDec", "Iter")
 
 
@@ -354,7 +354,7 @@ class GradientBoosting(NumericModeMixin):
         `MultiClass` -- `pointwise_non_symmetric.cpp:7-29` lists the
         eleven that have one; `train.cpp:279` is the error), and
         `use_pointwise_searcher=True` (that is the doc-parallel OBLIVIOUS
-        searcher). Their `Region` policy is not ported and is refused by
+        searcher). Their `Region` policy is not implemented and is refused by
         name. DEVIATION 259.
     feature_fraction : float, default 1.0
         Per-tree numeric feature subsampling in (0, 1]. A deterministic
@@ -470,8 +470,8 @@ class GradientBoosting(NumericModeMixin):
         (`greedy_search_helper.cpp:286-296`) -- so for RMSE, whose Der2 is
         1.0, each is bit-identical to its twin. CatBoost's other three
         spellings -- SolarL2, LOOL2, SatL2 -- ARE REFUSED BY NAME rather
-        than accepted, because on this port each silently fits a different
-        model than the one asked for. See `_UNPORTED_SCORE_FUNCTIONS` for
+        than accepted, because on this implementation each silently fits a different
+        model than the one asked for. See `_UNSUPPORTED_SCORE_FUNCTIONS` for
         which, and why.
     nan_mode : {'Min', 'Max', 'Forbidden'}, default 'Min'
         Where a NaN sorts against the borders
@@ -624,7 +624,7 @@ class GradientBoosting(NumericModeMixin):
         if grow_policy == "Region":
             raise NotImplementedError(
                 "mojolearn: grow_policy='Region' is EGrowPolicy::Region, "
-                "which no lane ports (greedy_search_helper.cpp:325-350); "
+                "which no lane implements (greedy_search_helper.cpp:325-350); "
                 f"reachable values are {GROW_POLICIES}"
             )
         if grow_policy not in _GROW_POLICY_CODES:
@@ -706,7 +706,7 @@ class GradientBoosting(NumericModeMixin):
         if not non_symmetric and int(min_data_in_leaf) != 1:
             # CatBoost ACCEPTS AND DISCARDS it here (`IsTerminalLeaf` tests
             # the size only when `Policy != SymmetricTree`,
-            # greedy_search_helper.cpp:685); this port refuses what it
+            # greedy_search_helper.cpp:685); this implementation refuses what it
             # would drop
             raise ValueError(
                 f"mojolearn: min_data_in_leaf={min_data_in_leaf} does "
@@ -729,10 +729,10 @@ class GradientBoosting(NumericModeMixin):
         # refusal below names the value the caller passed and the file:line
         # that makes it a lie, because "not supported" without a reason is
         # indistinguishable from "not implemented yet" and gets retried.
-        if score_function in _UNPORTED_SCORE_FUNCTIONS:
+        if score_function in _UNSUPPORTED_SCORE_FUNCTIONS:
             raise NotImplementedError(
                 f"mojolearn: score_function={score_function!r} is not "
-                f"honored here -- {_UNPORTED_SCORE_FUNCTIONS[score_function]}"
+                f"honored here -- {_UNSUPPORTED_SCORE_FUNCTIONS[score_function]}"
                 f". Reachable values are {SCORE_FUNCTIONS}."
             )
         if score_function not in _SCORE_FUNCTION_NAMES:
@@ -840,7 +840,7 @@ class GradientBoosting(NumericModeMixin):
         # unset and resolves inside `train` -- auto-True for RMSE (their
         # rule; NOT for Logloss, which is not on their list), False
         # otherwise; True is explicit and refused by name for losses
-        # whose CalcOptimumConstApprox arm is not ported.
+        # whose CalcOptimumConstApprox arm is not implemented.
         self.boost_from_average = boost_from_average
         self.border_build_max_samples = int(border_build_max_samples)
         self.class_weights = (
@@ -1035,7 +1035,7 @@ class GradientBoosting(NumericModeMixin):
         their own combination at pool build
         (`target/data_providers.cpp:168`:
         `rawWeights[i] * rawGroupWeights[i] * classWeights[...]`). Their
-        group-weight factor is absent because this port carries no
+        group-weight factor is absent because this implementation carries no
         `group_id`.
 
         `eval_set` is `(X_eval, y_eval)`, or a one-element list holding
@@ -1082,7 +1082,7 @@ class GradientBoosting(NumericModeMixin):
             if np.isnan(Xa).any():
                 raise ValueError(
                     "mojolearn: nan_mode='Forbidden' but X contains NaN. "
-                    "CatBoost refuses this pair; this port would otherwise "
+                    "CatBoost refuses this pair; this implementation would otherwise "
                     "bin the NaNs silently with no NaN bin. Use "
                     "nan_mode='Min' or 'Max', or clean the column."
                 )

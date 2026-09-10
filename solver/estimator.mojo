@@ -10,9 +10,9 @@ what a `mojolearn.Lasso().fit(X, y)` actually runs. The shape is
 device buffers owned here for exactly one call, results read back, nothing
 retained.
 
-The ported solver is `solver/impl/solver/cd.mojo` (cuML
+The implemented solver is `solver/impl/solver/cd.mojo` (cuML
 `cpp/src/solver/cd.cuh`, pinned at `v26.08.00` = `265b9da`); the lane's
-README, `DERIVATION_MAP.tsv` and `NOT_IMPLEMENTED.tsv` are the record of what is and is
+README, `NOT_IMPLEMENTED.tsv` are the record of what is and is
 not in it. Nothing here re-decides any of that: every guard cdFit carries is
 reached through `cd_fit_traced`, and this file adds no guard of its own
 beyond the two shape checks below.

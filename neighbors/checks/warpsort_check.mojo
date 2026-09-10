@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Launch RAFT's warp-sort top-k, check it against the ported radix select,
+"""Launch RAFT's warp-sort top-k, check it against the implemented radix select,
 and sabotage it.
 
 NO RAFT COUNTERPART. Same discipline as `neighbors/checks/knn_check.mojo`:
-a kernel is not ported until it has been enqueued (`archive/reference/PORTING.md 9`), and a
+a kernel is not implemented until it has been enqueued (`archive/reference/PORTING.md 9`), and a
 correct answer is not by itself evidence that the kernel ran.
 
 WHY THIS FILE EXISTS
@@ -19,7 +19,7 @@ WHAT IS COMPARED, AND HOW STRICTLY
 Three-way, on one scattered fixture:
 
   * warpsort   -- `warpsort_topk_block_kernel`, this round's new path
-  * radix      -- `radix_topk_one_block_kernel`, the incumbent ported select
+  * radix      -- `radix_topk_one_block_kernel`, the incumbent implemented select
   * host oracle -- a Float64 sort on the host, INDEPENDENT of both
 
 VALUES are compared strictly, as a sorted multiset per row. INDICES are
@@ -240,7 +240,7 @@ def _one_case[
 
 
 def check_warpsort_matches_radix() raises:
-    """Values against the host oracle AND against the ported radix select, at
+    """Values against the host oracle AND against the implemented radix select, at
     every k RAFT's own dispatch would send here, plus `k > n`.
 
     `capacity = bound_by_power_of_two(k)` and `block_warps` is chosen so that

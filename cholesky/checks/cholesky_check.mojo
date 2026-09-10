@@ -53,7 +53,7 @@ The checks, in order:
                                         zeros reach the factor and match the
                                         oracle BY SIGN BIT; a subnormal pivot
                                         is refused on every column
-    check_r1_update_equals_potrf        the ported RAFT rank-one update and
+    check_r1_update_equals_potrf        the implemented RAFT rank-one update and
                                         the blocked factorization agree bit
                                         for bit up to the panel width
     check_cholesky_sabotages            all ten arms, driven
@@ -450,7 +450,7 @@ def check_cholesky_refusals() raises:
 
     # (5) the NB hint. DEVIATION 1630. Under IDENTICAL a hint that is not the
     # pinned value raises; under FAST it is honored, and BOTH sides are
-    # exercised by name rather than only the default one (PORTING_RULES 8).
+    # exercised by name rather than only the default one (ENGINEERING_RULES 8).
     comptime if IDENTICAL:
         raised = False
         try:
@@ -1578,7 +1578,7 @@ def check_signed_zero_and_denormal() raises:
 
 
 def check_r1_update_equals_potrf() raises:
-    """The ported RAFT rank-one update against the blocked factorization.
+    """The implemented RAFT rank-one update against the blocked factorization.
 
     Two DEVICE spellings of one arithmetic, which is a stronger statement
     than a device-versus-host-oracle comparison: a mistake in a shared helper
@@ -1679,10 +1679,10 @@ def check_r1_update_equals_potrf() raises:
     # Apple and AMD do not show it, which is how it stayed latent here.
     _ = ctx^
 
-    # THE HOST ORACLE OF THE PORTED FILE, grown to half the panel width and
+    # THE HOST ORACLE OF THE IMPLEMENTED FILE, grown to half the panel width and
     # asserted against the oracle's own blocked factor. Without this arm
-    # `oracle_rank1_update` would have no caller, and PORTING_RULES rule 3
-    # says a ported file no caller reaches is not done.
+    # `oracle_rank1_update` would have no caller, and ENGINEERING_RULES rule 3
+    # says a implemented file no caller reaches is not done.
     var half = CHOL_NB_PINNED // 2
     var otr = IdentityTrace.disabled()
     var oblocked = oracle_potrf_lower(a, n, CHOL_NB_PINNED, otr)
@@ -1713,7 +1713,7 @@ def check_r1_update_equals_potrf() raises:
         + " agree with the blocked factorization BIT FOR BIT; "
         + String(n_reported)
         + " ranks beyond it differ, which they are entitled to (DEVIATION"
-        " 1630); the host oracle of the ported file agrees with the host"
+        " 1630); the host oracle of the implemented file agrees with the host"
         " blocked oracle to rank "
         + String(half)
         + ("" if first_report == "" else "; first at " + first_report)

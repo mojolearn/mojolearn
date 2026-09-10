@@ -65,4 +65,4 @@ weights and objective curvature; there is no universal cross-library value.
 The capability reference is XGBoost's documented
 [`min_child_weight`](https://xgboost.readthedocs.io/en/stable/parameter.html#parameters-for-tree-booster)
 child-Hessian condition. This implementation uses MojoLearn's existing GPU
-Newton statistics and split selection, rather than porting XGBoost's trainer.
+Newton statistics and split selection, rather than implementing XGBoost's trainer.

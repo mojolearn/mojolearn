@@ -209,7 +209,7 @@ def main() raises:
     # gpu_single_worker.cpp:120-123. The RequestStream case writes the id
     # into the command. It is readable only through a direct run(), because
     # the queue hands the worker a copy and the promise half of their design
-    # (`future/local_promise_future.h`) is not ported.
+    # (`future/local_promise_future.h`) is not implemented.
     # ------------------------------------------------------------------
     print("RequestStream writes its answer (gpu_single_worker.cpp:120-123)")
     var req = request_stream_command()

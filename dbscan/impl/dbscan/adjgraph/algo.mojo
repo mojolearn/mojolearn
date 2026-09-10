@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Boolean adjacency to CSR.
 
-PORT OF `cuml/cpp/src/dbscan/adjgraph/algo.cuh` at cuML `00094f7`.
-Partial. Do not improve.
+FOLLOWS `cuml/cpp/src/dbscan/adjgraph/algo.cuh` at cuML `00094f7`.
+Partial.
 
 Their `launcher` is two calls and both are here:
 
@@ -72,7 +72,7 @@ def scan_blocks_needed(n: Int) -> Int:
 #   resolve its own prefix without a second read of the input.
 # OURS: three launches -- local scan, scan of the per-block totals, add back.
 #   Two full passes over `ex_scan` instead of one.
-# REASON: their kernel is READABLE and therefore a port candidate, not a
+# REASON: their kernel is READABLE and therefore an candidate to implement, not a
 #   substitution candidate; what is not portable is the mechanism decoupled
 #   lookback rests on. It needs a forward-progress guarantee between blocks
 #   (a block spins on a flag written by a lower-numbered block) plus a memory
@@ -83,7 +83,7 @@ def scan_blocks_needed(n: Int) -> Int:
 #   them sound on 2026-08-19 -- but only under the co-residency that
 #   `launchConfigGenerator`-capped grids guarantee. Lookback's grid scales
 #   with the DATA, not the device, so a block can spin on a predecessor the
-#   scheduler has not started, and a literal port can deadlock rather than
+#   scheduler has not started, and a literal implementation can deadlock rather than
 #   run slowly.) Scan-then-propagate is the same algorithm with the
 #   inter-block communication moved into a second launch, which the driver
 #   orders for us. Cost: one extra read and write of `ex_scan`, `batch_size`

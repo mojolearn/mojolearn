@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """This lane's kernels with their pins BROKEN ON PURPOSE, for the check.
 
-NOT A PORT, NOT REACHED by any driver at `KMSAB_NONE`, not by
+NO REFERENCE FILE, NOT REACHED by any driver at `KMSAB_NONE`, not by
 `kernel_methods/estimator.mojo` and not by the card. Copies of the epilogues
 in `kernel_methods/impl/distance/kernel_matrices.mojo`, of
 `svm/impl/distance/kernel_matrices.mojo::rbf_kernel_expanded_kernel`, of

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Fold a list of leaf PATHS into a tree.
 
-PORT OF `TFlatTreeBuilder` and `BuildTreeLikeModel<TNonSymmetricTree>` in
+FOLLOWS `TFlatTreeBuilder` and `BuildTreeLikeModel<TNonSymmetricTree>` in
 `catboost/cuda/methods/greedy_subsets_searcher/model_builder.cpp` at CatBoost
-`54a8143a`. Transliterated. Do not improve.
+`54a8143a`. Followed statement for statement.
 
 The searcher hands back leaves as a flat `TVector<TLeafPath>` in LEAF-ID
 order, plus a weight and a value vector per leaf. Nothing in that list says
@@ -19,19 +19,19 @@ nor depth order. The model's bin numbering IS left-to-right, because that is
 what `bin += node.LeftSubtree` produces. Sorting ids cannot get there; only
 the paths can.
 
-THREE OF THEIR SPECIALIZATIONS, ONE PORTED
+THREE OF THEIR SPECIALIZATIONS, ONE IMPLEMENTED
 ------------------------------------------
 Theirs has `BuildTreeLikeModel<TObliviousTreeModel>`,
 `<TRegionModel>` and `<TNonSymmetricTree>`. Only the third is here.
 
-* The OBLIVIOUS one is not needed: this port's symmetric lane never builds
+* The OBLIVIOUS one is not needed: this implementation's symmetric lane never builds
   `TLeafPath`s to fold back (`run_tree_layout` returns the split list
   directly, which is what their specialization spends its body recovering
-  -- `structure.Splits = leaves[0].Splits`). Porting it now would mean
+  -- `structure.Splits = leaves[0].Splits`). Implementing it now would mean
   writing a function with no caller. `archive/plans/UNWIRED.md` records it.
 * The REGION one belongs to `EGrowPolicy::Region`, which no lane owns.
 
-`EDuplicateTerminalLeavesPolicy` IS ported, both arms, because their
+`EDuplicateTerminalLeavesPolicy` IS implemented, both arms, because their
 non-symmetric call site passes `Exception` (`model_builder.cpp:288`) and the
 `Combine` arm is what makes the enum meaningful. `Combine` is reached by
 `checks/depthwise_check.mojo`'s duplicate-path claim, so neither arm

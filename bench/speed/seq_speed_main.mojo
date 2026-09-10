@@ -60,7 +60,7 @@ seven separate score-sized buffers because contract section 6 says a lane
 whose instrument is the per-stage card may not begin by fusing the stages
 away. At `n_heads = 32` that is at least 32 round trips per call before any
 arithmetic is counted. It is a deliberate design decision of the identity
-lane and it is a real cost of the port. Say so beside the number.
+lane and it is a real cost of the implementation. Say so beside the number.
 
 THE HOUSE SHAPE THIS FILE FOLLOWS
 ==================================
@@ -1162,7 +1162,7 @@ def main() raises:
         + " size=" + size
     )
     print(
-        "FSPEED-NOTE lane=" + lane + " arm=ours entry costs the port pays and"
+        "FSPEED-NOTE lane=" + lane + " arm=ours entry costs the implementation pays and"
         " the opponent does not: llama_refuse_bad_inputs /"
         " mamba_refuse_bad_inputs download every weight per call, and"
         " eager_attention_forward synchronizes per (batch, head). See"

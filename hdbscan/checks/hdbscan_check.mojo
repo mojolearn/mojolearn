@@ -22,7 +22,7 @@ stabilities follow from the condensed tree, the labels follow from the
 selection.
 
 CHECKS
-  check_hdbscan_refusals                every unported arm, every
+  check_hdbscan_refusals                every unimplemented arm, every
                                         out-of-range parameter, every
                                         non-finite input, BY NAME
   check_core_distances_vs_oracle        per cell vs the host oracle's
@@ -50,7 +50,7 @@ CHECKS
                                         two launch shapes record-identical
   check_hdbscan_signed_zero_inputs      a `-0.0` COORDINATE moves no bit
   check_hdbscan_selection_leaf          the OTHER side of the selection
-                                        switch (PORTING_RULES rule 8)
+                                        switch (ENGINEERING_RULES rule 8)
   check_hdbscan_float64_reference       the MST total against a Float64
                                         direct-form mutual reachability MST
   check_hdbscan_sabotages               the table below
@@ -374,7 +374,7 @@ def _expect_raise(name: String, msg: String, want: String) raises:
 
 
 def check_hdbscan_refusals() raises:
-    """Every unported arm and every out-of-range parameter RAISES BY NAME.
+    """Every unimplemented arm and every out-of-range parameter RAISES BY NAME.
 
     A refusal is not tested by the absence of a wrong answer; it is tested
     by the presence of the NAME in the message, because a refusal whose
@@ -387,7 +387,7 @@ def check_hdbscan_refusals() raises:
     var vals = hfixture_as_list(fix)
     var n_ok = 0
 
-    # The two unported halves of the SPARSE graph (DEVIATION 1600).
+    # The two unimplemented halves of the SPARSE graph (DEVIATION 1600).
     try:
         mutual_reachability_knn_l2()
         raise Error("mutual_reachability_knn_l2 did not raise")
@@ -406,7 +406,7 @@ def check_hdbscan_refusals() raises:
         cluster_epsilon_search(Float32(0.5))
         raise Error("cluster_epsilon_search did not raise")
     except e:
-        _expect_raise("cluster_epsilon_search", String(e), "NOT PORTED")
+        _expect_raise("cluster_epsilon_search", String(e), "NOT IMPLEMENTED")
         n_ok += 1
 
     # Parameters, one fit each.
@@ -439,7 +439,7 @@ def check_hdbscan_refusals() raises:
         _ = _fit(ctx, vals, m, d, p_eps, trace)
         raise Error("cluster_selection_epsilon != 0 did not raise")
     except e:
-        _expect_raise("cluster_selection_epsilon", String(e), "NOT PORTED")
+        _expect_raise("cluster_selection_epsilon", String(e), "NOT IMPLEMENTED")
         n_ok += 1
 
     var p_ms0 = _params_for(fix)
@@ -736,7 +736,7 @@ def check_mutual_reachability_ties() raises:
         if an != bn:
             noise_moved += 1
     # PERMUTATION INVARIANCE IS ASSERTED ONLY WHERE THERE ARE NO TIES, and
-    # the reason is a property of the algorithm rather than of this port.
+    # the reason is a property of the algorithm rather than of this implementation.
     #
     # The MST tie-break is a total order on `(weight, min(u,v), max(u,v))`
     # (`hierarchy/checks/edge_order.mojo`), whose second and third
@@ -1029,7 +1029,7 @@ def check_labels_vs_oracle() raises:
         a partition test and is a different bug;
     (c) on the fixtures that PLANT an assignment, the partition equals the
         planted one and the planted noise points come back as `-1`. This
-        is the only control here that does not share a line with the port.
+        is the only control here that does not share a line with the implementation.
     """
     var ctx = DeviceContext()
     for fix in range(HFIX_COUNT):
@@ -1168,7 +1168,7 @@ def check_permutation_invariance() raises:
     so under an EXACT tie a permutation can select a different (equally
     minimal) MST, and a different MST can condense to a different tree.
     That is a real order dependence and it is the algorithm's, not a bug
-    in this port: upstream's answer under the same tie is a cuRAND draw,
+    in this implementation: upstream's answer under the same tie is a cuRAND draw,
     which is worse. **Mutual reachability makes ties ENDEMIC rather than
     exceptional**: `mr(a,b) = max(core_a, core_b, d(a,b))` collapses to a
     CORE DISTANCE whenever the points are closer than their cores, and
@@ -1479,7 +1479,7 @@ def check_hdbscan_signed_zero_inputs() raises:
 
 
 def check_hdbscan_selection_leaf() raises:
-    """PORTING_RULES rule 8: a switch is exercised on BOTH sides by a
+    """ENGINEERING_RULES rule 8: a switch is exercised on BOTH sides by a
     named check per side, with the switch set explicitly inside it.
 
     Excess of Mass is the default and every other gate runs it. This one
@@ -1493,7 +1493,7 @@ def check_hdbscan_selection_leaf() raises:
     trees these fixtures happen to produce, and asserting a difference
     would be building the gate to the fixture. A zero here is a REQUEST
     for a fixture whose root split has a higher stability than its
-    leaves, not a failure of the port.
+    leaves, not a failure of the implementation.
     """
     var ctx = DeviceContext()
     var n_differ = 0

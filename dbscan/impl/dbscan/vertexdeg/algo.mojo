@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Epsilon neighborhood: the boolean adjacency and the vertex degree.
 
-PORT OF `cuml/cpp/src/dbscan/vertexdeg/algo.cuh::launcher` at cuML `00094f7`.
-Partial. Do not improve.
+FOLLOWS `cuml/cpp/src/dbscan/vertexdeg/algo.cuh::launcher` at cuML `00094f7`.
+Partial.
 
 Their `launcher` is a metric switch and then ONE call. For the L2 arm with no
 ball-cover index -- which is `algo == 1`, `metric == L2SqrtExpanded` /
@@ -35,7 +35,7 @@ itself is zero, which is `<= eps`, so `vd` includes the point and `min_pts`
 counts it. Getting that wrong shifts every core-point decision by one and
 produces a plausible clustering that disagrees with sklearn everywhere.
 
-THE SAMPLE-WEIGHT ARM IS PORTED (2026-09-01), AND IT ENTERS IN EXACTLY ONE
+THE SAMPLE-WEIGHT ARM IS IMPLEMENTED (2026-09-01), AND IT ENTERS IN EXACTLY ONE
 PLACE
 --------------------------------------------------------------------------
 `launcher`'s tail (`algo.cuh:234-257`) is the whole of it, and reading their
@@ -55,13 +55,13 @@ the same sentence (`np.sum(sample_weight[neighbors]) >= min_samples`), and
 its docstring's "a sample with a weight of at least min_samples is by itself
 a core sample" falls out of the point being its own neighbor.
 
-THEIR CAST IS NOT A BUG AND IS NOT PORTED AS ONE. `compute.cuh:50` is
+THEIR CAST IS NOT A BUG AND IS NOT IMPLEMENTED AS ONE. `compute.cuh:50` is
 `mask[idx + start] = (Index_)vd[idx] >= min_pts` with `vd` templated on the
 VALUE type, so on the weighted arm a Float32 weight sum is truncated to
 Int32 before the compare. For `min_pts >= 1` (enforced at the estimator) and
 a non-negative sum that is exactly the same predicate: `trunc(w) >= p` and
 `w >= p` agree for integer `p` when `w >= 0`, since `trunc` is monotone and
-`trunc(p) == p`. This port compares the FLOAT directly, which is the same
+`trunc(p) == p`. This implementation compares the FLOAT directly, which is the same
 answer without depending on that argument. The checks written to hold the
 PREDICATE rather than the spelling are
 `check_dbscan_uniform_weight_matches_unweighted` and
@@ -71,14 +71,14 @@ sentence named a `check_dbscan_weighted_core_matches_host_oracle` until
 DEVIATION 28 below.
 
 Two producers of the weighted degree, because the two arms of `launcher`
-produce two different data structures, and both are ported:
+produce two different data structures, and both are implemented:
 - `coalescedReduction` over the dense `adj` (`algo.cuh:243-254`), the
   brute-force arm. Ours is `weighted_vertex_deg_dense_kernel`.
 - `accumulateWeights` over the CSR (`algo.cuh:62-91` and `:236-238`), the
   ball-cover arm. Ours is `weighted_vertex_deg_csr_kernel`.
 See DEVIATION 28 below for the fold, which is the whole numeric risk.
 
-NOT PORTED FROM THIS FILE, and named so it is not forgotten:
+NOT IMPLEMENTED FROM THIS FILE, and named so it is not forgotten:
 - the `CosineExpanded` arm (`:186-223`): row-normalize in place, use
   `eps2 = 2 * eps`, run the same neighborhood kernel, then un-normalize.
 - `Precomputed::launcher` (`algo == 2`), for a precomputed distance matrix.
@@ -101,7 +101,7 @@ FLOAT sum, so the fold shape is the answer's last bits, and the last bits
 decide `>= min_pts` for any point whose weight sum lands on the threshold.
 Both of their reducers close on a lane-width-shaped stage: CUB folds at the
 HARDWARE warp width, 32 on Apple and NVIDIA and 64 on a CDNA wavefront, so a
-faithful port would make an AMD fit disagree with a CUDA fit about which
+faithful implementation would make an AMD fit disagree with a CUDA fit about which
 points are core, and from there about how many clusters there are. That is
 not a last-bit difference in a reported number, it is a different model.
 `pinned_block_sum` is a halving tree over threadgroup memory with no warp
@@ -320,7 +320,7 @@ def weighted_vertex_deg_csr_kernel(
     UNWRITTEN when a row's weight sum is not positive, so the value the core
     test then reads is whatever the workspace held. It works for them because
     a non-positive sum cannot make a point core at `min_pts >= 1` either way;
-    it does not work here, because this port's buffer is not zeroed by a
+    it does not work here, because this implementation's buffer is not zeroed by a
     preceding pass and reading uninitialised device memory is not a
     predicate. Ours writes every row unconditionally. scikit-learn documents
     negative weights as meaningful ("a sample with a negative weight may

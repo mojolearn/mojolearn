@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`SmoBlockSolve`: one block solves the working-set QP by SMO.
 
-PORT OF `cuml/cpp/src/svm/smoblocksolve.cuh` at cuML v26.08.00, the kernel
+FOLLOWS `cuml/cpp/src/svm/smoblocksolve.cuh` at cuML v26.08.00, the kernel
 body transcribed branch for branch (`:154-271`). The math is documented in
 their header and is not repeated here; what follows is what changed.
 

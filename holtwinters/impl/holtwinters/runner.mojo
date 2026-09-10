@@ -94,7 +94,7 @@ comptime HW_DEFAULT_TRACE_ITERS = 64
 def default_optim_params(epsilon: Float32) -> OptimParams:
     """`HoltWintersOptim`'s defaults (`runner.cuh:226-234`): no caller of
     the fit path passes an `OptimParams`, so the override block (`:236-253`)
-    never runs and is not ported (NOT_IMPLEMENTED.tsv)."""
+    never runs and is not implemented (NOT_IMPLEMENTED.tsv)."""
     return OptimParams(
         eps=epsilon,
         min_param_diff=Float32(Float64(1e-8)),

@@ -2,17 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Borders for a column that may contain NaN, and the bin a NaN lands in.
 
-PORT OF `CalcQuantization` (`catboost/libs/data/quantization.cpp:300-346`)
+FOLLOWS `CalcQuantization` (`catboost/libs/data/quantization.cpp:300-346`)
 and the NaN half of the apply-time quantizer
 (`libs/model/cpu/quantization.h:368-409`) at CatBoost `54a8143a`.
-Transliterated. Do not improve.
+Followed statement for statement.
 
 ## The whole mechanism is a SENTINEL BORDER, and nothing downstream knows
 
 There is no NaN branch in their histogram kernels, their scorer, their
 partitioner or their GPU evaluator. NaN is handled entirely in
 quantization, and everything after it sees an ordinary bin index. That is
-what makes this cheap to port and it is worth stating plainly, because the
+what makes this cheap to implement and it is worth stating plainly, because the
 opposite -- a NaN flag threaded through the tree -- is what one would
 otherwise build.
 
@@ -34,7 +34,7 @@ Their `CalcQuantization` (`:321-346`), in full:
 
 **A COLUMN WITH NaNs GETS ONE FEWER REAL BORDER**, and that is not a
 rounding detail: `border_count` is a budget for the whole column, and the
-NaN bin comes out of it rather than being added to it. A port that inserted
+NaN bin comes out of it rather than being added to it. An implementation that inserted
 the sentinel WITHOUT the decrement would hand the histogram one more bin
 than the caller asked for, which changes the grid policy a feature lands in
 (`grid_policy.mojo:83` is a step function) and therefore which kernel reads
@@ -54,7 +54,7 @@ and `+infinity` for `AsTrue`, then run the ordinary comparison.
     -inf > lowest()  is false  ->  bin 0                       (Min)
     +inf > max()     is true   ->  bin len(borders)            (Max)
 
-This port takes the substitution for BOTH sides -- learn and apply -- so the
+This implementation takes the substitution for BOTH sides -- learn and apply -- so the
 one comparison kernel it already has is untouched, and the learn and apply
 paths agree by construction rather than by two implementations that have to
 be kept in step.

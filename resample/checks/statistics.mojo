@@ -453,7 +453,7 @@ def host_sort_stable(values: List[Float32], base: Int, m: Int) -> List[Float32]:
     """`values[base : base + m]` ascending under the TOTAL ORDER
     `(float_to_sortable(bits), original position)`.
 
-    `float_to_sortable` is `core/segmented_sort.mojo`'s port of
+    `float_to_sortable` is `core/segmented_sort.mojo`'s implementation of
     `cub::NumericTraits<float>::TwiddleIn`, imported rather than repeated --
     it is the function that makes a radix pass order floats correctly, and
     the one place `-0.0` and `+0.0` become DISTINCT KEYS (`0x7FFFFFFF` and
@@ -749,7 +749,7 @@ def perm_stat_kernel[stat: Int, tpb: Int](
     """
     comptime assert (
         stat == STAT_MEAN or stat == STAT_STD or stat == STAT_DIFF_MEANS
-    ), "perm_stat_kernel: mean, std and diff_means are the ported arms"
+    ), "perm_stat_kernel: mean, std and diff_means are the implemented arms"
     comptime lanes = PINNED_SUM_W // tpb
     var rr = Int(block_idx.x)
     if rr >= Int(n_replicates_in):

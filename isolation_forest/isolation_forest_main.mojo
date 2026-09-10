@@ -16,7 +16,7 @@ then per tree `if.treeNNN.rows` (the subsample's source rows),
 (n_nodes, max_depth), `if.treeNNN.structure.{feat,thr,left,right}` (the
 USED nodes), then `if.pathlen` and `if.scores` for the query batch. A
 cross-vendor run that diverges has an address: the RNG probe is pure
-integer (a difference there is a port defect, not a vendor), `.rows` /
+integer (a difference there is an implementation defect, not a vendor), `.rows` /
 `.features` are the Floyd sampler over that stream, `.structure.thr` is
 the per-node strict-compare min/max + `identical_mul_add` threshold
 (IDENTITY_PATHS rows 9/39) and `compute_c_n`'s `identical_log` (row 12),

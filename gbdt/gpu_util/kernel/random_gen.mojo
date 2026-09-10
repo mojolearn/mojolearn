@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CatBoost's GPU random streams, ported.
+"""CatBoost's GPU random streams, implemented.
 
-PORT OF `catboost/cuda/cuda_util/kernel/random_gen.cuh` at `54a8143a`.
-Transliterated. Do not improve.
+FOLLOWS `catboost/cuda/cuda_util/kernel/random_gen.cuh` at `54a8143a`.
+Followed statement for statement.
 
 The generator is a pair of 16-bit multiply-with-carry streams packed into
 one u64 (`AdvanceSeed`), exactly as they wrote it; every kernel that draws
@@ -13,7 +13,7 @@ state of the fit.
 
 DEVIATION (stated once for the file): their `NextUniform` computes
 `((v << 16) + u) * 2.328306435996595e-10` in FLOAT64 and Metal has no
-float64 in kernels, so this port keeps their own float32 arm
+float64 in kernels, so this implementation keeps their own float32 arm
 (`NextUniformF`, `random_gen.cuh:33-39`) for every draw. The integer
 stream is bit-identical to theirs; only the final scaling to [0,1) is
 f32, which changes no distribution and keeps every draw deterministic.

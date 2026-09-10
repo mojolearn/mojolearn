@@ -21,7 +21,7 @@ It should be. `TUniformBinarizer` lives in the same upstream file as
 `GreedyLogSum` and `MinEntropy`, so `gbdt/grid_creator/binarization.mojo`
 is its mirror address. It is here because that file is owned by another
 lane in this round and a two-lane edit of one file is a merge conflict, not
-a port. **Move `uniform_borders` there when the lanes rejoin**; nothing
+an implementation. **Move `uniform_borders` there when the lanes rejoin**; nothing
 else in this file belongs in `grid_creator/`.
 
 ## THE TWO GRIDS, AND THE ONE THAT WAS MIS-ATTRIBUTED
@@ -63,7 +63,7 @@ currently. Please use ctr_target_border_count option instead")`
 
 The borders themselves come from the same `TBordersBuilder` every feature
 grid comes from (`train.cpp:370-375`), so target binarization at
-`(MinEntropy, 1)` is exactly `best_split_min_entropy(y, 1)` -- the port
+`(MinEntropy, 1)` is exactly `best_split_min_entropy(y, 1)` -- the implementation
 already in `grid_creator/binarization.mojo`, bit-exact to CatBoost over ten
 budgets. Nothing new is computed here; what was missing was the CALL.
 
@@ -107,7 +107,7 @@ def border_selection_name(t: Int) -> String:
 
 @fieldwise_init
 struct TBinarizationOptions(Copyable, ImplicitlyCopyable, Movable):
-    """`NCatboostOptions::TBinarizationOptions`, the two fields this port
+    """`NCatboostOptions::TBinarizationOptions`, the two fields this implementation
     reaches. `NanMode` is `DisableNanModeOption()`d on both the CTR and the
     target descriptions (`cat_feature_options.cpp:219-223`, `:238`), so
     Forbidden is the only value either can hold and it is not carried."""
@@ -121,7 +121,7 @@ def uniform_borders(
 ) -> List[Float32]:
     """`TUniformBinarizer::BestSplit`
     (`library/cpp/grid_creator/binarization.cpp:1262-1310`), the arms this
-    port reaches (no `DefaultValue`, no `initialBorders`, no
+    implementation reaches (no `DefaultValue`, no `initialBorders`, no
     `quantizedDefaultBinFraction`).
 
         currentValue = minValue + (i + 1) * (maxValue - minValue)
@@ -181,7 +181,7 @@ def compute_ctr_borders(
 
     `Median` is refused rather than approximated. It is the TREE-ctr
     FeatureFreq default (`CreateDefaultCounter`'s `TreeCtr` branch), and
-    tree CTRs are not ported, so a Median border here would be a value
+    tree CTRs are not implemented, so a Median border here would be a value
     nothing produces.
     """
     var borders: List[Float32]
@@ -195,7 +195,7 @@ def compute_ctr_borders(
         raise Error(
             "ctr_binarization border_type="
             + border_selection_name(description.border_selection_type)
-            + " is not ported; the GPU simple-ctr defaults are Uniform for"
+            + " is not implemented; the GPU simple-ctr defaults are Uniform for"
             " Borders and MinEntropy for FeatureFreq"
             " (catboost_options.cpp:392-415, cat_feature_options.cpp:167-170)"
         )
@@ -219,7 +219,7 @@ def build_target_borders(
         raise Error(
             "target_binarization border_type="
             + border_selection_name(description.border_selection_type)
-            + " is not ported; CatBoost's default is MinEntropy"
+            + " is not implemented; CatBoost's default is MinEntropy"
             " (cat_feature_options.cpp:230)"
         )
     if description.border_count < 1:

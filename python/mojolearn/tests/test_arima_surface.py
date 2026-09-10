@@ -469,7 +469,7 @@ def arm_refusals(rep, y):
                "an unspelled method is refused",
                ARIMA, (1, 0, 0), method="mle")
     rep.raises(arm, NotImplementedError, "verbose",
-               "verbose is refused, it selects log lines this port never prints",
+               "verbose is refused, it selects log lines this implementation never prints",
                ARIMA, (1, 0, 0), verbose=True)
     rep.raises(arm, NotImplementedError, "output_type",
                "output_type is refused, this package returns NumPy",
@@ -485,7 +485,7 @@ def arm_refusals(rep, y):
                ARIMA, (1, 0, 0), seasonal_order=(0, 0, 0))
     rep.raises(arm, TypeError, "level",
                "level is NOT A PARAMETER of this class, so it is a TypeError;"
-               " cuML's confidence intervals are unported",
+               " cuML's confidence intervals are unimplemented",
                ARIMA, (1, 0, 0), level=0.95)
     rep.raises(arm, TypeError, "simple_differencing",
                "simple_differencing is NOT A PARAMETER of this class; only"
@@ -535,20 +535,20 @@ def arm_refusals(rep, y):
     # so this reaches the rd bound WITHOUT tripping the r bound first.
     rep.raises(arm, Exception, "block-per-series",
                "rd > 8 is refused; it selects cuML's block-per-series Kalman"
-               " kernel, which is unported",
+               " kernel, which is unimplemented",
                ARIMA(order=(0, 0, 0), seasonal_order=(0, 1, 0, 8),
                      trend="c").fit, y)
     # r = max(p, q + 1) = 6 with no differencing, so rd = 6 and the rd bound
     # is NOT what fires here.
     rep.raises(arm, Exception, "Lyapunov",
                "r > 5 is refused; it selects cuML's Schur/Sylvester Lyapunov"
-               " solver, which is unported",
+               " solver, which is unimplemented",
                ARIMA(order=(6, 0, 0), trend="n").fit, y)
     bad = y.copy()
     bad[1, 7] = np.float32("nan")
     rep.raises(arm, Exception, "non-finite value at index",
                "a NaN is refused by name and by INDEX; missing observations"
-               " are a cuML path with no port, so a NaN here is not missing"
+               " are a cuML path with no implementation, so a NaN here is not missing"
                " data, it is refused input",
                ARIMA(order=(1, 0, 0)).fit, bad)
     rep.raises(arm, Exception, "n_obs must be at least 2",
@@ -668,7 +668,7 @@ def arm_criteria(rep, fitted, n_obs):
     """`aic_` and `bic_` against raft's formula, written out again here.
 
     A TRANSCRIPTION CHECK AND NOTHING MORE, and it says so. cuML's
-    `information_criterion` is unported and its arithmetic beyond the
+    `information_criterion` is unimplemented and its arithmetic beyond the
     log-likelihood is one unary op, `ic_base - 2 * loglike`, with
     `ic_base = 2 * N` for AIC and `log(T) * N` for BIC
     (`raft/stats/detail/batched/information_criterion.cuh`). What this can
@@ -800,7 +800,7 @@ def arm_forecast(rep, y, m, md, n_obs):
               "a stationary AR(1) forecast decays; |step 6| does not exceed "
               "|step 1|")
 
-    # UPSTREAM `forecast` IS `predict(n_obs, n_obs + steps)` AND THIS PORT
+    # UPSTREAM `forecast` IS `predict(n_obs, n_obs + steps)` AND THIS IMPLEMENTATION
     # SAYS SO. If the two entry points ever stop agreeing, one of them has
     # grown a behaviour the other has not, and it will be visible here
     # before it is visible in an answer.

@@ -26,12 +26,12 @@ exact; `a`, `b` and the double sum are done on the host, serially,
 ascending over (i, j); IDENTICAL in Float32 through `identical_log` /
 `identical_mul_add` / `ftz`, FAST in Float64 through the host `log`.
 
-ONE INTEGER HAZARD OF THEIRS IS NOT PORTED: `a[i] * b[j]` (:61, :65) is an
+ONE INTEGER HAZARD OF THEIRS IS NOT IMPLEMENTED: `a[i] * b[j]` (:61, :65) is an
 `int` times an `int` -- it overflows once one class has more than 46,340
 samples in both labelings (`a_i * b_j > 2^31`), which is a dataset of
 fifty thousand rows. Ours forms the product in Int64 and converts. Below
 the overflow the two are the same number; above it theirs is wrong.
-Named here so it is not mistaken for a re-design (PORTING_RULES 0c: fix
+Named here so it is not mistaken for a re-design (ENGINEERING_RULES 0c: fix
 their BUGS, numbered). It is part of DEVIATION 650's block.
 """
 

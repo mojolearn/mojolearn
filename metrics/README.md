@@ -13,7 +13,6 @@ checks, with full numerical and cross-vendor qualification pending.
 and precision-recall score semantics; these also have local build/smoke-only
 validation and do not implement learning-to-rank objectives.
 
-`DERIVATION_MAP.tsv` identifies the upstream source for each implementation.
 `NOT_IMPLEMENTED.tsv` is the explicit refusal ledger. Integer reductions can be order independent;
 floating-point reductions must use a specified schedule when identity is promised.
 

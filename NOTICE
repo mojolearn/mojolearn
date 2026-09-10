@@ -20,9 +20,5 @@ WHEEL, none is reachable from any estimator, and they are therefore not
 described here: this file describes what is distributed to a user, and a test
 harness is not.
 
-Per-file correspondence between this work's algorithms and the published
-designs they implement is in the `DERIVATION_MAP.tsv` tables and
-DERIVATION.md.
-
 MAX (R) and Mojo (R) are trademarks of Modular, Inc., used under license.
 This project is not operated or endorsed by Modular, Inc.

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Weighted sums per cluster, which is the whole update half of Lloyd.
 
-NOT A PORT of cuVS. Their two calls are
+DOES NOT FOLLOW cuVS. Their two calls are
 `raft::linalg::reduce_rows_by_key` and `raft::linalg::reduce_cols_by_key`
 (`raft/linalg/reduce_rows_by_key.cuh` and `reduce_cols_by_key.cuh`, called
 from `update_centroids`, `detail/kmeans.cuh:300-318`), and RAFT is a
@@ -228,7 +228,7 @@ def accumulate_centroid_sums_privatized_kernel[
     MEASURED 3x on the assignment kernel (63 -> 21 ms/iter, re-verdict
     2026-08-20), so the hardware premise upstream's scalar reads rest on
     does not hold here. The instantiation contract is the SAME ladder the
-    assignment port dispatches on (`fused_veclen_for`, their
+    assignment implementation dispatches on (`fused_veclen_for`, their
     `fused_distance_nn-inl.cuh:107-110` selection, fed x's base address
     for both pointer terms): it guarantees `n_features % veclen == 0`, so
     a chunk of `veclen` cells never straddles a row (one label and one
@@ -604,7 +604,7 @@ def sum_partials_kernel(
       raft::add_op{})` over `minClusterAndDistance` whose `.value` was already
       multiplied by the sample weight (`:516-535`) -> `SUM_MODE_PRODUCT`.
 
-    An earlier version of this port wrote the squared differences to a
+    An earlier version of this implementation wrote the squared differences to a
     `n_clusters * n_features` scratch buffer with a separate
     `centroid_shift_kernel` and then summed it. That kernel is gone: it was a
     launch cuVS does not have.
@@ -685,7 +685,7 @@ def finish_sum_kernel(
     """Second stage: fold the block partials into ONE device scalar.
 
     Exists so the Lloyd loop never has to bring a sum to the host. The first
-    version of this port summed the partials in a host loop, which cost a
+    version of this implementation summed the partials in a host loop, which cost a
     drain and a transfer per iteration for a number the host only needed in
     order to make a decision the DEVICE can make. See
     `archive/reference/HOST_AND_DEVICE.md`.

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Stage hashes, so a cross-backend difference has an ADDRESS.
 
-NOT A PORT. CatBoost has no equivalent and does not need one: it ships one
+NO REFERENCE FILE. CatBoost has no equivalent and does not need one: it ships one
 GPU backend and accepts a non-deterministic answer. We ship Metal, CUDA and
 HIP from one source and claim a bit-identical model, and **a claim that can
 only be checked at the END is a claim nobody can debug.** Two model files

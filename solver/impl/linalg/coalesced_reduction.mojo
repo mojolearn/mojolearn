@@ -24,7 +24,7 @@ so the SHAPE of their fold -- and therefore the last bits of every column
 norm and every column mean -- is a function of the SM count of the card
 the fit ran on. That is IDENTITY_PATHS row 20's defect one level up: not
 only the lane width inside CUB, but which kernel is launched at all. ONLY
-THE MEDIUM KERNEL IS PORTED, and it is used at every shape under FAST
+THE MEDIUM KERNEL IS IMPLEMENTED, and it is used at every shape under FAST
 (`solver/NOT_IMPLEMENTED.tsv` names Thin and Thick). Under IDENTICAL nothing in
 this file runs: both callers go through the `mojolearn.identical.gemm.
 fp32.v1` dot (`solver/checks/profile_dot.mojo`), whose fold is a pure
@@ -53,7 +53,7 @@ compensation", their own comment at `-inl.cuh:480-483`), and the two
 stands in for `cub::BlockReduce<..., BLOCK_REDUCE_RAKING>::Sum` exactly as
 `core/column_stats.mojo` records (a collective, not an algorithm;
 archive/reference/VENDOR_LIBS.md banner, third case). `inplace` is never true on either of
-this section's paths and is not ported.
+this section's paths and is not implemented.
 
 NO `identical_mul_add`, NO `ftz` HERE, DELIBERATELY: this is the FAST arm,
 which is the vendor spelling, and under IDENTICAL it is not reached. A

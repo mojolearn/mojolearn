@@ -28,7 +28,7 @@ CHECKS, in the order `main` runs them
                                               unsupported metric, n_probe >
                                               n_lists, n_lists > n_rows,
                                               non-finite input, the three
-                                              unported index_params, and
+                                              unimplemented index_params, and
                                               k > SELECT_BLOCK: each
                                               RAISES BY NAME
   check_list_layout_and_index_carry           the layout is a PERMUTATION
@@ -303,7 +303,7 @@ def _knn_reference(
     (DEVIATION 509), but under `FAST` it chooses by shape, and a reference
     whose arm depends on how many queries this check happens to pass is a
     reference that tests a different thing in the two modes.
-    `PORTING_RULES.md` rule 8: the harness names the kernel it ran.
+    `ENGINEERING_RULES.md` rule 8: the harness names the kernel it ran.
 
     `return_sqrt=False` because the index under test carries
     `METRIC_L2_EXPANDED`, which is SQUARED distances on both sides.
@@ -683,7 +683,7 @@ def check_ivf_refusals() raises:
         + _mode_name()
         + "]: "
         + String(refused)
-        + " refusals by name; ivf_flat, both ported metrics and the default"
+        + " refusals by name; ivf_flat, both implemented metrics and the default"
         " parameter set all resolve"
     )
     _ = index^

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ls_success` and `ls_backtrack`: the backtracking line search.
 
-PORT OF `cuml/cpp/src/glm/qn/qn_linesearch.cuh` at cuML `00094f7`. WHOLE
+FOLLOWS `cuml/cpp/src/glm/qn/qn_linesearch.cuh` at cuML `00094f7`. WHOLE
 FILE since 2026-09-01: `LSProjectedStep` and `ls_backtrack_projected`,
 OWL-QN's projected line search, are at the bottom (DEVIATION 552). Do not
 improve.
@@ -22,7 +22,7 @@ scalars here (`ftol * dg_init`, `step *= width`, `wolfe * dg_init`) are
 single operations.
 
 `ls_backtrack`'s default path is ARMIJO (`LBFGSParam::linesearch`), so the
-Wolfe `dot(grad, drt)` is ported and not reached from the Python surface.
+Wolfe `dot(grad, drt)` is implemented and not reached from the Python surface.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx

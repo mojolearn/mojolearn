@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Does a ported kernel actually ENQUEUE on Metal?
+"""Does a implemented kernel actually ENQUEUE on Metal?
 
-Not a port and not a test: a COMPILE-AND-LAUNCH PROBE, and the standing rule
-of this tree is that a kernel is not ported until it appears here and runs.
+Not an implementation and not a test: a COMPILE-AND-LAUNCH PROBE, and the standing rule
+of this tree is that a kernel is not implemented until it appears here and runs.
 
 Every "it compiles" claim before the first probe was
 `mojo build --emit=object`, which targets the HOST. Three files reported as
@@ -228,4 +228,4 @@ def probe() raises:
     # the process then never returns (GPU idle, host threads in futex wait);
     # Apple and AMD do not show it, which is how it stayed latent here.
     _ = ctx^
-    print("all ported kernels enqueued and the queue drained")
+    print("all implemented kernels enqueued and the queue drained")
