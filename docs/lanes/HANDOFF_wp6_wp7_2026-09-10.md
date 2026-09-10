@@ -90,3 +90,12 @@ Integration correction: the hostptr gate now lives under root `checks/`. A
 binding builds use `-I . -I bindings`; this blocked ET/RF extension builds.
 The helper and gate behavior are unchanged. Retained run logs keep their
 original executed paths.
+
+## Build-path correction
+
+The host helper check lives in root `checks/`: a `bindings/checks/` directory
+shadows the root package when compiling binding entry points. The first
+remote baseline build exposed this import-resolution failure; no arithmetic
+ran. Another lane had independently fixed the location in 8d87cc92; that
+commit is now included in the refreshed baseline. The scoped rental was terminated and absence verified (HTTP 404). The
+extended host gate includes integer labels and passes 54,944 bit checks.
