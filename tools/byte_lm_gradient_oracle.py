@@ -41,30 +41,32 @@ OPT_FIELDS = {'kind', 'lr', 'beta1', 'beta2', 'eps', 'weight_decay',
 def model_dimensions(model_shape=None):
     """Independent shape admission; deliberately imports no native registry."""
     fields = (2, 32, 32, 4, 2, 8, 64) if model_shape is None else tuple(model_shape)
-    if len(fields) != 7 or any(type(x) is not int or not 0 < x <= 1048576 for x in fields):
-        raise ValueError('expected seven positive bounded integer model dimensions')
-    batch, length, dm, heads, kv, hd, ff = fields
+    if len(fields) == 7:
+        fields += (2, 256)
+    if len(fields) != 9 or any(type(x) is not int or not 0 < x <= 1048576 for x in fields):
+        raise ValueError('expected nine positive bounded integer model dimensions')
+    batch, length, dm, heads, kv, hd, ff, layers, vocab = fields
     if length > 8192 or dm != heads * hd or heads % kv or hd % 2:
         raise ValueError('invalid length, head dimensions or GQA ratio')
-    if max(batch * length * 256, batch * length * dm,
+    if max(batch * length * vocab, batch * length * dm,
            batch * length * ff, batch * heads * length * length) >= 2**31:
         raise ValueError('model extent exceeds int32 indexing')
-    total = 512 * dm + 2 * (2 * dm + 2 * dm * dm + 2 * dm * kv * hd + 3 * dm * ff)
+    total = 2 * vocab * dm + layers * (2 * dm + 2 * dm * dm + 2 * dm * kv * hd + 3 * dm * ff)
     if total >= 2**31:
         raise ValueError('parameter registry exceeds int32 indexing')
     return fields
 
 
 def registry(model_shape=None):
-    _, _, dm, heads, kv, hd, ff = model_dimensions(model_shape)
-    shapes = [('embed', (256, dm))]
-    for block in range(2):
+    _, _, dm, heads, kv, hd, ff, layers, vocab = model_dimensions(model_shape)
+    shapes = [('embed', (vocab, dm))]
+    for block in range(layers):
         shapes += [(f'block{block}.{name}', shape) for name, shape in (
             ('norm1_w', (dm,)), ('w_q', (heads * hd, dm)),
             ('w_k', (kv * hd, dm)), ('w_v', (kv * hd, dm)),
             ('w_o', (dm, heads * hd)), ('norm2_w', (dm,)),
             ('w_gate', (ff, dm)), ('w_up', (ff, dm)), ('w_down', (dm, ff)))]
-    shapes += [('lm_head', (256, dm))]
+    shapes += [('lm_head', (vocab, dm))]
     entries, offset = [], 0
     for name, shape in shapes:
         size = math.prod(shape)
@@ -111,21 +113,21 @@ def _validate_inputs(initial_params, ids, model_shape=None):
     if tokens.dtype != np.dtype('int32') or tokens.shape not in ((batch * (length + 1),), (batch, length + 1)):
         raise ValueError('ids must match configured int32[batch,length+1]')
     tokens = tokens.reshape(batch, length + 1)
-    if (tokens < 0).any() or (tokens >= 256).any():
+    if (tokens < 0).any() or (tokens >= model_dimensions(model_shape)[8]).any():
         raise ValueError('byte tokens must be in [0,256)')
     return params, tokens
 
 
 def reference(initial_params, ids, *, wrong_silu_block=None, model_shape=None, oracle_device="cuda"):
-    """Return (FP64 scalar loss, dict of 20 FP64 shaped parameter gradients).
+    """Return (FP64 scalar loss, dict of configured FP64 shaped parameter gradients).
 
     Mathematical transcription with independent PyTorch autograd. The optional
     control drops only the sigmoid derivative in one block while preserving
-    that block's SiLU forward values; wrong_silu_block must be None, 0 or 1.
+    that block's SiLU forward values; wrong_silu_block must be None or an existing layer index.
     """
-    batch, length, dm, heads, kv, hd, _ = model_dimensions(model_shape)
+    batch, length, dm, heads, kv, hd, _, layers, vocab = model_dimensions(model_shape)
     initial, ids = _validate_inputs(initial_params, ids, model_shape)
-    if wrong_silu_block not in (None, 0, 1):
+    if wrong_silu_block is not None and (type(wrong_silu_block) is not int or not 0 <= wrong_silu_block < layers):
         raise ValueError('invalid nonlinear control block')
     torch, _ = _torch_device(device=oracle_device)
     import torch.nn.functional as F
@@ -144,7 +146,7 @@ def reference(initial_params, ids, *, wrong_silu_block=None, model_shape=None, o
     def rotate(a):
         half = torch.cat((-a[..., hd // 2:], a[..., :hd // 2]), dim=-1)
         return a * cosine + half * sine
-    for block in range(2):
+    for block in range(layers):
         prefix = f'block{block}.'
         def linear(x, name):
             return F.linear(x, weights[prefix + name])
@@ -169,7 +171,7 @@ def reference(initial_params, ids, *, wrong_silu_block=None, model_shape=None, o
         h = residual + linear(activated * linear(z, 'w_up'), 'w_down')
     # No final RMSNorm, bias, tied head, dropout or cache carried between steps.
     logits = F.linear(h, weights['lm_head'])
-    loss = F.cross_entropy(logits.reshape(batch * length, 256), tokens[:, 1:].reshape(batch * length), reduction='mean')
+    loss = F.cross_entropy(logits.reshape(batch * length, vocab), tokens[:, 1:].reshape(batch * length), reduction='mean')
     loss.backward()
     if oracle_device == "cuda":
         torch.cuda.synchronize()

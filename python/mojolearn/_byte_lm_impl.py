@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Public wrapper for a runtime-shaped two-block byte LM.
+"""Public wrapper for a runtime-shaped decoder language model.
 
 This module contains no forward/backward/update arithmetic. All numerical
 work belongs to _mojolearn_byte_lm. No learning, performance, mathematical
@@ -21,16 +21,11 @@ from ._arrays import _addr, _addr_ro
 from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
 
 PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
-_BLOCK_NAMES = ('norm1_w', 'w_q', 'w_k', 'w_v', 'w_o', 'norm2_w', 'w_gate', 'w_up', 'w_down')
-_BLOCK_SHAPES = ((32,), (32, 32), (16, 32), (16, 32), (32, 32), (32,), (64, 32), (64, 32), (32, 64))
-PARAMETER_NAMES = ('embed', *('block%d.%s' % (block, name)
-                             for block in range(2) for name in _BLOCK_NAMES), 'lm_head')
-PARAMETER_SHAPES = ((256, 32), *_BLOCK_SHAPES, *_BLOCK_SHAPES, (256, 32))
-_OFFSETS = [0]
-for _shape in PARAMETER_SHAPES:
-    _OFFSETS.append(_OFFSETS[-1] + math.prod(_shape))
-_OFFSETS = tuple(_OFFSETS)
-_N = 34944
+# Compatibility constants describe only the original regression fixture.
+PARAMETER_NAMES = ByteLanguageModelConfig().parameter_names
+PARAMETER_SHAPES = ByteLanguageModelConfig().parameter_shapes
+_OFFSETS = ByteLanguageModelConfig().offsets
+_N = ByteLanguageModelConfig().n_total
 _EXTENSION = '_mojolearn_byte_lm'
 _SCHEMA = 'mojolearn.small-byte-lm-state.v1'
 _CHECKPOINT_SCHEMA = 'mojolearn.small-byte-lm-json-checkpoint.v1'
@@ -116,9 +111,9 @@ def _array(value, shape, name, dtype=np.float32):
 def _parameters(value, shape=None):
     shape = require_shape(shape)
     if isinstance(value, dict):
-        if set(value) != set(PARAMETER_NAMES):
-            raise ValueError('Byte-LM named parameters must contain the exact 20-tensor registry')
-        arrays = [_array(value[name], shape, name) for name, shape in zip(PARAMETER_NAMES, shape.parameter_shapes)]
+        if set(value) != set(shape.parameter_names):
+            raise ValueError('Byte-LM named parameters must contain the exact configured tensor registry')
+        arrays = [_array(value[name], shape, name) for name, shape in zip(shape.parameter_names, shape.parameter_shapes)]
         return np.concatenate([array.reshape(-1) for array in arrays])
     return _array(value, (shape.n_total,), 'parameters')
 
@@ -166,7 +161,7 @@ def _snapshot(state):
     return dict(state, parameters=state['parameters'].copy(), m=state['m'].copy(),
                 v=state['v'].copy(), flags=state['flags'].copy(), config=dict(state['config']),
                 data_schedule=_schedule(state['data_schedule']),
-                parameter_names=list(PARAMETER_NAMES),
+                parameter_names=list(shape.parameter_names),
                 parameter_shapes=[list(shape) for shape in shape.parameter_shapes],
                 parameter_offsets=list(shape.offsets))
 
@@ -181,7 +176,7 @@ def _validate_state(value):
         raise ValueError('Byte-LM state has missing or unknown fields')
     shape = state_shape(value)
     if (value['schema'] != _SCHEMA or value['profile'] != shape.profile or value['numeric_mode'] != 'identical'
-            or value['parameter_names'] != list(PARAMETER_NAMES)
+            or value['parameter_names'] != list(shape.parameter_names)
             or value['parameter_shapes'] != [list(shape) for shape in shape.parameter_shapes]
             or value['parameter_offsets'] != list(shape.offsets)):
         raise ValueError('Byte-LM state profile/registry/mode mismatch')
@@ -198,7 +193,7 @@ def _validate_state(value):
     parameters = _array(value['parameters'], (shape.n_total,), 'parameters')
     m = _array(value['m'], (shape.n_total,), 'm')
     v = _array(value['v'], (shape.n_total,), 'v')
-    flags = _array(value['flags'], (20,), 'flags', np.int32)
+    flags = _array(value['flags'], (shape.n_tensors,), 'flags', np.int32)
     if np.any(v < 0) or np.any((flags != 0) & (flags != 1)):
         raise ValueError('Byte-LM requires nonnegative second moments and binary flags')
     value = dict(value)
@@ -207,7 +202,7 @@ def _validate_state(value):
     return dict(value, parameters=parameters, m=m, v=v, flags=flags,
                 completed_steps=completed, next_batch_index=completed, config=config,
                 data_schedule=_schedule(value['data_schedule']),
-                parameter_names=list(PARAMETER_NAMES),
+                parameter_names=list(shape.parameter_names),
                 parameter_shapes=[list(shape) for shape in shape.parameter_shapes], parameter_offsets=list(shape.offsets))
 
 
@@ -237,15 +232,15 @@ def _binding_metadata(binding):
 
 
 class SmallByteLanguageModelTrainer:
-    """FP32 two-block byte-language-model trainer with runtime dimensions.
+    """FP32 decoder language-model trainer with runtime dimensions.
 
     Defaults B2/L32/DM32/H4/KV2/FF64/V256; pass ByteLanguageModelConfig
-    as shape to change runtime dimensions. Two blocks, 256 byte symbols,
+    as shape to configure dimensions, layer count and vocabulary.
     no biases/dropout/final norm, untied embedding/head. Supply a flat FP32
-    array or the 20 named tensors exposed by parameter_registry(shape). There
+    array or the configured named tensors exposed by parameter_registry(shape). There
     is no hidden initialization, tokenizer, padding, truncation or RNG.
 
-    train_step/evaluate require actual int32[B,L+1] IDs in [0,256).
+    train_step/evaluate require actual int32[B,L+1] IDs in [0, shape.vocab_size).
     The first L positions predict the next L; loss averages B*L targets. All arithmetic runs in the native CUDA/HIP/Metal IDENTICAL
     profile. The process must already select IDENTICAL mode.
 
@@ -273,11 +268,11 @@ class SmallByteLanguageModelTrainer:
         self._runtime = None
         self._runtime_binding = None
         self._state = dict(schema=_SCHEMA, profile=shape.profile, numeric_mode='identical',
-                           parameter_names=list(PARAMETER_NAMES),
+                           parameter_names=list(shape.parameter_names),
                            parameter_shapes=[list(shape) for shape in shape.parameter_shapes],
                            parameter_offsets=list(shape.offsets), parameters=flat,
                            m=np.zeros(shape.n_total, np.float32), v=np.zeros(shape.n_total, np.float32),
-                           flags=np.zeros(20, np.int32), completed_steps=0, next_batch_index=0,
+                           flags=np.zeros(shape.n_tensors, np.int32), completed_steps=0, next_batch_index=0,
                            config=config, data_schedule=descriptor)
         if shape.profile != PROFILE:
             self._state['model_shape'] = shape.to_dict()
@@ -287,7 +282,7 @@ class SmallByteLanguageModelTrainer:
         shape = require_shape(shape)
         return [{'name': name, 'shape': tensor_shape, 'offset': shape.offsets[index],
                  'size': shape.offsets[index + 1] - shape.offsets[index]}
-                for index, (name, tensor_shape) in enumerate(zip(PARAMETER_NAMES, shape.parameter_shapes))]
+                for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))]
 
     @property
     def step_(self):
@@ -334,8 +329,8 @@ class SmallByteLanguageModelTrainer:
     def _run(self, ids, train):
         shape = state_shape(self._state)
         tokens = _array(ids, (shape.batch, shape.length + 1), 'ids', np.int32)
-        if np.any(tokens < 0) or np.any(tokens >= 256):
-            raise ValueError('Byte-LM IDs must be in [0, 256)')
+        if np.any(tokens < 0) or np.any(tokens >= shape.vocab_size):
+            raise ValueError(f'Byte-LM IDs must be in [0, {shape.vocab_size})')
         working = _validate_state(self._state)
         if train and working['completed_steps'] >= 999999:
             raise ValueError('Byte-LM native call step counter is exhausted')
@@ -345,7 +340,7 @@ class SmallByteLanguageModelTrainer:
         out_p = np.full(shape.n_total, np.nan, np.float32)
         out_m = np.full(shape.n_total, np.nan, np.float32)
         out_v = np.full(shape.n_total, np.nan, np.float32)
-        out_flags = np.full(20, -1, np.int32)
+        out_flags = np.full(shape.n_tensors, -1, np.int32)
         out_loss = np.full(1, np.nan, np.float32)
         out_grad = np.full(shape.n_total, np.nan, np.float32) if train else None
         cfg = working['config']
@@ -377,12 +372,12 @@ class SmallByteLanguageModelTrainer:
         result = dict(loss=float(out_loss[0]), step=expected, completed_steps=expected,
                       next_batch_index=expected, flat_gradients=gradients,
                       gradients={name: gradients[shape.offsets[index]:shape.offsets[index + 1]].reshape(tensor_shape).copy()
-                                 for index, (name, tensor_shape) in enumerate(zip(PARAMETER_NAMES, shape.parameter_shapes))})
+                                 for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))})
         self._state = candidate
         return result
 
     def train_step(self, ids):
-        """One mean-CE/AdamW update, with all 20 pre-update gradients returned."""
+        """One mean-CE/AdamW update, with all configured pre-update gradients returned."""
         with self._lock:
             return self._run(ids, True)
 
@@ -395,7 +390,7 @@ class SmallByteLanguageModelTrainer:
         """Atomically write at most 2 MiB of canonical no-pickle JSON/hex."""
         with self._lock:
             # Refuse guaranteed-oversize saves before copying/hex-encoding state.
-            if state_shape(self._state).n_total * 24 + 20 * 8 > _CHECKPOINT_LIMIT:
+            if state_shape(self._state).n_total * 24 + state_shape(self._state).n_tensors * 8 > _CHECKPOINT_LIMIT:
                 raise ValueError('Byte-LM checkpoint exceeds 2 MiB; export state_dict arrays')
             payload = self.state_dict()
         for key in ('parameters', 'm', 'v', 'flags'):
@@ -458,7 +453,7 @@ class SmallByteLanguageModelTrainer:
         shape = state_shape(payload)
         for key in ('parameters', 'm', 'v', 'flags'):
             value = payload.get(key)
-            cells, dtype = (20, '<i4') if key == 'flags' else (shape.n_total, '<f4')
+            cells, dtype = (shape.n_tensors, '<i4') if key == 'flags' else (shape.n_total, '<f4')
             if (not isinstance(value, dict) or set(value) != {'dtype', 'shape', 'hex'}
                     or value['dtype'] != dtype or value['shape'] != [cells]
                     or not isinstance(value['hex'], str) or len(value['hex']) != cells * 8):

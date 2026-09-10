@@ -38,6 +38,17 @@ def main() raises:
     require(alternate.profile() == "mojolearn.byte-lm.b3-l7-d24-h3-kv1-hd8-ff40-v256-blocks2.fp32.v2", "alternate profile")
     var larger = ByteConfig(1, 65, 48, 6, 3, 8, 96)
     require(larger.n_total() == 66240, "larger GQA registry")
+    var generalized = ByteConfig(2, 7, 24, 3, 1, 8, 40, 3, 513)
+    require(generalized.n_tensors() == 29, "three-layer tensor count")
+    require(generalized.param_count(0) == 12312 and generalized.param_count(28) == 12312,
+            "configured embedding/head vocabulary")
+    require(generalized.n_total() == 38016, "three-layer registry total")
+    require(len(generalized.offsets()) == 30, "three-layer offsets")
+    var large = ByteConfig(1, 2048, 768, 12, 12, 64, 2048, 12, 50257)
+    require(large.n_tensors() == 110 and large.n_total() == 162147840,
+            "large configured registry")
+    refused(ByteConfig(1, 7, 24, 3, 1, 8, 40, 0, 513))
+    refused(ByteConfig(1, 7, 24, 3, 1, 8, 40, 3, 0))
     var copied = alternate.copy()
     copied.length = 11
     require(alternate.length == 7 and copied.profile() != alternate.profile(), "copy/profile isolation")

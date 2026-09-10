@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Synchronous owned-state boundary for a runtime-shaped two-block byte LM.
+"""Synchronous owned-state boundary for a runtime-shaped decoder language model.
 
 Runtime shapes are compile/host checked; device qualification is separate.
 No GPU/context is created during import.
@@ -20,7 +20,7 @@ from training.checks.optimizer_oracle import OptimizerConfig
 from training.checks.train_loop import download_f32
 from training.byte_lm_config import ByteConfig
 from training.byte_lm import (
-    BYTE_PROFILE, BYTE_J, ByteTrainer, byte_train_step,
+    BYTE_PROFILE, ByteTrainer, byte_train_step,
     byte_eval_loss, byte_validate_state, byte_validate_optimizer,
     byte_validate_tokens,
 )
@@ -40,7 +40,7 @@ def byte_lm_profile_binding() raises -> PythonObject:
 
 def _span_cells(index: Int, shape: ByteConfig) raises -> Int:
     if index == 3 or index == 9:
-        return BYTE_J
+        return shape.n_tensors()
     if index == 4:
         return shape.batch * (shape.length + 1)
     if index == 10:
@@ -103,8 +103,8 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                   momentum, dampening, nesterov, max_norm]
     action=0: eval; out_grad MUST be 0; returns unchanged completed step.
     action=1: training; writes pre-update gradients; returns completed+1.
-    Param/m/v/grad spans use shape.n_total(); flags20 int32(0/1);
-    IDs[B,L+1] int32[0,256). kind=2(AdamW). All config fields explicit. Positive learning rate, no clipping or SGD options.
+    Param/m/v/grad spans use shape.n_total(); flags[shape.n_tensors()] int32(0/1);
+    IDs[B,L+1] int32[0,shape.vocab_size). kind=2(AdamW). All config fields explicit. Positive learning rate, no clipping or SGD options.
     """
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("byte LM binding requires IDENTICAL")
@@ -141,7 +141,7 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
     var ids_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr[4])
     var flags = List[Bool]()
     var ids = List[Int32]()
-    for i in range(BYTE_J):
+    for i in range(shape.n_tensors()):
         var flag = flags_ptr.unsafe_load(i)
         if flag != 0 and flag != 1:
             raise Error("byte LM: momentum flags must be exactly 0 or 1")
@@ -181,7 +181,7 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
             _require_same_bits(initial_p, out_p)
             _require_same_bits(initial_m, out_m)
             _require_same_bits(initial_v, out_v)
-            for i in range(BYTE_J):
+            for i in range(shape.n_tensors()):
                 if flags[i] != out_flags[i]:
                     raise Error("byte LM eval changed momentum flags")
         byte_validate_state(out_p, out_m, out_v, out_flags, result_step, shape)
@@ -207,7 +207,7 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
     if action == 1:
         _write_f32(addr[8], out_g)
     var flags_out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr[9])
-    for i in range(BYTE_J):
+    for i in range(shape.n_tensors()):
         flags_out.unsafe_store(i, Int32(out_flags[i]))
     var loss_out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr[10])
     loss_out.unsafe_store(0, loss)
@@ -215,17 +215,20 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
 
 
 def _byte_config(shape: PythonObject) raises -> ByteConfig:
-    if len(shape) != 7:
-        raise Error("byte LM: expected 7 shape integers (B,L,DM,H,KV,HD,FF)")
+    if len(shape) != 7 and len(shape) != 9:
+        raise Error("byte LM: expected 7 or 9 shape integers (B,L,DM,H,KV,HD,FF[,layers,vocab])")
     var operator_module = Python.import_module("operator")
     var values = List[Int]()
-    for i in range(7):
+    for i in range(len(shape)):
         var type_name = String(py=shape[i].__class__.__name__)
         if type_name == "bool" or type_name == "bool_":
             raise Error("byte LM: shape dimensions must be integers, not booleans")
         values.append(Int(py=operator_module.index(shape[i])))
+    if len(values) == 7:
+        values.append(2)
+        values.append(256)
     var cfg = ByteConfig(values[0], values[1], values[2], values[3],
-                         values[4], values[5], values[6])
+                         values[4], values[5], values[6], values[7], values[8])
     cfg.validate()
     return cfg^
 

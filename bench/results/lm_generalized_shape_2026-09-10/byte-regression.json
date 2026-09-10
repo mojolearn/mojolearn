@@ -1,0 +1,94 @@
+{
+  "passed": true,
+  "scope": "stored native arrays, not timing or cross-vendor admission",
+  "captures": [
+    {
+      "file": "default-step0.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 978860,
+      "file_sha256": [
+        "77e6e9590ec06ca98fd08e19728a4514b5898a764eb4f685e20a60d9b6e79e7c",
+        "77e6e9590ec06ca98fd08e19728a4514b5898a764eb4f685e20a60d9b6e79e7c"
+      ]
+    },
+    {
+      "file": "default-step1.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 978860,
+      "file_sha256": [
+        "5c70a369379dc8b82f3b91f6ce78efcb5e923ba589d322d8f26a25c9f0d2734f",
+        "5c70a369379dc8b82f3b91f6ce78efcb5e923ba589d322d8f26a25c9f0d2734f"
+      ]
+    },
+    {
+      "file": "alternate_gqa-step0.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 594308,
+      "file_sha256": [
+        "92a47c8c94761f1c997bc219dd3d2b74a0b4378fa6da64cf50b09357a6e76eb7",
+        "92a47c8c94761f1c997bc219dd3d2b74a0b4378fa6da64cf50b09357a6e76eb7"
+      ]
+    },
+    {
+      "file": "alternate_gqa-step1.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 594308,
+      "file_sha256": [
+        "0e99842074484b6e97997e7b72ab5dded309805974138439fb335dd5905df60c",
+        "0e99842074484b6e97997e7b72ab5dded309805974138439fb335dd5905df60c"
+      ]
+    }
+  ]
+}

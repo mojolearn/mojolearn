@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Two-block FP32 byte LM orchestration with runtime shapes.
+"""FP32 decoder LM orchestration with runtime shapes.
 
 Runtime shapes are compile/host checked; numerical qualification is separate.
 
 Runtime shapes; default B2/L32/DM32/H4/KV2/FF64, 34,944 parameters.
-The byte alphabet (256 symbols), two blocks and 20-tensor registry are fixed.
+Vocabulary, layer count and the flat parameter registry follow ByteConfig.
+Layer construction/forward order follows transformers/models/llama/modeling_llama.py:354-356,402-412.
+The existing no-final-norm, untied-head architecture is preserved.
 Every numerical operation is an existing embedding/GEMM/Llama/loss/AdamW op.
 Caller supplies actual parameters, moments, flags, completed step and token IDs.
 No generated data, hidden initialization, tokenizer, performance or learning claim.
@@ -70,12 +72,12 @@ def byte_param_count(j: Int, config: ByteConfig = ByteConfig()) raises -> Int:
     return config.param_count(j)
 
 
-def byte_param_name(j: Int) raises -> String:
-    if j < 0 or j >= BYTE_J:
+def byte_param_name(j: Int, config: ByteConfig = ByteConfig()) raises -> String:
+    if j < 0 or j >= config.n_tensors():
         raise Error("byte LM: parameter index out of range")
     if j == 0:
         return "embed"
-    if j == 19:
+    if j == config.n_tensors() - 1:
         return "lm_head"
     var names = List[String]()
     names.append("norm1_w")
@@ -94,10 +96,10 @@ def byte_offsets(config: ByteConfig = ByteConfig()) raises -> List[Int]:
     return config.offsets()
 
 
-def byte_names() raises -> List[String]:
+def byte_names(config: ByteConfig = ByteConfig()) raises -> List[String]:
     var result = List[String]()
-    for j in range(BYTE_J):
-        result.append(byte_param_name(j))
+    for j in range(config.n_tensors()):
+        result.append(byte_param_name(j, config))
     return result^
 
 
@@ -111,7 +113,7 @@ def byte_validate_state(param: List[Float32], m: List[Float32], v: List[Float32]
                         flags: List[Bool], completed: Int, config: ByteConfig = ByteConfig()) raises:
     config.validate()
     var n_total = config.n_total()
-    if len(param) != n_total or len(m) != n_total or len(v) != n_total or len(flags) != BYTE_J:
+    if len(param) != n_total or len(m) != n_total or len(v) != n_total or len(flags) != config.n_tensors():
         raise Error("byte LM: state length differs from canonical registry")
     if completed < 0 or completed >= 1000000:
         raise Error("byte LM: completed step must be in [0,1000000)")
@@ -146,8 +148,8 @@ def byte_validate_tokens(ids: List[Int32], config: ByteConfig = ByteConfig()) ra
     if len(ids) != config.batch * (config.length + 1):
         raise Error("byte LM: token count differs from row-major [batch,length+1]")
     for i in range(len(ids)):
-        if ids[i] < 0 or ids[i] >= BYTE_V:
-            raise Error("byte LM: token ID outside [0,256)")
+        if ids[i] < 0 or ids[i] >= Int32(config.vocab_size):
+            raise Error("byte LM: token ID outside configured vocabulary")
 
 
 def _require_profile() raises:
@@ -176,15 +178,15 @@ def _byte_validate_allocations(config: ByteConfig) raises:
     config.validate()
     var m = config.batch * config.length
     var widths: List[Int] = [config.d_model, config.n_kv * config.head_dim,
-                            config.intermediate, BYTE_V]
+                            config.intermediate, config.vocab_size]
     for width in widths:
         _byte_check_gemm(m, width, config.d_model)
     _byte_check_gemm(m, config.d_model, config.intermediate)
     _byte_check_gemm(config.length, config.length, config.head_dim)
     _byte_check_gemm(config.length, config.head_dim, config.length)
     _byte_check_gemm(1, config.d_model, m)
-    _byte_check_workspace(identical_ce_workspace_max_floats(m, BYTE_V, REDUCTION_MEAN))
-    _byte_check_workspace(identical_ce_ones_floats(m, BYTE_V))
+    _byte_check_workspace(identical_ce_workspace_max_floats(m, config.vocab_size, REDUCTION_MEAN))
+    _byte_check_workspace(identical_ce_ones_floats(m, config.vocab_size))
     _byte_check_workspace(identical_optimizer_workspace_floats(config.offsets()))
 
 
@@ -253,7 +255,7 @@ struct ByteBuffers(Movable):
         self.config = config.copy()
         var M = config.batch * config.length
         var DM = config.d_model
-        comptime V = BYTE_V
+        var V = config.vocab_size
 
         self.offsets = byte_offsets(config)
         self.n_total = config.n_total()
@@ -269,8 +271,8 @@ struct ByteBuffers(Movable):
             record_n = n
         self.denom_out = _zeros(ctx, record_n)
         self.q_out = _zeros(ctx, record_n)
-        self.sumsq = _zeros(ctx, BYTE_J)
-        self.norms = _zeros(ctx, BYTE_J)
+        self.sumsq = _zeros(ctx, config.n_tensors())
+        self.norms = _zeros(ctx, config.n_tensors())
         self.total_cell = _zeros(ctx, 1)
         self.out2 = _zeros(ctx, 2)
         self.opt_ws = _zeros(
@@ -395,13 +397,10 @@ struct ByteTrainer(Movable):
     """
     var config: ByteConfig
     var buffers: ByteBuffers
-    var weights0: LlamaDeviceWeights
-    var weights1: LlamaDeviceWeights
+    var weights: List[LlamaDeviceWeights]
     var rope: LlamaRopeTable
-    var forward0: LlamaDeviceStages
-    var forward1: LlamaDeviceStages
-    var backward0: LlamaBackwardStages
-    var backward1: LlamaBackwardStages
+    var forward: List[LlamaDeviceStages]
+    var backward: List[LlamaBackwardStages]
     var optimizer: OptimizerConfig
     var completed_steps: Int
     var healthy: Bool
@@ -420,13 +419,14 @@ struct ByteTrainer(Movable):
         self.completed_steps = completed_steps
         self.healthy = True
         self.buffers = ByteBuffers(ctx, initial_params, initial_m, initial_v, flags, config)
-        self.weights0 = _block_weights(ctx, initial_params, 0, config)
-        self.weights1 = _block_weights(ctx, initial_params, 1, config)
+        self.weights = List[LlamaDeviceWeights]()
+        self.forward = List[LlamaDeviceStages]()
+        self.backward = List[LlamaBackwardStages]()
         self.rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
-        self.forward0 = LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config))
-        self.forward1 = LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config))
-        self.backward0 = LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config))
-        self.backward1 = LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config))
+        for layer in range(config.n_layers):
+            self.weights.append(_block_weights(ctx, initial_params, layer, config))
+            self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config)))
+            self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config)))
         ctx.synchronize()
 
 
@@ -482,8 +482,7 @@ def byte_train_step(ctx: DeviceContext, mut trainer: ByteTrainer,
 
 
 def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
-                       ids: List[Int32], mut kv0: LlamaKVCache,
-                       mut kv1: LlamaKVCache, mut trace: IdentityTrace) raises -> Float32:
+                       ids: List[Int32], mut trace: IdentityTrace) raises -> Float32:
     """Shared forward only. Authoritative params/m/v/flags/t are read-only."""
     var config = tr.config.copy()
     var M = config.batch * config.length
@@ -504,23 +503,32 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     ctx.synchronize()
     _ = hi
     _ = ht
-    _unpack_block(ctx, tr.buffers, tr.weights0, 0)
-    _unpack_block(ctx, tr.buffers, tr.weights1, 1)
-    _copy_into(ctx, tr.buffers.emb_w, tr.buffers.param, 0, 0, BYTE_V * config.d_model)
-    _copy_into(ctx, tr.buffers.lm_w, tr.buffers.param, 0, tr.buffers.offsets[19], BYTE_V * config.d_model)
+    for layer in range(config.n_layers):
+        _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
+    _copy_into(ctx, tr.buffers.emb_w, tr.buffers.param, 0, 0, config.vocab_size * config.d_model)
+    _copy_into(ctx, tr.buffers.lm_w, tr.buffers.param, 0, tr.buffers.offsets[config.n_tensors() - 1], config.vocab_size * config.d_model)
     ctx.synchronize()
-    var emb = EmbConfig.llama(BYTE_V, config.d_model)
-    var ce = CeConfig.causal_lm(BYTE_V)
+    var emb = EmbConfig.llama(config.vocab_size, config.d_model)
+    var ce = CeConfig.causal_lm(config.vocab_size)
     identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
     ctx.synchronize()
-    llama_decoder_layer_forward(ctx, tr.forward0, kv0, tr.rope, tr.weights0,
-        tr.buffers.x, config.batch, config.length, 0, trace, "byte.block0.forward")
-    ctx.synchronize()
-    llama_decoder_layer_forward(ctx, tr.forward1, kv1, tr.rope, tr.weights1,
-        tr.forward0.residual2, config.batch, config.length, 0, trace, "byte.block1.forward")
-    ctx.synchronize()
-    identical_gemm_into(ctx, tr.buffers.logits, tr.forward1.residual2,
-        tr.buffers.lm_w, tr.buffers.head_ws, M, BYTE_V, config.d_model, OP_NT)
+    for layer in range(config.n_layers):
+        # Move the current stages out while borrowing the preceding residual.
+        # No extra activation copy; restore canonical layer order after the call.
+        var stages = tr.forward.pop(layer)
+        var kv = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
+        var prefix = String("byte.block") + String(layer) + ".forward"
+        if layer == 0:
+            llama_decoder_layer_forward(ctx, stages, kv, tr.rope, tr.weights[layer],
+                tr.buffers.x, config.batch, config.length, 0, trace, prefix)
+        else:
+            llama_decoder_layer_forward(ctx, stages, kv, tr.rope, tr.weights[layer],
+                tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix)
+        ctx.synchronize()
+        tr.forward.insert(layer, stages^)
+        _ = kv^
+    identical_gemm_into(ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
+        tr.buffers.lm_w, tr.buffers.head_ws, M, config.vocab_size, config.d_model, OP_NT)
     ctx.synchronize()
     identical_ce_forward_into(ctx, tr.buffers.ce_max, tr.buffers.ce_shift,
         tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logdenom,
@@ -540,39 +548,43 @@ def _byte_step_admitted(ctx: DeviceContext, mut tr: ByteTrainer,
                         before_flags: List[Bool]) raises -> ByteStepCapture:
     var config = tr.config.copy()
     var M = config.batch * config.length
-    var emb = EmbConfig.llama(BYTE_V, config.d_model)
-    var ce = CeConfig.causal_lm(BYTE_V)
+    var emb = EmbConfig.llama(config.vocab_size, config.d_model)
+    var ce = CeConfig.causal_lm(config.vocab_size)
     var trace = IdentityTrace.disabled()
-    var kv0 = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
-    var kv1 = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
-    var loss = _byte_forward_loss(ctx, tr, ids, kv0, kv1, trace)
+    var loss = _byte_forward_loss(ctx, tr, ids, trace)
     identical_ce_backward_into(ctx, tr.buffers.ce_weights, tr.buffers.ce_dlogits,
         tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logp,
         tr.buffers.targets, M, M, ce)
     ctx.synchronize()
     identical_gemm_backward_a_into(ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
-        tr.buffers.lm_w, tr.buffers.head_bwd_ws, M, BYTE_V, config.d_model, OP_NT)
+        tr.buffers.lm_w, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
     identical_gemm_backward_b_into(ctx, tr.buffers.dw_lm, tr.buffers.ce_dlogits,
-        tr.forward1.residual2, tr.buffers.head_bwd_ws, M, BYTE_V, config.d_model, OP_NT)
+        tr.forward[config.n_layers - 1].residual2, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
     ctx.synchronize()
-    var head_gradient = download_f32(ctx, tr.buffers.d_h, M * config.d_model)
-    llama_decoder_layer_backward(ctx, tr.backward1, tr.forward1, tr.weights1,
-        tr.rope.cos, tr.rope.sin, tr.forward0.residual2, head_gradient,
-        config.batch, config.length, 0, trace, "byte.block1.backward")
-    ctx.synchronize()
-    var middle_gradient = download_f32(ctx, tr.backward1.d_x, M * config.d_model)
-    llama_decoder_layer_backward(ctx, tr.backward0, tr.forward0, tr.weights0,
-        tr.rope.cos, tr.rope.sin, tr.buffers.x, middle_gradient,
-        config.batch, config.length, 0, trace, "byte.block0.backward")
-    ctx.synchronize()
-    identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward0.d_x,
+    var layer_gradient = download_f32(ctx, tr.buffers.d_h, M * config.d_model)
+    for layer in range(config.n_layers - 1, -1, -1):
+        var stages = tr.forward.pop(layer)
+        var prefix = String("byte.block") + String(layer) + ".backward"
+        if layer == 0:
+            llama_decoder_layer_backward(ctx, tr.backward[layer], stages, tr.weights[layer],
+                tr.rope.cos, tr.rope.sin, tr.buffers.x, layer_gradient,
+                config.batch, config.length, 0, trace, prefix)
+        else:
+            llama_decoder_layer_backward(ctx, tr.backward[layer], stages, tr.weights[layer],
+                tr.rope.cos, tr.rope.sin, tr.forward[layer - 1].residual2, layer_gradient,
+                config.batch, config.length, 0, trace, prefix)
+        ctx.synchronize()
+        tr.forward.insert(layer, stages^)
+        if layer > 0:
+            layer_gradient = download_f32(ctx, tr.backward[layer].d_x, M * config.d_model)
+    identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
         tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
         tr.buffers.emb_perm, M, emb)
     ctx.synchronize()
-    _pack_block(ctx, tr.buffers, tr.backward0, 0)
-    _pack_block(ctx, tr.buffers, tr.backward1, 1)
-    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, BYTE_V * config.d_model)
-    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[19], 0, BYTE_V * config.d_model)
+    for layer in range(config.n_layers):
+        _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
+    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
+    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
     ctx.synchronize()
     # Capture actual raw pre-update gradients before ANY optimizer writes.
     var grads = download_f32(ctx, tr.buffers.grad, config.n_total())
@@ -592,10 +604,7 @@ def _byte_step_admitted(ctx: DeviceContext, mut tr: ByteTrainer,
     ctx.synchronize()
     tr.completed_steps = next_step
     # Explicit last uses retain all async operands through completion.
-    _ = kv0^
-    _ = kv1^
-    _ = head_gradient
-    _ = middle_gradient
+    _ = layer_gradient
     _ = trace
     return ByteStepCapture(ids.copy(), before_p.copy(), before_m.copy(),
         before_v.copy(), before_flags.copy(), grads^, after_p^, after_m^,
@@ -610,7 +619,7 @@ def byte_checkpoint(capture: ByteStepCapture, seed: UInt64,
     Seed is descriptive data-schedule metadata supplied by caller, not hidden
     initialization. A required sidecar binds profile, raw corpus bytes, token
     schedule/cursor, numeric mode, optimizer bits, source and checkpoint hash.
-    The codec alone cannot admit a resume of this two-block architecture.
+    The codec alone cannot admit a resume of this configured architecture.
     """
     if (capture.profile != config.profile() or capture.numeric_mode != "identical"
         or steps_planned < capture.completed_steps or steps_planned >= 1000000):
@@ -624,7 +633,7 @@ def byte_checkpoint(capture: ByteStepCapture, seed: UInt64,
     ck.v_state = capture.after_v.copy()
     ck.buf_initialized = capture.after_flags.copy()
     ck.offsets = byte_offsets(config)
-    ck.names = byte_names()
+    ck.names = byte_names(config)
     ck.t = capture.completed_steps
     ck.seed = seed
     ck.opt_kind = capture.optimizer.kind
@@ -663,12 +672,8 @@ def byte_eval_loss(ctx: DeviceContext, mut trainer: ByteTrainer,
     byte_validate_state(p, m, v, trainer.buffers.buf_initialized, trainer.completed_steps, config)
     trainer.healthy = False
     var trace = IdentityTrace.disabled()
-    var kv0 = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
-    var kv1 = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
-    var loss = _byte_forward_loss(ctx, trainer, token_ids, kv0, kv1, trace)
+    var loss = _byte_forward_loss(ctx, trainer, token_ids, trace)
     ctx.synchronize()
-    _ = kv0^
-    _ = kv1^
     _ = trace
     trainer.healthy = True
     return loss

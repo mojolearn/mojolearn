@@ -1,0 +1,39 @@
+{
+  "native_vendor": "metal",
+  "numpy": "2.5.2",
+  "oracle_device": "cpu",
+  "oracle_device_name": "CPU FP64",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "python": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "qualification": "numerical tolerance and local eval invariance; not cross-vendor bitwise identity",
+  "schema": "mojolearn.byte-lm.runtime-numerical.v1",
+  "source_sha256": {
+    "tools/byte_lm_gradient_oracle.py": "6887e590001d8f29ceff38318ec3a6141e567114cb9279362cf1b2c4fb6cb12b",
+    "tools/byte_lm_runtime_numerical_check.py": "57a7da5ad2dfc9023c3fea4054baf093418f9e7f7aa3c58d6cc31053ab986f93",
+    "training/byte_lm.mojo": "3d60ed8e4a37ff08350d083c2a0846f41677072481f531e192b849c1f84b357f",
+    "training/byte_lm_config.mojo": "a620c17cff6cbe5f96097609105acf774a732b72aa118d342bfbbe5e084d8606"
+  },
+  "tolerances_atol_rtol": {
+    "gradient": [
+      2e-06,
+      0.0002
+    ],
+    "loss": [
+      2e-06,
+      2e-06
+    ],
+    "post_m": [
+      2e-07,
+      2e-05
+    ],
+    "post_p": [
+      2e-06,
+      2e-05
+    ],
+    "post_v": [
+      2e-09,
+      2e-05
+    ]
+  },
+  "torch": "2.14.0"
+}

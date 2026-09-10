@@ -16,7 +16,9 @@ def main():
     spec.loader.exec_module(native)
     assert native.byte_lm_numeric_mode() == 1
     cases = [(2, 32, 32, 4, 2, 8, 64), (3, 7, 24, 3, 1, 8, 40),
-             (1, 65, 48, 6, 3, 8, 96), (1, 256, 512, 8, 4, 64, 1024)]
+             (1, 65, 48, 6, 3, 8, 96), (1, 256, 512, 8, 4, 64, 1024),
+             (1, 2048, 768, 12, 12, 64, 2048, 12, 50257),
+             (1, 5, 16, 2, 1, 8, 24, 1, 257)]
     for fields in cases:
         cfg = ByteLanguageModelConfig(*fields)
         assert native.byte_lm_config_profile(list(fields)) == cfg.profile

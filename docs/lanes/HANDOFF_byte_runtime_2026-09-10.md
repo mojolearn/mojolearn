@@ -159,3 +159,11 @@ output checks. Existing Apple preflight is retained: 3.6–7.4% lower k10 and
 4.1–6.3% lower k15 request latency versus safe NO_PREFLIGHT. No new default
 was enabled. Evidence: `bench/results/knn_large_gate_audit_2026-09-10/`.
 Historical Apple preflight measurements were 400k/1000, corrected in the audit.
+
+## Generalized layer count and vocabulary continuation
+
+The two-block/V256 restrictions have now been removed from the shared trainer.
+See [configured LM handoff](HANDOFF_lm_generalized_shape_2026-09-10.md) for the
+nine-field API, complete Metal numerical evidence and prior-capture byte checks.
+The large model is host-admitted; resident training, large memory qualification
+and production-size checkpoint I/O remain open. No new performance prices.

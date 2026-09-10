@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Bounded actual-native default/GQA gradient, update and evaluation gate.
 
-Root execution only. Four training steps and four evaluations total. No build,
+Root execution only. Eight training steps and eight evaluations total. No build,
 rental, installation, opponent timing or learning claim. Explicit CPU FP64 oracle
 supports native Metal, whose PyTorch backend cannot execute float64 arithmetic.
 Existing preset oracle tolerances are not adapted to measured errors.
@@ -18,7 +18,9 @@ import sys
 import byte_lm_gradient_oracle as oracle
 
 CASES = [('default', (2, 32, 32, 4, 2, 8, 64)),
-         ('alternate_gqa', (3, 7, 24, 3, 1, 8, 40))]
+         ('alternate_gqa', (3, 7, 24, 3, 1, 8, 40)),
+         ('one_layer_vocab257', (1, 5, 16, 2, 1, 8, 24, 1, 257)),
+         ('three_layers_vocab513', (2, 7, 24, 3, 1, 8, 40, 3, 513))]
 
 
 def sha(raw):
@@ -91,12 +93,12 @@ def main():
         write_json(args.out / f'{name}-runtime.json', runtime)
         case = {'name': name, 'shape': list(fields), 'profile': cfg.profile, 'steps': [], 'eval': []}
         for step in range(2):
-            ids = rng.integers(0, 256, (cfg.batch, cfg.length + 1), dtype=np.int32)
+            ids = rng.integers(0, cfg.vocab_size, (cfg.batch, cfg.length + 1), dtype=np.int32)
             # Repeated IDs exercise embedding gradient accumulation; endpoints
             # and distinct rows exercise byte range, shift and batch ownership.
             ids[:, 0] = 0
             ids[:, 1] = 7
-            ids[:, -1] = 255
+            ids[:, -1] = cfg.vocab_size - 1
             before = trainer.state_dict()
             reference_loss, gradients = oracle.reference(before['parameters'], ids,
                 model_shape=fields, oracle_device=args.oracle_device)
@@ -119,9 +121,9 @@ def main():
             controls = {'negated_gradient_detected': not oracle._compare(-result['flat_gradients'], reference_flat,
                          oracle.TOLERANCES['gradient'])['passed']}
             # Keep each block's SiLU values while deleting its sigmoid derivative.
-            # Both independent controls must be detected without moving loss.
+            # All layer controls must be detected without moving loss.
             if step == 0:
-                for block in range(2):
+                for block in range(cfg.n_layers):
                     bad_loss, bad = oracle.reference(before['parameters'], ids, wrong_silu_block=block,
                         model_shape=fields, oracle_device=args.oracle_device)
                     bad_flat = np.concatenate([bad[e['name']].reshape(-1) for e in entries])
@@ -162,7 +164,7 @@ def main():
             assert eval_record['state_identical'] and eval_record['loss']['passed'], f'{name}: evaluation failure'
         results.append(case)
     write_json(args.out / 'verdict.json', {'passed': True, 'cases': results})
-    print('PASS actual native runtime byte LM: 2 shapes, 4 full gradient/update steps, 4 eval state-invariance checks')
+    print('PASS actual native runtime byte LM: 4 shapes, 8 full gradient/update steps, 8 eval state-invariance checks')
 
 
 if __name__ == '__main__':
