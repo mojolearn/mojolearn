@@ -1,0 +1,2 @@
+name, driver_version, memory.total [MiB]
+NVIDIA L40S, 580.159.03, 46068 MiB

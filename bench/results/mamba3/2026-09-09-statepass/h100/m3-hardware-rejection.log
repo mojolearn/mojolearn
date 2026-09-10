@@ -1,0 +1,5 @@
+3425 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b1c80000000, nodemask=2)
+Mismatch: 148 got 0 expected 8388608
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: Mamba3 fold seam differs at triple 148
+/root/mamba3/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

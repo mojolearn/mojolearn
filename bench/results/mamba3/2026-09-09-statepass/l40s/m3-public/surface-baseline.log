@@ -1,0 +1,7 @@
+2181 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3062c0000000, nodemask=1)
+2181 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594d40000000, nodemask=2)
+
+----------------------------------------------------------------------
+Ran 0 tests in 0.000s
+
+OK

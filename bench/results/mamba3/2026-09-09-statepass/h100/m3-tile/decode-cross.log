@@ -1,0 +1,3 @@
+5398 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33ee40000000, nodemask=1)
+mamba3 block gate (IDENTICAL_MAMBA3_CONTRACT.md section 8); profile mojolearn.identical.mamba3.siso.fp32.v1; build mode IDENTICAL
+GATE D (cross) PASS: prefill 60 + decode through 70 == prefill 70, bitwise; the chain crossed the Q = 64 boundary and the sealed buffer folded and refilled
