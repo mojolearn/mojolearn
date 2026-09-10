@@ -53,7 +53,7 @@ calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
-from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for
+from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
 
 from checks.numerics import (
@@ -175,6 +175,59 @@ def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     return result
 
 
+@always_inline
+def _rt_dot_tile[REPAIR: Bool](
+    q: MutPointer[Float32, MutAnyOrigin],
+    yt: MutPointer[Float32, MutAnyOrigin],
+    rows_idx: SIMD[DType.int32, RT_ROWS],
+    cols_idx: SIMD[DType.int32, RT_COLS],
+    d: Int, y_stride: Int,
+) -> SIMD[DType.float32, RT_ROWS * RT_COLS]:
+    var acc = SIMD[DType.float32, RT_ROWS * RT_COLS](0.0)
+    for f in range(d):
+        var yv = SIMD[DType.float32, RT_COLS](0.0)
+        comptime for c in range(RT_COLS):
+            yv[c] = _rt_load(yt.unsafe_load(f * y_stride + Int(cols_idx[c])))
+        comptime for r in range(RT_ROWS):
+            var qv = _rt_load(q.unsafe_load(Int(rows_idx[r]) * d + f))
+            comptime for c in range(RT_COLS):
+                comptime if REPAIR:
+                    acc[r * RT_COLS + c] = _rt_step(qv, yv[c], acc[r * RT_COLS + c])
+                else:
+                    acc[r * RT_COLS + c] = ftz(identical_mul_add(qv, yv[c], acc[r * RT_COLS + c]))
+
+    return acc
+
+
+@always_inline
+def _rt_accumulate_tile(
+    q: MutPointer[Float32, MutAnyOrigin],
+    yt: MutPointer[Float32, MutAnyOrigin],
+    rows_idx: SIMD[DType.int32, RT_ROWS],
+    cols_idx: SIMD[DType.int32, RT_COLS],
+    d: Int, y_stride: Int,
+) -> SIMD[DType.float32, RT_ROWS * RT_COLS]:
+    comptime if knn_distance_preflight_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
+        # Ignore exponent-zero operands: _rt_load flushes them to signed zero,
+        # and a zero product cannot create an underflow-rounding boundary.
+        # Minima over the complete feature chain conservatively cover all
+        # sixteen output cells. Admission is data-dependent but exact.
+        var q_min = UInt32(255)
+        var y_min = UInt32(255)
+        for f in range(d):
+            comptime for r in range(RT_ROWS):
+                var e = (bitcast[DType.uint32](q.unsafe_load(Int(rows_idx[r]) * d + f)) >> 23) & 255
+                if e != 0 and e < q_min:
+                    q_min = e
+            comptime for c in range(RT_COLS):
+                var e = (bitcast[DType.uint32](yt.unsafe_load(f * y_stride + Int(cols_idx[c]))) >> 23) & 255
+                if e != 0 and e < y_min:
+                    y_min = e
+        if q_min + y_min >= 151:
+            return _rt_dot_tile[False](q, yt, rows_idx, cols_idx, d, y_stride)
+    return _rt_dot_tile[True](q, yt, rows_idx, cols_idx, d, y_stride)
+
+
 def pinned_distance_register_tile_kernel(
     z: MutPointer[Float32, MutAnyOrigin],
     q: MutPointer[Float32, MutAnyOrigin],
@@ -212,14 +265,7 @@ def pinned_distance_register_tile_kernel(
             cc = n_cols - 1
         cols_idx[c] = Int32(cc)
 
-    for f in range(d):
-        var yv = SIMD[DType.float32, RT_COLS](0.0)
-        comptime for c in range(RT_COLS):
-            yv[c] = _rt_load(yt.unsafe_load(f * y_stride + Int(cols_idx[c])))
-        comptime for r in range(RT_ROWS):
-            var qv = _rt_load(q.unsafe_load(Int(rows_idx[r]) * d + f))
-            comptime for c in range(RT_COLS):
-                acc[r * RT_COLS + c] = _rt_step(qv, yv[c], acc[r * RT_COLS + c])
+    acc = _rt_accumulate_tile(q, yt, rows_idx, cols_idx, d, y_stride)
 
     comptime for r in range(RT_ROWS):
         var row = row0 + r

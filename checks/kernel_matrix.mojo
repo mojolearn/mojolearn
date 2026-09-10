@@ -934,3 +934,11 @@ def knn_distance_zero_fma_repair_for[column: Int, identical: Bool]() -> Bool:
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_ZERO_FMA_REPAIR"]():
         return False
     return identical and column == COLUMN_APPLE
+
+
+@always_inline
+def knn_distance_preflight_for[column: Int, identical: Bool]() -> Bool:
+    """Experimental exact exponent admission outside the register tile's FMA loop."""
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_PREFLIGHT"]():
+        return identical and column == COLUMN_APPLE
+    return False
