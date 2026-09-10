@@ -64,3 +64,10 @@ No timing result establishes a speedup. The initial four-class 65k nominal
 all model fingerprints but were invalidated: FAST canary spread 1.184,
 IDENTICAL 1.699, versus the final 1.1 limit. Raw timings are retained for
 investigation; defaults remain OFF on every vendor and mode.
+
+September10 bounded follow-up: two attempts each for FAST and IDENTICAL,
+with full-fit prewarmups and shared-lock serialization, again failed the
+unchanged1.1 canary limit. All120 measured full-model fingerprints matched.
+No default changed and no speedup was certified. Raw samples, binary/source
+hashes and reproduction commands are in
+`bench/results/rf_column_tiles_2026-09-10/README.md`.
