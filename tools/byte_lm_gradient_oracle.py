@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Independent two-block FP64 gradient and AdamW gate; ROOT EXECUTION ONLY.
 
-Authored without executing tests, builds, models or measurements. Imports are
-inert. Existing capture evaluation requires CUDA/HIP. Explicit oracle_device=cpu
+Imports are inert. The bounded runtime-shape gate records actual native Metal
+and independent CPU FP64 checks in bench/results/byte_runtime_numerical_2026-09-10. Existing capture evaluation requires CUDA/HIP. Explicit oracle_device=cpu
 on reference/adamw_reference supports FP64 comparison of native Metal captures.
 External FP64 agreement is a tolerance-correctness claim, not bitwise identity.
 No native model, gradient oracle or numerical arithmetic module is imported.

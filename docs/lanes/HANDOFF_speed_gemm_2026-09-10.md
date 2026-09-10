@@ -75,11 +75,13 @@ both historical and corrected labels. Original raw evidence is unchanged.
    tree. Capacity specialization was already measured and rejected; changing
    the tree is outside this lane.
 
-## Apple measurement owed
+## Apple measurement completed in the continuation
 
-Measure the same actual Llama dimensions on the M4 with the same harness,
-report achieved TFLOP/s and start/end drift separately. No M4 throughput
-measurement was made by the host-only runtime-shape pass. Root must use one
+The continuation measured the same actual Llama dimensions on the M4. See
+`bench/results/gemm_swizzle_2026-09-10/`: baseline medians 0.156–0.162 TFLOP/s,
+forced transpose-swizzle medians 0.159–0.163, all bits checks green. No default
+changed. For subsequent measurements, use the same harness and report
+achieved TFLOP/s and start/end drift separately. Root must use one
 bounded thermal window, two build/host workers, `nice 19`, and the shared build
 lock. Check that the device is otherwise idle; a concurrent lane invalidates
 an uncontended performance claim. This measurement informs model-run budgets.
@@ -95,3 +97,12 @@ vendor qualification follows from a host-only compile.
 Root runs all builds/tests/measurements. Lanes may author source and record
 exact commands. GPU rentals require a one-hour lease; no rental is active for
 this pass. Trees belong to another lane.
+
+## H100 compile-only resource inspection
+
+The continuation cross-compiled for x86_64 Linux and sm_90 (emitted PTX target
+sm_90a). The current 128×128 KS16 specialization has 40960 shared bytes and a
+4096-byte per-thread local depot. The retained PTX includes actual local loads
+and stores plus `fma.rn.f32`/`mul.rn.ftz.f32`. These are static intermediate-code
+facts, not SASS register/spill counts or achieved occupancy. Physical NVIDIA
+measurement is still owed. The transpose plan shares that same specialization.

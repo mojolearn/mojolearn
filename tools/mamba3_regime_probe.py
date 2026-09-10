@@ -2,7 +2,7 @@
 """Diagnostic only: repeated same-binary Mamba3 calls with explicit shape order.
 
 Loads explicit retained helper/spec files without overwriting tracked tools. No source changes, compiler invocation, or timing claim.
-Output is JSONL; native M3_PHASE lines can be interleaved when a separately
+JSON event lines accompany fixture witnesses; native M3_PHASE lines can be interleaved when a separately
 built phase-instrumented library is supplied. That library is a different arm.
 """
 import argparse

@@ -1,0 +1,20 @@
+== selected baseline vs candidate, BITS and FP32 TFLOP/s ==
+baseline_selector=10 candidate_selector=19 (-2 baseline=current dispatch; -1 baseline=pre-tuned, candidate=current dispatch; >=0 explicit plan)
+timing=host-synchronized arithmetic-mean-ms; raw samples below; digest passes serve as warmup
+SAMPLE llama8b.qkv.t512 round=0 candidate_first=False baseline_ns=109222000 candidate_ns=108188000
+SAMPLE llama8b.qkv.t512 round=1 candidate_first=True baseline_ns=110638000 candidate_ns=108934000
+SAMPLE llama8b.qkv.t512 round=2 candidate_first=False baseline_ns=111045000 candidate_ns=107095000
+SAMPLE llama8b.qkv.t512 round=3 candidate_first=True baseline_ns=110112000 candidate_ns=108090000
+   OK  llama8b.qkv.t512 [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) -> TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, transposed tiles)]  m=512 n=4096 k=4096  BITS MATCH  baseline=110.25425ms candidate=108.07675ms  baseline_tflops=0.15582047117458056 candidate_tflops=0.15895989825748832
+SAMPLE llama8b.mlp_up.t512 round=0 candidate_first=False baseline_ns=366499000 candidate_ns=368397000
+SAMPLE llama8b.mlp_up.t512 round=1 candidate_first=True baseline_ns=370637000 candidate_ns=370563000
+SAMPLE llama8b.mlp_up.t512 round=2 candidate_first=False baseline_ns=370814000 candidate_ns=372092000
+SAMPLE llama8b.mlp_up.t512 round=3 candidate_first=True baseline_ns=371173000 candidate_ns=367008000
+   OK  llama8b.mlp_up.t512 [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) -> TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, transposed tiles)]  m=512 n=14336 k=4096  BITS MATCH  baseline=369.78075ms candidate=369.515ms  baseline_tflops=0.1626086326667897 candidate_tflops=0.16272557851237432
+SAMPLE llama8b.mlp_down.t512 round=0 candidate_first=False baseline_ns=380606000 candidate_ns=367763000
+SAMPLE llama8b.mlp_down.t512 round=1 candidate_first=True baseline_ns=384035000 candidate_ns=378863000
+SAMPLE llama8b.mlp_down.t512 round=2 candidate_first=False baseline_ns=375019000 candidate_ns=372488000
+SAMPLE llama8b.mlp_down.t512 round=3 candidate_first=True baseline_ns=381053000 candidate_ns=366815000
+   OK  llama8b.mlp_down.t512 [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) -> TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, transposed tiles)]  m=512 n=4096 k=14336  BITS MATCH  baseline=380.17825ms candidate=371.48225ms  baseline_tflops=0.15816144701597212 candidate_tflops=0.16186383641210314
+
+   3 match, 0 MOVED, 0 refused.

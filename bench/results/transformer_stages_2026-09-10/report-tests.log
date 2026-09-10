@@ -1,0 +1,8 @@
+test_nonfinite_cannot_look_like_zero_outside (test_transformer_admission_report.AdmissionReport.test_nonfinite_cannot_look_like_zero_outside) ... ok
+test_shape_mismatch_cannot_broadcast (test_transformer_admission_report.AdmissionReport.test_shape_mismatch_cannot_broadcast) ... ok
+test_tolerance_and_position_error_are_independent (test_transformer_admission_report.AdmissionReport.test_tolerance_and_position_error_are_independent) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.001s
+
+OK

@@ -1,0 +1,10 @@
+{
+  "binary": "/tmp/mojolearn-gemm-swizzle-20260910",
+  "sha256": "95de3629fa282baf07262c5436ad3acf85465218738240b90b3df8d72b107e46",
+  "timeout_seconds": 120,
+  "rounds": 4,
+  "start_unix": 1789040462.263999,
+  "foreign_mojo_pixi": [],
+  "exit_code": 0,
+  "elapsed_seconds": 9.491325855255127
+}

@@ -5,6 +5,10 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
+if [[ ${MOJOLEARN_BUILD_LOCK_HELD:-0} != 1 ]]; then
+  exec nice -n 19 tools/with_build_lock.sh bash "$0" "$@"
+fi
+export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
 column=${1:?apple or nvidia required}
 output=${2:?fresh absolute output directory required}
 case "$column" in
@@ -20,7 +24,7 @@ if [[ "$column" == nvidia ]]; then
   nvidia-smi --query-gpu=name,uuid,driver_version --format=csv > "$output/gpu.csv"
 fi
 if git rev-parse HEAD > "$output/source.txt" 2>/dev/null; then
-  git diff --binary > "$output/working-tree.patch"
+  git diff --binary -- neighbors core checks/kernel_matrix.mojo bench/knn_reference_price_main.mojo tools/knn_residual_phase_probe.sh > "$output/working-tree.patch"
 else
   cat commit.txt > "$output/source.txt"
 fi
@@ -28,15 +32,21 @@ printf '%s\n' "column=$column" "control=$control" 'phase_synchronization=enabled
 for arm in default control; do
   flags=(-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_PHASE_TIMERS=1)
   [[ "$arm" != control ]] || flags+=(-D "$control=1")
-  mojo build -I "$root" "${flags[@]}" bench/knn_reference_price_main.mojo \
+  mojo build -j 2 -I "$root" "${flags[@]}" bench/knn_reference_price_main.mojo \
     -o "$output/$arm" > "$output/$arm-build.log" 2>&1
 done
 # Full output equality is mandatory; neither control disables exact repair.
 # Reverse arm order on the second pass to expose clock/order drift.
+shapes=('400000 4000 32 10' '400000 4000 32 15' '400000 1000 8 15' '65537 129 17 10')
+if [[ ${MOJOLEARN_KNN_PHASE_SMOKE:-0} == 1 ]]; then
+  shapes=('65537 129 17 10')
+  echo 'scope=small phase smoke; not the 400k target price' >> "$output/experiment.txt"
+fi
+pairs=0
 for pass in 0 1; do
   arms=(default control)
   [[ $pass == 0 ]] || arms=(control default)
-  for shape in '400000 4000 32 10' '400000 4000 32 15' '400000 1000 8 15' '65537 129 17 10'; do
+  for shape in "${shapes[@]}"; do
     read -r n q d k <<< "$shape"
     tag="n${n}-q${q}-d${d}-k${k}-p${pass}"
     for arm in "${arms[@]}"; do
@@ -49,6 +59,7 @@ for pass in 0 1; do
         "$output/$tag-$arm.log" > "$output/$tag-$arm.phases"
     done
     cmp "$output/$tag-default.bin" "$output/$tag-control.bin"
+    pairs=$((pairs + 1))
   done
 done
-printf '%s\n' 'PASS: eight paired full-output comparisons; phase times are diagnostic only' > "$output/status.txt"
+printf '%s\n' "PASS: $pairs paired full-output comparisons; phase times are diagnostic only" > "$output/status.txt"

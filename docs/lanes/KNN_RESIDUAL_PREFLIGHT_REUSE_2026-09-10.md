@@ -51,3 +51,5 @@ fixture, in addition to output identity.
 Do not repeat rejected partitioned selectors, deeper16/32 scans, two-word warp
 redux, composite-key value decode or four-feature cached preflight without new
 evidence. These are documented in the retained selector/residual results.
+
+Root continuation: the small Apple phase smoke passes two reversed-order full-output comparisons. Large drift and ranking reversal prevent a speed conclusion. The script now enforces build serialization/two jobs; MOJOLEARN_KNN_PHASE_SMOKE=1 selects only the small fixture. Evidence: bench/results/knn_phase_2026-09-10/.

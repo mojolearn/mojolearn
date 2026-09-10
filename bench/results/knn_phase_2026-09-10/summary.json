@@ -1,0 +1,242 @@
+{
+  "n65537-q129-d17-k10-p0-control.phases": {
+    "scope": "includes warmups and request/device calls; synchronization-perturbed",
+    "samples": [
+      {
+        "distance_ms": 11.421,
+        "select_ms": 7.318,
+        "merge_ms": 0.501
+      },
+      {
+        "distance_ms": 11.359,
+        "select_ms": 7.247,
+        "merge_ms": 0.581
+      },
+      {
+        "distance_ms": 10.712,
+        "select_ms": 6.983,
+        "merge_ms": 0.241
+      },
+      {
+        "distance_ms": 8.703,
+        "select_ms": 8.038,
+        "merge_ms": 0.254
+      },
+      {
+        "distance_ms": 9.712,
+        "select_ms": 6.518,
+        "merge_ms": 0.271
+      },
+      {
+        "distance_ms": 9.233,
+        "select_ms": 6.533,
+        "merge_ms": 0.258
+      },
+      {
+        "distance_ms": 8.036,
+        "select_ms": 7.09,
+        "merge_ms": 0.261
+      },
+      {
+        "distance_ms": 9.299,
+        "select_ms": 6.601,
+        "merge_ms": 0.259
+      },
+      {
+        "distance_ms": 10.476,
+        "select_ms": 4.831,
+        "merge_ms": 0.263
+      },
+      {
+        "distance_ms": 10.315,
+        "select_ms": 4.357,
+        "merge_ms": 0.288
+      }
+    ],
+    "medians_ms": {
+      "distance_ms": 10.0135,
+      "select_ms": 6.792,
+      "merge_ms": 0.262
+    }
+  },
+  "n65537-q129-d17-k10-p1-control.phases": {
+    "scope": "includes warmups and request/device calls; synchronization-perturbed",
+    "samples": [
+      {
+        "distance_ms": 11.448,
+        "select_ms": 5.987,
+        "merge_ms": 0.274
+      },
+      {
+        "distance_ms": 4.087,
+        "select_ms": 2.737,
+        "merge_ms": 0.218
+      },
+      {
+        "distance_ms": 4.51,
+        "select_ms": 2.708,
+        "merge_ms": 0.218
+      },
+      {
+        "distance_ms": 4.126,
+        "select_ms": 2.915,
+        "merge_ms": 0.211
+      },
+      {
+        "distance_ms": 4.196,
+        "select_ms": 2.84,
+        "merge_ms": 0.248
+      },
+      {
+        "distance_ms": 4.071,
+        "select_ms": 2.922,
+        "merge_ms": 0.227
+      },
+      {
+        "distance_ms": 4.669,
+        "select_ms": 2.993,
+        "merge_ms": 0.229
+      },
+      {
+        "distance_ms": 4.141,
+        "select_ms": 2.788,
+        "merge_ms": 0.233
+      },
+      {
+        "distance_ms": 4.586,
+        "select_ms": 2.82,
+        "merge_ms": 0.289
+      },
+      {
+        "distance_ms": 4.147,
+        "select_ms": 3.135,
+        "merge_ms": 0.231
+      }
+    ],
+    "medians_ms": {
+      "distance_ms": 4.1715,
+      "select_ms": 2.8775,
+      "merge_ms": 0.23
+    }
+  },
+  "n65537-q129-d17-k10-p1-default.phases": {
+    "scope": "includes warmups and request/device calls; synchronization-perturbed",
+    "samples": [
+      {
+        "distance_ms": 4.621,
+        "select_ms": 3.359,
+        "merge_ms": 0.294
+      },
+      {
+        "distance_ms": 4.123,
+        "select_ms": 3.182,
+        "merge_ms": 0.223
+      },
+      {
+        "distance_ms": 5.391,
+        "select_ms": 3.645,
+        "merge_ms": 0.221
+      },
+      {
+        "distance_ms": 4.757,
+        "select_ms": 4.125,
+        "merge_ms": 0.261
+      },
+      {
+        "distance_ms": 4.13,
+        "select_ms": 4.372,
+        "merge_ms": 0.234
+      },
+      {
+        "distance_ms": 4.036,
+        "select_ms": 3.359,
+        "merge_ms": 0.243
+      },
+      {
+        "distance_ms": 5.019,
+        "select_ms": 3.529,
+        "merge_ms": 0.223
+      },
+      {
+        "distance_ms": 4.901,
+        "select_ms": 4.291,
+        "merge_ms": 0.229
+      },
+      {
+        "distance_ms": 4.427,
+        "select_ms": 3.76,
+        "merge_ms": 0.566
+      },
+      {
+        "distance_ms": 4.986,
+        "select_ms": 3.315,
+        "merge_ms": 0.229
+      }
+    ],
+    "medians_ms": {
+      "distance_ms": 4.689,
+      "select_ms": 3.5869999999999997,
+      "merge_ms": 0.2315
+    }
+  },
+  "n65537-q129-d17-k10-p0-default.phases": {
+    "scope": "includes warmups and request/device calls; synchronization-perturbed",
+    "samples": [
+      {
+        "distance_ms": 10.646,
+        "select_ms": 7.921,
+        "merge_ms": 0.821
+      },
+      {
+        "distance_ms": 9.189,
+        "select_ms": 7.337,
+        "merge_ms": 0.408
+      },
+      {
+        "distance_ms": 10.254,
+        "select_ms": 7.195,
+        "merge_ms": 0.56
+      },
+      {
+        "distance_ms": 8.544,
+        "select_ms": 6.034,
+        "merge_ms": 0.267
+      },
+      {
+        "distance_ms": 8.01,
+        "select_ms": 7.046,
+        "merge_ms": 0.479
+      },
+      {
+        "distance_ms": 9.033,
+        "select_ms": 6.277,
+        "merge_ms": 0.254
+      },
+      {
+        "distance_ms": 7.694,
+        "select_ms": 4.432,
+        "merge_ms": 0.318
+      },
+      {
+        "distance_ms": 7.086,
+        "select_ms": 4.17,
+        "merge_ms": 0.324
+      },
+      {
+        "distance_ms": 6.537,
+        "select_ms": 4.113,
+        "merge_ms": 0.265
+      },
+      {
+        "distance_ms": 6.996,
+        "select_ms": 4.594,
+        "merge_ms": 0.265
+      }
+    ],
+    "medians_ms": {
+      "distance_ms": 8.277000000000001,
+      "select_ms": 6.1555,
+      "merge_ms": 0.321
+    }
+  }
+}

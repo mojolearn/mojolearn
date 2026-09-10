@@ -454,7 +454,9 @@ comptime PLAN_TUNED_128_8X8_K32 = 17
 #: Wider split tile, retaining each leaf's ascending arithmetic and fold.
 #: KS=16 keeps its shared page within every column's memory limit.
 comptime PLAN_SPLIT_128_8X8 = 18
-comptime GEMM_PLAN_COUNT = 19
+#: Forced-only tile-visitation experiment; same kernel and arithmetic as plan 10.
+comptime PLAN_TUNED_128_8X8_TSP = 19
+comptime GEMM_PLAN_COUNT = 20
 
 #: Threads per block for `PLAN_FLAT`. SCHEDULING: each thread owns a whole
 #: output cell, so this moves WHICH thread computes a cell and never the
@@ -502,6 +504,8 @@ def gemm_plan_name(plan: Int) -> String:
         return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, 16)
     if plan == PLAN_TUNED_64_4X4_K32:
         return _tuned_plan_name(TUNED_RPT, TUNED_CPT, TUNED_KBLK)
+    if plan == PLAN_TUNED_128_8X8_TSP:
+        return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, 16, True)
     if plan == PLAN_TUNED_128_8X8_K32:
         return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, TUNED_128_KS)
     if plan == PLAN_SPLIT_128_8X8:
@@ -532,7 +536,7 @@ def _split_plan_name(rpt: Int, cpt: Int, tc: Int, ks: Int) -> String:
     return name + " (256 thr, 2-D grid, no swizzle)"
 
 
-def _tuned_plan_name(rpt: Int, cpt: Int, ks: Int) -> String:
+def _tuned_plan_name(rpt: Int, cpt: Int, ks: Int, transpose: Bool = False) -> String:
     """Built from the resolved kernel-matrix constants, never a literal."""
     var name = String("TUNED ") + String(rpt * TUNED_TR)
     name += "x" + String(cpt * TUNED_TC)
@@ -540,7 +544,7 @@ def _tuned_plan_name(rpt: Int, cpt: Int, ks: Int) -> String:
     name += " KS=" + String(ks) + " fold=" + String(TUNED_FOLD_SLOTS) + " local"
     name += " tpb=" + String(TUNED_TPB)
     name += " hwftz=" + String(TUNED_HW_FTZ_FMA)
-    return name + " (256 thr, 1-D grid, no swizzle)"
+    return name + (" (1-D grid, transposed tiles)" if transpose else " (1-D grid, no swizzle)")
 
 
 # ===========================================================================
@@ -2552,6 +2556,11 @@ def identical_gemm_with_plan(
     if plan == PLAN_TUNED_128_8X8:
         _launch_tuned[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16, TUNED_FOLD_SLOTS](
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
+        )
+        return
+    if plan == PLAN_TUNED_128_8X8_TSP:
+        _launch_tuned[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16, TUNED_FOLD_SLOTS](
+            ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_TRANSPOSE, False
         )
         return
     if plan == PLAN_TUNED_64_4X4_K32:

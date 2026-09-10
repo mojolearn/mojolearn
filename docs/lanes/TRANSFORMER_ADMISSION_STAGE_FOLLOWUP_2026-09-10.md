@@ -42,3 +42,5 @@ python tools/transformer_admission_diagnose.py --spec /path/to/original_speed_to
 Source is proposed; these new checks have not been run by the author. Host
 reporting checks cannot qualify the GPU stage comparisons. Full production
 intermediate exports would still be needed to attribute our own residuals.
+
+Root continuation: three report tests and a small CPU GQA smoke of all14 stage reports pass; original GPU stage attribution remains owed. Evidence: bench/results/transformer_stages_2026-09-10/.

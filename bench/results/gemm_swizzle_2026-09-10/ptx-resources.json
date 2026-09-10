@@ -1,0 +1,222 @@
+[
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_0c380d8237affc32.ptx",
+    "sha256": "ec5f04daa26096c5bb6b67f12e8a075c8f600b0ff69c672eaf81830cb2e25a33",
+    "local_bytes": 0,
+    "shared_bytes": 4096,
+    "fma_rn": 1,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_f944f393ee79184a.ptx",
+    "sha256": "44f56485cad4f25c849ceb9013f0dbf9f7893d7e89537c6272fdb5b4a1eb2aab",
+    "local_bytes": 0,
+    "shared_bytes": 5120,
+    "fma_rn": 1,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_aec0092219b94735.ptx",
+    "sha256": "3ab9116f21f69269065301bde03d77441d82928365bcbaa046bef1be956f9f95",
+    "local_bytes": 0,
+    "shared_bytes": 36864,
+    "fma_rn": 528,
+    "ftz_multiply": 528,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_b271817a12a7bcec.ptx",
+    "sha256": "20e4dad6016574950e6d62bd3acbe34097f9cfc160d94987609f1cb555200876",
+    "local_bytes": 0,
+    "shared_bytes": 11520,
+    "fma_rn": 34,
+    "ftz_multiply": 34,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_cb5163fe7d9c00b6.ptx",
+    "sha256": "364996861d6f29529f2993267d432f4927e0499729baf11ce82474b2013adf54",
+    "local_bytes": 0,
+    "shared_bytes": 8192,
+    "fma_rn": 0,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_7fef6be5c4ccd3f6.ptx",
+    "sha256": "5dfe31987e69e26e46aa6c86a18612d810d2155cc5378273b5f0f417a6c9516a",
+    "local_bytes": 0,
+    "shared_bytes": 1024,
+    "fma_rn": 1,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_37214b213138d22a.ptx",
+    "sha256": "8f659481f769af6f748301da2ef5297d61c17d0fdce8d0c68b7bd0dbd720c4b9",
+    "local_bytes": 0,
+    "shared_bytes": 18432,
+    "fma_rn": 132,
+    "ftz_multiply": 132,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_ec0b8dccd2655a53.ptx",
+    "sha256": "c0a2b43867bdec1e85c9000432e76dcf4a99bd435bb020240a8993ae1560706c",
+    "local_bytes": 256,
+    "shared_bytes": 10240,
+    "fma_rn": 68,
+    "ftz_multiply": 68,
+    "ld_local": 11,
+    "st_local": 4
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_f9dade9e4111c0be.ptx",
+    "sha256": "ad1eb77f4c35a0f25602062bdf3aa867d1d89f16c258f073c6f86ab16a080f5e",
+    "local_bytes": 4096,
+    "shared_bytes": 40960,
+    "fma_rn": 1088,
+    "ftz_multiply": 1088,
+    "ld_local": 191,
+    "st_local": 64
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_ddc3808c51e71707.ptx",
+    "sha256": "b21b936b2fceced5efe86e8a217c0a7f9b81185f671adc9d00897749c3d3122f",
+    "local_bytes": 0,
+    "shared_bytes": 1024,
+    "fma_rn": 1,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_6cfcc8db855a9f0d.ptx",
+    "sha256": "682f63ca38d929d8363e8fd76a15264bdced3f9a3cd00d06bc6b87b398432c28",
+    "local_bytes": 0,
+    "shared_bytes": 0,
+    "fma_rn": 1,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_195e52a7408fbc7f.ptx",
+    "sha256": "ed7f4f7bfdd2486bb92eba72e6c5e6ce12396fd9b9e657d451360454a2aa81c7",
+    "local_bytes": 0,
+    "shared_bytes": 0,
+    "fma_rn": 0,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_2b0a238717c31595.ptx",
+    "sha256": "da3cbde0f077e7c3ec2e19691c3b39d9045a55c4919522d8b6460d562b5c6c4e",
+    "local_bytes": 0,
+    "shared_bytes": 40960,
+    "fma_rn": 1088,
+    "ftz_multiply": 1088,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_99675d2cb6e86ec6.ptx",
+    "sha256": "8a04727bd9c666893bbe1d89565f903087a3c08492e1d23b54b8f403de191bae",
+    "local_bytes": 0,
+    "shared_bytes": 0,
+    "fma_rn": 0,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_d605fb1362e93e5b.ptx",
+    "sha256": "bb9bfbb6841739663dabb8bfe5dc26eb76f28c0dc021cd8aa9b22862c5c2f6aa",
+    "local_bytes": 1024,
+    "shared_bytes": 36864,
+    "fma_rn": 528,
+    "ftz_multiply": 528,
+    "ld_local": 47,
+    "st_local": 16
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_4df064ff661f93c3.ptx",
+    "sha256": "7f4b94fbe3ae7a9f5c64b2d41e8ba24cc76bf55703c22a20a4b2b8a6562df773",
+    "local_bytes": 0,
+    "shared_bytes": 0,
+    "fma_rn": 1,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_55fe6c135aba7469.ptx",
+    "sha256": "b36b6e25f9d5fba9783e9d9d603f0a0e2e26f880840de88ce2d14b79097623ac",
+    "local_bytes": 0,
+    "shared_bytes": 8192,
+    "fma_rn": 0,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_d559873bcc74d188.ptx",
+    "sha256": "0c9ddab299668883c2b747d0d1d89d9fd961bbbcd43722145424bd7b1cd1ac1f",
+    "local_bytes": 4096,
+    "shared_bytes": 36864,
+    "fma_rn": 2112,
+    "ftz_multiply": 2112,
+    "ld_local": 191,
+    "st_local": 64
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_d3026edf3dadc3c0.ptx",
+    "sha256": "ebda2cadea31bf0eb447b07a569492030f17c8c1f10878fc5183dfe526a21aa2",
+    "local_bytes": 0,
+    "shared_bytes": 9216,
+    "fma_rn": 33,
+    "ftz_multiply": 33,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_99adfa7b2bcdfe0e.ptx",
+    "sha256": "33bcb10aea3f559cfec3f4d4574b0e5281884debb75fcd68ce2ecf5cf3e3bf8a",
+    "local_bytes": 0,
+    "shared_bytes": 41120,
+    "fma_rn": 17,
+    "ftz_multiply": 17,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_eb2603ea9b3de8e2.ptx",
+    "sha256": "a883a458cbff141b9edc727eef44fc80ae4ed7769ab055b58d52514d92ee4d1a",
+    "local_bytes": 0,
+    "shared_bytes": 2560,
+    "fma_rn": 1,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  },
+  {
+    "file": "mojolearn-gemm-swizzle-h100_gemm_checks_gemm_identical_id6A6A6A6A6A6A_9e709e2daee4e9cf.ptx",
+    "sha256": "25496f6b1b902c50b3dea0fd2c8c0adce5016e632db91e12c03fd168e08c5ff8",
+    "local_bytes": 0,
+    "shared_bytes": 0,
+    "fma_rn": 0,
+    "ftz_multiply": 0,
+    "ld_local": 0,
+    "st_local": 0
+  }
+]

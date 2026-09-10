@@ -96,3 +96,5 @@ python tools/mamba3_regime_probe.py --harness bench/results/mamba3/2026-09-09-st
 
 A tiny pass only qualifies fixture loading and instrumentation. H100 large
 shape regime diagnosis remains RUN OWED and is not inferred from Metal.
+
+Root continuation: tiny Metal smoke passes both retained complete hashes; large H100 shape-order runs remain owed. Evidence: bench/results/mamba_regime_2026-09-10/.

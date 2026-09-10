@@ -625,3 +625,25 @@ against a forced 64×64 candidate. Its 0.747–0.841 ratio documents the rejecte
 candidate, not a current dispatch regression. Original logs remain immutable;
 new probe output names baseline/candidate and their selectors explicitly.
 See `docs/lanes/HANDOFF_speed_gemm_2026-09-10.md` for the corrected next steps.
+
+
+## 2026-09-10 continuation: own-arm M4 measurement, no new opponent price
+
+`bench/results/gemm_swizzle_2026-09-10/` records Apple M4, IDENTICAL FP32,
+actual shapes below, four host-synchronized samples per arm with alternating
+order in a 9.49-second window. Values are medians; raw arithmetic means and
+first/last drift are retained separately. Baseline is current plan 10;
+candidate is forced transpose-swizzle plan 19. All output digests agree and
+all seven stronger device gates pass. No dispatch change or peak utilization
+claim follows from these samples. No external opponent was rerun.
+
+| Actual m,n,k | Baseline ms | Candidate ms | Baseline TFLOP/s | Candidate TFLOP/s |
+|---|---:|---:|---:|---:|
+|512,4096,4096|110.375|108.139|0.15565|0.15887|
+|512,14336,4096|370.7255|369.4800|0.16219|0.16274|
+|512,4096,14336|380.8295|370.1255|0.15789|0.16246|
+
+The small kNN phase smoke (`knn_phase_2026-09-10`) and Mamba tiny smoke
+(`mamba_regime_2026-09-10`) are diagnostics, not replacement target-shape
+prices. Transformer remains numerically unadmitted. Reuse existing qualified
+opponent rows only within their recorded shape, arithmetic and hardware scope.
