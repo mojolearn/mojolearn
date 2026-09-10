@@ -33,6 +33,7 @@ struct Stats(Movable):
     var worst_ulp: UInt64
     var worst_relative: Float64
     var failed: Int
+    var special_policy_differences: Int
 
     def __init__(out self):
         self.inputs = UInt64(0xCBF29CE484222325)
@@ -41,6 +42,7 @@ struct Stats(Movable):
         self.worst_ulp = 0
         self.worst_relative = 0
         self.failed = 0
+        self.special_policy_differences = 0
 
     def sample(mut self, x: Float64, p: Float64) raises:
         var got = portable_pow64(x, p)
@@ -54,6 +56,17 @@ struct Stats(Movable):
         self.count += 1
         if bitcast[DType.uint64](identical_pow64(x, p)) != gb:
             raise Error("identical_pow64 wrapper did not select portable result")
+        # Our declared x**0 / 1**p policy precedes NaN classification.
+        # Some host libms quiet a signaling NaN instead. Check our policy
+        # exactly and report that oracle difference separately; do not
+        # weaken finite approximation admission to accommodate it.
+        if (bitcast[DType.uint64](p) & UInt64(0x7FFFFFFFFFFFFFFF)) == 0 or bitcast[DType.uint64](x) == UInt64(0x3FF0000000000000):
+            if gb != UInt64(0x3FF0000000000000):
+                raise Error("portable_pow64 violated explicit zero-exponent/unit-base policy")
+            if gb != wb:
+                self.special_policy_differences += 1
+                print("pow64 declared special-policy difference x_bits=", bitcast[DType.uint64](x), "p_bits=", bitcast[DType.uint64](p), "portable_bits=", gb, "libm_bits=", wb)
+            return
         var bad = False
         if wa > UInt64(0x7FF0000000000000):
             bad = ga != UInt64(0x7FF8000000000000)
@@ -93,6 +106,8 @@ def main() raises:
         raise Error("pow64 gate requires IDENTICAL build")
     # NaNs, signed zero, negative parity, infinities and retained subnormals.
     exact(0x7FF8000000001234, 0, 0x3FF0000000000000)
+    exact(0x7FF0000000000001, 0, 0x3FF0000000000000)
+    exact(0x3FF0000000000000, 0x7FF0000000000001, 0x3FF0000000000000)
     exact(0x3FF0000000000000, 0xFFF8000000001234, 0x3FF0000000000000)
     exact(0x4000000000000000, 0x7FF8000000001234, 0x7FF8000000000000)
     exact(0xBFF0000000000000, 0x7FF0000000000000, 0x3FF0000000000000)
@@ -139,6 +154,7 @@ def main() raises:
         if bitcast[DType.uint64](identical_log2_64(Float64(k))) != bitcast[DType.uint64](portable_log2_64(Float64(k))):
             raise Error("identical_log2_64 did not select portable arithmetic")
     print("portable_pow64 samples=", stats.count, "worst_ulp=", stats.worst_ulp, "worst_normal_relative=", stats.worst_relative, "failed=", stats.failed)
+    print("portable_pow64 declared special-policy/libm differences=", stats.special_policy_differences)
     print("portable_pow64 input_hash=", stats.inputs, "output_hash=", stats.outputs)
     if stats.failed != 0:
         raise Error("portable_pow64 accuracy admission failed")
