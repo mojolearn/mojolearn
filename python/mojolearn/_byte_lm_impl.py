@@ -249,6 +249,11 @@ class SmallByteLanguageModelTrainer:
     next_batch_index equals completed_steps; callers must provide the matching
     next batch after restoration. This class does not fetch/reorder a corpus.
 
+    resident=True retains an owned native context/model/optimizer across calls.
+    It is opt-in pending large-step timing qualification. Host snapshots and full
+    validation remain enabled. close() releases device state; the next call
+    resumes lazily. load_state_dict() invalidates any resident state.
+
     Complete state is copied and updates commit only after success. Evaluation
     requires byte-unchanged parameters, moments, flags and counter. Public
     checkpoints use an explicitly separate bounded JSON/hex schema; they are
@@ -258,7 +263,12 @@ class SmallByteLanguageModelTrainer:
     """
 
     def __init__(self, parameters, *, data_schedule, lr=1e-3, betas=(.9, .999),
-                 eps=1e-8, weight_decay=.01, shape=None):
+                 eps=1e-8, weight_decay=.01, shape=None, resident=False):
+        if type(resident) is not bool:
+            raise TypeError("resident must be a bool")
+        self._resident = resident
+        self._native_session = None
+        self._session_binding = None
         shape = require_shape(shape)
         flat = _parameters(parameters, shape)
         config = _configuration(lr, betas, eps, weight_decay)
@@ -298,17 +308,31 @@ class SmallByteLanguageModelTrainer:
         with self._lock:
             return _snapshot(self._state)
 
+    def close(self):
+        """Release device state; a later call lazily resumes from retained host state."""
+        with self._lock:
+            self._release_session()
+
+    def _release_session(self):
+        session, binding = self._native_session, self._session_binding
+        self._native_session = None
+        self._session_binding = None
+        if session is not None:
+            binding.byte_lm_session_close(session)
+
     def load_state_dict(self, state):
         """Replace full state and its validated model shape atomically."""
         with self._lock:
             replacement = _validate_state(state)
             _mode()
+            self._release_session()
             self._state = replacement
         return self
 
     def _binding(self):
         binding = _load(state_shape(self._state))
         if binding is not self._runtime_binding:
+            self._release_session()
             self._runtime = _binding_metadata(binding)
             self._runtime_binding = binding
         return binding
@@ -323,10 +347,23 @@ class SmallByteLanguageModelTrainer:
             self._binding()
             return dict(json.loads(_canonical(self._runtime)), schema='small-byte-lm.run-metadata.v1',
                         qualification='authored/unqualified', profile=self._state['profile'],
+                        device_state_lifetime='resident' if self._resident else 'call',
                         config=dict(self._state['config']), data_schedule=_schedule(self._state['data_schedule']),
                         completed_steps=self.step_, next_batch_index=self.step_)
 
     def _run(self, ids, train):
+        try:
+            return self._run_impl(ids, train)
+        except BaseException:
+            # Native success followed by Python validation failure must also
+            # invalidate the advanced device state. Host state has not committed.
+            try:
+                self._release_session()
+            except Exception:
+                pass  # Preserve the original failure; the owning object drops.
+            raise
+
+    def _run_impl(self, ids, train):
         shape = state_shape(self._state)
         tokens = _array(ids, (shape.batch, shape.length + 1), 'ids', np.int32)
         if np.any(tokens < 0) or np.any(tokens >= shape.vocab_size):
@@ -349,7 +386,16 @@ class SmallByteLanguageModelTrainer:
         parameters = [int(train), working['completed_steps'], cfg['kind'], cfg['lr'],
                       cfg['beta1'], cfg['beta2'], cfg['eps'], cfg['weight_decay'],
                       cfg['momentum'], cfg['dampening'], int(cfg['nesterov']), cfg['max_norm']]
-        if shape.profile == PROFILE:
+        if self._resident:
+            if not all(callable(getattr(binding, name, None)) for name in
+                       ('byte_lm_session_create', 'byte_lm_session_run', 'byte_lm_session_close')):
+                raise ImportError('Byte-LM binding lacks owned sessions; rebuild bindings/build_byte_lm.sh')
+            if self._native_session is None:
+                self._native_session = binding.byte_lm_session_create()
+                self._session_binding = binding
+            completed = binding.byte_lm_session_run(self._native_session, addresses, parameters,
+                                                    list(shape.native_shape))
+        elif shape.profile == PROFILE:
             completed = binding.byte_lm_run(addresses, parameters)
         else:
             completed = binding.byte_lm_run_configured(addresses, parameters, list(shape.native_shape))
@@ -418,14 +464,14 @@ class SmallByteLanguageModelTrainer:
                 os.unlink(temporary)
 
     @classmethod
-    def from_checkpoint(cls, path):
+    def from_checkpoint(cls, path, *, resident=False):
         """Restore this explicit JSON checkpoint schema, never native binary v1."""
         with Path(path).open('rb') as stream:
             encoded = stream.read(_CHECKPOINT_LIMIT + 1)
-        return cls.from_checkpoint_bytes(encoded)
+        return cls.from_checkpoint_bytes(encoded, resident=resident)
 
     @classmethod
-    def from_checkpoint_bytes(cls, encoded):
+    def from_checkpoint_bytes(cls, encoded, *, resident=False):
         """Restore one bounded immutable capture without opening any path.
 
         Only exact ``bytes`` is accepted: callers must first capture mutable
@@ -468,7 +514,8 @@ class SmallByteLanguageModelTrainer:
         state = _validate_state(payload)
         cfg = state['config']
         result = cls(state['parameters'], data_schedule=state['data_schedule'], lr=cfg['lr'],
-                     betas=(cfg['beta1'], cfg['beta2']), eps=cfg['eps'], weight_decay=cfg['weight_decay'], shape=shape)
+                     betas=(cfg['beta1'], cfg['beta2']), eps=cfg['eps'], weight_decay=cfg['weight_decay'],
+                     shape=shape, resident=resident)
         return result.load_state_dict(state)
 
 

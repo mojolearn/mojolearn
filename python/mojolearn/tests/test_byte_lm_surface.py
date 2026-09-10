@@ -253,18 +253,20 @@ def test_checkpoint_bytes_survive_source_buffer_and_path_replacement(host, tmp_p
     assert host.calls == []
 
 
-def test_checkpoint_file_api_delegates_the_exact_bounded_capture(host, tmp_path, monkeypatch):
+@pytest.mark.parametrize('resident', [False, True])
+def test_checkpoint_file_api_delegates_the_exact_bounded_capture(host, tmp_path, monkeypatch, resident):
     path = tmp_path / 'source.json'
     trainer().save_checkpoint(path)
     raw = path.read_bytes()
     seen = []
     sentinel = object()
-    def decode(cls, encoded):
+    def decode(cls, encoded, *, resident=False):
         seen.append(encoded)
+        seen.append(resident)
         return sentinel
     monkeypatch.setattr(SmallByteLanguageModelTrainer, 'from_checkpoint_bytes', classmethod(decode))
-    assert SmallByteLanguageModelTrainer.from_checkpoint(path) is sentinel
-    assert seen == [raw] and type(seen[0]) is bytes
+    assert SmallByteLanguageModelTrainer.from_checkpoint(path, resident=resident) is sentinel
+    assert seen == [raw, resident] and type(seen[0]) is bytes
 
 
 @pytest.mark.parametrize('encoded', [bytearray(b'{}'), memoryview(b'{}'), '{}', None])

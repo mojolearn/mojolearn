@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "checks": [
+    "initial step matches reconstruction",
+    "repeated call reuses owner and matches reconstruction",
+    "close and lazy reconstruction resume exactly",
+    "restore invalidates resident state and resumes exactly",
+    "resident mismatch control detected; failed session discarded",
+    "post-native failure recovers from last committed state",
+    "shape-changing restore and evaluation",
+    "optimizer admission distinguishes signed zero"
+  ],
+  "qualification": "local lifecycle and exact regression; not timing"
+}

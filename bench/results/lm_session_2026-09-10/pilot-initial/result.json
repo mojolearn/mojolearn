@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "samples_seconds": {
+    "reconstructed": [
+      3.6336017090070527,
+      3.5584445830027107
+    ],
+    "resident": [
+      3.3154392909782473,
+      3.225888874992961
+    ]
+  },
+  "median_seconds": {
+    "reconstructed": 3.5960231460048817,
+    "resident": 3.270664082985604
+  },
+  "resident_over_reconstructed": 0.9095225336964959,
+  "process_max_rss_bytes_both_arms": 4155097088,
+  "qualification": "complete-call pilot; not GPU peak memory, opponent admission or a default gate"
+}

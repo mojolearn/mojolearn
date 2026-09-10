@@ -1,0 +1,182 @@
+{
+  "passed": true,
+  "scope": "stored native arrays, not timing or cross-vendor admission",
+  "captures": [
+    {
+      "file": "default-step0.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 978860,
+      "file_sha256": [
+        "77e6e9590ec06ca98fd08e19728a4514b5898a764eb4f685e20a60d9b6e79e7c",
+        "77e6e9590ec06ca98fd08e19728a4514b5898a764eb4f685e20a60d9b6e79e7c"
+      ]
+    },
+    {
+      "file": "default-step1.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 978860,
+      "file_sha256": [
+        "5c70a369379dc8b82f3b91f6ce78efcb5e923ba589d322d8f26a25c9f0d2734f",
+        "5c70a369379dc8b82f3b91f6ce78efcb5e923ba589d322d8f26a25c9f0d2734f"
+      ]
+    },
+    {
+      "file": "alternate_gqa-step0.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 594308,
+      "file_sha256": [
+        "92a47c8c94761f1c997bc219dd3d2b74a0b4378fa6da64cf50b09357a6e76eb7",
+        "92a47c8c94761f1c997bc219dd3d2b74a0b4378fa6da64cf50b09357a6e76eb7"
+      ]
+    },
+    {
+      "file": "alternate_gqa-step1.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 594308,
+      "file_sha256": [
+        "0e99842074484b6e97997e7b72ab5dded309805974138439fb335dd5905df60c",
+        "0e99842074484b6e97997e7b72ab5dded309805974138439fb335dd5905df60c"
+      ]
+    },
+    {
+      "file": "one_layer_vocab257-step0.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 285044,
+      "file_sha256": [
+        "05ad17e4380161e37f1425b0e73a5c48eba6da94a8b9f4f3bf56db1ef5d1a683",
+        "05ad17e4380161e37f1425b0e73a5c48eba6da94a8b9f4f3bf56db1ef5d1a683"
+      ]
+    },
+    {
+      "file": "one_layer_vocab257-step1.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 285044,
+      "file_sha256": [
+        "f83eb06b7e1bed467ba017ddd71ab671d728a53788bbfe273d8aecf4316cae7f",
+        "f83eb06b7e1bed467ba017ddd71ab671d728a53788bbfe273d8aecf4316cae7f"
+      ]
+    },
+    {
+      "file": "three_layers_vocab513-step0.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 1064748,
+      "file_sha256": [
+        "678bb6077e2bf5e085a46d036492d9fa3cfa2deacee442be3e299d8203a60c3a",
+        "678bb6077e2bf5e085a46d036492d9fa3cfa2deacee442be3e299d8203a60c3a"
+      ]
+    },
+    {
+      "file": "three_layers_vocab513-step1.npz",
+      "passed": true,
+      "arrays": {
+        "ids": true,
+        "initial_p": true,
+        "initial_m": true,
+        "initial_v": true,
+        "initial_flags": true,
+        "grad": true,
+        "post_p": true,
+        "post_m": true,
+        "post_v": true,
+        "post_flags": true,
+        "loss": true
+      },
+      "bytes_compared": 1064748,
+      "file_sha256": [
+        "75a4389940a10fea153d8e71accc334de26fdcf059216565e92d6f390931b648",
+        "75a4389940a10fea153d8e71accc334de26fdcf059216565e92d6f390931b648"
+      ]
+    }
+  ]
+}

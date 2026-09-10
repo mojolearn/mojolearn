@@ -28,12 +28,7 @@ from training.byte_lm import (
 
 
 struct ByteLMSession(Movable, Writable):
-    """Python-owned device lifetime; no global handles or retained host pointers.
-
-    Upstream LlamaModel owns its layers across calls:
-    transformers/models/llama/modeling_llama.py:334-359,402-412.
-    This binding retains our existing ByteTrainer without changing its kernels.
-    """
+    """Python-owned device lifetime; no global handles or retained host pointers."""
     var ctx: Optional[DeviceContext]
     var trainer: Optional[ByteTrainer]
     var busy: Bool
@@ -139,10 +134,10 @@ def _write_f32(address: Int, values: List[Float32]):
 
 def _require_same_bits(before: List[Float32], after: List[Float32]) raises:
     if len(before) != len(after):
-        raise Error("byte LM: authoritative state length mismatch")
+        raise Error("byte LM eval changed state length")
     for i in range(len(before)):
         if bitcast[DType.uint32](before[i]) != bitcast[DType.uint32](after[i]):
-            raise Error("byte LM: authoritative state bits mismatch")
+            raise Error("byte LM eval changed authoritative state")
 
 
 def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfig,
@@ -229,11 +224,11 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                     raise Error("byte LM: resident completed-step mismatch")
                 var prior_cfg = session.trainer.value().optimizer.copy()
                 if (prior_cfg.kind != cfg.kind or prior_cfg.nesterov != cfg.nesterov
-                    or bitcast[DType.uint32](prior_cfg.lr) != bitcast[DType.uint32](cfg.lr) or bitcast[DType.uint32](prior_cfg.beta1) != bitcast[DType.uint32](cfg.beta1)
-                    or bitcast[DType.uint32](prior_cfg.beta2) != bitcast[DType.uint32](cfg.beta2) or bitcast[DType.uint32](prior_cfg.eps) != bitcast[DType.uint32](cfg.eps)
-                    or bitcast[DType.uint32](prior_cfg.weight_decay) != bitcast[DType.uint32](cfg.weight_decay)
-                    or bitcast[DType.uint32](prior_cfg.momentum) != bitcast[DType.uint32](cfg.momentum) or bitcast[DType.uint32](prior_cfg.dampening) != bitcast[DType.uint32](cfg.dampening)
-                    or bitcast[DType.uint32](prior_cfg.max_norm) != bitcast[DType.uint32](cfg.max_norm)):
+                    or prior_cfg.lr != cfg.lr or prior_cfg.beta1 != cfg.beta1
+                    or prior_cfg.beta2 != cfg.beta2 or prior_cfg.eps != cfg.eps
+                    or prior_cfg.weight_decay != cfg.weight_decay
+                    or prior_cfg.momentum != cfg.momentum or prior_cfg.dampening != cfg.dampening
+                    or prior_cfg.max_norm != cfg.max_norm):
                     raise Error("byte LM: resident optimizer mismatch")
                 _require_same_bits(initial_p, download_f32(ctx, session.trainer.value().buffers.param, n))
                 _require_same_bits(initial_m, download_f32(ctx, session.trainer.value().buffers.m_state, n))
@@ -277,16 +272,13 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                     if (bitcast[DType.uint32](out_g[i]) & UInt32(0x7F800000)) == UInt32(0x7F800000):
                         raise Error("byte LM: nonfinite returned gradient")
             ctx.synchronize()
-            if not retain:
-                # Already synchronized: preserve the stateless teardown without
-                # adding close()'s second drain to the comparison baseline.
-                session.trainer = None
-                session.ctx = None
     except error:
         session.busy = False
         raise error
     session.busy = False
-    session.usable = retain
+    session.usable = True
+    if not retain:
+        session.close()
     # Publication starts after the synchronized GPU scope succeeds. The
     # Python wrapper commits these fresh arrays atomically to its state object.
     _write_f32(addr[5], out_p)
