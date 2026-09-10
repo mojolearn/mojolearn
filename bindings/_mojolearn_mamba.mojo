@@ -263,7 +263,7 @@ def _m3_upload_addr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffe
         var dev = ctx.enqueue_create_buffer[DType.float32](count)
         # DeviceContext accepts ordinary host pointers; the Python frame
         # retains each NumPy array until the synchronized copy completes.
-        comptime if is_defined["MOJOLEARN_MAMBA3_CALLER_TRANSFER"]():
+        comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER"]():
             if n > 0:
                 ctx.enqueue_copy(dst_buf=dev, src_ptr=src)
                 ctx.synchronize()
@@ -285,7 +285,7 @@ def _m3_download_addr(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], 
         _m3_write_f32(addr, m3_download(ctx, buf, n))
     else:
         var dst = _f32_ptr(addr)
-        comptime if is_defined["MOJOLEARN_MAMBA3_CALLER_TRANSFER"]():
+        comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER"]():
             if n == len(buf):
                 ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
             else:
@@ -1227,7 +1227,7 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
         m.def_function[mamba2_decode_step_binding]("mamba2_decode_step")
         m.def_function[mamba3_backward_binding]("mamba3_backward")
         m.def_function[mamba3_forward_binding]("mamba3_forward")
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_FRESH_PREFILL"]():
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL"]():
             m.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
         m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         return m.finalize()
