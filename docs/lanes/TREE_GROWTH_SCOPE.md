@@ -1,5 +1,7 @@
 # GPU tree growth scope and working memory
 
+Consolidated implementation sequence and backlog: [DECISION_TREE_ROADMAP.md](DECISION_TREE_ROADMAP.md).
+
 Decision recorded 2026-09-09 at the user's request. Keep this scope when
 continuing tree work in later sessions.
 

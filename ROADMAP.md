@@ -1,5 +1,7 @@
 # Roadmap
 
+GPU decision-tree execution plan: [RF, Extra Trees and GBDT roadmap](docs/lanes/DECISION_TREE_ROADMAP.md).
+
 This is the main project roadmap. The actionable follow-up checklist is
 [Feature completion and release follow-up](FEATURE_COMPLETION_PLAN.md),
 covering the six requested workstreams and execution limits. Historical

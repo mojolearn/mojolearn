@@ -1,5 +1,7 @@
 # Trees lane handoff (branch `lane/trees-identical`, 2026-09-09)
 
+Current consolidated plan: [DECISION_TREE_ROADMAP.md](DECISION_TREE_ROADMAP.md).
+
 Current scope and persistent project decisions: [TREE_GROWTH_SCOPE.md](TREE_GROWTH_SCOPE.md).
 
 Symmetric GBDT (CatBoost mirror), RF (cuML mirror), ET. Our IDENTICAL arm
