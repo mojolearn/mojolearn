@@ -23,7 +23,7 @@ insertion and shifts so local SIMD indexing cannot spill via runtime indices.
 Other K values use the retained runtime baseline.
 """
 from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from neighbors.checks.lane_minimum import shuffle_min_u64
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -227,25 +227,6 @@ comptime SMALLK_LANES = lib_lane_width_for[TARGET_COLUMN]()
 comptime SMALLK_WARPS = SMALLK_BLOCK // SMALLK_LANES
 
 
-@always_inline
-def _shuffle_xor_u64(v: UInt64, offset: UInt32) -> UInt64:
-    var hi = shuffle_xor(UInt32(v >> UInt64(32)), offset)
-    var lo = shuffle_xor(UInt32(v & UInt64(4294967295)), offset)
-    return (UInt64(hi) << UInt64(32)) | UInt64(lo)
-
-
-@always_inline
-def _lane_group_min_u64(v: UInt64) -> UInt64:
-    var m = v
-    var offset = 1
-    while offset < SMALLK_LANES:
-        var other = _shuffle_xor_u64(m, UInt32(offset))
-        if other < m:
-            m = other
-        offset *= 2
-    return m
-
-
 comptime SMALLK_SCAN_UNROLL = 8
 
 
@@ -320,7 +301,7 @@ def smallk_bucket_kernel[CAP: Int, K: Int = 0](
         var lane = tid % SMALLK_LANES
         for rank in range(k):
             var mine = local_keys[0]
-            var group_min = _lane_group_min_u64(mine)
+            var group_min = shuffle_min_u64[SMALLK_LANES](mine)
             var page = (rank & 1) * SMALLK_WARPS
             if lane == 0:
                 heads[page + warp] = group_min
