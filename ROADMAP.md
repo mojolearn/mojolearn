@@ -1,5 +1,7 @@
 # Roadmap
 
+GPU workflow completion: [metrics, preprocessing, sklearn compatibility and mode policy](docs/lanes/GPU_PIPELINE_PLAN.md).
+
 GPU decision-tree execution plan: [RF, Extra Trees and GBDT roadmap](docs/lanes/DECISION_TREE_ROADMAP.md).
 
 This is the main project roadmap. The actionable follow-up checklist is

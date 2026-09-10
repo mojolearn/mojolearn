@@ -6,6 +6,10 @@ This is the consolidated execution plan for single trees, Random Forest (RF),
 Extra Trees (ET), and symmetric/Depthwise/Lossguide GBDT. Status describes
 this source lane, not a published wheel or a merge to main.
 
+Pipeline expansion: [GPU_PIPELINE_PLAN.md](GPU_PIPELINE_PLAN.md) covers metrics,
+preprocessing, sklearn compatibility, model selection and end-to-end identity.
+DETERMINISTIC stays supported pending measured retirement criteria.
+
 ## Contract and priorities
 
 Build GPU learners in Mojo. CPU input preparation and orchestration remain
@@ -30,7 +34,8 @@ Backend support in competitors must be checked separately from general APIs.
 Current order:
 
 1. Establish RF column-tile timings; implement minimum-child-Hessian control.
-2. Add GBDT feature sampling and expose prepared datasets through Python.
+2. Start common metrics and sklearn protocol work from the pipeline plan;
+   then add GBDT feature sampling and expose prepared datasets through Python.
 3. On an available NVIDIA GPU, qualify RF/ET candidates, large stable
    partitions and the stream API; then implement measured stream overlap.
 4. Add interaction constraints, then monotonic constraints and coherent
@@ -81,14 +86,13 @@ Evidence and bounded feature coverage:
 | P7 / after profile: host overhead | Profile Python packing, quantization, allocations, transfers and result materialization separately. Avoid duplicate copies and object conversion; use existing contiguous/device input paths where present. | End-to-end improvement with unchanged inputs/models, dtype/layout/NaN validation, ownership tests; report kernel-only time separately. |
 | P8 / later: inference | RF/ET public prediction currently reconstructs trees and copies rows into native lists each call. First traverse borrowed flat buffers directly, then add owned resident GPU models inspired by cuML forest inference. Preserve tree accumulation order and postprocessing; audit GBDT separately. | Public prediction/probability/apply/save-load equivalence, cold/warm and small/large batches, measured memory/throughput; no reassociation in IDENTICAL. |
 | P9 / later: heterogeneous histograms | Pack feature histogram offsets using actual bin counts instead of padding every feature to the maximum, where profiling shows wasted memory/work. Extend existing layouts rather than duplicating histogram subtraction. | Boundary/bin-offset oracle, constant/one-hot/unequal-bin fixtures, full models and memory/fit measurements in every enabled mode. |
-
 | P10 / after profile: small frontiers | Single trees cannot benefit from cross-tree overlap; ET best-first expands at most one node per tree per cycle. Profile frontier downloads/launches, then consider fused small-node kernels and device frontier compaction without changing priority. | One-tree and uneven forest workloads, same frontier order/ties and exact leaf budgets, end-to-end latency and identity. |
 
 Single-tree native engines share relevant ET builder paths, but standalone
 public DecisionTree exports are still a separate API task. Test one-tree native
 models explicitly rather than assuming forest tests cover their dispatch.
 RF already builds quantiles/bins once per forest: prepared RF work targets
-reuse across fits. ET pools must retain raw inputs and random thresholds.
+reuse across fits. ET pools retain raw inputs; node-local random thresholds are still drawn per fit.
 The binding overhead audit points to `bindings/_mojolearn_rf.mojo`
 (`_rebuild_trees`, prediction and `_forest_out`) and
 `bindings/_mojolearn_trees.mojo`; typed bulk model export can also replace
@@ -98,7 +102,7 @@ per-node Python scalar construction during fit.
 
 | ID / priority | Reference | Mojo implementation and dependency | Required evidence |
 | --- | --- | --- | --- |
-| F1 / active: minimum child Hessian | LightGBM `min_sum_hessian_in_leaf`; XGBoost `min_child_weight` | Apply eligibility to each candidate before winner selection using actual objective curvature, not a score denominator mislabeled as Hessian. Define weighting/bootstrap and objective support. Default disabled; plumb through native, prepared, Python and binding APIs. | Analytic weighted regression/logistic cases, equality boundary, highest-score-ineligible but second-best-valid split, default fingerprints, mode readback and public fits. |
+| F1 / in qualification: minimum child Hessian | LightGBM `min_sum_hessian_in_leaf`; XGBoost `min_child_weight` | Apply eligibility to each candidate before winner selection using actual objective curvature, not a score denominator mislabeled as Hessian. First slice supports NewtonL2/NewtonCosine with RMSE/Logloss/CrossEntropy and explicit weighting/bootstrap semantics. Other scores/losses need a separate curvature plane or audit. Default disabled; plumb through native, prepared, Python and binding APIs. | Analytic weighted regression/logistic cases, equality boundary, highest-score-ineligible but second-best-valid split, default fingerprints, mode readback and public fits. |
 | F2 / next: feature sampling | LightGBM per-tree/per-node fractions; XGBoost `colsample_*` | Deterministic masks keyed by seed/tree/node and a specified stable feature order. First implement per-tree, then per-node; thread masks into candidate enumeration to avoid work. Specify intersection with categorical sources, interaction constraints and shared symmetric-depth splits. | Fraction-one default equivalence, known RNG vectors and selected-feature witnesses, no empty masks, all policies/modes, cross-device masks, work counters and quality/time comparison. |
 | F3 / next: interaction constraints | XGBoost/LightGBM permitted interaction groups | Carry allowed-feature state along each path. Respect overlapping groups; intersect with sampling masks. Define symmetric-tree shared-split eligibility explicitly. | Exhaustive tiny path oracle, overlapping/disjoint groups, invalid feature IDs, unseen features, save/load and constraint verification over every model path. |
 | F4 / later: monotonic constraints | XGBoost constrained split evaluation; LightGBM monotone bounds | Start with numeric features and a bounded objective/leaf-estimation profile. Carry descendant lower/upper bounds, score feasible leaves and enforce bounds in final estimation. Split filtering alone is insufficient. | Independent ordered-pair predictions, descendant-bound oracle, weighted/NaN cases, repeated estimation steps, round trips and cross-device identity. |
@@ -191,6 +195,8 @@ before shipping the core GPU growth controls.
 | Work | State as of 2026-09-10 |
 | --- | --- |
 | Consolidated roadmap | Written in this file; keep status and evidence links current |
-| RF timing refresh | Active; preserve Sep9 evidence and keep defaults unchanged pending results |
+| RF timing refresh | Completed: all four timing windows failed stability; 120 model fingerprints match. [Sep10 evidence](../../bench/results/rf_column_tiles_2026-09-10/EVIDENCE.md). Defaults unchanged. |
 | Minimum child Hessian | Active design/implementation; not yet qualified or claimed public |
+| Sub-byte layout gate | Retained for live histogram layouts; named pixi task and hardware-matrix entry both pass all three internal negative controls. [Audit and commands](SUB_BYTE_LAYOUT_GATE.md). |
+| Pipeline expansion | Audited and planned: metrics, preprocessing, sklearn protocol and model selection. Keep DETERMINISTIC; measure cost/benefit before deprecation. [Detailed plan](GPU_PIPELINE_PLAN.md). |
 | Other features above | Planned; start independent slices after current gates finish |

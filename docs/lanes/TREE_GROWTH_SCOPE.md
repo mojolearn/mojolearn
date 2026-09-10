@@ -1,5 +1,8 @@
 # GPU tree growth scope and working memory
 
+Pipeline and mode decision (2026-09-10): [GPU_PIPELINE_PLAN.md](GPU_PIPELINE_PLAN.md).
+Keep DETERMINISTIC for now; prioritize metrics and estimator interoperability after current tree gates.
+
 Consolidated implementation sequence and backlog: [DECISION_TREE_ROADMAP.md](DECISION_TREE_ROADMAP.md).
 
 Decision recorded 2026-09-09 at the user's request. Keep this scope when

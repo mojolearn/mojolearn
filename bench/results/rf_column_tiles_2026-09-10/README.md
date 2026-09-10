@@ -1,6 +1,6 @@
-# Bounded RF timing follow-up — September10,2026
+# Bounded RF timing follow-up — September 10, 2026
 
-No timing window passed the pre-existing canary max/min limit of1.1.
+No timing window passed the pre-existing canary max/min limit of 1.1.
 RF column tiles remain opt-in on every vendor and numeric mode. The raw
 medians below are diagnostic observations, not established speedups.
 
@@ -17,14 +17,14 @@ scan found no active benchmark/build job. A later command-name-only process
 snapshot records substantial system/application CPU activity; it does not
 establish the cause of the observed timing drift.
 
-Each attempt measured a synthetic binary262145-row,28-column input,
-20 trees, depth limit12,128 bins. Each binary first completed a discarded
+Each attempt measured a synthetic binary 262,145-row, 28-column input,
+20 trees, depth limit 12, 128 bins. Each binary first completed a discarded
 five-fit invocation. Measurement then ran reference/tile2/tile4/tile4/tile2/
 reference; each process ran five canary warmups and five fits, discarding
 its first fit. Thus each arm contributes eight retained fit samples per
-attempt. All measured mode/tile readbacks and120 full-model fingerprints
+attempt. All measured mode/tile readbacks and 120 full-model fingerprints
 passed; candidate and reference hashes match. No prediction gate was added
-here; the prior September9 complete-model/prediction gates remain unchanged.
+here; the prior September 9 complete-model/prediction gates remain unchanged.
 
 Six fresh binaries were built for attempt1; attempt2 reused those exact
 SHA256-verified executables. Executables remain under
