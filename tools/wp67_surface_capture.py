@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """Run an existing neural/GP surface gate and capture exported array bytes."""
+import faulthandler
+faulthandler.enable()
+faulthandler.dump_traceback_later(30, repeat=True)
 import argparse
 import json
 import os

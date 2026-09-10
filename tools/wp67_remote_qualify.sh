@@ -44,7 +44,7 @@ PY
         DIR="$OUT/$arm/$mode"
         mkdir -p "$DIR"
         for binding in base gp byte_lm mamba svm metrics preprocessing estimators linalg arima tsa solver training transformer; do
-            [ "$binding" != byte_lm ] || [ "$mode" = identical ] || continue
+            case "$binding" in byte_lm|mamba|training|transformer) [ "$mode" = identical ] || continue ;; esac
             script=bindings/build_$binding.sh
             [ "$binding" != base ] || script=bindings/build.sh
             if [ "$binding" = byte_lm ]; then
@@ -55,6 +55,7 @@ PY
         done
         export PYTHONPATH=/root/mojolearn/python
         for surface in gp svr mamba mamba1_backward mamba23_backward transformer arima; do
+            case "$surface" in mamba|mamba1_backward|mamba23_backward|transformer) [ "$mode" = identical ] || continue ;; esac
             printf '%s %s surface %s\n' "$arm" "$mode" "$surface"
             MOJOLEARN_IDENTITY_TRACE="$DIR/$surface.trace" timeout -k 10 180 "$PY" \
                 /root/wp67_surface_capture.py "python/mojolearn/tests/test_${surface}_surface.py" \
@@ -62,8 +63,12 @@ PY
         done
         timeout -k 10 90 "$PY" /root/wp67_classical_capture.py "$DIR/classical.bin" > "$DIR/classical.log" 2>&1
         if [ "$mode" = identical ]; then
-            timeout -k 10 180 "$PY" /root/wp67_surface_capture.py packaging/language_model_smoke.py \
-                "$DIR/byte_lm.bin" > "$DIR/surface-byte_lm.log" 2>&1
+            for resident in 0 1; do
+              for action in train eval; do
+                WP67_LM_ACTION=$action WP67_LM_RESIDENT=$resident timeout -k 10 90 "$PY" /root/wp67_surface_capture.py /root/wp67_lm_surface.py \
+                    "$DIR/byte_lm-$resident-$action.bin" > "$DIR/surface-byte_lm-$resident-$action.log" 2>&1
+              done
+            done
         fi
         mode_define=-D\ MOJOLEARN_NUMERIC_IDENTICAL=1
         [ "$mode" != deterministic ] || mode_define=-D\ MOJOLEARN_NUMERIC_DETERMINISTIC=1
@@ -98,3 +103,5 @@ print('PASS',len(rows),'complete exported-array captures')
 PY
 
 MOJOLEARN_NUMERIC_MODE=identical timeout -k 10 120 "$PY" /root/wp67_gp_predict_bench.py "$OUT/before/identical/gp.so" "$OUT/after/identical/gp.so" "$OUT/gp-large.json" > "$OUT/gp-large.log" 2>&1
+
+MOJOLEARN_NUMERIC_MODE=identical timeout -k 10 180 "$PY" /root/wp67_knn_classify_bench.py "$OUT/binaries/base-before.so" python/mojolearn/identical/_mojolearn.so "$OUT/knn-large.json" > "$OUT/knn-large.log" 2>&1

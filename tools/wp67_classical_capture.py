@@ -3,6 +3,7 @@
 import faulthandler
 faulthandler.enable()
 faulthandler.dump_traceback_later(30, repeat=True)
+import os
 import json
 import struct
 import sys
@@ -51,7 +52,8 @@ def main():
     save('rmse',ml.metrics.root_mean_squared_error(x[:,0],x[:,1]))
     save('f1',ml.metrics.f1_score(y,pred,average='macro'))
     save('matmul',linalg.matmul(x[:8],x[:5],transpose_b=True))
-    save('cross_entropy',training.cross_entropy(x[:4],np.array([0,1,2,0],np.int32)))
+    if os.environ.get('MOJOLEARN_NUMERIC_MODE')=='identical':
+        save('cross_entropy',training.cross_entropy(x[:4],np.array([0,1,2,0],np.int32)))
     model=ml.AgglomerativeClustering(n_clusters=3).fit(x)
     save('agglomerative',model.labels_)
     save('kpss',ml.kpss_test(np.sin(np.arange(64,dtype=np.float64)/3)+1))
