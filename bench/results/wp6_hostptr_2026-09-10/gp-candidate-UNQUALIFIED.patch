@@ -4,36 +4,36 @@ index 536202c5..1705fbe6 100644
 +++ b/bindings/_mojolearn_gp.mojo
 @@ -83,6 +83,7 @@ THE GIL is released around every device call, and nothing inside a
  """
- 
+
  from std.os import abort
 +from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
  from std.python import Python, PythonObject
  from std.python._cpython import GILReleased
  from std.python.bindings import PythonModuleBuilder
 @@ -113,21 +114,15 @@ from gaussian_process.estimator import (
- 
- 
+
+
  def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 -    if addr == 0:
 -        raise Error("mojolearn: null float32 buffer address")
 -    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
 +    return f32_ptr(addr)
- 
- 
+
+
  def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
 -    if addr == 0:
 -        raise Error("mojolearn: null int32 buffer address")
 -    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
 +    return i32_ptr(addr)
- 
- 
+
+
  def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
 -    if addr == 0:
 -        raise Error("mojolearn: null float64 buffer address")
 -    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
 +    return f64_ptr(addr)
- 
- 
+
+
  def gp_numeric_mode_binding() raises -> PythonObject:
 @@ -301,10 +296,8 @@ def _gpr_fit_run(
      function because `GPRegressor` has no default constructor to
@@ -65,7 +65,7 @@ index 536202c5..1705fbe6 100644
          info = _gpr_fit_run(
 @@ -492,8 +481,8 @@ def gpr_predict_binding(
          6  info            LAPACK's info from the fit, PASSED THROUGH
- 
+
      Slot 6 is the trap in this list, and it is a deliberate one. The
 -    `GPRegressor` is reconstructed below with `y_train`, `alpha`,
 -    `logdet`, `ydotalpha`, `lml` and `nb` ZERO-FILLED -- `gpr_predict_host`
