@@ -80,6 +80,7 @@ import numpy as np
 
 from . import _mojolearn_trees, _serialize
 from ._mode import NumericModeMixin
+from ._forest_protocol import ForestProtocol, forest_estimator
 from ._arrays import _addr, _addr_ro, as_f32_c, as_f32_colmajor
 
 #: The npz model-file format tag `save` writes and `load` requires.
@@ -205,7 +206,7 @@ def _fit_params(n_rows, n_features, n_classes, cfg, device, criterion):
     ]
 
 
-class _ExtraTreesBase(NumericModeMixin):
+class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
     _BINDING = "_mojolearn_trees"
     def __init__(self, device):
         if device not in ("gpu", "cpu"):
@@ -349,6 +350,7 @@ class _ExtraTreesBase(NumericModeMixin):
         return obj
 
 
+@forest_estimator("classifier")
 class ExtraTreesClassifier(_ExtraTreesBase):
     """sklearn's `ExtraTreesClassifier`, honoured or refused by name.
 
@@ -412,6 +414,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         )
 
     def fit(self, X, y):
+        self._refresh_config()
         ya = np.asarray(y)
         self.classes_, codes = np.unique(ya, return_inverse=True)
         self.n_classes_ = int(len(self.classes_))
@@ -429,6 +432,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         return self.classes_[np.argmax(self._vote(X), axis=1)]
 
 
+@forest_estimator("regressor")
 class ExtraTreesRegressor(_ExtraTreesBase):
     """sklearn's `ExtraTreesRegressor`, honoured or refused by name.
 
@@ -496,6 +500,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
             self._cfg["max_features"] = None
 
     def fit(self, X, y):
+        self._refresh_config()
         return self._fit_arrays(
             X,
             np.ascontiguousarray(y, dtype=np.float32),

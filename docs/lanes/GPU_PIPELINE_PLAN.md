@@ -3,10 +3,12 @@
 Decision and source audit: 2026-09-10, on
 `lane/trees-gpu-growth-rf-hist-2026-09-09`. This extends the
 [decision-tree roadmap](DECISION_TREE_ROADMAP.md) to the surrounding library.
-These are planned capabilities, not claims that new APIs or a cross-vendor
-pipeline have shipped. Finish the current tree correctness gates first;
-metrics and estimator compatibility then take priority over the longer-tail
-tree features.
+The bounded A1 regression-error APIs and B1 RF/ET sklearn protocol are now
+implemented; see [regression metrics](GPU_REGRESSION_METRICS.md) and
+[forest compatibility](FOREST_SKLEARN_PROTOCOL.md) for contracts and qualification.
+The remaining phases are planned. A complete cross-vendor pipeline has not
+been qualified. Metrics and estimator compatibility take priority over
+the longer-tail tree features.
 
 ## Decision: keep DETERMINISTIC for now
 
@@ -34,7 +36,7 @@ metadata; changing a label must not silently select different arithmetic.
 Until then, new pipeline operations use shared kernels with explicit mode
 policies and all three modes receive appropriate correctness checks.
 
-## What the audit actually found
+## Initial audit (before A1/B1 implementation)
 
 | Surface | Present | Missing or incomplete |
 | --- | --- | --- |
@@ -138,5 +140,6 @@ qualify that entire pipeline as cross-vendor IDENTICAL.
 
 Do not claim arbitrary sklearn pipelines are identical, or that no competitor
 can offer a similar guarantee. Publish the precise certified workflow and
-its intermediate evidence instead. This plan is the implementation and
-qualification queue; the audit did not add these missing APIs.
+its intermediate evidence instead. This plan remains the implementation and qualification queue. A1 unweighted
+Float32 errors and B1 forest compatibility are the first implemented slices;
+weights, multiple outputs and broader protocol support remain pending.

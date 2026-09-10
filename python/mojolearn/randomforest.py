@@ -56,6 +56,7 @@ import numpy as np
 
 from . import _mojolearn_rf, _serialize
 from ._mode import NumericModeMixin
+from ._forest_protocol import ForestProtocol, forest_estimator
 from ._arrays import _addr, _addr_ro, as_f32_c, as_f32_colmajor
 
 #: The npz model-file format tag `save` writes and `load` requires.
@@ -279,7 +280,7 @@ def _max_leaves_slot(max_leaves):
     )
 
 
-class _RandomForestBase(NumericModeMixin):
+class _RandomForestBase(ForestProtocol, NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_rf"
 
@@ -491,6 +492,7 @@ class _RandomForestBase(NumericModeMixin):
         return obj
 
 
+@forest_estimator("classifier")
 class RandomForestClassifier(_RandomForestBase):
     """cuML's `RandomForestClassifier`, honoured or refused by name.
 
@@ -554,6 +556,7 @@ class RandomForestClassifier(_RandomForestBase):
         self.criterion = criterion
 
     def fit(self, X, y):
+        self._refresh_config()
         ya = np.asarray(y).ravel()
         self.classes_, codes = np.unique(ya, return_inverse=True)
         self.n_classes_ = int(len(self.classes_))
@@ -588,6 +591,7 @@ class RandomForestClassifier(_RandomForestBase):
         return self.classes_[np.argmax(self.predict_proba(X), axis=1)]
 
 
+@forest_estimator("regressor")
 class RandomForestRegressor(_RandomForestBase):
     """cuML's `RandomForestRegressor`, honoured or refused by name.
 
@@ -657,6 +661,7 @@ class RandomForestRegressor(_RandomForestBase):
         self.criterion = criterion
 
     def fit(self, X, y):
+        self._refresh_config()
         y32 = np.ascontiguousarray(np.asarray(y).ravel(), dtype=np.float32)
         code = self._cfg["criterion"]
         if code == _REG_CRITERIA["poisson"]:

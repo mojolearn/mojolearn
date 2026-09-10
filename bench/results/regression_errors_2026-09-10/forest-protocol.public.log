@@ -1,0 +1,15 @@
+sklearn 1.8.0
+fast ExtraTreesClassifier {'model__max_depth': 1} score 1.0 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/_mojolearn_trees.so
+fast ExtraTreesRegressor {'model__max_depth': 2} score 0.949999988079071 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/_mojolearn_trees.so
+fast RandomForestClassifier {'model__max_depth': 1} score 1.0 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/_mojolearn_rf.so
+fast RandomForestRegressor {'model__max_depth': 2} score 1.0 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/_mojolearn_rf.so
+deterministic ExtraTreesClassifier {'model__max_depth': 1} score 1.0 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/deterministic/_mojolearn_trees.so
+deterministic ExtraTreesRegressor {'model__max_depth': 2} score 0.949999988079071 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/deterministic/_mojolearn_trees.so
+deterministic RandomForestClassifier {'model__max_depth': 1} score 1.0 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/deterministic/_mojolearn_rf.so
+deterministic RandomForestRegressor {'model__max_depth': 2} score 1.0 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/deterministic/_mojolearn_rf.so
+identical ExtraTreesClassifier {'model__max_depth': 1} score 1.0 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/identical/_mojolearn_trees.so
+identical ExtraTreesRegressor {'model__max_depth': 2} score 0.949999988079071 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/identical/_mojolearn_trees.so
+Context leak detected, CoreAnalytics returned false
+identical RandomForestClassifier {'model__max_depth': 1} score 1.0 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/identical/_mojolearn_rf.so
+identical RandomForestRegressor {'model__max_depth': 2} score 1.0 binding /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/identical/_mojolearn_rf.so
+FOREST PROTOCOL PUBLIC GREEN

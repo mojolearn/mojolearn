@@ -36,7 +36,7 @@ Current order:
 1. RF timing refresh is complete but inconclusive; keep candidates opt-in.
    The bounded minimum-child-Hessian control now passes native/public M4
    checks in all modes; broader device qualification remains.
-2. Start common metrics and sklearn protocol work from the pipeline plan;
+2. Continue common metrics and sklearn protocol work from the pipeline plan;
    then add GBDT feature sampling and expose prepared datasets through Python.
 3. On an available NVIDIA GPU, qualify RF/ET candidates, large stable
    partitions and the stream API; then implement measured stream overlap.
@@ -201,5 +201,5 @@ before shipping the core GPU growth controls.
 | RF timing refresh | Completed: all four timing windows failed stability; 120 model fingerprints match. [Sep10 evidence](../../bench/results/rf_column_tiles_2026-09-10/EVIDENCE.md). Defaults unchanged. |
 | Minimum child Hessian | Implemented for the three audited scalar losses with Newton scoring; native/public checks pass in all modes on M4. [Feature and evidence](GBDT_MIN_CHILD_HESSIAN.md). Cross-vendor qualification remains. |
 | Sub-byte layout gate | Retained for live histogram layouts; named pixi task and hardware-matrix entry both pass all three internal negative controls. [Audit and commands](SUB_BYTE_LAYOUT_GATE.md). |
-| Pipeline expansion | Audited and planned: metrics, preprocessing, sklearn protocol and model selection. Keep DETERMINISTIC; measure cost/benefit before deprecation. [Detailed plan](GPU_PIPELINE_PLAN.md). |
+| Pipeline expansion | A1 unweighted Float32 MSE/MAE/RMSE and B1 RF/ET sklearn protocol implemented; see their contracts in the [detailed plan](GPU_PIPELINE_PLAN.md). Classification metrics, preprocessing and model selection remain planned. Keep DETERMINISTIC pending measurements. |
 | Other features above | Planned; start independent slices after current gates finish |
