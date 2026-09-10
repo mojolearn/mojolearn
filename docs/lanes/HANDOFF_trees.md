@@ -146,11 +146,19 @@ were not, so the two ours rows are not an A/B of any single change).
 - Apple M4 identity JSON regeneration after DEVIATION 2340 (orchestrator):
   `MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py --lanes rf-clf,rf-reg,et-clf,et-reg,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse,kmeans --vendor apple-m4 --json bench/results/identity_break/apple-m4.identical.json`
   (expect the 18 `predict` cells to move by dtype only, `proba` equal).
-- Apple M4 rebuild of the rf binding at the flipped default and its
-  fingerprints (the flip was gated on the H100 only):
-  `MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_rf.sh` then the
-  identity_break line above diffed against the JSON it produces before the
-  rebuild, and `tools/with_build_lock.sh pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 ensemble/checks/rf_perf_candidates_check.mojo`.
+- DONE 2026-09-10 (orchestrator, Apple M4, main at c061fe82): the rf
+  binding rebuilt IDENTICAL at the flipped default;
+  `rf_perf_candidates_check.mojo` ALL ARMS GREEN under
+  `-D MOJOLEARN_NUMERIC_IDENTICAL=1`; `identity_break.py --lanes rf-clf,rf-reg`
+  (`bench/results/identity_break/apple-m4.identical.rf-flip2011-2026-09-10.json`)
+  diffed against the retained `apple-m4.identical.json`: rf-reg 9/9
+  IDENTICAL, rf-clf `proba` 9/9 equal, `predict` differs on 9/9 by dtype
+  only (today's int64 cast to the int32 label dtype reproduces the retained
+  hash 9/9), the same picture as the H100. The flip is forest-identical on
+  Apple. The full nine-lane Apple JSON regeneration above is still owed and
+  should wait until DEVIATION 2340's `predict` dtype is settled (sklearn
+  returns predictions in the `classes_` dtype; int64 is a behavior change,
+  not just a fingerprint change).
 - AMD execution and timing of every cell above (no AMD box this leg).
 - 5M rungs: not started by directive.
 - RF 2M at the flipped SOURCE (only rf2011's define build has the 2M cell):
