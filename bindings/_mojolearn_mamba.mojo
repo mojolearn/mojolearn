@@ -876,7 +876,10 @@ def _mamba3_run[discard_state: Bool = False](
             dstate.pend_k = _m3_upload_addr(ctx, a[18], k_n)
             dstate.pend_v = _m3_upload_addr(ctx, a[19], v_n)
     m3_phase_tick(ctx, phase_tick, String("surface.state_upload"))
-    var dstages = Mamba3DeviceStages(ctx, b, l, q0, dims)
+    var dstages = Mamba3DeviceStages(
+        ctx, b, l, q0, dims,
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_UNINITIALIZED_SCRATCH"](),
+    )
     m3_phase_tick(ctx, phase_tick, String("surface.stage_allocations"))
     var dx = _m3_upload_addr(ctx, a[0], b * l * dm)
 

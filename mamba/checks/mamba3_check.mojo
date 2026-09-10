@@ -101,6 +101,7 @@ must differ) guards the gate against comparing a buffer with itself.
 """
 
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from std.os import getenv
 from std.sys import argv
 
@@ -624,7 +625,7 @@ def run_pair(
             m3_case_init_k(case_k),
             m3_case_init_v(case_k),
         )
-    var dstages = Mamba3DeviceStages(ctx, b, l, 0, dims)
+    var dstages = Mamba3DeviceStages(ctx, b, l, 0, dims, is_defined["MOJOLEARN_MAMBA3_UNINITIALIZED_SCRATCH"]())
     var dx = mamba_upload(ctx, x)
     mamba3_block_forward(ctx, dstages, dstate, dw, dx, b, l, trace, prefix)
     var ddump = device_dump(ctx, dstages, dstate, b, l, 0, dims)
@@ -809,7 +810,7 @@ def gate_c(ctx: DeviceContext, case_k: Int, l: Int) raises:
             x.append(x3[i])
         var dw = Mamba3DeviceWeights(ctx, w)
         var dstate = allocate_inference_cache(ctx, bsz, dims)
-        var dstages = Mamba3DeviceStages(ctx, bsz, l, 0, dims)
+        var dstages = Mamba3DeviceStages(ctx, bsz, l, 0, dims, is_defined["MOJOLEARN_MAMBA3_UNINITIALIZED_SCRATCH"]())
         var dx = mamba_upload(ctx, x)
         var trace = IdentityTrace.disabled()
         mamba3_block_forward(
@@ -884,7 +885,7 @@ def gate_d(
     # ---- the reference prefill: one call, L tokens, fresh state.
     var dw = Mamba3DeviceWeights(ctx, w)
     var pre_state = allocate_inference_cache(ctx, b, dims)
-    var pre_stages = Mamba3DeviceStages(ctx, b, l_total, 0, dims)
+    var pre_stages = Mamba3DeviceStages(ctx, b, l_total, 0, dims, is_defined["MOJOLEARN_MAMBA3_UNINITIALIZED_SCRATCH"]())
     var dx = mamba_upload(ctx, x)
     var trace = IdentityTrace.disabled()
     mamba3_block_forward(
@@ -901,7 +902,7 @@ def gate_d(
         var x1 = List[Float32]()
         for i in range(b * l1 * dims.d_model):
             x1.append(x[i])
-        var st1 = Mamba3DeviceStages(ctx, b, l1, 0, dims)
+        var st1 = Mamba3DeviceStages(ctx, b, l1, 0, dims, is_defined["MOJOLEARN_MAMBA3_UNINITIALIZED_SCRATCH"]())
         var dx1 = mamba_upload(ctx, x1)
         mamba3_block_forward(
             ctx, st1, state, dw, dx1, b, l1, trace, String("m3d.p1")
@@ -916,7 +917,7 @@ def gate_d(
         for j in range(dims.d_model):
             xt.append(x[li * dims.d_model + j])
         var q0 = state.buf_len
-        var dstages = Mamba3DeviceStages(ctx, b, 1, q0, dims)
+        var dstages = Mamba3DeviceStages(ctx, b, 1, q0, dims, is_defined["MOJOLEARN_MAMBA3_UNINITIALIZED_SCRATCH"]())
         var dxt = mamba_upload(ctx, xt)
         mamba3_block_forward(
             ctx, dstages, state, dw, dxt, b, 1, trace,
@@ -1103,7 +1104,7 @@ def gate_e_one_plant(
 
     var dw = Mamba3DeviceWeights(ctx, w)
     var dstate = allocate_inference_cache(ctx, b, dims)
-    var dstages = Mamba3DeviceStages(ctx, b, l, 0, dims)
+    var dstages = Mamba3DeviceStages(ctx, b, l, 0, dims, is_defined["MOJOLEARN_MAMBA3_UNINITIALIZED_SCRATCH"]())
     var dx = mamba_upload(ctx, x)
 
     # State plants: download the zero buffer's size, plant at len/2, copy
@@ -1749,6 +1750,7 @@ def sabotage_main(ctx: DeviceContext) raises:
 
 
 def main() raises:
+    print("M3_SCRATCH_MODE", is_defined["MOJOLEARN_MAMBA3_UNINITIALIZED_SCRATCH"](), is_defined["MOJOLEARN_MAMBA3_POISON_SCRATCH"]())
     # The pi/2pi bit pins (contract section 2a): a literal drift would
     # silently move every rotation, so it is asserted before anything.
     if bitcast[DType.uint32](M3_PI) != UInt32(0x40490FDB):
