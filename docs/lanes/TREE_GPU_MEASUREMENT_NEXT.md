@@ -6,6 +6,14 @@ for NVIDIA performance runs, including symmetric GBDT against CatBoost GPU.
 RF uses cuML RF; ET comparisons require an equivalent learner or explicit
 context-only labeling. Internal mode speed ratios are not the success metric.
 
+Choose representative **large real datasets** for training-speed decisions and
+performance-default acceptance. HIGGS 1M is an example; include feature/class
+counts, bins, depth and device memory pressure when choosing scale, rather than
+using a universal row threshold. Record held-out quality and stable end-to-end
+fit timing. Small synthetic runs, including the allocation-reuse diagnostic
+below, validate correctness or isolate costs; they do not establish a large-data
+speed gain or justify a default change without the representative measurement.
+
 RunPod tests are authorized when warranted. Use a bounded single-GPU session
 with automatic teardown, separate from the protected Samba training pod.
 The last read-only inventory found only that protected pod; see

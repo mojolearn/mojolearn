@@ -93,8 +93,8 @@ General objective names also come from the parameter references above.
 Do not treat every row as an obligation to reproduce every API. In particular,
 RF-like boosting modes are not proof of identical random-forest semantics;
 Extra Trees random thresholds must remain distinct. cuML remains our RF
-performance reference. Native RF OOB/class-weight capabilities need public
-wiring; standalone DecisionTree exports and ET weighting/missing/criteria
+performance reference. RF class weights now have bounded public dict/balanced wiring through the
+existing engine ([contract](../RF_CLASS_WEIGHT.md)); OOB remains refused pending a GPU path; standalone DecisionTree exports and ET weighting/missing/criteria
 support are tracked separately in the main roadmap.
 
 MojoLearn evidence: [public tree inventory](../TREE_ALPHA_FEATURE_STATUS.md),
@@ -166,5 +166,7 @@ Cross-device identity is a later evidence gate, not a synonym for compilation.
 Update: numeric F2a is implemented; see the [feature contract](GBDT_FEATURE_FRACTION.md)
 for its limited local checks and exploratory timing. Default-one behavior is
 retained. Buffer reuse and dedicated AMD/NVIDIA evidence take priority over
-additional feature knobs. Continue to commit/push completed slices to the lane.
-Main integration remains a separate reviewed step.
+additional feature knobs. Main integration was authorized and the integration
+merge is recorded at `b5d7913d`; retain separate review and evidence for subsequent
+changes. The [symmetric CatBoost comparison audit](SYMMETRIC_CATBOOST_COMPARISON.md)
+distinguishes matched controls, searcher differences and timing qualification.

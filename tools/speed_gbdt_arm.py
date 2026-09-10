@@ -1497,9 +1497,33 @@ def prepare_cuml_labels(data):
 # The runner. Arms ALTERNATE; they never run in blocks.
 # --------------------------------------------------------------------------
 
-def run(lane, arms, data, n_rounds, size, dev=None):
+def dataset_scale(data):
+    """Visible workload heuristic, not a performance acceptance criterion."""
+    rows, features = data.X_train.shape
+    input_bytes = data.X_train.nbytes
+    return dict(rows=int(rows), features=int(features), input_bytes=int(input_bytes),
+                large_candidate=bool(rows >= 1_000_000 or input_bytes >= 256 * 1024**2))
+
+
+def emit_scale_reminder(data, stage):
+    scale = dataset_scale(data)
+    print("FSPEED-SCALE stage=%s rows=%d features=%d input_mib=%.1f large_candidate=%s"
+          % (stage, scale['rows'], scale['features'], scale['input_bytes'] / 1024**2,
+             str(scale['large_candidate']).lower()))
+    print("FSPEED-REMINDER stage=%s %s"
+          % (stage, "Optimize for large datasets; confirm representative feature/class counts, "
+             "tree depth and memory pressure before making speed/default decisions."
+             if scale['large_candidate'] else
+             "SMALL WORKLOAD: useful for correctness/smoke diagnostics; do not use this "
+             "run alone for training-speed claims or optimization/default decisions. "
+             "Also test representative large datasets (for example HIGGS 1M rows)."))
+
+
+def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False):
     """One untimed warm-up per arm, then `n_rounds` timed rounds in which
     every surviving arm takes one turn before any arm takes its second.
+    Optional rotate_order advances the first arm each round to distribute
+    position effects; it does not remove noise or establish timing stability.
 
     THE ALTERNATION IS THE POINT AND NOT A STYLE CHOICE. A rented box may
     throttle mid-run. Blocks give you the first arm's cold clocks against the
@@ -1510,6 +1534,7 @@ def run(lane, arms, data, n_rounds, size, dev=None):
     from eating the lease that the GPU arms are the point of. An arm that
     exceeds either is dropped from the rotation with a refusal carrying the
     reason, so the table says what happened."""
+    emit_scale_reminder(data, "before")
     dev = dev or device_string()
     budget = per_arm_budget_s()
     deadline = time.time() + process_deadline_s()
@@ -1542,7 +1567,13 @@ def run(lane, arms, data, n_rounds, size, dev=None):
         live.append(arm)
 
     for r in range(1, n_rounds + 1):
-        for arm in list(live):
+        ordered = list(live)
+        if rotate_order and ordered:
+            offset = (r - 1) % len(ordered)
+            ordered = ordered[offset:] + ordered[:offset]
+        print("FSPEED-ORDER lane=%s round=%d arms=%s"
+              % (lane, r, ",".join(arm.name for arm in ordered)))
+        for arm in ordered:
             if time.time() > deadline:
                 emit_refused(lane, arm.name,
                              "process deadline reached at round %d" % r)
@@ -1599,6 +1630,7 @@ def run(lane, arms, data, n_rounds, size, dev=None):
                             " ".join(str(exc).split())))
 
     _check_same_library_agreement(lane, scores)
+    emit_scale_reminder(data, "after")
     return live
 
 

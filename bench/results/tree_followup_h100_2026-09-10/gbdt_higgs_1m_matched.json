@@ -1,0 +1,225 @@
+{
+  "lane": "gbdt-symmetric",
+  "dataset": "higgs-1000000x28",
+  "config": {
+    "seed": 7,
+    "n_estimators": 100,
+    "max_depth": 6,
+    "learning_rate": 0.1,
+    "l2": 1.0,
+    "borders": 254,
+    "max_leaves": 64,
+    "grow_policy": "SymmetricTree"
+  },
+  "dataset_scale": {
+    "rows": 1000000,
+    "features": 28,
+    "input_bytes": 112000000,
+    "large_candidate": true
+  },
+  "numeric_mode": "identical",
+  "vendor": "cuda",
+  "rounds": 6,
+  "symmetric_profile": "matched-no-noise",
+  "binding": {
+    "requested": "identical",
+    "resolved": "identical",
+    "compiled": "identical",
+    "vendor": "cuda",
+    "path": "/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so"
+  },
+  "binding_sha256": "fc2603212264f55fe78b7b63727a0683380621d2f3a00ed9d5543dc1a6660403",
+  "benchmark_source_sha256": {
+    "/root/mojolearn/bench/speed/nvidia_identical_trees.py": "4043acc3636c0064a29ab18ec298dcd4e6fa7854dc948345bb58ec95d03772d4",
+    "/root/mojolearn/bench/speed/forest_speed_arm.py": "132244ebcd85a44cbcc015125fabf1f6b60eefa5d311303da23f136ba8881c42",
+    "/root/mojolearn/tools/speed_gbdt_arm.py": "5d183c800627608040a931ace7f66b62295e821d43802aa25d9a68c1772f3b08"
+  },
+  "source_commit": "5acb3fb26cd2ae960114fc6953c62215f86869bc",
+  "data_sha256": "640ef1484d55ae61318426d3ce71ebab4f648de2fbb287ec4f631de8459fe159",
+  "versions": {
+    "numpy": "2.4.6",
+    "catboost": "1.2.10",
+    "cuml-cu12": "26.8.0"
+  },
+  "arm_parameters": {
+    "ours": {
+      "seed": 7,
+      "n_estimators": 100,
+      "max_depth": 6,
+      "learning_rate": 0.1,
+      "l2": 1.0,
+      "borders": 254,
+      "max_leaves": 64,
+      "grow_policy": "SymmetricTree"
+    },
+    "catboost-gpu": {
+      "iterations": 100,
+      "learning_rate": 0.1,
+      "depth": 6,
+      "l2_leaf_reg": 1.0,
+      "loss_function": "Logloss",
+      "border_count": 254,
+      "random_seed": 7,
+      "verbose": false,
+      "allow_writing_files": false,
+      "boosting_type": "Plain",
+      "task_type": "GPU",
+      "devices": "0",
+      "bootstrap_type": "No",
+      "grow_policy": "SymmetricTree",
+      "random_strength": 0.0
+    }
+  },
+  "summary": {
+    "ours": {
+      "fit_ms": [
+        567.681,
+        580.875,
+        527.652,
+        515.722,
+        483.779,
+        521.836
+      ],
+      "median_ms": 524.744,
+      "max_min_spread": 1.2007032136574758,
+      "stable": false
+    },
+    "catboost-gpu": {
+      "fit_ms": [
+        916.853,
+        911.836,
+        918.29,
+        952.772,
+        927.351,
+        900.561
+      ],
+      "median_ms": 917.5715,
+      "max_min_spread": 1.0579760837966556,
+      "stable": true
+    }
+  },
+  "complete": true,
+  "quality": [
+    {
+      "arm": "ours",
+      "metric": "logloss",
+      "value": 0.542067
+    },
+    {
+      "arm": "ours",
+      "metric": "auc",
+      "value": 0.800716
+    },
+    {
+      "arm": "catboost-gpu",
+      "metric": "logloss",
+      "value": 0.541756
+    },
+    {
+      "arm": "catboost-gpu",
+      "metric": "auc",
+      "value": 0.800891
+    }
+  ],
+  "fitted_parameters": {
+    "catboost-gpu": {
+      "nan_mode": "Min",
+      "gpu_ram_part": 0.95,
+      "eval_metric": "Logloss",
+      "iterations": 100,
+      "leaf_estimation_method": "Newton",
+      "observations_to_bootstrap": "TestOnly",
+      "random_score_type": "NormalWithModelSizeDecrease",
+      "grow_policy": "SymmetricTree",
+      "penalties_coefficient": 1,
+      "boosting_type": "Plain",
+      "feature_border_type": "GreedyLogSum",
+      "bayesian_matrix_reg": 0.10000000149011612,
+      "devices": "0",
+      "eval_fraction": 0,
+      "pinned_memory_bytes": "104857600",
+      "force_unit_auto_pair_weights": false,
+      "l2_leaf_reg": 1,
+      "random_strength": 0,
+      "rsm": 1,
+      "boost_from_average": false,
+      "gpu_cat_features_storage": "GpuRam",
+      "fold_size_loss_normalization": false,
+      "model_size_reg": 0.5,
+      "pool_metainfo_options": {
+        "tags": {}
+      },
+      "use_best_model": false,
+      "meta_l2_frequency": 0,
+      "class_names": [
+        0,
+        1
+      ],
+      "random_seed": 7,
+      "depth": 6,
+      "border_count": 254,
+      "min_fold_size": 100,
+      "data_partition": "DocParallel",
+      "classes_count": 0,
+      "auto_class_weights": "None",
+      "leaf_estimation_backtracking": "AnyImprovement",
+      "best_model_min_trees": 1,
+      "min_data_in_leaf": 1,
+      "add_ridge_penalty_to_loss_function": false,
+      "loss_function": "Logloss",
+      "learning_rate": 0.10000000149011612,
+      "meta_l2_exponent": 1,
+      "score_function": "Cosine",
+      "task_type": "GPU",
+      "leaf_estimation_iterations": 10,
+      "bootstrap_type": "No",
+      "max_leaves": 64
+    }
+  },
+  "arm_order_policy": "rotate first arm each measured round",
+  "arm_orders": [
+    "FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours,catboost-gpu",
+    "FSPEED-ORDER lane=gbdt-symmetric round=2 arms=catboost-gpu,ours",
+    "FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours,catboost-gpu",
+    "FSPEED-ORDER lane=gbdt-symmetric round=4 arms=catboost-gpu,ours",
+    "FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours,catboost-gpu",
+    "FSPEED-ORDER lane=gbdt-symmetric round=6 arms=catboost-gpu,ours"
+  ],
+  "quality_valid": true,
+  "repeated_model_and_prediction_equal": true,
+  "model_hashes": [
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3",
+    "c51e7e61410256ba62602c2ca1d79123d30c4d51def2f93d7f8d44be3ea49da3"
+  ],
+  "prediction_hashes": {
+    "ours": [
+      "dac2cf366e219cec",
+      "dac2cf366e219cec",
+      "dac2cf366e219cec",
+      "dac2cf366e219cec",
+      "dac2cf366e219cec",
+      "dac2cf366e219cec"
+    ],
+    "catboost-gpu": [
+      "0d92d566a2f1db37",
+      "e81448ce1606f81e",
+      "6ea9d66f181e5d8c",
+      "7a88690301da19a0",
+      "53b53b6cf48f66a8",
+      "6aff811cccce467a"
+    ]
+  },
+  "scores": [
+    "FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542067",
+    "FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800716",
+    "FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.541756",
+    "FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800891"
+  ],
+  "refusals": [],
+  "timing_contract": "constructor + host packing + fit + synchronization; scoring excluded"
+}

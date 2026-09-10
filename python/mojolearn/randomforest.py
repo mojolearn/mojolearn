@@ -52,6 +52,7 @@ X IS COPIED TWICE PER FIT (NumPy to column-major float32, then across the
 boundary); on large matrices that is the dominant cost of the CALL.
 """
 
+import numbers
 import numpy as np
 
 from . import _mojolearn_rf, _serialize
@@ -280,6 +281,42 @@ def _max_leaves_slot(max_leaves):
     )
 
 
+def _class_weight_rows(class_weight, classes, codes):
+    """cuML 26.08 process_class_weight shape, bounded Float32 weights.
+
+    Host label bookkeeping; the existing native forest consumes row weights.
+    Unlike cuML RF's Float64 weights, this engine narrows to Float32.
+    """
+    if class_weight is None:
+        return None
+    if isinstance(class_weight, str):
+        counts = np.bincount(codes, minlength=len(classes))
+        values = len(codes) / (len(classes) * counts.astype(np.float64))
+    else:
+        unknown = set(class_weight).difference(classes.tolist())
+        if unknown:
+            raise ValueError("class_weight contains labels absent from y")
+        values = []
+        for label in classes:
+            value = class_weight.get(label, 1.0)
+            if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+                raise ValueError("class weights must be finite nonnegative real numbers")
+            values.append(value)
+        values = np.asarray(values, dtype=np.float64)
+    if not np.all(np.isfinite(values)) or np.any(values < 0):
+        raise ValueError("class weights must be finite and nonnegative")
+    # Preserve the original unweighted entrypoint, including bootstrap RNG.
+    if np.all(values == 1):
+        return None
+    with np.errstate(over="ignore", under="ignore"):
+        narrowed = np.asarray(values, dtype=np.float32)
+    if not np.all(np.isfinite(narrowed)) or np.any((values > 0) & (narrowed == 0)):
+        raise ValueError("class weights must remain finite and nonzero when positive in Float32")
+    if not np.any(narrowed > 0):
+        raise ValueError("class weights must have positive total")
+    return np.ascontiguousarray(narrowed[codes])
+
+
 class _RandomForestBase(ForestProtocol, NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_rf"
@@ -328,9 +365,9 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
             _refuse("ccp_alpha", "cost-complexity pruning is a"
                     " post-processing pass neither cuML nor this port"
                     " implements. Only 0.0 is accepted.")
-        if class_weight is not None:
-            _refuse("class_weight", "the engine's apply_class_weight exists"
-                    " but this boundary does not carry weights yet.")
+        if class_weight is not None and not isinstance(class_weight, dict):
+            if not isinstance(class_weight, str) or class_weight != "balanced":
+                raise ValueError("class_weight must be None, a dict, or 'balanced'; balanced_subsample is unsupported")
         if monotonic_cst is not None:
             _refuse("monotonic_cst", "no cuML counterpart.")
         if n_jobs is not None:
@@ -557,15 +594,23 @@ class RandomForestClassifier(_RandomForestBase):
 
     def fit(self, X, y):
         self._refresh_config()
+        self._capture_fit_mode()
         ya = np.asarray(y).ravel()
         self.classes_, codes = np.unique(ya, return_inverse=True)
         self.n_classes_ = int(len(self.classes_))
         if self.n_classes_ < 2:
             raise ValueError("y has fewer than 2 classes")
         y32 = np.ascontiguousarray(codes, dtype=np.int32)
-        return self._fit_arrays(
-            X, y32, self.n_classes_, self._bind("_mojolearn_rf").rf_classifier_fit
-        )
+        weights = _class_weight_rows(self.class_weight, self.classes_, codes)
+        binding = self._bind("_mojolearn_rf")
+        fit_fn = binding.rf_classifier_fit
+        if weights is not None:
+            weighted_fit = getattr(binding, "rf_classifier_fit_weighted", None)
+            if weighted_fit is None:
+                raise RuntimeError("rebuild the RF binding for class_weight support")
+            def fit_fn(x_addr, y_addr, params, criterion):
+                return weighted_fit(x_addr, y_addr, params, criterion, _addr_ro(weights))
+        return self._fit_arrays(X, y32, self.n_classes_, fit_fn)
 
     def predict_proba(self, X):
         Xa, n_rows, n_features = self._check_predict_input(X)
@@ -662,6 +707,7 @@ class RandomForestRegressor(_RandomForestBase):
 
     def fit(self, X, y):
         self._refresh_config()
+        self._capture_fit_mode()
         y32 = np.ascontiguousarray(np.asarray(y).ravel(), dtype=np.float32)
         code = self._cfg["criterion"]
         if code == _REG_CRITERIA["poisson"]:

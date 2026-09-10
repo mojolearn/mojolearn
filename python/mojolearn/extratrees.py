@@ -413,6 +413,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
 
     def fit(self, X, y):
         self._refresh_config()
+        self._capture_fit_mode()
         ya = np.asarray(y)
         self.classes_, codes = np.unique(ya, return_inverse=True)
         self.n_classes_ = int(len(self.classes_))
@@ -499,6 +500,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
 
     def fit(self, X, y):
         self._refresh_config()
+        self._capture_fit_mode()
         return self._fit_arrays(
             X,
             np.ascontiguousarray(y, dtype=np.float32),

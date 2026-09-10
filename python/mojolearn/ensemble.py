@@ -290,6 +290,35 @@ def _tri(v):
     return 1 if v else 0
 
 
+def _validate_search_options(random_strength, use_pointwise_searcher,
+                             grow_policy, score_function):
+    """Shared constructor/fit guards; these conflicts apply in every mode."""
+    valid_type = (not isinstance(random_strength, (bool, np.bool_))
+                  and isinstance(random_strength, (int, float, np.integer, np.floating)))
+    try:
+        strength = float(random_strength) if valid_type else float("nan")
+    except (TypeError, ValueError, OverflowError):
+        strength = float("nan")
+    if (not np.isfinite(strength)
+            or not 0 <= strength <= float(np.finfo(np.float32).max)):
+        raise ValueError(
+            "mojolearn: random_strength must be finite, nonnegative and "
+            "<= Float32.MAX_FINITE"
+        )
+    if use_pointwise_searcher and grow_policy != "SymmetricTree":
+        raise ValueError(
+            "mojolearn: use_pointwise_searcher=True is an OBLIVIOUS searcher; "
+            f"grow_policy={grow_policy!r} requires the greedy subsets searcher"
+        )
+    if strength != 0.0 and score_function in ("L2", "NewtonL2"):
+        raise ValueError(
+            f"mojolearn: random_strength={strength} does nothing under "
+            f"score_function={score_function!r}; use Cosine or NewtonCosine, "
+            "or random_strength=0.0"
+        )
+    return strength
+
+
 class GradientBoosting(NumericModeMixin):
     """Gradient-boosted trees, mirroring CatBoost's GPU learner: its three
     growth policies (`grow_policy`), its losses, its leaf estimators.
@@ -645,14 +674,6 @@ class GradientBoosting(NumericModeMixin):
                 "exactly eleven losses (pointwise_non_symmetric.cpp:7-29; "
                 f"train.cpp:279 is the refusal): {sorted(_NON_SYMMETRIC_LOSSES)}"
             )
-        if non_symmetric and use_pointwise_searcher:
-            raise ValueError(
-                "mojolearn: use_pointwise_searcher=True is "
-                "TDocParallelObliviousTreeSearcher, an OBLIVIOUS searcher; "
-                f"grow_policy={grow_policy!r} is grown by "
-                "TGreedySubsetsSearcher<TNonSymmetricTree> only "
-                "(pointwise_non_symmetric.cpp:5-29)"
-            )
         if max_leaves is not None:
             if int(max_leaves) < 2:
                 raise ValueError(
@@ -740,28 +761,9 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: nan_mode must be one of {NAN_MODES}, got "
                 f"{nan_mode!r}"
             )
-        if random_strength < 0.0:
-            raise ValueError(
-                f"mojolearn: random_strength must be >= 0, got "
-                f"{random_strength}"
-            )
-        if random_strength != 0.0 and score_function in ("L2", "NewtonL2"):
-            # CatBoost accepts this pair and discards the value: only
-            # `TCosineScoreCalcer` has a noise term
-            # (`score_calcers.cuh:159-167`), `TL2ScoreCalcer` (`:40-69`)
-            # has none, and NewtonL2 runs that same L2 calcer. Copying
-            # that silence would leave a knob that reads as live and is
-            # not, so this port refuses where CatBoost does not. The same
-            # refusal is in `CatBoostOptions.validate`.
-            raise ValueError(
-                f"mojolearn: random_strength={random_strength} does nothing "
-                f"under score_function={score_function!r} -- only "
-                "TCosineScoreCalcer carries the noise term "
-                "(score_calcers.cuh:159-167). Use score_function='Cosine' "
-                "or 'NewtonCosine', or random_strength=0.0. (Under "
-                "grow_policy='Lossguide' an unset score_function resolves "
-                "to NewtonL2, CatBoost's own GPU default there.)"
-            )
+        random_strength = _validate_search_options(
+            random_strength, use_pointwise_searcher, grow_policy, score_function
+        )
         if border_build_max_samples < 0:
             raise ValueError(
                 f"mojolearn: border_build_max_samples must be >= 0 (0 means "
@@ -879,6 +881,10 @@ class GradientBoosting(NumericModeMixin):
     # Trailing defaults are omitted, preserving all existing caller layouts.
     def _params(self, n_rows, n_features, n_flags, n_weights=0,
                 n_eval_rows=0):
+        strength = _validate_search_options(
+            self.random_strength, self.use_pointwise_searcher,
+            self.grow_policy, self.score_function,
+        )
         def f(v):
             return _UNSET if v is None else float(v)
 
@@ -926,7 +932,7 @@ class GradientBoosting(NumericModeMixin):
             else int(self.od_wait),                     # 22
             _tri(self.use_best_model),                  # 23
             int(self.best_model_min_trees),             # 24
-            float(self.random_strength),                # 25
+            strength,                                   # 25
             1 if self.use_pointwise_searcher else 0,    # 26
             int(self.border_build_max_samples),         # 27
             -1 if self.permutation_count is None

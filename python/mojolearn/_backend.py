@@ -965,8 +965,24 @@ def set_default_mode(mode):
 
 
 def binding(name, mode=None):
-    """The one accessor an estimator needs: give me `name`, in `mode`."""
-    return getattr(load_set(mode or default_mode()), name)
+    """Resolve a binding and reject a readable compiled-mode mismatch at call time."""
+    requested = default_mode() if mode is None else mode
+    if not isinstance(requested, str) or requested.strip().lower() not in _MODE_CODE:
+        raise ValueError("numeric_mode must be fast, deterministic, identical or None")
+    selected = load_set(requested.strip().lower())
+    module = getattr(selected, name)
+    # A correctly built GBDT sibling does not establish RF/ET (or any other
+    # extension) mode. Check the actual called module, including cached sets.
+    getter_name = _vendor_fn(name).removesuffix("_vendor") + "_numeric_mode"
+    getter = getattr(module, getter_name, None)
+    if getter is not None:
+        compiled = _CODE_MODE.get(getter(), "unknown")
+        if compiled != selected.mode:
+            raise RuntimeError(
+                f"mojolearn: {name} was compiled for {compiled}, but this call "
+                f"requested {selected.mode}; rebuild the {selected.mode} binding"
+            )
+    return module
 
 
 _MISSING = []

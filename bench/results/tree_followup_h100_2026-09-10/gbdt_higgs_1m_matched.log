@@ -1,0 +1,34 @@
+2139 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12cdc0000000, nodemask=1)
+2139 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ae780000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=6 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=6 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 ms=1165.761
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 ms=953.426
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=567.681 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=1 ms=916.853 hash=0d92d566a2f1db37
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=catboost-gpu,ours
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=2 ms=911.836 hash=e81448ce1606f81e
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=2 ms=580.875 hash=dac2cf366e219cec
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=3 ms=527.652 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=3 ms=918.290 hash=6ea9d66f181e5d8c
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=catboost-gpu,ours
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=4 ms=952.772 hash=7a88690301da19a0
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=4 ms=515.722 hash=dac2cf366e219cec
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=5 ms=483.779 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=5 ms=927.351 hash=53b53b6cf48f66a8
+FSPEED-ORDER lane=gbdt-symmetric round=6 arms=catboost-gpu,ours
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=6 ms=900.561 hash=6aff811cccce467a
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=6 ms=521.836 hash=dac2cf366e219cec
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542067
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800716
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.541756
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800891
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+BASELINE_RESULT /root/trees_out/gbdt_higgs_1m_matched.json complete= True repeatable= True
