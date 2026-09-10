@@ -80,6 +80,7 @@ order because callers rely on it; the two elementwise helpers reproduce
 `linear_model.py`'s `_center` / `_scale_rows` operation for operation.
 """
 
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from std.os import abort
 from std.math import isfinite
 from std.memory import memcpy
@@ -113,7 +114,7 @@ def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     """
     if addr == 0:
         raise Error("mojolearn: null buffer address")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f32_ptr(addr)
 
 
 def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
@@ -123,19 +124,19 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
     `_mojolearn_svm.mojo` and `_mojolearn_gp.mojo`."""
     if addr == 0:
         raise Error("mojolearn: null buffer address")
-    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f64_ptr(addr)
 
 
 def _u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("mojolearn: null buffer address")
-    return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return u32_ptr(addr)
 
 
 def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("mojolearn: null int32 buffer address")
-    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return i32_ptr(addr)
 
 
 # ===========================================================================
