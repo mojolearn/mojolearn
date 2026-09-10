@@ -1,0 +1,15 @@
+{
+  "data": {
+    "gpuTypes": [
+      {
+        "id": "NVIDIA H100 80GB HBM3",
+        "displayName": "H100 SXM",
+        "lowestPrice": {
+          "stockStatus": "Low",
+          "uninterruptablePrice": 3.49,
+          "availableGpuCounts": null
+        }
+      }
+    ]
+  }
+}

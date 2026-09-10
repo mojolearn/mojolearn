@@ -1,0 +1,26 @@
+{
+  "original_shape": [
+    11000000,
+    28
+  ],
+  "train_source_rows": [
+    0,
+    1000000
+  ],
+  "test_source_rows": [
+    10500000,
+    11000000
+  ],
+  "cropped_shape": [
+    1500000,
+    28
+  ],
+  "sha256": {
+    "X_train": "451e4aeb37ee8c67b4981c9b4cfa1bdcef5ef97d0d767930c39fca3813184631",
+    "y_train": "38a413233528c6344de0b543dcbde803e649143ead6ba17a588daab92d824181",
+    "X_test": "1b20eae8ca7a0f227809eada5f733eb3f147f008fa6f16e80b87e3fb3014114b",
+    "y_test": "e06774bf56e7d6c0f0a2707937fe12e8108567c724328163ba0dbdaafab95fcf"
+  },
+  "note": "Exact original prefix and fixed original tail; cropped cache supports training up to1M only",
+  "cache_sha256": "94d2702f5b9b52aaa84a873239ee9fcdc45f5b20782d4467712424c593560491"
+}

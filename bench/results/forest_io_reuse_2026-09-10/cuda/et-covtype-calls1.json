@@ -1,0 +1,674 @@
+{
+  "harness_schema": 2,
+  "complete": true,
+  "records": [
+    {
+      "arm": "parallel_groves_transient",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 97.24103659391403,
+      "calls_per_sample": 1,
+      "ms": 97.24103659391403,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 47.97153361141682,
+      "calls_per_sample": 1,
+      "ms": 47.97153361141682,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 4.427758976817131,
+      "calls_per_sample": 1,
+      "ms": 4.427758976817131,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 4.255596548318863,
+      "calls_per_sample": 1,
+      "ms": 4.255596548318863,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 37.70272061228752,
+      "calls_per_sample": 1,
+      "ms": 37.70272061228752,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 6.574174389243126,
+      "calls_per_sample": 1,
+      "ms": 6.574174389243126,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 4.293572157621384,
+      "calls_per_sample": 1,
+      "ms": 4.293572157621384,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 4.220159724354744,
+      "calls_per_sample": 1,
+      "ms": 4.220159724354744,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 6.173072382807732,
+      "calls_per_sample": 1,
+      "ms": 6.173072382807732,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 4.274485632777214,
+      "calls_per_sample": 1,
+      "ms": 4.274485632777214,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 4.214828833937645,
+      "calls_per_sample": 1,
+      "ms": 4.214828833937645,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 36.205604672431946,
+      "calls_per_sample": 1,
+      "ms": 36.205604672431946,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 4.359161481261253,
+      "calls_per_sample": 1,
+      "ms": 4.359161481261253,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 4.222448915243149,
+      "calls_per_sample": 1,
+      "ms": 4.222448915243149,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 34.03851389884949,
+      "calls_per_sample": 1,
+      "ms": 34.03851389884949,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 6.449103355407715,
+      "calls_per_sample": 1,
+      "ms": 6.449103355407715,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 4.279274493455887,
+      "calls_per_sample": 1,
+      "ms": 4.279274493455887,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 32.71470405161381,
+      "calls_per_sample": 1,
+      "ms": 32.71470405161381,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 6.348524242639542,
+      "calls_per_sample": 1,
+      "ms": 6.348524242639542,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 4.290442913770676,
+      "calls_per_sample": 1,
+      "ms": 4.290442913770676,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 32.272426411509514,
+      "calls_per_sample": 1,
+      "ms": 32.272426411509514,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 6.302705034613609,
+      "calls_per_sample": 1,
+      "ms": 6.302705034613609,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 4.29517962038517,
+      "calls_per_sample": 1,
+      "ms": 4.29517962038517,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 4.212448373436928,
+      "calls_per_sample": 1,
+      "ms": 4.212448373436928,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 6.268491968512535,
+      "calls_per_sample": 1,
+      "ms": 6.268491968512535,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 4.254575818777084,
+      "calls_per_sample": 1,
+      "ms": 4.254575818777084,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 4.21023927628994,
+      "calls_per_sample": 1,
+      "ms": 4.21023927628994,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 32.86300785839558,
+      "calls_per_sample": 1,
+      "ms": 32.86300785839558,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 4.433196038007736,
+      "calls_per_sample": 1,
+      "ms": 4.433196038007736,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 4.253381863236427,
+      "calls_per_sample": 1,
+      "ms": 4.253381863236427,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 32.659340649843216,
+      "calls_per_sample": 1,
+      "ms": 32.659340649843216,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 6.38384185731411,
+      "calls_per_sample": 1,
+      "ms": 6.38384185731411,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 4.290441051125526,
+      "calls_per_sample": 1,
+      "ms": 4.290441051125526,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 33.109113574028015,
+      "calls_per_sample": 1,
+      "ms": 33.109113574028015,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 6.478406488895416,
+      "calls_per_sample": 1,
+      "ms": 6.478406488895416,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 4.303310066461563,
+      "calls_per_sample": 1,
+      "ms": 4.303310066461563,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+      ],
+      "hash": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+    }
+  ],
+  "staged_records": [
+    {
+      "arm": "parallel_groves_transient",
+      "round": 0,
+      "dispatch_ms": 33.265186473727226,
+      "instrumented_public_ms": 33.58127921819687,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.31609274446964264
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 0,
+      "dispatch_ms": 6.2636155635118484,
+      "instrumented_public_ms": 6.72738254070282,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.4637669771909714
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 0,
+      "dispatch_ms": 4.068279638886452,
+      "instrumented_public_ms": 4.374898970127106,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.306619331240654
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 0,
+      "dispatch_ms": 4.005700349807739,
+      "instrumented_public_ms": 4.33775968849659,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.3320593386888504
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 1,
+      "dispatch_ms": 3.9976146072149277,
+      "instrumented_public_ms": 4.333341494202614,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.33572688698768616
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 1,
+      "dispatch_ms": 4.007149487733841,
+      "instrumented_public_ms": 4.368672147393227,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.3615226596593857
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 1,
+      "dispatch_ms": 6.20730035007,
+      "instrumented_public_ms": 6.553826853632927,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.34652650356292725
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 1,
+      "dispatch_ms": 33.521588891744614,
+      "instrumented_public_ms": 33.9367650449276,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.4151761531829834
+    }
+  ],
+  "calls_per_sample": 1,
+  "timing_scope": "single_public_call",
+  "lane": "et",
+  "dataset": "covtype-522911x54",
+  "task": "multiclass",
+  "response_method": "predict_proba",
+  "rows_fit": 522911,
+  "rows_predict": 58101,
+  "features": 54,
+  "outputs": 7,
+  "numeric_mode": "identical",
+  "vendor": "cuda",
+  "binding": {
+    "requested": "identical",
+    "resolved": "identical",
+    "compiled": "identical",
+    "vendor": "cuda",
+    "path": "/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so"
+  },
+  "config": {
+    "seed": 7,
+    "n_estimators": 100,
+    "max_depth": 16,
+    "n_bins": 128,
+    "min_samples_leaf": 1,
+    "min_samples_split": 2,
+    "min_impurity_decrease": 0.0,
+    "bootstrap": false
+  },
+  "versions": {
+    "numpy": "2.4.6",
+    "cuml-cu12": "26.8.0"
+  },
+  "compiled_vector_groves": true,
+  "borrowed_buffers": true,
+  "reuse_io": true,
+  "first_call_contract": "round0 includes lazy preparation for each engine; measured repeats may reuse resident state",
+  "trees": 100,
+  "nodes": 927052,
+  "host_model_bytes": 37082484,
+  "host_predict_input_bytes": 12549816,
+  "retained_reuse_workspace_bytes": 14176644,
+  "model_sha256": "6cd039b17007ce1a93a4f5a6aae31e7f147ae40c22923b61c4ea034eff8da168",
+  "data_sha256": "fc3772fb139b88f7bed659adbabdd468fc455fb3d7b43eeed0e9b700d3e3d51e",
+  "binding_sha256": "37c3f6f572d0a6f264f90e5a68f8a99e452ca3409d8ecded95ef3b29dbc56581",
+  "source_sha256": {
+    "/root/mojolearn/bench/speed/forest_inference_ab.py": "04f286b4a9437a5aea5b4a872a58ab989bfddf1b9a6a8bc40c6d9f9ad287beb7",
+    "/root/mojolearn/bench/speed/forest_speed_arm.py": "132244ebcd85a44cbcc015125fabf1f6b60eefa5d311303da23f136ba8881c42",
+    "/root/mojolearn/tools/speed_gbdt_arm.py": "a57f9a95da25056e08c2992b20047dd014f79971f92b851b618d7095d0753cd0",
+    "core/forest_inference.mojo": "eee9f5e6e37042bbaf34994cdfa619f9e9b23f0871b990e3ad0e4e3799201809",
+    "core/forest_inference_model.mojo": "9b6f4e0c5a9fd28eeb665c2f184d0674138958d2b2e52a337225c197a9daba41",
+    "bindings/forest_inference_binding.mojo": "a2d8afabd256a5778b880084da01265db34a384a8f6ddc076b6b55fe64469e81",
+    "bindings/_mojolearn_rf.mojo": "caca0059eba1721b2e828d341d27f1175ada6dec50094310d51dd71efc398ea5",
+    "bindings/_mojolearn_trees.mojo": "18af8db07973f001868a3ac5eae3dbe05c26a4f314ae348b6cba444fa1ad0546",
+    "python/mojolearn/_forest_protocol.py": "47cd7087299c1867cccd3d2fbff069191e7cb281dc871c15a41f4f0957541165",
+    "python/mojolearn/randomforest.py": "12d44982cb6153b30c263ff592d16785a8aedd4594fe07c4d26f80de03ce1373",
+    "python/mojolearn/extratrees.py": "bb4b450a1e978a85741653f3d3468c305dfff59482f8bf62ac863dc9f6dea15a"
+  },
+  "source_commit": "591c82a9b541121b4fed845dbf42877b47e1fae6",
+  "preparation_fit_ms": 6306.639796122909,
+  "rtol": 2e-06,
+  "atol": 2e-06,
+  "contract": "primary public calls include host packing, native staging/transfers and host output; fit excluded; same MojoLearn forest, transient public dispatch overridden to stateless GPU ABI; resident/transient groves must match bits; optional sequential reference may differ in association; optional cuML context has a separately trained cached GPU model",
+  "stages_contract": "separate instrumented public calls, no kernel-only timing; dispatch includes cache lookup, native validation, allocation, transfer, traversal and output; ET input checking is included in Python remainder",
+  "memory_contract": "host arrays and calculated retained reuse workspace are reported, not peak memory; after reuse warmup its pair stays resident during all arms; collect telemetry separately",
+  "summary": {
+    "parallel_groves_transient": {
+      "samples_ms": [
+        37.70272061228752,
+        36.205604672431946,
+        34.03851389884949,
+        32.71470405161381,
+        32.272426411509514,
+        32.86300785839558,
+        32.659340649843216,
+        33.109113574028015
+      ],
+      "median_ms": 32.986060716211796,
+      "spread": 1.1682642058435795,
+      "stable": false
+    },
+    "parallel_groves_resident": {
+      "samples_ms": [
+        6.574174389243126,
+        6.173072382807732,
+        6.449103355407715,
+        6.348524242639542,
+        6.302705034613609,
+        6.268491968512535,
+        6.38384185731411,
+        6.478406488895416
+      ],
+      "median_ms": 6.366183049976826,
+      "spread": 1.0649760737542104,
+      "stable": true
+    },
+    "parallel_groves_borrowed": {
+      "samples_ms": [
+        4.293572157621384,
+        4.274485632777214,
+        4.359161481261253,
+        4.290442913770676,
+        4.29517962038517,
+        4.254575818777084,
+        4.433196038007736,
+        4.303310066461563
+      ],
+      "median_ms": 4.294375889003277,
+      "spread": 1.0419830852331582,
+      "stable": true
+    },
+    "parallel_groves_reuse": {
+      "samples_ms": [
+        4.220159724354744,
+        4.214828833937645,
+        4.222448915243149,
+        4.279274493455887,
+        4.212448373436928,
+        4.21023927628994,
+        4.253381863236427,
+        4.290441051125526
+      ],
+      "median_ms": 4.221304319798946,
+      "spread": 1.0190492201446233,
+      "stable": true
+    }
+  },
+  "timing_stable": false,
+  "repeated_engine_hashes": {
+    "parallel_groves_transient": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2",
+    "parallel_groves_resident": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2",
+    "parallel_groves_borrowed": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2",
+    "parallel_groves_reuse": "4e32947e2e9326f6d192c275c2ec3735b18274ed201e998ec0cbc4d4474ec8d2"
+  }
+}

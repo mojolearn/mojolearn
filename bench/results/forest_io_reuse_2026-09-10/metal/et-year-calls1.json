@@ -1,0 +1,608 @@
+{
+  "harness_schema": 2,
+  "complete": true,
+  "records": [
+    {
+      "arm": "parallel_groves_transient",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 120.53441602620296,
+      "calls_per_sample": 1,
+      "ms": 120.53441602620296,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 101.59375000512227,
+      "calls_per_sample": 1,
+      "ms": 101.59375000512227,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 50.27291699661873,
+      "calls_per_sample": 1,
+      "ms": 50.27291699661873,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 117.76066600577906,
+      "calls_per_sample": 1,
+      "ms": 117.76066600577906,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 162.9478340037167,
+      "calls_per_sample": 1,
+      "ms": 162.9478340037167,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 62.48545800917782,
+      "calls_per_sample": 1,
+      "ms": 62.48545800917782,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 47.765708004590124,
+      "calls_per_sample": 1,
+      "ms": 47.765708004590124,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 122.63687499216758,
+      "calls_per_sample": 1,
+      "ms": 122.63687499216758,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 67.21266597742215,
+      "calls_per_sample": 1,
+      "ms": 67.21266597742215,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 51.73408301197924,
+      "calls_per_sample": 1,
+      "ms": 51.73408301197924,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 118.8032909994945,
+      "calls_per_sample": 1,
+      "ms": 118.8032909994945,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 160.92875000322238,
+      "calls_per_sample": 1,
+      "ms": 160.92875000322238,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 64.64054199750535,
+      "calls_per_sample": 1,
+      "ms": 64.64054199750535,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 50.17245898488909,
+      "calls_per_sample": 1,
+      "ms": 50.17245898488909,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 120.89812499471009,
+      "calls_per_sample": 1,
+      "ms": 120.89812499471009,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 117.89633400621824,
+      "calls_per_sample": 1,
+      "ms": 117.89633400621824,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 53.82262502098456,
+      "calls_per_sample": 1,
+      "ms": 53.82262502098456,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 87.8689170058351,
+      "calls_per_sample": 1,
+      "ms": 87.8689170058351,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 46.86491598840803,
+      "calls_per_sample": 1,
+      "ms": 46.86491598840803,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 48.78120799548924,
+      "calls_per_sample": 1,
+      "ms": 48.78120799548924,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 167.9574580048211,
+      "calls_per_sample": 1,
+      "ms": 167.9574580048211,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 56.6223330097273,
+      "calls_per_sample": 1,
+      "ms": 56.6223330097273,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 62.56770799518563,
+      "calls_per_sample": 1,
+      "ms": 62.56770799518563,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 60.24741701548919,
+      "calls_per_sample": 1,
+      "ms": 60.24741701548919,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 85.05454199621454,
+      "calls_per_sample": 1,
+      "ms": 85.05454199621454,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 55.050291994120926,
+      "calls_per_sample": 1,
+      "ms": 55.050291994120926,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 49.96712499996647,
+      "calls_per_sample": 1,
+      "ms": 49.96712499996647,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 104.0857500047423,
+      "calls_per_sample": 1,
+      "ms": 104.0857500047423,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 83.5193750099279,
+      "calls_per_sample": 1,
+      "ms": 83.5193750099279,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 50.7524170097895,
+      "calls_per_sample": 1,
+      "ms": 50.7524170097895,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 94.7079999896232,
+      "calls_per_sample": 1,
+      "ms": 94.7079999896232,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 73.76308299717493,
+      "calls_per_sample": 1,
+      "ms": 73.76308299717493,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 69.75516700185835,
+      "calls_per_sample": 1,
+      "ms": 69.75516700185835,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 104.93587501696311,
+      "calls_per_sample": 1,
+      "ms": 104.93587501696311,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 79.43304101354443,
+      "calls_per_sample": 1,
+      "ms": 79.43304101354443,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 76.91991701722145,
+      "calls_per_sample": 1,
+      "ms": 76.91991701722145,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    }
+  ],
+  "staged_records": [],
+  "calls_per_sample": 1,
+  "timing_scope": "single_public_call",
+  "lane": "et",
+  "dataset": "year-463811x90",
+  "task": "regression",
+  "response_method": "predict",
+  "rows_fit": 463811,
+  "rows_predict": 51534,
+  "features": 90,
+  "outputs": 1,
+  "numeric_mode": "fast",
+  "vendor": "metal",
+  "binding": {
+    "requested": "fast",
+    "resolved": "fast",
+    "compiled": "fast",
+    "vendor": "metal",
+    "path": "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/_mojolearn_trees.so"
+  },
+  "config": {
+    "seed": 7,
+    "n_estimators": 100,
+    "max_depth": 16,
+    "n_bins": 128,
+    "min_samples_leaf": 1,
+    "min_samples_split": 2,
+    "min_impurity_decrease": 0.0,
+    "bootstrap": false
+  },
+  "versions": {
+    "numpy": "2.5.2"
+  },
+  "compiled_vector_groves": false,
+  "borrowed_buffers": true,
+  "reuse_io": true,
+  "first_call_contract": "round0 includes lazy preparation for each engine; measured repeats may reuse resident state",
+  "trees": 100,
+  "nodes": 3814254,
+  "host_model_bytes": 61028468,
+  "host_predict_input_bytes": 18552240,
+  "retained_reuse_workspace_bytes": 18758376,
+  "model_sha256": "3aa98c0b12aae1b1fae676167b6958e1b8aadb8abffd881c25a1dc2727f7b22f",
+  "data_sha256": "4151cc3994690915d0da753d9e89b3011f0801d2803a267b60613dcd81e9ce4d",
+  "binding_sha256": "cc3809d5d7c2625ca35e22faf1f2f6b1cb16cb5cdef00ef689e17bd59bd13fbb",
+  "source_sha256": {
+    "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bench/speed/forest_inference_ab.py": "04f286b4a9437a5aea5b4a872a58ab989bfddf1b9a6a8bc40c6d9f9ad287beb7",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/bench/speed/forest_speed_arm.py": "132244ebcd85a44cbcc015125fabf1f6b60eefa5d311303da23f136ba8881c42",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/tools/speed_gbdt_arm.py": "a57f9a95da25056e08c2992b20047dd014f79971f92b851b618d7095d0753cd0",
+    "core/forest_inference.mojo": "eee9f5e6e37042bbaf34994cdfa619f9e9b23f0871b990e3ad0e4e3799201809",
+    "core/forest_inference_model.mojo": "9b6f4e0c5a9fd28eeb665c2f184d0674138958d2b2e52a337225c197a9daba41",
+    "bindings/forest_inference_binding.mojo": "a2d8afabd256a5778b880084da01265db34a384a8f6ddc076b6b55fe64469e81",
+    "bindings/_mojolearn_rf.mojo": "caca0059eba1721b2e828d341d27f1175ada6dec50094310d51dd71efc398ea5",
+    "bindings/_mojolearn_trees.mojo": "18af8db07973f001868a3ac5eae3dbe05c26a4f314ae348b6cba444fa1ad0546",
+    "python/mojolearn/_forest_protocol.py": "47cd7087299c1867cccd3d2fbff069191e7cb281dc871c15a41f4f0957541165",
+    "python/mojolearn/randomforest.py": "12d44982cb6153b30c263ff592d16785a8aedd4594fe07c4d26f80de03ce1373",
+    "python/mojolearn/extratrees.py": "bb4b450a1e978a85741653f3d3468c305dfff59482f8bf62ac863dc9f6dea15a"
+  },
+  "source_commit": null,
+  "preparation_fit_ms": 98538.21937501198,
+  "rtol": 2e-06,
+  "atol": 2e-06,
+  "contract": "primary public calls include host packing, native staging/transfers and host output; fit excluded; same MojoLearn forest, transient public dispatch overridden to stateless GPU ABI; resident/transient groves must match bits; optional sequential reference may differ in association; optional cuML context has a separately trained cached GPU model",
+  "stages_contract": "separate instrumented public calls, no kernel-only timing; dispatch includes cache lookup, native validation, allocation, transfer, traversal and output; ET input checking is included in Python remainder",
+  "memory_contract": "host arrays and calculated retained reuse workspace are reported, not peak memory; after reuse warmup its pair stays resident during all arms; collect telemetry separately",
+  "summary": {
+    "parallel_groves_transient": {
+      "samples_ms": [
+        162.9478340037167,
+        160.92875000322238,
+        120.89812499471009,
+        87.8689170058351,
+        167.9574580048211,
+        104.0857500047423,
+        94.7079999896232,
+        104.93587501696311
+      ],
+      "median_ms": 112.9170000058366,
+      "spread": 1.9114547410851503,
+      "stable": false
+    },
+    "parallel_groves_resident": {
+      "samples_ms": [
+        62.48545800917782,
+        67.21266597742215,
+        117.89633400621824,
+        46.86491598840803,
+        56.6223330097273,
+        85.05454199621454,
+        73.76308299717493,
+        79.43304101354443
+      ],
+      "median_ms": 70.48787448729854,
+      "spread": 2.515662975590946,
+      "stable": false
+    },
+    "parallel_groves_borrowed": {
+      "samples_ms": [
+        47.765708004590124,
+        51.73408301197924,
+        64.64054199750535,
+        48.78120799548924,
+        62.56770799518563,
+        55.050291994120926,
+        83.5193750099279,
+        76.91991701722145
+      ],
+      "median_ms": 58.80899999465328,
+      "spread": 1.7485216591346655,
+      "stable": false
+    },
+    "parallel_groves_reuse": {
+      "samples_ms": [
+        122.63687499216758,
+        118.8032909994945,
+        50.17245898488909,
+        53.82262502098456,
+        60.24741701548919,
+        49.96712499996647,
+        50.7524170097895,
+        69.75516700185835
+      ],
+      "median_ms": 57.035021018236876,
+      "spread": 2.454351235782524,
+      "stable": false
+    }
+  },
+  "timing_stable": false,
+  "repeated_engine_hashes": {
+    "parallel_groves_transient": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+    "parallel_groves_resident": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+    "parallel_groves_borrowed": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+    "parallel_groves_reuse": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+  }
+}

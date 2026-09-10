@@ -1,0 +1,50 @@
+{
+  "id": "edxly1uzk3wdve",
+  "name": "mojolearn-forest-io-20260910-170253",
+  "createdAt": "2026-09-10 17:02:54.251 +0000 UTC",
+  "costPerHr": 3.49,
+  "machineId": "h8yfm3dfh39f",
+  "gpuCount": 1,
+  "containerDiskInGb": 80,
+  "volumeInGb": 0,
+  "source_commit": "591c82a9b541121b4fed845dbf42877b47e1fae6",
+  "lease_minutes": 55,
+  "protected_pod_untouched": true,
+  "status": "terminated",
+  "plan": {
+    "cells": [
+      "rf-higgs",
+      "et-higgs",
+      "et-year",
+      "et-covtype"
+    ],
+    "trees": 100,
+    "depth": 16,
+    "rounds": 8,
+    "calls_per_sample": [
+      1,
+      8
+    ],
+    "numeric_mode": "identical",
+    "vendor": "cuda",
+    "stable_spread_limit": 1.1,
+    "retry_policy": "no timing retries"
+  },
+  "terminated_verified_at": "2026-09-10T17:18:28.506798+00:00",
+  "delete_http": 204,
+  "absence_http": 404,
+  "compute_estimate_usd": 0.9057090930611112,
+  "cost_scope": "estimated compute; excludes storage; not invoice",
+  "default_selection": "public parallel_groves uses forest_predict_resident_reuse_gpu after qualified pairs; sequential remains estimator default",
+  "metal_companion": {
+    "cells": [
+      "rf-higgs",
+      "et-year"
+    ],
+    "rounds": 8,
+    "calls_per_sample": 1,
+    "numeric_mode": "fast",
+    "vendor": "metal",
+    "purpose": "separate large-workload default gate; no timing retries"
+  }
+}

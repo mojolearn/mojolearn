@@ -169,12 +169,14 @@ struct ResidentForest(Movable):
             _ = dout^
 
     def prepare_workspace(mut self, rows: Int) raises:
-        # DEVIATION BLOCK FOREST-IO-REUSE-1 (unmeasured candidate):
+        # DEVIATION BLOCK FOREST-IO-REUSE-1:
         # nvForest cef3a50d forest_model.hpp:284-308 borrows caller-owned GPU
         # buffers; our NumPy boundary requires host/device copies. Retain one
         # exact-size pair, avoiding two device allocations on equal-size calls.
-        # No high-water cache: resizing releases the previous pair. Keep the
-        # default off pending large CUDA IDENTICAL end-to-end measurements.
+        # No high-water cache: resizing releases the previous pair. Public
+        # parallel_groves selects reuse after the September 10 large-data gate:
+        # CUDA IDENTICAL RF/HIGGS throughput 21.485 -> 21.094 ms/call;
+        # ET/HIGGS single calls 25.926 -> 24.510 ms. See forest_io_reuse results.
         # Calls are synchronous and the binding holds the GIL throughout.
         if self.workspace_rows == rows:
             return

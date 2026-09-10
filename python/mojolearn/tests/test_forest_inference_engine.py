@@ -88,6 +88,7 @@ def test_resident_model_reuse_invalidation_and_lifetime(cls, monkeypatch):
     native = SimpleNamespace(forest_prepare_gpu=prepare,
                              forest_predict_resident_gpu=predict,
                              forest_predict_resident_into_gpu=predict,
+                             forest_predict_resident_reuse_gpu=predict,
                              forest_release_gpu=released.append)
     monkeypatch.setattr(_backend, 'binding', lambda *args: native)
     model = fitted(cls, 'parallel_groves')
@@ -126,6 +127,7 @@ def test_resident_refuses_bad_arrays_before_pointer_handoff(monkeypatch):
         pytest.fail('malformed host arrays reached native pointer ABI')
     native = SimpleNamespace(forest_prepare_gpu=fail, forest_predict_resident_gpu=fail,
                              forest_predict_resident_into_gpu=fail,
+                             forest_predict_resident_reuse_gpu=fail,
                              forest_release_gpu=fail)
     monkeypatch.setattr(_backend, 'binding', lambda *args: native)
     model = fitted(RandomForestRegressor, 'parallel_groves')
@@ -134,8 +136,9 @@ def test_resident_refuses_bad_arrays_before_pointer_handoff(monkeypatch):
         model.predict(np.ones((2, 1), dtype=np.float32))
 
 
-def test_resident_default_requires_borrowed_binding(monkeypatch):
+def test_resident_default_requires_reuse_binding(monkeypatch):
     native = SimpleNamespace(forest_prepare_gpu=lambda *args: 1,
+                             forest_predict_resident_into_gpu=lambda *args: 0,
                              forest_predict_resident_gpu=lambda *args: 0,
                              forest_release_gpu=lambda handle: None)
     monkeypatch.setattr(_backend, 'binding', lambda *args: native)

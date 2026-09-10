@@ -56,6 +56,26 @@ for bit. The list-returning resident reference explicitly selects
 `forest_predict_resident_gpu`, even if the public default later changes. This
 keeps a future A/B from accidentally timing the same ABI twice.
 
+## Exact-size device workspace comparison
+
+`--reuse-io` adds `parallel_groves_reuse`, selecting the shared
+`forest_predict_resident_reuse_gpu` entrypoint. It also includes
+`parallel_groves_borrowed` explicitly, so the baseline still allocates each call
+if public defaults change later. All arms use the same fitted forest and fixed
+reduction graph, with full output hashes checked after timing. A retained pair
+is allocated on the first nonempty reuse call and replaced when row count
+changes. Byte counts include calculated workspace residency; collect telemetry
+for peak memory. The retained pair stays alive during subsequent baseline arms,
+so this comparison does not measure each arm's isolated peak memory footprint.
+
+The September 10 follow-up predeclares eight single-call samples per arm and
+one eight-calls-per-sample companion, covering RF/HIGGS and ET/HIGGS, Year,
+Covtype at 100 trees / depth 16. HIGGS uses 1M training and the original 500k
+held-out rows. Only RF includes independently trained cuML GPU inference.
+Use the existing spread gate per arm and distinguish a stable pair from an
+unstable complete grid. No timing retries are scheduled. Small native/public
+checks establish candidate reach and correctness before large-data timing.
+
 ## Commands
 
 Run each command under the existing build and benchmark locks, with no compiler

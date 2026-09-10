@@ -108,42 +108,42 @@ Training comparisons are independent of inference timing. The campaign's
 large-data training and prediction results separately.
 
 
-### Device I/O reuse candidate (September 10 follow-up)
+### Device I/O workspace reuse
 
-The shared resident RF/ET owner now supports one retained exact-size device
-input/output pair through `forest_predict_resident_reuse_gpu`. Public predictions
-still use the existing borrowed-host allocation path. The performance harness
-`bench/speed/forest_inference_ab.py --reuse-io` adds both the borrowed baseline and
-reuse candidate to its interleaved, exact-output comparison on the same forest.
-This is a benchmark option, not another inference algorithm or numeric mode.
+Public `parallel_groves` predictions now select
+`forest_predict_resident_reuse_gpu`, retaining one exact-size device input/output
+pair. `bench/speed/forest_inference_ab.py --reuse-io` explicitly compares it with
+`forest_predict_resident_into_gpu`, which still allocates per call. This changes
+storage lifetime, not the inference algorithm, arithmetic or archive format.
 
 Equal nonempty batch sizes reuse both allocations; a changed size releases the
 old pair before allocating its replacement. Empty calls retain the pair without
-copying or launching. Memory retained is `4 * rows * (features + outputs)` bytes
-for the most recent nonempty batch, released with the model. Inputs still upload
-and outputs still download on every call. The binding holds the GIL and each call
-synchronizes before returning, so this workspace is not concurrently shared.
+copying or launching. Retained workspace is `4 * rows * (features + outputs)`
+bytes for the most recent nonempty batch, released with the model cache. Inputs
+still upload and outputs still download every call. The binding holds the GIL
+and synchronizes before returning, so this workspace is not concurrently shared.
 
 Source basis: nvForest `cef3a50d`, `forest_model.hpp:284–308`, borrows device I/O
-from its caller. Our NumPy interface needs owned device staging; retaining that
-staging is declared `FOREST-IO-REUSE-1`, an unmeasured candidate rather than a
-literal upstream allocation policy. The fixed reduction and threshold policies
-are unchanged. Native FAST/IDENTICAL Metal checks compare both arms for RF/ET,
-changed inputs, reuse, resizing, zero rows, and cleanup. These are correctness
-fixtures, not speed evidence or CUDA/HIP qualification.
+from its caller. Our NumPy interface requires owned device staging; retaining
+that staging is declared `FOREST-IO-REUSE-1`, not a literal copy of upstream's
+allocation policy. RF/ET share ownership, copying, validation and GPU dispatch.
 
-Next measurement: NVIDIA IDENTICAL on HIGGS (1M fit / 500k prediction rows),
-Year and Covtype, recording cold calls, interleaved warm single-call timings,
-throughput blocks, and retained memory. Compare reuse directly with borrowed
-allocation; separate this from cuML's independently trained RF. No speedup or
-new default is justified until these large-workload results are stable.
+The [large-data follow-up](../bench/results/forest_io_reuse_2026-09-10/README.md)
+qualified the reuse/baseline pairs on NVIDIA IDENTICAL ET single calls (HIGGS,
+Year, Covtype), RF/HIGGS throughput, and Metal FAST RF/HIGGS single calls.
+Gains were modest: roughly 1–2% in most qualified cells and 5.5% for ET/HIGGS
+single calls. No ET throughput gain is certified; those pairs were noisy. The
+Metal Year cell and NVIDIA RF single calls also failed stability. Those noisy
+cells do not justify a speed claim or the default selection.
 
-Validation of this follow-up: native lifecycle checks passed on Metal in FAST
-and IDENTICAL; public FAST Metal checks passed for all four estimators with
-both entrypoints, matching complete prediction hashes, independent graph
-oracles, pickle and archive checks. The same-process harness selector was
-exercised for both RF and ET. The existing 67 forest host tests passed.
-`bindings/build_trees.sh` now checks GPU repeats and explicit CPU refusal;
-its stale smoke test attempted to fit the removed CPU learner. Both binding
-build gates passed after that correction. No NVIDIA rental or performance
-measurement was run for this follow-up.
+RF/HIGGS throughput is now a qualified competitor comparison for this one cell:
+21.09 ms/call versus cuML's 10.70 ms/call, averaged within eight-call blocks.
+MojoLearn remains about 1.97 times slower. The forests are independently trained;
+this is not same-model inference or evidence of a cost caused by IDENTICAL.
+
+Native lifecycle checks passed on CUDA IDENTICAL and Metal FAST/IDENTICAL,
+including reuse, resize, empty input, changed values, error paths and cleanup.
+All four public estimators passed independent graph, repeat, pickle and archive
+checks with baseline and reuse paths. The promoted default was checked on CUDA
+IDENTICAL and Metal FAST, and 67 host tests passed. HIP and broader large-model
+cross-vendor qualification remain open.

@@ -1,0 +1,29 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/checks/forest_inference_model.mojo:7:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/core/forest_inference.mojo:154:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/checks/forest_inference_model.mojo:7:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/core/forest_inference.mojo:161:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/checks/forest_inference_model.mojo:7:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/core/forest_inference.mojo:167:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/checks/forest_inference_model.mojo:7:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/core/forest_inference.mojo:174:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/checks/forest_inference_model.mojo:7:
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/core/forest_inference.mojo:180:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+WORKSPACE_PASS RF_INPUT True cached/uncached resize/reuse/empty/changed-input/close
+WORKSPACE_PASS RF_INPUT False cached/uncached resize/reuse/empty/changed-input/close
+RESIDENT_MODE 0 VENDOR metal
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction

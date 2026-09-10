@@ -150,7 +150,7 @@ class ForestProtocol:
         return function
 
     def _resident_prediction_function(self, native):
-        return native.forest_predict_resident_into_gpu
+        return native.forest_predict_resident_reuse_gpu
 
     def _predict_forest(self, sequential_name, X, out):
         """Shared RF/ET dispatch; cache nvForest-style owned device model state.
@@ -168,7 +168,7 @@ class ForestProtocol:
             return self._prediction_function(sequential_name)(
                 *(_addr_ro(a) for a in arrays), _addr_ro(X),
                 _addr(out), [int(rows), *dimensions])
-        required = ("forest_prepare_gpu", "forest_predict_resident_into_gpu", "forest_release_gpu")
+        required = ("forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu")
         if any(not callable(getattr(native, name, None)) for name in required):
             raise RuntimeError("rebuild the forest binding for resident parallel_groves inference")
         mode = self._effective_mode()

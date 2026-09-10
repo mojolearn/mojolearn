@@ -1,0 +1,898 @@
+{
+  "harness_schema": 2,
+  "complete": true,
+  "records": [
+    {
+      "arm": "parallel_groves_transient",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 83.30515772104263,
+      "calls_per_sample": 1,
+      "ms": 83.30515772104263,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 94.71496753394604,
+      "calls_per_sample": 1,
+      "ms": 94.71496753394604,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 5.838818848133087,
+      "calls_per_sample": 1,
+      "ms": 5.838818848133087,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 0,
+      "warmup": true,
+      "block_ms": 5.853734910488129,
+      "calls_per_sample": 1,
+      "ms": 5.853734910488129,
+      "timing_scope": "single_public_call",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 537.2158363461494,
+      "calls_per_sample": 8,
+      "ms": 67.15197954326868,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 61.36620603501797,
+      "calls_per_sample": 8,
+      "ms": 7.670775754377246,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 45.0026523321867,
+      "calls_per_sample": 8,
+      "ms": 5.625331541523337,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 1,
+      "warmup": false,
+      "block_ms": 46.21519334614277,
+      "calls_per_sample": 8,
+      "ms": 5.776899168267846,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 60.193564742803574,
+      "calls_per_sample": 8,
+      "ms": 7.524195592850447,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 46.1859367787838,
+      "calls_per_sample": 8,
+      "ms": 5.773242097347975,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 44.69797760248184,
+      "calls_per_sample": 8,
+      "ms": 5.58724720031023,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 2,
+      "warmup": false,
+      "block_ms": 546.5085543692112,
+      "calls_per_sample": 8,
+      "ms": 68.3135692961514,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 56.31566792726517,
+      "calls_per_sample": 8,
+      "ms": 7.039458490908146,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 48.50387945771217,
+      "calls_per_sample": 8,
+      "ms": 6.062984932214022,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 541.9060960412025,
+      "calls_per_sample": 8,
+      "ms": 67.73826200515032,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 3,
+      "warmup": false,
+      "block_ms": 62.25365586578846,
+      "calls_per_sample": 8,
+      "ms": 7.7817069832235575,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 45.87886482477188,
+      "calls_per_sample": 8,
+      "ms": 5.734858103096485,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 517.6249742507935,
+      "calls_per_sample": 8,
+      "ms": 64.70312178134918,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 58.56019631028175,
+      "calls_per_sample": 8,
+      "ms": 7.320024538785219,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 4,
+      "warmup": false,
+      "block_ms": 44.07254979014397,
+      "calls_per_sample": 8,
+      "ms": 5.509068723767996,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 507.3473211377859,
+      "calls_per_sample": 8,
+      "ms": 63.41841514222324,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 58.45143459737301,
+      "calls_per_sample": 8,
+      "ms": 7.306429324671626,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 44.07331347465515,
+      "calls_per_sample": 8,
+      "ms": 5.509164184331894,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 5,
+      "warmup": false,
+      "block_ms": 43.94916817545891,
+      "calls_per_sample": 8,
+      "ms": 5.4936460219323635,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 58.06015618145466,
+      "calls_per_sample": 8,
+      "ms": 7.257519522681832,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 43.99777948856354,
+      "calls_per_sample": 8,
+      "ms": 5.499722436070442,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 43.84372569620609,
+      "calls_per_sample": 8,
+      "ms": 5.480465712025762,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 6,
+      "warmup": false,
+      "block_ms": 503.33497300744057,
+      "calls_per_sample": 8,
+      "ms": 62.91687162593007,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 44.637857005000114,
+      "calls_per_sample": 8,
+      "ms": 5.579732125625014,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 43.94914023578167,
+      "calls_per_sample": 8,
+      "ms": 5.493642529472709,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 511.9990836828947,
+      "calls_per_sample": 8,
+      "ms": 63.99988546036184,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 7,
+      "warmup": false,
+      "block_ms": 58.95198695361614,
+      "calls_per_sample": 8,
+      "ms": 7.368998369202018,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 44.01188902556896,
+      "calls_per_sample": 8,
+      "ms": 5.50148612819612,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 493.8952326774597,
+      "calls_per_sample": 8,
+      "ms": 61.736904084682465,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 58.58801119029522,
+      "calls_per_sample": 8,
+      "ms": 7.323501398786902,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 8,
+      "warmup": false,
+      "block_ms": 44.1038403660059,
+      "calls_per_sample": 8,
+      "ms": 5.512980045750737,
+      "timing_scope": "batched_public_throughput",
+      "prediction_hashes": [
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+        "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+      ],
+      "hash": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+    }
+  ],
+  "staged_records": [
+    {
+      "arm": "parallel_groves_transient",
+      "round": 0,
+      "dispatch_ms": 65.57072512805462,
+      "instrumented_public_ms": 65.67661464214325,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.10588951408863068
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 0,
+      "dispatch_ms": 7.7755507081747055,
+      "instrumented_public_ms": 7.87179172039032,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.09624101221561432
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 0,
+      "dispatch_ms": 5.505958572030067,
+      "instrumented_public_ms": 5.58256171643734,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.07660314440727234
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 0,
+      "dispatch_ms": 5.523849278688431,
+      "instrumented_public_ms": 5.596151575446129,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.07230229675769806
+    },
+    {
+      "arm": "parallel_groves_reuse",
+      "round": 1,
+      "dispatch_ms": 5.4900795221328735,
+      "instrumented_public_ms": 5.557700991630554,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.06762146949768066
+    },
+    {
+      "arm": "parallel_groves_borrowed",
+      "round": 1,
+      "dispatch_ms": 5.481991916894913,
+      "instrumented_public_ms": 5.551772192120552,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.06978027522563934
+    },
+    {
+      "arm": "parallel_groves_resident",
+      "round": 1,
+      "dispatch_ms": 7.344186305999756,
+      "instrumented_public_ms": 7.406983524560928,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.06279721856117249
+    },
+    {
+      "arm": "parallel_groves_transient",
+      "round": 1,
+      "dispatch_ms": 64.23158757388592,
+      "instrumented_public_ms": 64.32032398879528,
+      "dispatch_boundary": "_predict_forest",
+      "python_remainder_ms": 0.08873641490936279
+    }
+  ],
+  "calls_per_sample": 8,
+  "timing_scope": "batched_public_throughput",
+  "lane": "et",
+  "dataset": "year-463811x90",
+  "task": "regression",
+  "response_method": "predict",
+  "rows_fit": 463811,
+  "rows_predict": 51534,
+  "features": 90,
+  "outputs": 1,
+  "numeric_mode": "identical",
+  "vendor": "cuda",
+  "binding": {
+    "requested": "identical",
+    "resolved": "identical",
+    "compiled": "identical",
+    "vendor": "cuda",
+    "path": "/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so"
+  },
+  "config": {
+    "seed": 7,
+    "n_estimators": 100,
+    "max_depth": 16,
+    "n_bins": 128,
+    "min_samples_leaf": 1,
+    "min_samples_split": 2,
+    "min_impurity_decrease": 0.0,
+    "bootstrap": false
+  },
+  "versions": {
+    "numpy": "2.4.6",
+    "cuml-cu12": "26.8.0"
+  },
+  "compiled_vector_groves": false,
+  "borrowed_buffers": true,
+  "reuse_io": true,
+  "first_call_contract": "round0 includes lazy preparation for each engine; measured repeats may reuse resident state",
+  "trees": 100,
+  "nodes": 3814254,
+  "host_model_bytes": 61028468,
+  "host_predict_input_bytes": 18552240,
+  "retained_reuse_workspace_bytes": 18758376,
+  "model_sha256": "3aa98c0b12aae1b1fae676167b6958e1b8aadb8abffd881c25a1dc2727f7b22f",
+  "data_sha256": "4151cc3994690915d0da753d9e89b3011f0801d2803a267b60613dcd81e9ce4d",
+  "binding_sha256": "37c3f6f572d0a6f264f90e5a68f8a99e452ca3409d8ecded95ef3b29dbc56581",
+  "source_sha256": {
+    "/root/mojolearn/bench/speed/forest_inference_ab.py": "04f286b4a9437a5aea5b4a872a58ab989bfddf1b9a6a8bc40c6d9f9ad287beb7",
+    "/root/mojolearn/bench/speed/forest_speed_arm.py": "132244ebcd85a44cbcc015125fabf1f6b60eefa5d311303da23f136ba8881c42",
+    "/root/mojolearn/tools/speed_gbdt_arm.py": "a57f9a95da25056e08c2992b20047dd014f79971f92b851b618d7095d0753cd0",
+    "core/forest_inference.mojo": "eee9f5e6e37042bbaf34994cdfa619f9e9b23f0871b990e3ad0e4e3799201809",
+    "core/forest_inference_model.mojo": "9b6f4e0c5a9fd28eeb665c2f184d0674138958d2b2e52a337225c197a9daba41",
+    "bindings/forest_inference_binding.mojo": "a2d8afabd256a5778b880084da01265db34a384a8f6ddc076b6b55fe64469e81",
+    "bindings/_mojolearn_rf.mojo": "caca0059eba1721b2e828d341d27f1175ada6dec50094310d51dd71efc398ea5",
+    "bindings/_mojolearn_trees.mojo": "18af8db07973f001868a3ac5eae3dbe05c26a4f314ae348b6cba444fa1ad0546",
+    "python/mojolearn/_forest_protocol.py": "47cd7087299c1867cccd3d2fbff069191e7cb281dc871c15a41f4f0957541165",
+    "python/mojolearn/randomforest.py": "12d44982cb6153b30c263ff592d16785a8aedd4594fe07c4d26f80de03ce1373",
+    "python/mojolearn/extratrees.py": "bb4b450a1e978a85741653f3d3468c305dfff59482f8bf62ac863dc9f6dea15a"
+  },
+  "source_commit": "591c82a9b541121b4fed845dbf42877b47e1fae6",
+  "preparation_fit_ms": 23458.086347207427,
+  "rtol": 2e-06,
+  "atol": 2e-06,
+  "contract": "primary public calls include host packing, native staging/transfers and host output; fit excluded; same MojoLearn forest, transient public dispatch overridden to stateless GPU ABI; resident/transient groves must match bits; optional sequential reference may differ in association; optional cuML context has a separately trained cached GPU model",
+  "stages_contract": "separate instrumented public calls, no kernel-only timing; dispatch includes cache lookup, native validation, allocation, transfer, traversal and output; ET input checking is included in Python remainder",
+  "memory_contract": "host arrays and calculated retained reuse workspace are reported, not peak memory; after reuse warmup its pair stays resident during all arms; collect telemetry separately",
+  "summary": {
+    "parallel_groves_transient": {
+      "samples_ms": [
+        67.15197954326868,
+        68.3135692961514,
+        67.73826200515032,
+        64.70312178134918,
+        63.41841514222324,
+        62.91687162593007,
+        63.99988546036184,
+        61.736904084682465
+      ],
+      "median_ms": 64.35150362085551,
+      "spread": 1.10652729204639,
+      "stable": false
+    },
+    "parallel_groves_resident": {
+      "samples_ms": [
+        7.670775754377246,
+        7.524195592850447,
+        7.7817069832235575,
+        7.320024538785219,
+        7.306429324671626,
+        7.257519522681832,
+        7.368998369202018,
+        7.323501398786902
+      ],
+      "median_ms": 7.34624988399446,
+      "spread": 1.0722268068178789,
+      "stable": true
+    },
+    "parallel_groves_borrowed": {
+      "samples_ms": [
+        5.625331541523337,
+        5.773242097347975,
+        7.039458490908146,
+        5.509068723767996,
+        5.509164184331894,
+        5.499722436070442,
+        5.579732125625014,
+        5.512980045750737
+      ],
+      "median_ms": 5.546356085687876,
+      "spread": 1.279966138788969,
+      "stable": false
+    },
+    "parallel_groves_reuse": {
+      "samples_ms": [
+        5.776899168267846,
+        5.58724720031023,
+        6.062984932214022,
+        5.734858103096485,
+        5.4936460219323635,
+        5.480465712025762,
+        5.493642529472709,
+        5.50148612819612
+      ],
+      "median_ms": 5.544366664253175,
+      "spread": 1.1062900948198693,
+      "stable": false
+    }
+  },
+  "timing_stable": false,
+  "repeated_engine_hashes": {
+    "parallel_groves_transient": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+    "parallel_groves_resident": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+    "parallel_groves_borrowed": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176",
+    "parallel_groves_reuse": "691b587a1655bae6631a2781e598a4c494b183f42225cd788effec79e6ada176"
+  }
+}

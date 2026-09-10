@@ -159,9 +159,9 @@ cancellation cases. Training-mode contracts are not evidence for inference bits.
 5. Model buffers/context persist across calls. Immutable host snapshots prevent
    stale device state; replacement/refit invalidates the cache, and GPU handles
    are excluded from pickle. Borrowed host input/output avoids intermediate
-   Lists. The default still allocates device input/output per call. An exact-size
-   workspace reuse candidate is reachable through the benchmark `--reuse-io`
-   arm; large CUDA timing is pending. GPU-array inputs and nvForest-style
+   Lists. The default now retains an exact-size device input/output pair after
+   qualified large-data measurements; the benchmark `--reuse-io` arm explicitly
+   compares reuse with the original per-call allocation path. GPU-array inputs and nvForest-style
    packed node layout remain next work.
 
 The shared engine and new native entrypoints are implemented. Bounded CUDA and
@@ -228,3 +228,30 @@ Then measure large real-data public predict calls, including uploads/downloads,
 against both the old route and cuML's actual cached nvForest prediction, reporting
 model/quality differences and warm/cold residency separately. No speed estimate is
 inferred from the algorithm. The [September 10 campaign](../../bench/results/forest_groves_2026-09-10/README.md) records implemented paths, exact-output checks, stable ET throughput cells and remaining noisy RF comparisons.
+
+### Next layout experiment after I/O measurement
+
+The pinned nvForest `detail/node.hpp:81–175` stores threshold/output-or-index,
+child offset and feature metadata together; `detail/evaluate_tree.hpp:44–65`
+loads a node and advances through relative child offsets. The vector-leaf
+builder (`detail/decision_forest_builder.hpp:135–149`) stores only actual leaf
+vectors in its external output array. Our current flat model stores separate
+column/threshold/child arrays and allocates output slots for internal nodes too.
+These are concrete remaining layout differences, not evidence of a measured
+bottleneck by themselves.
+
+A bounded candidate should prepare the packed representation once per immutable
+resident snapshot, preserving tree IDs and the fixed grove reduction. Reuse the
+existing graph/finite validation and RF/ET comparison policy. Explicitly handle
+root-only trees and retain raw `<=` threshold routing; copying upstream `<`
+without its threshold conversion is incorrect. If nodes are reordered for
+upstream's depth-first layout, rewrite child/root indices and compact leaf
+vectors without reordering trees or changing any leaf bits. Keep archives in
+their existing representation; device packing is a derived cache.
+
+Measure preparation cost, resident bytes, traversal and complete public calls
+separately on large HIGGS/Year/Covtype forests. Compare complete outputs against
+the direct-layout kernel, with threshold equality, subnormal RF/ET policy,
+root leaves, ragged trees and every output specialization. A default decision
+requires the same large NVIDIA IDENTICAL and separate Metal FAST evidence as
+other inference candidates. No packed-node kernel is implemented by this note.
