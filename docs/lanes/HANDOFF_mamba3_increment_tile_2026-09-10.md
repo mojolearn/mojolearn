@@ -1,0 +1,13 @@
+# Mamba3 shared-operand increment tile experiment
+
+Base: main 2419895f. Initial candidate 041bc46a was opt-in. After direct and complete public gates, guarded dispatch eded801f enables the tile for large NVIDIA calls; Apple retains its prior default. Trees and non-IDENTICAL modes are outside this lane.
+
+The prior complete H100 phase trace puts S20 increments around 8.06 ms on the wide grid. The old implementation shares decayed V across 128 state columns but reloads K for each P owner. The new 8P×32N tile shares K across 8P and stages decayed V across 32N. It trades fourfold repetition of V staging for eightfold reuse of K and fewer inner-loop address calculations. Each 256-thread block owns 256 distinct outputs; shared memory holds operands only, and each thread preserves all ascending Q multiply-add steps, including every padded +0 term. No state, report, refusal, weight ownership, or arithmetic seam changes.
+
+The dedicated check compares scalar/shared-V/tiled complete increment buffers over 2,752,512 cells: B2/H3, Q32/64, lengths 1/31/32/33/63/64/65/129, regular and adversarial finite operands including signed zeros, subnormals, cancellation, and large magnitudes. It is an intra-vendor identity gate against existing arithmetic, not a new claim about all cross-vendor floating-point boundaries.
+
+`tools/mamba3_increment_tile_leg.sh` is the isolated NVIDIA reproduction driver. Set `MOJOLEARN_MAMBA3_REPO`, absolute `MOJOLEARN_MAMBA3_RESULTS` and optional `MOJOLEARN_PIXI`; it activates Pixi, runs the direct gate, baseline/candidate native traces and continuation/refusal gates, full fresh-forward and surface tests, and both original public grid arms with complete output SHA comparison. The original archived harness is reused; no opponent is measured. Parent owns the single guarded H100 and Apple builds.
+
+Measured forced-tile medians are 66.936124 ms narrow / 122.015735 ms wide versus 72.118117 / 126.097558 ms baseline (7.2% / 3.2% less). Tiny regresses by about 40 microseconds, so default dispatch retains the previous path below 128 B×chunks×heads groups. The threshold is an occupancy guard, not a tuned optimum across intermediate shapes. Capacity guards require 256 threads and 10 KiB shared memory. Force and legacy flags preserve explicit A/B gates.
+
+[Evidence and reproduction](../../bench/results/mamba3/2026-09-10-increment-tile/README.md). Final guarded default and Apple forced-tile full integration both passed. Final H100 default medians: 0.984050 ms tiny, 65.868374 ms narrow and 120.395977 ms wide. Large final ratios to reused admitted historical torch are 4.02×/6.21×; the 1–1.5× target remains unmet. All remote evidence is fetched; root owns pod cleanup.

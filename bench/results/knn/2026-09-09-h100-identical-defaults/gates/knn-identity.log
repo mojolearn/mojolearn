@@ -1,0 +1,5 @@
+2292 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x130d80000000, nodemask=1)
+check_knn_tie_set_is_lowest_index OK (IDENTICAL): four equidistant candidates, two slots, and the composite key returns the two LOWEST indices 5 and 100 -- arithmetic, not arrival order
+check_knn_tiled_is_query_tile_invariant OK (IDENTICAL): 12 slots bit-identical at query_tile 1, 2 and 3
+check_knn_fused_tie_set_is_geometry_invariant OK (IDENTICAL): the fused arm returned the same tie set 5 / 100 at 1, 40 and 2,000 identical queries, every row agreeing with row 0
+check_knn_auto_arm_is_pinned OK (IDENTICAL): AUTO == TILED at 53 and 2,000 queries, so the arm no longer depends on the query count

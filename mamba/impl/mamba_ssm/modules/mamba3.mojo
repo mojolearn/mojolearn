@@ -72,8 +72,11 @@ in `mamba/checks/mamba3_check.mojo`.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
+from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from mamba.impl.mamba_ssm.modules.mamba3_transfer import m3_upload as mamba_upload, m3_download as mamba_download
+from mamba.impl.mamba_ssm.modules.mamba3_refusal import m3_refuse_nonfinite_named
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
@@ -85,7 +88,7 @@ from gemm.checks.gemm_oracle import OP_NT
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
-    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_clamp,
     identical_div,
@@ -115,6 +118,7 @@ from mamba.checks.mamba3_fixture import (
 from mamba.impl.mamba_ssm.ops.mamba3_siso import (
     MAMBA3_TPB,
     SISO3_ANY_SABOTAGE,
+    m3_phase_tick,
     m3_mod_2pi,
     m3_n_chunks,
     m3_q_eff,
@@ -122,10 +126,7 @@ from mamba.impl.mamba_ssm.ops.mamba3_siso import (
     siso3_sabotage_name,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
-    _refuse_nonfinite_named,
-    mamba_download,
     mamba_rms_norm,
-    mamba_upload,
     mamba_zeros,
     residual_add_kernel,
 )
@@ -208,6 +209,32 @@ struct Mamba3DeviceWeights(Movable):
         self.c_bias = mamba_upload(ctx, w.c_bias)
         self.d_skip = mamba_upload(ctx, w.d_skip)
         self.w_out = mamba_upload(ctx, w.w_out)
+
+
+    def __init__(
+        out self, dims: Mamba3Dims,
+        var norm_w: DeviceBuffer[DType.float32],
+        var w_in: DeviceBuffer[DType.float32],
+        var dt_bias: DeviceBuffer[DType.float32],
+        var bnorm_w: DeviceBuffer[DType.float32],
+        var cnorm_w: DeviceBuffer[DType.float32],
+        var b_bias: DeviceBuffer[DType.float32],
+        var c_bias: DeviceBuffer[DType.float32],
+        var d_skip: DeviceBuffer[DType.float32],
+        var w_out: DeviceBuffer[DType.float32],
+    ):
+        """Adopt freshly uploaded buffers; every public call validates anew."""
+        self.dims = dims.copy()
+        self.weights_checked = False
+        self.norm_w = norm_w^
+        self.w_in = w_in^
+        self.dt_bias = dt_bias^
+        self.bnorm_w = bnorm_w^
+        self.cnorm_w = cnorm_w^
+        self.b_bias = b_bias^
+        self.c_bias = c_bias^
+        self.d_skip = d_skip^
+        self.w_out = w_out^
 
 
 struct Mamba3DeviceState(Movable):
@@ -422,15 +449,27 @@ struct Mamba3DeviceStages(Movable):
 
 
 def m3_dt_softplus(x: Float32) -> Float32:
-    """S6 softplus with a stable small-dt FAST path.
+    """S6 softplus with a stable small-dt path for every unpinned tier.
 
     Negative dt biases make exp(x) small. Rounding exp(x) + 1 before log
     discards significant dt bits, which accumulate in S10's rotary angle
     and can exceed the key-state tolerance after cancellation in rotation.
-    Retain FAST's vendor exp, but evaluate log1p directly in float32.
-    IDENTICAL and DETERMINISTIC keep their existing arithmetic verbatim.
+    Retain the vendor exp, but evaluate log1p directly in float32.
+
+    DEVIATION 2300 (2026-09-09). The repair above was gated on FAST alone,
+    so DETERMINISTIC fell through to `identical_softplus`'s unpinned arm,
+    `log(exp(x) + 1)`, the very cancellation this helper exists to avoid.
+    The installed 0.7.0 qualification showed it: mamba/deterministic failed
+    `k_last` against ref64 at flat index 151 with the SAME excess
+    (3.980e-07) the FAST column showed before its repair, bit-identically
+    on an L40S and an H100, while FAST and IDENTICAL passed. The gate is
+    now "not IDENTICAL": FAST and DETERMINISTIC share the stable spelling,
+    IDENTICAL keeps its portable arithmetic verbatim (its bits do not move;
+    the cross-vendor contract is untouched). DETERMINISTIC promises same
+    box, same build, same bits, which this keeps; it carries no bit promise
+    across versions, so its dt bits moving here is within contract.
     """
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         from std.math import exp
 
         if x <= Float32(20.0):
@@ -979,81 +1018,29 @@ def mamba3_refuse_bad_inputs(
     var di = dims.d_inner
     var dip = dims.d_in_proj()
     var nh = dims.nheads
-    _refuse_nonfinite_named("x", mamba_download(ctx, x, b * l * dm))
+    m3_refuse_nonfinite_named(ctx, "x", x, b * l * dm)
     if not w.weights_checked:
-        _refuse_nonfinite_named(
-            "norm.weight", mamba_download(ctx, w.norm_w, dm)
-        )
-        _refuse_nonfinite_named(
-            "in_proj.weight", mamba_download(ctx, w.w_in, dip * dm)
-        )
-        _refuse_nonfinite_named(
-            "dt_bias", mamba_download(ctx, w.dt_bias, nh)
-        )
-        _refuse_nonfinite_named(
-            "B_norm.weight", mamba_download(ctx, w.bnorm_w, M3_D_STATE)
-        )
-        _refuse_nonfinite_named(
-            "C_norm.weight", mamba_download(ctx, w.cnorm_w, M3_D_STATE)
-        )
-        _refuse_nonfinite_named(
-            "B_bias", mamba_download(ctx, w.b_bias, nh * M3_D_STATE)
-        )
-        _refuse_nonfinite_named(
-            "C_bias", mamba_download(ctx, w.c_bias, nh * M3_D_STATE)
-        )
-        _refuse_nonfinite_named("D", mamba_download(ctx, w.d_skip, nh))
-        _refuse_nonfinite_named(
-            "out_proj.weight", mamba_download(ctx, w.w_out, dm * di)
-        )
+        m3_refuse_nonfinite_named(ctx, "norm.weight", w.norm_w, dm)
+        m3_refuse_nonfinite_named(ctx, "in_proj.weight", w.w_in, dip * dm)
+        m3_refuse_nonfinite_named(ctx, "dt_bias", w.dt_bias, nh)
+        m3_refuse_nonfinite_named(ctx, "B_norm.weight", w.bnorm_w, M3_D_STATE)
+        m3_refuse_nonfinite_named(ctx, "C_norm.weight", w.cnorm_w, M3_D_STATE)
+        m3_refuse_nonfinite_named(ctx, "B_bias", w.b_bias, nh * M3_D_STATE)
+        m3_refuse_nonfinite_named(ctx, "C_bias", w.c_bias, nh * M3_D_STATE)
+        m3_refuse_nonfinite_named(ctx, "D", w.d_skip, nh)
+        m3_refuse_nonfinite_named(ctx, "out_proj.weight", w.w_out, dm * di)
         w.weights_checked = True
-    _refuse_nonfinite_named(
-        "state.theta",
-        mamba_download(ctx, state.theta, b * nh * M3_NUM_ROPE_ANGLES),
-    )
-    _refuse_nonfinite_named(
-        "state.h",
-        mamba_download(ctx, state.h, b * nh * M3_HEADDIM * M3_D_STATE),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_qrot",
-        mamba_download(
-            ctx, state.buf_qrot, b * M3_CHUNK_SIZE * nh * M3_D_STATE
-        ),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_krot",
-        mamba_download(
-            ctx, state.buf_krot, b * M3_CHUNK_SIZE * nh * M3_D_STATE
-        ),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_v",
-        mamba_download(
-            ctx, state.buf_v, b * M3_CHUNK_SIZE * nh * M3_HEADDIM
-        ),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_dt",
-        mamba_download(ctx, state.buf_dt, b * M3_CHUNK_SIZE * nh),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_sig",
-        mamba_download(ctx, state.buf_sig, b * M3_CHUNK_SIZE * nh),
-    )
-    _refuse_nonfinite_named(
-        "state.buf_adt",
-        mamba_download(ctx, state.buf_adt, b * M3_CHUNK_SIZE * nh),
-    )
+    m3_refuse_nonfinite_named(ctx, "state.theta", state.theta, b * nh * M3_NUM_ROPE_ANGLES)
+    m3_refuse_nonfinite_named(ctx, "state.h", state.h, b * nh * M3_HEADDIM * M3_D_STATE)
+    m3_refuse_nonfinite_named(ctx, "state.buf_qrot", state.buf_qrot, b * M3_CHUNK_SIZE * nh * M3_D_STATE)
+    m3_refuse_nonfinite_named(ctx, "state.buf_krot", state.buf_krot, b * M3_CHUNK_SIZE * nh * M3_D_STATE)
+    m3_refuse_nonfinite_named(ctx, "state.buf_v", state.buf_v, b * M3_CHUNK_SIZE * nh * M3_HEADDIM)
+    m3_refuse_nonfinite_named(ctx, "state.buf_dt", state.buf_dt, b * M3_CHUNK_SIZE * nh)
+    m3_refuse_nonfinite_named(ctx, "state.buf_sig", state.buf_sig, b * M3_CHUNK_SIZE * nh)
+    m3_refuse_nonfinite_named(ctx, "state.buf_adt", state.buf_adt, b * M3_CHUNK_SIZE * nh)
     if state.pending:
-        _refuse_nonfinite_named(
-            "input_states.k",
-            mamba_download(ctx, state.pend_k, b * nh * M3_D_STATE),
-        )
-        _refuse_nonfinite_named(
-            "input_states.v",
-            mamba_download(ctx, state.pend_v, b * nh * M3_HEADDIM),
-        )
+        m3_refuse_nonfinite_named(ctx, "input_states.k", state.pend_k, b * nh * M3_D_STATE)
+        m3_refuse_nonfinite_named(ctx, "input_states.v", state.pend_v, b * nh * M3_HEADDIM)
 
 
 # ===========================================================================
@@ -1073,7 +1060,11 @@ def _record_work_slice(
     width: Int,
 ) raises:
     """Record rows [q0, q0+l) of a [B, T, width] working buffer as the
-    [M, width] card stage."""
+    [M, width] card stage. Disabled tracing must not download and repack
+    a buffer that record_list_f32 immediately discards."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_TRACE_SLICES"]():
+        if not trace.enabled:
+            return
     var t_work = q0 + l
     var whole = mamba_download(ctx, buf, b * t_work * width)
     var out = List[Float32]()
@@ -1135,7 +1126,11 @@ def mamba3_block_forward(
             "mamba3_block_forward: the weights' d_model is not the stages'"
         )
 
+    var phase_tick = 0
+    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
+        phase_tick = Int(perf_counter_ns())
     mamba3_refuse_bad_inputs(ctx, w, x, state, b, l)
+    m3_phase_tick(ctx, phase_tick, String("block.refusal"))
 
     var dims = stages.dims.copy()
     var dm = dims.d_model
@@ -1159,11 +1154,13 @@ def mamba3_block_forward(
     )
     ctx.synchronize()
 
+    m3_phase_tick(ctx, phase_tick, String("block.norm"))
     # ---- S4: in_proj (mamba3.py:176), gemm v1 OP_NT, k = d_model.
     identical_gemm[False](
         ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
     )
 
+    m3_phase_tick(ctx, phase_tick, String("block.in_proj"))
     # ---- S5 + S6.
     ctx.enqueue_function[m3_a_dt_kernel](
         stages.a_out.unsafe_ptr(),
@@ -1238,6 +1235,7 @@ def mamba3_block_forward(
     )
     ctx.synchronize()
 
+    m3_phase_tick(ctx, phase_tick, String("block.assembly"))
     # THE REQUIRED-RED ARM (DEVIATION 831): the upstream step's own
     # per-token recurrence replaces the resumption for the new token --
     # AND IT ENGAGES ONLY AT l == 1 (the mamba2 lesson: an armed decode
@@ -1393,12 +1391,14 @@ def mamba3_block_forward(
         ctx.synchronize()
         state.buf_len = r
 
+    m3_phase_tick(ctx, phase_tick, String("block.core_and_buffer"))
     # ---- S4: out_proj (mamba3.py:277), gemm v1 OP_NT, k = d_inner. The
     #      gate output IS the [M, d_inner] row (d = h*P + p, a copy).
     identical_gemm[False](
         ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
     )
 
+    m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
     # ---- S23: residual (block.py:52/:67), the REUSED Mamba-1 kernel.
     ctx.enqueue_function[residual_add_kernel](
         stages.residual_out.unsafe_ptr(),

@@ -1,0 +1,24 @@
+== leg lane=dbscan mode=FAST round=1 08:02:19 ==
+== bench/lanes_price_main.mojo [FAST] lane=dbscan rounds=1 smoke=False ==
+   dbscan passes 5 (scheduling, NOT hashed)
+LPRICE dbscan FAST warmup 50000x8 0.292335532 f67f486b1e2d7905
+   dbscan passes 5 (scheduling, NOT hashed)
+LPRICE dbscan FAST 1 50000x8 0.288505285 f67f486b1e2d7905
+HASH-STABLE dbscan FAST 2 rounds all f67f486b1e2d7905
+== done [FAST] lane=dbscan ==
+== leg lane=dbscan mode=FAST round=2 08:02:21 ==
+== bench/lanes_price_main.mojo [FAST] lane=dbscan rounds=1 smoke=False ==
+   dbscan passes 5 (scheduling, NOT hashed)
+LPRICE dbscan FAST warmup 50000x8 0.29272999 f67f486b1e2d7905
+   dbscan passes 5 (scheduling, NOT hashed)
+LPRICE dbscan FAST 1 50000x8 0.288810046 f67f486b1e2d7905
+HASH-STABLE dbscan FAST 2 rounds all f67f486b1e2d7905
+== done [FAST] lane=dbscan ==
+== leg lane=dbscan mode=FAST round=3 08:02:22 ==
+== bench/lanes_price_main.mojo [FAST] lane=dbscan rounds=1 smoke=False ==
+   dbscan passes 5 (scheduling, NOT hashed)
+LPRICE dbscan FAST warmup 50000x8 0.29309932 f67f486b1e2d7905
+   dbscan passes 5 (scheduling, NOT hashed)
+LPRICE dbscan FAST 1 50000x8 0.288653193 f67f486b1e2d7905
+HASH-STABLE dbscan FAST 2 rounds all f67f486b1e2d7905
+== done [FAST] lane=dbscan ==

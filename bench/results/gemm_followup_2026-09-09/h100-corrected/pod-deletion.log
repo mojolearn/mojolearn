@@ -1,0 +1,3 @@
+[22:27:42 attn-pod] terminating kk5ux6hbbzlt1u
+[22:27:43 attn-pod] DELETE -> HTTP 204
+[22:27:48 attn-pod] VERIFIED GONE (GET -> HTTP 404)

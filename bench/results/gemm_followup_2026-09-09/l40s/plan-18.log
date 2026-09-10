@@ -1,0 +1,7 @@
+2729 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a78c0000000, nodemask=2)
+== dispatcher vs the untuned plan, BITS and TIME ==
+   OK  llama8b.qkv.t512 [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle) -> TUNED 64x128 reg4x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)]  m=512 n=4096 k=4096  BITS MATCH  untuned=1.2643147142857143ms dispatch=1.669079ms  speedup=0.7574924340224245x
+   OK  llama8b.mlp_up.t512 [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle) -> TUNED 64x128 reg4x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)]  m=512 n=14336 k=4096  BITS MATCH  untuned=4.936353ms dispatch=5.629624142857143ms  speedup=0.8768530322336415x
+   OK  llama8b.mlp_down.t512 [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle) -> TUNED 64x128 reg4x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)]  m=512 n=4096 k=14336  BITS MATCH  untuned=4.413265285714286ms dispatch=5.751968714285714ms  speedup=0.7672616985473869x
+
+   3 match, 0 MOVED, 0 refused.

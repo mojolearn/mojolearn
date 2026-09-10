@@ -1,0 +1,66 @@
+3995 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3adfc0000000, nodemask=2)
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:442:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:451:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:465:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:467:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        regy[j] = sy[
+                                  ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:481:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:492:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[
+                                    ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:514:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:524:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:538:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:639:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:670:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:675:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/final-continuation/neighbors/checks/fused_logical32_check.mojo:12:
+/root/final-continuation/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:745:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 

@@ -1,0 +1,10 @@
+{
+  "default": {
+    "path": "/tmp/mojolearn-knn-phase-smoke-20260910/default",
+    "sha256": "228fc4b9399ceb111d05a1ff56d80f165be4cbce8e1bc389b3844d4474d4aeac"
+  },
+  "control": {
+    "path": "/tmp/mojolearn-knn-phase-smoke-20260910/control",
+    "sha256": "ff74ecba3e8cb9b336095ee02351e39844170409dd561710ad2a41863e45d25c"
+  }
+}

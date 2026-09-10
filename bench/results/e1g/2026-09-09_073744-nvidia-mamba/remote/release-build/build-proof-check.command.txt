@@ -1,0 +1,1 @@
+/usr/bin/python3 tools/nvidia_serial_guard.py --seconds 30 --rss-gib 12 -- /usr/bin/python3 /root/gemm_leg_out/release-build/postflight.py /root/gemm_leg_out/release-build 

@@ -1,0 +1,36 @@
+555 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x113540000000, nodemask=1)
+Imported from /root/continuation/mamba/checks/mamba3_yintra_tile_check.mojo:6:
+/root/continuation/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:28:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/continuation/mamba/checks/mamba3_yintra_tile_check.mojo:6:
+/root/continuation/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:51:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/continuation/mamba/checks/mamba3_yintra_tile_check.mojo:7:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1310:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sm[row * 64 + jj] = coefficient
+        ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_yintra_tile_check.mojo:7:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1319:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sv[ix] = value
+        ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_yintra_tile_check.mojo:7:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1324:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sm[row * 64 + j], sv[j * 32 + pp], acc))
+                                    ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/continuation/mamba/checks/mamba3_yintra_tile_check.mojo:7:
+/root/continuation/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1324:57: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sm[row * 64 + j], sv[j * 32 + pp], acc))
+                                                      ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/continuation/mamba/checks/mamba3_yintra_tile_check.mojo:41:9: warning: ref 'i' was never used, remove it?
+    for i in range(count + 17): initial.append(poison)
+        ^

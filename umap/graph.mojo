@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Deterministic first UMAP slice: smooth k-NN distances and fuzzy graph."""
 
-from std.math import exp, log2
+from checks.numerics import identical_exp64, identical_log2_64
+
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -76,7 +77,7 @@ def _membership_sum(
     var total = Float64(0.0)
     for j in range(1, k):
         var d = Float64(distances[row * k + j]) - rho
-        total += Float64(1.0) if d <= 0.0 else exp(-d / sigma)
+        total += Float64(1.0) if d <= 0.0 else identical_exp64(-d / sigma)
     return total
 
 
@@ -164,7 +165,7 @@ def fuzzy_simplicial_graph(
     var sigmas = List[Float32]()
     rhos.resize(n_samples, Float32(0.0))
     sigmas.resize(n_samples, Float32(0.0))
-    var target = log2(Float64(n_neighbors))
+    var target = identical_log2_64(Float64(n_neighbors))
     for i in range(n_samples):
         if Int(knn_indices[i * n_neighbors]) != i:
             raise Error("UMAP expects self in k-NN slot zero")
@@ -198,7 +199,7 @@ def fuzzy_simplicial_graph(
             var delta = knn_distances[i * n_neighbors + j] - rhos[i]
             var value = Float32(1.0)
             if delta > Float32(0.0):
-                value = Float32(exp(-Float64(delta) / Float64(sigmas[i])))
+                value = Float32(identical_exp64(-Float64(delta) / Float64(sigmas[i])))
             var at = i * n_samples + dst
             if value > directed[at]:
                 directed[at] = value

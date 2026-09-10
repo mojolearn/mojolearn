@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Synchronous owned-state boundary for the fixed two-block byte LM.
+"""Synchronous owned-state boundary for a runtime-shaped two-block byte LM.
 
-AUTHORED, UNCOMPILED, UNQUALIFIED. No GPU/context is created during import.
+Runtime shapes are compile/host checked; device qualification is separate.
+No GPU/context is created during import.
 The Python caller owns correctly sized, contiguous, aligned live arrays. Native
 span checks cannot prove that an arbitrary integer address names allocated RAM.
 No pointer or DeviceContext survives a call. Outputs are published only after
@@ -17,8 +18,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from training.checks.optimizer_oracle import OptimizerConfig
 from training.checks.train_loop import download_f32
+from training.byte_lm_config import ByteConfig
 from training.byte_lm import (
-    BYTE_PROFILE, BYTE_N_TOTAL, BYTE_J, ByteTrainer, byte_train_step,
+    BYTE_PROFILE, BYTE_J, ByteTrainer, byte_train_step,
     byte_eval_loss, byte_validate_state, byte_validate_optimizer,
     byte_validate_tokens,
 )
@@ -36,25 +38,25 @@ def byte_lm_profile_binding() raises -> PythonObject:
     return PythonObject(String(BYTE_PROFILE))
 
 
-def _span_cells(index: Int) -> Int:
+def _span_cells(index: Int, shape: ByteConfig) raises -> Int:
     if index == 3 or index == 9:
         return BYTE_J
     if index == 4:
-        return 66
+        return shape.batch * (shape.length + 1)
     if index == 10:
         return 1
-    return BYTE_N_TOTAL
+    return shape.n_total()
 
 
-def _validate_addresses(addresses: List[Int], action: Int) raises:
-    # All spans are bounded fixed-profile lengths. Validate addition before any
+def _validate_addresses(addresses: List[Int], action: Int, shape: ByteConfig) raises:
+    # All spans use validated runtime-profile lengths. Validate addition before any
     # pointer construction/dereference; reject null, misalignment and wraparound.
     for i in range(11):
         if i == 8 and action == 0:
             if addresses[i] != 0:
                 raise Error("byte LM eval requires null gradient output; no gradient is computed")
             continue
-        var size_bytes = _span_cells(i) * 4
+        var size_bytes = _span_cells(i, shape) * 4
         if addresses[i] <= 0 or addresses[i] % 4 != 0 or addresses[i] > Int(0x7FFFFFFFFFFFFFFF) - size_bytes:
             raise Error("byte LM: null/misaligned/overflowing span at address slot " + String(i))
     # Inputs may share storage because all are copied before numerical work.
@@ -65,15 +67,15 @@ def _validate_addresses(addresses: List[Int], action: Int) raises:
         for j in range(i):
             if j == 8 and action == 0:
                 continue
-            if (addresses[i] < addresses[j] + _span_cells(j) * 4
-                and addresses[j] < addresses[i] + _span_cells(i) * 4):
+            if (addresses[i] < addresses[j] + _span_cells(j, shape) * 4
+                and addresses[j] < addresses[i] + _span_cells(i, shape) * 4):
                 raise Error("byte LM: output overlaps another live span")
 
 
-def _read_f32(address: Int) -> List[Float32]:
+def _read_f32(address: Int, n: Int) -> List[Float32]:
     var ptr = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
     var out = List[Float32]()
-    for i in range(BYTE_N_TOTAL):
+    for i in range(n):
         out.append(ptr.unsafe_load(i))
     return out^
 
@@ -92,8 +94,8 @@ def _require_same_bits(before: List[Float32], after: List[Float32]) raises:
             raise Error("byte LM eval changed authoritative state")
 
 
-def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
-    """ABI v1. All fixed sizes are ELEMENTS, not bytes.
+def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfig) raises -> PythonObject:
+    """Shared implementation. All sizes are ELEMENTS, not bytes.
 
     addresses[11] = [in_param, in_m, in_v, in_flags_i32, in_ids_i32,
                      out_param, out_m, out_v, out_grad, out_flags_i32, out_loss_f32]
@@ -101,9 +103,8 @@ def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises ->
                   momentum, dampening, nesterov, max_norm]
     action=0: eval; out_grad MUST be 0; returns unchanged completed step.
     action=1: training; writes pre-update gradients; returns completed+1.
-    Param/m/v/grad spans34944 FP32; flags20 int32(0/1); IDs66 int32[0,256).
-    kind=2(AdamW). All config fields explicit; only the fixed legal profile is
-    admitted. Positive learning rate, no clipping or SGD options.
+    Param/m/v/grad spans use shape.n_total(); flags20 int32(0/1);
+    IDs[B,L+1] int32[0,256). kind=2(AdamW). All config fields explicit. Positive learning rate, no clipping or SGD options.
     """
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("byte LM binding requires IDENTICAL")
@@ -111,6 +112,8 @@ def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises ->
         raise Error("byte LM binding requires CUDA, HIP or Metal")
     if len(addresses) != 11 or len(params) != 12:
         raise Error("byte LM: expected 11 addresses and 12 scalar parameters")
+    shape.validate()
+    var n = shape.n_total()
     var action = Int(py=params[0])
     var completed = Int(py=params[1])
     var kind = Int(py=params[2])
@@ -129,11 +132,11 @@ def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises ->
     var addr = List[Int]()
     for i in range(11):
         addr.append(Int(py=addresses[i]))
-    _validate_addresses(addr, action)
+    _validate_addresses(addr, action, shape)
     # No GPU work before all borrowed inputs become validated owned host lists.
-    var initial_p = _read_f32(addr[0])
-    var initial_m = _read_f32(addr[1])
-    var initial_v = _read_f32(addr[2])
+    var initial_p = _read_f32(addr[0], n)
+    var initial_m = _read_f32(addr[1], n)
+    var initial_v = _read_f32(addr[2], n)
     var flags_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr[3])
     var ids_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr[4])
     var flags = List[Bool]()
@@ -143,10 +146,10 @@ def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises ->
         if flag != 0 and flag != 1:
             raise Error("byte LM: momentum flags must be exactly 0 or 1")
         flags.append(flag == 1)
-    for i in range(66):
+    for i in range(shape.batch * (shape.length + 1)):
         ids.append(ids_ptr.unsafe_load(i))
-    byte_validate_state(initial_p, initial_m, initial_v, flags, completed)
-    byte_validate_tokens(ids)
+    byte_validate_state(initial_p, initial_m, initial_v, flags, completed, shape)
+    byte_validate_tokens(ids, shape)
     var out_p = List[Float32]()
     var out_m = List[Float32]()
     var out_v = List[Float32]()
@@ -156,7 +159,7 @@ def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises ->
     var result_step = completed
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        var trainer = ByteTrainer(ctx, initial_p, initial_m, initial_v, flags, completed, cfg)
+        var trainer = ByteTrainer(ctx, initial_p, initial_m, initial_v, flags, completed, cfg, shape)
         if action == 1:
             var capture = byte_train_step(ctx, trainer, ids)
             out_p = capture.after_params.copy()
@@ -170,9 +173,9 @@ def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises ->
             loss = byte_eval_loss(ctx, trainer, ids)
             # Read actual post-evaluation state rather than simply echoing the
             # inputs, which would hide an accidental mutation in evaluation.
-            out_p = download_f32(ctx, trainer.buffers.param, BYTE_N_TOTAL)
-            out_m = download_f32(ctx, trainer.buffers.m_state, BYTE_N_TOTAL)
-            out_v = download_f32(ctx, trainer.buffers.v_state, BYTE_N_TOTAL)
+            out_p = download_f32(ctx, trainer.buffers.param, n)
+            out_m = download_f32(ctx, trainer.buffers.m_state, n)
+            out_v = download_f32(ctx, trainer.buffers.v_state, n)
             out_flags = trainer.buffers.buf_initialized.copy()
             result_step = trainer.completed_steps
             _require_same_bits(initial_p, out_p)
@@ -181,15 +184,15 @@ def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises ->
             for i in range(BYTE_J):
                 if flags[i] != out_flags[i]:
                     raise Error("byte LM eval changed momentum flags")
-        byte_validate_state(out_p, out_m, out_v, out_flags, result_step)
+        byte_validate_state(out_p, out_m, out_v, out_flags, result_step, shape)
         if result_step != completed + action:
             raise Error("byte LM: successful result has wrong completed step")
         if (bitcast[DType.uint32](loss) & UInt32(0x7F800000)) == UInt32(0x7F800000):
             raise Error("byte LM: nonfinite returned loss")
         if action == 1:
-            if len(out_g) != BYTE_N_TOTAL:
+            if len(out_g) != n:
                 raise Error("byte LM: wrong gradient length")
-            for i in range(BYTE_N_TOTAL):
+            for i in range(n):
                 if (bitcast[DType.uint32](out_g[i]) & UInt32(0x7F800000)) == UInt32(0x7F800000):
                     raise Error("byte LM: nonfinite returned gradient")
         ctx.synchronize()
@@ -211,6 +214,40 @@ def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises ->
     return PythonObject(result_step)
 
 
+def _byte_config(shape: PythonObject) raises -> ByteConfig:
+    if len(shape) != 7:
+        raise Error("byte LM: expected 7 shape integers (B,L,DM,H,KV,HD,FF)")
+    var operator_module = Python.import_module("operator")
+    var values = List[Int]()
+    for i in range(7):
+        var type_name = String(py=shape[i].__class__.__name__)
+        if type_name == "bool" or type_name == "bool_":
+            raise Error("byte LM: shape dimensions must be integers, not booleans")
+        values.append(Int(py=operator_module.index(shape[i])))
+    var cfg = ByteConfig(values[0], values[1], values[2], values[3],
+                         values[4], values[5], values[6])
+    cfg.validate()
+    return cfg^
+
+
+def byte_lm_config_profile_binding(shape: PythonObject) raises -> PythonObject:
+    """Host-only shape admission and profile negotiation; creates no context."""
+    var cfg = _byte_config(shape)
+    return PythonObject(cfg.profile())
+
+
+def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Preserved v1 ABI: the original B2/L32/DM32 profile."""
+    return _byte_lm_run(addresses, params, ByteConfig())
+
+
+def byte_lm_run_configured_binding(addresses: PythonObject, params: PythonObject,
+                                  shape: PythonObject) raises -> PythonObject:
+    """Runtime shape ABI; validate lengths before dereferencing any address."""
+    var cfg = _byte_config(shape)
+    return _byte_lm_run(addresses, params, cfg)
+
+
 @export
 def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
     try:
@@ -219,6 +256,8 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_vendor_binding]("byte_lm_vendor")
         module.def_function[byte_lm_profile_binding]("byte_lm_profile")
         module.def_function[byte_lm_run_binding]("byte_lm_run")
+        module.def_function[byte_lm_config_profile_binding]("byte_lm_config_profile")
+        module.def_function[byte_lm_run_configured_binding]("byte_lm_run_configured")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm: ", error))

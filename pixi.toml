@@ -33,10 +33,35 @@ mojo = ">=1.0.0,<2"
 max = ">=26.5.0,<27"
 
 [tasks]
+# Host-only runtime byte-model shape/registry checks; no GPU import or context.
+check-byte-lm-config = "mojo run -j 2 -I . training/checks/byte_lm_config_check.mojo"
+
 # The whole correctness suite, end to end, on the GPU. This is the one command
 # that answers "does it still work". It builds and runs; there is no separate
 # build step to keep in sync.
 probe = "mojo run -I . probe_main.mojo"
+
+# ---------------------------------------------------------------------------
+# DOC GATES. Neither needs a GPU, one takes a second and the other about six,
+# so there is no reason for a restated fact to rot between releases.
+#
+# `check-docs` settles the two classes a machine can settle without guessing
+# at meaning, a `pixi run -e` naming an environment pixi.toml never defines
+# and a backticked path that is not on disk. IT IS A REPORT, NOT YET A GATE.
+# On 2026-09-10 it lists 345 dead citations, most of them `archive/` paths
+# that no longer exist. It also used to take minutes, because it indexed
+# every agent worktree under .claude/ and then scanned that index once per
+# citation; pruning those took it to about six seconds, which is the
+# difference between a check somebody runs and one nobody does.
+#
+# `check-docs-facts` settles a third class, the handful of facts with exactly
+# ONE source of truth in the tree that then get RESTATED in prose, in an
+# install command and in a badge. The version, the default mode and the DOI.
+# `--write` repairs the marked spans; the pins and the prose are edits a
+# person makes. Run it at Freeze, step 1 of docs/RELEASE_CHECKLIST.md.
+check-docs = "python3 tools/check_docs_reference_reality.py"
+check-docs-facts = "python3 tools/docs_facts.py --check"
+write-docs-facts = "python3 tools/docs_facts.py --write"
 
 # ---------------------------------------------------------------------------
 # THE FAST SPEED LANE (bench/speed/README.md). Ours against the vendor's own
@@ -684,6 +709,11 @@ check-portable-translog = "mojo run -I . checks/portable_translog_check.mojo"
 check-portable-sqrtcos = "mojo run -I . checks/portable_sqrtcos_check.mojo"
 # host-only: portable_log64 (Cephes double log) against the host libm, 2 ulp, + its own hash
 check-portable-log64 = "mojo run -I . checks/portable_log64_check.mojo"
+# host-only: portable_log2_64, hashed full-range admission and exact powers
+check-portable-log2-64 = "mojo run -I . checks/portable_log2_64_check.mojo"
+# IDENTICAL plan and logical-width qualification; outputs stay outside the tree.
+check-embedding-plan-sort = "bash tools/check_embedding_plan_sort.sh /tmp/mojolearn-embedding-plan-sort"
+check-lane-minimum = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/checks/lane_minimum_check.mojo"
 
 # IDENTITY_PATHS row 49 (DEVIATION 740): DIVISION characterized per class
 # on this backend -- 2^20 hashed (a, b) pairs in 13 classes (normals, each
@@ -972,26 +1002,14 @@ check-dbscan-identity = "mojo run -I . dbscan/checks/dbscan_identity_check.mojo"
 # a check nobody can run by name is a check nobody runs.
 check-kmeans = "mojo run -I . cluster/kmeans_main.mojo"
 check-knn = "mojo run -I . neighbors/knn_main.mojo"
-# -O1 IS LOAD BEARING AND IS NOT A PERFORMANCE CHOICE. At the default -O3
-# this file does not COMPILE: the four weighted gates hit an LLVM pass
-# assertion, `DeadArgumentElimination surveyUse failed`, and that is why
-# `sample_weight` was IMPLEMENTED AND UNGATED from the day it landed until
-# 2026-09-01. Measured, one variable, on an Apple M4: -O3 and -O2 both
-# assert, -O1 and -O0 both build, and DeadArgumentElimination is an -O2-and-
-# above pass. No source construct was the cause -- four candidate rewrites
-# were tried and every one still asserted at -O3.
-#
-# WHY THIS IS NOT A WEAKENED GATE. With the four weighted gates disabled so
-# that -O3 can build at all, the -O1 and -O3 binaries print BYTE-IDENTICAL
-# output across all 13 remaining gates, including the float-heavy ones
-# (`check_fused_eps_agrees_with_materialized`, 31,950 cells against a float64
-# host oracle, and `check_dbscan_manhattan_neighborhood`, 22,500). The level
-# changes no number this lane asserts on. It is also only the HOST binary;
-# the Metal kernels are compiled by their own path.
-#
-# NO OTHER LANE TAKES THIS FLAG. If a second lane ever needs it, that is the
-# signal to report the assertion upstream rather than to spread the flag.
-check-dbscan = "mojo run -O1 -I . dbscan/dbscan_main.mojo"
+# This task carried `-O1` from 2026-09-01 to 2026-09-09 because the file did
+# not COMPILE at -O2 or above: `DeadArgumentElimination surveyUse failed`,
+# a compiler assertion. The construct was found and removed on 2026-09-09
+# (a `while` loop re-reading `len()` of a List argument with a runtime Int
+# stride, in `_host_weighted_degree_strided`; the reduced repro is
+# `dbscan/checks/compiler_repro_dead_arg_elim.mojo`). The -O3 build prints
+# byte-identical output to the -O1 build. No lane takes an -O flag.
+check-dbscan = "mojo run -I . dbscan/dbscan_main.mojo"
 check-ball-cover = "mojo run -I . neighbors/ball_cover_main.mojo"
 check-radius = "mojo run -I . neighbors/radius_main.mojo"
 check-ball-cover-knn = "mojo run -I . neighbors/ball_cover_knn_main.mojo"
@@ -1072,6 +1090,7 @@ check-metrics-regression = "mojo run -I . metrics/checks/regression_metrics_chec
 check-metrics-silhouette = "mojo run -I . metrics/checks/silhouette_check.mojo"
 check-metrics-trust = "mojo run -I . metrics/checks/trustworthiness_check.mojo"
 check-holtwinters = "mojo run -I . holtwinters/checks/hw_check.mojo"
+check-mamba-decode = "mojo run -I . mamba/checks/mamba_decode_check.mojo"
 check-mamba-block = "mojo run -I . mamba/checks/mamba_check.mojo"
 check-mamba2-block = "mojo run -I . mamba/checks/mamba2_check.mojo"
 check-mamba3-block = "mojo run -I . mamba/checks/mamba3_check.mojo"
@@ -1167,6 +1186,10 @@ check-batch-invariance = "mojo run -I . batch_invariance_main.mojo"
 # work above leans on.
 check-transformer = "mojo run -I . transformer/checks/transformer_check.mojo"
 check-transformer-backward = "mojo run -I . transformer/checks/transformer_backward_check.mojo"
+# The fused attention path (transformer/impl/.../fused_attention.mojo) against
+# the eager stage kernels, bit for bit, at shapes the fixture gate does not
+# reach, plus its two refusals (the regime bound and the -0.0 corner).
+check-transformer-fused = "mojo run -I . transformer/checks/transformer_fused_check.mojo"
 # Independent CPU float64 references for Transformer backward, cross-entropy,
 # SGD/AdamW, and embedding gradients. Run in the skgpu environment because
 # PyTorch is intentionally not a core dependency. The generated NPZ is an
@@ -1244,6 +1267,9 @@ check-arima-surface = "cd python && python3 -m mojolearn.tests.test_arima_surfac
 # 2026-08-23 have NEVER BEEN COMPILED, so a syntax error in them would break this build.
 check-spectral = "mojo run -I . spectral/checks/spectral_check.mojo"
 spectral-card = "mojo run -I . spectral/spectral_main.mojo"
+check-portable-pow64 = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/portable_pow64_check.mojo"
+check-umap-portable-host-math = "bash tools/check_umap_portable_host_math.sh /tmp/mojolearn-umap-portable-host-math"
+check-svd-wide-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . decomposition/checks/svd_wide_check.mojo"
 check-umap = "mojo run -I . umap/checks/graph_check.mojo"
 check-umap-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/graph_check.mojo"
 check-umap-spectral = "mojo run -I . umap/checks/spectral_init_check.mojo"

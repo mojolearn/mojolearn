@@ -1,0 +1,16 @@
+2075 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x787b00000000, nodemask=2)
+Imported from /root/mojolearn/gemm/checks/gemm_fragment_boundary_check.mojo:13:
+/root/mojolearn/transformer/impl/transformers/models/llama/modeling_llama.mojo:698:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_fragment_boundary_check.mojo:13:
+/root/mojolearn/transformer/impl/transformers/models/llama/modeling_llama.mojo:723:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/gemm/checks/gemm_fragment_boundary_check.mojo:27:22: warning: assignment to 'got' was never used; assign to '_' instead?
+    var got = Float32(0)
+                     ^

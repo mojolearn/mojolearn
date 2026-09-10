@@ -165,7 +165,7 @@ ceiling that forces this is Apple's alone and the double buffer would fit on
 NVIDIA's 48 KB and AMD's 64 KB. That is a `lib_smem_pages_for` row, not a
 constant, and it is left OPEN; see the lane file.
 
-**DEVIATION BLOCK 5 - IDENTITY, and it is TWO moves plus a refusal**
+**DEVIATION BLOCK 5 - IDENTITY: pinned arithmetic, grid and logical queues**
 (IDENTITY_PATHS rows 19 and 23, DEVIATIONS 502 and 503). Reached only under
 `NUMERIC_IDENTICAL`; the FAST build below is unchanged bit for bit.
 
@@ -180,10 +180,11 @@ constant, and it is left OPEN; see the lane file.
    every column of its rows and feeds them ascending. `grid_y` needs no pin,
    because `row - tile_m` is the same offset inside `Mblk` at every grid, so
    the same lane sees the same columns in the same order.
-3. A target column whose lane width is not 32 is REFUSED at the entry. The
-   FAISS network is 32 lanes wide by construction and on a 64-wide
-   wavefront it addresses the wrong half of the group -- that is not
-   non-identical, it is wrong.
+3. IDENTICAL admits native32 and CDNA64 while keeping a logical32 network.
+   CDNA votes, shuffle masks, lane IDs and indexed broadcasts stay inside
+   each aligned half-wave; the two query groups never share queue state.
+   Other modes retain the prior non32 refusal. Actual CDNA runtime evidence
+   is a separate gate from compiling or simulating its declared width.
 
 **DEVIATION BLOCK 4 - `sqrt`.** Not a deviation, a copy, recorded because it
 looks like one. `fusedL2Knn` hard-codes `constexpr bool sqrt = false`
@@ -216,7 +217,7 @@ clauses. See the lane file; `core/` is another lane's.
 
 from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.primitives.warp import max as warp_max
+from neighbors.impl.neighbors.topk.logical_warp32 import queue_any, LOGICAL32_ON64
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -564,7 +565,7 @@ def fused_l2_knn_kernel[
                 var f0 = Int32(0)
                 if heap0.num_vals > 0:
                     f0 = Int32(1)
-                if warp_max(f0) != Int32(0):
+                if queue_any(f0) != Int32(0):
                     heap0.reduce()
                 heap0.write_out(
                     out_dists.unsafe_offset(row0 * num_nn),
@@ -575,7 +576,7 @@ def fused_l2_knn_kernel[
                 var f1 = Int32(0)
                 if heap1.num_vals > 0:
                     f1 = Int32(1)
-                if warp_max(f1) != Int32(0):
+                if queue_any(f1) != Int32(0):
                     heap1.reduce()
                 heap1.write_out(
                     out_dists.unsafe_offset(row1 * num_nn),
@@ -682,7 +683,7 @@ def fused_l2_knn_kernel[
                     var f0 = Int32(0)
                     if heap0.num_vals > 0:
                         f0 = Int32(1)
-                    if warp_max(f0) != Int32(0):
+                    if queue_any(f0) != Int32(0):
                         heap0.reduce()
                     heap0.write_out(
                         out_dists.unsafe_offset(row0 * num_nn),
@@ -693,7 +694,7 @@ def fused_l2_knn_kernel[
                     var f1 = Int32(0)
                     if heap1.num_vals > 0:
                         f1 = Int32(1)
-                    if warp_max(f1) != Int32(0):
+                    if queue_any(f1) != Int32(0):
                         heap1.reduce()
                     heap1.write_out(
                         out_dists.unsafe_offset(row1 * num_nn),
@@ -708,13 +709,13 @@ def fused_l2_knn_kernel[
                     var p0 = Int32(0)
                     if heap0.num_vals > 0:
                         p0 = Int32(1)
-                    if warp_max(p0) != Int32(0):
+                    if queue_any(p0) != Int32(0):
                         heap0.reduce()
                 if have1:
                     var p1 = Int32(0)
                     if heap1.num_vals > 0:
                         p1 = Int32(1)
-                    if warp_max(p1) != Int32(0):
+                    if queue_any(p1) != Int32(0):
                         heap1.reduce()
                 if tid == 0:
                     # `while (atomicCAS(&mutexes[...], 0, 1) != 0);`
@@ -873,15 +874,11 @@ def fused_l2_knn(
     # `shDumpKV` (DEVIATION BLOCKS 1 and 3), where theirs adds
     # `Mblk * numOfNN * sizeof(Pair)` for the shmem queue dump it has and we
     # do not.
-    # THE 32-LANE REFUSAL (IDENTITY_PATHS row 23). the register-resident queue's warp
-    # queue is a bitonic network over `WARP_LANES = 32` lanes, and the
-    # kernel's own `lid = threadIdx.x % 32` and `kNumWarpQRegisters =
-    # NumWarpQ / 32` say the same thing three more times. On a 64-wide
-    # wavefront those lane indices address the wrong half of the group, so
-    # this arm is not merely non-identical there, it is WRONG. Refuse at
-    # the entry rather than compile a silently different answer; the
-    # closure is the width-parameterized network, which is not ported.
-    if lib_lane_width_for[TARGET_COLUMN]() != 32:
+    # IDENTICAL CDNA retains two independent logical32 queues per64-lane
+    # wave. Votes, broadcasts and lane IDs are explicitly scoped; the32-wide
+    # bitonic network and floating contraction topology are unchanged.
+    # Other modes/unsupported widths retain their prior refusal.
+    if lib_lane_width_for[TARGET_COLUMN]() != 32 and not LOGICAL32_ON64:
         raise Error(
             "fusedL2kNN: the FAISS warp queue is a 32-lane bitonic network"
             " and this target column's lane width is "

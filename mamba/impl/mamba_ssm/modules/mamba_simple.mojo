@@ -70,13 +70,13 @@ step, compared against the prefill card's).
 
 DEVIATION 734 -- THE CACHE'S SIGNATURE. `allocate_inference_cache(self,
 batch_size, max_seqlen, dtype=None, **kwargs)` becomes
-`allocate_inference_cache(batch_size, dims)`. `max_seqlen` is dropped
+`allocate_inference_cache(batch_size, dims)` for the host reference and
+`allocate_inference_cache(ctx, batch_size, dims)` for device state.
+`max_seqlen` is dropped
 because Mamba's cache does not depend on it (their own body ignores it too:
 the shapes at :258-265 are `(B, d_inner, d_conv)` and `(B, d_inner,
-d_state)`, no sequence length in either); `dtype` and `device` are dropped
-because the profile is Float32 everywhere (contract section 3) and this
-lane ships one dtype, so a dtype argument could only ever carry a value the
-profile forbids. The ZEROS -- the whole content of their function -- are
+d_state)`, no sequence length in either). The device overload takes the
+caller's `DeviceContext`; dtype remains fixed to Float32 by the profile. The ZEROS -- the whole content of their function -- are
 unchanged, and are what makes the first token's conv read zero padding and
 its scan start from h = 0.
 
@@ -95,17 +95,11 @@ stages).
 
 ## Where the arithmetic comes from, today and tomorrow
 
-`mamba/checks/mamba_oracle.mojo` is the landed interface authority for
-this lane (buffer conventions, stage list, seam order), and its
-`mamba_block_oracle` is the block spelling this step calls. The DEVICE
-spelling of the same block --
-`mamba/impl/transformers/models/mamba/modeling_mamba.mojo`, and the scan
-in `mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo` -- is being
-written beside this file and is not on disk yet. When it lands,
-`_one_block_call` below is the single line that changes, and NO arithmetic
-in this file changes with it, because there is no arithmetic in this file
-to change. That is the point of the delegation: the decode path has no
-private conv and no private scan to keep in sync.
+The device overload of `mamba_step` delegates to the certified
+`modeling_mamba.mamba_block_forward` at L=1. The public Python decode
+binding and the device decode/prefill gate both call that overload.
+The host-list overload and `_one_block_call` retain the independent oracle
+for the reference gate and its arithmetic negative controls.
 
 Run the gate:
 
@@ -117,6 +111,11 @@ Run the gate:
 
 from std.memory import bitcast
 from std.sys import argv
+from max.gpu.host import DeviceBuffer, DeviceContext
+from mamba.impl.transformers.models.mamba.modeling_mamba import (
+    MambaDeviceStages, MambaDeviceState, MambaDeviceWeights,
+    mamba_block_forward,
+)
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import ftz, identical_mul_add
@@ -167,6 +166,37 @@ def allocate_inference_cache(batch_size: Int, dims: MambaDims) -> MambaState:
 # ===========================================================================
 
 
+def allocate_inference_cache(
+    ctx: DeviceContext, batch_size: Int, dims: MambaDims,
+) raises -> MambaDeviceState:
+    """Allocate the zero conv window and SSM state on the caller's device."""
+    if batch_size <= 0:
+        raise Error("allocate_inference_cache: batch_size must be positive")
+    return MambaDeviceState(ctx, batch_size, dims)
+
+
+def mamba_step(
+    ctx: DeviceContext,
+    mut stages: MambaDeviceStages,
+    mut state: MambaDeviceState,
+    mut w: MambaDeviceWeights,
+    mut hidden_states: DeviceBuffer[DType.float32],
+    b: Int,
+    mut trace: IdentityTrace,
+    prefix: String,
+) raises:
+    """Decode one token per row on the GPU, updating the caller's state.
+
+    The same block kernels serve prefill and decode. The block validates
+    that stages and state match B and L=1 before launching any work.
+    """
+    if len(hidden_states) != b * w.dims.d_model:
+        raise Error("mamba_step: expected exactly one token per batch row")
+    mamba_block_forward(
+        ctx, stages, state, w, hidden_states, b, DECODE_TOKENS, trace, prefix,
+    )
+
+
 def _one_block_call(
     w: MambaWeights,
     x: List[Float32],
@@ -174,16 +204,11 @@ def _one_block_call(
     l: Int,
     mut state: MambaState,
 ) raises -> MambaStages:
-    """THE ONE SPELLING, the single call site both paths go through.
+    """Host reference for the oracle decode/prefill gate.
 
-    Today it is `mamba_block_oracle` (the landed host authority). When
-    `mamba/impl/transformers/models/mamba/modeling_mamba.mojo` lands, this
-    body becomes its device forward and nothing else in this file moves.
-    Prefill passes `l = L`; the decode step passes `l = DECODE_TOKENS`. The
-    conv reads position `l - 3 + k` from the sequence when that is
-    nonnegative and from `state.conv_win` otherwise, so at `l = 1` this IS
-    their :216-221 chain, and the scan takes h in a buffer and runs any
-    `l`."""
+    Production decode uses the device overload of `mamba_step`; keeping
+    this reference independent lets the gate catch a device regression.
+    """
     return mamba_block_oracle(w, x, b, l, state)
 
 
@@ -719,7 +744,7 @@ def probe_every_stage_compare(mut trace: IdentityTrace) raises:
         print("    ", want, "-> caught,", n, "cells")
 
 
-def main() raises:
+def check_reference_decode() raises:
     var sabotage = SABOTAGE_NONE
     var probe = False
     for a in argv():

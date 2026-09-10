@@ -448,8 +448,8 @@ def arm_refusals(rep):
                "a float16 parameter is refused, not upcast",
                T.Adam, np.zeros(4, dtype=np.float16))
     rep.raises("REFUSALS", NotImplementedError,
-               "STOCHASTIC LAYERS ARE NOT COVERED",
-               "dropout= is refused by name",
+               "dropout is not an OPTIMIZER option",
+               "dropout= is refused by name and pointed at Generator.dropout",
                T.Adam, p, dropout=0.1)
     rep.raises("REFUSALS", NotImplementedError,
                "DISTRIBUTED TRAINING IS NOT COVERED",

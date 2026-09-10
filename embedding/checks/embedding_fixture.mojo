@@ -16,8 +16,9 @@ WHAT IS OWED AND IS NOT HERE
 ------------------------------
   * **A COMPILE.** Nothing has been through the front end.
   * **A RUN, ON ANY COLUMN.** Zero bits observed.
-  * **`PLAN_SORT`.** Contract 6.2 specifies it and it is not written, so no
-    case here can exercise contract clause (d), plan invariance.
+  * **`PLAN_SORT`.** Now implemented by the total-key device network;
+    clause (d) compares both real plans at three launch geometries.
+
   * **THE SHIPPED SHAPE.** Contract 11.2's sweep names `V = 128256`,
     `d = 4096`, `T = 4096`. The largest case here is `V = 300`. A
     128256 x 4096 `dW` is 2.10 GB and `[[no-heavy-local-compute]]` binds

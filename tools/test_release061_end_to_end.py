@@ -1,9 +1,11 @@
-"""Inert file-only 0.6.1 admission fixtures. Root alone executes these tests.
+"""Inert file-only release-linux3 admission fixtures. Root alone executes these tests.
 
 All native files are text and never loaded. The ordered numerical comparator
 alone is mocked; RECORD, source/build proofs, all75 installed records, corpus
 fingerprints, retained evidence and UMAP raw-byte comparisons use real gates.
 Synthetic passing quality numbers exercise admission plumbing, not ML quality.
+DEVIATION 2290: the fixture declares its own `_version.py` and every version
+and profile string below comes from the shared reader; nothing pins a number.
 """
 import base64
 import csv
@@ -50,7 +52,7 @@ def seal_evidence(out):
     record = json.loads((out / 'qualification.json').read_text())
     record['installed_records'] = {
         s + '-' + m: gate.digest_file(out / (s + '-' + m + '.installed.json'))
-        for s, m in gate.surface.expected_jobs({'assembly_profile': 'release-0.6.1'})}
+        for s, m in gate.surface.expected_jobs({'assembly_profile': gate.surface.RELEASE_PROFILE})}
     record['evidence_sha256'] = {
         p.name: gate.digest_file(p) for p in out.iterdir()
         if p.is_file() and p.name not in ('qualification.json', 'exit_code')}
@@ -71,7 +73,13 @@ def byte_fixture(out, vendor, binding_sha):
         for key in ('parameters', 'm', 'v'):
             value = float(step + (1 if key == 'parameters' else 0))
             payload[key] = dict(dtype='<f4', shape=[34944], hex=(struct.pack('<f', value) * 34944).hex())
-        payload['flags'] = dict(dtype='<i4', shape=[20], hex=struct.pack('<20i', *([step] * 20)).hex())
+        # DEVIATION 2296: the fixture used to flip the flags 0 -> 1 with the
+        # step, which is what the old check demanded and what no real run has
+        # ever produced. config kind=2 is AdamW; `flags` is SGD's
+        # buffer-initialized marker and stays zero. The first installed
+        # qualification on real gfx942 silicon returned zeros, and the
+        # gradient oracle requires the step to leave them untouched.
+        payload['flags'] = dict(dtype='<i4', shape=[20], hex=bytes(80).hex())
         states.append(payload)
     hashes = {}
     for name, payload in zip(('byte-lm-before.json', 'byte-lm-after.json', 'byte-lm-restored.json'), states):
@@ -86,10 +94,22 @@ def byte_fixture(out, vendor, binding_sha):
         gradients_hex=(struct.pack('<f', 1.0) * 34944).hex(), checkpoint_sha256=hashes))
 
 
+# DEVIATION 2293: which three architectures the fixture wheel carries. The
+# Hopper slot has two legal spellings and only sm_90a is buildable on an H100,
+# so the gate has to be exercised with both. Default is the canonical triple;
+# test_hopper_spelled_sm_90a_admits swaps it.
+ARCHES = None
+
+
 def fixture(root):
     wrapper = root / 'python/mojolearn/__init__.py'
     wrapper.parent.mkdir(parents=True)
     wrapper.write_bytes(b'# inert wrapper fixture\n')
+    # DEVIATION 2290: the fixture's own _version.py is the only version source;
+    # it is packaged like every other python/mojolearn/*.py (flat_python check).
+    version_file = root / 'python/mojolearn/_version.py'
+    version_file.write_bytes(b'__version__ = "9.9.9"\n')
+    version = gate.surface.release_version(root)
     snapshot = {}
     for case in gate.surface.CORPUS_CASES:
         p = root / 'mamba/corpus' / case / 'x.f32'
@@ -98,12 +118,13 @@ def fixture(root):
         snapshot[p.relative_to(root).as_posix()] = gate.digest_file(p)
     inventory = gate.native_inventory(root)
     source_sha = gate.inventory_digest(inventory)
-    files = {'mojolearn/__init__.py': wrapper.read_bytes(), 'mojolearn/.libs/libfixture.so': b'inert runtime'}
+    files = {'mojolearn/__init__.py': wrapper.read_bytes(), 'mojolearn/_version.py': version_file.read_bytes(),
+             'mojolearn/.libs/libfixture.so': b'inert runtime'}
     qualification_root = root / 'qualification'
     proof_root = qualification_root / 'build-proofs'
     proof_root.mkdir(parents=True)
     proof_sets = {}
-    for key in sorted(gate.RELEASE_ARCHES):
+    for key in sorted(ARCHES or gate.RELEASE_ARCHES):
         extensions = {}
         for mode in gate.surface.MODES:
             prefix = 'mojolearn/' + key + '/' + ('' if mode == 'fast' else mode + '/')
@@ -116,16 +137,17 @@ def fixture(root):
             complete=True, build_exit=0, action='build', source_commit='a' * 40,
             source_inventory=inventory, source_sha256=source_sha, extensions=extensions))
         proof_sets[key] = dict(sha256=gate.digest_file(proof_path), source_sha256=source_sha)
-    payload = dict(schema='mojolearn.linux-payload.v1', version='0.6.1',
-        assembly_profile='release-0.6.1', release_profile='alpha-api', source_commit='a' * 40,
+    payload = dict(schema='mojolearn.linux-payload.v1', version=version,
+        assembly_profile=gate.surface.RELEASE_PROFILE, release_profile='alpha-api', source_commit='a' * 40,
         source_inventory=inventory, sets=proof_sets,
         extensions={n: hashlib.sha256(b).hexdigest() for n, b in files.items() if '/_mojolearn' in n},
-        python_sha256={'mojolearn/__init__.py': gate.digest_file(wrapper)},
+        python_sha256={'mojolearn/__init__.py': gate.digest_file(wrapper),
+                       'mojolearn/_version.py': gate.digest_file(version_file)},
         runtime_sha256={'mojolearn/.libs/libfixture.so': hashlib.sha256(b'inert runtime').hexdigest()},
         optional_native={'_mojolearn_byte_lm': {'included': True, 'supported_modes': ['identical'], 'unsupported_modes': ['fast', 'deterministic']}})
-    dist = 'mojolearn-0.6.1.dist-info/'
+    dist = 'mojolearn-' + version + '.dist-info/'
     files[dist + 'LINUX_PAYLOAD.json'] = json.dumps(payload).encode()
-    files[dist + 'METADATA'] = b'Metadata-Version: 2.4\nName: mojolearn\nVersion: 0.6.1\n'
+    files[dist + 'METADATA'] = ('Metadata-Version: 2.4\nName: mojolearn\nVersion: ' + version + '\n').encode()
     record_path = dist + 'RECORD'
     rows = io.StringIO()
     writer = csv.writer(rows)
@@ -134,11 +156,11 @@ def fixture(root):
         writer.writerow([name, 'sha256=' + digest, str(len(data))])
     writer.writerow([record_path, '', ''])
     files[record_path] = rows.getvalue().encode()
-    wheel = root / 'mojolearn-0.6.1-py3-none-manylinux_2_35_x86_64.whl'
+    wheel = root / ('mojolearn-' + version + '-py3-none-manylinux_2_35_x86_64.whl')
     with zipfile.ZipFile(wheel, 'w') as archive:
         for name, data in files.items():
             archive.writestr(name, data)
-    for key in sorted(gate.RELEASE_ARCHES):
+    for key in sorted(ARCHES or gate.RELEASE_ARCHES):
         vendor, arch = key.split('/')
         out = qualification_root / key
         out.mkdir(parents=True)
@@ -222,6 +244,202 @@ class EndToEndRelease061(unittest.TestCase):
                         self.assertEqual(set(result['runtime_coverage']), gate.RELEASE_ARCHES)
                         self.assertEqual(result['jobs_per_runtime_architecture'], 25)
                         self.assertEqual(ordered.call_count, 2)
+                        self.assertEqual(result['assembly_profile'], gate.surface.RELEASE_PROFILE)
+
+    def test_deprecated_profile_alias_in_retained_audit_still_admits(self):
+        # DEVIATION 2290: evidence written under `release-0.6.1` parses as
+        # release-linux3 and the admission record says the current name.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheel, qualification = fixture(root)
+            out = qualification / 'hip/gfx942'
+            path = out / 'wheel-audit.json'
+            audit = json.loads(path.read_text())
+            audit['assembly_profile'] = 'release-0.6.1'
+            write_json(path, audit)
+            seal_evidence(out)
+            with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}):
+                result = gate.check_release061(wheel, qualification, root)
+            self.assertEqual(result['status'], 'PASSED')
+            self.assertEqual(result['assembly_profile'], gate.surface.RELEASE_PROFILE)
+
+    def test_wheel_of_another_version_refused(self):
+        # DEVIATION 2290: the wheel must carry the version the source root declares.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheel, qualification = fixture(root)
+            (root / 'python/mojolearn/_version.py').write_bytes(b'__version__ = "9.9.10"\n')
+            with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}), \
+                    self.assertRaises((ValueError, OSError, KeyError)):
+                gate.check_release061(wheel, qualification, root)
+
+
+class HopperSpelling(unittest.TestCase):
+    """DEVIATION 2293. sm_90 has never been built; the compiler emits sm_90a on
+    an H100 and every read-back gate refuses a set named otherwise. The whole
+    admission path therefore has to accept a wheel whose Hopper slot is spelled
+    sm_90a, and has to keep refusing one that fills that slot twice."""
+
+    def _run(self, arches):
+        global ARCHES
+        ARCHES = frozenset(arches)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                wheel, qualification = fixture(root)
+                with patch.object(gate.compare_ordered_python, 'compare',
+                                  return_value={'status': 'PASSED'}):
+                    return gate.check_release061(wheel, qualification, root)
+        finally:
+            ARCHES = None
+
+    def test_hopper_spelled_sm_90a_admits(self):
+        result = self._run({'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})
+        self.assertEqual(result['status'], 'PASSED')
+        self.assertEqual(set(result['runtime_coverage']),
+                         {'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})
+        self.assertEqual(result['jobs_per_runtime_architecture'], 25)
+
+    def test_hopper_spelled_sm_90_still_admits(self):
+        result = self._run({'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'})
+        self.assertEqual(result['status'], 'PASSED')
+        self.assertEqual(set(result['runtime_coverage']),
+                         {'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'})
+
+    def test_hopper_slot_filled_twice_refused(self):
+        with self.assertRaises((ValueError, OSError, KeyError)):
+            self._run({'cuda/sm_89', 'cuda/sm_90', 'cuda/sm_90a', 'hip/gfx942'})
+
+    def test_missing_hopper_refused(self):
+        with self.assertRaises((ValueError, OSError, KeyError)):
+            self._run({'cuda/sm_89', 'cuda/sm_86', 'hip/gfx942'})
+
+
+class SmokeTier(unittest.TestCase):
+    """DEVIATION 2297. One FULL 25-job column per advertised vendor; every other
+    architecture the wheel carries clears SMOKE. The tier is DECLARED by a
+    marker file, never inferred from a failing full check -- an earlier draft
+    inferred it and turned three injected defects into silent downgrades."""
+
+    def _root(self, tmp, smoke_keys):
+        root = Path(tmp)
+        wheel, qualification = fixture(root)
+        for key in smoke_keys:
+            write_json(qualification / key / 'SMOKE_TIER.json',
+                       dict(schema='mojolearn.linux.smoke-tier.v1', architecture=key,
+                            reason='fixture: reduced tier for this architecture'))
+        return wheel, qualification, root
+
+    def _check(self, wheel, qualification, root):
+        with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}):
+            return gate.check_release061(wheel, qualification, root)
+
+    def test_one_full_per_vendor_admits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._root(tmp, ['cuda/sm_90'])          # sm_89 full, gfx942 full
+            result = self._check(w, q, r)
+            self.assertEqual(result['status'], 'PASSED')
+            self.assertEqual(result['qualification_tiers']['cuda/sm_90'], 'smoke')
+            self.assertEqual(result['qualification_tiers']['cuda/sm_89'], 'full')
+            self.assertEqual(result['qualification_tiers']['hip/gfx942'], 'full')
+
+    def test_no_full_cuda_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._root(tmp, ['cuda/sm_89', 'cuda/sm_90'])
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+    def test_no_full_hip_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._root(tmp, ['hip/gfx942'])
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+    def test_marker_must_name_its_own_architecture(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheel, qualification = fixture(root)
+            write_json(qualification / 'cuda/sm_90' / 'SMOKE_TIER.json',
+                       dict(schema='mojolearn.linux.smoke-tier.v1',
+                            architecture='hip/gfx942', reason='wrong architecture'))
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(wheel, qualification, root)
+
+    def test_marker_must_give_a_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheel, qualification = fixture(root)
+            write_json(qualification / 'cuda/sm_90' / 'SMOKE_TIER.json',
+                       dict(schema='mojolearn.linux.smoke-tier.v1',
+                            architecture='cuda/sm_90', reason='   '))
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(wheel, qualification, root)
+
+
+class DeclaredKnownFailures(unittest.TestCase):
+    """DEVIATION 2299. A full column may carry a KNOWN failing job, declared by
+    name and cited. An undeclared failure still refuses; a declaration for a job
+    that passed is refused as stale; the declaration is republished."""
+
+    def _fixture(self, tmp, fail_job=None, declare=None, citation='README.md'):
+        root = Path(tmp)
+        wheel, qualification = fixture(root)
+        # the citation is resolved against the SOURCE ROOT, which here is tmp
+        (root / 'README.md').write_text('fixture citation target\n')
+        col = qualification / 'cuda/sm_89'
+        if fail_job:
+            surf, mode = fail_job.split('/')
+            rows = (col / 'results.tsv').read_text().splitlines()
+            rows = [r if not r.startswith(surf + '\t' + mode) else surf + '\t' + mode + '\t1'
+                    for r in rows]
+            (col / 'results.tsv').write_text('\n'.join(rows) + '\n')
+            write_json(col / 'qualification.json',
+                       dict(status='FAILED', reason='Missing, duplicate or failed installed job'))
+        if declare:
+            write_json(col / 'KNOWN_FAILURES.json', dict(
+                schema='mojolearn.linux.known-failures.v1',
+                failures=[dict(job=declare, citation=citation, reason='fixture: known open item')]))
+        return wheel, qualification, root
+
+    def _check(self, w, q, r):
+        with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}):
+            return gate.check_release061(w, q, r)
+
+    def test_declared_failure_admits_and_is_republished(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._fixture(tmp, fail_job='mamba/deterministic', declare='mamba/deterministic')
+            result = self._check(w, q, r)
+            self.assertEqual(result['status'], 'PASSED')
+            self.assertEqual(result['qualification_tiers']['cuda/sm_89'], 'full')
+            declared = result['observed_job_failures']['cuda/sm_89']
+            self.assertEqual(declared[0]['job'], 'mamba/deterministic')
+            self.assertTrue(declared[0]['citation'])
+
+    def test_undeclared_failure_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._fixture(tmp, fail_job='mamba/deterministic')
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+    def test_declaring_one_job_does_not_excuse_another(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._fixture(tmp, fail_job='umap/fast', declare='mamba/deterministic')
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+    def test_stale_declaration_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._fixture(tmp, declare='mamba/deterministic')   # nothing failed
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
+
+    def test_citation_must_exist_in_the_source_tree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w, q, r = self._fixture(tmp, fail_job='mamba/deterministic',
+                                    declare='mamba/deterministic',
+                                    citation='docs/NO_SUCH_DOCUMENT.md')
+            with self.assertRaises((ValueError, OSError, KeyError)):
+                self._check(w, q, r)
 
 
 if __name__ == '__main__':

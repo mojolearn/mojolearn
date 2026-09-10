@@ -1,0 +1,27 @@
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 16384 batch 4 rounds 3
+2945 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ace00000000, nodemask=2)
+2945 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x728b40000000, nodemask=1)
+ours: tier identical vendor cuda
+Traceback (most recent call last):
+  File "/root/mojolearn/transformer/bench_window_timing.py", line 239, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/mojolearn/transformer/bench_window_timing.py", line 223, in main
+    ours_out = ours(args, w, x, dy, log)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/transformer/bench_window_timing.py", line 70, in ours
+    f_ms, f_all = median_ms(lambda: blk.forward(x), args.rounds, lambda: None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/transformer/bench_window_timing.py", line 51, in median_ms
+    fn()
+  File "/root/mojolearn/transformer/bench_window_timing.py", line 70, in <lambda>
+    f_ms, f_all = median_ms(lambda: blk.forward(x), args.rounds, lambda: None)
+                                    ^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 627, in forward
+    return self._call(x, state, step=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 584, in _call
+    new_len = ext.transformer_forward(
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+Exception: llama: s_max 16384 exceeds the absolute-position ceiling 8192 (DEVIATION 812: the Cody-Waite domain of _cephes_sincosf_core, shared by portable_sinf and portable_cosf)

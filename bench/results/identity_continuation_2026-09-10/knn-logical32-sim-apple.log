@@ -1,0 +1,79 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:441:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:450:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:464:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:466:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        regy[j] = sy[
+                                  ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:480:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:491:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[
+                                    ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:513:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:523:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:537:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:638:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:669:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:674:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/checks/fused_logical32_check.mojo:12:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/impl/neighbors/detail/fused_l2_knn.mojo:744:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+FUSED_LOGICAL32_COLUMN amd simulated True
+FUSED_LOGICAL32_CASE_PASS 1 1 cells 1
+FUSED_LOGICAL32_CASE_PASS 1 8 cells 8
+FUSED_LOGICAL32_CASE_PASS 1 32 cells 32
+FUSED_LOGICAL32_CASE_PASS 1 64 cells 64
+FUSED_LOGICAL32_CASE_PASS 9 1 cells 9
+FUSED_LOGICAL32_CASE_PASS 9 8 cells 72
+FUSED_LOGICAL32_CASE_PASS 9 32 cells 288
+FUSED_LOGICAL32_CASE_PASS 9 64 cells 576
+FUSED_LOGICAL32_CASE_PASS 17 1 cells 17
+FUSED_LOGICAL32_CASE_PASS 17 8 cells 136
+FUSED_LOGICAL32_CASE_PASS 17 32 cells 544
+FUSED_LOGICAL32_CASE_PASS 17 64 cells 1088
+FUSED LOGICAL32 PASS cases 12 virtual_addresses 2048

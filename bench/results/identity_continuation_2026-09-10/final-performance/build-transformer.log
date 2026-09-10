@@ -1,0 +1,70 @@
+4900 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50ce80000000, nodemask=1)
+/root/finalperformance/bindings/_mojolearn_transformer.mojo:190:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=p, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/finalperformance/bindings/_mojolearn_transformer.mojo:198:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/finalperformance/bindings/_mojolearn_transformer.mojo:222:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=p, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/finalperformance/bindings/_mojolearn_transformer.mojo:254:5: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+    memcpy(dest=p, src=host.unsafe_ptr(), count=n)
+    ^~~~~~
+    unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/finalperformance/bindings/_mojolearn_transformer.mojo:155:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:698:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/finalperformance/bindings/_mojolearn_transformer.mojo:155:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:723:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/finalperformance/bindings/_mojolearn_transformer.mojo:169:
+./transformer/checks/transformer_backward.mojo:101:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/finalperformance/bindings/_mojolearn_transformer.mojo:135:
+./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/finalperformance/bindings/_mojolearn_transformer.mojo:135:
+./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/finalperformance/bindings/_mojolearn_transformer.mojo:135:
+./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/finalperformance/bindings/_mojolearn_transformer.mojo:498:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/finalperformance/bindings/_mojolearn_transformer.mojo:585:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/finalperformance/bindings/_mojolearn_transformer.mojo:625:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+Included from /root/finalperformance/bindings/_mojolearn_transformer.mojo:169:
+./transformer/checks/transformer_backward.mojo:2605:28: warning: assignment to 'cells' was never used; assign to '_' instead?
+    var cells = b * nh * l * s
+                           ^

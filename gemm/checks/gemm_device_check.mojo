@@ -48,7 +48,7 @@ bits beside its decimal.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
 
 from bench.gemm_shapes import (
     GEMM_SHAPE_COUNT,
@@ -67,8 +67,11 @@ from gemm.checks.gemm_identical import (
     GEMM_PLAN_COUNT,
     PLAN_FLAT,
     PLAN_SPLITK,
+    TUNED_FOLD_SLOTS,
     _fold_drain,
+    _fold_drain_local,
     _fold_push,
+    _fold_push_local,
     choose_gemm_plan,
     contract_partition,
     gemm_operand_strides,
@@ -324,6 +327,70 @@ def check_stack_fold_is_the_contract_tree() raises:
     print(
         "check_stack_fold_is_the_contract_tree OK: register stack == the"
         " contract's balanced tree, bit for bit, at every P in 1..2049"
+    )
+
+
+def _tile_fold(p: Int) raises -> List[Float32]:
+    """The tuned plans' fold, driven from the host over the SAME
+    `_fold_push_local` / `_fold_drain_local` the device calls, on 4 cells at
+    once, every cell folding a different hashed sequence of `p` leaves."""
+    comptime NC = 4
+    var stack = stack_allocation[TUNED_FOLD_SLOTS * NC, Scalar[DType.float32]]()
+    var occ = 0
+    for t in range(p):
+        var v = SIMD[DType.float32, NC](0.0)
+        for e in range(NC):
+            v[e] = _val(t * 31 + p + 7 * e, 909 + e)
+        if not _fold_push_local[NC, TUNED_FOLD_SLOTS](stack, occ, v):
+            raise Error(
+                "_tile_fold: the thread-local fold stack OVERFLOWED at leaf "
+                + String(t)
+                + " of "
+                + String(p)
+            )
+    var out = _fold_drain_local[NC, TUNED_FOLD_SLOTS](stack, occ)
+    var r = List[Float32]()
+    for e in range(NC):
+        r.append(out[e])
+    return r^
+
+
+def check_tile_fold_is_the_contract_tree() raises:
+    """The tuned plans' thread-local, multi-cell fold is bit for bit
+    `gemm_oracle.fold_balanced_tree`, per cell, at every `P` in 1..2049.
+
+    `_fold_push_local` is a second spelling of the tree (a runtime loop over
+    a memory stack, four cells per push) and a second spelling is a second
+    thing that can be wrong, so it gets the same sweep
+    `check_stack_fold_is_the_contract_tree` gives the register stack: every
+    carry pattern, every level width, every set-bit combination of `P`,
+    including the odd `P` no real shape produces.
+    """
+    var bad = 0
+    var first_bad = -1
+    for p in range(1, 2050):
+        var got = _tile_fold(p)
+        for e in range(4):
+            var v = List[Float32]()
+            for t in range(p):
+                v.append(_val(t * 31 + p + 7 * e, 909 + e))
+            var want = fold_balanced_tree(v)
+            if _bits(got[e]) != _bits(want):
+                bad += 1
+                if first_bad < 0:
+                    first_bad = p
+    if bad != 0:
+        raise Error(
+            "check_tile_fold_is_the_contract_tree: the tuned plans' fold"
+            " DISAGREES with gemm_oracle.fold_balanced_tree at "
+            + String(bad)
+            + " (P, cell) pairs. First at P = "
+            + String(first_bad)
+        )
+    print(
+        "check_tile_fold_is_the_contract_tree OK: thread-local 4-cell fold"
+        " == the contract's balanced tree, bit for bit, every cell, at every"
+        " P in 1..2049"
     )
 
 
@@ -1521,6 +1588,11 @@ def main() raises:
         _gate(String("check_fold_stack_depth_covers_the_profile"), ran, failed, String(""))
     except e:
         _gate(String("check_fold_stack_depth_covers_the_profile"), ran, failed, String(e))
+    try:
+        check_tile_fold_is_the_contract_tree()
+        _gate(String("check_tile_fold_is_the_contract_tree"), ran, failed, String(""))
+    except e:
+        _gate(String("check_tile_fold_is_the_contract_tree"), ran, failed, String(e))
     try:
         check_strides_match_the_contract_addressing()
         _gate(String("check_strides_match_the_contract_addressing"), ran, failed, String(""))

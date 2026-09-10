@@ -1,0 +1,27 @@
+KNN_REF_HEADER mode IDENTICAL column nvidia index 400000 queries 4000 features 32 k 10 rounds 3 fixture dyadic-v1 selector 1 transpose 1 register_tile 1 index_tile 65536
+KNN_PHASE_TIMERS transpose_ms 0.123645
+KNN_PHASE_TIMERS distance_ms 19.124946 select_ms 20.029613 merge_ms 0.823741 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_PHASE_TIMERS transpose_ms 0.103415
+KNN_PHASE_TIMERS distance_ms 19.00682 select_ms 19.864536 merge_ms 0.75818 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_PHASE_TIMERS transpose_ms 0.103504
+KNN_PHASE_TIMERS distance_ms 19.007741 select_ms 19.86424 merge_ms 0.772722 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_PHASE_TIMERS transpose_ms 0.104797
+KNN_PHASE_TIMERS distance_ms 19.218937 select_ms 19.845636 merge_ms 0.766425 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_PHASE_TIMERS transpose_ms 0.104056
+KNN_PHASE_TIMERS distance_ms 18.949118 select_ms 19.751544 merge_ms 0.94709 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_PHASE_TIMERS norms_ms 0.225727
+KNN_PHASE_TIMERS transpose_ms 0.103154
+KNN_PHASE_TIMERS distance_ms 18.832192 select_ms 19.777905 merge_ms 0.74872 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_PHASE_TIMERS norms_ms 0.225017
+KNN_PHASE_TIMERS transpose_ms 0.104326
+KNN_PHASE_TIMERS distance_ms 18.850051 select_ms 19.826729 merge_ms 0.769191 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_PHASE_TIMERS norms_ms 0.224205
+KNN_PHASE_TIMERS transpose_ms 0.104186
+KNN_PHASE_TIMERS distance_ms 18.873786 select_ms 19.84245 merge_ms 0.811719 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_PHASE_TIMERS norms_ms 0.225047
+KNN_PHASE_TIMERS transpose_ms 0.103605
+KNN_PHASE_TIMERS distance_ms 18.885705 select_ms 19.845914 merge_ms 0.771589 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_PHASE_TIMERS norms_ms 0.224896
+KNN_PHASE_TIMERS transpose_ms 0.103054
+KNN_PHASE_TIMERS distance_ms 19.006327 select_ms 19.824059 merge_ms 0.76823 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_RESULT index 400000 queries 4000 k 10 features 32 request_median_ms 42.138715 device_median_ms 39.912526 rounds 3 query_tile 256 index_tile 65536

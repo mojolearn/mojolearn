@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/nvidia_serial_guard.py", line 124, in <module>
+    sys.exit(run(arguments))
+             ^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_serial_guard.py", line 70, in run
+    raise RuntimeError('NVIDIA GPU is occupied; refusing overlapping work')
+RuntimeError: NVIDIA GPU is occupied; refusing overlapping work

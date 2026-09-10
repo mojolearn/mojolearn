@@ -13,6 +13,11 @@ spec.loader.exec_module(packer)
 
 class ReleaseInventory(unittest.TestCase):
     def fixture(self, root):
+        # DEVIATION 2290: the fixture root declares its own version; the tests
+        # read it back through the packer's shared reader and pin no number.
+        version_file = root / 'python/mojolearn/_version.py'
+        version_file.parent.mkdir(parents=True)
+        version_file.write_text('__version__ = "9.9.9"\n')
         source = root / 'source.py'
         source.write_bytes(b'fixture source\n')
         inventory = [['source.py', packer.sha(source).hex()]]
@@ -42,7 +47,10 @@ class ReleaseInventory(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             sets, proofs = self.fixture(root)
-            result = packer.release_inventory(sets, proofs, '0.6.1', root)
+            version = packer.read_version(root)
+            result = packer.release_inventory(sets, proofs, version, root)
+            self.assertEqual(result['version'], version)
+            self.assertEqual(result['assembly_profile'], packer.RELEASE_PROFILE)
             self.assertEqual(len(result['extensions']), 138)
             self.assertTrue(result['optional_native']['_mojolearn_byte_lm']['included'])
             self.assertEqual(result['optional_native']['_mojolearn_byte_lm']['unsupported_modes'],
@@ -53,7 +61,9 @@ class ReleaseInventory(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             sets, proofs = self.fixture(root)
-            for version, selected in [('0.6.0', sets), ('0.6.1', sets[:2])]:
+            declared = packer.read_version(root)
+            # DEVIATION 2290: any version other than the root's declared one is refused.
+            for version, selected in [(declared + '.post1', sets), (declared, sets[:2])]:
                 with self.assertRaises(SystemExit):
                     packer.release_inventory(selected, proofs, version, root)
 
@@ -61,17 +71,18 @@ class ReleaseInventory(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             sets, proofs = self.fixture(root)
+            version = packer.read_version(root)
             with self.assertRaises(SystemExit):
-                packer.release_inventory(sets, [proofs[0]] * 3, '0.6.1', root)
+                packer.release_inventory(sets, [proofs[0]] * 3, version, root)
             binary = next(iter(sets[0][2].values()))
             original = binary.read_bytes()
             binary.write_bytes(b'changed')
             with self.assertRaises(SystemExit):
-                packer.release_inventory(sets, proofs, '0.6.1', root)
+                packer.release_inventory(sets, proofs, version, root)
             binary.write_bytes(original)
             (root / 'source.py').write_bytes(b'stale')
             with self.assertRaises(SystemExit):
-                packer.release_inventory(sets, proofs, '0.6.1', root)
+                packer.release_inventory(sets, proofs, version, root)
 
     def test_missing_or_wrong_mode_byte_lm_refused_even_with_matching_proof(self):
         for misplaced in (False, True):
@@ -87,7 +98,7 @@ class ReleaseInventory(unittest.TestCase):
                 proof['extensions'] = {'mojolearn/' + n: packer.sha(p).hex() for n, p in files.items()}
                 proofs[0].write_text(json.dumps(proof))
                 with self.assertRaises(SystemExit):
-                    packer.release_inventory(sets, proofs, '0.6.1', root)
+                    packer.release_inventory(sets, proofs, packer.read_version(root), root)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,4 @@
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 3
+ours: tier identical vendor cuda
+ours forward            median 514.8 ms  rounds ['553.5', '514.8', '483.9']
+ours forward+backward   median 1111.9 ms  rounds ['1111.9', '1115.8', '1109.8']

@@ -1,0 +1,5 @@
+6838 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a4180000000, nodemask=2)
+portable_log2_64: 2098 powers exact; boundary inputs 82
+portable_log2_64: 262144 hashed doubles; worst 1 ulp from this host's libm at x = 7.38097006515398e-26 ; 0 beyond 2 ulp; edges exact
+portable_log2_64 device-independent hash: 18138053008657378164
+portable log2_64 check OK

@@ -32,7 +32,7 @@ carry:
     even, which is what makes their scan's per-list work uniform. Ours
     inherits Lloyd's list-size distribution, empty lists included.
   - **the identity status of the coarse centroids is the k-means lane's,
-    not this lane's.** `archive/research/UNSUPERVISED_IDENTITY.md` is the file that says
+    not this lane's.** `IDENTITY_PATHS.md` is the file that says
     what it is, and `ivf/README.md` quotes it rather than restating it.
 
 WHICH K-MEANS ENTRY POINT, AND WHY THAT ONE

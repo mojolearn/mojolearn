@@ -42,8 +42,9 @@ The border between two bins is the MIDPOINT of the values either side
 (`:1367`), not one of the values.
 """
 
-from std.ffi import external_call
 from std.math import log
+
+from checks.numerics import portable_log64
 
 
 def _penalty_max_sum_log(weight: Float64) -> Float64:
@@ -361,7 +362,7 @@ def _penalty_min_entropy(weight: Float64) -> Float64:
     tie-break fires on the difference. `@no_inline` restores every
     symmetric pair bit-identically. Recorded as archive/reference/PORTING.md 54.
 
-    ## Why this calls libm instead of `std.math.log`
+    ## Why this does NOT call `std.math.log` (history: the libm fix)
 
     **`std.math.log` is not accurate enough to reproduce their tie-breaks,
     and this was measured, not assumed.** At w = 840 it returns a product
@@ -383,11 +384,36 @@ def _penalty_min_entropy(weight: Float64) -> Float64:
     1,3,5,8,10,13,16,18,20,22,24,26,28. Both are optimal, with the same
     multiset of bin sizes. Only one of them is CatBoost's.
 
-    **This is host code, which is why calling libm is available at all.**
-    Border selection runs on the host in CatBoost and on the host here.
-    If any of this ever moves to a device, `log` has to be revisited from
-    scratch, because no libm is reachable there and the accuracy question
-    comes back in a form this fix cannot answer.
+    The recorded fix was the HOST LIBM's `log` through `external_call`,
+    which reproduced CatBoost's borders exactly on `bench/minentropy_oracle.txt`
+    because CatBoost itself computes them with the host's libm. That fix
+    was host-only by nature -- no libm is reachable on a device -- and it
+    made the identical path's bits depend on which C library the host
+    links (IDENTITY_PATHS row 18's class: macOS and glibc disagree in the
+    last bit).
+
+    ## What it calls NOW (DEVIATION 2263, 2026-09-08)
+
+    `portable_log64` from `checks/numerics.mojo`: the Cephes double log
+    through fma and basic ops only, measured within 2 ulp of libm over
+    2^18 hashed doubles (`check-portable-log64`), and -- the property that
+    matters here -- the SAME BITS on every host and every device, so the
+    plateau argument above holds everywhere at once: exactly equal costs
+    still compare exactly equal, and the tie-break, not a libm, decides.
+    Operand order and spelling are theirs, unchanged: `w * log(w + 1e-8)`.
+
+    CONSEQUENCE, stated rather than hoped away: our bits now come from OUR
+    log rather than the host's libm, while CatBoost's come from theirs.
+    Where two DIFFERENT cut sets' costs are within a couple of ulp of each
+    other (a near-tie, not an exact one -- exact ties are tie-broken the
+    same way on both sides), the border selection can differ from
+    CatBoost's by that ULP difference, and `check-minentropy` /
+    `check-greedylogsum` / `ctr-target-oracle` compare against CatBoost's
+    borders EXACTLY. If one of them moves after this change, that is the
+    ULP consequence and not a regression of the tie-break: re-baseline the
+    oracle card with the differing (column, budget) pair documented as a
+    1-ULP near-tie, or accept a documented tolerance ONLY where the input
+    is such a near-tie. Do not reach for libm again to make it green.
 
     MEASURED AND CLOSED: `_penalty_max_sum_log` above deliberately still
     calls `std.math.log`, and that is now a result rather than an omission.
@@ -400,7 +426,7 @@ def _penalty_min_entropy(weight: Float64) -> Float64:
     budgets 37, 63, 100 and 200 and nothing moved, while flipping one
     comparison in the heap pop broke 4 of 6 cases. Do not "fix" it.
     """
-    return weight * external_call["log", Float64](weight + 1e-8)
+    return weight * portable_log64(weight + 1e-8)  # DEVIATION 2263
 
 
 def best_split_min_entropy(

@@ -1,0 +1,32 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+6878 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3aa500000000, nodemask=2)
+6878 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x120280000000, nodemask=1)
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+[stage-times] SymmetricTree fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   sym.hist	67.875 ms
+[stage-times]   sym.pstats	16.094 ms
+[stage-times]   sym.score	14.972 ms
+[stage-times]   sym.winner	6.093 ms
+[stage-times]   sym.split	45.141 ms
+[stage-times]   sym.drain	1.528 ms
+[stage-times]   est.move	13.856 ms
+[stage-times]   est.approx	16.981 ms
+[stage-times]   est.pstats	22.932 ms
+[stage-times]   est.readback	13.732 ms
+[stage-times]   (accounted 219.210 ms of 253.544 ms fit wall; the rest is un-wrapped host bookkeeping)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 ms=1337.208
+[stage-times] SymmetricTree fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   sym.hist	67.650 ms
+[stage-times]   sym.pstats	15.955 ms
+[stage-times]   sym.score	14.762 ms
+[stage-times]   sym.winner	5.950 ms
+[stage-times]   sym.split	45.535 ms
+[stage-times]   sym.drain	1.484 ms
+[stage-times]   est.move	13.055 ms
+[stage-times]   est.approx	16.613 ms
+[stage-times]   est.pstats	22.773 ms
+[stage-times]   est.readback	13.366 ms
+[stage-times]   (accounted 217.147 ms of 250.937 ms fit wall; the rest is un-wrapped host bookkeeping)
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=683.623 hash=dac2cf366e219cec
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542067
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800716

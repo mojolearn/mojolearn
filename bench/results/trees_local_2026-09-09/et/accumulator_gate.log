@@ -1,0 +1,186 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+numeric_mode FAST
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+numeric_mode FAST
+PASS Extra Trees accumulator dispatch fast: 18 full-forest fingerprints match width 32
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+numeric_mode IDENTICAL
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/accumulator_dispatch_fingerprint.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/checks/bestfirst_fingerprint.mojo:41:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/randomforest/randomforest.mojo:95:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+numeric_mode IDENTICAL
+PASS Extra Trees accumulator dispatch identical: 18 full-forest fingerprints match width 32

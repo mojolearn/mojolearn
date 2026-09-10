@@ -2492,8 +2492,8 @@ def _device_tpb() -> Int:
 comptime DEVICE_MAX_ACC = _device_max_acc()
 """Widest per-cell class accumulator the score kernel's shared memory admits
 (DEVIATION 172). One definition, for the same reason DEVICE_TPB is one.
-32 unless a DEVIATION 2021 measurement arm narrows it -- see
-`_device_max_acc()`."""
+32 unless a DEVIATION 2021 measurement arm narrows it. Normal classification
+fits dispatch to 4/8/16/32-wide score kernels without narrowing this limit."""
 
 
 def _device_max_acc() -> Int:
@@ -2526,9 +2526,9 @@ def _device_max_acc() -> Int:
     208's probe) -- the regime where occupancy is the lever, because
     more resident blocks are what hide gather latency.
 
-    THE ARMS. `-D MOJOLEARN_ET_MAX_ACC_4` / `_8` / `_16` narrow the
-    comptime width; the default stays 32 and compiles the exact
-    pre-2021 program. None is set by any build script. The bits cannot
+    ORIGINAL MEASUREMENT ARMS. `-D MOJOLEARN_ET_MAX_ACC_4` / `_8` / `_16`
+    force the comptime width. The supported default limit stays 32; `_32`
+    forces the original width. None is set by build scripts. The bits cannot
     move: the arrays hold the SAME integers in the same slots and the
     unused tail was all zeros folded through integer sums -- removing a
     zero from an integer sum is the identity. The guard is already
@@ -2538,14 +2538,11 @@ def _device_max_acc() -> Int:
     the fit rather than mis-scoring it -- gate arms accordingly (the
     lane's fixtures fit `_8`; higgs2m and every regression fit `_4`).
 
-    NOT taken instead: making the width a runtime kernel argument
-    (impossible -- comptime slot count), or shrinking the DEFAULT
-    (a default flips only on the orchestrator's measured bit-identical
-    win, and a narrowed default would newly refuse legal 17-32-class
-    fits; if the win is real the shipping shape is a small dispatch
-    over two or three instantiations, which is a follow-up decision,
-    not this arm). UNVERIFIED, RUN OWED: the A/B commands live in
-    DEVIATIONS.md 2021 and PLAN.md.
+    SHIPPING DISPATCH. Classification now selects 4, 8, 16 or 32 at runtime
+    in `search_batch`, preserving the original 32-class support. The fixed
+    arms above still override dispatch for measurements; `_32` explicitly
+    selects the old full-width kernel for A/B identity and timing checks.
+    Search tiling and block-size tuning remain independent opt-in arms.
     ==================================================================
     """
     if is_defined["MOJOLEARN_ET_MAX_ACC_4"]():
@@ -2900,6 +2897,116 @@ def stage_batch(
     # `doSplit` enqueues its `update_device` calls the same way and drains
     # ONCE, at `handle.sync_stream` (`builder.cuh:492-494`).
 
+def _enqueue_classification_leaves[MAX_OUT: Int](
+    ctx: DeviceContext,
+    mut d_leaves: DeviceBuffer[DType.float32],
+    mut d_visit: DeviceBuffer[DType.int32],
+    mut d_nodes: DeviceBuffer[DType.uint8],
+    mut d_ranges: DeviceBuffer[DType.uint8],
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    mut dataset: DeviceDataset,
+    k_out: Int,
+    total_nodes: Int,
+) raises:
+    """Keep the established leaf kernel for <=16 classes; admit all 32.
+
+    The old fixed width silently zeroed probabilities above 16 classes,
+    even though split search admitted 32. The wider leaf kernel performs
+    the same per-class integer counts and probability normalization.
+    """
+    ctx.enqueue_function[
+        leaf_kernel[DEVICE_TPB, MAX_OUT, True, zero_fill=True]
+    ](
+        d_leaves.unsafe_ptr(),
+        d_visit.unsafe_ptr(),
+        d_nodes.unsafe_ptr().unsafe_bitcast[
+            SparseTreeNode[DType.float32]
+        ](),
+        d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
+        d_row_ids.unsafe_ptr(),
+        dataset.d_labels.unsafe_ptr(),
+        Int32(k_out),
+        Float32(1.0),  # classification: no fixed-point rescale
+        LEAF_SAB_NONE,
+        grid_dim=(total_nodes, 1, 1),
+        block_dim=(DEVICE_TPB, 1, 1),
+    )
+
+
+def _enqueue_classification_score[MAX_ACC: Int](
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    n_rows: Int32,
+    k: Int,
+    n_classes: Int32,
+    seed: UInt64,
+    params: DecisionTreeParams,
+    n_cells: Int,
+    n_blocks_dimx: Int,
+) raises:
+    """Launch the same integer scoring DAG with a class-sized private array.
+
+    Global accumulators remain packed at the runtime class count. Only the
+    unused zero tail of each thread's private arrays changes; row assignment,
+    random draws, integer reductions and score finalization are unchanged.
+    """
+    comptime TPB = DEVICE_TPB
+    ctx.enqueue_function[
+        node_feature_score_kernel[TPB, MAX_ACC, True]
+    ](
+        ws.d_nleft.unsafe_ptr(),
+        ws.d_ntotal.unsafe_ptr(),
+        ws.d_accl.unsafe_ptr(),
+        ws.d_acct.unsafe_ptr(),
+        ws.d_nblocks.unsafe_ptr(),
+        ws.d_min.unsafe_ptr(),
+        ws.d_max.unsafe_ptr(),
+        ws.d_missing.unsafe_ptr(),
+        dataset.d_data.unsafe_ptr(),
+        d_row_ids.unsafe_ptr(),
+        dataset.d_labels.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+        ws.d_colids.unsafe_ptr(),
+        ws.d_tree.unsafe_ptr(),
+        n_rows,
+        Int32(k),
+        n_classes,
+        seed,
+        Int32(0),
+        grid_dim=(n_blocks_dimx, Int(k), 1),
+        block_dim=(TPB, 1, 1),
+    )
+    ctx.enqueue_function[
+        node_feature_score_finalize_kernel[MAX_ACC, True]
+    ](
+        ws.d_status.unsafe_ptr(),
+        ws.d_thresh.unsafe_ptr(),
+        ws.d_gnum.unsafe_ptr(),
+        ws.d_gden.unsafe_ptr(),
+        ws.d_nleft.unsafe_ptr(),
+        ws.d_ntotal.unsafe_ptr(),
+        ws.d_accl.unsafe_ptr(),
+        ws.d_acct.unsafe_ptr(),
+        ws.d_min.unsafe_ptr(),
+        ws.d_max.unsafe_ptr(),
+        ws.d_missing.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        ws.d_colids.unsafe_ptr(),
+        ws.d_tree.unsafe_ptr(),
+        Int32(n_cells),
+        Int32(k),
+        n_classes,
+        seed,
+        params.min_samples_leaf,
+        Int32(0),
+        grid_dim=ceildiv(n_cells, 64),
+        block_dim=64,
+    )
+
+
 def search_batch(
     ctx: DeviceContext,
     mut ws: LevelWorkspace,
@@ -2940,7 +3047,6 @@ def search_batch(
     ranges are empty unless `range_only`.
     """
     comptime TPB = DEVICE_TPB
-    comptime MAX_ACC = DEVICE_MAX_ACC
     var n_nodes = len(work_items)
     if n_nodes == 0:
         # DEVIATION 466: a best-first cycle can have NOTHING to search --
@@ -3223,58 +3329,40 @@ def search_batch(
     # --- 4. the draw and score pass ----------------------------------
     # DEVIATION 470: the score cells and class accumulators were seeded
     # by fused half B above (the survey skips half B and never gets here).
-    ctx.enqueue_function[
-        node_feature_score_kernel[TPB, MAX_ACC, True]
-    ](
-        d_nleft.unsafe_ptr(),
-        d_ntotal.unsafe_ptr(),
-        d_accl.unsafe_ptr(),
-        d_acct.unsafe_ptr(),
-        d_nblocks.unsafe_ptr(),
-        d_min.unsafe_ptr(),
-        d_max.unsafe_ptr(),
-        d_missing.unsafe_ptr(),
-        dataset.d_data.unsafe_ptr(),
-        d_row_ids.unsafe_ptr(),
-        dataset.d_labels.unsafe_ptr(),
-        d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-        d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-        d_colids.unsafe_ptr(),
-        ws.d_tree.unsafe_ptr(),
-        n_rows,
-        Int32(k),
-        n_classes,
-        seed,
-        Int32(0),
-        grid_dim=(plan.n_blocks_dimx, Int(k), 1),
-        block_dim=(TPB, 1, 1),
+    # Keep the fixed-width measurement arms, including a 32-wide baseline.
+    # Normal fits retain all 32 supported classes through runtime dispatch.
+    comptime FIXED_ACC = (
+        is_defined["MOJOLEARN_ET_MAX_ACC_4"]()
+        or is_defined["MOJOLEARN_ET_MAX_ACC_8"]()
+        or is_defined["MOJOLEARN_ET_MAX_ACC_16"]()
+        or is_defined["MOJOLEARN_ET_MAX_ACC_32"]()
     )
-    ctx.enqueue_function[
-        node_feature_score_finalize_kernel[MAX_ACC, True]
-    ](
-        d_status.unsafe_ptr(),
-        d_thresh.unsafe_ptr(),
-        d_gnum.unsafe_ptr(),
-        d_gden.unsafe_ptr(),
-        d_nleft.unsafe_ptr(),
-        d_ntotal.unsafe_ptr(),
-        d_accl.unsafe_ptr(),
-        d_acct.unsafe_ptr(),
-        d_min.unsafe_ptr(),
-        d_max.unsafe_ptr(),
-        d_missing.unsafe_ptr(),
-        d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-        d_colids.unsafe_ptr(),
-        ws.d_tree.unsafe_ptr(),
-        Int32(n_cells),
-        Int32(k),
-        n_classes,
-        seed,
-        params.min_samples_leaf,
-        Int32(0),
-        grid_dim=ceildiv(n_cells, 64),
-        block_dim=64,
-    )
+    comptime if FIXED_ACC:
+        _enqueue_classification_score[DEVICE_MAX_ACC](
+            ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
+            params, n_cells, plan.n_blocks_dimx,
+        )
+    else:
+        if n_classes <= 4:
+            _enqueue_classification_score[4](
+                ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
+                params, n_cells, plan.n_blocks_dimx,
+            )
+        elif n_classes <= 8:
+            _enqueue_classification_score[8](
+                ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
+                params, n_cells, plan.n_blocks_dimx,
+            )
+        elif n_classes <= 16:
+            _enqueue_classification_score[16](
+                ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
+                params, n_cells, plan.n_blocks_dimx,
+            )
+        else:
+            _enqueue_classification_score[32](
+                ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
+                params, n_cells, plan.n_blocks_dimx,
+            )
 
     # --- 5. scored cells into candidates (DEVIATION 182) -------------
     clock.tick(ctx, PHASE_SCORE)
@@ -4145,23 +4233,16 @@ def train_forest_classification_device_timed(
         # before the IsLeaf early return, and the grid is one block per
         # node over the whole concatenated buffer, so block-exclusive slot
         # ownership covers exactly what the two memsets covered.
-        ctx.enqueue_function[
-            leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, True, zero_fill=True]
-        ](
-            d_leaves.unsafe_ptr(),
-            d_visit.unsafe_ptr(),
-            d_nodes.unsafe_ptr().unsafe_bitcast[
-                SparseTreeNode[DType.float32]
-            ](),
-            d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
-            d_row_ids.unsafe_ptr(),
-            dataset.d_labels.unsafe_ptr(),
-            Int32(k_out),
-            Float32(1.0),  # classification: no fixed-point rescale
-            LEAF_SAB_NONE,
-            grid_dim=(total_nodes, 1, 1),
-            block_dim=(TPB, 1, 1),
-        )
+        if k_out <= LEAF_MAX_OUT_DEFAULT:
+            _enqueue_classification_leaves[LEAF_MAX_OUT_DEFAULT](
+                ctx, d_leaves, d_visit, d_nodes, d_ranges, d_row_ids,
+                dataset, k_out, total_nodes,
+            )
+        else:
+            _enqueue_classification_leaves[32](
+                ctx, d_leaves, d_visit, d_nodes, d_ranges, d_row_ids,
+                dataset, k_out, total_nodes,
+            )
         ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
         ctx.synchronize()
         for s in range(g):

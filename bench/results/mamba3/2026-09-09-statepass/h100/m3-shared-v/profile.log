@@ -1,0 +1,270 @@
+FSPEED-HEADER family=seq lane=mamba3 arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+FSPEED-NOTE lane=mamba3 arm=ours entry=mojolearn.mamba.Mamba3Block(weights).forward(x) -> mamba/ via _mojolearn_mamba; our arm through the public Python API (DEVIATION 2100); cli_lane=mamba3 rows=all
+7163 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x121580000000, nodemask=1)
+FSPEED-WEIGHTS lane=mamba3 shape=lane.b2_l4_d32 tensor=block_norm.weight n=32 hash=b75a50bba7865004
+FSPEED-INPUT-SHA256 lane=mamba3 shape=lane.b2_l4_d32 tensor=block_norm.weight bytes=128 sha256=5b046b680d0e816a91fae72ccf613516319571ef11ffa9bc66d58a87fe690ae6
+FSPEED-WEIGHTS lane=mamba3 shape=lane.b2_l4_d32 tensor=in_proj.weight n=13408 hash=f27be8a2af1371c8
+FSPEED-INPUT-SHA256 lane=mamba3 shape=lane.b2_l4_d32 tensor=in_proj.weight bytes=53632 sha256=6241a988d65d57fceba64e953fced75d70b1cf3fd2e0f1843f8789c96cbba4cf
+FSPEED-WEIGHTS lane=mamba3 shape=lane.b2_l4_d32 tensor=dt_bias n=1 hash=36ed4c2dc2cf9734
+FSPEED-INPUT-SHA256 lane=mamba3 shape=lane.b2_l4_d32 tensor=dt_bias bytes=4 sha256=a0aea22888eb8a03b2b2c183c961d8a44b8b49bd3ad0b411eb12c42154f9e257
+FSPEED-WEIGHTS lane=mamba3 shape=lane.b2_l4_d32 tensor=B_norm.weight n=128 hash=3ec83c1cc24c4a39
+FSPEED-INPUT-SHA256 lane=mamba3 shape=lane.b2_l4_d32 tensor=B_norm.weight bytes=512 sha256=c8f113b8224dca2a8f025c8247fd87457ffa83e50354aa11730d2abac0e1230f
+FSPEED-WEIGHTS lane=mamba3 shape=lane.b2_l4_d32 tensor=C_norm.weight n=128 hash=5d821adffaee8cfa
+FSPEED-INPUT-SHA256 lane=mamba3 shape=lane.b2_l4_d32 tensor=C_norm.weight bytes=512 sha256=5488b944deb0d60245aa795d64acd223dad9910fe65296d5364d162674b8d70f
+FSPEED-WEIGHTS lane=mamba3 shape=lane.b2_l4_d32 tensor=B_bias n=128 hash=0db75a25457f36e4
+FSPEED-INPUT-SHA256 lane=mamba3 shape=lane.b2_l4_d32 tensor=B_bias bytes=512 sha256=db0761d169fee66bd89849c88e0a59f447daf7b7531a44923eea1906ab46e0c1
+FSPEED-WEIGHTS lane=mamba3 shape=lane.b2_l4_d32 tensor=C_bias n=128 hash=8a8b27d3040fdc11
+FSPEED-INPUT-SHA256 lane=mamba3 shape=lane.b2_l4_d32 tensor=C_bias bytes=512 sha256=d93005673e63f24a52e97c61697566f735d090e8977e8315ba4521bd1bd300a2
+FSPEED-WEIGHTS lane=mamba3 shape=lane.b2_l4_d32 tensor=D n=1 hash=f0a319c562fbab28
+FSPEED-INPUT-SHA256 lane=mamba3 shape=lane.b2_l4_d32 tensor=D bytes=4 sha256=09acd232416e7e19e65327c0b9d7479a54cfe3b3a325b99ebc5709803ec1a498
+FSPEED-WEIGHTS lane=mamba3 shape=lane.b2_l4_d32 tensor=out_proj.weight n=2048 hash=dcf8f4019ab70f19
+FSPEED-INPUT-SHA256 lane=mamba3 shape=lane.b2_l4_d32 tensor=out_proj.weight bytes=8192 sha256=df541853a466297c8fdf73633149cb86f89ffa112a38d2d3c05df799474302d7
+FSPEED-WEIGHTS lane=mamba3 shape=lane.b2_l4_d32 tensor=x n=256 hash=3a2c9cef1d2b3726
+FSPEED-INPUT-SHA256 lane=mamba3 shape=lane.b2_l4_d32 tensor=x bytes=1024 sha256=9cb359a2db29ebf4ae23d0ad006d5eacbc076a95894935a601bfaa74a6f4bc67
+FSPEED-NOTE lane=mamba3 arm=ours binary read-back shape=lane.b2_l4_d32 numeric_mode_used=identical vendor_used=cuda entry=mojolearn.mamba.Mamba3Block(weights).forward(x) -> mamba/ via _mojolearn_mamba
+FSPEED-NOTE lane=mamba3 arm=ours one round at shape lane.b2_l4_d32 = one public forward() including the weight host-list copy + upload, the non-finite refusal scan and the output download; the return is the synchronization (DEVIATION 2111)
+M3_PHASE surface.weight_lists_and_context 490.054035
+M3_PHASE surface.weight_upload 423.435301
+M3_PHASE surface.state_upload 0.350597
+M3_PHASE surface.stage_allocations 0.238727
+M3_PHASE surface.x_upload 0.014345
+M3_PHASE block.refusal 0.594008
+M3_PHASE block.norm 0.077278
+M3_PHASE block.in_proj 0.080169
+M3_PHASE block.assembly 0.148102
+M3_PHASE m3_pre_kernel 0.047757
+M3_PHASE m3_scale_kernel 0.043617
+M3_PHASE m3_angle_increment_kernel 0.049186
+M3_PHASE m3_angle_kernel 0.048274
+M3_PHASE m3_rot_kernel 0.048743
+M3_PHASE m3_qkdot_kernel 0.062289
+M3_PHASE m3_kscale_kernel 0.04296
+M3_PHASE m3_dacs_kernel 0.050389
+M3_PHASE m3_seg_l_kernel 0.057773
+M3_PHASE m3_state_decay_kernel 0.049633
+M3_PHASE m3_state_increment_kernel 0.055849
+M3_PHASE m3_state_scan_kernel 0.047679
+M3_PHASE m3_qk_s_kernel 0.068537
+M3_PHASE m3_yintra_kernel 0.052269
+M3_PHASE m3_ystate_kernel 0.055414
+M3_PHASE m3_skip_gate_kernel 0.051334
+M3_PHASE m3_reports_kernel 0.056156
+M3_PHASE block.core_and_buffer 0.942953
+M3_PHASE block.out_proj 0.022478
+M3_PHASE surface.block 1.951512
+M3_PHASE surface.downloads 0.290983
+M3_PHASE surface.buffer_destruction 0.10275
+M3_PHASE surface.context_destruction 0.027517
+FSPEED-WARMUP lane=mamba3 arm=ours shape=lane.b2_l4_d32 ms=916.815720
+M3_PHASE surface.weight_lists_and_context 0.039968
+M3_PHASE surface.weight_upload 0.137434
+M3_PHASE surface.state_upload 0.251197
+M3_PHASE surface.stage_allocations 0.232343
+M3_PHASE surface.x_upload 0.014568
+M3_PHASE block.refusal 0.405912
+M3_PHASE block.norm 0.017025
+M3_PHASE block.in_proj 0.018928
+M3_PHASE block.assembly 0.045105
+M3_PHASE m3_pre_kernel 0.010444
+M3_PHASE m3_scale_kernel 0.00999
+M3_PHASE m3_angle_increment_kernel 0.01087
+M3_PHASE m3_angle_kernel 0.011698
+M3_PHASE m3_rot_kernel 0.010358
+M3_PHASE m3_qkdot_kernel 0.025921
+M3_PHASE m3_kscale_kernel 0.01017
+M3_PHASE m3_dacs_kernel 0.015863
+M3_PHASE m3_seg_l_kernel 0.020677
+M3_PHASE m3_state_decay_kernel 0.010224
+M3_PHASE m3_state_increment_kernel 0.017375
+M3_PHASE m3_state_scan_kernel 0.01128
+M3_PHASE m3_qk_s_kernel 0.014939
+M3_PHASE m3_yintra_kernel 0.016687
+M3_PHASE m3_ystate_kernel 0.013373
+M3_PHASE m3_skip_gate_kernel 0.010597
+M3_PHASE m3_reports_kernel 0.010356
+M3_PHASE block.core_and_buffer 0.245946
+M3_PHASE block.out_proj 0.020371
+M3_PHASE surface.block 0.76744
+M3_PHASE surface.downloads 0.251793
+M3_PHASE surface.buffer_destruction 0.092903
+M3_PHASE surface.context_destruction 0.01377
+FSPEED lane=mamba3 arm=ours shape=lane.b2_l4_d32 round=1 ms=2.161045 hash=706547260126798c
+FSPEED-NOTE lane=mamba3 arm=ours output witness shape=lane.b2_l4_d32 n=256 hash=ac0da105f4c25606
+FSPEED-REFUSED lane=mamba3 arm=agree reason=MOJOLEARN_SPEED_DUMP_DIR unset, so no output was dumped and no FSPEED-AGREE can be computed for shape lane.b2_l4_d32
+FSPEED-WEIGHTS lane=mamba3 shape=narrow.b8_l4096_d512 tensor=block_norm.weight n=512 hash=ae3c64b9e9f1a8fc
+FSPEED-INPUT-SHA256 lane=mamba3 shape=narrow.b8_l4096_d512 tensor=block_norm.weight bytes=2048 sha256=8b7b7181ce01acfb219d234b78563a7a9d278bcc864d2b093d0aa04d315ef370
+FSPEED-WEIGHTS lane=mamba3 shape=narrow.b8_l4096_d512 tensor=in_proj.weight n=1220608 hash=1bfbff7cf495a05a
+FSPEED-INPUT-SHA256 lane=mamba3 shape=narrow.b8_l4096_d512 tensor=in_proj.weight bytes=4882432 sha256=ea36765c7d1a717f3f66c5dd730cee212d5ff71035f3a4789ec9d38e18abdf8e
+FSPEED-WEIGHTS lane=mamba3 shape=narrow.b8_l4096_d512 tensor=dt_bias n=16 hash=827084605578ff8f
+FSPEED-INPUT-SHA256 lane=mamba3 shape=narrow.b8_l4096_d512 tensor=dt_bias bytes=64 sha256=7d493227cf206f5fdb00272421a5b573d5509a09c0af1dc236bf3ce6a4f5b7d1
+FSPEED-WEIGHTS lane=mamba3 shape=narrow.b8_l4096_d512 tensor=B_norm.weight n=128 hash=3ec83c1cc24c4a39
+FSPEED-INPUT-SHA256 lane=mamba3 shape=narrow.b8_l4096_d512 tensor=B_norm.weight bytes=512 sha256=c8f113b8224dca2a8f025c8247fd87457ffa83e50354aa11730d2abac0e1230f
+FSPEED-WEIGHTS lane=mamba3 shape=narrow.b8_l4096_d512 tensor=C_norm.weight n=128 hash=5d821adffaee8cfa
+FSPEED-INPUT-SHA256 lane=mamba3 shape=narrow.b8_l4096_d512 tensor=C_norm.weight bytes=512 sha256=5488b944deb0d60245aa795d64acd223dad9910fe65296d5364d162674b8d70f
+FSPEED-WEIGHTS lane=mamba3 shape=narrow.b8_l4096_d512 tensor=B_bias n=2048 hash=1fbcfe71f83b676b
+FSPEED-INPUT-SHA256 lane=mamba3 shape=narrow.b8_l4096_d512 tensor=B_bias bytes=8192 sha256=eb19ff848a56164691b3cc0773a1b12b45f3329df17b402aa250578bdc0272b9
+FSPEED-WEIGHTS lane=mamba3 shape=narrow.b8_l4096_d512 tensor=C_bias n=2048 hash=492b8acd3dd5522a
+FSPEED-INPUT-SHA256 lane=mamba3 shape=narrow.b8_l4096_d512 tensor=C_bias bytes=8192 sha256=114ab7abf011c96f194d8b179f73bc9f57005736dccfb47f791743f0a8fc1160
+FSPEED-WEIGHTS lane=mamba3 shape=narrow.b8_l4096_d512 tensor=D n=16 hash=016b763871469a7e
+FSPEED-INPUT-SHA256 lane=mamba3 shape=narrow.b8_l4096_d512 tensor=D bytes=64 sha256=311acfdf84f1fda4ad2fc689a524d1254340f0f90c591854e99184d8d281baa6
+FSPEED-WEIGHTS lane=mamba3 shape=narrow.b8_l4096_d512 tensor=out_proj.weight n=524288 hash=a8ea283baa5bb6ab
+FSPEED-INPUT-SHA256 lane=mamba3 shape=narrow.b8_l4096_d512 tensor=out_proj.weight bytes=2097152 sha256=599dbf657aee55fa8dafd3f37ba184685496106537cc98baba91a3d36db8d394
+FSPEED-WEIGHTS lane=mamba3 shape=narrow.b8_l4096_d512 tensor=x n=16777216 hash=ae6a6f54211a9d5e
+FSPEED-NOTE lane=mamba3 arm=ours binary read-back shape=narrow.b8_l4096_d512 numeric_mode_used=identical vendor_used=cuda entry=mojolearn.mamba.Mamba3Block(weights).forward(x) -> mamba/ via _mojolearn_mamba
+FSPEED-NOTE lane=mamba3 arm=ours one round at shape narrow.b8_l4096_d512 = one public forward() including the weight host-list copy + upload, the non-finite refusal scan and the output download; the return is the synchronization (DEVIATION 2111)
+M3_PHASE surface.weight_lists_and_context 0.065008
+M3_PHASE surface.weight_upload 1.494919
+M3_PHASE surface.state_upload 1.844039
+M3_PHASE surface.stage_allocations 2.200303
+M3_PHASE surface.x_upload 13.032554
+M3_PHASE block.refusal 0.699493
+M3_PHASE block.norm 0.438577
+M3_PHASE block.in_proj 8.801996
+M3_PHASE block.assembly 0.454756
+M3_PHASE m3_pre_kernel 0.018334
+M3_PHASE m3_scale_kernel 0.016187
+M3_PHASE m3_angle_increment_kernel 0.17081
+M3_PHASE m3_angle_kernel 1.860816
+M3_PHASE m3_rot_kernel 0.475471
+M3_PHASE m3_qkdot_kernel 0.311128
+M3_PHASE m3_kscale_kernel 0.3293
+M3_PHASE m3_dacs_kernel 0.055343
+M3_PHASE m3_seg_l_kernel 0.470743
+M3_PHASE m3_state_decay_kernel 0.01567
+M3_PHASE m3_state_increment_kernel 8.150728
+M3_PHASE m3_state_scan_kernel 3.0862
+M3_PHASE m3_qk_s_kernel 1.604599
+M3_PHASE m3_yintra_kernel 4.846133
+M3_PHASE m3_ystate_kernel 1.667017
+M3_PHASE m3_skip_gate_kernel 0.428584
+M3_PHASE m3_reports_kernel 0.01184
+M3_PHASE block.core_and_buffer 23.559577
+M3_PHASE block.out_proj 3.163359
+M3_PHASE surface.block 37.224694
+M3_PHASE surface.downloads 22.759758
+M3_PHASE surface.buffer_destruction 0.113976
+M3_PHASE surface.context_destruction 0.022774
+FSPEED-WARMUP lane=mamba3 arm=ours shape=narrow.b8_l4096_d512 ms=79.646967
+M3_PHASE surface.weight_lists_and_context 0.035264
+M3_PHASE surface.weight_upload 1.100997
+M3_PHASE surface.state_upload 1.617561
+M3_PHASE surface.stage_allocations 1.115473
+M3_PHASE surface.x_upload 12.55974
+M3_PHASE block.refusal 0.716239
+M3_PHASE block.norm 0.418201
+M3_PHASE block.in_proj 7.122394
+M3_PHASE block.assembly 0.44056
+M3_PHASE m3_pre_kernel 0.018858
+M3_PHASE m3_scale_kernel 0.015499
+M3_PHASE m3_angle_increment_kernel 0.171331
+M3_PHASE m3_angle_kernel 1.848845
+M3_PHASE m3_rot_kernel 0.475546
+M3_PHASE m3_qkdot_kernel 0.311022
+M3_PHASE m3_kscale_kernel 0.327837
+M3_PHASE m3_dacs_kernel 0.055314
+M3_PHASE m3_seg_l_kernel 0.471542
+M3_PHASE m3_state_decay_kernel 0.015702
+M3_PHASE m3_state_increment_kernel 8.148069
+M3_PHASE m3_state_scan_kernel 3.084159
+M3_PHASE m3_qk_s_kernel 1.604644
+M3_PHASE m3_yintra_kernel 4.847218
+M3_PHASE m3_ystate_kernel 1.665909
+M3_PHASE m3_skip_gate_kernel 0.428467
+M3_PHASE m3_reports_kernel 0.012026
+M3_PHASE block.core_and_buffer 23.543077
+M3_PHASE block.out_proj 3.160436
+M3_PHASE surface.block 35.50624
+M3_PHASE surface.downloads 23.531916
+M3_PHASE surface.buffer_destruction 0.116881
+M3_PHASE surface.context_destruction 0.023708
+FSPEED lane=mamba3 arm=ours shape=narrow.b8_l4096_d512 round=1 ms=77.193681 hash=dc61ff3fdb99606d
+FSPEED-NOTE lane=mamba3 arm=ours output witness shape=narrow.b8_l4096_d512 n=16777216 hash=abe1cc610dfe1926
+FSPEED-REFUSED lane=mamba3 arm=agree reason=MOJOLEARN_SPEED_DUMP_DIR unset, so no output was dumped and no FSPEED-AGREE can be computed for shape narrow.b8_l4096_d512
+FSPEED-WEIGHTS lane=mamba3 shape=wide.b8_l1024_d2048 tensor=block_norm.weight n=2048 hash=e19341884bae7431
+FSPEED-INPUT-SHA256 lane=mamba3 shape=wide.b8_l1024_d2048 tensor=block_norm.weight bytes=8192 sha256=5f38f5a8be4d7230b9e63ff906c0ee90822fc671096bedca361017aea590a5ca
+FSPEED-WEIGHTS lane=mamba3 shape=wide.b8_l1024_d2048 tensor=in_proj.weight n=17760256 hash=349bdde10f512309
+FSPEED-WEIGHTS lane=mamba3 shape=wide.b8_l1024_d2048 tensor=dt_bias n=64 hash=fd339e4774d174c3
+FSPEED-INPUT-SHA256 lane=mamba3 shape=wide.b8_l1024_d2048 tensor=dt_bias bytes=256 sha256=ad923d44347c03ae04ffc546ac44b5e2a3a3892846876928031420017a4dc05a
+FSPEED-WEIGHTS lane=mamba3 shape=wide.b8_l1024_d2048 tensor=B_norm.weight n=128 hash=3ec83c1cc24c4a39
+FSPEED-INPUT-SHA256 lane=mamba3 shape=wide.b8_l1024_d2048 tensor=B_norm.weight bytes=512 sha256=c8f113b8224dca2a8f025c8247fd87457ffa83e50354aa11730d2abac0e1230f
+FSPEED-WEIGHTS lane=mamba3 shape=wide.b8_l1024_d2048 tensor=C_norm.weight n=128 hash=5d821adffaee8cfa
+FSPEED-INPUT-SHA256 lane=mamba3 shape=wide.b8_l1024_d2048 tensor=C_norm.weight bytes=512 sha256=5488b944deb0d60245aa795d64acd223dad9910fe65296d5364d162674b8d70f
+FSPEED-WEIGHTS lane=mamba3 shape=wide.b8_l1024_d2048 tensor=B_bias n=8192 hash=5e7f6fc0aca134c3
+FSPEED-INPUT-SHA256 lane=mamba3 shape=wide.b8_l1024_d2048 tensor=B_bias bytes=32768 sha256=2b0c0a2d10cbcef09d634b3fdb80b26ed1fee9bf3fc1d5226d79b603f65620bd
+FSPEED-WEIGHTS lane=mamba3 shape=wide.b8_l1024_d2048 tensor=C_bias n=8192 hash=e09a0edb8afaa651
+FSPEED-INPUT-SHA256 lane=mamba3 shape=wide.b8_l1024_d2048 tensor=C_bias bytes=32768 sha256=e0c3e0cb093cafd303336ecdc69d3a8d3f5ec5376d34755fb3f6f487b80bbb8b
+FSPEED-WEIGHTS lane=mamba3 shape=wide.b8_l1024_d2048 tensor=D n=64 hash=ee1411114721184d
+FSPEED-INPUT-SHA256 lane=mamba3 shape=wide.b8_l1024_d2048 tensor=D bytes=256 sha256=e86f15414a34b641a230701f64a12835515a8d21bb3bae159b28b540658af618
+FSPEED-WEIGHTS lane=mamba3 shape=wide.b8_l1024_d2048 tensor=out_proj.weight n=8388608 hash=0caed7b3417405c0
+FSPEED-WEIGHTS lane=mamba3 shape=wide.b8_l1024_d2048 tensor=x n=16777216 hash=ae6a6f54211a9d5e
+FSPEED-NOTE lane=mamba3 arm=ours binary read-back shape=wide.b8_l1024_d2048 numeric_mode_used=identical vendor_used=cuda entry=mojolearn.mamba.Mamba3Block(weights).forward(x) -> mamba/ via _mojolearn_mamba
+FSPEED-NOTE lane=mamba3 arm=ours one round at shape wide.b8_l1024_d2048 = one public forward() including the weight host-list copy + upload, the non-finite refusal scan and the output download; the return is the synchronization (DEVIATION 2111)
+M3_PHASE surface.weight_lists_and_context 0.074617
+M3_PHASE surface.weight_upload 20.684703
+M3_PHASE surface.state_upload 9.830667
+M3_PHASE surface.stage_allocations 1.123157
+M3_PHASE surface.x_upload 11.821453
+M3_PHASE block.refusal 1.156476
+M3_PHASE block.norm 0.640813
+M3_PHASE block.in_proj 27.322872
+M3_PHASE block.assembly 0.311194
+M3_PHASE m3_pre_kernel 0.022807
+M3_PHASE m3_scale_kernel 0.014885
+M3_PHASE m3_angle_increment_kernel 0.171043
+M3_PHASE m3_angle_kernel 0.484513
+M3_PHASE m3_rot_kernel 0.474171
+M3_PHASE m3_qkdot_kernel 0.564782
+M3_PHASE m3_kscale_kernel 0.333326
+M3_PHASE m3_dacs_kernel 0.05906
+M3_PHASE m3_seg_l_kernel 0.47522
+M3_PHASE m3_state_decay_kernel 0.014911
+M3_PHASE m3_state_increment_kernel 8.009767
+M3_PHASE m3_state_scan_kernel 2.941946
+M3_PHASE m3_qk_s_kernel 1.602618
+M3_PHASE m3_yintra_kernel 4.846413
+M3_PHASE m3_ystate_kernel 1.668549
+M3_PHASE m3_skip_gate_kernel 0.429189
+M3_PHASE m3_reports_kernel 0.013274
+M3_PHASE block.core_and_buffer 22.234506
+M3_PHASE block.out_proj 12.888182
+M3_PHASE surface.block 64.661755
+M3_PHASE surface.downloads 44.69253
+M3_PHASE surface.buffer_destruction 0.148072
+M3_PHASE surface.context_destruction 0.029889
+FSPEED-WARMUP lane=mamba3 arm=ours shape=wide.b8_l1024_d2048 ms=156.124085
+M3_PHASE surface.weight_lists_and_context 0.038826
+M3_PHASE surface.weight_upload 18.39964
+M3_PHASE surface.state_upload 8.88284
+M3_PHASE surface.stage_allocations 1.114478
+M3_PHASE surface.x_upload 11.433864
+M3_PHASE block.refusal 1.129905
+M3_PHASE block.norm 0.635871
+M3_PHASE block.in_proj 27.315325
+M3_PHASE block.assembly 0.312757
+M3_PHASE m3_pre_kernel 0.01802
+M3_PHASE m3_scale_kernel 0.015381
+M3_PHASE m3_angle_increment_kernel 0.171724
+M3_PHASE m3_angle_kernel 0.484896
+M3_PHASE m3_rot_kernel 0.474699
+M3_PHASE m3_qkdot_kernel 0.564271
+M3_PHASE m3_kscale_kernel 0.32967
+M3_PHASE m3_dacs_kernel 0.057923
+M3_PHASE m3_seg_l_kernel 0.477575
+M3_PHASE m3_state_decay_kernel 0.016488
+M3_PHASE m3_state_increment_kernel 8.01465
+M3_PHASE m3_state_scan_kernel 2.946399
+M3_PHASE m3_qk_s_kernel 1.612964
+M3_PHASE m3_yintra_kernel 4.843598
+M3_PHASE m3_ystate_kernel 1.668053
+M3_PHASE m3_skip_gate_kernel 0.432031
+M3_PHASE m3_reports_kernel 0.012579
+M3_PHASE block.core_and_buffer 22.249212
+M3_PHASE block.out_proj 12.883678
+M3_PHASE surface.block 64.632742
+M3_PHASE surface.downloads 42.233799
+M3_PHASE surface.buffer_destruction 0.121183
+M3_PHASE surface.context_destruction 0.026404
+FSPEED lane=mamba3 arm=ours shape=wide.b8_l1024_d2048 round=1 ms=150.178630 hash=32db3f9f7fc62b71
+FSPEED-NOTE lane=mamba3 arm=ours output witness shape=wide.b8_l1024_d2048 n=16777216 hash=ad789d335594e3d0
+FSPEED-REFUSED lane=mamba3 arm=agree reason=MOJOLEARN_SPEED_DUMP_DIR unset, so no output was dumped and no FSPEED-AGREE can be computed for shape wide.b8_l1024_d2048
+FSPEED-DONE lane=mamba3 arm=ours mode=IDENTICAL

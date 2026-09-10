@@ -1,0 +1,25 @@
+{
+ "environment": {
+  "gpu": "NVIDIA L40S",
+  "driver": "580.126.09",
+  "cuml": "26.08.00",
+  "cupy": "14.2.0",
+  "numpy": "2.4.6"
+ },
+ "rows": 5000,
+ "features": 32,
+ "neighbors": 15,
+ "epochs": 200,
+ "k": 10,
+ "ours_identical": {
+  "trustworthiness": 0.5914237255492025,
+  "neighbor_retention": 0.03614,
+  "k": 10
+ },
+ "cuml_fast": {
+  "trustworthiness": 0.5997665202126592,
+  "neighbor_retention": 0.04282,
+  "k": 10
+ },
+ "cuml_fit_ms_one_round": 2698.859078809619
+}

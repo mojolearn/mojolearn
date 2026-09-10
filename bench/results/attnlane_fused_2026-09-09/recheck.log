@@ -1,0 +1,87 @@
+== build fused check 18:07:30
+fused_check_rc=0
+0
+== build check-transformer 18:07:49
+tcheck_rc=0
+== build check-transformer-backward 18:08:09
+tbcheck_rc=0
+== build identical binding 18:08:35
+binding_rc=0
+== done 18:09:06
+== fused check 18:09:06
+fused_check_rc=0
+  case base_hd64_l300  B=2 L=300 S=300 key_lo=0 win=0 pos0=0 nh=4 nkv=2 hd=64
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: RAN
+  case win96_hd64_l300  B=2 L=300 S=300 key_lo=0 win=96 pos0=0 nh=4 nkv=2 hd=64
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: RAN
+  case win2048_hd64_l700_nrep4  B=1 L=700 S=700 key_lo=0 win=2048 pos0=0 nh=4 nkv=1 hd=64
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: RAN
+  case decode_hd64_pos200  B=2 L=1 S=201 key_lo=0 win=0 pos0=200 nh=4 nkv=2 hd=64
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: RAN
+  case decode_win64_pos200  B=2 L=1 S=64 key_lo=137 win=64 pos0=200 nh=4 nkv=2 hd=64
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: RAN
+  case split_win50_pos100_l37  B=1 L=37 S=86 key_lo=51 win=50 pos0=100 nh=2 nkv=1 hd=64
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: RAN
+  case hd16_win7_l40  B=2 L=40 S=40 key_lo=0 win=7 pos0=0 nh=2 nkv=1 hd=16
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: RAN
+  case hd24_l33  B=1 L=33 S=33 key_lo=0 win=0 pos0=0 nh=2 nkv=1 hd=24
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: RAN
+  case hd128_win20_l70  B=1 L=70 S=70 key_lo=0 win=20 pos0=0 nh=2 nkv=2 hd=128
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: RAN
+  case underflow_hd64_l48  B=1 L=48 S=48 key_lo=0 win=0 pos0=0 nh=2 nkv=1 hd=64
+    fused forward status: CORNER
+    wrapper status: CORNER
+    fused backward status: CORNER
+  case regime_q1e30  B=1 L=32 S=32 key_lo=0 win=0 pos0=0 nh=2 nkv=1 hd=64
+    fused forward status: REFUSED_REGIME
+    wrapper status: REFUSED_REGIME
+    fused backward status: REFUSED_REGIME
+  case regime_dctx1e30  B=1 L=32 S=32 key_lo=0 win=0 pos0=0 nh=2 nkv=1 hd=64
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: REFUSED_REGIME
+transformer_fused_check: PASS, 12 cases, every compared buffer bit-identical, every status as expected
+== check-transformer clause a+d, card 18:09:07
+tcheck_rc=0
+clause (d) split: whole prefill vs 5 + 11 with the cache carried, win4_b1_l16_nrep2, window 4
+clause (d) split: PASS, 11 tail tokens bit-identical to the whole prefill on all 16890 compared cells
+clause (d): decode == prefill at the block, win5_b1_l12_hd24, 12 tokens, window 5, per token, per stage
+clause (d) control: decode step t vs prefill token t+1 differs on 209 misaligned stage comparisons, so the comparison distinguishes tokens
+clause (d): PASS, 12 decode steps bit-identical to the prefill on all 24868 compared cells
+clause (d) split: whole prefill vs 7 + 5 with the cache carried, win5_b1_l12_hd24, window 5
+clause (d) split: PASS, 5 tail tokens bit-identical to the whole prefill on all 17770 compared cells
+clause (d): decode == prefill at the block, win20_b1_l16_nrep2, 16 tokens, window 20, per token, per stage
+clause (d) control: decode step t vs prefill token t+1 differs on 285 misaligned stage comparisons, so the comparison distinguishes tokens
+clause (d): PASS, 16 decode steps bit-identical to the prefill on all 23720 compared cells
+clause (d) split: whole prefill vs 6 + 10 with the cache carried, win20_b1_l16_nrep2, window 20
+clause (d) split: PASS, 10 tail tokens bit-identical to the whole prefill on all 19100 compared cells
+FWD_CARD_BYTE_EQUAL
+8ce661b469681b18fb5cf4d566ad78ff  /root/jobs/transformer.identical.card
+== check-transformer-backward, card 18:09:09
+tbcheck_rc=0
+clause (a): PASS, 17 cases, 37/37 stages bit-identical to the oracle on all 412172 cells, 37/37 card tags
+BWD_CARD_BYTE_EQUAL
+7eee8da90ecb4dba1d154991e2e67e30  /root/jobs/transformer-backward.identical.card
+== surface test identical 18:09:11
+surface_rc=0
+    pass [OWED, recorded debt -- no comparison ran] corpus tolerance arm: transformer/corpus holds a generator and no case data (the lane's phase 7 row: gen_corpus.py has never been executed). The float64 reference above is this file's own transcription, not an independent artifact. This row FAILS once case data appears, until the ref64 arm is wired
+  116 checks, 0 failed
+== done 18:09:12

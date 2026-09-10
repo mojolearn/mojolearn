@@ -1,0 +1,10 @@
+3212 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1133c0000000, nodemask=1)
+/root/final-continuation/checks/portable_pow64_check.mojo:70:19: warning: assignment to 'bad' was never used; assign to '_' instead?
+        var bad = False
+                  ^
+3212 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38d3c0000000, nodemask=2)
+pow64 declared special-policy difference x_bits= 9218868437227405313 p_bits= 0 portable_bits= 4607182418800017408 libm_bits= 9221120237041090561
+portable_pow64 samples= 262378 worst_ulp= 1037 worst_normal_relative= 1.2169443322931572e-13 failed= 0
+portable_pow64 declared special-policy/libm differences= 1
+portable_pow64 input_hash= 11634649235927139599 output_hash= 13353115118729037508
+portable_pow64 special cases and approximation admission PASS

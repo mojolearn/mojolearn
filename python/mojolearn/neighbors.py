@@ -18,7 +18,7 @@ from ._labels import sorted_classes
 from ._mode import NumericModeMixin
 from .linear_model import _dtype_name, _is_integer_labels, _shape_of
 
-_DEFAULT_QUERY_TILE = 256
+_DEFAULT_QUERY_TILE = 0  # Ask the compiled planner for its measured default.
 
 #: cuVS `DistanceType` values (`cuvs/distance/distance.h:22-69`), mirrored
 #: from `neighbors/impl/distance/detail/distance_ops.mojo`. The value gaps
@@ -356,18 +356,18 @@ class NearestNeighbors(NumericModeMixin):
     ----------
     n_neighbors : int, default 5
         scikit-learn's default.
-    query_tile : int, default 256
-        Queries processed per pass. **This is the value every published
-        mojolearn k-NN number was measured at.** It may be lowered
-        automatically when the workspace it implies would be too large; after
-        `kneighbors` runs, `used_query_tile_` reports what actually ran, so a
-        benchmark can record the configuration instead of assuming it.
+    query_tile : int, default 0 (automatic)
+        Queries processed per pass. Zero uses the compiled planner: NVIDIA
+        IDENTICAL starts at 512, while other modes and columns start at 256.
+        The planner applies its workspace limit and clamps to the query count.
+        Set an explicit positive tile to request a fixed starting size.
+        ``used_query_tile_`` reports the batch size that actually ran.
 
     Attributes
     ----------
     used_query_tile_ : int
-        Set by `kneighbors`. Differs from `query_tile` when the workspace cap
-        fired, which means the run was not the measured configuration.
+        Set by `kneighbors` after automatic planning, the workspace cap and
+        the query-count clamp.
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.

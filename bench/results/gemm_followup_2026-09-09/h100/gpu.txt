@@ -1,0 +1,2 @@
+name, driver_version
+NVIDIA H100 80GB HBM3, 580.126.09

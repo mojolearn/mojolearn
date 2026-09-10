@@ -2,7 +2,38 @@
 
 # PROFILE `mojolearn.identical.embedding.fp32.v1`
 
-## STATUS
+## PLAN_SORT implementation update (2026-09-10)
+
+`embedding/checks/embedding_sort.mojo` implements the section 6.2 total-key
+plan with device bitonic compare/exchange passes. Each pass owns disjoint
+pairs; stream launch ordering provides global barriers. Padding positions and
+power-of-two slack use the maximum UInt64 sentinel. Integer binary searches
+produce counts and run boundaries, and the low key halves produce ascending
+positions. The existing FP32 fold is shared unchanged between both plans.
+
+The production backward entry accepts `plan=PLAN_SCAN` (the unchanged default)
+and `block_threads=EMB_TPB`. PLAN_SORT uses O(next_power_of_two(T)) UInt64
+scratch and synchronizes before releasing that local allocation; caller output
+owners must still survive the caller's final synchronization. Launch overrides
+are validated against the portable identity floor and target column maximum.
+No dispatch threshold or performance claim is established by this change.
+
+Clause 11(d), enabled with `MOJOLEARN_EMB_CHECK_CLAUSE_D=1`, now runs both
+production plans at 32, 96 and 160 threads for every accepted fixture and
+compares counts, run_begin, used perm and dW bitwise. The independent host key
+check and negative control remain. Device evidence is recorded separately;
+implementation availability is not a claim that all vendors have run the gate.
+
+**Validation:** Apple and NVIDIA H100 pass the real 17-fixture, 102-comparison
+clause (d), the 56 edge combinations, and the registered device-sort negative
+control. H100 additionally passes the mandatory V128256/D4096/T4096 shape,
+comparing all 525,336,576 FP32 output cells bitwise at both plans and three geometries.
+See [`embedding_plan_sort_2026-09-10`](../bench/results/embedding_plan_sort_2026-09-10/README.md)
+for commands, raw evidence, single-call timing diagnostics and remaining debt.
+The existing device nonfinite refusal gap remains open; this is not a claim
+that every embedding contract clause has passed.
+
+## Historical status (2026-08-28)
 
 **COMPILED, RUN AND CARDED ON TWO COLUMNS, APPLE AND AMD, 2026-08-28. CLAUSE
 (a) ONLY. NO NVIDIA LEG. NOT ONE SABOTAGE ARM HAS EVER BEEN BUILT.**
@@ -22,10 +53,8 @@ inert on device, a cross-vendor hole every other lane's fixtures had hidden.
 
 **Two columns are not three, and clause (a) is not the contract.** Still
 absent, each named by the run's own SCOPE line. No NVIDIA leg. Clauses (b),
-(c), (d), (e) and (f) SKIPPED on both columns. `PLAN_SORT` is not written, so
-clause (d) cannot run at all, which means **the plan-invariance gate, the
-strongest available evidence that the arithmetic does not read the plan, has
-never run and cannot.** The shipped shape `V=128256 d=4096 T=4096` that 11.2
+(c), (d), (e) and (f) SKIPPED on both columns. At that historical run, `PLAN_SORT` was not written and clause (d) was
+unavailable; the 2026-09-10 update above supersedes that implementation status. The shipped shape `V=128256 d=4096 T=4096` that 11.2
 calls mandatory, which is 2.10 GB of `dW` and belongs on a rented GPU. FAST
 mode. All fifteen buildable sabotage arms, of the eighteen in 11.1; the run's
 ledger line reports the binary as CLEAN, meaning no arm was compiled in. And
@@ -436,11 +465,10 @@ and not a numerical one**, since integer addition is exact and associative, so
 swapping in `gbdt/gpu_util/kernel/scan.mojo`'s parallel scan cannot move a
 bit.
 
-### 6.2 `PLAN_SORT`, NOT WRITTEN, and how a sort would be made deterministic AND stable
+### 6.2 `PLAN_SORT`: deterministic total keys
 
-OWED, and clause (d) cannot run until it exists. What it must satisfy, because
-this is the likeliest place for an embedding identity contract to be quietly
-wrong.
+Implemented by the device total-key network described in the update above.
+The following key and permutation requirements remain normative.
 
 **DEVIATION 1303. The key is a TOTAL ORDER, so stability is MOOT.**
 `key(t) = (UInt64(ids[t]) & 0xFFFFFFFF) << 32 | UInt64(t) & 0xFFFFFFFF`. No two
@@ -490,7 +518,7 @@ that is not in position order, or by an atomic integer rank. Sabotages
 
 Clause (d) of section 11. It is the strongest evidence available that the
 arithmetic does not read the plan, and it is cheap, because `PLAN_SCAN` is
-already the oracle's spelling. **It cannot run until `PLAN_SORT` exists.**
+already the oracle's spelling. The production gate is now available through clause (d).
 
 ---
 ## 7. Invariance, what holds, what does not, and the microbatch finding
@@ -775,14 +803,14 @@ defect and not a numerics one.
 
 Each must move the stage its OWN clause writes and no earlier one.
 
-**TWO CANNOT BE BUILT TODAY, and it is not because they are wrong.**
-`EMB_SORT_KEY_ID_ONLY_UNSTABLE` is a `PLAN_SORT` arm and `PLAN_SORT` is not
-written. `EMB_SORT_TIE_REVERSED` has a `PLAN_SCAN` spelling in
-`embedding_identical.mojo` and its `PLAN_SORT` half does not exist. **So the
-sort clause is HALF gated by construction and half not gated at all.** A third,
-`EMB_FOLD_VIA_GEMM_ONEHOT`, has no switch anywhere (DEVIATION 1505), and a
-fourth, `EMB_ACCUM_BY_ADD`, is falsifiable only under clause (e), which
-neither leg ran.
+**Remaining sabotage debt (updated 2026-09-10).** The dedicated
+`EMB_SORT_KEY_ID_ONLY_UNSTABLE` switch remains unimplemented.
+`EMB_SORT_TIE_REVERSED` retains its original PLAN_SCAN spelling. The new
+`MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL` instead reverses ties in the actual
+PLAN_SORT key stream and decodes original positions, providing a separate
+negative control for the real sort permutation gate. `EMB_FOLD_VIA_GEMM_ONEHOT`
+still has no switch (DEVIATION 1505); `EMB_ACCUM_BY_ADD` remains falsifiable
+only through clause (e). This update does not claim those other arms ran.
 
 **Five pass by construction on the obvious fixture and are the ones most
 likely to be deleted as broken arms.** `EMB_FOLD_BALANCED_TREE` needs a run of
@@ -837,8 +865,11 @@ At `V = 128256`, `d = 4096`, `T = 4096`, against an atomic scatter, both pay
 the same `V*d` = 525.3 M zero-fill stores and the same `T*d` = 16.8 M adds,
 theirs ATOMIC and ours plain and flushed. Ours adds one compare and one select
 per add for seam E3, plus `2*V*T` = 1.05 G integer compares for `PLAN_SCAN`'s
-run structure (or about 68 launches for `PLAN_SORT`), `V` integer adds for the
-prefix scan, and 1.0 MB of CSR.
+run structure and `V` integer adds for its prefix scan. At `T=4096`, the
+implemented `PLAN_SORT` instead uses 78 compare/exchange launches plus three
+pack/run/perm launches, 32 KiB of temporary keys, and per-row integer binary
+searches. Both retain about 1.0 MB of CSR. These are operation counts, not
+measured prices.
 
 **The single largest fact is that the `+0.0` fill dominates everything and both
 spellings pay it.** 2.10 GB of fill against 67.1 MB of gradient, a ratio of
@@ -889,7 +920,7 @@ result.**
 - **Not BF16, FP16, FP8, TF32 or any quantization.** Not FP64 on device.
 - **No optimizer, no weight update, no clipping, no loss scaling, no
   distributed all-reduce.**
-- **`PLAN_SORT` IS NOT WRITTEN**, so clause (d) cannot run.
+- **PLAN_SORT performance and additional vendor evidence remain owed.**
 - **No performance number.** Section 10 is derivation.
 - **TWO columns is not a cross-vendor claim, and this lane's two are exactly
   the pair that has fooled this repository before.** Apple and AMD agreed bit
@@ -943,13 +974,9 @@ Cited from elsewhere and never redefined: 621, 1505, 1938.
    only under a clause neither leg ran.
 2. **An NVIDIA leg**, and clauses (b), (c), (e) and (f) on the two existing
    columns.
-3. **`PLAN_SORT` is specified in 6.2 and NOT WRITTEN.** It should be
-   `launch_radix_sort_bins` keyed on the ids with the positions as the
-   payload, plus a run-boundary pass; `svm/checks/device_select.mojo` is the
-   precedent for a lane importing a `gbdt/gpu_util/` primitive, but it needs
-   six scratch buffers and a `REORDER_BLOCK` geometry this lane has not
-   verified against, and writing an unverified device sort would have added a
-   second thing that can be wrong. **Clause (d) cannot run until it exists.**
+3. **PLAN_SORT is implemented.** Clause (d) now exercises both real plans
+   and three launch geometries. Additional vendor evidence and a measured
+   dispatch crossover remain owed; the production default stays PLAN_SCAN.
 4. **A `pixi.toml` task, an `embedding/README.md`, a `DERIVATION_MAP.tsv` and
    a `NOT_IMPLEMENTED.tsv`.** Every other lane carries all four.
 5. **An `IDENTITY_PATHS.md` row**, DEVIATION 1300. It must record exactly what

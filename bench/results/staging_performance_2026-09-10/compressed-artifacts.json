@@ -1,0 +1,112 @@
+[
+  {
+    "path": "apple/knn/baseline-gate.log.gz",
+    "raw_bytes": 460542,
+    "raw_sha256": "af3a89707051368249420de0859bb8bc9454ca2740870ca15394ca58ecdf1dd5"
+  },
+  {
+    "path": "apple/knn/baseline-public-gate.log.gz",
+    "raw_bytes": 7413217,
+    "raw_sha256": "3df89047de86a928b914448cd3c60f1ef82092217c7ce029052e774510708287"
+  },
+  {
+    "path": "apple/knn/baseline-public.cells.gz",
+    "raw_bytes": 7408854,
+    "raw_sha256": "0bbb33952d5c86fd7ef1ad65a203fe714717a08892897801602155ccc9a7c8ab"
+  },
+  {
+    "path": "apple/knn/coalesced-gate.log.gz",
+    "raw_bytes": 460541,
+    "raw_sha256": "b87bbbea91942cad446a2c9d7e8f349955968ee3fae84bc8a9f78aff68839f9e"
+  },
+  {
+    "path": "apple/knn/coalesced-public-gate.log.gz",
+    "raw_bytes": 7413217,
+    "raw_sha256": "3df89047de86a928b914448cd3c60f1ef82092217c7ce029052e774510708287"
+  },
+  {
+    "path": "apple/knn/coalesced-public.cells.gz",
+    "raw_bytes": 7408854,
+    "raw_sha256": "0bbb33952d5c86fd7ef1ad65a203fe714717a08892897801602155ccc9a7c8ab"
+  },
+  {
+    "path": "apple/knn-batch/baseline-public-gate.log.gz",
+    "raw_bytes": 7413217,
+    "raw_sha256": "3df89047de86a928b914448cd3c60f1ef82092217c7ce029052e774510708287"
+  },
+  {
+    "path": "apple/knn-batch/baseline-public.cells.gz",
+    "raw_bytes": 7408854,
+    "raw_sha256": "0bbb33952d5c86fd7ef1ad65a203fe714717a08892897801602155ccc9a7c8ab"
+  },
+  {
+    "path": "apple/knn-batch/batch512-public-gate.log.gz",
+    "raw_bytes": 7413217,
+    "raw_sha256": "3df89047de86a928b914448cd3c60f1ef82092217c7ce029052e774510708287"
+  },
+  {
+    "path": "apple/knn-batch/batch512-public.cells.gz",
+    "raw_bytes": 7408854,
+    "raw_sha256": "0bbb33952d5c86fd7ef1ad65a203fe714717a08892897801602155ccc9a7c8ab"
+  },
+  {
+    "path": "knn-batch/baseline-public-gate.log.gz",
+    "raw_bytes": 7413358,
+    "raw_sha256": "1bf189d7dbfc10c7157e0dac131c3a6bc08cee3b16705ba86d1b959ecb532117"
+  },
+  {
+    "path": "knn-batch/baseline-public.cells.gz",
+    "raw_bytes": 7408854,
+    "raw_sha256": "0bbb33952d5c86fd7ef1ad65a203fe714717a08892897801602155ccc9a7c8ab"
+  },
+  {
+    "path": "knn-batch/batch512-public-gate.log.gz",
+    "raw_bytes": 7413358,
+    "raw_sha256": "f6f87f941bd1e8a816b5bdbf3261ef0edd5118e9eb04925566094aa5d78afe43"
+  },
+  {
+    "path": "knn-batch/batch512-public.cells.gz",
+    "raw_bytes": 7408854,
+    "raw_sha256": "0bbb33952d5c86fd7ef1ad65a203fe714717a08892897801602155ccc9a7c8ab"
+  },
+  {
+    "path": "knn-final/public.cells.gz",
+    "raw_bytes": 7408854,
+    "raw_sha256": "0bbb33952d5c86fd7ef1ad65a203fe714717a08892897801602155ccc9a7c8ab"
+  },
+  {
+    "path": "knn-final/public.log.gz",
+    "raw_bytes": 7464010,
+    "raw_sha256": "56c54f88e618f3724825e8f5b729d1759ab4173d45d5ecae27fa9f4fd9613390"
+  },
+  {
+    "path": "knn-stage/baseline-gate.log.gz",
+    "raw_bytes": 460683,
+    "raw_sha256": "0b9996fa927424cf4f7273405d098f736fff700abe68ea02b7d711fdbb239392"
+  },
+  {
+    "path": "knn-stage/baseline-public-gate.log.gz",
+    "raw_bytes": 7413358,
+    "raw_sha256": "938d0b80ad0592e207ebfb0b19a6d3785243cd7d10049c48ecb1b2623285c2ba"
+  },
+  {
+    "path": "knn-stage/baseline-public.cells.gz",
+    "raw_bytes": 7408854,
+    "raw_sha256": "0bbb33952d5c86fd7ef1ad65a203fe714717a08892897801602155ccc9a7c8ab"
+  },
+  {
+    "path": "knn-stage/coalesced-gate.log.gz",
+    "raw_bytes": 460682,
+    "raw_sha256": "e5a6f6b0b8b6c169af1813da8b9a3f1e419f041034e14ce6d657ee03eac72b7e"
+  },
+  {
+    "path": "knn-stage/coalesced-public-gate.log.gz",
+    "raw_bytes": 7413358,
+    "raw_sha256": "52bb400cc1a247bb68844f705b4db422543b73670542556f684734e55c31ee15"
+  },
+  {
+    "path": "knn-stage/coalesced-public.cells.gz",
+    "raw_bytes": 7408854,
+    "raw_sha256": "0bbb33952d5c86fd7ef1ad65a203fe714717a08892897801602155ccc9a7c8ab"
+  }
+]

@@ -722,7 +722,12 @@ clause (d) when they are written, they will look inert and be deleted.
   prefill.** Section 6.
 - **Not BF16, FP16, FP8, TF32 or any quantization.** Not FP64 anywhere on
   device; Metal does not have it.
-- **No training, no backward, no dropout, no autograd.**
+- **No dropout, no autograd, no optimizer.** A block BACKWARD exists
+  (`transformer/checks/transformer_backward.mojo`, its own oracle and
+  gate) and, since 2026-09-09, is on the Python surface as
+  `TransformerBlock.backward` for the zero-state prefill under the
+  IDENTICAL tier; its clauses are the backward gate's, not this
+  document's.
 - **Not GELU**, not `tanh` and not `erf`. Llama's activation is SiLU. The
   numerics lane's DEVIATIONS 821-824 landed both GELU forms, `portable_tanhf`
   and `portable_erff` on 2026-08-24 for whoever pins a GPT-shaped or
@@ -731,8 +736,20 @@ clause (d) when they are written, they will look inert and be deleted.
 - **Not `rope_scaling`.** Only `rope_type = "default"`. Linear, dynamic,
   YARN and Llama-3 rope all carry an `attention_scaling` that is not 1.0 and
   inverse frequencies computed a different way.
-- **Not any mask but the causal one.** No sliding window, no prefix mask, no
-  arbitrary additive mask, no attention sink.
+- **Not any mask but the causal one and its sliding-window form.** Since
+  2026-09-09 `window = W > 0` is a runtime parameter: query at absolute
+  position `p` sees keys `[max(0, p - W + 1), p]`, S13 adds the same
+  `-FLT_MAX` where a key is outside that range, and the KV cache is a
+  RING of `W` slots (`slot = position % W`) whose visible span is
+  gathered into the packed `kv.k_cache` / `kv.v_cache` stages before
+  the ring is written. `window = 0` is this profile's full causal mask
+  bit for bit. Every S14-S19 fold still walks the call's key span
+  ascending from `+0.0`; the masked head and tail of the span are
+  exactly `+0.0` by 7.1, so a query row's bits are a pure function of
+  (its position, its visible key range), which is what makes decode
+  and split prefill equal the whole prefill under a window (the gate's
+  clause (d) and clause (d) split on the `win*` fixtures). No prefix
+  mask, no arbitrary additive mask, no attention sink.
 - **No bias on any projection**, no attention dropout.
 - **No performance number.** None has been taken and none will be quoted
   until it is, alternated inside one thermal window.

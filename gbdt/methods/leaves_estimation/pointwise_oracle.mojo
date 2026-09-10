@@ -144,14 +144,22 @@ from std.sys.compile import is_defined
 # observed stale.
 #
 # OFF BY DEFAULT. Arm B builds with `-D MOJOLEARN_2030_FUSED_EST_MOVE=1`.
-# UNVERIFIED, RUN OWED -- the A/B commands are in
+# `-D MOJOLEARN_2030_NO_FUSED_EST_MOVE=1` takes precedence for baseline A/B.
+# Kernel equivalence is checked by checks/gbdt_fused_move_check.mojo.
+# Native fit A/B: checks/gbdt_fused_fit_check.mojo (baseline versus define).
+# NVIDIA small-fixture fingerprints passed on L40S and H100; see
+# docs/lanes/HANDOFF_trees.md. Per-device end-to-end timing still governs
+# default selection. Additional A/B commands are in
 # archive/research/gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN appendix; the gates that
 # must hold are `check-fit-pointwise`, `check-logloss-train` and
 # `check-ordered-boosting` built with the define (the changed arm is the
 # Logloss estimation path, and A GATE MUST EXERCISE THE CHANGED ARM --
 # DEVIATION 2009's lesson).
 # ====================================================
-comptime FUSED_EST_MOVE_2030 = is_defined["MOJOLEARN_2030_FUSED_EST_MOVE"]()
+comptime FUSED_EST_MOVE_2030 = (
+    is_defined["MOJOLEARN_2030_FUSED_EST_MOVE"]()
+    and not is_defined["MOJOLEARN_2030_NO_FUSED_EST_MOVE"]()
+)
 
 
 def merge_stage_times(mut dst: StageTimes, src: StageTimes):

@@ -163,7 +163,7 @@ from checks.numerics import (
     identical_mul_add,
     identical_sqrt,
 )
-from core.pinned_reduce import pinned_block_sum
+from core.pinned_reduce import halving_block_sum
 
 
 #: THE WIDTH OF THE FOLD. See DEVIATION 587 in the banner: this is a numeric
@@ -268,7 +268,7 @@ def fold_and_broadcast[tpb: Int](value: Float32) -> Float32:
     with no arithmetic in it. The FOLD itself is the shared
     `pinned_block_sum`, which is the part that could drift.
     """
-    var s = pinned_block_sum[tpb](value)
+    var s = halving_block_sum[tpb](value)   # DEVIATION 2291: 32 threads < AMD's 64-wide warp; the library fold refuses
     var slot = stack_allocation[
         1,
         Scalar[DType.float32],

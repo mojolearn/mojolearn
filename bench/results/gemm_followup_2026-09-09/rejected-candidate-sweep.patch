@@ -1,0 +1,102 @@
+diff --git a/gemm/checks/gemm_identical.mojo b/gemm/checks/gemm_identical.mojo
+index a421e371..f1a9b0d1 100644
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -449,7 +449,15 @@ comptime PLAN_SPLIT_64_4X4 = 15
+ #: `choose_gemm_plan` does not pick them; the forced-plan sweep times them.
+ comptime PLAN_TUNED_64_4X4_K32 = 16
+ comptime PLAN_TUNED_128_8X8_K32 = 17
+-comptime GEMM_PLAN_COUNT = 18
++#: Rectangular register tiles and a wider split tile for forced-plan sweeps.
++#: These reuse the exact leaf arithmetic; dispatch stays on measured plans.
++#: KS=16 keeps every page below Metal's 32 KiB shared-memory ceiling.
++comptime PLAN_TUNED_64X128_4X8 = 18
++comptime PLAN_TUNED_128X64_8X4 = 19
++comptime PLAN_SPLIT_128_8X8 = 20
++comptime PLAN_SPLIT_64_4X4_STACK = 21
++comptime PLAN_SPLIT_128_8X8_STACK = 22
++comptime GEMM_PLAN_COUNT = 23
+ 
+ #: Threads per block for `PLAN_FLAT`. SCHEDULING: each thread owns a whole
+ #: output cell, so this moves WHICH thread computes a cell and never the
+@@ -499,6 +507,16 @@ def gemm_plan_name(plan: Int) -> String:
+         return _tuned_plan_name(TUNED_RPT, TUNED_CPT, TUNED_KBLK)
+     if plan == PLAN_TUNED_128_8X8_K32:
+         return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, TUNED_128_KS)
++    if plan == PLAN_TUNED_64X128_4X8:
++        return _tuned_plan_name(TUNED_RPT, TUNED_CPT * 2, 16)
++    if plan == PLAN_TUNED_128X64_8X4:
++        return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT, 16)
++    if plan == PLAN_SPLIT_64_4X4_STACK:
++        return _split_plan_name(TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_KBLK) + " forced stack"
++    if plan == PLAN_SPLIT_128_8X8_STACK:
++        return _split_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16) + " forced stack"
++    if plan == PLAN_SPLIT_128_8X8:
++        return _split_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16)
+     if plan == PLAN_SPLIT_64_4X4:
+         return _split_plan_name(TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_KBLK)
+     if plan == PLAN_SPLIT_32_2X2:
+@@ -2016,7 +2034,7 @@ comptime SPLIT_BLOCK_FOLD_MAX_CELLS = 16384
+ 
+ 
+ def _launch_split[
+-    RPT: Int, CPT: Int, TC: Int, KS: Int
++    RPT: Int, CPT: Int, TC: Int, KS: Int, FORCE_STACK: Bool = False
+ ](
+     ctx: DeviceContext,
+     mut c: DeviceBuffer[DType.float32],
+@@ -2060,7 +2078,7 @@ def _launch_split[
+         grid_dim=(g[0], p_count, 1),
+         block_dim=(NTH, 1, 1),
+     )
+-    if m * n <= SPLIT_BLOCK_FOLD_MAX_CELLS:
++    if m * n <= SPLIT_BLOCK_FOLD_MAX_CELLS and not FORCE_STACK:
+         ctx.enqueue_function[identical_gemm_fold_kernel[True]](
+             c.unsafe_ptr(),
+             ws.unsafe_ptr(),
+@@ -2123,6 +2141,9 @@ def _is_split_plan(plan: Int) -> Bool:
+     return (
+         plan == PLAN_SPLIT_32_2X2
+         or plan == PLAN_SPLIT_64_4X4
++        or plan == PLAN_SPLIT_128_8X8
++        or plan == PLAN_SPLIT_64_4X4_STACK
++        or plan == PLAN_SPLIT_128_8X8_STACK
+         or plan == PLAN_SPLIT_16_1X1
+         or plan == PLAN_SPLIT_1X256
+         or plan == PLAN_SPLIT_8X64
+@@ -2458,6 +2479,18 @@ def identical_gemm_with_plan(
+             _launch_split[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_KBLK](
+                 ctx, c, a, b, ws, m, n, k, leaf, p_count, st
+             )
++        elif plan == PLAN_SPLIT_64_4X4_STACK:
++            _launch_split[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_KBLK, True](
++                ctx, c, a, b, ws, m, n, k, leaf, p_count, st
++            )
++        elif plan == PLAN_SPLIT_128_8X8_STACK:
++            _launch_split[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16, True](
++                ctx, c, a, b, ws, m, n, k, leaf, p_count, st
++            )
++        elif plan == PLAN_SPLIT_128_8X8:
++            _launch_split[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16](
++                ctx, c, a, b, ws, m, n, k, leaf, p_count, st
++            )
+         elif plan == PLAN_SPLIT_16_1X1:
+             _launch_split[1, 1, TUNED_TC, TUNED_KBLK](
+                 ctx, c, a, b, ws, m, n, k, leaf, p_count, st
+@@ -2521,6 +2554,16 @@ def identical_gemm_with_plan(
+             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
+         )
+         return
++    if plan == PLAN_TUNED_64X128_4X8:
++        _launch_tuned[TUNED_RPT, TUNED_CPT * 2, TUNED_TC, 16, TUNED_FOLD_SLOTS](
++            ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
++        )
++        return
++    if plan == PLAN_TUNED_128X64_8X4:
++        _launch_tuned[TUNED_RPT * 2, TUNED_CPT, TUNED_TC, 16, TUNED_FOLD_SLOTS](
++            ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
++        )
++        return
+     # PLAN_FLAT, and the fallback for both SPLITK plans and the four SPLIT
+     # plans at `k == 0` (there are no partials to write, and section 8 still requires `+0.0` to be
+     # STORED rather than the store skipped).

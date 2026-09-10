@@ -1,0 +1,817 @@
+{
+  "comparison": "same-device baseline versus opt-in batch512",
+  "compiler": "4960 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x309680000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
+  "source": "c92f1a4e9759aebb86f97a37ad9e3dead85f3530",
+  "shapes": [
+    {
+      "index": 400000,
+      "queries": 4000,
+      "features": 32,
+      "k": 10,
+      "passes": [
+        {
+          "order": [
+            "baseline",
+            "batch512"
+          ],
+          "arms": {
+            "baseline": {
+              "log": "n400000-q4000-d32-k10-p0-baseline.log",
+              "samples_ms": {
+                "request": [
+                  29.219552,
+                  29.246012,
+                  29.216587,
+                  29.205925,
+                  29.206584
+                ],
+                "device": [
+                  28.136363,
+                  28.098156,
+                  28.08868,
+                  28.083575,
+                  28.103746
+                ]
+              },
+              "full_output_sha256": "c8af7c3d3137e6ea26159ee6c2282137c734af2cb707c1669c3be74dabb020a2",
+              "reported_result": {
+                "index": "400000",
+                "queries": "4000",
+                "k": "10",
+                "features": "32",
+                "request_median_ms": "29.216587",
+                "device_median_ms": "28.098156",
+                "rounds": "5",
+                "query_tile": "256",
+                "index_tile": "65536"
+              }
+            },
+            "batch512": {
+              "log": "n400000-q4000-d32-k10-p0-batch512.log",
+              "samples_ms": {
+                "request": [
+                  27.522587,
+                  27.507331,
+                  27.499019,
+                  27.525584,
+                  27.531116
+                ],
+                "device": [
+                  26.458191,
+                  26.382206,
+                  26.375191,
+                  26.373654,
+                  26.38177
+                ]
+              },
+              "full_output_sha256": "c8af7c3d3137e6ea26159ee6c2282137c734af2cb707c1669c3be74dabb020a2",
+              "reported_result": {
+                "index": "400000",
+                "queries": "4000",
+                "k": "10",
+                "features": "32",
+                "request_median_ms": "27.522587",
+                "device_median_ms": "26.38177",
+                "rounds": "5",
+                "query_tile": "512",
+                "index_tile": "65536"
+              }
+            }
+          }
+        },
+        {
+          "order": [
+            "batch512",
+            "baseline"
+          ],
+          "arms": {
+            "baseline": {
+              "log": "n400000-q4000-d32-k10-p1-baseline.log",
+              "samples_ms": {
+                "request": [
+                  29.17043,
+                  29.172323,
+                  29.170857,
+                  29.183255,
+                  29.166934
+                ],
+                "device": [
+                  28.116393,
+                  28.076288,
+                  28.058318,
+                  28.05844,
+                  28.05994
+                ]
+              },
+              "full_output_sha256": "c8af7c3d3137e6ea26159ee6c2282137c734af2cb707c1669c3be74dabb020a2",
+              "reported_result": {
+                "index": "400000",
+                "queries": "4000",
+                "k": "10",
+                "features": "32",
+                "request_median_ms": "29.170857",
+                "device_median_ms": "28.05994",
+                "rounds": "5",
+                "query_tile": "256",
+                "index_tile": "65536"
+              }
+            },
+            "batch512": {
+              "log": "n400000-q4000-d32-k10-p1-batch512.log",
+              "samples_ms": {
+                "request": [
+                  27.495849,
+                  27.484455,
+                  27.475429,
+                  27.500865,
+                  27.489936
+                ],
+                "device": [
+                  26.43587,
+                  26.401113,
+                  26.367761,
+                  26.356586,
+                  26.376015
+                ]
+              },
+              "full_output_sha256": "c8af7c3d3137e6ea26159ee6c2282137c734af2cb707c1669c3be74dabb020a2",
+              "reported_result": {
+                "index": "400000",
+                "queries": "4000",
+                "k": "10",
+                "features": "32",
+                "request_median_ms": "27.489936",
+                "device_median_ms": "26.376015",
+                "rounds": "5",
+                "query_tile": "512",
+                "index_tile": "65536"
+              }
+            }
+          }
+        }
+      ],
+      "pooled_median_ms": {
+        "baseline": {
+          "request": 29.194589999999998,
+          "device": 28.0861275
+        },
+        "batch512": {
+          "request": 27.499942,
+          "device": 26.3788925
+        }
+      },
+      "candidate_over_baseline": {
+        "request": 0.9419533550565362,
+        "device": 0.9392142971650328
+      }
+    },
+    {
+      "index": 400000,
+      "queries": 4000,
+      "features": 32,
+      "k": 15,
+      "passes": [
+        {
+          "order": [
+            "baseline",
+            "batch512"
+          ],
+          "arms": {
+            "baseline": {
+              "log": "n400000-q4000-d32-k15-p0-baseline.log",
+              "samples_ms": {
+                "request": [
+                  33.652004,
+                  33.647557,
+                  33.651807,
+                  33.629925,
+                  33.695679
+                ],
+                "device": [
+                  32.433542,
+                  32.422339,
+                  32.409885,
+                  32.424862,
+                  32.453619
+                ]
+              },
+              "full_output_sha256": "bfb848a13019378f930b4c9948b9f98a7d2cf3110be586b16e8a776b354340c3",
+              "reported_result": {
+                "index": "400000",
+                "queries": "4000",
+                "k": "15",
+                "features": "32",
+                "request_median_ms": "33.651807",
+                "device_median_ms": "32.424862",
+                "rounds": "5",
+                "query_tile": "256",
+                "index_tile": "65536"
+              }
+            },
+            "batch512": {
+              "log": "n400000-q4000-d32-k15-p0-batch512.log",
+              "samples_ms": {
+                "request": [
+                  31.865422,
+                  31.840999,
+                  31.836812,
+                  31.856432,
+                  31.863533
+                ],
+                "device": [
+                  30.689565,
+                  30.659171,
+                  30.654126,
+                  30.685061,
+                  30.750661
+                ]
+              },
+              "full_output_sha256": "bfb848a13019378f930b4c9948b9f98a7d2cf3110be586b16e8a776b354340c3",
+              "reported_result": {
+                "index": "400000",
+                "queries": "4000",
+                "k": "15",
+                "features": "32",
+                "request_median_ms": "31.856432",
+                "device_median_ms": "30.685061",
+                "rounds": "5",
+                "query_tile": "512",
+                "index_tile": "65536"
+              }
+            }
+          }
+        },
+        {
+          "order": [
+            "batch512",
+            "baseline"
+          ],
+          "arms": {
+            "baseline": {
+              "log": "n400000-q4000-d32-k15-p1-baseline.log",
+              "samples_ms": {
+                "request": [
+                  33.608833,
+                  33.621996,
+                  33.590626,
+                  33.550842,
+                  33.553184
+                ],
+                "device": [
+                  32.37487,
+                  32.39657,
+                  32.367208,
+                  32.387826,
+                  32.390674
+                ]
+              },
+              "full_output_sha256": "bfb848a13019378f930b4c9948b9f98a7d2cf3110be586b16e8a776b354340c3",
+              "reported_result": {
+                "index": "400000",
+                "queries": "4000",
+                "k": "15",
+                "features": "32",
+                "request_median_ms": "33.590626",
+                "device_median_ms": "32.387826",
+                "rounds": "5",
+                "query_tile": "256",
+                "index_tile": "65536"
+              }
+            },
+            "batch512": {
+              "log": "n400000-q4000-d32-k15-p1-batch512.log",
+              "samples_ms": {
+                "request": [
+                  31.886603,
+                  31.876556,
+                  31.86565,
+                  31.884604,
+                  31.884127
+                ],
+                "device": [
+                  30.706833,
+                  30.703108,
+                  30.686519,
+                  30.702456,
+                  30.708183
+                ]
+              },
+              "full_output_sha256": "bfb848a13019378f930b4c9948b9f98a7d2cf3110be586b16e8a776b354340c3",
+              "reported_result": {
+                "index": "400000",
+                "queries": "4000",
+                "k": "15",
+                "features": "32",
+                "request_median_ms": "31.884127",
+                "device_median_ms": "30.703108",
+                "rounds": "5",
+                "query_tile": "512",
+                "index_tile": "65536"
+              }
+            }
+          }
+        }
+      ],
+      "pooled_median_ms": {
+        "baseline": {
+          "request": 33.625960500000005,
+          "device": 32.4032275
+        },
+        "batch512": {
+          "request": 31.865536,
+          "device": 30.6960105
+        }
+      },
+      "candidate_over_baseline": {
+        "request": 0.947646863500003,
+        "device": 0.9473133656207549
+      }
+    },
+    {
+      "index": 400000,
+      "queries": 1000,
+      "features": 8,
+      "k": 10,
+      "passes": [
+        {
+          "order": [
+            "baseline",
+            "batch512"
+          ],
+          "arms": {
+            "baseline": {
+              "log": "n400000-q1000-d8-k10-p0-baseline.log",
+              "samples_ms": {
+                "request": [
+                  5.937566,
+                  5.943641,
+                  5.939987,
+                  5.940648,
+                  5.946727
+                ],
+                "device": [
+                  5.626708,
+                  5.625592,
+                  5.626397,
+                  5.622404,
+                  5.618692
+                ]
+              },
+              "full_output_sha256": "6790b3b1b74b119310c8cbd7b6fb19c73a602fbdf84eede1b180e1234e983059",
+              "reported_result": {
+                "index": "400000",
+                "queries": "1000",
+                "k": "10",
+                "features": "8",
+                "request_median_ms": "5.940648",
+                "device_median_ms": "5.625592",
+                "rounds": "5",
+                "query_tile": "256",
+                "index_tile": "65536"
+              }
+            },
+            "batch512": {
+              "log": "n400000-q1000-d8-k10-p0-batch512.log",
+              "samples_ms": {
+                "request": [
+                  5.596118,
+                  5.594589,
+                  5.594499,
+                  5.593723,
+                  5.592615
+                ],
+                "device": [
+                  5.270994,
+                  5.270474,
+                  5.270927,
+                  5.269614,
+                  5.267257
+                ]
+              },
+              "full_output_sha256": "6790b3b1b74b119310c8cbd7b6fb19c73a602fbdf84eede1b180e1234e983059",
+              "reported_result": {
+                "index": "400000",
+                "queries": "1000",
+                "k": "10",
+                "features": "8",
+                "request_median_ms": "5.594499",
+                "device_median_ms": "5.270474",
+                "rounds": "5",
+                "query_tile": "512",
+                "index_tile": "65536"
+              }
+            }
+          }
+        },
+        {
+          "order": [
+            "batch512",
+            "baseline"
+          ],
+          "arms": {
+            "baseline": {
+              "log": "n400000-q1000-d8-k10-p1-baseline.log",
+              "samples_ms": {
+                "request": [
+                  5.963516,
+                  5.961095,
+                  5.954677,
+                  5.96084,
+                  5.960642
+                ],
+                "device": [
+                  5.641488,
+                  5.635183,
+                  5.64056,
+                  5.63615,
+                  5.632896
+                ]
+              },
+              "full_output_sha256": "6790b3b1b74b119310c8cbd7b6fb19c73a602fbdf84eede1b180e1234e983059",
+              "reported_result": {
+                "index": "400000",
+                "queries": "1000",
+                "k": "10",
+                "features": "8",
+                "request_median_ms": "5.96084",
+                "device_median_ms": "5.63615",
+                "rounds": "5",
+                "query_tile": "256",
+                "index_tile": "65536"
+              }
+            },
+            "batch512": {
+              "log": "n400000-q1000-d8-k10-p1-batch512.log",
+              "samples_ms": {
+                "request": [
+                  5.607384,
+                  5.600141,
+                  5.592255,
+                  5.602357,
+                  5.596458
+                ],
+                "device": [
+                  5.273328,
+                  5.271172,
+                  5.271458,
+                  5.269771,
+                  5.2713
+                ]
+              },
+              "full_output_sha256": "6790b3b1b74b119310c8cbd7b6fb19c73a602fbdf84eede1b180e1234e983059",
+              "reported_result": {
+                "index": "400000",
+                "queries": "1000",
+                "k": "10",
+                "features": "8",
+                "request_median_ms": "5.600141",
+                "device_median_ms": "5.2713",
+                "rounds": "5",
+                "query_tile": "512",
+                "index_tile": "65536"
+              }
+            }
+          }
+        }
+      ],
+      "pooled_median_ms": {
+        "baseline": {
+          "request": 5.950702,
+          "device": 5.629802
+        },
+        "batch512": {
+          "request": 5.5953535,
+          "device": 5.2709605
+        }
+      },
+      "candidate_over_baseline": {
+        "request": 0.9402846084377944,
+        "device": 0.9362603693700063
+      }
+    },
+    {
+      "index": 10000,
+      "queries": 32,
+      "features": 32,
+      "k": 15,
+      "passes": [
+        {
+          "order": [
+            "baseline",
+            "batch512"
+          ],
+          "arms": {
+            "baseline": {
+              "log": "n10000-q32-d32-k15-p0-baseline.log",
+              "samples_ms": {
+                "request": [
+                  0.152311,
+                  0.152766,
+                  0.15221,
+                  0.152006,
+                  0.151235
+                ],
+                "device": [
+                  0.068407,
+                  0.068388,
+                  0.068762,
+                  0.068456,
+                  0.068374
+                ]
+              },
+              "full_output_sha256": "f6aa9f09b2f2dfa58687bfcb1e3093ef3cd6372663f10cebd84a07a888866070",
+              "reported_result": {
+                "index": "10000",
+                "queries": "32",
+                "k": "15",
+                "features": "32",
+                "request_median_ms": "0.15221",
+                "device_median_ms": "0.068407",
+                "rounds": "5",
+                "query_tile": "32",
+                "index_tile": "10000"
+              }
+            },
+            "batch512": {
+              "log": "n10000-q32-d32-k15-p0-batch512.log",
+              "samples_ms": {
+                "request": [
+                  0.153174,
+                  0.148143,
+                  0.148228,
+                  0.148019,
+                  0.147192
+                ],
+                "device": [
+                  0.066718,
+                  0.066583,
+                  0.067402,
+                  0.067017,
+                  0.066761
+                ]
+              },
+              "full_output_sha256": "f6aa9f09b2f2dfa58687bfcb1e3093ef3cd6372663f10cebd84a07a888866070",
+              "reported_result": {
+                "index": "10000",
+                "queries": "32",
+                "k": "15",
+                "features": "32",
+                "request_median_ms": "0.148143",
+                "device_median_ms": "0.066761",
+                "rounds": "5",
+                "query_tile": "32",
+                "index_tile": "10000"
+              }
+            }
+          }
+        },
+        {
+          "order": [
+            "batch512",
+            "baseline"
+          ],
+          "arms": {
+            "baseline": {
+              "log": "n10000-q32-d32-k15-p1-baseline.log",
+              "samples_ms": {
+                "request": [
+                  0.148176,
+                  0.148312,
+                  0.148056,
+                  0.14769,
+                  0.147201
+                ],
+                "device": [
+                  0.067383,
+                  0.066534,
+                  0.067125,
+                  0.067481,
+                  0.066779
+                ]
+              },
+              "full_output_sha256": "f6aa9f09b2f2dfa58687bfcb1e3093ef3cd6372663f10cebd84a07a888866070",
+              "reported_result": {
+                "index": "10000",
+                "queries": "32",
+                "k": "15",
+                "features": "32",
+                "request_median_ms": "0.148056",
+                "device_median_ms": "0.067125",
+                "rounds": "5",
+                "query_tile": "32",
+                "index_tile": "10000"
+              }
+            },
+            "batch512": {
+              "log": "n10000-q32-d32-k15-p1-batch512.log",
+              "samples_ms": {
+                "request": [
+                  0.148573,
+                  0.14814,
+                  0.14907,
+                  0.147592,
+                  0.151188
+                ],
+                "device": [
+                  0.066927,
+                  0.067334,
+                  0.067306,
+                  0.066772,
+                  0.066883
+                ]
+              },
+              "full_output_sha256": "f6aa9f09b2f2dfa58687bfcb1e3093ef3cd6372663f10cebd84a07a888866070",
+              "reported_result": {
+                "index": "10000",
+                "queries": "32",
+                "k": "15",
+                "features": "32",
+                "request_median_ms": "0.148573",
+                "device_median_ms": "0.066927",
+                "rounds": "5",
+                "query_tile": "32",
+                "index_tile": "10000"
+              }
+            }
+          }
+        }
+      ],
+      "pooled_median_ms": {
+        "baseline": {
+          "request": 0.1497735,
+          "device": 0.0679275
+        },
+        "batch512": {
+          "request": 0.1481855,
+          "device": 0.06690499999999999
+        }
+      },
+      "candidate_over_baseline": {
+        "request": 0.9893973232915034,
+        "device": 0.9849471863383753
+      }
+    },
+    {
+      "index": 65537,
+      "queries": 129,
+      "features": 17,
+      "k": 10,
+      "passes": [
+        {
+          "order": [
+            "baseline",
+            "batch512"
+          ],
+          "arms": {
+            "baseline": {
+              "log": "n65537-q129-d17-k10-p0-baseline.log",
+              "samples_ms": {
+                "request": [
+                  0.366687,
+                  0.366473,
+                  0.366464,
+                  0.365087,
+                  0.367279
+                ],
+                "device": [
+                  0.225342,
+                  0.226242,
+                  0.224395,
+                  0.225662,
+                  0.228184
+                ]
+              },
+              "full_output_sha256": "1f8d0f97797cc7addb1fe2da281c0a80bbe608655a244928634b682b5e797047",
+              "reported_result": {
+                "index": "65537",
+                "queries": "129",
+                "k": "10",
+                "features": "17",
+                "request_median_ms": "0.366473",
+                "device_median_ms": "0.225662",
+                "rounds": "5",
+                "query_tile": "129",
+                "index_tile": "65536"
+              }
+            },
+            "batch512": {
+              "log": "n65537-q129-d17-k10-p0-batch512.log",
+              "samples_ms": {
+                "request": [
+                  0.375977,
+                  0.372536,
+                  0.372453,
+                  0.373614,
+                  0.374684
+                ],
+                "device": [
+                  0.225861,
+                  0.226389,
+                  0.225781,
+                  0.227029,
+                  0.229987
+                ]
+              },
+              "full_output_sha256": "1f8d0f97797cc7addb1fe2da281c0a80bbe608655a244928634b682b5e797047",
+              "reported_result": {
+                "index": "65537",
+                "queries": "129",
+                "k": "10",
+                "features": "17",
+                "request_median_ms": "0.373614",
+                "device_median_ms": "0.226389",
+                "rounds": "5",
+                "query_tile": "129",
+                "index_tile": "65536"
+              }
+            }
+          }
+        },
+        {
+          "order": [
+            "batch512",
+            "baseline"
+          ],
+          "arms": {
+            "baseline": {
+              "log": "n65537-q129-d17-k10-p1-baseline.log",
+              "samples_ms": {
+                "request": [
+                  0.369341,
+                  0.366885,
+                  0.366933,
+                  0.36685,
+                  0.36732
+                ],
+                "device": [
+                  0.225588,
+                  0.225165,
+                  0.22467,
+                  0.225525,
+                  0.224498
+                ]
+              },
+              "full_output_sha256": "1f8d0f97797cc7addb1fe2da281c0a80bbe608655a244928634b682b5e797047",
+              "reported_result": {
+                "index": "65537",
+                "queries": "129",
+                "k": "10",
+                "features": "17",
+                "request_median_ms": "0.366933",
+                "device_median_ms": "0.225165",
+                "rounds": "5",
+                "query_tile": "129",
+                "index_tile": "65536"
+              }
+            },
+            "batch512": {
+              "log": "n65537-q129-d17-k10-p1-batch512.log",
+              "samples_ms": {
+                "request": [
+                  0.368091,
+                  0.369085,
+                  0.366393,
+                  0.364713,
+                  0.366935
+                ],
+                "device": [
+                  0.225216,
+                  0.225474,
+                  0.224926,
+                  0.224049,
+                  0.223485
+                ]
+              },
+              "full_output_sha256": "1f8d0f97797cc7addb1fe2da281c0a80bbe608655a244928634b682b5e797047",
+              "reported_result": {
+                "index": "65537",
+                "queries": "129",
+                "k": "10",
+                "features": "17",
+                "request_median_ms": "0.366935",
+                "device_median_ms": "0.224926",
+                "rounds": "5",
+                "query_tile": "129",
+                "index_tile": "65536"
+              }
+            }
+          }
+        }
+      ],
+      "pooled_median_ms": {
+        "baseline": {
+          "request": 0.3668675,
+          "device": 0.2254335
+        },
+        "batch512": {
+          "request": 0.370769,
+          "device": 0.2256275
+        }
+      },
+      "candidate_over_baseline": {
+        "request": 1.0106346296687496,
+        "device": 1.00086056420186
+      }
+    }
+  ]
+}

@@ -1,0 +1,226 @@
+{
+  "note": "Read-only replay of speed_torch_seq.py lines2077-2088 using emitted original input witnesses; no opponent rerun or timing change.",
+  "passed": true,
+  "tensors": 30,
+  "source_sha256": {
+    "ours": "ca25bc0eb93b8de0829c4e1b78eb9c19d21392a98388cf3f4b86156bf2ad3f95",
+    "torch": "b5442542e7a34755ac97cc915ad465cf1d41398b481d1b24b6049bfa77320ea8"
+  },
+  "numerical_gate_lines": [
+    "FSPEED-AGREE-GATE lane=mamba3 shape=lane.b2_l4_d32 arm=reference-fp32 passed=true rtol=0.0005 atol=1e-05",
+    "FSPEED-AGREE-GATE lane=mamba3 shape=narrow.b8_l4096_d512 arm=reference-fp32 passed=true rtol=0.0005 atol=1e-05",
+    "FSPEED-AGREE-GATE lane=mamba3 shape=wide.b8_l1024_d2048 arm=reference-fp32 passed=true rtol=0.0005 atol=1e-05"
+  ],
+  "entries": [
+    {
+      "lane": "mamba3",
+      "shape": "lane.b2_l4_d32",
+      "tensor": "block_norm.weight",
+      "n": "32",
+      "hash": "b75a50bba7865004"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "lane.b2_l4_d32",
+      "tensor": "in_proj.weight",
+      "n": "13408",
+      "hash": "f27be8a2af1371c8"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "lane.b2_l4_d32",
+      "tensor": "dt_bias",
+      "n": "1",
+      "hash": "36ed4c2dc2cf9734"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "lane.b2_l4_d32",
+      "tensor": "B_norm.weight",
+      "n": "128",
+      "hash": "3ec83c1cc24c4a39"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "lane.b2_l4_d32",
+      "tensor": "C_norm.weight",
+      "n": "128",
+      "hash": "5d821adffaee8cfa"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "lane.b2_l4_d32",
+      "tensor": "B_bias",
+      "n": "128",
+      "hash": "0db75a25457f36e4"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "lane.b2_l4_d32",
+      "tensor": "C_bias",
+      "n": "128",
+      "hash": "8a8b27d3040fdc11"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "lane.b2_l4_d32",
+      "tensor": "D",
+      "n": "1",
+      "hash": "f0a319c562fbab28"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "lane.b2_l4_d32",
+      "tensor": "out_proj.weight",
+      "n": "2048",
+      "hash": "dcf8f4019ab70f19"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "lane.b2_l4_d32",
+      "tensor": "x",
+      "n": "256",
+      "hash": "3a2c9cef1d2b3726"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "narrow.b8_l4096_d512",
+      "tensor": "block_norm.weight",
+      "n": "512",
+      "hash": "ae3c64b9e9f1a8fc"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "narrow.b8_l4096_d512",
+      "tensor": "in_proj.weight",
+      "n": "1220608",
+      "hash": "1bfbff7cf495a05a"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "narrow.b8_l4096_d512",
+      "tensor": "dt_bias",
+      "n": "16",
+      "hash": "827084605578ff8f"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "narrow.b8_l4096_d512",
+      "tensor": "B_norm.weight",
+      "n": "128",
+      "hash": "3ec83c1cc24c4a39"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "narrow.b8_l4096_d512",
+      "tensor": "C_norm.weight",
+      "n": "128",
+      "hash": "5d821adffaee8cfa"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "narrow.b8_l4096_d512",
+      "tensor": "B_bias",
+      "n": "2048",
+      "hash": "1fbcfe71f83b676b"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "narrow.b8_l4096_d512",
+      "tensor": "C_bias",
+      "n": "2048",
+      "hash": "492b8acd3dd5522a"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "narrow.b8_l4096_d512",
+      "tensor": "D",
+      "n": "16",
+      "hash": "016b763871469a7e"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "narrow.b8_l4096_d512",
+      "tensor": "out_proj.weight",
+      "n": "524288",
+      "hash": "a8ea283baa5bb6ab"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "narrow.b8_l4096_d512",
+      "tensor": "x",
+      "n": "16777216",
+      "hash": "ae6a6f54211a9d5e"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "wide.b8_l1024_d2048",
+      "tensor": "block_norm.weight",
+      "n": "2048",
+      "hash": "e19341884bae7431"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "wide.b8_l1024_d2048",
+      "tensor": "in_proj.weight",
+      "n": "17760256",
+      "hash": "349bdde10f512309"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "wide.b8_l1024_d2048",
+      "tensor": "dt_bias",
+      "n": "64",
+      "hash": "fd339e4774d174c3"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "wide.b8_l1024_d2048",
+      "tensor": "B_norm.weight",
+      "n": "128",
+      "hash": "3ec83c1cc24c4a39"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "wide.b8_l1024_d2048",
+      "tensor": "C_norm.weight",
+      "n": "128",
+      "hash": "5d821adffaee8cfa"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "wide.b8_l1024_d2048",
+      "tensor": "B_bias",
+      "n": "8192",
+      "hash": "5e7f6fc0aca134c3"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "wide.b8_l1024_d2048",
+      "tensor": "C_bias",
+      "n": "8192",
+      "hash": "e09a0edb8afaa651"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "wide.b8_l1024_d2048",
+      "tensor": "D",
+      "n": "64",
+      "hash": "ee1411114721184d"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "wide.b8_l1024_d2048",
+      "tensor": "out_proj.weight",
+      "n": "8388608",
+      "hash": "0caed7b3417405c0"
+    },
+    {
+      "lane": "mamba3",
+      "shape": "wide.b8_l1024_d2048",
+      "tensor": "x",
+      "n": "16777216",
+      "hash": "ae6a6f54211a9d5e"
+    }
+  ]
+}

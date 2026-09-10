@@ -4,11 +4,10 @@
 
     pixi run check-cityhash
 
-Three functions under test, the whole key chain a category ever passes
+Two functions under test, the whole key chain a category ever passes
 through in their system:
 
   `city_hash_64`           gbdt/digest/city.mojo      (util/digest/city.cpp)
-  `calc_cat_feature_hash`  gbdt/cat_feature/          (libs/cat_feature)
   `calc_hash` + the (ui64)(int) widening
                            gbdt/models/hash.mojo      (libs/model/hash.h,
                                                        ctr_provider.h:107)
@@ -29,8 +28,10 @@ is needed.
    1..3, 4..8, 9..16, 17..32, 33..64, and >64 at 1, 2, 4 and 15 loop
    iterations), category spellings from the real datasets ("Private",
    ">50K", "?", "nan", integers-as-strings), UTF-8, an embedded NUL and a
-   0xff byte. Both the 64-bit hash and its low-32 truncation are compared,
-   because the truncation is the function the rest of CatBoost calls.
+   0xff byte. Both the 64-bit hash and its low-32 truncation are compared.
+   The truncation is the form a raw category takes in their hash maps, and
+   it is taken inline here because this repository trains on dense codes
+   and never hashes a category on its own path.
 
 2. **CHAINS**: the apply-time combination fold at lengths 1..8, mixing
    sign-extended category hashes with bare 0/1 binary-split arms. The
@@ -40,7 +41,6 @@ is needed.
    extension in `cat_hash_chain_element` would diverge.
 """
 
-from gbdt.cat_feature.cat_feature import calc_cat_feature_hash
 from gbdt.digest.city import city_hash_64
 from gbdt.models.hash import calc_hash, cat_hash_chain_element
 
@@ -97,7 +97,7 @@ def main() raises:
         var want64 = _parse_hex_u64(fields[3])
         var want32 = _parse_hex_u64(fields[4]).cast[DType.uint32]()
         var got64 = city_hash_64(Span(data))
-        var got32 = calc_cat_feature_hash(Span(data))
+        var got32 = (got64 & 0xFFFFFFFF).cast[DType.uint32]()
         if got64 != want64:
             wrong64 += 1
             print(
@@ -107,12 +107,12 @@ def main() raises:
         if got32 != want32:
             wrong32 += 1
             print(
-                "  MISMATCH len", length, ": calc_cat_feature_hash",
+                "  MISMATCH len", length, ": low-32 truncation",
                 hex(got32), "want", hex(want32),
             )
     print(
         "cityhash strings:", n_strings, "rows,", wrong64,
-        "wrong city_hash_64,", wrong32, "wrong calc_cat_feature_hash",
+        "wrong city_hash_64,", wrong32, "wrong low-32 truncation",
     )
 
     var chain_head = lines[1 + n_strings].split(" ")

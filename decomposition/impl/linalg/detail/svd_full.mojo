@@ -109,20 +109,31 @@ through the square costs less than one Float64 ulp on a Float32-derived
 value; a private copy of the ordering rule would cost a second definition of
 `noise_variance_`, which is the expensive one.
 
-DEVIATION 593: A WIDE MATRIX IS REFUSED BY NAME.
-R-SVD needs `n_samples >= n_features`. scikit-learn's `_fit_full` handles the
-wide case because LAPACK `gesdd` does; the portable route for it is an LQ
-factorization of the transpose, which is the same kernel run on `X^T` plus a
-transpose of an `O(rows)` buffer, and it is not written. `svd_solver='full'`
-therefore RAISES on `n_samples < n_features` and names the route, rather than
-silently taking the covariance arm, which is the substitution this class
-already refuses to make for the solver name itself. The shipped
-`'covariance_eigh'` arm handles that shape and the message says so.
+DEVIATION 593: WIDE IDENTICAL MATRICES USE TRANSPOSED QR (2026-09-10).
+Center X using the shared kernels, factor X^T = Q R with a single QR panel,
+SVD R^T = U S V^T, and form the PCA right basis Q V by applying stored
+reflectors in reverse order. No covariance and no division by singular
+values are used, including on rank-deficient inputs. The existing square
+caller buffers retain their shape, with compact results zero-padded for
+tracing. The shared host tail uses min(rows, cols) singular values and the
+same count for noise variance. n_components cannot exceed that count.
+
+The new wide Jacobi route uses 64 sweeps and relative tolerance 1e-6;
+the inherited 1e-7 can cycle on roundoff-sized rank-deficient columns.
+A local large-theta rotation avoids overflowing theta squared. Columns
+whose pinned squared norms flush to zero are treated as zero in the relative
+rotation test as well as in singular-value extraction; rotating against
+zero norms made rank-deficient columns cycle on H100. Tall and
+legacy numeric-mode behavior retain the original rotation, budget and
+threshold. Nonconvergence is still refused. Single-panel Q reconstruction
+and square caller buffers are capacity/performance limitations, not a
+TSQR speed claim. Gates: decomposition/checks/svd_wide_check.mojo.
 
 WHAT THIS ARM DOES NOT INHERIT FROM THE COVARIANCE ARM: the
 `n_features > 128 under NUMERIC_IDENTICAL` refusal. That limit is the pinned
 split-K Gram kernel's capacity (IDENTITY_PATHS row 27) and this arm never
-builds a Gram. UNRUN on any column and recorded as OWED rather than claimed;
+builds a Gram. Tall feature counts above 128 remain RUN OWED; the standard
+tall suite and wide 129-feature gate ran on Apple and NVIDIA (September 10);
 `one-box-verdict-is-not-three` applies to a capability claim as much as to a
 speed one.
 """
@@ -130,16 +141,16 @@ speed one.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import thread_idx
+from std.gpu import thread_idx, block_idx
 from std.memory import stack_allocation
 
-from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from checks.numerics import ftz, identical_mul_add, identical_sqrt, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.column_stats import (
     STATS_TPB,
     column_mean_kernel,
     shift_columns_kernel,
 )
-from core.householder_qr import fold_and_broadcast, qr_factor, qr_slice_count
+from core.householder_qr import fold_and_broadcast, qr_factor, qr_slice_count, QR_TPB, qr_reflector_u1, qr_reflector_tau
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
@@ -165,7 +176,7 @@ from decomposition.impl.linalg.detail.pca import (
 comptime SVD_TPB = JACOBI_TPB
 
 
-def one_sided_jacobi_svd_kernel(
+def one_sided_jacobi_svd_kernel[wide_rotation: Bool = False](
     r: MutPointer[Float32, MutAnyOrigin],
     v_out: MutPointer[Float32, MutAnyOrigin],
     s_out: MutPointer[Float32, MutAnyOrigin],
@@ -251,10 +262,25 @@ def one_sided_jacobi_svd_kernel(
                 var np_ = ftz(identical_sqrt(app))
                 var nq_ = ftz(identical_sqrt(aqq))
                 var thresh = ftz(tol_in * ftz(np_ * nq_))
-                if abs(apq) > thresh:
+                var rotate = abs(apq) > thresh
+                comptime if wide_rotation:
+                    # The declared FTZ squared-norm arithmetic represents
+                    # these columns as zero. A nonzero cross product cannot
+                    # define a relative angle against a zero norm.
+                    rotate = rotate and np_ != Float32(0.0) and nq_ != Float32(0.0)
+                if rotate:
                     rots += 1
                     if tid == 0:
                         var cs = jacobi_rotation_cs(app, aqq, apq)
+                        comptime if wide_rotation:
+                            # Large theta overflows theta^2 in the inherited
+                            # rotation. Here t=apq/(aqq-app) is its limiting
+                            # value, with error below Float32 rounding once
+                            # |theta| > 1e10. This is local to the new route.
+                            var delta = ftz(aqq - app)
+                            if abs(delta) > abs(apq) * Float32(2e10):
+                                var t = ftz(identical_div(apq, delta))
+                                cs = SIMD[DType.float32, 2](Float32(1.0), t)
                         rot[0] = cs[0]
                         rot[1] = cs[1]
                     barrier()
@@ -311,13 +337,14 @@ def one_sided_jacobi_svd_kernel(
         info_out.unsafe_store(2, Float32(last_rots))
 
 
-def svd_of_r(
+def svd_of_r[wide_rotation: Bool = False](
     ctx: DeviceContext,
     mut r: DeviceBuffer[DType.float32],
     mut v: DeviceBuffer[DType.float32],
     mut s: DeviceBuffer[DType.float32],
     n_cols: Int,
     max_sweeps: Int = JACOBI_SWEEPS,
+    tolerance: Float32 = Float32(JACOBI_TOL),
 ) raises:
     """Launch the one-sided Jacobi and REFUSE a non-converged answer.
 
@@ -333,14 +360,14 @@ def svd_of_r(
     """
     var info = ctx.enqueue_create_buffer[DType.float32](3)
     ctx.synchronize()
-    ctx.enqueue_function[one_sided_jacobi_svd_kernel](
+    ctx.enqueue_function[one_sided_jacobi_svd_kernel[wide_rotation]](
         r.unsafe_ptr(),
         v.unsafe_ptr(),
         s.unsafe_ptr(),
         info.unsafe_ptr(),
         Int32(n_cols),
         Int32(max_sweeps),
-        Float32(JACOBI_TOL),
+        tolerance,
         grid_dim=(1, 1, 1),
         block_dim=(SVD_TPB, 1, 1),
     )
@@ -356,7 +383,7 @@ def svd_of_r(
             + ": the last sweep still performed "
             + String(h_info.unsafe_ptr().unsafe_load(2))
             + " rotations against a tolerance of "
-            + String(JACOBI_TOL)
+            + String(tolerance)
             + ". The remedy is more sweeps, the same one cuSOLVER's syevj"
             " has. An unconverged decomposition is not returned as if it"
             " were one; see DEVIATION 590."
@@ -364,9 +391,13 @@ def svd_of_r(
 
 
 def pca_full_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
-    """`pca_validate`'s four refusals, plus DEVIATION 593's."""
+    """Shared shape checks; wide IDENTICAL additionally bounds k by rows."""
     pca_validate(n_rows, n_cols, n_components)
     if n_rows < n_cols:
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            if n_components > n_rows:
+                raise Error("full SVD n_components cannot exceed min(n_samples, n_features)")
+            return
         raise Error(
             "mojolearn PCA(svd_solver='full') needs at least as many samples"
             " as features and got "
@@ -438,8 +469,11 @@ def pca_fit_full(
     )
     ctx.synchronize()
 
-    _ = qr_factor(ctx, x, r_scratch, r_out, n_rows, n_cols)
-    svd_of_r(ctx, r_out, v_buf, s_buf, n_cols)
+    if n_rows < n_cols:
+        _pca_wide_basis(ctx, x, r_out, v_buf, s_buf, n_rows, n_cols)
+    else:
+        _ = qr_factor(ctx, x, r_scratch, r_out, n_rows, n_cols)
+        svd_of_r(ctx, r_out, v_buf, s_buf, n_cols)
 
     # `signFlipKernel` on the RIGHT basis, which is where DEVIATION 525 pins
     # it for both shipped arms: largest-absolute-value entry, ties to the
@@ -475,11 +509,116 @@ def pca_fit_full(
     for i in range(n_cols * n_cols):
         vecs.append(Float64(h_v.unsafe_ptr().unsafe_load(i)))
     return order_truncate_spectrum(
-        diag, vecs, n_cols, n_components, n_rows - 1
+        diag, vecs, n_cols, n_components, n_rows - 1, min(n_rows, n_cols)
     )
 
 
 def pca_full_scratch_cells(n_rows: Int, n_cols: Int) -> Int:
     """How large `r_scratch` must be. One place, so a caller cannot size it
     from a slice count it computed itself."""
+    if n_rows < n_cols:
+        return 1  # The wide route owns its compact transposed QR buffers.
     return qr_slice_count(n_rows, n_cols) * n_cols * n_cols
+
+
+
+def _wide_transpose_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    rows: Int32, cols: Int32,
+):
+    var t = Int(block_idx.x) * 256 + Int(thread_idx.x)
+    if t < Int(rows) * Int(cols):
+        dst.unsafe_store((t % Int(cols)) * Int(rows) + t // Int(cols), src.unsafe_load(t))
+
+
+def _wide_seed_kernel(
+    small_v: MutPointer[Float32, MutAnyOrigin],
+    small_r: MutPointer[Float32, MutAnyOrigin],
+    basis: MutPointer[Float32, MutAnyOrigin],
+    report_r: MutPointer[Float32, MutAnyOrigin],
+    singular: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32, n_in: Int32,
+):
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var t = Int(block_idx.x) * 256 + Int(thread_idx.x)
+    if t < n * n:
+        var row = t // n
+        var col = t % n
+        var v = Float32(0.0)
+        var r = Float32(0.0)
+        if row < m and col < m:
+            v = small_v.unsafe_load(row * m + col)
+            r = small_r.unsafe_load(row * m + col)
+        basis.unsafe_store(t, v)
+        report_r.unsafe_store(t, r)
+    if t >= m and t < n:
+        singular.unsafe_store(t, Float32(0.0))
+
+
+def _wide_apply_q_kernel(
+    packed: MutPointer[Float32, MutAnyOrigin],
+    r: MutPointer[Float32, MutAnyOrigin],
+    basis: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32, n_in: Int32,
+):
+    # X^T=Q R and R^T=U S V^T imply X=U S (Q V)^T.
+    # Apply stored reflectors in reverse order to [V;0]. No division by S,
+    # so rank deficiency preserves an orthonormal null-space basis as well.
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    for jj in range(m):
+        var j = m - 1 - jj
+        var rjj = r.unsafe_load(j * m + j)
+        if rjj != Float32(0.0):
+            var ajj = ftz(packed.unsafe_load(j * m + j))
+            var tau = qr_reflector_tau(ajj, abs(rjj), qr_reflector_u1(ajj, rjj))
+            var acc = Float32(0.0)
+            var row = j + 1 + tid
+            while row < n:
+                acc = ftz(identical_mul_add(packed.unsafe_load(row * m + j), basis.unsafe_load(row * n + c), acc))
+                row += QR_TPB
+            # Read before the fold barrier: tid0 must not overwrite the
+            # head while another warp is still loading it.
+            var head = basis.unsafe_load(j * n + c)
+            var tail = fold_and_broadcast[QR_TPB](acc)
+            var td = ftz(tau * ftz(head + tail))
+            if tid == 0:
+                basis.unsafe_store(j * n + c, ftz(head - td))
+            row = j + 1 + tid
+            while row < n:
+                basis.unsafe_store(row * n + c, ftz(identical_mul_add(-td, packed.unsafe_load(row * m + j), basis.unsafe_load(row * n + c))))
+                row += QR_TPB
+            barrier()
+
+
+def _pca_wide_basis(
+    ctx: DeviceContext,
+    mut centered: DeviceBuffer[DType.float32],
+    mut report_r: DeviceBuffer[DType.float32],
+    mut basis: DeviceBuffer[DType.float32],
+    mut singular: DeviceBuffer[DType.float32],
+    m: Int, n: Int,
+) raises:
+    var xt = ctx.enqueue_create_buffer[DType.float32](m * n)
+    var r = ctx.enqueue_create_buffer[DType.float32](m * m)
+    var rt = ctx.enqueue_create_buffer[DType.float32](m * m)
+    var small_v = ctx.enqueue_create_buffer[DType.float32](m * m)
+    var scratch = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.enqueue_function[_wide_transpose_kernel](centered.unsafe_ptr(), xt.unsafe_ptr(), Int32(m), Int32(n), grid_dim=((m*n+255)//256,1,1), block_dim=(256,1,1))
+    # A single panel preserves all reflectors. TSQR's R-only interface does
+    # not retain the second-level Q; using it here would silently lose Q.
+    _ = qr_factor(ctx, xt, scratch, r, n, m, slices_override=1)
+    ctx.enqueue_function[_wide_transpose_kernel](r.unsafe_ptr(), rt.unsafe_ptr(), Int32(m), Int32(m), grid_dim=((m*m+255)//256,1,1), block_dim=(256,1,1))
+    svd_of_r[True](ctx, rt, small_v, singular, m, max_sweeps=64, tolerance=Float32(1e-6))
+    ctx.enqueue_function[_wide_seed_kernel](small_v.unsafe_ptr(), r.unsafe_ptr(), basis.unsafe_ptr(), report_r.unsafe_ptr(), singular.unsafe_ptr(), Int32(m), Int32(n), grid_dim=((n*n+255)//256,1,1), block_dim=(256,1,1))
+    ctx.enqueue_function[_wide_apply_q_kernel](xt.unsafe_ptr(), r.unsafe_ptr(), basis.unsafe_ptr(), Int32(m), Int32(n), grid_dim=(m,1,1), block_dim=(QR_TPB,1,1))
+    ctx.synchronize()
+    _ = xt^
+    _ = r^
+    _ = rt^
+    _ = small_v^
+    _ = scratch^

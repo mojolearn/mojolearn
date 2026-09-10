@@ -1,0 +1,75 @@
+Imported from /tmp/mojolearn-mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:6:
+/tmp/mojolearn-mamba3-next/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:28:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /tmp/mojolearn-mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:6:
+/tmp/mojolearn-mamba3-next/mamba/impl/mamba_ssm/modules/mamba3_transfer.mojo:51:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /tmp/mojolearn-mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/tmp/mojolearn-mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:966:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sv[ix] = v
+        ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /tmp/mojolearn-mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/tmp/mojolearn-mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:975:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sk[ix] = k
+        ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /tmp/mojolearn-mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/tmp/mojolearn-mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:982:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sv[j * 8 + pp], sk[j * 32 + nn], acc))
+                                    ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /tmp/mojolearn-mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/tmp/mojolearn-mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:982:55: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        acc = ftz(identical_mul_add(sv[j * 8 + pp], sk[j * 32 + nn], acc))
+                                                    ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /tmp/mojolearn-mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/tmp/mojolearn-mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1025:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sv[tid] = value
+        ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /tmp/mojolearn-mamba3-next/mamba/checks/mamba3_increment_tile_check.mojo:8:
+/tmp/mojolearn-mamba3-next/mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:1029:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var vsv = sv[j * 2 + p % 2]
+                  ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+M3_INCREMENT_TILE_CASE_PASS 2 1 3 32 False 49152
+M3_INCREMENT_TILE_CASE_PASS 2 1 3 32 True 49152
+M3_INCREMENT_TILE_CASE_PASS 2 31 3 32 False 49152
+M3_INCREMENT_TILE_CASE_PASS 2 31 3 32 True 49152
+M3_INCREMENT_TILE_CASE_PASS 2 32 3 32 False 49152
+M3_INCREMENT_TILE_CASE_PASS 2 32 3 32 True 49152
+M3_INCREMENT_TILE_CASE_PASS 2 33 3 32 False 98304
+M3_INCREMENT_TILE_CASE_PASS 2 33 3 32 True 98304
+M3_INCREMENT_TILE_CASE_PASS 2 63 3 32 False 98304
+M3_INCREMENT_TILE_CASE_PASS 2 63 3 32 True 98304
+M3_INCREMENT_TILE_CASE_PASS 2 64 3 32 False 98304
+M3_INCREMENT_TILE_CASE_PASS 2 64 3 32 True 98304
+M3_INCREMENT_TILE_CASE_PASS 2 65 3 32 False 147456
+M3_INCREMENT_TILE_CASE_PASS 2 65 3 32 True 147456
+M3_INCREMENT_TILE_CASE_PASS 2 129 3 32 False 245760
+M3_INCREMENT_TILE_CASE_PASS 2 129 3 32 True 245760
+M3_INCREMENT_TILE_CASE_PASS 2 1 3 64 False 49152
+M3_INCREMENT_TILE_CASE_PASS 2 1 3 64 True 49152
+M3_INCREMENT_TILE_CASE_PASS 2 31 3 64 False 49152
+M3_INCREMENT_TILE_CASE_PASS 2 31 3 64 True 49152
+M3_INCREMENT_TILE_CASE_PASS 2 32 3 64 False 49152
+M3_INCREMENT_TILE_CASE_PASS 2 32 3 64 True 49152
+M3_INCREMENT_TILE_CASE_PASS 2 33 3 64 False 49152
+M3_INCREMENT_TILE_CASE_PASS 2 33 3 64 True 49152
+M3_INCREMENT_TILE_CASE_PASS 2 63 3 64 False 49152
+M3_INCREMENT_TILE_CASE_PASS 2 63 3 64 True 49152
+M3_INCREMENT_TILE_CASE_PASS 2 64 3 64 False 49152
+M3_INCREMENT_TILE_CASE_PASS 2 64 3 64 True 49152
+M3_INCREMENT_TILE_CASE_PASS 2 65 3 64 False 98304
+M3_INCREMENT_TILE_CASE_PASS 2 65 3 64 True 98304
+M3_INCREMENT_TILE_CASE_PASS 2 129 3 64 False 147456
+M3_INCREMENT_TILE_CASE_PASS 2 129 3 64 True 147456
+M3_INCREMENT_TILE_PASS 2752512 three-plan output cells

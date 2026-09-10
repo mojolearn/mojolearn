@@ -118,7 +118,7 @@ from ._spectral_impl import SpectralClustering
 from . import umap
 from .umap import UMAP
 from .neural_network import SmallMLPTrainer
-from .language_model import SmallByteLanguageModelTrainer
+from .language_model import SmallByteLanguageModelTrainer, ByteLanguageModelConfig
 from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
@@ -204,12 +204,19 @@ from ._mamba_impl import (
 # (transformer/README.md's "PyPI surface" section is the ledger).
 from . import transformer
 from ._transformer_impl import TransformerBlock, TransformerState
+# The Samba-shaped training stack (embedding, Mamba-3 / attention blocks,
+# final norm, LM head, cross-entropy, AdamW with schedule and clause 9.2
+# accumulation, position-keyed RNG, JSON checkpoint) over the training,
+# mamba and transformer bindings. `_samba_impl.py` holds no numerics.
+from ._samba_impl import SambaConfig, SambaStack
 
 __all__ = [
     "Array",
     "SGD",
     "Adam",
     "AdamW",
+    "SambaConfig",
+    "SambaStack",
     "ARIMA",
     "AgglomerativeClustering",
     "ConstantKernel",
@@ -254,6 +261,7 @@ __all__ = [
     "UMAP",
     "SmallMLPTrainer",
     "SmallByteLanguageModelTrainer",
+    "ByteLanguageModelConfig",
     "kpss_test",
     "linalg",
     "matmul",

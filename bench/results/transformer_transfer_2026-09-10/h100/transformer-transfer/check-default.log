@@ -1,0 +1,2 @@
+8932 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bdf40000000, nodemask=2)
+{"arrays": 82, "timings": {"b2_l512_d128": {"median_ms": 2.610373, "samples_ms": [2.573003, 3.925977, 3.048108, 2.610373, 2.572215]}, "b2_l512_d256": {"median_ms": 3.468087, "samples_ms": [3.464305, 3.520324, 3.468087, 3.491038, 3.461501]}}}

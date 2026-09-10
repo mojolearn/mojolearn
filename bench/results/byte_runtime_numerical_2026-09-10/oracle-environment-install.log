@@ -1,0 +1,37 @@
+Collecting torch
+  Downloading torch-2.14.0-cp314-cp314-macosx_14_0_arm64.whl.metadata (39 kB)
+Collecting filelock (from torch)
+  Using cached filelock-3.32.6-py3-none-any.whl.metadata (2.0 kB)
+Collecting typing-extensions>=4.10.0 (from torch)
+  Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting setuptools>=77.0.3 (from torch)
+  Using cached setuptools-84.0.0-py3-none-any.whl.metadata (6.6 kB)
+Collecting sympy>=1.13.3 (from torch)
+  Using cached sympy-1.14.0-py3-none-any.whl.metadata (12 kB)
+Collecting networkx>=2.5.1 (from torch)
+  Using cached networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)
+Collecting jinja2 (from torch)
+  Using cached jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+Collecting fsspec>=0.8.5 (from torch)
+  Using cached fsspec-2026.7.0-py3-none-any.whl.metadata (10 kB)
+Collecting mpmath<1.4,>=1.1.0 (from sympy>=1.13.3->torch)
+  Using cached mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+Collecting MarkupSafe>=2.0 (from jinja2->torch)
+  Using cached markupsafe-3.0.3-cp314-cp314-macosx_11_0_arm64.whl.metadata (2.7 kB)
+Downloading torch-2.14.0-cp314-cp314-macosx_14_0_arm64.whl (127.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 127.3/127.3 MB 31.9 MB/s  0:00:04
+Using cached fsspec-2026.7.0-py3-none-any.whl (206 kB)
+Using cached networkx-3.6.1-py3-none-any.whl (2.1 MB)
+Using cached setuptools-84.0.0-py3-none-any.whl (818 kB)
+Using cached sympy-1.14.0-py3-none-any.whl (6.3 MB)
+Using cached mpmath-1.3.0-py3-none-any.whl (536 kB)
+Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Using cached filelock-3.32.6-py3-none-any.whl (100 kB)
+Using cached jinja2-3.1.6-py3-none-any.whl (134 kB)
+Using cached markupsafe-3.0.3-cp314-cp314-macosx_11_0_arm64.whl (12 kB)
+Installing collected packages: mpmath, typing-extensions, sympy, setuptools, networkx, MarkupSafe, fsspec, filelock, jinja2, torch
+
+Successfully installed MarkupSafe-3.0.3 filelock-3.32.6 fsspec-2026.7.0 jinja2-3.1.6 mpmath-1.3.0 networkx-3.6.1 setuptools-84.0.0 sympy-1.14.0 torch-2.14.0 typing-extensions-4.16.0
+
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: /private/tmp/mojolearn-root-validation-20260906/bin/python -m pip install --upgrade pip

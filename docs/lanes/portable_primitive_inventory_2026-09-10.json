@@ -1,0 +1,1288 @@
+{
+  "source_revision": "f7fdae3c15a85714fce935efb1e69f6e8141e62a",
+  "scope": "tracked/nonignored Mojo files; docstrings/comments/string literals removed for call detection; named external_call targets included; lexical categories are not reachability proofs",
+  "file_count": 1149,
+  "operations": {
+    "erfc": {
+      "calls": [],
+      "imports": [],
+      "mentions": 10
+    },
+    "expm1": {
+      "calls": [],
+      "imports": [],
+      "mentions": 2
+    },
+    "log10": {
+      "calls": [],
+      "imports": [],
+      "mentions": 0
+    },
+    "log2": {
+      "calls": [
+        {
+          "path": "ensemble/checks/predict_check.mojo",
+          "line": 1384,
+          "category": "gate/oracle",
+          "source": "var libm_v = external_call[\"log2\", Float64](Float64(n))"
+        },
+        {
+          "path": "ensemble/checks/predict_check.mojo",
+          "line": 1426,
+          "category": "gate/oracle",
+          "source": "var libm_v = external_call[\"log2\", Float64](Float64(n))"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 532,
+          "category": "production/library",
+          "source": "return log2(x)"
+        },
+        {
+          "path": "checks/portable_log2_64_check.mojo",
+          "line": 31,
+          "category": "gate/oracle",
+          "source": "return external_call[\"log2\", Float64](x)"
+        },
+        {
+          "path": "isolation_forest/checks/if_check.mojo",
+          "line": 1005,
+          "category": "gate/oracle",
+          "source": "var want = Int(ceil(log2(Float64(nn))))"
+        },
+        {
+          "path": "gbdt/train.mojo",
+          "line": 400,
+          "category": "production/library",
+          "source": "elif sn > 1 and Float64(sn) > Float64(nrr) / log2(Float64(sn)):"
+        },
+        {
+          "path": "gbdt/methods/kernel/split_properties_helpers.mojo",
+          "line": 119,
+          "category": "production/library",
+          "source": ") << UInt32(ceil(log2(Float32(self.fold_count))))"
+        }
+      ],
+      "imports": [
+        {
+          "path": "ensemble/checks/predict_check.mojo",
+          "line": 88,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 530,
+          "category": "production/library"
+        },
+        {
+          "path": "checks/sample_indices_check.mojo",
+          "line": 22,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "isolation_forest/checks/if_check.mojo",
+          "line": 95,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "isolation_forest/impl/isolation_forest/isolation_forest.mojo",
+          "line": 59,
+          "category": "production/library"
+        },
+        {
+          "path": "gbdt/train.mojo",
+          "line": 50,
+          "category": "production/library"
+        },
+        {
+          "path": "gbdt/methods/kernel/split_properties_helpers.mojo",
+          "line": 49,
+          "category": "production/library"
+        }
+      ],
+      "mentions": 145
+    },
+    "asin": {
+      "calls": [],
+      "imports": [],
+      "mentions": 0
+    },
+    "acos": {
+      "calls": [],
+      "imports": [],
+      "mentions": 0
+    },
+    "atan": {
+      "calls": [],
+      "imports": [],
+      "mentions": 0
+    },
+    "atan2": {
+      "calls": [],
+      "imports": [],
+      "mentions": 0
+    },
+    "atanh": {
+      "calls": [
+        {
+          "path": "arima/checks/fit_check.mojo",
+          "line": 919,
+          "category": "gate/oracle",
+          "source": "var want = 2.0 * atanh(v)"
+        },
+        {
+          "path": "arima/checks/fit_oracle.mojo",
+          "line": 99,
+          "category": "gate/oracle",
+          "source": "mine[i] = 2.0 * atanh(mine[i])"
+        },
+        {
+          "path": "arima/impl/timeSeries/jones_transform.mojo",
+          "line": 120,
+          "category": "production/library",
+          "source": "return Float32(2.0) * atanh(v)"
+        }
+      ],
+      "imports": [
+        {
+          "path": "arima/checks/fit_check.mojo",
+          "line": 905,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "arima/checks/fit_oracle.mojo",
+          "line": 56,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "arima/impl/timeSeries/jones_transform.mojo",
+          "line": 79,
+          "category": "production/library"
+        }
+      ],
+      "mentions": 19
+    },
+    "cbrt": {
+      "calls": [],
+      "imports": [],
+      "mentions": 0
+    },
+    "sinh": {
+      "calls": [],
+      "imports": [],
+      "mentions": 0
+    },
+    "cosh": {
+      "calls": [],
+      "imports": [],
+      "mentions": 0
+    },
+    "hypot": {
+      "calls": [],
+      "imports": [],
+      "mentions": 0
+    },
+    "lgamma": {
+      "calls": [
+        {
+          "path": "kde/checks/kde_oracle.mojo",
+          "line": 359,
+          "category": "gate/oracle",
+          "source": "return 0.5 * Float64(n) * log(Float64(pi)) - lgamma(0.5 * Float64(n) + 1.0)"
+        },
+        {
+          "path": "kde/checks/kde_oracle.mojo",
+          "line": 381,
+          "category": "gate/oracle",
+          "source": "factor = _log_sn64(d - 1) + lgamma(dd)"
+        },
+        {
+          "path": "kde/impl/neighbors/kernel_density.mojo",
+          "line": 538,
+          "category": "production/library",
+          "source": "factor = _log_sn_fast(d - 1) + lgamma(dd)"
+        },
+        {
+          "path": "kde/impl/neighbors/kernel_density.mojo",
+          "line": 553,
+          "category": "production/library",
+          "source": "return 0.5 * Float64(n) * log(Float64(pi)) - lgamma(0.5 * Float64(n) + 1.0)"
+        }
+      ],
+      "imports": [
+        {
+          "path": "kde/checks/kde_oracle.mojo",
+          "line": 43,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "kde/impl/neighbors/kernel_density.mojo",
+          "line": 98,
+          "category": "production/library"
+        }
+      ],
+      "mentions": 16
+    },
+    "tgamma": {
+      "calls": [],
+      "imports": [],
+      "mentions": 0
+    },
+    "log1p": {
+      "calls": [
+        {
+          "path": "checks/portable_nn_check.mojo",
+          "line": 153,
+          "category": "gate/oracle",
+          "source": "return external_call[\"log1p\", Float64](x)"
+        }
+      ],
+      "imports": [],
+      "mentions": 35
+    },
+    "erf": {
+      "calls": [
+        {
+          "path": "checks/numerics.mojo",
+          "line": 1038,
+          "category": "production/library",
+          "source": "return erf(x)"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 1049,
+          "category": "production/library",
+          "source": "return x * Float32(0.5) * (Float32(1.0) + erf(x / s2))"
+        },
+        {
+          "path": "checks/portable_gelu_check.mojo",
+          "line": 352,
+          "category": "gate/oracle",
+          "source": "out_verf.unsafe_store(i, erf(x))"
+        },
+        {
+          "path": "checks/portable_gelu_check.mojo",
+          "line": 430,
+          "category": "gate/oracle",
+          "source": "return external_call[\"erf\", Float64](x)"
+        }
+      ],
+      "imports": [
+        {
+          "path": "checks/numerics.mojo",
+          "line": 1036,
+          "category": "production/library"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 1045,
+          "category": "production/library"
+        },
+        {
+          "path": "checks/portable_gelu_check.mojo",
+          "line": 95,
+          "category": "gate/oracle"
+        }
+      ],
+      "mentions": 46
+    },
+    "tanh": {
+      "calls": [
+        {
+          "path": "kernel_methods/checks/km_oracle.mojo",
+          "line": 137,
+          "category": "gate/oracle",
+          "source": "out.append(tanh(t))"
+        },
+        {
+          "path": "kernel_methods/checks/km_sabotage.mojo",
+          "line": 333,
+          "category": "gate/oracle",
+          "source": "inout_k.unsafe_store(tid, ftz(tanh(t)))"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 1029,
+          "category": "production/library",
+          "source": "return tanh(x)"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 1064,
+          "category": "production/library",
+          "source": "* (Float32(1.0) + tanh(kk * (x + c3 * (x * x * x))))"
+        },
+        {
+          "path": "checks/portable_gelu_check.mojo",
+          "line": 351,
+          "category": "gate/oracle",
+          "source": "out_vtanh.unsafe_store(i, tanh(x))"
+        },
+        {
+          "path": "checks/portable_gelu_check.mojo",
+          "line": 426,
+          "category": "gate/oracle",
+          "source": "return external_call[\"tanh\", Float64](x)"
+        },
+        {
+          "path": "arima/checks/fit_check.mojo",
+          "line": 930,
+          "category": "gate/oracle",
+          "source": "var th64 = tanh(x * 0.5)"
+        },
+        {
+          "path": "arima/checks/fit_oracle.mojo",
+          "line": 102,
+          "category": "gate/oracle",
+          "source": "tmp[i] = tanh(tmp[i] * 0.5)"
+        },
+        {
+          "path": "arima/impl/timeSeries/jones_transform.mojo",
+          "line": 109,
+          "category": "production/library",
+          "source": "return tanh(x * Float32(0.5))"
+        },
+        {
+          "path": "mamba/checks/mamba3_oracle.mojo",
+          "line": 1233,
+          "category": "gate/oracle",
+          "source": "var ang = tanh(proj[t * dip + c_ang + r]) * pi64"
+        }
+      ],
+      "imports": [
+        {
+          "path": "kernel_methods/checks/km_oracle.mojo",
+          "line": 46,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "kernel_methods/checks/km_sabotage.mojo",
+          "line": 117,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 1027,
+          "category": "production/library"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 1056,
+          "category": "production/library"
+        },
+        {
+          "path": "checks/portable_gelu_check.mojo",
+          "line": 95,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "arima/checks/fit_check.mojo",
+          "line": 905,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "arima/checks/fit_oracle.mojo",
+          "line": 56,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "arima/impl/timeSeries/jones_transform.mojo",
+          "line": 79,
+          "category": "production/library"
+        },
+        {
+          "path": "mamba/checks/mamba3_oracle.mojo",
+          "line": 1134,
+          "category": "gate/oracle"
+        }
+      ],
+      "mentions": 114
+    },
+    "sqrt": {
+      "calls": [
+        {
+          "path": "core/expand_distances.mojo",
+          "line": 55,
+          "category": "production/library",
+          "source": "d = ftz(sqrt(d))"
+        },
+        {
+          "path": "hierarchy/checks/sabotage_tile.mojo",
+          "line": 79,
+          "category": "gate/oracle",
+          "source": "dist = ftz(sqrt(dist))"
+        },
+        {
+          "path": "hierarchy/checks/linkage_oracle.mojo",
+          "line": 439,
+          "category": "gate/oracle",
+          "source": "keys.append(sqrt(s))"
+        },
+        {
+          "path": "ensemble/randomforest.mojo",
+          "line": 366,
+          "category": "production/library",
+          "source": "return sqrt(Float64(n_cols)) / Float64(n_cols)"
+        },
+        {
+          "path": "neighbors/checks/estimator_check.mojo",
+          "line": 235,
+          "category": "gate/oracle",
+          "source": "var want_d = sqrt(best_d[s])"
+        },
+        {
+          "path": "neighbors/checks/knn_check.mojo",
+          "line": 721,
+          "category": "gate/oracle",
+          "source": "var want = sqrt(Float64(p0))"
+        },
+        {
+          "path": "neighbors/checks/metric_oracle.mojo",
+          "line": 194,
+          "category": "gate/oracle",
+          "source": "return 1.0 - dot / (sqrt(xn) * sqrt(yn))"
+        },
+        {
+          "path": "neighbors/checks/metric_oracle.mojo",
+          "line": 213,
+          "category": "gate/oracle",
+          "source": "return sqrt(acc)"
+        },
+        {
+          "path": "neighbors/impl/neighbors/detail/fused_l2_knn.mojo",
+          "line": 805,
+          "category": "production/library",
+          "source": "out_dists.unsafe_store(idx, sqrt(v))"
+        },
+        {
+          "path": "cluster/impl/distance/unfused_distance_nn.mojo",
+          "line": 274,
+          "category": "production/library",
+          "source": "best_value = sqrt(best_value)"
+        },
+        {
+          "path": "neighbors/impl/neighbors/ball_cover/ball_cover.mojo",
+          "line": 203,
+          "category": "production/library",
+          "source": "var s = Int(sqrt(Float64(m)))"
+        },
+        {
+          "path": "cluster/impl/distance/fused_distance_nn/simt_kernel.mojo",
+          "line": 575,
+          "category": "production/library",
+          "source": "best_v = sqrt(best_v)"
+        },
+        {
+          "path": "spectral/checks/symmetric_eig_host.mojo",
+          "line": 164,
+          "category": "production/library",
+          "source": "return sqrt(x)"
+        },
+        {
+          "path": "metrics/checks/silhouette_check.mojo",
+          "line": 206,
+          "category": "gate/oracle",
+          "source": "sums[Int(y[j])] += sqrt(acc)"
+        },
+        {
+          "path": "kernel_methods/checks/km_oracle.mojo",
+          "line": 484,
+          "category": "gate/oracle",
+          "source": "return sqrt(x)"
+        },
+        {
+          "path": "gaussian_process/checks/gp_oracle.mojo",
+          "line": 405,
+          "category": "gate/oracle",
+          "source": "var s3 = sqrt(Float64(3.0))"
+        },
+        {
+          "path": "gaussian_process/checks/gp_oracle.mojo",
+          "line": 406,
+          "category": "gate/oracle",
+          "source": "var s5 = sqrt(Float64(5.0))"
+        },
+        {
+          "path": "gaussian_process/checks/gp_oracle.mojo",
+          "line": 452,
+          "category": "gate/oracle",
+          "source": "var dist = sqrt(acc)"
+        },
+        {
+          "path": "gaussian_process/checks/gp_oracle.mojo",
+          "line": 530,
+          "category": "gate/oracle",
+          "source": "return sqrt(Float64(3.0))"
+        },
+        {
+          "path": "gaussian_process/checks/gp_oracle.mojo",
+          "line": 534,
+          "category": "gate/oracle",
+          "source": "return sqrt(Float64(5.0))"
+        },
+        {
+          "path": "spectral/impl/sparse/solver/detail/lanczos.mojo",
+          "line": 423,
+          "category": "production/library",
+          "source": "return sqrt(x)"
+        },
+        {
+          "path": "decomposition/checks/svd_full_check.mojo",
+          "line": 232,
+          "category": "gate/oracle",
+          "source": "out.append(sqrt(lam) if lam > 0.0 else 0.0)"
+        },
+        {
+          "path": "decomposition/checks/svd_full_check.mojo",
+          "line": 319,
+          "category": "gate/oracle",
+          "source": "return sqrt(num / den)"
+        },
+        {
+          "path": "decomposition/checks/jacobi_check.mojo",
+          "line": 210,
+          "category": "gate/oracle",
+          "source": "return sqrt(s)"
+        },
+        {
+          "path": "decomposition/checks/jacobi_eigh.mojo",
+          "line": 89,
+          "category": "gate/oracle",
+          "source": "t = 1.0 / (theta + sqrt(1.0 + theta * theta))"
+        },
+        {
+          "path": "decomposition/checks/jacobi_eigh.mojo",
+          "line": 91,
+          "category": "gate/oracle",
+          "source": "t = -1.0 / (-theta + sqrt(1.0 + theta * theta))"
+        },
+        {
+          "path": "decomposition/checks/jacobi_eigh.mojo",
+          "line": 92,
+          "category": "gate/oracle",
+          "source": "var c = 1.0 / sqrt(1.0 + t * t)"
+        },
+        {
+          "path": "decomposition/checks/pca_check.mojo",
+          "line": 72,
+          "category": "gate/oracle",
+          "source": "return sqrt(100.0)"
+        },
+        {
+          "path": "decomposition/checks/pca_check.mojo",
+          "line": 74,
+          "category": "gate/oracle",
+          "source": "return sqrt(50.0)"
+        },
+        {
+          "path": "decomposition/checks/pca_check.mojo",
+          "line": 76,
+          "category": "gate/oracle",
+          "source": "return sqrt(20.0)"
+        },
+        {
+          "path": "decomposition/checks/pca_check.mojo",
+          "line": 77,
+          "category": "gate/oracle",
+          "source": "return sqrt(5.0)"
+        },
+        {
+          "path": "decomposition/checks/pca_check.mojo",
+          "line": 135,
+          "category": "gate/oracle",
+          "source": "var a = sqrt(3.0 * _planted_var(k))"
+        },
+        {
+          "path": "decomposition/checks/pca_check.mojo",
+          "line": 738,
+          "category": "gate/oracle",
+          "source": "return sqrt(v)"
+        },
+        {
+          "path": "decomposition/checks/pca_check.mojo",
+          "line": 752,
+          "category": "gate/oracle",
+          "source": "var z = (_wide_u01(i, k, 1) - 0.5) * 2.0 * sqrt(3.0)"
+        },
+        {
+          "path": "decomposition/checks/pca_check.mojo",
+          "line": 755,
+          "category": "gate/oracle",
+          "source": "v += (_wide_u01(i, j + 1000, 3) - 0.5) * 2.0 * sqrt(3.0)"
+        },
+        {
+          "path": "decomposition/impl/linalg/detail/pca.mojo",
+          "line": 239,
+          "category": "production/library",
+          "source": "singular_vals.append(sqrt(lam * Float64(singular_scale)))"
+        },
+        {
+          "path": "decomposition/impl/linalg/detail/pca.mojo",
+          "line": 369,
+          "category": "production/library",
+          "source": "var r = sqrt(d)"
+        },
+        {
+          "path": "checks/portable_nn_check.mojo",
+          "line": 406,
+          "category": "gate/oracle",
+          "source": "var refr = Float32(Float64(1.0) / sqrt(Float64(xr)))"
+        },
+        {
+          "path": "checks/multiclass_score_check.mojo",
+          "line": 228,
+          "category": "gate/oracle",
+          "source": "var want = off_c[0] * sqrt(Float32(2.0))"
+        },
+        {
+          "path": "checks/leafwise_scores_check.mojo",
+          "line": 283,
+          "category": "gate/oracle",
+          "source": "score / sqrt(denum)"
+        },
+        {
+          "path": "checks/leafwise_scores_check.mojo",
+          "line": 288,
+          "category": "gate/oracle",
+          "source": "score_b / sqrt(denum_b)"
+        },
+        {
+          "path": "checks/pointwise_scores_check.mojo",
+          "line": 426,
+          "category": "gate/oracle",
+          "source": "out = -score / sqrt(denum)"
+        },
+        {
+          "path": "checks/pointwise_scores_check.mojo",
+          "line": 623,
+          "category": "gate/oracle",
+          "source": "out = -score / sqrt(denum)"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 651,
+          "category": "production/library",
+          "source": "return sqrt(x)"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 801,
+          "category": "production/library",
+          "source": "return Float32(1.0) / sqrt(x)"
+        },
+        {
+          "path": "glm/checks/ols_check.mojo",
+          "line": 1579,
+          "category": "gate/oracle",
+          "source": "return sqrt(s)"
+        },
+        {
+          "path": "glm/checks/ols_check.mojo",
+          "line": 2107,
+          "category": "gate/oracle",
+          "source": "var scaled = a[i] * sqrt(sw[i // d])"
+        },
+        {
+          "path": "glm/checks/ridge_check.mojo",
+          "line": 257,
+          "category": "gate/oracle",
+          "source": "return sqrt(s)"
+        },
+        {
+          "path": "glm/checks/multinomial_check.mojo",
+          "line": 1269,
+          "category": "gate/oracle",
+          "source": "var step = Float32(1.0) / sqrt(_host_dot(drt, drt, n))"
+        },
+        {
+          "path": "glm/checks/logistic_check.mojo",
+          "line": 392,
+          "category": "gate/oracle",
+          "source": "return sqrt(s)"
+        },
+        {
+          "path": "checks/portable_sqrtcos_check.mojo",
+          "line": 182,
+          "category": "gate/oracle",
+          "source": "var refs = Float32(sqrt(Float64(xs)))"
+        },
+        {
+          "path": "checks/ieee_arith_check.mojo",
+          "line": 107,
+          "category": "gate/oracle",
+          "source": "out_sqrt.unsafe_store(i, sqrt(abs(av)))"
+        },
+        {
+          "path": "checks/ieee_arith_check.mojo",
+          "line": 111,
+          "category": "gate/oracle",
+          "source": "out_cos.unsafe_store(i, av / sqrt(bp))"
+        },
+        {
+          "path": "checks/ieee_arith_check.mojo",
+          "line": 144,
+          "category": "gate/oracle",
+          "source": "o.unsafe_store(5, sqrt(av))"
+        },
+        {
+          "path": "checks/ieee_arith_check.mojo",
+          "line": 171,
+          "category": "gate/oracle",
+          "source": "refs.append(Float32(sqrt(a64)))"
+        },
+        {
+          "path": "checks/ieee_arith_check.mojo",
+          "line": 304,
+          "category": "gate/oracle",
+          "source": "var ref_sqrt = Float32(sqrt(Float64(abs(av))))"
+        },
+        {
+          "path": "checks/ieee_arith_check.mojo",
+          "line": 308,
+          "category": "gate/oracle",
+          "source": "var t_sq = Float32(sqrt(Float64(bp)))"
+        },
+        {
+          "path": "checks/ieee_arith_check.mojo",
+          "line": 322,
+          "category": "gate/oracle",
+          "source": "var ftz_sqrt = _ftz(Float32(sqrt(Float64(abs(_ftz(av))))))"
+        },
+        {
+          "path": "checks/division_check.mojo",
+          "line": 119,
+          "category": "gate/oracle",
+          "source": "out_rsqrt_div.unsafe_store(i, Float32(1.0) / sqrt(x))"
+        },
+        {
+          "path": "checks/division_check.mojo",
+          "line": 478,
+          "category": "gate/oracle",
+          "source": "var refx = Float32(Float64(1.0) / sqrt(Float64(x)))"
+        },
+        {
+          "path": "checks/gram_splitk_check.mojo",
+          "line": 177,
+          "category": "gate/oracle",
+          "source": "budget += VENDOR_SERIAL_FOLD_REL_PER_SQRT_K * sqrt(Float64(k))"
+        },
+        {
+          "path": "checks/gram_splitk_check.mojo",
+          "line": 641,
+          "category": "gate/oracle",
+          "source": "+ VENDOR_SERIAL_FOLD_REL_PER_SQRT_K * sqrt(Float64(k))"
+        },
+        {
+          "path": "holtwinters/checks/hw_oracle.mojo",
+          "line": 87,
+          "category": "gate/oracle",
+          "source": "return sqrt(x)"
+        },
+        {
+          "path": "bench/dsweep_main.mojo",
+          "line": 94,
+          "category": "benchmark",
+          "source": "var eps = 0.30 * sqrt(Float64(d) / 8.0)"
+        },
+        {
+          "path": "glm/impl/glm/qn/simple_mat/dense.mojo",
+          "line": 246,
+          "category": "production/library",
+          "source": "return sqrt(squared_norm(ctx, u, n, scalar))"
+        },
+        {
+          "path": "holtwinters/impl/holtwinters/internal/hw_optim.mojo",
+          "line": 237,
+          "category": "production/library",
+          "source": "return sqrt(x)"
+        },
+        {
+          "path": "hdbscan/checks/hdbscan_oracle.mojo",
+          "line": 724,
+          "category": "gate/oracle",
+          "source": "row.append(sqrt(s))"
+        },
+        {
+          "path": "hdbscan/checks/hdbscan_oracle.mojo",
+          "line": 750,
+          "category": "gate/oracle",
+          "source": "var dij = sqrt(s)"
+        },
+        {
+          "path": "cholesky/checks/cholesky_oracle.mojo",
+          "line": 361,
+          "category": "gate/oracle",
+          "source": "a[j * n + j] = sqrt(s)"
+        },
+        {
+          "path": "cholesky/checks/chol_sabotage.mojo",
+          "line": 235,
+          "category": "gate/oracle",
+          "source": "a.unsafe_store(jc * n + jc, ftz(sqrt(s)))"
+        },
+        {
+          "path": "mixture/checks/gmm_oracle.mojo",
+          "line": 652,
+          "category": "gate/oracle",
+          "source": "var djj = sqrt(s)"
+        },
+        {
+          "path": "mamba/checks/mamba3_oracle.mojo",
+          "line": 1154,
+          "category": "gate/oracle",
+          "source": "var rstd = 1.0 / sqrt(acc / Float64(dm) + Float64(M3_RMS_EPS))"
+        },
+        {
+          "path": "mamba/checks/mamba3_oracle.mojo",
+          "line": 1219,
+          "category": "gate/oracle",
+          "source": "var rb = 1.0 / sqrt(bn / Float64(n_state) + Float64(M3_RMS_EPS))"
+        },
+        {
+          "path": "mamba/checks/mamba3_oracle.mojo",
+          "line": 1220,
+          "category": "gate/oracle",
+          "source": "var rc = 1.0 / sqrt(cn / Float64(n_state) + Float64(M3_RMS_EPS))"
+        },
+        {
+          "path": "mamba/checks/mamba_oracle.mojo",
+          "line": 435,
+          "category": "gate/oracle",
+          "source": "var rstd = 1.0 / sqrt(acc / Float64(dm) + Float64(RMS_EPS))"
+        },
+        {
+          "path": "mamba/checks/mamba2_oracle.mojo",
+          "line": 821,
+          "category": "gate/oracle",
+          "source": "var rstd = 1.0 / sqrt(acc / Float64(dm) + Float64(M2_RMS_EPS))"
+        },
+        {
+          "path": "mamba/checks/mamba2_oracle.mojo",
+          "line": 903,
+          "category": "gate/oracle",
+          "source": "var rstd = 1.0 / sqrt(acc / Float64(di) + Float64(M2_RMS_EPS))"
+        },
+        {
+          "path": "gbdt/lapack/linear_system.mojo",
+          "line": 106,
+          "category": "production/library",
+          "source": "var ljj = sqrt(s)"
+        },
+        {
+          "path": "gbdt/methods/random_score_helper.mojo",
+          "line": 216,
+          "category": "production/library",
+          "source": "return sqrt(sum2 / (Float64(count) + 1e-100))"
+        },
+        {
+          "path": "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo",
+          "line": 282,
+          "category": "production/library",
+          "source": "return sqrt(sum2 / (weight + 1e-100))"
+        },
+        {
+          "path": "kde/checks/kde_oracle.mojo",
+          "line": 441,
+          "category": "gate/oracle",
+          "source": "return 1.0 - dot / (sqrt(qn) * sqrt(tn))"
+        },
+        {
+          "path": "kde/checks/kde_oracle.mojo",
+          "line": 459,
+          "category": "gate/oracle",
+          "source": "return sqrt(acc)"
+        },
+        {
+          "path": "kde/impl/neighbors/kernel_density.mojo",
+          "line": 228,
+          "category": "production/library",
+          "source": "bound = Float32(9.223372036854775808e18 / sqrt(Float64(n_features)))"
+        },
+        {
+          "path": "gbdt/gpu_lib/gpu_profiler.mojo",
+          "line": 222,
+          "category": "production/library",
+          "source": "sqrt((self.sum2 - self.sum * mean) / Float64(self.count)),"
+        }
+      ],
+      "imports": [
+        {
+          "path": "core/row_norms.mojo",
+          "line": 55,
+          "category": "production/library"
+        },
+        {
+          "path": "core/expand_distances.mojo",
+          "line": 18,
+          "category": "production/library"
+        },
+        {
+          "path": "hierarchy/checks/sabotage_tile.mojo",
+          "line": 25,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "hierarchy/checks/linkage_oracle.mojo",
+          "line": 52,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "ensemble/randomforest.mojo",
+          "line": 56,
+          "category": "production/library"
+        },
+        {
+          "path": "neighbors/checks/estimator_check.mojo",
+          "line": 55,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "neighbors/checks/ball_cover_check.mojo",
+          "line": 46,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "neighbors/checks/knn_check.mojo",
+          "line": 45,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "neighbors/checks/metric_oracle.mojo",
+          "line": 30,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "resample/checks/resample_check.mojo",
+          "line": 83,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "resample/checks/resample_oracle.mojo",
+          "line": 41,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "gemm/checks/gemm_unpinned_price.mojo",
+          "line": 78,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "neighbors/impl/neighbors/detail/fused_l2_knn.mojo",
+          "line": 220,
+          "category": "production/library"
+        },
+        {
+          "path": "cluster/impl/distance/unfused_distance_nn.mojo",
+          "line": 69,
+          "category": "production/library"
+        },
+        {
+          "path": "neighbors/impl/neighbors/ball_cover/ball_cover.mojo",
+          "line": 166,
+          "category": "production/library"
+        },
+        {
+          "path": "cluster/impl/distance/fused_distance_nn/simt_kernel.mojo",
+          "line": 167,
+          "category": "production/library"
+        },
+        {
+          "path": "spectral/checks/symmetric_eig_host.mojo",
+          "line": 74,
+          "category": "production/library"
+        },
+        {
+          "path": "spectral/checks/spectral_check.mojo",
+          "line": 109,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "neighbors/impl/matrix/detail/select_radix.mojo",
+          "line": 119,
+          "category": "production/library"
+        },
+        {
+          "path": "metrics/checks/silhouette_check.mojo",
+          "line": 82,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "metrics/checks/regression_metrics_check.mojo",
+          "line": 80,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "metrics/checks/trustworthiness_check.mojo",
+          "line": 54,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "kernel_methods/checks/km_oracle.mojo",
+          "line": 482,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "gaussian_process/checks/gp_oracle.mojo",
+          "line": 69,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "ivf/checks/ivf_oracle.mojo",
+          "line": 54,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "spectral/impl/sparse/solver/detail/lanczos.mojo",
+          "line": 421,
+          "category": "production/library"
+        },
+        {
+          "path": "decomposition/checks/svd_full_check.mojo",
+          "line": 51,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "decomposition/checks/jacobi_check.mojo",
+          "line": 46,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "decomposition/checks/jacobi_eigh.mojo",
+          "line": 42,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "decomposition/checks/pca_check.mojo",
+          "line": 47,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "decomposition/impl/linalg/detail/pca.mojo",
+          "line": 6,
+          "category": "production/library"
+        },
+        {
+          "path": "checks/portable_nn_check.mojo",
+          "line": 42,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/multiclass_score_check.mojo",
+          "line": 61,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/leafwise_scores_check.mojo",
+          "line": 75,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/logloss_leaf_oracle_check.mojo",
+          "line": 265,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/pointwise_scores_check.mojo",
+          "line": 179,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/vendor_correctness_check.mojo",
+          "line": 38,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 649,
+          "category": "production/library"
+        },
+        {
+          "path": "checks/numerics.mojo",
+          "line": 799,
+          "category": "production/library"
+        },
+        {
+          "path": "glm/checks/ols_check.mojo",
+          "line": 104,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "glm/checks/ridge_check.mojo",
+          "line": 61,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "glm/checks/multinomial_check.mojo",
+          "line": 85,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "glm/checks/qn_losses_check.mojo",
+          "line": 67,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "glm/checks/logistic_check.mojo",
+          "line": 109,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/loss_oracle_check.mojo",
+          "line": 157,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/portable_sqrtcos_check.mojo",
+          "line": 33,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/ieee_arith_check.mojo",
+          "line": 79,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/division_check.mojo",
+          "line": 78,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/gram_splitk_check.mojo",
+          "line": 97,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "checks/catboost_apply_check.mojo",
+          "line": 51,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "arima/checks/fit_check.mojo",
+          "line": 61,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "holtwinters/checks/hw_oracle.mojo",
+          "line": 22,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "bench/dsweep_main.mojo",
+          "line": 22,
+          "category": "benchmark"
+        },
+        {
+          "path": "glm/impl/glm/qn/simple_mat/dense.mojo",
+          "line": 244,
+          "category": "production/library"
+        },
+        {
+          "path": "holtwinters/impl/holtwinters/internal/hw_optim.mojo",
+          "line": 235,
+          "category": "production/library"
+        },
+        {
+          "path": "hdbscan/checks/hdbscan_oracle.mojo",
+          "line": 59,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "cholesky/checks/cholesky_oracle.mojo",
+          "line": 62,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "cholesky/checks/chol_sabotage.mojo",
+          "line": 77,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "mixture/checks/gmm_oracle.mojo",
+          "line": 83,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "mamba/checks/mamba3_oracle.mojo",
+          "line": 1134,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "mamba/checks/mamba_oracle.mojo",
+          "line": 420,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "mamba/checks/mamba2_oracle.mojo",
+          "line": 803,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "gbdt/lapack/linear_system.mojo",
+          "line": 57,
+          "category": "production/library"
+        },
+        {
+          "path": "gbdt/methods/random_score_helper.mojo",
+          "line": 66,
+          "category": "production/library"
+        },
+        {
+          "path": "gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo",
+          "line": 7,
+          "category": "production/library"
+        },
+        {
+          "path": "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo",
+          "line": 5,
+          "category": "production/library"
+        },
+        {
+          "path": "kde/checks/kde_oracle.mojo",
+          "line": 43,
+          "category": "gate/oracle"
+        },
+        {
+          "path": "kde/impl/neighbors/kernel_density.mojo",
+          "line": 98,
+          "category": "production/library"
+        },
+        {
+          "path": "gbdt/gpu_lib/gpu_profiler.mojo",
+          "line": 80,
+          "category": "production/library"
+        }
+      ],
+      "mentions": 685
+    },
+    "pow": {
+      "calls": [
+        {
+          "path": "checks/numerics.mojo",
+          "line": 642,
+          "category": "production/library",
+          "source": "return pow(x, p)"
+        },
+        {
+          "path": "checks/pointwise_target_check.mojo",
+          "line": 170,
+          "category": "gate/oracle",
+          "source": "return external_call[\"pow\", Float64](x, y)"
+        },
+        {
+          "path": "checks/portable_pow64_check.mojo",
+          "line": 49,
+          "category": "gate/oracle",
+          "source": "var want = external_call[\"pow\", Float64](x, p)"
+        }
+      ],
+      "imports": [
+        {
+          "path": "checks/numerics.mojo",
+          "line": 640,
+          "category": "production/library"
+        }
+      ],
+      "mentions": 102
+    }
+  }
+}

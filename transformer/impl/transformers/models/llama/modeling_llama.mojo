@@ -271,7 +271,9 @@ transcendentals and division below are OURS.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
+from std.os import getenv
+from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -298,7 +300,15 @@ from mamba.impl.transformers.models.mamba.modeling_mamba import (
     residual_add_kernel,
 )
 
+from transformer.impl.transformers.models.llama.fused_attention import (
+    FUSED_RAN,
+    device_first_nonfinite,
+    fused_forward_launch,
+    fused_supported_head_dim,
+)
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_cos,
     identical_div,
@@ -636,6 +646,35 @@ def _gemm_op_nn() -> Int:
 
 
 # ===========================================================================
+# THE KEY SPAN OF ONE CALL. `window == 0` is the full causal profile: every
+# call reads absolute keys `[0, pos0 + l)`. `window > 0` is sliding-window
+# causal attention: the query at absolute position `p` sees keys
+# `[max(0, p - window + 1), p]`, so one call of `l` tokens starting at `pos0`
+# reads absolute keys `[llama_key_lo, pos0 + l)`. Every softmax fold below
+# walks that span ASCENDING from `+0.0`; the masked head and tail of the
+# span contribute exactly `+0.0` (contract 7.1), so the bits of a query row
+# are a pure function of (query position, its visible key range) and do not
+# depend on `pos0`, on `l`, or on how the sequence was chunked.
+# ===========================================================================
+
+
+def llama_key_lo(pos0: Int, window: Int) -> Int:
+    """First absolute key position a call starting at `pos0` reads."""
+    if window <= 0:
+        return 0
+    var lo = pos0 - window + 1
+    if lo < 0:
+        lo = 0
+    return lo
+
+
+def llama_key_span(pos0: Int, l: Int, window: Int) -> Int:
+    """Number of key positions a call of `l` tokens at `pos0` reads: the
+    packed stride of every `[B, *, L, S]` attention buffer this call."""
+    return pos0 + l - llama_key_lo(pos0, window)
+
+
+# ===========================================================================
 # DEVICE I/O PLUMBING. Not seams, not arithmetic -- these three are
 # `modeling_mamba.mojo`'s `mamba_upload`, `mamba_download` and `mamba_zeros`
 # transcribed under lane-neutral names, because a llama file calling
@@ -655,8 +694,8 @@ def _upload(
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     ctx.synchronize()
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
+    if n > 0:
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
     ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
@@ -679,9 +718,9 @@ def _download(
         var view = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    if n > 0:
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
     _ = host^
     return out^
 
@@ -939,15 +978,9 @@ struct LlamaDeviceWeights(Movable):
         # for anyone who needs that, and it is what
         # `transformer_check.mojo`'s refusal audit calls directly, so the
         # audit's coverage of every name is untouched.
-        _refuse_nonfinite_named("input_layernorm.weight", norm1_w)
-        _refuse_nonfinite_named("post_attention_layernorm.weight", norm2_w)
-        _refuse_nonfinite_named("q_proj.weight", w_q)
-        _refuse_nonfinite_named("k_proj.weight", w_k)
-        _refuse_nonfinite_named("v_proj.weight", w_v)
-        _refuse_nonfinite_named("o_proj.weight", w_o)
-        _refuse_nonfinite_named("gate_proj.weight", w_gate)
-        _refuse_nonfinite_named("up_proj.weight", w_up)
-        _refuse_nonfinite_named("down_proj.weight", w_down)
+        # Uploaded first, refused on the device (2026-09-09: the host walk
+        # of 17 M weights was 38 ms per call at the Samba shape). Same
+        # names, same order, same message at the same flat index.
         self.norm1_w = _upload(ctx, norm1_w)
         self.norm2_w = _upload(ctx, norm2_w)
         self.w_q = _upload(ctx, w_q)
@@ -957,6 +990,68 @@ struct LlamaDeviceWeights(Movable):
         self.w_gate = _upload(ctx, w_gate)
         self.w_up = _upload(ctx, w_up)
         self.w_down = _upload(ctx, w_down)
+        _refuse_nonfinite_device(ctx, "input_layernorm.weight", self.norm1_w, dm)
+        _refuse_nonfinite_device(ctx, "post_attention_layernorm.weight", self.norm2_w, dm)
+        _refuse_nonfinite_device(ctx, "q_proj.weight", self.w_q, qw * dm)
+        _refuse_nonfinite_device(ctx, "k_proj.weight", self.w_k, kw * dm)
+        _refuse_nonfinite_device(ctx, "v_proj.weight", self.w_v, kw * dm)
+        _refuse_nonfinite_device(ctx, "o_proj.weight", self.w_o, dm * qw)
+        _refuse_nonfinite_device(ctx, "gate_proj.weight", self.w_gate, it * dm)
+        _refuse_nonfinite_device(ctx, "up_proj.weight", self.w_up, it * dm)
+        _refuse_nonfinite_device(ctx, "down_proj.weight", self.w_down, dm * it)
+
+
+    def __init__(
+        out self, ctx: DeviceContext, dims: LlamaDims, eps: Float32,
+        var norm1_w: DeviceBuffer[DType.float32],
+        var norm2_w: DeviceBuffer[DType.float32],
+        var w_q: DeviceBuffer[DType.float32],
+        var w_k: DeviceBuffer[DType.float32],
+        var w_v: DeviceBuffer[DType.float32],
+        var w_o: DeviceBuffer[DType.float32],
+        var w_gate: DeviceBuffer[DType.float32],
+        var w_up: DeviceBuffer[DType.float32],
+        var w_down: DeviceBuffer[DType.float32],
+    ) raises:
+        """Own uploaded buffers directly, with the host constructor's
+        identical length checks and ordered device refusals. The binding
+        uses this to avoid zero-filled host Lists and a redundant copy of
+        every weight on each call; no pointer or weight cache survives it.
+        """
+        dims.validate()
+        self.dims = dims.copy()
+        self.eps = eps
+        var dm = dims.d_model
+        var qw = dims.q_width()
+        var kw = dims.kv_width()
+        var it = dims.intermediate
+        _expect_len("norm1.weight", len(norm1_w), dm)
+        _expect_len("norm2.weight", len(norm2_w), dm)
+        _expect_len("q_proj.weight", len(w_q), qw * dm)
+        _expect_len("k_proj.weight", len(w_k), kw * dm)
+        _expect_len("v_proj.weight", len(w_v), kw * dm)
+        _expect_len("o_proj.weight", len(w_o), dm * qw)
+        _expect_len("gate_proj.weight", len(w_gate), it * dm)
+        _expect_len("up_proj.weight", len(w_up), it * dm)
+        _expect_len("down_proj.weight", len(w_down), dm * it)
+        self.norm1_w = norm1_w^
+        self.norm2_w = norm2_w^
+        self.w_q = w_q^
+        self.w_k = w_k^
+        self.w_v = w_v^
+        self.w_o = w_o^
+        self.w_gate = w_gate^
+        self.w_up = w_up^
+        self.w_down = w_down^
+        _refuse_nonfinite_device(ctx, "input_layernorm.weight", self.norm1_w, dm)
+        _refuse_nonfinite_device(ctx, "post_attention_layernorm.weight", self.norm2_w, dm)
+        _refuse_nonfinite_device(ctx, "q_proj.weight", self.w_q, qw * dm)
+        _refuse_nonfinite_device(ctx, "k_proj.weight", self.w_k, kw * dm)
+        _refuse_nonfinite_device(ctx, "v_proj.weight", self.w_v, kw * dm)
+        _refuse_nonfinite_device(ctx, "o_proj.weight", self.w_o, dm * qw)
+        _refuse_nonfinite_device(ctx, "gate_proj.weight", self.w_gate, it * dm)
+        _refuse_nonfinite_device(ctx, "up_proj.weight", self.w_up, it * dm)
+        _refuse_nonfinite_device(ctx, "down_proj.weight", self.w_down, dm * it)
 
 
 struct LlamaKVCache(Movable):
@@ -985,16 +1080,33 @@ struct LlamaKVCache(Movable):
     var head_dim: Int
     var s_max: Int
     var s: Int
+    var window: Int
+    var cap: Int
     var k: DeviceBuffer[DType.float32]
     var v: DeviceBuffer[DType.float32]
 
     def __init__(
-        out self, ctx: DeviceContext, b: Int, dims: LlamaDims, s_max: Int
+        out self,
+        ctx: DeviceContext,
+        b: Int,
+        dims: LlamaDims,
+        s_max: Int,
+        window: Int = 0,
     ) raises:
+        """`window == 0`: the linear cache above, packed at stride `s`.
+        `window > 0`: a RING of `window` slots per (batch, kv head), slot
+        `= position % window`, always at stride `window`; `s` still counts
+        absolute positions and `s_max` still bounds them (the rotary table
+        and DEVIATION 812's ceiling are per position, not per slot). A
+        call gathers the keys it reads out of the ring into the packed
+        work span (`kv_window_gather_kernel`) before writing its own
+        tokens back (`kv_ring_write_kernel`)."""
         if b <= 0:
             raise Error("llama: KV cache needs B > 0")
         if s_max <= 0:
             raise Error("llama: KV cache needs s_max > 0")
+        if window < 0:
+            raise Error("llama: KV cache window must be >= 0 (0 = full causal)")
         if s_max > MAX_ABS_POSITION:
             raise Error(
                 String("llama: s_max ")
@@ -1010,8 +1122,12 @@ struct LlamaKVCache(Movable):
         self.head_dim = dims.head_dim
         self.s_max = s_max
         self.s = 0
-        self.k = _zeros(ctx, b * dims.n_kv * s_max * dims.head_dim)
-        self.v = _zeros(ctx, b * dims.n_kv * s_max * dims.head_dim)
+        self.window = window
+        self.cap = s_max
+        if window > 0:
+            self.cap = window
+        self.k = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
+        self.v = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
 
 
 struct LlamaDeviceStages(Movable):
@@ -1036,6 +1152,8 @@ struct LlamaDeviceStages(Movable):
     var b: Int
     var l: Int
     var s_max: Int
+    var window: Int
+    var s_cap: Int
     var dims: LlamaDims
     var norm1_sumsq: DeviceBuffer[DType.float32]  # [M]
     var norm1_out: DeviceBuffer[DType.float32]  # [M, d_model]
@@ -1066,6 +1184,11 @@ struct LlamaDeviceStages(Movable):
     var qbh: DeviceBuffer[DType.float32]  # [L, head_dim]     (no tag)
     var kbh: DeviceBuffer[DType.float32]  # [s_max, head_dim] (no tag)
     var sbh: DeviceBuffer[DType.float32]  # [L, s_max]        (no tag)
+    var attn_materialized: Bool
+    """Whether `scores`, `masked`, `aexp` and `weights` hold the LAST call's
+    attention stages. The eager path sets it; the fused path (which never
+    writes them) clears it, and a backward that needs them recomputes
+    them first (`ensure_attention_materialized`)."""
 
     def __init__(
         out self,
@@ -1074,7 +1197,18 @@ struct LlamaDeviceStages(Movable):
         l: Int,
         s_max: Int,
         dims: LlamaDims,
+        window: Int = 0,
+        lean: Bool = False,
     ) raises:
+        """`window` must equal the cache's. The attention buffers are
+        allocated at `s_cap`: `s_max` for full causal, and the widest key
+        span a windowed call of `l` tokens can read otherwise.
+
+        `lean`: the four `[B, n_heads, L, S]` attention stages and `sbh`
+        are allocated at ONE element, for a caller that runs the fused
+        attention path with the trace off. The eager path grows them on
+        demand (`ensure_attention_stage_capacity`), so a lean struct is
+        never wrong, only late."""
         dims.validate()
         if b <= 0 or l <= 0:
             raise Error("llama: stages need B > 0 and L > 0")
@@ -1086,9 +1220,15 @@ struct LlamaDeviceStages(Movable):
                 + String(l)
                 + "; the cache must hold at least one call's tokens"
             )
+        if window < 0:
+            raise Error("llama: stages window must be >= 0 (0 = full causal)")
         self.b = b
         self.l = l
         self.s_max = s_max
+        self.window = window
+        self.s_cap = s_max
+        if window > 0 and window - 1 + l < s_max:
+            self.s_cap = window - 1 + l
         self.dims = dims.copy()
         var m = b * l
         var dm = dims.d_model
@@ -1105,14 +1245,20 @@ struct LlamaDeviceStages(Movable):
         self.v_proj = _zeros(ctx, m * kw)
         self.q_rope = _zeros(ctx, m * qw)
         self.k_rope = _zeros(ctx, m * kw)
-        self.k_cache = _zeros(ctx, b * nkv * s_max * hd)
-        self.v_cache = _zeros(ctx, b * nkv * s_max * hd)
-        self.scores = _zeros(ctx, b * nh * l * s_max)
-        self.masked = _zeros(ctx, b * nh * l * s_max)
+        var sc = self.s_cap
+        var cells = b * nh * l * sc
+        var sbh_n = l * sc
+        if lean:
+            cells = 1
+            sbh_n = 1
+        self.k_cache = _zeros(ctx, b * nkv * sc * hd)
+        self.v_cache = _zeros(ctx, b * nkv * sc * hd)
+        self.scores = _zeros(ctx, cells)
+        self.masked = _zeros(ctx, cells)
         self.amax = _zeros(ctx, b * nh * l)
-        self.aexp = _zeros(ctx, b * nh * l * s_max)
+        self.aexp = _zeros(ctx, cells)
         self.denom = _zeros(ctx, b * nh * l)
-        self.weights = _zeros(ctx, b * nh * l * s_max)
+        self.weights = _zeros(ctx, cells)
         self.ctxv = _zeros(ctx, m * qw)
         self.o_proj = _zeros(ctx, m * dm)
         self.residual1 = _zeros(ctx, m * dm)
@@ -1125,8 +1271,24 @@ struct LlamaDeviceStages(Movable):
         self.down_proj = _zeros(ctx, m * dm)
         self.residual2 = _zeros(ctx, m * dm)
         self.qbh = _zeros(ctx, l * hd)
-        self.kbh = _zeros(ctx, s_max * hd)
-        self.sbh = _zeros(ctx, l * s_max)
+        self.kbh = _zeros(ctx, sc * hd)
+        self.sbh = _zeros(ctx, sbh_n)
+        self.attn_materialized = False
+
+
+def ensure_attention_stage_capacity(
+    ctx: DeviceContext, mut stages: LlamaDeviceStages, l: Int, s: Int
+) raises:
+    """Grow a lean struct's attention stages to this call's `[B, n_heads,
+    L, S]` before the eager path writes them. A no-op on a full struct."""
+    var cells = stages.b * stages.dims.n_heads * l * s
+    if len(stages.scores) < cells:
+        stages.scores = _zeros(ctx, cells)
+        stages.masked = _zeros(ctx, cells)
+        stages.aexp = _zeros(ctx, cells)
+        stages.weights = _zeros(ctx, cells)
+    if len(stages.sbh) < l * s:
+        stages.sbh = _zeros(ctx, l * s)
 
 
 # ===========================================================================
@@ -1601,6 +1763,95 @@ def kv_append_kernel(
     new_cache.unsafe_store(i, v)
 
 
+def kv_window_gather_kernel(
+    work: MutPointer[Float32, MutAnyOrigin],
+    ring: MutPointer[Float32, MutAnyOrigin],
+    fresh: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    cap_in: Int32,
+    key_lo_in: Int32,
+    pos0_in: Int32,
+    s_in: Int32,
+):
+    """The windowed twin of `kv_append_kernel`: one thread per cell of the
+    packed work span `[B, n_kv, S, head_dim]`, where work index `j` is
+    absolute position `key_lo + j`. Positions before `pos0` come out of
+    the ring at slot `position % cap`; positions from `pos0` on come out of
+    this call's token-major `fresh`. A COPY, not a seam. It runs BEFORE
+    `kv_ring_write_kernel`, because this call's tokens may evict positions
+    this call still attends to."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var cap = Int(cap_in)
+    var key_lo = Int(key_lo_in)
+    var pos0 = Int(pos0_in)
+    var s = Int(s_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * nkv * s * hd:
+        return
+    var d = i % hd
+    var rest = i // hd
+    var j = rest % s
+    var rest2 = rest // s
+    var kvh = rest2 % nkv
+    var bb = rest2 // nkv
+    var pos = key_lo + j
+    var v: Float32
+    if pos < pos0:
+        v = ring.unsafe_load(((bb * nkv + kvh) * cap + pos % cap) * hd + d)
+    else:
+        var t = pos - pos0
+        v = fresh.unsafe_load((bb * l + t) * nkv * hd + kvh * hd + d)
+    work.unsafe_store(i, v)
+
+
+def kv_ring_write_kernel(
+    ring: MutPointer[Float32, MutAnyOrigin],
+    fresh: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    cap_in: Int32,
+    pos0_in: Int32,
+):
+    """Write this call's `l` tokens into the ring at slot `position % cap`.
+    One thread per RING cell: it finds the LAST of this call's positions
+    that maps to its slot (the highest position wins, as an in-order
+    append would) and copies that token, or leaves the slot alone when no
+    token of this call lands there. No thread reads a cell another thread
+    writes, so the result does not depend on the launch."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var cap = Int(cap_in)
+    var pos0 = Int(pos0_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * nkv * cap * hd:
+        return
+    var d = i % hd
+    var rest = i // hd
+    var slot = rest % cap
+    var rest2 = rest // cap
+    var kvh = rest2 % nkv
+    var bb = rest2 // nkv
+    var p_last = pos0 + l - 1
+    var delta = (p_last % cap - slot + cap) % cap
+    var pos = p_last - delta
+    if pos < pos0:
+        return
+    var t = pos - pos0
+    ring.unsafe_store(
+        i, fresh.unsafe_load((bb * l + t) * nkv * hd + kvh * hd + d)
+    )
+
+
 # ===========================================================================
 # `eager_attention_forward` (:191-213), the pinned path. Contract section 6
 # excludes FlashAttention, SDPA, paged attention and chunked prefill, and
@@ -1787,6 +2038,8 @@ def attn_mask_kernel(
     l_in: Int32,
     s_in: Int32,
     pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
 ):
     """S13: `attn_weights + attention_mask` (:206), ONE ADD of
     `finfo(float32).min` where masked and of `+0.0` where not
@@ -1805,21 +2058,31 @@ def attn_mask_kernel(
     `s + (-FLT_MAX)` is `-FLT_MAX` exactly for `|s| < 2^103` and overflows
     to `-inf` below roughly `-1e31`. `S13_MASK_NEG_INF` is the other value.
 
-    THE MASK IS CAUSAL AND NOTHING ELSE (contract section 11): key at
-    absolute position `j` is visible to query token `t` iff
-    `j <= pos0 + t`. No sliding window, no prefix mask, no attention sink.
+    THE MASK IS CAUSAL, OPTIONALLY SLIDING-WINDOW, AND NOTHING ELSE: key
+    at absolute position `p_k = key_lo + j` is visible to the query at
+    absolute position `p_q = pos0 + t` iff `p_k <= p_q` and, when
+    `window > 0`, `p_k > p_q - window`. `window == 0` with `key_lo == 0`
+    is the full causal mask of contract section 11 exactly. No prefix
+    mask, no attention sink.
     """
     var b = Int(b_in)
     var nh = Int(nh_in)
     var l = Int(l_in)
     var s = Int(s_in)
     var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= b * nh * l * s:
         return
     var j = i % s
     var rest = i // s
     var t = rest % l
+    var p_k = key_lo + j
+    var p_q = pos0 + t
+    var visible = p_k <= p_q
+    if window > 0 and p_k <= p_q - window:
+        visible = False
 
     var fill: Float32
     comptime if SAB_S13_MASK_NEG_INF:
@@ -1828,7 +2091,7 @@ def attn_mask_kernel(
         fill = bitcast[DType.float32](UInt32(MASK_FILL_BITS))
 
     var sv = ftz(scores.unsafe_load(i))
-    if j <= pos0 + t:
+    if visible:
         comptime if SAB_S13_MASK_SELECT:
             # SABOTAGE: the unmasked cell passes through unchanged, so a
             # planted `-0.0` score survives instead of being laundered.
@@ -2218,6 +2481,46 @@ def _refuse_nonfinite_named(name: String, values: List[Float32]) raises:
             )
 
 
+def _refuse_nonfinite_device(
+    ctx: DeviceContext,
+    name: String,
+    mut buf: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """`_refuse_nonfinite_named` over a DEVICE buffer: the scan runs on
+    the device (`device_first_nonfinite`) and only the offending element is
+    brought back to classify it, so the message is character for character
+    the host loop's message at the same flat index."""
+    var idx = device_first_nonfinite(ctx, buf, n)
+    if idx < 0:
+        return
+    var one = buf.create_sub_buffer[DType.float32](idx, 1)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=one)
+    ctx.synchronize()
+    var v = host.unsafe_ptr().unsafe_load(0)
+    _ = host^
+    var au = bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF)
+    if au > UInt32(0x7F800000):
+        raise Error(
+            String("llama: NaN in ")
+            + name
+            + " at flat index "
+            + String(idx)
+            + " REFUSED (row 39: NaN payloads are vendor-shaped;"
+            + " no stage may record one)"
+        )
+    raise Error(
+        String("llama: infinity in ")
+        + name
+        + " at flat index "
+        + String(idx)
+        + " REFUSED (row 39: an infinity in an input is a computed"
+        + " NaN one seam later)"
+    )
+
+
 def llama_refuse_bad_call(
     ctx: DeviceContext,
     mut w: LlamaDeviceWeights,
@@ -2247,18 +2550,21 @@ def llama_refuse_bad_call(
     var dims = w.dims.copy()
     var dm = dims.d_model
     var hd = dims.head_dim
-    _refuse_nonfinite_named("hidden_states", _download(ctx, x, b * l * dm))
-    _refuse_nonfinite_named(
-        "rotary_emb.inv_freq", _download(ctx, rope.inv_freq, dims.half())
-    )
+    # ON THE DEVICE (2026-09-09): the download-and-walk of the block input
+    # was 65 ms per call at the Samba shape, a fifth of the forward.
+    _refuse_nonfinite_device(ctx, "hidden_states", x, b * l * dm)
+    _refuse_nonfinite_device(ctx, "rotary_emb.inv_freq", rope.inv_freq, dims.half())
     if kv.s > 0:
-        _refuse_nonfinite_named(
-            "past_key_values.key_cache",
-            _download(ctx, kv.k, b * dims.n_kv * kv.s * hd),
+        # The linear cache is packed at stride `s`; the ring is always at
+        # stride `cap`, so the whole ring is read (unused slots are zeros).
+        var used = kv.s
+        if kv.window > 0:
+            used = kv.cap
+        _refuse_nonfinite_device(
+            ctx, "past_key_values.key_cache", kv.k, b * dims.n_kv * used * hd
         )
-        _refuse_nonfinite_named(
-            "past_key_values.value_cache",
-            _download(ctx, kv.v, b * dims.n_kv * kv.s * hd),
+        _refuse_nonfinite_device(
+            ctx, "past_key_values.value_cache", kv.v, b * dims.n_kv * used * hd
         )
 
 
@@ -2342,6 +2648,56 @@ def llama_attention_scale(head_dim: Int) -> Float32:
     return ftz(identical_rsqrt(Float32(head_dim)))
 
 
+def timing_on() -> Bool:
+    """`MOJOLEARN_TRANSFORMER_TIMING=1`: print a host-timed, synchronized
+    phase breakdown of every block call. A traced or timed run is not a
+    measurement of anything else; this exists to say where the time goes."""
+    return String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+
+
+def timing_tick(
+    ctx: DeviceContext, on: Bool, mut t: Int, name: String
+) raises:
+    """Synchronize, print the milliseconds since `t`, advance `t`."""
+    if not on:
+        return
+    ctx.synchronize()
+    var now = Int(perf_counter_ns())
+    print(
+        "timing " + name + " " + String(Float64(now - t) / 1000000.0) + " ms"
+    )
+    t = now
+
+
+comptime ATTN_PATH_AUTO = 0
+"""Fused when the build, the call and the data allow it; eager otherwise."""
+comptime ATTN_PATH_EAGER = 1
+"""The eager stage kernels, always."""
+comptime ATTN_PATH_FUSED = 2
+"""The fused kernels, with the eager fallback on a regime or corner refusal."""
+
+
+def attention_path_choice(plant_at: Int) -> Int:
+    """Which attention path THIS call takes, before the data is looked at.
+
+    `MOJOLEARN_TRANSFORMER_ATTN_PATH=eager` forces the eager kernels (the
+    A/B arm for timing; also what a FAST or DETERMINISTIC build, a
+    sabotage build and a planted call get unconditionally). `fused` asks
+    for the fused kernels; the default is `auto`, which is `fused`."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return ATTN_PATH_EAGER
+    comptime if BLOCK_ANY_SABOTAGE:
+        return ATTN_PATH_EAGER
+    if plant_at != PLANT_AT_NONE:
+        return ATTN_PATH_EAGER
+    var want = String(getenv("MOJOLEARN_TRANSFORMER_ATTN_PATH"))
+    if want == "eager":
+        return ATTN_PATH_EAGER
+    if want == "fused":
+        return ATTN_PATH_FUSED
+    return ATTN_PATH_AUTO
+
+
 def eager_attention_forward(
     ctx: DeviceContext,
     mut stages: LlamaDeviceStages,
@@ -2349,6 +2705,96 @@ def eager_attention_forward(
     l: Int,
     s: Int,
     pos0: Int,
+    key_lo: Int,
+    window: Int,
+    dims: LlamaDims,
+    plant_at: Int,
+    plant_idx: List[Int],
+    plant_bits: List[UInt32],
+    mut trace: IdentityTrace,
+    prefix: String,
+    materialize: Bool,
+) raises -> Int:
+    """The attention interface, eager or fused, ONE set of bits.
+
+    `materialize`: run the eager stage kernels even with the trace off, so
+    that `scores`, `masked`, `aexp` and `weights` hold this call's stages
+    for a caller that reads them back (the gates' device dumps). The
+    fused output is still what lands in `ctxv`.
+
+    With the trace ON the eager kernels run and record S11-S18 as they
+    always have; then, when the call is fused-eligible, the fused kernels
+    run too and `attn.ctx` is recorded FROM THE FUSED OUTPUT, so the card
+    gates the fused path at every fixture it is eligible for (and every
+    downstream stage with it). With the trace OFF only one path runs: the
+    fused kernels, or the eager ones when the choice, the regime or the
+    corner says so. Returns the fused status (`FUSED_RAN` when the fused
+    bits are the ones in `stages.ctxv`; -1 when the fused path was not
+    attempted)."""
+    var choice = attention_path_choice(plant_at)
+    var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
+    var status = -1
+    if need_eager:
+        attention_eager_core(
+            ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
+            plant_idx, plant_bits, trace, prefix,
+        )
+    if choice != ATTN_PATH_EAGER:
+        status = fused_forward_launch(
+            ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
+            stages.k_cache, stages.v_cache, b, l, dims.n_heads, dims.n_kv,
+            dims.head_dim, s, pos0, key_lo, window,
+            llama_attention_scale(dims.head_dim),
+        )
+        if status != FUSED_RAN and not need_eager:
+            attention_eager_core(
+                ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
+                plant_idx, plant_bits, trace, prefix,
+            )
+        elif status == FUSED_RAN and not need_eager:
+            stages.attn_materialized = False
+    trace.record_device[DType.float32](
+        ctx,
+        prefix + ".attn.ctx",
+        stages.ctxv,
+        b * l * dims.n_heads * dims.head_dim,
+    )
+    return status
+
+
+def ensure_attention_materialized(
+    ctx: DeviceContext,
+    mut stages: LlamaDeviceStages,
+    b: Int,
+    l: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+) raises:
+    """Recompute the eager attention stages of the LAST forward call when
+    the fused path skipped them (a backward that takes the eager path
+    reads `weights`). The inputs (`q_rope`, the packed caches) are still
+    in `stages`; the output `ctxv` is rewritten with the same bits."""
+    if stages.attn_materialized:
+        return
+    var off = IdentityTrace.disabled()
+    var dims = stages.dims.copy()
+    attention_eager_core(
+        ctx, stages, b, l, s, pos0, key_lo, window, dims,
+        PLANT_AT_NONE, List[Int](), List[UInt32](), off, String(""),
+    )
+
+
+def attention_eager_core(
+    ctx: DeviceContext,
+    mut stages: LlamaDeviceStages,
+    b: Int,
+    l: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
     dims: LlamaDims,
     plant_at: Int,
     plant_idx: List[Int],
@@ -2358,7 +2804,9 @@ def eager_attention_forward(
 ) raises:
     """`eager_attention_forward(module, query, key, value, attention_mask,
     scaling, dropout)` (:191-213), inference only, `dropout = 0.0` and
-    REFUSED as a config (contract section 2).
+    REFUSED as a config (contract section 2). THE EAGER STAGE KERNELS,
+    S11 through S19; records S11-S18 (`attn.ctx` is recorded by the
+    caller, after the path decision).
 
     Their order, and this function's:
 
@@ -2385,6 +2833,8 @@ def eager_attention_forward(
     var n_rep = dims.n_rep()
     var cells = b * nh * l * s
     var scale = llama_attention_scale(hd)
+    ensure_attention_stage_capacity(ctx, stages, l, s)
+    stages.attn_materialized = True
 
     # ---- S11 (:204's matmul). `gemm.fp32.v1` OP_NT with `k = head_dim`,
     #      ONE CALL PER (batch, head). Contract DEVIATION 808.
@@ -2478,6 +2928,8 @@ def eager_attention_forward(
         Int32(l),
         Int32(s),
         Int32(pos0),
+        Int32(key_lo),
+        Int32(window),
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
@@ -2630,9 +3082,6 @@ def eager_attention_forward(
             block_dim=(LLAMA_TPB, 1, 1),
         )
         ctx.synchronize()
-    trace.record_device[DType.float32](
-        ctx, prefix + ".attn.ctx", stages.ctxv, b * l * nh * hd
-    )
 
 
 def llama_attention_forward(
@@ -2649,6 +3098,7 @@ def llama_attention_forward(
     plant_bits: List[UInt32],
     mut trace: IdentityTrace,
     prefix: String,
+    materialize: Bool,
 ) raises:
     """`LlamaAttention.forward(hidden_states, position_embeddings,
     attention_mask, past_key_values)` (:243-281), eager path, inference
@@ -2689,7 +3139,11 @@ def llama_attention_forward(
     var hd = dims.head_dim
     var m = b * l
     var s_old = kv.s
-    var s = s_old + l
+    var window = kv.window
+    var key_lo = llama_key_lo(s_old, window)
+    var s = llama_key_span(s_old, l, window)
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
 
     # ---- q_proj, k_proj, v_proj (:252-254). `nn.Linear(d_model, *,
     #      bias=attention_bias)` with `attention_bias` False, so weight
@@ -2715,6 +3169,7 @@ def llama_attention_forward(
     trace.record_device[DType.float32](
         ctx, prefix + ".v_proj.out", stages.v_proj, m * kw
     )
+    timing_tick(ctx, ton, tk, "attn.qkv_proj")
 
     # ---- the rotary table (:113-127). COMPUTED once per configuration,
     #      RECORDED every call. DEVIATION 1024: contract section 9 says
@@ -2766,30 +3221,67 @@ def llama_attention_forward(
 
     # ---- past_key_values.update (:261-262). Copies. DEVIATION 1022: the
     #      repack is OUT OF PLACE, at the NEW stride S.
-    ctx.enqueue_function[kv_append_kernel](
-        stages.k_cache.unsafe_ptr(),
-        kv.k.unsafe_ptr(),
-        stages.k_rope.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(nkv),
-        Int32(hd),
-        Int32(s_old),
-        grid_dim=(_grid(b * nkv * s * hd), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
-    ctx.enqueue_function[kv_append_kernel](
-        stages.v_cache.unsafe_ptr(),
-        kv.v.unsafe_ptr(),
-        stages.v_proj.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(nkv),
-        Int32(hd),
-        Int32(s_old),
-        grid_dim=(_grid(b * nkv * s * hd), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
+    #
+    #      `window > 0`: `stages.k_cache`/`v_cache` hold the packed KEY
+    #      SPAN this call reads (absolute `[key_lo, pos0 + l)`), gathered
+    #      from the ring plus this call's tokens; the ring itself is then
+    #      updated in place. The recorded `kv.k_cache` stage is that span.
+    if window == 0:
+        ctx.enqueue_function[kv_append_kernel](
+            stages.k_cache.unsafe_ptr(),
+            kv.k.unsafe_ptr(),
+            stages.k_rope.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        ctx.enqueue_function[kv_append_kernel](
+            stages.v_cache.unsafe_ptr(),
+            kv.v.unsafe_ptr(),
+            stages.v_proj.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[kv_window_gather_kernel](
+            stages.k_cache.unsafe_ptr(),
+            kv.k.unsafe_ptr(),
+            stages.k_rope.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(key_lo),
+            Int32(s_old),
+            Int32(s),
+            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        ctx.enqueue_function[kv_window_gather_kernel](
+            stages.v_cache.unsafe_ptr(),
+            kv.v.unsafe_ptr(),
+            stages.v_proj.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(key_lo),
+            Int32(s_old),
+            Int32(s),
+            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".kv.k_cache", stages.k_cache, b * nkv * s * hd
@@ -2802,26 +3294,59 @@ def llama_attention_forward(
     # computed. DEVIATION 1022 is why the two buffers are distinct; the rest
     # of THIS call reads `stages.k_cache` and `stages.v_cache`, which hold
     # the same bits.
-    ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
-    ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
+    if window == 0:
+        ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
+        ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
+    else:
+        # The ring takes this call's tokens AFTER the gather above read it.
+        ctx.enqueue_function[kv_ring_write_kernel](
+            kv.k.unsafe_ptr(),
+            stages.k_rope.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        ctx.enqueue_function[kv_ring_write_kernel](
+            kv.v.unsafe_ptr(),
+            stages.v_proj.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     ctx.synchronize()
-    kv.s = s
+    kv.s = s_old + l
+    timing_tick(ctx, ton, tk, "attn.rope_and_cache")
 
-    # ---- the attention interface (:264-277). Eager, pinned.
-    eager_attention_forward(
+    # ---- the attention interface (:264-277). Eager or fused, ONE set of
+    #      bits (`eager_attention_forward`'s docstring).
+    _ = eager_attention_forward(
         ctx,
         stages,
         b,
         l,
         s,
         pos0,
+        key_lo,
+        window,
         dims,
         plant_at,
         plant_idx,
         plant_bits,
         trace,
         prefix,
+        materialize,
     )
+    timing_tick(ctx, ton, tk, "attn.core")
 
     # ---- o_proj (:280). `nn.Linear(n_heads*head_dim, d_model,
     #      bias=attention_bias)`, no bias.
@@ -2832,6 +3357,7 @@ def llama_attention_forward(
     trace.record_device[DType.float32](
         ctx, prefix + ".o_proj.out", stages.o_proj, m * dm
     )
+    timing_tick(ctx, ton, tk, "attn.o_proj")
 
 
 # ===========================================================================
@@ -2957,8 +3483,14 @@ def llama_decoder_layer_forward_planted(
     plant_bits: List[UInt32],
     mut trace: IdentityTrace,
     prefix: String,
+    materialize: Bool = True,
 ) raises:
     """`LlamaDecoderLayer.forward(hidden_states, ...)` (:295-324).
+
+    `materialize` (default True): keep the eager attention stages
+    materialized whatever path computes `attn.ctx`, because every caller
+    of THIS entry point is a gate that reads them back. The plain entry
+    point below passes False and lets the fused path skip them.
 
         residual = hidden_states                                      :305
         hidden_states = self.input_layernorm(hidden_states)           :306
@@ -2992,6 +3524,8 @@ def llama_decoder_layer_forward_planted(
     dims.validate()
     var dm = dims.d_model
     var m = b * l
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
 
     if b <= 0 or l <= 0:
         raise Error(
@@ -3049,6 +3583,18 @@ def llama_decoder_layer_forward_planted(
             + " past its capacity "
             + String(kv.s_max)
         )
+    if kv.window != stages.window:
+        raise Error(
+            String("llama_decoder_layer_forward: the cache has window=")
+            + String(kv.window)
+            + " but the stages were sized for window="
+            + String(stages.window)
+        )
+    if llama_key_span(kv.s, l, kv.window) > stages.s_cap:
+        raise Error(
+            "llama_decoder_layer_forward: this call's key span exceeds the"
+            " stages' attention buffers"
+        )
     if pos0 + l > rope.p_max:
         raise Error(
             String("llama_decoder_layer_forward: absolute position ")
@@ -3103,6 +3649,7 @@ def llama_decoder_layer_forward_planted(
     )
 
     # ---- self.self_attn(...) (:308-316).
+    timing_tick(ctx, ton, tk, "block.norm1")
     llama_attention_forward(
         ctx,
         stages,
@@ -3117,7 +3664,9 @@ def llama_decoder_layer_forward_planted(
         plant_bits,
         trace,
         prefix,
+        materialize,
     )
+    timing_tick(ctx, ton, tk, "block.attention_total")
 
     # ---- residual + hidden_states (:317). S22. The mamba lane's S16
     #      kernel, IMPORTED (contract section 0).
@@ -3171,6 +3720,7 @@ def llama_decoder_layer_forward_planted(
     trace.record_device[DType.float32](
         ctx, prefix + ".residual2.out", stages.residual2, m * dm
     )
+    timing_tick(ctx, ton, tk, "block.mlp_and_residuals")
 
 
 def llama_decoder_layer_forward(
@@ -3210,4 +3760,5 @@ def llama_decoder_layer_forward(
         List[UInt32](),
         trace,
         prefix,
+        materialize=False,
     )

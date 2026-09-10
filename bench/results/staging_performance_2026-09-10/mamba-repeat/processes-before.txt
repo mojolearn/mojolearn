@@ -1,0 +1,15 @@
+    PID     ELAPSED COMMAND
+      1       24:59 /sbin/docker-init -- /opt/nvidia/nvidia_entrypoint.sh /start.sh
+    441       24:58 /bin/bash /start.sh
+    474       24:58 nginx: master process /usr/sbin/nginx
+    475       24:58 nginx: worker process
+    496       24:58 sshd: /usr/sbin/sshd [listener] 0 of 10-100 startups
+    504       24:58 sleep infinity
+    546       24:20 /bin/sh /tmp/mojolearn-lease.sh
+    548       24:20 sleep 3600
+   8513       00:15 sshd: root@notty
+   8525       00:12 bash -c cd /root/jobs && rm -f mamba-repeat.done mamba-repeat.rc && nohup sh -c 'bash /root/jobs/mamba-repeat.sh > /root/jobs/mamba-repeat.log 2>&1; echo $? > /root/jobs/mamba-repeat.rc; touch /root/jobs/mamba-repeat.done' > /dev/null 2>&1 &
+   8527       00:12 sh -c bash /root/jobs/mamba-repeat.sh > /root/jobs/mamba-repeat.log 2>&1; echo $? > /root/jobs/mamba-repeat.rc; touch /root/jobs/mamba-repeat.done
+   8528       00:12 pixi run bash /root/jobs/mamba-repeat.sh
+   8677       00:00 /usr/bin/bash /root/jobs/mamba-repeat.sh
+   8682       00:00 ps -eo pid,etime,args

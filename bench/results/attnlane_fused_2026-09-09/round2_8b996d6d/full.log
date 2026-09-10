@@ -1,0 +1,100 @@
+== pixi install 22:07:55
+pixi_rc=0
+Mojo 1.0.0 (ed45d567)
+== build fused check 22:07:58
+fused_check_rc=0
+== build check-transformer 22:08:19
+tcheck_rc=0
+== build check-transformer-backward 22:08:44
+tbcheck_rc=0
+== build identical binding 22:09:15
+binding_rc=0
+== fused check 22:09:52
+fused_check_run_rc=0
+    fused backward status: CORNER
+    fused forward status: REFUSED_REGIME
+    wrapper status: REFUSED_REGIME
+    fused backward status: REFUSED_REGIME
+    fused forward status: RAN
+    wrapper status: RAN
+    fused backward status: REFUSED_REGIME
+transformer_fused_check: PASS, 12 cases, every compared buffer bit-identical, every status as expected
+== check-transformer clause a+d, card 22:09:53
+tcheck_run_rc=0
+clause (d): PASS, 12 decode steps bit-identical to the prefill on all 24868 compared cells
+clause (d) split: whole prefill vs 7 + 5 with the cache carried, win5_b1_l12_hd24, window 5
+clause (d) split: PASS, 5 tail tokens bit-identical to the whole prefill on all 17770 compared cells
+clause (d): decode == prefill at the block, win20_b1_l16_nrep2, 16 tokens, window 20, per token, per stage
+clause (d) control: decode step t vs prefill token t+1 differs on 285 misaligned stage comparisons, so the comparison distinguishes tokens
+clause (d): PASS, 16 decode steps bit-identical to the prefill on all 23720 compared cells
+clause (d) split: whole prefill vs 6 + 10 with the cache carried, win20_b1_l16_nrep2, window 20
+clause (d) split: PASS, 10 tail tokens bit-identical to the whole prefill on all 19100 compared cells
+FWD_CARD_BYTE_EQUAL
+8ce661b469681b18fb5cf4d566ad78ff  /root/jobs/transformer.identical.card
+== check-transformer-backward, card 22:09:55
+tbcheck_run_rc=0
+clause (a): PASS, 17 cases, 37/37 stages bit-identical to the oracle on all 412172 cells, 37/37 card tags
+BWD_CARD_BYTE_EQUAL
+7eee8da90ecb4dba1d154991e2e67e30  /root/jobs/transformer-backward.identical.card
+== surface test identical 22:09:56
+surface_rc=0
+    pass [OWED, recorded debt -- no comparison ran] corpus tolerance arm: transformer/corpus holds a generator and no case data (the lane's phase 7 row: gen_corpus.py has never been executed). The float64 reference above is this file's own transcription, not an independent artifact. This row FAILS once case data appears, until the ref64 arm is wired
+  116 checks, 0 failed
+== timing 4096_fused 22:09:58
+rc=0
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 3
+ours: tier identical vendor cuda
+ours forward            median 249.2 ms  rounds ['277.1', '249.2', '247.7']
+ours forward+backward   median 525.8 ms  rounds ['561.8', '502.4', '525.8']
+== timing 4096_eager 22:10:04
+rc=0
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 3
+ours: tier identical vendor cuda
+ours forward            median 279.9 ms  rounds ['293.4', '279.9', '279.0']
+ours forward+backward   median 847.3 ms  rounds ['877.2', '847.3', '821.5']
+== timing 4096_break 22:10:11
+rc=0
+timing bwd.attention 137.08198 ms
+timing bwd.after_attention 22.033509 ms
+timing surface.backward 287.745517 ms
+timing surface.outputs_down 20.614163 ms
+ours forward+backward   median 547.1 ms  rounds ['547.1']
+timing surface.weights_up 17.933615 ms
+timing surface.cache_stages_x_up 12.963894 ms
+timing block.norm1 0.673182 ms
+timing attn.qkv_proj 3.725358 ms
+timing attn.rope_and_cache 0.377737 ms
+timing attn.core 177.093054 ms
+timing attn.o_proj 2.477385 ms
+timing block.attention_total 183.688474 ms
+timing block.mlp_and_residuals 30.681325 ms
+timing surface.forward 215.107853 ms
+timing surface.outputs_down 19.625385 ms
+timing surface.inputs_up 44.415804 ms
+timing block.norm1 0.671042 ms
+timing attn.qkv_proj 3.707817 ms
+timing attn.rope_and_cache 0.371767 ms
+timing attn.core 176.908631 ms
+timing attn.o_proj 2.481375 ms
+timing block.attention_total 183.48319 ms
+timing block.mlp_and_residuals 30.721456 ms
+timing surface.forward 214.950849 ms
+timing bwd.before_attention 0.00315 ms
+timing bwd.attention 136.807995 ms
+timing bwd.after_attention 21.959288 ms
+timing surface.backward 254.974334 ms
+timing surface.outputs_down 18.475845 ms
+== timing 1024_ours 22:10:16
+rc=0
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 1024 batch 4 rounds 3
+ours: tier identical vendor cuda
+ours forward            median 46.2 ms  rounds ['73.8', '46.2', '45.4']
+ours forward+backward   median 93.4 ms  rounds ['95.5', '92.2', '93.4']
+== timing 1024_torch 22:10:19
+rc=0
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 1024 batch 4 rounds 3
+torch-eager-fp32-sdpa forward            median 5.7 ms  rounds ['5.7', '5.7', '5.7']
+torch-eager-fp32-sdpa forward+backward   median 16.8 ms  rounds ['16.8', '16.6', '17.2']
+torch-eager-fp32-sdpa-compiled forward            median 5.3 ms  rounds ['5.7', '5.3', '5.3']
+torch-eager-fp32-sdpa-compiled forward+backward   median 13.8 ms  rounds ['13.7', '13.8', '14.1']
+== done 22:10:30

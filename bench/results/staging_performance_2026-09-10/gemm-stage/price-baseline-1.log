@@ -1,0 +1,48 @@
+1193 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18bc80000000, nodemask=2)
+FSPEED-HEADER family=gemm lane=gemm arm=ours-v1-identical mode=IDENTICAL device=NVIDIA H100 80GB HBM3 rounds=7 size=shipped
+FSPEED-NOTE lane=gemm arm=ours-v1-identical gemm/checks/gemm_identical.mojo::identical_gemm_into, profile mojolearn.identical.gemm.fp32.v1, strict FP32 by contract. Its fair opponent is cublas-fp32.
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 plan=TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 ms=0.282093
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=1 ms=0.037176 hash=ce518fe285e59ce5
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=2 ms=0.035296 hash=ce518fe285e59ce5
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=3 ms=0.033303 hash=ce518fe285e59ce5
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=4 ms=0.033404 hash=ce518fe285e59ce5
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=5 ms=0.032625 hash=ce518fe285e59ce5
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=6 ms=0.033077 hash=ce518fe285e59ce5
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=7 ms=0.0335 hash=ce518fe285e59ce5
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 plan=TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 ms=0.0243
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=1 ms=0.023394 hash=05c1bddd0f21fbc0
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=2 ms=0.022915 hash=05c1bddd0f21fbc0
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=3 ms=0.02252 hash=05c1bddd0f21fbc0
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=4 ms=0.02293 hash=05c1bddd0f21fbc0
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=5 ms=0.022383 hash=05c1bddd0f21fbc0
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=6 ms=0.023347 hash=05c1bddd0f21fbc0
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=7 ms=0.022476 hash=05c1bddd0f21fbc0
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 ms=3.560255
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=1 ms=1.95355 hash=653d78aec804b8d4
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=2 ms=1.942435 hash=653d78aec804b8d4
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=3 ms=1.930585 hash=653d78aec804b8d4
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=4 ms=1.933052 hash=653d78aec804b8d4
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=5 ms=1.943892 hash=653d78aec804b8d4
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=6 ms=1.938565 hash=653d78aec804b8d4
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=7 ms=1.94226 hash=653d78aec804b8d4
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 ms=7.582639
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=1 ms=7.584915 hash=88ccdd14e4766d32
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=2 ms=7.593925 hash=88ccdd14e4766d32
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=3 ms=7.580098 hash=88ccdd14e4766d32
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=4 ms=7.564232 hash=88ccdd14e4766d32
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=5 ms=7.591011 hash=88ccdd14e4766d32
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=6 ms=7.577228 hash=88ccdd14e4766d32
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=7 ms=7.584773 hash=88ccdd14e4766d32
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 ms=6.776002
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=1 ms=6.784936 hash=f51b912d95b3677f
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=2 ms=6.779385 hash=f51b912d95b3677f
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=3 ms=6.762528 hash=f51b912d95b3677f
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=4 ms=6.781593 hash=f51b912d95b3677f
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=5 ms=6.787364 hash=f51b912d95b3677f
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=6 ms=6.745884 hash=f51b912d95b3677f
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=7 ms=6.766941 hash=f51b912d95b3677f

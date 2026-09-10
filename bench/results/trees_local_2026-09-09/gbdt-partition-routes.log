@@ -1,0 +1,3 @@
+PARTITION ROUTES GREEN; opt_in False disabled False
+PARTITION ROUTES GREEN; opt_in True disabled False
+PARTITION ROUTES GREEN; opt_in True disabled True

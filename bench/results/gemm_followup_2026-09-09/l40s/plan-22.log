@@ -1,0 +1,7 @@
+22285 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51ba80000000, nodemask=1)
+== dispatcher vs the untuned plan, BITS and TIME ==
+22285 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x199bc0000000, nodemask=2)
+   OK  gram.32x32x1M [SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle) -> SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle) forced stack]  m=32 n=32 k=1000000  BITS MATCH  untuned=0.410618ms dispatch=2.1770045714285713ms  speedup=0.18861604857841366x
+   OK  gram.128sq.x100003 [SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle) -> SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle) forced stack]  m=128 n=128 k=100003  BITS MATCH  untuned=0.4968642857142857ms dispatch=0.4060912857142857ms  speedup=1.2235285592015026x
+
+   2 match, 0 MOVED, 0 refused.

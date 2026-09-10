@@ -1,0 +1,185 @@
+3580 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a9b40000000, nodemask=2)
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:6:
+Imported from /root/final-continuation/decomposition/checks/svd_full_check.mojo:80:
+/root/final-continuation/decomposition/impl/linalg/detail/pca.mojo:167:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[0] = reduced_max
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:6:
+Imported from /root/final-continuation/decomposition/checks/svd_full_check.mojo:80:
+/root/final-continuation/decomposition/impl/linalg/detail/pca.mojo:169:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var biggest = sh[0]
+                  ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:6:
+Imported from /root/final-continuation/decomposition/checks/svd_full_check.mojo:80:
+/root/final-continuation/decomposition/impl/linalg/detail/pca.mojo:181:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[1] = reduced_first
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:6:
+Imported from /root/final-continuation/decomposition/checks/svd_full_check.mojo:80:
+/root/final-continuation/decomposition/impl/linalg/detail/pca.mojo:182:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[2] = Float32(1.0)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:6:
+Imported from /root/final-continuation/decomposition/checks/svd_full_check.mojo:80:
+/root/final-continuation/decomposition/impl/linalg/detail/pca.mojo:184:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var first = sh[1]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:6:
+Imported from /root/final-continuation/decomposition/checks/svd_full_check.mojo:80:
+/root/final-continuation/decomposition/impl/linalg/detail/pca.mojo:190:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sh[2] = Float32(-1.0)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:6:
+Imported from /root/final-continuation/decomposition/checks/svd_full_check.mojo:80:
+/root/final-continuation/decomposition/impl/linalg/detail/pca.mojo:192:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sh[2] = Float32(1.0)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:6:
+Imported from /root/final-continuation/decomposition/checks/svd_full_check.mojo:80:
+/root/final-continuation/decomposition/impl/linalg/detail/pca.mojo:196:10: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    if sh[2] < Float32(0.0):
+       ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:215:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:220:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:221:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if other > red[tid]:
+                       ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:222:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = other
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:225:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:244:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:249:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:250:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if other < red[tid]:
+                       ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:251:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = other
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Imported from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:146:
+Imported from /root/final-continuation/core/column_stats.mojo:94:
+/root/final-continuation/core/pinned_reduce.mojo:254:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+/root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:280:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[0] = cs[0]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+/root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:281:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[1] = cs[1]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+/root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:283:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var c = rot[0]
+                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+/root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:284:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var s = rot[1]
+                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Included from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:6:
+Included from /root/final-continuation/decomposition/checks/svd_full_check.mojo:61:
+/root/final-continuation/decomposition/checks/jacobi_eigh.mojo:87:25: warning: assignment to 't' was never used; assign to '_' instead?
+                var t = 0.0
+                        ^
+Included from /root/final-continuation/decomposition/checks/svd_wide_check.mojo:7:
+Included from /root/final-continuation/decomposition/impl/linalg/detail/svd_full.mojo:151:
+/root/final-continuation/decomposition/checks/jacobi_eigh_device.mojo:79:20: warning: assignment to 't' was never used; assign to '_' instead?
+    var t = Float32(0.0)
+                   ^
+3580 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11f780000000, nodemask=1)
+WIDE 4 8 0 hash 16600138171556580602 orth 1.4278730497974124e-07 residual 1.4925043170337197e-14
+WIDE 8 17 0 hash 13518132012963077215 orth 5.515365772978953e-07 residual 2.128958034749866e-13
+WIDE 17 33 0 hash 5887197085409874679 orth 1.8455738810541078e-06 residual 1.478830155736809e-12
+WIDE 4 129 0 hash 12493376822400591550 orth 1.9541942175571592e-07 residual 3.0340478110052264e-14
+WIDE 3 7 1 hash 13659285908921000709 orth 0.0 residual 0.0
+WIDE 8 13 2 hash 10808196423886373789 orth 1.4648921053961317e-07 residual 4.523084887108049e-16
+wide full SVD PASS

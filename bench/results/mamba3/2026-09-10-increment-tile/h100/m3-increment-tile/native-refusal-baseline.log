@@ -1,0 +1,3 @@
+3164 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7bd840000000, nodemask=2)
+mamba3 block gate (IDENTICAL_MAMBA3_CONTRACT.md section 8); profile mojolearn.identical.mamba3.siso.fp32.v1; build mode IDENTICAL
+GATE E PASS: 36 plants (quiet NaN + inf per each of the 18 names, cell len/2), each read back off the device first, each refused BY NAME with 0 stages recorded; clean control recorded all 28

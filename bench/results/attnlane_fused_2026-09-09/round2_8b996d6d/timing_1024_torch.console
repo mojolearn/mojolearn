@@ -1,0 +1,10 @@
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 1024 batch 4 rounds 3
+torch-eager-fp32-sdpa forward            median 5.7 ms  rounds ['5.7', '5.7', '5.7']
+/usr/local/lib/python3.11/dist-packages/torch/autograd/graph.py:769: UserWarning: Attempting to run cuBLAS, but there was no current CUDA context! Attempting to set the primary context... (Triggered internally at ../aten/src/ATen/cuda/CublasHandlePool.cpp:135.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+torch-eager-fp32-sdpa forward+backward   median 16.8 ms  rounds ['16.8', '16.6', '17.2']
+/usr/local/lib/python3.11/dist-packages/torch/_inductor/compile_fx.py:150: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+torch-eager-fp32-sdpa-compiled forward            median 5.3 ms  rounds ['5.7', '5.3', '5.3']
+torch-eager-fp32-sdpa-compiled forward+backward   median 13.8 ms  rounds ['13.7', '13.8', '14.1']

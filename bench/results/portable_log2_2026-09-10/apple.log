@@ -1,0 +1,5 @@
+✨ Pixi task (check-portable-log2-64 in default): mojo run -I . checks/portable_log2_64_check.mojo
+portable_log2_64: 2098 powers exact; boundary inputs 82
+portable_log2_64: 262144 hashed doubles; worst 1 ulp from this host's libm at x = 7.38097006515398e-26 ; 0 beyond 2 ulp; edges exact
+portable_log2_64 device-independent hash: 18138053008657378164
+portable log2_64 check OK

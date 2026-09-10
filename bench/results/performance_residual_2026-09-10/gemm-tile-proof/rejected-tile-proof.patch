@@ -1,0 +1,128 @@
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -112,7 +112,8 @@
+ """
+ 
+ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+-from std.memory import stack_allocation
++from std.memory import bitcast, stack_allocation
++from max.gpu.primitives.block import min as block_min
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+@@ -1205,9 +1206,42 @@
+             "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
+         ](rounded, Float32(1.0))
+     return ftz(identical_mul_add(a, b, acc))
++
++
++@always_inline
++def _proof_exponent(v: Float32) -> UInt32:
++    var e = (bitcast[DType.uint32](v) >> 23) & UInt32(255)
++    if e == 0: return UInt32(255)
++    if e == 255: return UInt32(0)
++    return e
++
++
++def _tile_operand_bound[ROWS: Int](
++    src: MutPointer[Float32, MutAnyOrigin], outer_stride: Int,
++    k_stride: Int, start: Int, limit: Int, k: Int, tid: Int,
++) -> UInt32:
++    var lowest = UInt32(255)
++    var i = tid
++    while i < ROWS * k:
++        var r = i // k
++        var p = i % k
++        if outer_stride == 1:
++            r = i % ROWS
++            p = i // ROWS
++        if start + r < limit:
++            lowest = min(lowest, _proof_exponent(src.unsafe_load((start+r)*outer_stride+p*k_stride)))
++        i += TUNED_TPB
++    return lowest
+ 
+ 
++@always_inline
++def _tile_proven_step[ADMITTED: Bool](a: Float32, b: Float32, acc: Float32) -> Float32:
++    comptime if ADMITTED and TUNED_HW_FTZ_FMA:
++        return llvm_intrinsic["llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False](a,b,acc)
++    return _tuned_step(a,b,acc)
+ 
++
++
+ # ===========================================================================
+ # THE SCHEDULING CONSTANTS, ALL FROM `checks/kernel_matrix.mojo`
+ # ===========================================================================
+@@ -1533,6 +1567,54 @@
+ 
+ def identical_gemm_tuned_kernel[
+     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, SPLIT: Bool = False
++](
++    c: MutPointer[Float32, MutAnyOrigin],
++    a: MutPointer[Float32, MutAnyOrigin],
++    b: MutPointer[Float32, MutAnyOrigin],
++    m_in: Int32,
++    n_in: Int32,
++    k_in: Int32,
++    leaf_in: Int32,
++    p_in: Int32,
++    a_si_in: Int32,
++    a_sp_in: Int32,
++    b_sp_in: Int32,
++    b_sj_in: Int32,
++    swizzle_in: Int32,
++):
++    comptime if TUNED_HW_FTZ_FMA and is_defined["MOJOLEARN_GEMM_TILE_PROOF"]() and not SPLIT and RPT == 8 and CPT == 8:
++        comptime BM = RPT * (TUNED_TPB // TC)
++        comptime BN = CPT * TC
++        var m = Int(m_in)
++        var n = Int(n_in)
++        var k = Int(k_in)
++        if k > 0:
++            var ni = (m+BM-1)//BM
++            var nj = (n+BN-1)//BN
++            var raw = Int(block_idx.y)*Int(grid_dim.x)+Int(block_idx.x)
++            if raw >= ni*nj: return
++            var tile = raw
++            if Int(swizzle_in) == SWIZZLE_REVERSE:
++                tile = ni*nj-1-raw
++            elif Int(swizzle_in) == SWIZZLE_TRANSPOSE:
++                tile = (raw%ni)*nj+raw//ni
++            var i0 = (tile//nj)*BM
++            var j0 = (tile%nj)*BN
++            var tid = Int(thread_idx.x)
++            var a_bound = _tile_operand_bound[BM](a,Int(a_si_in),Int(a_sp_in),i0,m,k,tid)
++            var b_bound = _tile_operand_bound[BN](b,Int(b_sj_in),Int(b_sp_in),j0,n,k,tid)
++            var bound = block_min[block_size=TUNED_TPB](min(a_bound,b_bound))
++            var shared_bound = stack_allocation[1, UInt32, address_space=AddressSpace.SHARED]()
++            if tid == 0: shared_bound.unsafe_store(0,bound)
++            barrier()
++            if shared_bound.unsafe_load(0) >= UInt32(76):
++                _identical_gemm_tuned_body[RPT,CPT,TC,KS,FS,PAGES,SPLIT,True](c, a, b, m_in, n_in, k_in, leaf_in, p_in, a_si_in, a_sp_in, b_sp_in, b_sj_in, swizzle_in)
++                return
++    _identical_gemm_tuned_body[RPT,CPT,TC,KS,FS,PAGES,SPLIT,False](c, a, b, m_in, n_in, k_in, leaf_in, p_in, a_si_in, a_sp_in, b_sp_in, b_sj_in, swizzle_in)
++
++
++def _identical_gemm_tuned_body[
++    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, SPLIT: Bool, ADMITTED: Bool
+ ](
+     c: MutPointer[Float32, MutAnyOrigin],
+     a: MutPointer[Float32, MutAnyOrigin],
+@@ -1834,7 +1916,7 @@
+                             # 4 (one fused rounding) and 5c (the accumulator
+                             # flushed after EVERY step). 5c is per cell per
+                             # step and is NOT hoisted, because it cannot be.
+-                            acc[u2 * CPT + v3] = _tuned_step(
++                            acc[u2 * CPT + v3] = _tile_proven_step[ADMITTED](
+                                 afl, bfl[v3], acc[u2 * CPT + v3]
+                             )
+         else:
+@@ -1852,7 +1934,7 @@
+                         as_.unsafe_load(abase + u3 * TR * SSTRIDE + cc)
+                     )
+                     comptime for v5 in range(NCOL):
+-                        acc[u3 * CPT + v5] = _tuned_step(
++                        acc[u3 * CPT + v5] = _tile_proven_step[ADMITTED](
+                             afl2, bfl2[v5], acc[u3 * CPT + v5]
+                         )
+ 

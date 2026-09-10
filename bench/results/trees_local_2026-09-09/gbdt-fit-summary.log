@@ -1,0 +1,8 @@
+ACQUIRED by 'gbdt-fused-ab' (pid 96198)
+RELEASED
+fast baseline median_ms 204.43 samples [204.134, 204.936, 205.874, 201.641, 229.535, 203.254, 202.992, 203.705, 211.108, 204.726]
+fast fused median_ms 186.781 samples [186.785, 190.533, 183.74, 186.421, 192.283, 192.083, 185.479, 191.76, 186.777, 184.243]
+fast IDENTICAL fingerprints 10714057908549941363 fused_speedup 1.0944903389531055
+identical baseline median_ms 269.7815 samples [266.908, 266.347, 295.366, 264.145, 276.826, 268.515, 271.048, 255.739, 588.237, 288.167]
+identical fused median_ms 261.6195 samples [260.781, 281.661, 262.458, 276.408, 274.285, 259.875, 287.776, 256.033, 254.986, 258.934]
+identical IDENTICAL fingerprints 10850012190025152241 fused_speedup 1.0311979802728772

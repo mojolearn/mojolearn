@@ -1,0 +1,6 @@
+1258 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a72c0000000, nodemask=2)
+UMAP_PHASE_HEADER mode IDENTICAL column nvidia rows 1000000 features 32 neighbors 15 epochs 200 rounds 1 fixture dyadic-v1 device_optimizer 1 opt_tpb 128
+1258 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a7300000000, nodemask=2)
+1258 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a7340000000, nodemask=2)
+UMAP_PHASE_ROUND 0 knn_ms 33585.799416 graph_ms 7242.866269 spectral_ms 6261.979204 optimize_ms 3777.627851 total_ms 50868.274863 edges 20914722 embedding_fnv1a64 160286130194205729
+UMAP PHASE PRICE PASS

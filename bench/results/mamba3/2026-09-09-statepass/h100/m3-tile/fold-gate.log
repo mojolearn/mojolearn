@@ -1,0 +1,2 @@
+5261 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31e5c0000000, nodemask=1)
+Mamba3 fold PASS: 10648 finite adversarial triples; hardware column engaged: False

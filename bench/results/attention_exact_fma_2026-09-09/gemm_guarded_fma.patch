@@ -1,0 +1,53 @@
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -97,9 +97,8 @@
+ the operand flushes 5a/5b are applied once per staged value, and the fold
+ stack lives in thread-local memory (`_fold_push_local`, touched once per
+ leaf). On the NVIDIA column the per-step seam `ftz(fma(a, b, acc))` is the
+-explicit NVIDIA FMA path selected by `lib_hardware_ftz_fma_for`. Its
+-round-then-flush rule includes the smallest-normal rounding boundary;
+-a bare `fma.rn.ftz.f32` is insufficient. `choose_gemm_plan` picks them for outputs of 128 K cells and
++hardware's `fma.rn.ftz.f32` (`lib_hardware_ftz_fma_for`), the same value at
++every input. `choose_gemm_plan` picks them for outputs of 128 K cells and
+ up; `choose_gemm_plan_untuned` is the dispatcher as it stood before.
+ 
+ DEVIATIONS 530 (the register-stack realization of the contract's fold tree),
+@@ -112,7 +111,7 @@
+ """
+ 
+ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+-from std.memory import stack_allocation
++from std.memory import bitcast, stack_allocation
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+@@ -1190,16 +1189,21 @@
+     `a` and `b` already flushed as loaded (5a, 5b) and `acc` already flushed
+     by the previous step or seeded `+0.0`.
+ 
+-    NVIDIA uses round-to-nearest FMA followed by explicit output flush.
+-    PTX fma.rn.ftz flushes before rounding at some underflow boundaries:
+-    (0x3f7fffff * 0x00800000) + 0 rounds to the smallest normal in the
+-    software seam but becomes zero with the hardware .ftz modifier.
+-    Inputs here are already flushed by callers, as required above.
++    NVIDIA uses hardware FTZ for nonzero results. A zero result is
++    recomputed with RN then explicit flush, because hardware .ftz can
++    flush before rounding at the smallest-normal boundary. This guard
++    matches NVIDIA software FMA; it does not certify other columns'
++    underlying software seam at the same boundary.
+     """
+     comptime if TUNED_HW_FTZ_FMA:
+-        return ftz(llvm_intrinsic[
+-            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
+-        ](a, b, acc))
++        var fast = llvm_intrinsic[
++            "llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False
++        ](a, b, acc)
++        if (bitcast[DType.uint32](fast) & UInt32(0x7FFFFFFF)) == 0:
++            return ftz(llvm_intrinsic[
++                "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
++            ](a, b, acc))
++        return fast
+     return ftz(identical_mul_add(a, b, acc))
+ 
+ 

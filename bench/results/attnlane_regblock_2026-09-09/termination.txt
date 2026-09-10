@@ -1,0 +1,5 @@
+Pod m4gh2e66ikwihq (mojolearn-attn-20260909_205502), owned by attention lane.
+Created 2026-09-09 20:55:03 EDT; 60-minute on-pod guard armed 20:55:26 EDT.
+All jobs fetched before teardown.
+DELETE HTTP 204 2026-09-09 21:06:02 EDT.
+GET HTTP 404 2026-09-09 21:06:07 EDT: VERIFIED GONE.

@@ -1,0 +1,6 @@
+pod=p49osubfas72qd
+armed=1
+terminated=1
+deadman_pid=44972
+exit=143
+at=2026-09-09T08:08:49Z

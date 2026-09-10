@@ -1,0 +1,159 @@
+HANDOFF TO THE NEXT SESSION, mojolearn identical fan-out, written 2026-09-09 18:10 EDT, updated 18:25 EDT (all lanes landed)
+Orchestrator session: https://claude.ai/code/session_01U2tufdZoytSRokRVQoppgy
+Repo: /Users/andrewhendel/CascadeProjects/mojolearn (main, pushed to github.com/mojolearn/mojolearn)
+Companion (fuller, markdown): docs/lanes/HANDOFF_orchestrator_2026-09-09.md
+Opponent numbers: bench/OPPONENT_REFERENCE.md (never re-run an opponent where a row exists)
+
+=== ANDREW'S STANDING ORDERS (this fan-out) ===
+1. The only number that matters: OUR IDENTICAL arm vs THE OPPONENT'S FAST arm, NVIDIA column.
+   Never test, time, qualify or optimize our own FAST/DETERMINISTIC arms. Existing three-tier
+   tree bindings stay exactly as they are.
+2. Opponents are measured ONCE per (GPU model, driver, library version, dataset, params) and
+   stored in bench/OPPONENT_REFERENCE.md; rounds run OUR identical arm alone and read the row.
+3. NO NEW LANES until Andrew says so. Resume unfinished lanes only (SendMessage to the agent id
+   resumes it with its transcript; that is not a new lane).
+4. Subagents write code and may rent NVIDIA boxes (tools/gemm_remote_leg.sh, L40S to iterate,
+   H100 for finals, one-hour lease baked in). ONLY the orchestrator runs anything on the Mac:
+   one thing at a time, nice 19, via a nohup script in the scratchpad + a background wait loop.
+5. Keys: ~/.mojolearn_runpod_key and ~/.mojolearn_do_token are read by file path only
+   (MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key), never printed or exported.
+6. Never touch RunPod pods named samba-* or samba-gate-* (foreign program). Any other pod with no
+   live lane is an orphan: terminate it. List pods: curl rest.runpod.io/v1/pods with the key.
+7. Git: explicit paths only (no git add -A), never rewrite history, fix forward, report commits
+   as "%h parent %p". Nothing over 5 MB in a commit (hooks fence 50 MiB anyway).
+8. Never measure tree perf below 1M rows. Never say "we are faster" in prose; ratios only.
+
+=== STATE OF MAIN (pushed) ===
+18033a3f  orchestrator handoff after the DBSCAN + UMAP merges
+4494b73a  MERGE lane/umap-optimizer   (device IDENTICAL UMAP optimizer)
+5d5398ce  MERGE lane/dbscan-compiler-crash (real fix, -O1 workaround removed)
+9bcbe5b9  opponent reference: trees rows
+fd0c4052  MERGE lane/trees-identical
+3d798a1f  Apple IDENTICAL kNN column flipped (small-k selector + transposed index + index tiling)
+71d2ba71  round-1 merges (GEMM tuned plans, kNN NVIDIA/AMD flip, attention backward binding,
+          training glue) + gate fixes
+Every merge above had its lane's RUN OWED run on the M4 and green before the push:
+  trees:  4 identical builds; identity_break 81/81 vs shipped Apple JSON AND vs the H100 fold
+          JSON; rf_perf_candidates; check-fit-pointwise; check-logloss-train; check-ordered-boosting
+  dbscan: check-dbscan 17/17 at default opt level (fold-pin 1.0000151 / 1.000015 / 1.0);
+          check-unsupervised-identity both modes
+  umap:   stage identity byte-equal to the L40S logs (186 + 690 cells); host arm == 2026-09-05
+          card; 20k launch-width fingerprint 12938647291752780014 on Apple in both widths == L40S;
+          FAST checks unchanged; estimators binding rebuilt IDENTICAL
+Uncommitted on main: nothing (bench/results/runpod_leases/ is an untracked guard dir; leave it).
+
+=== GEMM SPLIT-K LANE: LANDED 18:15 EDT (merge 294351db, Apple fix 5363419c, pushed) ===
+   Five H100 legs, all gates green, card byte-equal. gram.32x32x1M 210x -> 1.8x of cuBLAS FP32;
+   gram.128sq 90x -> 6.0x; decode rows 1.7-2.8x; t512 rows unchanged 4.4-4.9x (KS=32 on the
+   128x128 tile LOST 17%). 64x64 tuned plan steps K by 32 where two pages fit (matrix rule).
+   THE APPLE RUN OWED CAUGHT A REAL BUG: the 128x128 KS=32 probe plan needs 36,864 B of
+   threadgroup memory > Metal's 32 KB; every gate that enumerates the 18 plans failed on the
+   M4. Fix = kernel-matrix row lib_smem_page_fits_for + TUNED_128_KS (probe resolves to 16 on a
+   32 KB column). Lesson: a plan list that only ran on 48 KB boxes is unverified on Apple.
+   Handoff: docs/lanes/HANDOFF_gemm_splitk.md (its profile_dot command was wrong: run check-cd).
+
+=== FUSED ATTENTION LANE: LANDED 18:20 EDT (merge ddaabe49, Apple fix 25b0399d, pushed) ===
+   Fused three-pass recompute is the IDENTICAL default (MOJOLEARN_TRANSFORMER_ATTN_PATH=eager is
+   the A/B arm). L40S Samba shape: forward 249.2 ms vs torch SDPA 33.6 (7.4x, 5x target NOT
+   met); fwd+bwd 525.8 vs 106.9 (4.9x, met); was 514.8 / 1111.9. Fused core is 177 of the 249
+   ms (shared-memory bound). Reference rows added for seq 1024 and 16384 (ours refuses 16384 by
+   the 8192 position ceiling). THE APPLE RUN OWED CAUGHT A SECOND 32 KB BUG: head dim 128 claims
+   35,600 shared bytes; fused_supported_head_dim now reads lib_smem_page_fits_for and hd 128 takes
+   the eager path on Apple (same bits by construction); the fused check expects the column's
+   answer. Next: register-blocked fused kernels (design in docs/lanes/HANDOFF_fused_attention.md).
+
+=== ROUND 3: OPENED 19:05 EDT (Andrew: "just 2 lanes at most"), WOUND DOWN ~19:25 EDT (Andrew:
+    "please tell everything to wind down"). BOTH LANES CLOSED, NO LANES OPEN, NO PODS OF OURS. ===
+   lane/fused-attention-regblock: NO CODE. Design only (tile shapes and page bytes per column, hd
+   128 fits Apple at 25,344 B with BK 32, resolver = comptime scan through lib_smem_page_fits_for),
+   written into docs/lanes/HANDOFF_fused_attention.md "Wound down 2026-09-09"; MERGED to main
+   at acc60199 (docs only, nothing to run). 0 pod hours. Stale sentence to fix when the kernels
+   land: lib_smem_page_fits_for's docstring says hd 128 takes the eager path on Apple.
+   lane/knn-selector: NOT MERGED (three commits, branch and worktree agent-a8b4f188a0e93ff39):
+     58dbc7b1 parent bdc110a0  per-class host timers (-D MOJOLEARN_KNN_PHASE_TIMERS=1), leg scripts
+     f2cff18e parent 58dbc7b1  two kernel-matrix rows: knn_selector_shuffle_for (butterfly block
+                               minimum) and knn_distance_hardware_ftz_fma_for (fma.rn.ftz.f32 on
+                               NVIDIA). KNN_REF_FINGERPRINT equal to the H100 reference on all 8
+                               many-query shapes; the four-arm cells, adversarial cells, knn card
+                               and UMAP gates were NOT run.
+     8453e883 parent f2cff18e  UNBUILT, UNGATED, DO NOT MERGE: 8-deep loads in the selector scan,
+                               4-feature hoisting in the register tile; the handoff
+                               docs/lanes/HANDOFF_knn_selector.md and the L40S profile directory
+                               bench/results/knn/2026-09-09-selector/l40s-profile/.
+   The profile (L40S, 400k/4000q/k10): selector 52% of device time (31.9 ms), distance tile 27.2.
+   The butterfly moved the selector only 5%: the cost is one dependent global-load latency per
+   scan iteration at 25% occupancy, not the barriers. The hardware ftz FMA moved the distance
+   tile 25% (to 20.4 ms), bits unchanged. Device total 60.4 -> 52.2 ms on the L40S. The fix the
+   profile points at is memory-level parallelism (8453e883), then a deeper index-axis split of
+   the selection. No H100 table, no cuML ratio, no UMAP 1M phase. 0.2 pod hours.
+   To pick it up: resume the agent by SendMessage (its id is in memory) or start fresh from the
+   handoff's "next commands"; build and gate f2cff18e on an L40S before considering 8453e883;
+   merge only after the four-arm cells 49c0f025..., the card and the UMAP fingerprints hold, then
+   the Apple RUN OWED list in HANDOFF_knn_selector.md.
+   RunPod balance after round 3: $564.85. Only the foreign samba-train pod is running.
+
+=== LESSON OF THE DAY (both round-2 GPU lanes) ===
+   A kernel whose shared page was only ever created on 48 KB boxes is UNVERIFIED on Apple
+   (32 KB). Every plan/head-dim table must ask checks/kernel_matrix.mojo::lib_smem_page_fits_for
+   before a pipeline exists; the Apple RUN OWED is where this shows, so never skip it.
+
+=== MERGE PROCEDURE WHEN A LANE REPORTS (what I did four times today) ===
+1. git log lane/<branch> (commits as %h parent %p); git merge --no-ff --no-edit lane/<branch>.
+   checks/kernel_matrix.mojo is the file most likely to conflict (docstrings); keep main's text.
+2. Read the lane's docs/lanes/HANDOFF_<lane>.md "RUN OWED on the Apple M4" section. Write a
+   scratchpad script with one step() per command, nice 19, capture rc BEFORE any $(date)
+   substitution (my first trees.sh reported rc=0 for a failed step because of that), nohup it,
+   then a background `while ! grep -q DONE status; do sleep 20; done` wait (timeout 600000).
+   tools/identity_break.py needs PYTHONPATH=python. Card diffs: transformer cards are cmp'd
+   byte-for-byte; GEMM card diffs with '#' lines stripped.
+3. Green: git push origin main. Add the lane's opponent rows to bench/OPPONENT_REFERENCE.md
+   (the lanes put them in a marked section of their handoff, not in the file). Update
+   docs/lanes/HANDOFF_orchestrator_2026-09-09.md (lane table + gap table) and this file.
+4. Red: fix forward on main in the same session, or revert the one line and record it.
+5. Check the pod list for orphans.
+
+=== RESULTS SO FAR (ours IDENTICAL vs their FAST) ===
+GEMM tuned plans (L40S, Llama-8B t512 shapes): 2.1-2.7x of cuBLAS FP32, bits unchanged.
+v1 GEMM split plans landed: gram.32x32x1M 1.8x of cuBLAS FP32 on H100 (was 210x), gram.128sq
+   6.0x, decode rows 1.7-2.8x, t512 rows 4.4-4.9x. Estimator core Gram path at parity already.
+kNN vs cuML H100: wins at <=128 queries; 3-6.5x behind at 1000-4000 queries. Apple, NVIDIA,
+   AMD all on the flipped kernels now. NOBODY owns the selector work (UMAP lane task 2 produced
+   no code: the L40S image lacked nsys; HANDOFF_umap.md has the fallback and candidate changes).
+UMAP: 100k 62.7 s -> 1.67 s on L40S (cuML H100 row 0.321 s = 5.2x cross-GPU); 1M 50.9 s vs cuML
+   L40S 8.0 s = 6.4x same-GPU, self-kNN is 66% of it, then host graph 7.2 s, spectral init 6.3 s.
+Trees H100 HIGGS 1M same process: symmetric Logloss 775 ms vs CatBoost GPU 900 (0.86x); RMSE 806
+   vs 699; L40S 426 vs 781 and 318 vs 915. RF 5762 vs cuML 3314 (1.7x, structural). The paper's
+   4.9-31x symmetric gap does NOT reproduce at 1M in this tree. 2M/5M rungs, ET rows and the
+   H100 A/B for the three-barrier fold + DEV 2030 fused walker + RF defines are UNRUN; those
+   are all bit-equal on both boxes; flags NOT flipped (only L40S transcribed timings:
+   baseline 411/585, fold 336/570, fused 322/557 ms at 1M/2M). tools/trees_leg.sh +
+   tools/trees_identical_ab.sh are the harness.
+Attention: fused landed; fwd 7.4x, fwd+bwd 4.9x behind torch SDPA on L40S (see the lane block).
+Training lane (round 1): code landed, NO measured number yet.
+DBSCAN: crash fixed (one `while k < len(cols)` over a borrowed List with a runtime step;
+   dbscan/checks/compiler_repro_dead_arg_elim.mojo; draft report
+   docs/lanes/MODULAR_ISSUE_dead_arg_elim.md, unfiled, Andrew's call).
+
+=== FINDINGS NOBODY OWNS ===
+- L40S: after the round-1 kNN flip, tools/check_unsupervised_identity.sh FAST pass fails at
+  neighbors/knn_main.mojo ("1 of 512 returned neighbors are not in the true k-nearest set");
+  IDENTICAL pass green; M4 green in both modes. Not a product arm, but a red gate on NVIDIA.
+- Missing opponent rows: LightGBM CUDA extra_trees (valid build; the Sep 9 rf-boosting row at
+  470 s/fit is not an ET row), trees at 2M/5M under the same-process protocol, cuML DBSCAN/PCA
+  at 1M, torch byte-LM step time on H100, cuBLAS H100 for the tuned plans (the GEMM lane may
+  deliver this).
+- UMAP cuML quality gate via the estimators binding needs cuML (not runnable on the Mac).
+
+=== NEXT PRIORITIES AFTER THE TWO LANES LAND (Andrew must say go before any new lane) ===
+1. kNN selector for many queries (the shared substrate under kNN, UMAP, DBSCAN).
+2. Mamba-3 SISO block speed (72-85x vs torch reference scan on the Sep 7 grid).
+3. Trees: H100 A/B of the fold / DEV 2030 / RF defines, 2M/5M rungs, ET opponent row.
+4. UMAP host graph + spectral init at 1M.
+5. Round-1 leftovers: estimator-level GEMM swap timing (GEMM_IDENT_SWAP_537 moves OLS/PCA bits,
+   Andrew's call); AMD column for the kNN rows and the tuned GEMM plans; training-lane runs.
+
+=== SCRATCHPAD (this session only; will vanish) ===
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/7dd5155c-af6a-421e-a6d7-e0d5ab1633f2/scratchpad/runowed/
+   run.sh (round-1 26 steps), trees.sh, dbscan.sh, umap.sh, *_status.txt, per-step logs.
+Memory: ~/.claude/projects/-Users-andrewhendel-CascadeProjects/memory/mojolearn-identical-fanout-sep9.md
+   and identical-vs-their-fast-only.md carry the same state.

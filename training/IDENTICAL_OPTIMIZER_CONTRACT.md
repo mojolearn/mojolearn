@@ -654,6 +654,35 @@ must name `A`. When clause 7 does hold, `A` is free, which is a designable
 property, is cheap to arrange, and is the thing that makes identical training
 across different hardware budgets possible at all.
 
+**CLAUSE 9.3, the device op (2026-09-09, Samba training lane).**
+`training/samba_ops.mojo::samba_accumulate_host` is condition 5 on the
+device: `A` consecutive blocks of `n` floats in ascending microbatch index,
+combined level by level as `ftz(ftz(x) + ftz(y))`, one thread per output
+cell, no fold across threads. It refuses a non-power-of-two `A` by name and,
+when handed the step's token count `T`, refuses a split
+`microbatch_split_is_identical(T, A)` rejects, BEFORE any add. The Python
+spelling is `mojolearn.training.accumulate_grads(parts, tokens)` and
+`Optimizer.step_accumulated(parts, tokens)`; `SambaStack.train_step` splits
+the batch ROWS into `A` microbatches, computes every microbatch's gradient
+with the whole step's divisor (`reduction="sum", num_items=count`, so each
+row's `dlogits` is its slice of the unsplit one) and combines by this op.
+Which tensors then equal the unsplit step is a property of each tensor's
+own contraction: the LM head and the final-norm weight gradients contract
+over tokens through the v1 GEMM and DO; the embedding's run-sorted fold and
+the Mamba-3 block's per-head reductions are reported, not claimed
+(`python/mojolearn/tests/test_samba_surface.py`, arm STACK-ACCUM).
+
+**CLAUSE 9.4, the learning rate as a function of the step.** Clause 7.1's
+host scalar `lr` may now come from a schedule
+(`mojolearn.training.ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`), in
+which case it is the float32 nearest to the EXACT rational schedule value
+at ONE-BASED step `t`, computed with Python integers and rounded once
+(ties to even, flushed below the smallest normal). The cosine is a Taylor
+series on a rational interval enclosing pi with a carried remainder bound,
+never the host `cos`; a value whose interval straddles a float32 rounding
+boundary raises rather than guesses. So `lr(t)` has the same bits on every
+platform and the step stays a pure function of (state, batch, t, config).
+
 ---
 
 ## 10. The stages, in card order

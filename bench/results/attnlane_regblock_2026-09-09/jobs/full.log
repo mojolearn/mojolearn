@@ -1,0 +1,239 @@
+929 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3805c0000000, nodemask=2)
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:188:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=p, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:196:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:214:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=p, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:236:5: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+    memcpy(dest=p, src=host.unsafe_ptr(), count=n)
+    ^~~~~~
+    unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:153:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:698:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:153:
+./transformer/impl/transformers/models/llama/modeling_llama.mojo:723:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:167:
+./transformer/checks/transformer_backward.mojo:101:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:133:
+./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:133:
+./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:133:
+./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:502:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:542:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+Included from /root/mojolearn/bindings/_mojolearn_transformer.mojo:167:
+./transformer/checks/transformer_backward.mojo:2605:28: warning: assignment to 'cells' was never used; assign to '_' instead?
+    var cells = b * nh * l * s
+                           ^
+built python/mojolearn/identical/_mojolearn_transformer.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+1029 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x539580000000, nodemask=1)
+Imported from /root/mojolearn/transformer/checks/transformer_check.mojo:294:
+/root/mojolearn/transformer/impl/transformers/models/llama/modeling_llama.mojo:698:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_check.mojo:294:
+/root/mojolearn/transformer/impl/transformers/models/llama/modeling_llama.mojo:723:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_check.mojo:242:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_check.mojo:242:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_check.mojo:242:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+1139 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5051c0000000, nodemask=1)
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2076:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 6.2 clause (c), the length half, **with DEVIATION 1529's
+       ^
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2602:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 5.3, DEVIATION 1416, **demonstrated and NOT gated, and DEVIATION
+       ^
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:359:
+/root/mojolearn/transformer/impl/transformers/models/llama/modeling_llama.mojo:698:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:359:
+/root/mojolearn/transformer/impl/transformers/models/llama/modeling_llama.mojo:723:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:371:
+/root/mojolearn/transformer/checks/transformer_backward.mojo:101:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Included from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:371:
+/root/mojolearn/transformer/checks/transformer_backward.mojo:2605:28: warning: assignment to 'cells' was never used; assign to '_' instead?
+    var cells = b * nh * l * s
+                           ^
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 3
+1292 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x336940000000, nodemask=1)
+ours: tier identical vendor cuda
+ours forward            median 154.7 ms  rounds ['177.0', '154.7', '152.5']
+ours forward+backward   median 444.9 ms  rounds ['451.9', '417.9', '444.9']
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 1
+1373 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bab00000000, nodemask=2)
+ours: tier identical vendor cuda
+timing surface.weights_up 837.162549 ms
+timing surface.cache_stages_x_up 15.65955 ms
+timing block.norm1 0.836764 ms
+timing attn.qkv_proj 6.535693 ms
+timing attn.rope_and_cache 0.557829 ms
+timing attn.core 75.550522 ms
+timing attn.o_proj 2.756427 ms
+timing block.attention_total 85.418221 ms
+timing block.mlp_and_residuals 33.261903 ms
+timing surface.forward 119.60101 ms
+timing surface.outputs_down 18.534039 ms
+timing surface.weights_up 39.096503 ms
+timing surface.cache_stages_x_up 11.203443 ms
+timing block.norm1 0.682332 ms
+timing attn.qkv_proj 3.759595 ms
+timing attn.rope_and_cache 0.378796 ms
+timing attn.core 74.725557 ms
+timing attn.o_proj 2.723757 ms
+timing block.attention_total 81.601745 ms
+timing block.mlp_and_residuals 33.301834 ms
+timing surface.forward 115.664232 ms
+timing surface.outputs_down 9.972702 ms
+ours forward            median 177.1 ms  rounds ['177.1']
+timing surface.inputs_up 23.903391 ms
+timing block.norm1 0.691452 ms
+timing attn.qkv_proj 3.875126 ms
+timing attn.rope_and_cache 0.382537 ms
+timing attn.core 75.827486 ms
+timing attn.o_proj 2.745927 ms
+timing block.attention_total 82.848216 ms
+timing block.mlp_and_residuals 32.954058 ms
+timing surface.forward 116.582728 ms
+timing bwd.before_attention 0.00301 ms
+timing bwd.attention 138.063358 ms
+timing bwd.after_attention 23.171319 ms
+timing surface.backward 296.795582 ms
+timing surface.outputs_down 16.83984 ms
+timing surface.inputs_up 24.494402 ms
+timing block.norm1 0.687812 ms
+timing attn.qkv_proj 3.866526 ms
+timing attn.rope_and_cache 0.381857 ms
+timing attn.core 75.691514 ms
+timing attn.o_proj 2.760387 ms
+timing block.attention_total 82.714814 ms
+timing block.mlp_and_residuals 33.318194 ms
+timing surface.forward 116.799062 ms
+timing bwd.before_attention 0.00364 ms
+timing bwd.attention 138.558396 ms
+timing bwd.after_attention 22.686081 ms
+timing surface.backward 293.78744 ms
+timing surface.outputs_down 18.960136 ms
+ours forward+backward   median 455.7 ms  rounds ['455.7']
+timing surface.weights_up 34.985542 ms
+timing surface.cache_stages_x_up 14.641422 ms
+timing block.norm1 0.682192 ms
+timing attn.qkv_proj 3.760225 ms
+timing attn.rope_and_cache 0.376136 ms
+timing attn.core 75.115794 ms
+timing attn.o_proj 2.745927 ms
+timing block.attention_total 82.013613 ms
+timing block.mlp_and_residuals 33.027328 ms
+timing surface.forward 115.788735 ms
+timing surface.outputs_down 14.317716 ms
+timing surface.inputs_up 23.288241 ms
+timing block.norm1 0.687242 ms
+timing attn.qkv_proj 3.811826 ms
+timing attn.rope_and_cache 0.378036 ms
+timing attn.core 75.349918 ms
+timing attn.o_proj 2.746298 ms
+timing block.attention_total 82.304598 ms
+timing block.mlp_and_residuals 33.340084 ms
+timing surface.forward 116.406955 ms
+timing bwd.before_attention 0.00338 ms
+timing bwd.attention 139.176977 ms
+timing bwd.after_attention 22.907294 ms
+timing surface.backward 262.360299 ms
+timing surface.outputs_down 18.113612 ms
+attention path: auto
+shape: d_model 1024 heads 16 kv 4 head_dim 64 inter 4096 window 2048 seq 4096 batch 4 rounds 3
+torch-eager-fp32-sdpa forward            median 35.9 ms  rounds ['33.2', '35.9', '36.9']
+/usr/local/lib/python3.11/dist-packages/torch/autograd/graph.py:769: UserWarning: Attempting to run cuBLAS, but there was no current CUDA context! Attempting to set the primary context... (Triggered internally at ../aten/src/ATen/cuda/CublasHandlePool.cpp:135.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+torch-eager-fp32-sdpa forward+backward   median 114.3 ms  rounds ['109.1', '115.2', '114.3']

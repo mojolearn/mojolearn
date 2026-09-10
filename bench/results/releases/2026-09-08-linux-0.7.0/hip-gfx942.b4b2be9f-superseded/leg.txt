@@ -1,0 +1,20 @@
+vendor=amd
+arch=hip/gfx942
+image=188571990
+size=gpu-mi325x1-256gb
+region=tor1
+commit=b4b2be9f339c9ff6b6b059dacff2a71d09bd405c
+archive_sha256=c132aa207c9af1338ebd69a20eb519f6f197300edc2eefb48538b22b39dc5e41
+archive_bytes=8593886
+deadman_seconds=3600
+fetch_reserve=900
+started=2026-09-09T08:10:58Z
+droplet=598976455
+created=2026-09-09T08:11:00Z
+ip=165.245.235.129
+ON_DROPLET_DEADMAN_ARMED
+work_seconds=2400
+build_exit=0
+admission=BUILT_NOT_INSTALLED hip/gfx942 46 extensions, fetched bytes match proof
+destroyed=2026-09-09T08:30:00Z verified_http_404
+finished=2026-09-09T08:30:00Z rc=0

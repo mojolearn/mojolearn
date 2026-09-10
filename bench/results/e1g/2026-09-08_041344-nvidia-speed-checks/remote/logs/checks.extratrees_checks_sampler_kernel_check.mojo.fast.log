@@ -1,0 +1,73 @@
+907 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5af080000000, nodemask=2)
+=== sampler_kernel_check ===
+[device] accelerator present; nvidia -- every arm below runs the SAME binary, selected by a kernel argument
+
+[excess M=1] builder_kernels.cuh:152-248, one draw per thread
+    small  n= 64  k= 8  nodes= 64  -> device says  excess-with-replacement  M= 1  iters= 1..2  :  512  slots bit-identical
+    wide  n= 1000  k= 20  nodes= 64  -> device says  excess-with-replacement  M= 1  iters= 1..2  :  1280  slots bit-identical
+    k==1  n= 100  k= 1  nodes= 64  -> device says  excess-with-replacement  M= 1  iters= 1..1  :  64  slots bit-identical
+
+[excess M=72] the same kernel at the other instantiation
+    k==n-1  n= 100  k= 99  nodes= 8  -> device says  excess-with-replacement  M= 72  iters= 1..2  :  792  slots bit-identical
+    just over the M boundary  n= 20000  k= 128  nodes= 8  -> device says  excess-with-replacement  M= 72  iters= 1..1  :  1024  slots bit-identical
+    dense  n= 2000  k= 1500  nodes= 8  -> device says  excess-with-replacement  M= 72  iters= 1..2  :  12000  slots bit-identical
+
+[all-features] k == n: builder.cuh:399 does not launch; we fill
+    k==n, n=1  n= 1  k= 1  nodes= 16  -> device says  all-features  M= 0  iters= 0..0  :  16  slots bit-identical
+    k==n, n=2  n= 2  k= 2  nodes= 16  -> device says  all-features  M= 0  iters= 0..0  :  32  slots bit-identical
+    k==n, n=17  n= 17  k= 17  nodes= 16  -> device says  all-features  M= 0  iters= 0..0  :  272  slots bit-identical
+    k==n, n=256  n= 256  k= 256  nodes= 16  -> device says  all-features  M= 0  iters= 0..0  :  4096  slots bit-identical
+
+[algo-L] builder_kernels.cuh:268-316, one THREAD per work item
+    device_has_float64() = True  on nvidia
+
+[deviations 164/165] the two fixed cuML bugs, on device
+    n= 2  k=1 over 64 nodes: column 0 drawn 34 times (device, fixed) vs 0 with cuML's mask[0] predecessor restored
+    n= 3  k=1 over 64 nodes: column 0 drawn 27 times (device, fixed) vs 0 with cuML's mask[0] predecessor restored
+    n= 4  k=1 over 64 nodes: column 0 drawn 20 times (device, fixed) vs 0 with cuML's mask[0] predecessor restored
+    n= 8  k=1 over 64 nodes: column 0 drawn 10 times (device, fixed) vs 0 with cuML's mask[0] predecessor restored
+    n=64 k=8 over 512 nodes x 8 trees: column n-1 drawn 517 times against 512.0 expected (ratio 1.009765625 ); with cuML's n-1 filler restored: 3524 (ratio 6.8828125 )
+
+[edges] n==1, k==1, k==n-1, and the refusals
+    k==1, n=2  n= 2  k= 1  nodes= 64  -> device says  excess-with-replacement  M= 1  iters= 1..1  :  64  slots bit-identical
+    k==1, n=3  n= 3  k= 1  nodes= 64  -> device says  excess-with-replacement  M= 1  iters= 1..1  :  64  slots bit-identical
+    k==1, n=5000  n= 5000  k= 1  nodes= 64  -> device says  excess-with-replacement  M= 1  iters= 1..1  :  64  slots bit-identical
+    k==n-1, n=3  n= 3  k= 2  nodes= 8  -> device says  excess-with-replacement  M= 1  iters= 1..2  :  16  slots bit-identical
+    k==n-1, n=100  n= 100  k= 99  nodes= 8  -> device says  excess-with-replacement  M= 72  iters= 1..2  :  792  slots bit-identical
+    refused (n, k) = (10, 0), (10, 11), (10, -3)
+
+[sabotage] one per mechanism, each an argument to the SAME binary
+     sort direction  @ (n= 1000 , k= 20 , M= 1 , iters= 1..1 ):  20 of 160 slots differ  <-- DESIGNATED
+     sort direction  @ (n= 64 , k= 8 , M= 1 , iters= 1..1 ):  32 of 64 slots differ 
+     sort direction  @ (n= 3 , k= 2 , M= 1 , iters= 1..2 ):  12 of 16 slots differ 
+     sort direction  @ (n= 100 , k= 99 , M= 72 , iters= 1..2 ):  196 of 792 slots differ 
+     sort direction  @ (n= 2000 , k= 1500 , M= 72 , iters= 1..2 ):  10389 of 12000 slots differ 
+     dedupe  @ (n= 1000 , k= 20 , M= 1 , iters= 1..1 ):  20 of 160 slots differ 
+     dedupe  @ (n= 64 , k= 8 , M= 1 , iters= 1..1 ):  29 of 64 slots differ 
+     dedupe  @ (n= 3 , k= 2 , M= 1 , iters= 1..2 ):  7 of 16 slots differ 
+     dedupe  @ (n= 100 , k= 99 , M= 72 , iters= 1..2 ):  574 of 792 slots differ  <-- DESIGNATED
+     dedupe  @ (n= 2000 , k= 1500 , M= 72 , iters= 1..2 ):  10480 of 12000 slots differ 
+     block-scan aggregate  @ (n= 1000 , k= 20 , M= 1 , iters= 1..1 ):  0 of 160 slots differ 
+     block-scan aggregate  @ (n= 64 , k= 8 , M= 1 , iters= 1..1 ):  0 of 64 slots differ 
+     block-scan aggregate  @ (n= 3 , k= 2 , M= 1 , iters= 1..2 ):  0 of 16 slots differ 
+     block-scan aggregate  @ (n= 100 , k= 99 , M= 72 , iters= 1..2 ):  792 of 792 slots differ 
+907 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52e380000000, nodemask=1)
+     block-scan aggregate  @ (n= 2000 , k= 1500 , M= 72 , iters= 1..2 ):  12000 of 12000 slots differ  <-- DESIGNATED
+     key chain  @ (n= 1000 , k= 20 , M= 1 , iters= 1..1 ):  159 of 160 slots differ  <-- DESIGNATED
+     key chain  @ (n= 64 , k= 8 , M= 1 , iters= 1..1 ):  60 of 64 slots differ 
+     key chain  @ (n= 3 , k= 2 , M= 1 , iters= 1..2 ):  5 of 16 slots differ 
+     key chain  @ (n= 100 , k= 99 , M= 72 , iters= 1..2 ):  479 of 792 slots differ 
+     key chain  @ (n= 2000 , k= 1500 , M= 72 , iters= 1..2 ):  11869 of 12000 slots differ 
+     enough-uniques condition  @ (n= 1000 , k= 20 , M= 1 , iters= 1..1 ):  0 of 160 slots differ 
+     enough-uniques condition  @ (n= 64 , k= 8 , M= 1 , iters= 1..1 ):  0 of 64 slots differ 
+     enough-uniques condition  @ (n= 3 , k= 2 , M= 1 , iters= 1..2 ):  1 of 16 slots differ 
+     enough-uniques condition  @ (n= 100 , k= 99 , M= 72 , iters= 1..2 ):  389 of 792 slots differ  <-- DESIGNATED
+     enough-uniques condition  @ (n= 2000 , k= 1500 , M= 72 , iters= 1..2 ):  8991 of 12000 slots differ 
+     all-features order at (n=17, k=17): shipping differs in 0 , reversed differs in 256 of 272
+     cuML mask[0] predecessor and cuML n-1 filler: asserted in section 5 above, both turn their own measurement red
+
+
+[uniformity] DEVIATION 215 at (n=28, k=5), 4000 nodes
+    fixed rule: per-column counts 682 .. 754 around 714 ; cuML's smallest-k arm: 273 .. 836 -- RED as required
+sampler_kernel:  23518  cells
+sampler_kernel_check: PASS

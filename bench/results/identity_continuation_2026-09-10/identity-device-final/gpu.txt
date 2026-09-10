@@ -1,0 +1,2 @@
+name, uuid, driver_version
+NVIDIA H100 80GB HBM3, GPU-27c60f95-99ff-5839-38e2-a46406c86af6, 580.126.09

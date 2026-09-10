@@ -211,7 +211,7 @@ from gemm.checks.gemm_identical import (
     SWIZZLE_TRANSPOSE,
     _leaf_bounds,
     _tile_grid,
-    choose_gemm_plan,
+    choose_gemm_plan_untuned,
     contract_partition,
     gemm_operand_strides,
     gemm_plan_name,
@@ -883,8 +883,12 @@ def unpinned_gemm_into_nacc[
     important thing this file holds fixed, because a plan difference would
     make the comparison a comparison of plans.
     """
+    # `choose_gemm_plan_untuned`, since 2026-09-09: the tuned plans have no
+    # unpinned counterpart yet, so this control is priced at the execution
+    # plan the pinned dispatcher used before them. gemm_unpinned_price
+    # prints both plan names, so the difference is visible per row.
     unpinned_gemm_with_plan[NACC](
-        ctx, c, a, b, ws, m, n, k, op, choose_gemm_plan(m, n, k)
+        ctx, c, a, b, ws, m, n, k, op, choose_gemm_plan_untuned(m, n, k)
     )
 
 
@@ -944,4 +948,4 @@ def unpinned_gemm_plan_name(m: Int, n: Int, k: Int) -> String:
     `gemm_plan_name`. A bench prints this beside the pinned arm's plan; if
     the two lines ever differ, the run is not the experiment and the number
     must be thrown away rather than explained."""
-    return gemm_plan_name(choose_gemm_plan(m, n, k))
+    return gemm_plan_name(choose_gemm_plan_untuned(m, n, k))

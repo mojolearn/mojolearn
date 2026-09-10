@@ -1,0 +1,40 @@
+{
+ "environment": {
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "driver": "580.126.09",
+  "cuml": "26.08.00",
+  "cupy": "14.2.0",
+  "numpy": "2.4.6",
+  "cuda_runtime": 12090,
+  "arm": "cuml-UMAP-fit_transform-fast",
+  "note": "cuML default build_algo (brute force below its threshold, NN-descent above), GPU optimizer; no deterministic configuration"
+ },
+ "results": [
+  {
+   "rows": 20000,
+   "features": 32,
+   "neighbors": 15,
+   "epochs": 200,
+   "rounds": 3,
+   "fit_transform_ms": [
+    146.7130221426487,
+    145.372717641294,
+    145.6625908613205
+   ],
+   "median_ms": 145.6625908613205
+  },
+  {
+   "rows": 100000,
+   "features": 32,
+   "neighbors": 15,
+   "epochs": 200,
+   "rounds": 3,
+   "fit_transform_ms": [
+    321.25456258654594,
+    322.2594987601042,
+    321.0920440033078
+   ],
+   "median_ms": 321.25456258654594
+  }
+ ]
+}

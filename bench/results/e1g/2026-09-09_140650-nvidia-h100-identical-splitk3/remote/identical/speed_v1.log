@@ -1,0 +1,143 @@
+2183 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a7e00000000, nodemask=2)
+FSPEED-HEADER family=gemm lane=gemm arm=ours-v1-identical mode=IDENTICAL device=NVIDIA H100 80GB HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=gemm arm=ours-v1-identical gemm/checks/gemm_identical.mojo::identical_gemm_into, profile mojolearn.identical.gemm.fp32.v1, strict FP32 by contract. Its fair opponent is cublas-fp32.
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=gram.32x32x1M plan=SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=gram.32x32x1M ms=0.622579
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.32x32x1M round=1 ms=0.436765 hash=a1714301a05043c8
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.32x32x1M round=2 ms=0.435637 hash=a1714301a05043c8
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.32x32x1M round=3 ms=0.435096 hash=a1714301a05043c8
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.32x32x1M round=4 ms=0.434947 hash=a1714301a05043c8
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.32x32x1M round=5 ms=0.434337 hash=a1714301a05043c8
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=gram.32x32x64K plan=SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=gram.32x32x64K ms=0.05304
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.32x32x64K round=1 ms=0.049154 hash=f54a21df38359a62
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.32x32x64K round=2 ms=0.048342 hash=f54a21df38359a62
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.32x32x64K round=3 ms=0.048158 hash=f54a21df38359a62
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.32x32x64K round=4 ms=0.047957 hash=f54a21df38359a62
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.32x32x64K round=5 ms=0.048357 hash=f54a21df38359a62
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=gram.128sq.x100003 plan=SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=gram.128sq.x100003 ms=0.74612
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.128sq.x100003 round=1 ms=0.577566 hash=3ad7c8fe1ccb69cd
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.128sq.x100003 round=2 ms=0.576378 hash=3ad7c8fe1ccb69cd
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.128sq.x100003 round=3 ms=0.576601 hash=3ad7c8fe1ccb69cd
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.128sq.x100003 round=4 ms=0.577969 hash=3ad7c8fe1ccb69cd
+FSPEED lane=gemm arm=ours-v1-identical shape=gram.128sq.x100003 round=5 ms=0.576841 hash=3ad7c8fe1ccb69cd
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=ols.step1.16x16x64K plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=ols.step1.16x16x64K ms=0.142034
+FSPEED lane=gemm arm=ours-v1-identical shape=ols.step1.16x16x64K round=1 ms=0.031105 hash=8453e6a32bb513dd
+FSPEED lane=gemm arm=ours-v1-identical shape=ols.step1.16x16x64K round=2 ms=0.030638 hash=8453e6a32bb513dd
+FSPEED lane=gemm arm=ours-v1-identical shape=ols.step1.16x16x64K round=3 ms=0.030371 hash=8453e6a32bb513dd
+FSPEED lane=gemm arm=ours-v1-identical shape=ols.step1.16x16x64K round=4 ms=0.030353 hash=8453e6a32bb513dd
+FSPEED lane=gemm arm=ours-v1-identical shape=ols.step1.16x16x64K round=5 ms=0.030885 hash=8453e6a32bb513dd
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=pca.transform.8192x4x4 plan=TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=pca.transform.8192x4x4 ms=0.089052
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.8192x4x4 round=1 ms=0.013043 hash=59b1a1993889ef60
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.8192x4x4 round=2 ms=0.012776 hash=59b1a1993889ef60
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.8192x4x4 round=3 ms=0.012894 hash=59b1a1993889ef60
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.8192x4x4 round=4 ms=0.012546 hash=59b1a1993889ef60
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.8192x4x4 round=5 ms=0.012291 hash=59b1a1993889ef60
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 plan=TUNED 64x64 reg4x4 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 ms=0.170594
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=1 ms=0.03304 hash=ce518fe285e59ce5
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=2 ms=0.032472 hash=ce518fe285e59ce5
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=3 ms=0.032005 hash=ce518fe285e59ce5
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=4 ms=0.031834 hash=ce518fe285e59ce5
+FSPEED lane=gemm arm=ours-v1-identical shape=pca.transform.wide.8192x64x128 round=5 ms=0.038002 hash=ce518fe285e59ce5
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 plan=TUNED 64x64 reg4x4 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 ms=0.02251
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=1 ms=0.022586 hash=05c1bddd0f21fbc0
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=2 ms=0.022391 hash=05c1bddd0f21fbc0
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=3 ms=0.022389 hash=05c1bddd0f21fbc0
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=4 ms=0.02269 hash=05c1bddd0f21fbc0
+FSPEED lane=gemm arm=ours-v1-identical shape=kmeans.dist.4096x64x64 round=5 ms=0.022252 hash=05c1bddd0f21fbc0
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=ols.predict.gemv.64Kx16 plan=TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=ols.predict.gemv.64Kx16 ms=0.033729
+FSPEED lane=gemm arm=ours-v1-identical shape=ols.predict.gemv.64Kx16 round=1 ms=0.031392 hash=7599d7655ca6ff23
+FSPEED lane=gemm arm=ours-v1-identical shape=ols.predict.gemv.64Kx16 round=2 ms=0.030902 hash=7599d7655ca6ff23
+FSPEED lane=gemm arm=ours-v1-identical shape=ols.predict.gemv.64Kx16 round=3 ms=0.031467 hash=7599d7655ca6ff23
+FSPEED lane=gemm arm=ours-v1-identical shape=ols.predict.gemv.64Kx16 round=4 ms=0.031107 hash=7599d7655ca6ff23
+FSPEED lane=gemm arm=ours-v1-identical shape=ols.predict.gemv.64Kx16 round=5 ms=0.031414 hash=7599d7655ca6ff23
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t1 plan=SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t1 ms=0.214758
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t1 round=1 ms=0.071467 hash=40c46f773e9c361b
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t1 round=2 ms=0.071189 hash=40c46f773e9c361b
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t1 round=3 ms=0.070805 hash=40c46f773e9c361b
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t1 round=4 ms=0.070782 hash=40c46f773e9c361b
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t1 round=5 ms=0.070681 hash=40c46f773e9c361b
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t8 plan=SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t8 ms=0.292926
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t8 round=1 ms=0.125539 hash=b9ec681417590473
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t8 round=2 ms=0.125276 hash=b9ec681417590473
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t8 round=3 ms=0.125045 hash=b9ec681417590473
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t8 round=4 ms=0.125619 hash=b9ec681417590473
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t8 round=5 ms=0.124998 hash=b9ec681417590473
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 ms=3.40579
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=1 ms=1.662954 hash=653d78aec804b8d4
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=2 ms=1.657588 hash=653d78aec804b8d4
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=3 ms=1.65964 hash=653d78aec804b8d4
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=4 ms=1.652615 hash=653d78aec804b8d4
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.qkv.t512 round=5 ms=1.654148 hash=653d78aec804b8d4
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t1 plan=SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t1 ms=0.227091
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t1 round=1 ms=0.213032 hash=b2677e792e0efb84
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t1 round=2 ms=0.212787 hash=b2677e792e0efb84
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t1 round=3 ms=0.212458 hash=b2677e792e0efb84
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t1 round=4 ms=0.213261 hash=b2677e792e0efb84
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t1 round=5 ms=0.213233 hash=b2677e792e0efb84
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t8 plan=SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t8 ms=0.383633
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t8 round=1 ms=0.379581 hash=e59f4d365e5acd35
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t8 round=2 ms=0.378008 hash=e59f4d365e5acd35
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t8 round=3 ms=0.378922 hash=e59f4d365e5acd35
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t8 round=4 ms=0.377399 hash=e59f4d365e5acd35
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t8 round=5 ms=0.37728 hash=e59f4d365e5acd35
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 ms=6.559179
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=1 ms=6.54418 hash=88ccdd14e4766d32
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=2 ms=6.543954 hash=88ccdd14e4766d32
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=3 ms=6.53684 hash=88ccdd14e4766d32
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=4 ms=6.552638 hash=88ccdd14e4766d32
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_up.t512 round=5 ms=6.541322 hash=88ccdd14e4766d32
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t1 plan=SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t1 ms=0.211306
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t1 round=1 ms=0.201876 hash=19b80c90669f4b73
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t1 round=2 ms=0.201068 hash=19b80c90669f4b73
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t1 round=3 ms=0.201272 hash=19b80c90669f4b73
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t1 round=4 ms=0.201828 hash=19b80c90669f4b73
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t1 round=5 ms=0.201205 hash=19b80c90669f4b73
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t8 plan=SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t8 ms=0.397924
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t8 round=1 ms=0.393514 hash=dccd59993fbb1ee7
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t8 round=2 ms=0.39309 hash=dccd59993fbb1ee7
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t8 round=3 ms=0.393045 hash=dccd59993fbb1ee7
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t8 round=4 ms=0.392564 hash=dccd59993fbb1ee7
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t8 round=5 ms=0.392573 hash=dccd59993fbb1ee7
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 ms=5.814786
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=1 ms=5.807809 hash=f51b912d95b3677f
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=2 ms=5.80544 hash=f51b912d95b3677f
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=3 ms=5.818814 hash=f51b912d95b3677f
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=4 ms=5.807662 hash=f51b912d95b3677f
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.mlp_down.t512 round=5 ms=5.806891 hash=f51b912d95b3677f
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t1 plan=SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t1 ms=1.581022
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t1 round=1 ms=1.537747 hash=fb123fa7d2e93d01
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t1 round=2 ms=1.536716 hash=fb123fa7d2e93d01
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t1 round=3 ms=1.534586 hash=fb123fa7d2e93d01
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t1 round=4 ms=1.533689 hash=fb123fa7d2e93d01
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t1 round=5 ms=1.533648 hash=fb123fa7d2e93d01
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t8 plan=SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t8 ms=3.210198
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t8 round=1 ms=3.19206 hash=e6a23074e50145da
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t8 round=2 ms=3.186306 hash=e6a23074e50145da
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t8 round=3 ms=3.186258 hash=e6a23074e50145da
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t8 round=4 ms=3.18651 hash=e6a23074e50145da
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t8 round=5 ms=3.186369 hash=e6a23074e50145da
+FSPEED-NOTE lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t512 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (256 thr, 1-D grid, no swizzle)
+FSPEED-WARMUP lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t512 ms=51.263565
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t512 round=1 ms=51.214904 hash=a9a3e86c20935410
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t512 round=2 ms=51.21183 hash=a9a3e86c20935410
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t512 round=3 ms=51.23226 hash=a9a3e86c20935410
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t512 round=4 ms=51.232062 hash=a9a3e86c20935410
+FSPEED lane=gemm arm=ours-v1-identical shape=llama8b.lm_head.t512 round=5 ms=51.240107 hash=a9a3e86c20935410

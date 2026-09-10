@@ -26,8 +26,8 @@ across Apple M4, NVIDIA H100 and AMD MI325X, measured at leg 11
 section 7, 34 card stages, both boxes) under `MOJOLEARN_NUMERIC_MODE=
 identical`. That result is for the 34-stage card of that commit; the card
 has since grown to 61 stages and the three-vendor leg on the GROWN card is
-OWED (`metrics/README.md` Status). **The FAST arm, which is the default,
-makes no cross-vendor claim at all** -- the FAST cards differ between
+OWED (`metrics/README.md` Status). **The FAST arm, which is not the default
+and must be selected explicitly, makes no cross-vendor claim at all** -- the FAST cards differ between
 vendors and that is recorded, not a defect.
 
 ONE CAVEAT ABOUT THAT EVIDENCE, since it is checkable and worth checking.

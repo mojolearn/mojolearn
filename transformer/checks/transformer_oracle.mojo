@@ -394,25 +394,52 @@ struct TransformerKVCache(Copyable, Movable):
     var head_dim: Int
     var cap: Int
     var used: Int
+    var window: Int
+    var ring: Int
     var k: List[Float32]
     var v: List[Float32]
 
-    def __init__(out self, b: Int, dims: TransformerDims, cap: Int) raises:
+    def __init__(
+        out self, b: Int, dims: TransformerDims, cap: Int, window: Int = 0
+    ) raises:
+        """`window == 0`: slot `j` is absolute position `j`, `cap` slots.
+        `window > 0`: sliding-window causal attention; the buffers are a
+        RING of `window` slots per (batch, kv head), slot `= j % window`,
+        and `cap` still bounds absolute positions."""
         if b <= 0 or cap <= 0:
             raise Error("transformer: KV cache needs positive B and capacity")
+        if window < 0:
+            raise Error("transformer: KV cache window must be >= 0")
         self.b = b
         self.n_kv = dims.n_kv_heads
         self.head_dim = dims.head_dim
         self.cap = cap
         self.used = 0
+        self.window = window
+        self.ring = cap
+        if window > 0:
+            self.ring = window
         self.k = List[Float32]()
         self.v = List[Float32]()
-        for _ in range(b * dims.n_kv_heads * cap * dims.head_dim):
+        for _ in range(b * dims.n_kv_heads * self.ring * dims.head_dim):
             self.k.append(Float32(0.0))
             self.v.append(Float32(0.0))
 
     def slot(self, bb: Int, kv: Int, j: Int, d: Int) -> Int:
-        return ((bb * self.n_kv + kv) * self.cap + j) * self.head_dim + d
+        var jj = j
+        if self.window > 0:
+            jj = j % self.window
+        return ((bb * self.n_kv + kv) * self.ring + jj) * self.head_dim + d
+
+    def key_lo(self, pos0: Int) -> Int:
+        """First absolute key a call starting at `pos0` reads: 0 for full
+        causal, `max(0, pos0 - window + 1)` under a window."""
+        if self.window <= 0:
+            return 0
+        var lo = pos0 - self.window + 1
+        if lo < 0:
+            lo = 0
+        return lo
 
     def plant_slots(mut self, first: Int, values: List[Float32]) raises:
         """Write known bits into slots `[first, cap)`, k block then v block.
@@ -1050,22 +1077,31 @@ def transformer_block_oracle(
     # CALL, and it is read BEFORE the append. Contract section 5.5: one
     # axis, one direction, one origin.
     var pos0 = cache.used
-    var s = pos0 + l
-    if s > cache.cap:
+    var s_abs = pos0 + l
+    if s_abs > cache.cap:
         raise Error(
             String("transformer: this call would use ")
-            + String(s)
+            + String(s_abs)
             + " KV slots and the cache holds "
             + String(cache.cap)
             + " REFUSED"
         )
-    if s > MAX_ABS_POSITION:
+    if s_abs > MAX_ABS_POSITION:
         raise Error(
             String("transformer: absolute position ")
-            + String(s - 1)
+            + String(s_abs - 1)
             + " is at or beyond the Cody-Waite domain of"
             + " _cephes_sincosf_core (DEVIATION 812)"
         )
+    # THE KEY SPAN THIS CALL READS: absolute keys `[key_lo, pos0 + l)`.
+    # Full causal has `key_lo == 0` and `s == pos0 + l` exactly as before;
+    # a window `W` has `key_lo = max(0, pos0 - W + 1)`. Every fold below
+    # walks the span ascending from `+0.0`, and the masked head and tail
+    # of it are exactly `+0.0` (contract 7.1), so a query row's bits are a
+    # pure function of (its position, its visible keys).
+    var key_lo = cache.key_lo(pos0)
+    var s = s_abs - key_lo
+    var window = cache.window
 
     st.input_x = x.copy()
 
@@ -1122,7 +1158,28 @@ def transformer_block_oracle(
     st.q_rope_out = q_rope^
     st.k_rope_out = k_rope^
 
+    # ---- the key span, BEFORE the append. A COPY. -----------------------
+    # The stage `kv.k_cache` is `[B, n_kv, S, head_dim]`: the keys this
+    # call's attention reads, work index `j` at absolute `key_lo + j`.
+    # Positions before `pos0` come from the cache, this call's own from
+    # `k_rope_out` / `v_proj_out`. Gathered BEFORE the append because, under
+    # a window, this call's tokens may evict positions it still attends to.
+    for bb in range(b):
+        for kv in range(nkv):
+            for j in range(s):
+                var pos = key_lo + j
+                for d in range(hd):
+                    if pos < pos0:
+                        var ix = cache.slot(bb, kv, pos, d)
+                        st.kv_k_cache.append(cache.k[ix])
+                        st.kv_v_cache.append(cache.v[ix])
+                    else:
+                        var src = (bb * l + (pos - pos0)) * kw + kv * hd + d
+                        st.kv_k_cache.append(st.k_rope_out[src])
+                        st.kv_v_cache.append(st.v_proj_out[src])
+
     # ---- the KV append (:261-262 past_key_values.update). A COPY. --------
+    # In position order, so under a ring the highest position wins a slot.
     for t in range(m):
         var bb = t // l
         var li = t % l
@@ -1138,16 +1195,7 @@ def transformer_block_oracle(
                 var vbits = st.v_proj_out[src]
                 cache.k[dst] = kbits
                 cache.v[dst] = vbits
-    cache.used = s
-
-    # The cache stages hold the USED prefix [0, S) and NOT the allocation.
-    for bb in range(b):
-        for kv in range(nkv):
-            for j in range(s):
-                for d in range(hd):
-                    var ix = cache.slot(bb, kv, j, d)
-                    st.kv_k_cache.append(cache.k[ix])
-                    st.kv_v_cache.append(cache.v[ix])
+    cache.used = s_abs
 
     # ---- S11, S12: the scores (EAF:204) ---------------------------------
     # `torch.matmul(query, key_states.transpose(2, 3)) * scaling`.
@@ -1187,8 +1235,7 @@ def transformer_block_oracle(
             var kmat = List[Float32]()
             for j in range(s):
                 for d in range(hd):
-                    var ix = cache.slot(bb, kv, j, d)
-                    kmat.append(cache.k[ix])
+                    kmat.append(st.kv_k_cache[((bb * nkv + kv) * s + j) * hd + d])
             var cell = gemm_oracle(qmat, kmat, OP_NT, l, s, hd)
             for qi in range(l):
                 for j in range(s):
@@ -1233,7 +1280,10 @@ def transformer_block_oracle(
                 var base = ((bb * nh + h) * l + qi) * s
                 for j in range(s):
                     var mv = ufill
-                    if j > p:
+                    var pk = key_lo + j
+                    if pk > p:
+                        mv = mfill
+                    if window > 0 and pk <= p - window:
                         mv = mfill
                     masked.append(ftz(ftz(scores[base + j]) + mv))
     _apply_plant(masked, plant, PLANT_AT_MASKED)
@@ -1381,8 +1431,9 @@ def transformer_block_oracle(
                 for d in range(hd):
                     var acc = Float32(0.0)
                     for j in range(s):
-                        var ix = cache.slot(bb, kv, j, d)
-                        var vv = ftz(cache.v[ix])
+                        var vv = ftz(
+                            st.kv_v_cache[((bb * nkv + kv) * s + j) * hd + d]
+                        )
                         acc = ftz(
                             identical_mul_add(
                                 ftz(aweights[base + j]), vv, acc

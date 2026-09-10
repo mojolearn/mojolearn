@@ -67,44 +67,19 @@ account (6.3 case 3: an integer atomic's COUNT is order free and its SLOT is
 not), so a witness that silently goes inert is the worst one to lose.
 `f_multiblock` is `T = 600`.
 
-**(3) DEVIATION 1506, AND IT IS THE SERIOUS ONE. THE DEVICE ENTRY POINTS
-PERFORM NO REFUSAL AT ALL.** Contract 9.1 says a NaN or an infinity "is
-refused by name, `refuse_nonfinite`... before any recorded stage", and
-contract section 8 says an out-of-range id "is REFUSED BY NAME... Not
-clamped, not wrapped, not silently dropped". Both are TRUE of
-`emb_forward_oracle` and `emb_backward_oracle`, which call
-`emb_refuse_shape`, `emb_refuse_ids` and `refuse_nonfinite` on entry. **Both
-are FALSE of `identical_embedding_forward_into` and
-`identical_embedding_backward_into`, which check nothing.** That file's own
-docstring says so and calls it a design -- "THE HOST REFUSALS RUN BEFORE
-THIS, NOT INSIDE IT" -- and the design has no enforcement anywhere: there is
-no wrapper in the profile that does both, so a caller who forgets gets
-
-  * a NaN folded into `emb.dw` and hashed onto a card, which is exactly the
-    vendor-shaped payload IDENTITY_PATHS row 39 forbids; and, worse,
-  * an OUT-OF-BOUNDS DEVICE READ for a negative id. `emb_gather_kernel`
-    computes `weight.unsafe_load(v * width + j)` with no bounds branch on
-    the normative path, so `v == -1` reads BEFORE the buffer. That is a
-    memory-safety bug and not a numerics one.
-
-This file MEASURES the first half -- it plants a NaN in `W`, reads it back
-OFF THE DEVICE by bits to prove reach, calls the device forward with the
-trace DISABLED so no payload can enter a card, and reports whether anything
-raised. **It deliberately does NOT run the out-of-range half**, because
-running an out-of-bounds read to demonstrate that it is out of bounds is not
-a test, it is the bug. Clause (f) raises on the gap by default and names the
-one-line fix; `MOJOLEARN_EMB_DEVICE_REFUSAL_GAP_ACK=1` downgrades the raise
-to a printed line and the line prints EITHER WAY, so the gap cannot be
-suppressed, only acknowledged. **Clause (f) is the LAST clause this file
-runs**, precisely so that a raise there still leaves every other clause
-measured.
+**(3) DEVIATION 1506: NONFINITE INPUT REFUSAL REMAINS OPEN.** Production
+entry points validate ID bounds. They still omit the host oracle's NaN/inf
+refusal for W and dY. Clause (f) plants a NaN, measures device reach and
+reports whether the forward refuses it. It raises for this existing gap
+unless MOJOLEARN_EMB_DEVICE_REFUSAL_GAP_ACK=1 is supplied; it runs last so
+this independent audit does not mask the other clause results.
 
 TWO MORE, SMALLER
 ------------------
 **DEVIATION 1505.** Contract 11.1's table has eighteen rows and
 `embedding_identical.mojo` has SIXTEEN switches. The contract names
 `EMB_SORT_KEY_ID_ONLY_UNSTABLE` as unbuildable (it is a `PLAN_SORT` arm and
-`PLAN_SORT` is not written) and it does NOT say the same of
+the id-only sabotage switch is not implemented) and it does NOT say the same of
 `EMB_FOLD_VIA_GEMM_ONEHOT` -- which nonetheless has no switch anywhere in
 the lane. So the table promises an arm that does not exist, and contract
 5.2(d)'s claim that the one-hot routing "survives as a SABOTAGE whose job is
@@ -133,12 +108,10 @@ WHAT WOULD MAKE EACH CLAUSE PASS WHILE GATING NOTHING
   comparison is a value against itself. Each half carries a FIRING control:
   the same extra positions carrying a REAL id and a NONZERO gradient MUST
   move `dW`, and a zero there raises VACUOUS.
-* **(d)** **THIS CLAUSE CANNOT RUN AND THE FILE SAYS SO RATHER THAN
-  SKIPPING IT.** Plan invariance needs two plans and `PLAN_SORT` is not
-  written. What IS run is its host shadow -- `emb_perm_by_total_order_key`
-  against `emb_perm_by_scan` at every case -- which proves the KEY and not
-  the KERNEL. The launch-geometry half cannot run either: `EMB_TPB` is a
-  `comptime`, so "three unrelated launch geometries" is three BUILDS.
+* **(d)** Both production plans run at 32, 96 and 160 threads on every
+  accepted fixture. Counts, run boundaries, used permutation and dW are
+  compared bitwise. The independent host total-key check and reverse-tie
+  negative control are retained.
 * **(e)** A split that leaves every row's contributors on one side. Then the
   carry and the `dW += dW_micro` spelling agree and the clause passes on
   both. `emb_case_straddling_rows` is asserted POSITIVE before the clause
@@ -228,7 +201,7 @@ OWED, AND THIS FILE COVERS NONE OF IT
 * **A RUN, ON ANY COLUMN.** Zero bits observed.
 * **THE 16 SABOTAGE BUILDS.** Sixteen compiles, one arm each. No runner
   script exists and writing one under `tools/` is outside this file's remit.
-* **`PLAN_SORT`,** and therefore contract clause (d) in its real form.
+* **NVIDIA evidence for the new PLAN_SORT implementation.**
 * **THE SHIPPED SHAPE.** `V = 128256`, `d = 4096`, `T = 4096`, which
   contract 11.2 calls mandatory. `dW` there is 2.10 GB and
   `[[no-heavy-local-compute]]` binds this author; it belongs on a rented
@@ -312,6 +285,7 @@ from embedding.checks.embedding_identical import (
     identical_embedding_backward_into,
     identical_embedding_forward_into,
 )
+from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
 from embedding.checks.embedding_oracle import (
     EMB_MAX_POSITIONS,
     EMB_NO_PADDING_IDX,
@@ -628,7 +602,7 @@ def host_dump(c: EmbCase) raises -> EmbDump:
     return d^
 
 
-def device_dump(ctx: DeviceContext, c: EmbCase) raises -> EmbDump:
+def device_dump(ctx: DeviceContext, c: EmbCase, plan: Int = PLAN_SCAN, block_threads: Int = EMB_TPB) raises -> EmbDump:
     """The device's nine stages for one case, read back off the device.
 
     FRESH EVERYTHING on every call -- fresh weight, fresh ids, fresh `dW`,
@@ -684,7 +658,7 @@ def device_dump(ctx: DeviceContext, c: EmbCase) raises -> EmbDump:
     var b0 = _upload_i32(ctx, _zeros_i32_list(cfg.vocab + 1))
     var p0 = _upload_i32(ctx, _zeros_i32_list(1))
     identical_embedding_backward_into(
-        ctx, dseed, d_dy0, d_ids0, c0, b0, p0, 0, cfg
+        ctx, dseed, d_dy0, d_ids0, c0, b0, p0, 0, cfg, plan, block_threads
     )
     ctx.synchronize()
     d.f[STAGE_DW_SEED] = _download_f32(ctx, dseed, cells)
@@ -748,7 +722,7 @@ def device_dump(ctx: DeviceContext, c: EmbCase) raises -> EmbDump:
                 + " ([[reached-but-inert]])."
             )
     identical_embedding_backward_into(
-        ctx, ddw, ddy, dw_ids, counts, run_begin, perm, t, cfg
+        ctx, ddw, ddy, dw_ids, counts, run_begin, perm, t, cfg, plan, block_threads
     )
     ctx.synchronize()
     d.i[STAGE_COUNTS] = _download_i32(ctx, counts, cfg.vocab)
@@ -1781,62 +1755,28 @@ def clause_c_known_exception(ctx: DeviceContext) raises:
 
 
 def clause_d(ctx: DeviceContext) raises:
-    """Contract 11(d), and the honest report of what is missing.
-
-    **THE CLAUSE AS WRITTEN CANNOT RUN AND THIS FUNCTION SAYS SO RATHER
-    THAN SKIPPING IT.** DEVIATION 1507. It asks for two things and neither
-    is available:
-
-      1. `PLAN_SCAN` and `PLAN_SORT` producing identical `emb.perm` and
-         identical `emb.dw` at every fixture. **`PLAN_SORT` IS NOT WRITTEN**
-         (contract 6.2, OWED item 2), so there is one plan. The contract
-         calls this clause "the strongest evidence available that the
-         arithmetic does not read the plan", and it has never been run and
-         cannot be.
-      2. `emb.dw` identical under at least three unrelated launch
-         geometries. **`EMB_TPB` IS A `comptime`** resolved by
-         `_emb_max_tpb` at build time, so three geometries is three BUILDS
-         and not three calls. One binary cannot do it and pretending
-         otherwise would be a green line for a comparison that never
-         happened.
-
-    WHAT DOES RUN IS THE HOST SHADOW, and it is worth running because it
-    proves the KEY even though it cannot prove the KERNEL.
-    `emb_perm_by_total_order_key` sorts contract 6.2(a)'s packed `(id, t)`
-    key with a stable merge sort and must return `emb_perm_by_scan`'s
-    permutation at every case. Three separate claims collapse into that one
-    assertion:
-
-      * the packed key is a TOTAL order, so the sorted list is a pure
-        function of `ids` (6.2(a));
-      * sorting on it gives ascending `t` inside every run, which is
-        contract 5.1 clause 1;
-      * therefore 6.2(b) holds -- a STABLE sort by `id` ALONE over a
-        POSITION-ORDERED input is the same permutation, because stability
-        supplies the low half of the key. That is
-        `gbdt/gpu_util/kernel/radix_sort.mojo`'s own argument about
-        CatBoost's `(bin || permutationPosition)`, and this is how it stops
-        being a quotation.
-
-    **AND ITS NEGATIVE CONTROL.** If the two spellings were the same
-    function -- if `emb_perm_by_total_order_key` called `emb_perm_by_scan`
-    -- the assertion would pass for ever while comparing nothing. So the
-    clause first shows the merge sort producing a DIFFERENT permutation from
-    `emb_perm_by_scan` when it is fed a key that is NOT a total order: the
-    id alone, with the positions handed to it in REVERSE. That is precisely
-    `EMB_SORT_TIE_REVERSED`'s shape and precisely the tie order an unstable
-    id-keyed sort is permitted to return, and if it does not differ then the
-    sort cannot tell two orders apart and this clause gates nothing."""
-    _ = ctx
-    print(
-        "clause (d): **CANNOT RUN AS SPECIFIED.** PLAN_SORT is not written"
-        " (contract 6.2, OWED item 2), so there is ONE plan and plan"
-        " invariance -- which the contract calls the strongest evidence that"
-        " the arithmetic does not read the plan -- has never been run. The"
-        " launch-geometry half needs three BUILDS, because EMB_TPB is a"
-        " comptime. What follows is the HOST SHADOW: it proves the KEY, not"
-        " the KERNEL."
-    )
+    """Real production plan and launch geometry invariance, contract 11(d)."""
+    var geometries: List[Int] = [32, 96, 160]
+    var comparisons = 0
+    for k in range(EMB_CASE_COUNT):
+        var c = emb_case(k)
+        if c.refused:
+            continue
+        var baseline = device_dump(ctx, c, PLAN_SCAN, EMB_TPB)
+        for plan in range(2):
+            for g in range(len(geometries)):
+                var candidate = device_dump(ctx, c, plan, geometries[g])
+                var stages: List[Int] = [STAGE_COUNTS, STAGE_RUN_BEGIN, STAGE_PERM]
+                for z in range(len(stages)):
+                    var stage = stages[z]
+                    var diff = compare_i32(String(c.name) + " plan/geometry integer", baseline.i[stage], candidate.i[stage], True)
+                    if diff.n_diff != 0:
+                        raise Error("embedding clause (d): plan/geometry integer mismatch")
+                var diff = compare_f32(String(c.name) + " plan/geometry dw", baseline.f[STAGE_DW], candidate.f[STAGE_DW], True)
+                if diff.n_diff != 0:
+                    raise Error("embedding clause (d): plan/geometry dw mismatch")
+                comparisons += 1
+    print("clause (d) production: PASS ", comparisons, " scan/sort comparisons at 32/96/160 threads; counts, run_begin, used perm and dw bit identical")
     var agreed = 0
     var checked = 0
     for k in range(EMB_CASE_COUNT):
@@ -1921,8 +1861,7 @@ def clause_d(ctx: DeviceContext) raises:
         + String(checked)
         + " cases; the reverse-tie control differs on "
         + String(control_moved)
-        + " entries, so the comparison can see a tie order. **THE PLAN"
-        " CLAUSE ITSELF REMAINS UNGATED.**"
+        + " entries, so the comparison can see a tie order."
     )
 
 
@@ -2324,23 +2263,11 @@ def clause_f(ctx: DeviceContext) raises:
     name" and the clause would pass for ever WHILE GATING NOTHING. So the
     clause first runs a CLEAN call and requires that nothing raises.
 
-    **AND THEN DEVIATION 1506, WHICH IS WHY THIS CLAUSE RUNS LAST.** Every
-    assertion above is about the HOST ORACLE. The DEVICE entry points check
-    NOTHING -- read `identical_embedding_forward_into`, which says so in its
-    own docstring -- so the profile has no entry point that satisfies
-    contract 9.1. This function MEASURES the gap on the safe half (a NaN in
-    `W`, planted, read BACK OFF THE DEVICE by bits so reach is measured, run
-    with the trace DISABLED so no vendor-shaped payload can enter a card)
-    and then raises unless the operator has acknowledged it.
-
-    **IT DELIBERATELY DOES NOT RUN THE OUT-OF-RANGE HALF.** With a negative
-    id, `emb_gather_kernel` computes `weight.unsafe_load(v * width + j)`
-    with no bounds branch on the normative path, so `v == -1` reads BEFORE
-    the buffer. Running an out-of-bounds read to demonstrate that it is out
-    of bounds is not a test, it is the bug, and it would be a bug this gate
-    committed on purpose on somebody's machine. The host half proves the id
-    is refused where a refusal exists; the device half is reported from the
-    SOURCE and left unrun."""
+    The production ID check is present. The remaining device audit plants
+    a NaN in W and measures its reach and propagation; missing nonfinite
+    refusal is independent of the integer run-construction plan. This audit
+    raises unless the existing gap is explicitly acknowledged. Device ID
+    refusal is not exercised by this particular clause."""
     print("clause (f): the row-39 audit, contract section 9.1")
 
     # ---- THE CONTROL ----------------------------------------------------
@@ -2526,28 +2453,12 @@ def clause_f(ctx: DeviceContext) raises:
         )
         return
     var complaint = (
-        String("embedding_check: **DEVIATION 1506 IS OPEN.** Contract 9.1")
-        + " says a NaN 'is refused by name, refuse_nonfinite ... before any"
-        + " recorded stage' and contract section 8 says an out-of-range id"
-        + " 'is REFUSED BY NAME ... Not clamped, not wrapped, not silently"
-        + " dropped'. Both are TRUE of emb_forward_oracle and"
-        + " emb_backward_oracle and FALSE of"
-        + " identical_embedding_forward_into and"
-        + " identical_embedding_backward_into, which check NOTHING. The"
-        + " planted NaN reached the device (measured, 1 cell) and "
+        String("embedding_check: DEVIATION 1506 nonfinite refusal remains open. ")
+        + "Production entry points check ID bounds, but do not refuse NaN/inf in W or dY. "
+        + "The planted NaN reached device W (measured), and "
         + String(leaked)
-        + " non-finite cells came back out of the gather. Nothing in the"
-        + " profile forces a caller to run the host refusals first, and for"
-        + " a NEGATIVE id the consequence is not a bad number, it is"
-        + " emb_gather_kernel computing weight.unsafe_load(v * width + j)"
-        + " with v = -1, a read BEFORE the buffer. THE FIX, one function:"
-        + " a refusing wrapper in embedding_identical.mojo that calls"
-        + " emb_refuse_shape, emb_refuse_ids and refuse_nonfinite and then"
-        + " the _into form -- which is the only way the contract's sentence"
-        + " becomes true of anything a caller can reach. This gate may not"
-        + " edit that file. The out-of-range half was NOT RUN: running an"
-        + " out-of-bounds read to demonstrate that it is out of bounds is"
-        + " not a test."
+        + " nonfinite cells returned from gather. This is an existing input-refusal gap, "
+        + "independent of PLAN_SCAN/PLAN_SORT integer run construction."
     )
     if env_on("MOJOLEARN_EMB_DEVICE_REFUSAL_GAP_ACK"):
         print(complaint)
@@ -2702,7 +2613,7 @@ def arm_expectation(arm: String) raises -> ArmExpectation:
             String(
                 "contract 6.2(a), the total order. **HALF GATED BY"
                 " CONSTRUCTION**: this is the PLAN_SCAN spelling of the arm"
-                " and its PLAN_SORT half does not exist, so the sort clause"
+                " and its PLAN_SORT half must be gated separately; the sort clause"
                 " is half gated and half not gated at all -- contract 11.1"
                 " says so and this table repeats it"
             ),
@@ -2791,7 +2702,7 @@ def arm_expectation(arm: String) raises -> ArmExpectation:
         + "' is not one of the SIXTEEN sabotage names"
         + " embedding_identical.mojo carries. Contract 11.1's table has"
         + " EIGHTEEN rows: EMB_SORT_KEY_ID_ONLY_UNSTABLE is a PLAN_SORT arm"
-        + " and PLAN_SORT is not written, and EMB_FOLD_VIA_GEMM_ONEHOT has"
+        + " whose dedicated switch is not implemented, and EMB_FOLD_VIA_GEMM_ONEHOT has"
         + " no switch anywhere in the lane (DEVIATION 1505). If a"
         + " seventeenth switch was added, this table and the contract both"
         + " owe it a row."
@@ -3169,10 +3080,7 @@ def main() raises:
         else:
             print(
                 "clause (d): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_D=1)."
-                " NOTE: even when it runs it is a HOST SHADOW -- PLAN_SORT"
-                " is not written, so plan invariance, which the contract"
-                " calls the strongest evidence that the arithmetic does not"
-                " read the plan, has never been run and cannot be."
+
             )
 
         if env_on("MOJOLEARN_EMB_CHECK_CLAUSE_E"):
@@ -3188,9 +3096,8 @@ def main() raises:
         print(
             "SCOPE: this build, this column, "
             + mode_name()
-            + " only. What is NOT closed by anything printed above: **plan"
-            " invariance** (PLAN_SORT is not written, contract clause (d)"
-            " has never run); **the shipped shape** V=128256 d=4096 T=4096,"
+            + " only. Plan invariance requires the explicit clause (d) run."
+            " Still owed: **the shipped shape** V=128256 d=4096 T=4096,"
             " which contract 11.2 calls mandatory and which is 2.10 GB of dW"
             " and belongs on a rented GPU rather than this laptop; **the"
             " device-side refusal**, DEVIATION 1506, which is a real defect"
@@ -3198,8 +3105,7 @@ def main() raises:
             " and **EMB_SORT_KEY_ID_ONLY_UNSTABLE**, two of contract 11.1's"
             " eighteen arms that have no switch anywhere (DEVIATION 1505);"
             " **EMB_NO_FLUSH_ACC on any FTZ column**, where it is inert by"
-            " construction; **EMB_GATHER_CLAMP_OOR**, whose clean half is an"
-            " out-of-bounds read; **an INDEPENDENT reference** -- there is"
+            " construction; **an INDEPENDENT reference** -- there is"
             " no embedding table in cuML, cuVS or RAFT and no PyTorch"
             " checkout, so every clause here is our device against our"
             " oracle and both are ours; **FAST mode**; **the fifteen"
@@ -3220,7 +3126,7 @@ def main() raises:
                 "clause (f): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_F=1)."
                 " NOTE: it runs LAST when it runs, because DEVIATION 1506"
                 " makes it RAISE on a defect in a file this gate may not"
-                " edit -- the device entry points perform NO refusal at all"
+                " edit -- the device entry points still omit nonfinite input refusal"
                 " -- and a raise there must not cost the other clauses their"
                 " measurements."
             )

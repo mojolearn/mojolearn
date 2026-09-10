@@ -1,0 +1,78 @@
+✨ Pixi task (check-pointwise-target in default): mojo run -I . checks/pointwise_target_check.mojo
+1191 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x331d00000000, nodemask=1)
+Imported from /root/mojolearn/checks/pointwise_target_check.mojo:114:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:745:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/pointwise_target_check.mojo:114:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:752:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/checks/pointwise_target_check.mojo:114:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:177:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/pointwise_target_check.mojo:114:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:182:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/pointwise_target_check.mojo:114:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:182:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/pointwise_target_check.mojo:114:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:182:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/pointwise_target_check.mojo:114:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:185:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/pointwise_target_check.mojo:114:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:359:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/pointwise_target_check.mojo:114:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:432:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/pointwise_target_check.mojo:114:
+/root/mojolearn/gbdt/targets/kernel/pointwise_targets.mojo:495:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+1191 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7862c0000000, nodemask=2)
+-- honest run: every objective, both modes, both weightings --
+  ok   RMSE alpha 0.0
+  ok   Quantile alpha 0.7
+  ok   MAE alpha 0.5
+  ok   LogLinQuantile alpha 0.7
+  ok   MAPE alpha 0.0
+  ok   Poisson alpha 0.0
+  ok   Lq alpha 1.5
+  ok   Expectile alpha 0.7
+  ok   Tweedie alpha 1.5
+  ok   Huber alpha 1.0
+  ok   Lq q=2.5 (the q >= 2 Der2 arm)
+
+-- sabotages: each must turn the check RED --
+  ok   Lq q=1.0 (where sign(0) is observable)
+  ok   S1 sign(0) flipped to +1 -> 20 cells moved
+  ok   S2 Huber boundary < -> <= -> 14 cells moved
+  ok   S3 Quantile arm > -> >= -> 20 cells moved
+  ok   S4 der scaled by (1 + 1e-5) -> 2554 cells moved
+  ok   S5 estimation planes swapped -> 4133 cells moved
+  ok   S6 Lq Der2 forced to the q >= 2 arm -> 4133 cells moved
+
+worst honest relative gap: 2.471181810393475e-06  REL_TOL: 5e-06  headroom: 2.0233234070316635
+
+pointwise target check: PASS

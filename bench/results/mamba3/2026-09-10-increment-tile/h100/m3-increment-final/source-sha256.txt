@@ -1,0 +1,2 @@
+5925c6eb04bd35a973df9f6d6966174987536139ef9033046a1e3d21b483fc50  mamba/impl/mamba_ssm/ops/mamba3_siso.mojo
+094e5f43b2cf8af230c3377a02198faa8ea2af56a4abdc6ba0be690c56aec1f5  gemm/checks/gemm_identical.mojo

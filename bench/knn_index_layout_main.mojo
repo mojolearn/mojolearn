@@ -21,7 +21,10 @@ from std.time import perf_counter_ns
 from bench.gemv_serial_layout_main import _env_int, _upload, _read, _same
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.row_norms import NORM_TPB, row_norm_kernel
-from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB, pinned_distance_tile_kernel
+from neighbors.checks.pinned_distance_tile import (
+    PINNED_TILE_TPB, pinned_distance_tile_kernel,
+    RT_ROWS, RT_TILE_COLS, RT_TPB, pinned_distance_register_tile_kernel,
+)
 from neighbors.checks.transposed_index_distance_candidate import transposed_index_distance_into
 from neighbors.checks.select_radix_identical import radix_topk_identical_kernel
 from neighbors.impl.matrix.detail.select_radix import SELECT_BLOCK
@@ -69,6 +72,16 @@ def _distance(
             grid_dim=((r * n + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1),
             block_dim=(PINNED_TILE_TPB, 1, 1),
         )
+    elif arm == 3:
+        # The qualification loop prepares yt in arm 1 before this arm.
+        # Cover the production register tile against the scalar pinned
+        # oracle, including cancellation, FTZ operands and ragged features.
+        ctx.enqueue_function[pinned_distance_register_tile_kernel](
+            z.unsafe_ptr(), q.unsafe_ptr(), yt.unsafe_ptr(), qn.unsafe_ptr(), yn.unsafe_ptr(),
+            Int32(r), Int32(n), Int32(n), Int32(d), Int32(root),
+            grid_dim=((n + RT_TILE_COLS - 1) // RT_TILE_COLS, (r + RT_ROWS - 1) // RT_ROWS, 1),
+            block_dim=(RT_TPB, 1, 1),
+        )
     else:
         transposed_index_distance_into(ctx, z, q, y, yt, qn, yn, r, n, d, root, arm == 1)
 
@@ -79,7 +92,7 @@ def _select(
     mut bv: DeviceBuffer[DType.float32], mut bi: DeviceBuffer[DType.uint32],
     r: Int, n: Int, k: Int,
 ) raises:
-    ctx.enqueue_function[radix_topk_identical_kernel](
+    ctx.enqueue_function[radix_topk_identical_kernel[SELECT_BLOCK]](
         z.unsafe_ptr(), ov.unsafe_ptr(), oi.unsafe_ptr(), bv.unsafe_ptr(), bi.unsafe_ptr(),
         Int32(n), Int32(k), Int32(n), Int32(1),
         grid_dim=(r, 1, 1), block_dim=(SELECT_BLOCK, 1, 1),
@@ -111,7 +124,7 @@ def _case(r: Int, n: Int, d: Int, profile: Int, root: Int, timing: Bool, samples
         var expected_vals = List[Float32]()
         var expected_idx = List[UInt32]()
         for repeat in range(2):
-            for arm in range(3):
+            for arm in range(4):
                 z.enqueue_fill(Float32(-987654))
                 ov.enqueue_fill(Float32(-987654))
                 oi.enqueue_fill(UInt32(4294967295))

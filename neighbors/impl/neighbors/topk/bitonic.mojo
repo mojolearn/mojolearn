@@ -98,9 +98,11 @@ directions for a NaN, so a NaN compares as equal-to-everything and its final
 position is unspecified. Callers feed distances, which are non-NaN.
 """
 
+# In IDENTICAL CDNA, "warp" in this module's network/layout contract means
+# an aligned logical32 group, not the physical64-lane wave. Communication
+# wrappers preserve that scope; all other modes keep their previous calls.
 from std.bit import log2_floor
-from std.gpu.primitives.id import lane_id
-from std.gpu.primitives.warp import shuffle_xor
+from neighbors.impl.neighbors.topk.logical_warp32 import queue_lane_id, queue_shuffle_xor
 
 
 @always_inline
@@ -190,8 +192,8 @@ def _cex_stage[W: Int, dir: Bool, S: Int, KK: Int](
         comptime for r in range(W):
             var ok = keys[r]
             var ov = vals[r]
-            var pk = shuffle_xor(ok, UInt32(S))
-            var pv = shuffle_xor(ov, UInt32(S))
+            var pk = queue_shuffle_xor(ok, UInt32(S))
+            var pv = queue_shuffle_xor(ov, UInt32(S))
 
             # FIXED ROLES. `A` is the low index of the pair on BOTH lanes,
             # so both lanes feed `_needs_swap` the same ordered pair and get
@@ -246,7 +248,7 @@ def bitonic_merge_warp[W: Int, dir: Bool](
     """
     comptime N = 32 * W
     comptime STAGES = log2_floor(N)
-    var lane = Int(lane_id())
+    var lane = Int(queue_lane_id())
 
     comptime for step in range(STAGES):
         # N/2, N/4, ..., 1
@@ -267,7 +269,7 @@ def bitonic_sort_warp[W: Int, dir: Bool](
     """
     comptime N = 32 * W
     comptime LEVELS = log2_floor(N)
-    var lane = Int(lane_id())
+    var lane = Int(queue_lane_id())
 
     comptime for lk in range(LEVELS):
         comptime KK = 2 << lk  # 2, 4, ..., N
@@ -305,7 +307,7 @@ def bitonic_merge_two_warp[W: Int, dir: Bool](
 
     Reversing `B` is one shuffle: element `i = r * 32 + lane` reverses to
     `32 W - 1 - i = (W - 1 - r) * 32 + (31 - lane)`, and `31 - lane` is
-    `lane ^ 31` for a 32-lane warp, so `shuffle_xor(..., 31)` on register
+    `lane ^ 31` for a 32-lane warp, so `queue_shuffle_xor(..., 31)` on register
     `W - 1 - r` fetches it.
 
     Duplicate pairs are harmless: `is_better` is strict, so on a tie the
@@ -314,8 +316,8 @@ def bitonic_merge_two_warp[W: Int, dir: Bool](
     """
     comptime for r in range(W):
         # Register `W - 1 - r` of lane `31 - lane` is the reversal partner.
-        var rk = shuffle_xor(bk[W - 1 - r], UInt32(31))
-        var rv = shuffle_xor(bv[W - 1 - r], UInt32(31))
+        var rk = queue_shuffle_xor(bk[W - 1 - r], UInt32(31))
+        var rv = queue_shuffle_xor(bv[W - 1 - r], UInt32(31))
         if is_better[dir](rk, rv, ak[r], av[r]):
             ak[r] = rk
             av[r] = rv

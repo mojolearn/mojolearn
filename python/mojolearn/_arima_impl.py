@@ -70,8 +70,8 @@ SURFACE is OWED and nothing here may be described as certified across
 vendors until it exists.
 
 That property, where it exists at all, belongs to
-`MOJOLEARN_NUMERIC_MODE=identical`. The FAST build, which is the default,
-makes no cross-vendor claim of any kind.
+`MOJOLEARN_NUMERIC_MODE=identical`, which is the default. The FAST build,
+selected explicitly, makes no cross-vendor claim of any kind.
 """
 
 import math

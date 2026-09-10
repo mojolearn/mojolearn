@@ -53,6 +53,17 @@ recorded as correct in transformer/README.md). The reference
 tolerances, the shapes, the state bookkeeping and every refusal are
 asserted in every tier.
 
+SLIDING WINDOW AND BACKWARD ARMS, added 2026-09-09 (the Samba attention
+lane): `TransformerBlock(window=W)` against the float64 reference with the
+sliding-window mask, decode through the ring, a split prefill that
+gathers out of the ring, a ring snapshot round trip, and
+`TransformerBlock.backward` against a float64 analytic reverse-mode
+oracle (itself checked by central differences) at window 0 and window
+W, plus two-call bit repeatability. The gradient tolerance (rtol 1e-4,
+atol 1e-5) is an adopted anchor for an fp32 backward chain; the
+forward's is unchanged. RUN OWED on the Apple M4 for these arms; they
+first ran on an NVIDIA L40S (the lane report names the log).
+
 RUN LEDGER. RAN 2026-09-02 on the M4 (Apple), ALL THREE TIERS GREEN,
 44 checks 0 failed each, with the binding rebuilt for each tier:
 fast (bitwise rows REPORTED), deterministic (the repeat-call row
@@ -66,7 +77,7 @@ case data). Re-run per tier, with the binding REBUILT first.
 
 HOW TO RUN IT
 -------------
-    # 1. build the extension (fast is the default tier)
+    # 1. build the extension (identical is the default tier)
     bash bindings/build_transformer.sh
 
     # 2. the gate, FROM THE REPOSITORY ROOT (the debt arm reads
@@ -206,10 +217,21 @@ def _ref_rope_apply(v, cos_t, sin_t, positions):
     return v * cos_full + rh * sin_full
 
 
-def _ref_block(w, x, n_heads, n_kv, head_dim):
+def _ref_mask(l, window):
+    """The additive mask [L, L]: +0.0 where key j is visible to query t
+    (j <= t, and j > t - window when window > 0), else -FLT_MAX."""
+    positions = np.arange(l)
+    visible = positions[None, :] <= positions[:, None]
+    if window > 0:
+        visible &= positions[None, :] > positions[:, None] - window
+    return np.where(visible, 0.0, _MASK_FILL)
+
+
+def _ref_block(w, x, n_heads, n_kv, head_dim, window=0):
     """One fresh-prefill block call in float64, the contract's order
     (section 2). Returns y [B, L, d_model]. GQA is the index map
-    kvh = h // n_rep (contract DEVIATION 813)."""
+    kvh = h // n_rep (contract DEVIATION 813). `window > 0` is the
+    sliding-window causal mask."""
     x = np.asarray(x, dtype=np.float64)
     b, l, dm = x.shape
     n_rep = n_heads // n_kv
@@ -231,10 +253,8 @@ def _ref_block(w, x, n_heads, n_kv, head_dim):
         for h in range(n_heads):
             kvh = h // n_rep
             scores = (q[:, h, :] @ k[:, kvh, :].T) * scale  # [L, S=L]
-            # S13: the causal mask, ADDED. Query at absolute position t
-            # attends keys j <= t; +0.0 where unmasked.
-            mask = np.where(positions[None, :] <= positions[:, None],
-                            0.0, _MASK_FILL)
+            # S13: the causal (or sliding-window) mask, ADDED.
+            mask = _ref_mask(l, window)
             masked = scores + mask
             m = masked.max(axis=-1, keepdims=True)  # S14
             e = np.exp(masked - m)  # S15-S16
@@ -250,6 +270,121 @@ def _ref_block(w, x, n_heads, n_kv, head_dim):
         mlp = (silu * u) @ w64["down_proj.weight"].T  # S21, S5
         y[bb] = r1 + mlp  # S23
     return y
+
+
+def _ref_rms_bwd(x, g, dn):
+    """Reverse of `_ref_rms` on one [L, dm] row block: returns (dx, dg)."""
+    dm = x.shape[-1]
+    var = np.mean(x * x, axis=-1, keepdims=True)
+    r = 1.0 / np.sqrt(var + _RMS_EPS)
+    inner = x * r
+    dg = np.sum(dn * inner, axis=0)
+    dh = dn * g
+    dr = np.sum(dh * x, axis=-1, keepdims=True)
+    dvar = dr * (-0.5) * r ** 3
+    return dh * r + dvar * 2.0 * x / dm, dg
+
+
+def _ref_rope_bwd(d, cos_t, sin_t, positions):
+    """The transpose of `_ref_rope_apply` on `d` [L, n, head_dim]."""
+    hd = d.shape[-1]
+    half = hd // 2
+    c = cos_t[positions][:, None, :]
+    sn = sin_t[positions][:, None, :]
+    cos_full = np.concatenate([c, c], axis=-1)
+    sin_full = np.concatenate([sn, sn], axis=-1)
+    z = d * sin_full
+    return d * cos_full + np.concatenate([z[..., half:], -z[..., :half]],
+                                         axis=-1)
+
+
+def _ref_block_grads(w, x, dy, n_heads, n_kv, head_dim, window=0):
+    """Reverse-mode float64 gradients of `_ref_block`'s block (the
+    contract's block order differentiated by hand): a dict keyed `"x"`
+    plus the nine weight names, each in its argument's shape."""
+    x = np.asarray(x, dtype=np.float64)
+    dy = np.asarray(dy, dtype=np.float64)
+    b, l, dm = x.shape
+    n_rep = n_heads // n_kv
+    scale = float(head_dim) ** -0.5
+    cos_t, sin_t = _ref_rope_tables(head_dim, l)
+    positions = np.arange(l)
+    w64 = {k: np.asarray(v, dtype=np.float64) for k, v in w.items()}
+    gw = {k: np.zeros_like(v) for k, v in w64.items()}
+    gx = np.zeros_like(x)
+    mask = _ref_mask(l, window)
+    for bb in range(b):
+        # ---- forward, keeping what the backward reads ----
+        h_in = x[bb]
+        n1 = _ref_rms(h_in, w64["input_layernorm.weight"])
+        q0 = (n1 @ w64["q_proj.weight"].T).reshape(l, n_heads, head_dim)
+        k0 = (n1 @ w64["k_proj.weight"].T).reshape(l, n_kv, head_dim)
+        v = (n1 @ w64["v_proj.weight"].T).reshape(l, n_kv, head_dim)
+        q = _ref_rope_apply(q0, cos_t, sin_t, positions)
+        k = _ref_rope_apply(k0, cos_t, sin_t, positions)
+        ctx = np.empty((l, n_heads, head_dim))
+        probs = []
+        for h in range(n_heads):
+            kvh = h // n_rep
+            masked = (q[:, h, :] @ k[:, kvh, :].T) * scale + mask
+            m = masked.max(axis=-1, keepdims=True)
+            e = np.exp(masked - m)
+            pr = e / e.sum(axis=-1, keepdims=True)
+            probs.append(pr)
+            ctx[:, h, :] = pr @ v[:, kvh, :]
+        cflat = ctx.reshape(l, n_heads * head_dim)
+        attn = cflat @ w64["o_proj.weight"].T
+        r1 = h_in + attn
+        n2 = _ref_rms(r1, w64["post_attention_layernorm.weight"])
+        g = n2 @ w64["gate_proj.weight"].T
+        u = n2 @ w64["up_proj.weight"].T
+        sg = 1.0 / (1.0 + np.exp(-g))
+        silu = g * sg
+        mm = silu * u
+        # ---- backward ----
+        d_out = dy[bb]
+        d_r1 = d_out.copy()
+        d_m = d_out @ w64["down_proj.weight"]
+        gw["down_proj.weight"] += d_out.T @ mm
+        d_silu = d_m * u
+        d_u = d_m * silu
+        d_g = d_silu * (sg * (1.0 + g * (1.0 - sg)))
+        gw["gate_proj.weight"] += d_g.T @ n2
+        gw["up_proj.weight"] += d_u.T @ n2
+        d_n2 = d_g @ w64["gate_proj.weight"] + d_u @ w64["up_proj.weight"]
+        d_r1_n, dg2 = _ref_rms_bwd(r1, w64["post_attention_layernorm.weight"],
+                                   d_n2)
+        gw["post_attention_layernorm.weight"] += dg2
+        d_r1 += d_r1_n
+        d_attn = d_r1
+        gw["o_proj.weight"] += d_attn.T @ cflat
+        d_c = (d_attn @ w64["o_proj.weight"]).reshape(l, n_heads, head_dim)
+        d_q = np.zeros_like(q)
+        d_k = np.zeros_like(k)
+        d_v = np.zeros_like(v)
+        for h in range(n_heads):
+            kvh = h // n_rep
+            pr = probs[h]
+            d_p = d_c[:, h, :] @ v[:, kvh, :].T
+            d_v[:, kvh, :] += pr.T @ d_c[:, h, :]
+            d_s = pr * (d_p - np.sum(d_p * pr, axis=-1, keepdims=True))
+            d_s *= scale
+            d_q[:, h, :] = d_s @ k[:, kvh, :]
+            d_k[:, kvh, :] += d_s.T @ q[:, h, :]
+        d_q0 = _ref_rope_bwd(d_q, cos_t, sin_t, positions).reshape(l, -1)
+        d_k0 = _ref_rope_bwd(d_k, cos_t, sin_t, positions).reshape(l, -1)
+        d_v0 = d_v.reshape(l, -1)
+        gw["q_proj.weight"] += d_q0.T @ n1
+        gw["k_proj.weight"] += d_k0.T @ n1
+        gw["v_proj.weight"] += d_v0.T @ n1
+        d_n1 = (d_q0 @ w64["q_proj.weight"] + d_k0 @ w64["k_proj.weight"]
+                + d_v0 @ w64["v_proj.weight"])
+        d_x_n, dg1 = _ref_rms_bwd(h_in, w64["input_layernorm.weight"], d_n1)
+        gw["input_layernorm.weight"] += dg1
+        gx[bb] = d_r1 + d_x_n
+    out = {"x": gx}
+    out.update(gw)
+    return out
 
 
 def _uniform(rng, shape, lo, hi):
@@ -521,6 +656,162 @@ def main(out=sys.stdout):
                "an odd head_dim is refused IN MOJO by name (RoPE pairs "
                "halves; LlamaDims.validate)",
                blk_odd.forward, np.zeros((1, 2, 5), np.float32))
+
+    # -- SLIDING WINDOW: reference, ring decode, split prefill, round trip
+    W_WIN, W_L = 3, 8
+    arm = ("WINDOW (window %d over L %d, contract float64 reference with"
+           " the sliding-window mask)" % (W_WIN, W_L))
+    blk_w = TransformerBlock(wa, n_heads=A_NH, n_kv_heads=A_NKV, window=W_WIN)
+    xw = _uniform(rng, (BATCH, W_L, A_DM), -2.0, 2.0)
+    yw = blk_w.forward(xw)
+    rep.check(arm, yw.shape == (BATCH, W_L, A_DM), "y has x's shape")
+    rep.close(arm, yw, _ref_block(wa, xw, A_NH, A_NKV, A_HD, W_WIN),
+              "windowed block output matches the float64 reference with "
+              "the sliding-window mask (rtol 1e-5, atol 1e-6)")
+    y_full = blk.forward(xw)
+    rep.check(arm, not np.array_equal(yw[:, W_WIN:, :], y_full[:, W_WIN:, :]),
+              "the window CHANGES the output past position %d (negative "
+              "control: a window that moves no bit gates nothing)" % W_WIN)
+    rep.bits_equal(arm, yw[:, :W_WIN, :], y_full[:, :W_WIN, :],
+                   "the first %d tokens see every key under both masks and "
+                   "are byte-identical to the full causal block" % W_WIN,
+                   assert_bits)
+    rep.raises(arm, ValueError, "window",
+               "a negative window is refused by name",
+               TransformerBlock, wa, n_heads=A_NH, n_kv_heads=A_NKV,
+               window=-1)
+    rep.raises(arm, ValueError, "window",
+               "a state allocated by a block with another window is refused",
+               blk_w.forward, xw, blk.allocate_state(BATCH, W_L))
+
+    arm = "WINDOW DECODE through the ring (bitwise %s)" % (
+        "ASSERTED" if assert_bits else "reported; %s tier" % mode)
+    stw = blk_w.allocate_state(BATCH, W_L)
+    rep.check(arm, stw.k_cache.shape == (BATCH * A_NKV * W_WIN * A_HD,),
+              "the ring holds window slots per (batch, kv head), not "
+              "max_tokens")
+    y_stw = blk_w.forward(xw, stw)
+    rep.bits_equal(arm, y_stw, yw, "carried-state windowed prefill == the "
+                   "stateless one", assert_bits)
+    rep.check(arm, stw.cached_tokens == W_L,
+              "cached_tokens counts positions past the window (%d)" % W_L,
+              "got %r" % stw.cached_tokens)
+    rep.check(arm, stw.keys().shape == (BATCH, A_NKV, W_WIN, A_HD),
+              "keys() hands back the window's held positions")
+    stwd = blk_w.allocate_state(BATCH, W_L)
+    for t in range(W_L):
+        yt = blk_w.step(xw[:, t:t + 1, :], stwd)
+        rep.bits_equal(arm, yt[:, 0, :], yw[:, t, :],
+                       "ring decode step %d == windowed prefill token %d"
+                       % (t, t), assert_bits)
+    rep.bits_equal(arm, stwd.k_cache, stw.k_cache,
+                   "the key ring after %d steps == the prefill's ring bytes"
+                   % W_L, assert_bits)
+    rep.bits_equal(arm, stwd.v_cache, stw.v_cache,
+                   "the value ring after %d steps == the prefill's"
+                   % W_L, assert_bits)
+
+    arm = "WINDOW RESUMPTION (split prefill through the ring, bitwise %s)" % (
+        "ASSERTED" if assert_bits else "reported; %s tier" % mode)
+    cut = 5
+    sts = blk_w.allocate_state(BATCH, W_L)
+    y_head = blk_w.forward(xw[:, :cut, :], sts)
+    rep.bits_equal(arm, y_head, yw[:, :cut, :],
+                   "the %d-token head == the whole prefill's head" % cut,
+                   assert_bits)
+    snap_k, snap_v, snap_n = sts.k_cache.copy(), sts.v_cache.copy(), \
+        sts.cached_tokens
+    y_tail = blk_w.forward(xw[:, cut:, :], sts)
+    rep.bits_equal(arm, y_tail, yw[:, cut:, :],
+                   "the %d-token tail (gathered out of the ring, evicting "
+                   "as it goes) == the whole prefill's tail" % (W_L - cut),
+                   assert_bits)
+    rep.bits_equal(arm, sts.k_cache, stw.k_cache,
+                   "split == whole: the key ring", assert_bits)
+    # Round trip: the snapshot taken between the two calls resumes to the
+    # same bytes as the state that was never copied.
+    st_rt = blk_w.allocate_state(BATCH, W_L)
+    st_rt.k_cache[:] = snap_k
+    st_rt.v_cache[:] = snap_v
+    st_rt.cached_tokens = snap_n
+    y_rt = blk_w.forward(xw[:, cut:, :], st_rt)
+    rep.bits_equal(arm, y_rt, y_tail,
+                   "a ring snapshot serialized between calls resumes byte "
+                   "for byte", assert_bits)
+    rep.bits_equal(arm, st_rt.v_cache, sts.v_cache,
+                   "and lands the same value ring", assert_bits)
+
+    # -- BACKWARD: the zero-state prefill VJP, IDENTICAL tier only --------
+    arm = "BACKWARD (float64 analytic oracle; %s tier)" % mode
+    if mode != "identical":
+        rep.raises(arm, NotImplementedError, "IDENTICAL",
+                   "backward is refused by name outside the identical tier",
+                   blk.backward, xa, xa)
+    else:
+        rng_b = np.random.default_rng(0x42776421)
+        # The float64 oracle checked against itself by central differences
+        # on a handful of coordinates BEFORE it judges the device.
+        xb_ = _uniform(rng_b, (1, 3, A_DM), -1.0, 1.0).astype(np.float64)
+        dyb_ = _uniform(rng_b, (1, 3, A_DM), -1.0, 1.0).astype(np.float64)
+        ref_g = _ref_block_grads(wa, xb_, dyb_, A_NH, A_NKV, A_HD, W_WIN)
+        worst_fd = 0.0
+        eps = 1e-6
+        for (idx) in [(0, 0, 3), (0, 1, 17), (0, 2, 30)]:
+            xp = xb_.copy(); xp[idx] += eps
+            xm = xb_.copy(); xm[idx] -= eps
+            fd = (np.sum(_ref_block(wa, xp, A_NH, A_NKV, A_HD, W_WIN) * dyb_)
+                  - np.sum(_ref_block(wa, xm, A_NH, A_NKV, A_HD, W_WIN)
+                           * dyb_)) / (2 * eps)
+            worst_fd = max(worst_fd, abs(fd - ref_g["x"][idx])
+                           / (1e-6 + abs(fd)))
+        for name, idx in [("q_proj.weight", (5, 7)),
+                          ("down_proj.weight", (2, 40)),
+                          ("input_layernorm.weight", (9,))]:
+            wp = dict(wa); a64 = wa[name].astype(np.float64).copy()
+            a64[idx] += eps; wp[name] = a64
+            wm = dict(wa); b64 = wa[name].astype(np.float64).copy()
+            b64[idx] -= eps; wm[name] = b64
+            fd = (np.sum(_ref_block(wp, xb_, A_NH, A_NKV, A_HD, W_WIN) * dyb_)
+                  - np.sum(_ref_block(wm, xb_, A_NH, A_NKV, A_HD, W_WIN)
+                           * dyb_)) / (2 * eps)
+            worst_fd = max(worst_fd, abs(fd - ref_g[name][idx])
+                           / (1e-6 + abs(fd)))
+        rep.check(arm, worst_fd < 1e-5,
+                  "the float64 oracle agrees with central differences on "
+                  "6 coordinates (worst rel %.2e)" % worst_fd,
+                  "worst rel %.3e" % worst_fd)
+        for win in (0, W_WIN):
+            blk_g = TransformerBlock(wa, n_heads=A_NH, n_kv_heads=A_NKV,
+                                     window=win)
+            xg = _uniform(rng_b, (BATCH, W_L, A_DM), -2.0, 2.0)
+            dyg = _uniform(rng_b, (BATCH, W_L, A_DM), -1.0, 1.0)
+            got = blk_g.backward(xg, dyg)
+            want = _ref_block_grads(wa, xg, dyg, A_NH, A_NKV, A_HD, win)
+            rep.check(arm, set(got) == set(want),
+                      "window %d: the gradient dict carries x and the nine "
+                      "weights" % win)
+            for name in ("x",) + TransformerBlock._W_NAMES:
+                rep.check(arm, got[name].shape == want[name].shape
+                          and got[name].dtype == np.float32,
+                          "window %d: %s gradient has its argument's shape, "
+                          "float32" % (win, name))
+                rep.close(arm, got[name], want[name],
+                          "window %d: d%s matches the float64 oracle "
+                          "(rtol 1e-4, atol 1e-5)" % (win, name),
+                          rtol=1e-4, atol=1e-5)
+            got2 = blk_g.backward(xg, dyg)
+            same = all(np.array_equal(got[n].view(np.uint32),
+                                      got2[n].view(np.uint32))
+                       for n in got)
+            rep.check(arm, same,
+                      "window %d: two backward calls are byte-identical on "
+                      "all ten gradients" % win)
+        rep.raises(arm, ValueError, "grad_output",
+                   "a grad_output of the wrong shape is refused by name",
+                   blk.backward, xa, xa[:, :1, :])
+        rep.raises(arm, TypeError, "float64",
+                   "a float64 grad_output is refused by name",
+                   blk.backward, xa, xa.astype(np.float64))
 
     # -- THE CORPUS DEBT (recorded, cannot rot -- header) ----------------
     arm = "CORPUS DEBT (transformer/corpus)"

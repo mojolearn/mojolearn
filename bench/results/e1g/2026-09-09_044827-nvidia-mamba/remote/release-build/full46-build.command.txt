@@ -1,0 +1,1 @@
+/usr/bin/python3 tools/nvidia_serial_guard.py --seconds 2368 --rss-gib 12 -- bash /root/mojolearn/tools/linux_surface_qualification.sh build /root/gemm_leg_out/release-build/build 

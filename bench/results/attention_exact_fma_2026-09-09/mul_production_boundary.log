@@ -1,0 +1,2 @@
+13320 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x317840000000, nodemask=1)
+Guarded production seams PASS 262144 triples; attention mismatches 0 GEMM mismatches 0

@@ -5,6 +5,7 @@
 from std.sys.compile import is_defined
 from std.sys.info import (
     has_amd_gpu_accelerator,
+    has_amd_rdna_gpu_accelerator,
     has_nvidia_gpu_accelerator,
 )
 
@@ -349,6 +350,11 @@ comptime TARGET_COLUMN = (
     COLUMN_NVIDIA if is_defined["MOJOLEARN_COLUMN_NVIDIA"]() else
     COLUMN_AMD if is_defined["MOJOLEARN_COLUMN_AMD"]() else
     COLUMN_AMD_RDNA if is_defined["MOJOLEARN_COLUMN_AMD_RDNA"]() else
+    # Explicit declaration simulation only; these do not enable a backend.
+    COLUMN_QUALCOMM if is_defined["MOJOLEARN_COLUMN_QUALCOMM"]() else
+    COLUMN_INTEL if is_defined["MOJOLEARN_COLUMN_INTEL"]() else
+    COLUMN_SPEC_BASELINE if is_defined["MOJOLEARN_COLUMN_SPEC_BASELINE"]() else
+    COLUMN_AMD_RDNA if has_amd_rdna_gpu_accelerator() else
     COLUMN_AMD if has_amd_gpu_accelerator() else
     COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
     COLUMN_APPLE
@@ -356,6 +362,7 @@ comptime TARGET_COLUMN = (
 
 
 comptime DETECTED_COLUMN = (
+    COLUMN_AMD_RDNA if has_amd_rdna_gpu_accelerator() else
     COLUMN_AMD if has_amd_gpu_accelerator() else
     COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
     COLUMN_APPLE
@@ -515,13 +522,20 @@ def quantized_hist_group_features_for[column: Int]() -> Int:
 
 
 def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
-    """SCHEDULING row (DEVIATION 1907): whether the leaf reorder's stable one-bit partition may take the SINGLE-PASS decoupled-lookback path (`gbdt/gpu_util/kernel/reorder_single_pass.mojo`) for a level whose leaf bound is above CatBoost's `FastSortSize()` == 500,000 rows."""
-    comptime if identical:
-        return False
+    """SCHEDULING row (DEVIATION 1907): stable partition above 500,000 rows.
+
+    IDENTICAL's NVIDIA candidate requires an explicit build define until
+    a large-input identity and timing run exercises the routed kernel.
+    Small identity fixtures cannot reach this branch. The kill switch wins
+    over the opt-in, and other vendors retain the established partition.
+    """
     comptime if is_defined["MOJOLEARN_2042_FAST_NO_LOOKBACK"]():
         return False
-    comptime if column == COLUMN_AMD:
-        return False
+    comptime if identical:
+        return (
+            column == COLUMN_NVIDIA
+            and is_defined["MOJOLEARN_IDENTICAL_SINGLE_PASS_PARTITION"]()
+        )
     return column == COLUMN_NVIDIA
 
 
@@ -770,6 +784,24 @@ def lib_smem_pages_for[column: Int, page_bytes: Int]() -> Int:
     return 2 if 2 * page_bytes <= limit else 1
 
 
+def lib_smem_page_fits_for[column: Int, page_bytes: Int]() -> Bool:
+    """SCHEDULING row (2026-09-09, orchestrator, Apple RUN OWED of the split-K lane): whether ONE shared page of `page_bytes` fits under the column's shared limit at all. `lib_smem_pages_for` answers "one page or two"; it cannot say "not even one". The 128x128 tuned pair at K step 32 is 36,864 bytes a page, which no NVIDIA leg noticed (48 KB) and which Metal refuses at pipeline creation (32 KB: "Threadgroup memory size (36864) exceeds the maximum threadgroup memory allowed (32768)", gemm_device_check and gemm_backward_check on the M4). A plan whose page does not fit resolves its K step down through this row instead of naming a vendor. The fused attention kernels ask the same question per head dim: the head-dim-128 backward path claims 35,600 bytes and takes the eager path on a 32 KB column; register-blocked forward needs 18,624 bytes and fits."""
+    return page_bytes <= column_shared_limit(column)
+
+
+def lib_hardware_ftz_fma_for[column: Int]() -> Bool:
+    """Capability row for NVIDIA's explicit round-to-nearest FMA intrinsics.
+
+    This is not permission to replace round-then-flush with a bare .ftz
+    instruction. At a smallest-normal rounding boundary, fma.rn.ftz can
+    return zero where round-then-flush returns 0x00800000. Callers must
+    preserve explicit round-then-flush semantics or correct that case;
+    see the adversarial seam evidence from 2026-09-09.
+    Other columns retain their existing software spelling.
+    """
+    return column == COLUMN_NVIDIA
+
+
 def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's selector is the ported RAFT WARPSORT (`select_warpsort.mojo`, `warpsort_topk_block_kernel`) instead of the ported RAFT radix (`select_radix.mojo`) for `2 < k <= 256`."""
     comptime if identical:
@@ -797,3 +829,143 @@ def quantize_search_for[column: Int]() -> Int:
     if column == COLUMN_APPLE:
         return QUANTIZE_SEARCH_TWO_LEVEL
     return QUANTIZE_SEARCH_LINEAR
+
+
+def _knn_identical_round_column(column: Int) -> Bool:
+    """The columns whose IDENTICAL k-NN defaults were flipped 2026-09-09: small-k selector, transposed index layout with the register tile, and index-axis tiling. NVIDIA and AMD flipped on the H100 evidence; Apple flipped the same afternoon on the M4 four-arm price (100k x 32, k 10, 9 rounds, PRICE_MS medians baseline -> both: 20.5 -> 15.1 ms at 32 queries, 26.9 -> 14.9 at 128, 182.2 -> 66.6 at 1000; all four arms byte-equal to the NVIDIA baseline across 143,628 cells). On Apple the transpose-only arm was slightly faster still at 128 and 1000 queries (12.1, 60.2 ms) and slower at 32 (16.3 ms); the both column is the shipped one."""
+    return (
+        column == COLUMN_NVIDIA
+        or column == COLUMN_AMD
+        or column == COLUMN_AMD_RDNA
+        or column == COLUMN_APPLE
+    )
+
+
+def knn_smallk_select_for[column: Int, identical: Bool]() -> Bool:
+    """ROUTING row: whether the IDENTICAL tiled k-NN arm selects k <= KNN_SMALLK_MAX_K with the per-thread composite-key selector (`neighbors/checks/select_smallk_identical_candidate.mojo`) instead of the 64-bit radix. Both return the k smallest (distance, index) keys ascending, so the bits are equal by construction and the gate is the four-arm dispatch check. `-D MOJOLEARN_KNN_IDENTICAL_LEGACY_SELECT=1` forces the radix on every column; `-D MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL=1` forces the selector on every column."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_LEGACY_SELECT"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL"]():
+        return True
+    return _knn_identical_round_column(column)
+
+
+def knn_transposed_index_for[column: Int, identical: Bool]() -> Bool:
+    """ROUTING row: whether the IDENTICAL tiled k-NN arm transposes the index once per request so the pinned distance tile reads it coalesced. Same per-cell fma chain, so the bits are equal. `-D MOJOLEARN_KNN_IDENTICAL_LEGACY_LAYOUT=1` forces the row-major layout; `-D MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL=1` forces the transpose on every column."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_LEGACY_LAYOUT"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL"]():
+        return True
+    return _knn_identical_round_column(column)
+
+
+def knn_distance_register_tile_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row: whether the transposed IDENTICAL distance tile computes a 4x4 register tile per thread (`pinned_distance_tile.mojo::pinned_distance_register_tile_kernel`) instead of one cell per thread. Every cell's chain is still one ascending serial fma chain over the feature axis (IDENTITY_PATHS row 24), so the bits are equal. Only reachable when `knn_transposed_index_for` is true. `-D MOJOLEARN_KNN_IDENTICAL_SCALAR_TILE=1` keeps one cell per thread."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SCALAR_TILE"]():
+        return False
+    return knn_transposed_index_for[column, identical]()
+
+
+def knn_selector_specialize_common_for[column: Int, identical: Bool]() -> Bool:
+    """Compile-time k=10/15 removes dynamic insertion guards and threshold
+    selection. NVIDIA 400k/4000q/k10: selector 20.3 -> 9.1 ms on the L40S
+    (2026-09-09 selector resume). The same integer composite-key scan and
+    block minimum are retained. Other columns can force the specialization
+    for qualification; the generic capacity buckets remain the A/B arm.
+    """
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_GENERIC_K"]():
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SPECIALIZE_COMMON"]():
+        return True
+    return column == COLUMN_NVIDIA
+
+
+def knn_selector_shuffle_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (2026-09-09, lane/knn-selector): whether the IDENTICAL small-k selector (`select_smallk_identical_candidate.mojo::smallk_bucket_kernel`) takes each rank's block minimum through a lane-group butterfly (`shuffle_xor` over `column_lane_width` lanes, one shared slot per lane group, ONE barrier per rank, double-buffered slots) instead of the eight-level shared-memory tree (eleven barriers per rank). The reduced value is a UInt64 composite key and the fold is an integer minimum, which is associative, commutative and idempotent, so the winner is the same key under any tree and the bits are equal by construction; the gate is the four-arm dispatch check. Every column with a fixed lane width (`column_lane_width_is_fixed`) takes the butterfly; the Qualcomm and Intel columns, whose lane width the vendor's compiler chooses per kernel, keep the tree. `-D MOJOLEARN_KNN_IDENTICAL_TREE_SELECT=1` forces the tree on every column."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_TREE_SELECT"]():
+        return False
+    return column_lane_width_is_fixed(column)
+
+
+def umap_device_optimizer_for[column: Int, identical: Bool]() -> Bool:
+    """ROUTING row (2026-09-09, lane/umap-optimizer): whether the IDENTICAL UMAP layout optimizer runs on the device (`umap/optimizer_identical_device.mojo`: one thread per vertex, one epoch snapshot, each vertex's update a fixed-order fold over its CSR row, negatives from Philox keyed by (seed, epoch, edge, slot), no atomics, no launch-geometry dependence) instead of the serial host loop (`umap/optimizer.mojo::optimize_layout_identical`, `umap/sparse_optimizer.mojo::optimize_sparse_layout_identical`). The two produce DIFFERENT bits (Jacobi versus Gauss-Seidel order); the device path is the IDENTICAL contract on every column and is gated against itself across launch widths and GPUs, not against the host loop. `-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1` restores the host loop on every column (the pre-2026-09-09 cards). FAST and DETERMINISTIC never enter this row."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER"]():
+        return False
+    return True
+
+
+comptime KNN_IDENTICAL_INDEX_TILE = 65536
+
+
+def knn_index_tile_columns_for[column: Int, identical: Bool]() -> Int:
+    """SCHEDULING row: the widest index-axis column tile the IDENTICAL tiled k-NN arm computes per query tile before merging partial top-k lists under the composite total order (`select_smallk_identical_candidate.mojo::partial_topk_merge_kernel`). 0 means the index axis is never split. Merging sorted (distance, index) lists is order-independent, so the bits are equal to the untiled path. `-D MOJOLEARN_KNN_IDENTICAL_NO_INDEX_TILE=1` restores the untiled path."""
+    comptime if not identical:
+        return 0
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_INDEX_TILE"]():
+        return 0
+    if _knn_identical_round_column(column):
+        return KNN_IDENTICAL_INDEX_TILE
+    return 0
+
+
+def gemm_wide_split_for[column: Int]() -> Bool:
+    """Execution-only wide split-K tiles on the measured NVIDIA column.
+
+    The 128x128/KS16 tile reduces operand reloads for complete output tiles.
+    Other columns keep their previous dispatcher pending local timings;
+    every column's all-plan correctness gate still exercises the new tile.
+    """
+    return column == COLUMN_NVIDIA
+
+
+def knn_distance_zero_fma_repair_for[column: Int, identical: Bool]() -> Bool:
+    """Repair Apple's pre-round FMA underflow only at the kNN register seam.
+
+    The integer slow path runs only for a zero result and restores a rounded
+    smallest-normal result when required. NVIDIA already uses round-then-FTZ.
+    The exact integer oracle checks 396584 actual/simulated-underflow triples.
+    The disable flag retains an explicit Apple before/after performance arm.
+    """
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_ZERO_FMA_REPAIR"]():
+        return False
+    return identical and column == COLUMN_APPLE
+
+
+@always_inline
+def knn_distance_preflight_for[column: Int, identical: Bool]() -> Bool:
+    """Exact whole-chain exponent admission avoids unnecessary Apple repairs."""
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_PREFLIGHT"]():
+        return False
+    return identical and column == COLUMN_APPLE
+
+
+@always_inline
+def knn_distance_hardware_flush_for[column: Int, identical: Bool]() -> Bool:
+    """Fully rounded NVIDIA FMA followed by exact hardware FTZ multiplication."""
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SOFTWARE_FLUSH"]():
+        return False
+    return identical and column == COLUMN_NVIDIA
+
+
+@always_inline
+def knn_distance_rows_for[column: Int, identical: Bool]() -> Int:
+    """Measured NVIDIA eight-query register tile; each cell keeps its FMA chain.
+
+    The32/128-feature cases improve; the8-feature coverage is flat to0.9%
+    slower. Other columns retain four query rows per thread.
+    """
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_ROWS4"]():
+        return 4
+    return 8 if identical and column == COLUMN_NVIDIA else 4

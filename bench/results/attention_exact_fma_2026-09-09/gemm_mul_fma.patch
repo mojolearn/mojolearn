@@ -1,0 +1,30 @@
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -1190,16 +1190,20 @@
+     `a` and `b` already flushed as loaded (5a, 5b) and `acc` already flushed
+     by the previous step or seeded `+0.0`.
+ 
+-    NVIDIA uses round-to-nearest FMA followed by explicit output flush.
+-    PTX fma.rn.ftz flushes before rounding at some underflow boundaries:
+-    (0x3f7fffff * 0x00800000) + 0 rounds to the smallest normal in the
+-    software seam but becomes zero with the hardware .ftz modifier.
+-    Inputs here are already flushed by callers, as required above.
++    NVIDIA first rounds the FMA without FTZ, then flushes the rounded
++    value with hardware multiply-by-one. A single hardware FTZ FMA can
++    flush before rounding at the smallest-normal boundary, unlike this
++    two-instruction sequence. Inputs here are already flushed by callers.
++    This matches the NVIDIA software seam; other columns' underlying FMA
++    rounding at underflow boundaries remains a separate numerical audit.
+     """
+     comptime if TUNED_HW_FTZ_FMA:
+-        return ftz(llvm_intrinsic[
++        var rounded = llvm_intrinsic[
+             "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
+-        ](a, b, acc))
++        ](a, b, acc)
++        return llvm_intrinsic[
++            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
++        ](rounded, Float32(1.0))
+     return ftz(identical_mul_add(a, b, acc))
+ 
+ 

@@ -1,0 +1,306 @@
+===== SWEEP TIER S (kmeans knn dbscan gram nt gemv gbdt rf et) =====
+== lanes_price: rounds 3, lanes [kmeans knn dbscan gram nt gemv gbdt rf et], smoke 0 -> bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/S ==
+== build FAST -> bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/S/bin/lanes_price.FAST ==
+== build IDENTICAL (tools/with_identical_mode.sh, mojo build form) -> bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/S/bin/lanes_price.IDENTICAL ==
+
+== lane kmeans: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE kmeans FAST 2 rounds all 23250b50508d95f9
+   round 1: HASH-STABLE kmeans IDENTICAL 2 rounds all eeea38872c935b98
+   round 2: HASH-STABLE kmeans FAST 2 rounds all 23250b50508d95f9
+   round 2: HASH-STABLE kmeans IDENTICAL 2 rounds all eeea38872c935b98
+   round 3: HASH-STABLE kmeans FAST 2 rounds all 23250b50508d95f9
+   round 3: HASH-STABLE kmeans IDENTICAL 2 rounds all eeea38872c935b98
+
+== lane knn: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-MOVED knn FAST round warmup=decb514fb60be374 vs 1=065a424abb034a4c
+   round 1: HASH-STABLE knn IDENTICAL 2 rounds all 4c6f4a612b096067
+   round 2: HASH-MOVED knn FAST round warmup=e2bc839693d992f0 vs 1=71440911da00ae9c
+   round 2: HASH-STABLE knn IDENTICAL 2 rounds all 4c6f4a612b096067
+   round 3: HASH-MOVED knn FAST round warmup=47963f0030c269b0 vs 1=af89d59046bbe304
+   round 3: HASH-STABLE knn IDENTICAL 2 rounds all 4c6f4a612b096067
+
+== lane dbscan: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE dbscan FAST 2 rounds all 9cda87ce5c6b3c85
+   round 1: HASH-STABLE dbscan IDENTICAL 2 rounds all 9cda87ce5c6b3c85
+   round 2: HASH-STABLE dbscan FAST 2 rounds all 9cda87ce5c6b3c85
+   round 2: HASH-STABLE dbscan IDENTICAL 2 rounds all 9cda87ce5c6b3c85
+   round 3: HASH-STABLE dbscan FAST 2 rounds all 9cda87ce5c6b3c85
+   round 3: HASH-STABLE dbscan IDENTICAL 2 rounds all 9cda87ce5c6b3c85
+
+== lane gram: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gram FAST 2 rounds all 37fc8ca7a94b7568
+   round 1: HASH-STABLE gram IDENTICAL 2 rounds all 0e9de1a0121f721a
+   round 2: HASH-STABLE gram FAST 2 rounds all 37fc8ca7a94b7568
+   round 2: HASH-STABLE gram IDENTICAL 2 rounds all 0e9de1a0121f721a
+   round 3: HASH-STABLE gram FAST 2 rounds all 37fc8ca7a94b7568
+   round 3: HASH-STABLE gram IDENTICAL 2 rounds all 0e9de1a0121f721a
+
+== lane nt: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE nt FAST 2 rounds all 5c68413208583222
+   round 1: HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+   round 2: HASH-STABLE nt FAST 2 rounds all 5c68413208583222
+   round 2: HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+   round 3: HASH-STABLE nt FAST 2 rounds all 5c68413208583222
+   round 3: HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+
+== lane gemv: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gemv FAST 2 rounds all baa72e10387fa2c8
+   round 1: HASH-STABLE gemv IDENTICAL 2 rounds all a0d44fa8c1343b19
+   round 2: HASH-STABLE gemv FAST 2 rounds all baa72e10387fa2c8
+   round 2: HASH-STABLE gemv IDENTICAL 2 rounds all a0d44fa8c1343b19
+   round 3: HASH-STABLE gemv FAST 2 rounds all baa72e10387fa2c8
+   round 3: HASH-STABLE gemv IDENTICAL 2 rounds all a0d44fa8c1343b19
+
+== lane gbdt: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gbdt FAST 2 rounds all 45bfcba4070bf931
+   round 1: HASH-STABLE gbdt IDENTICAL 2 rounds all edde9bd742ac76f3
+   round 2: HASH-STABLE gbdt FAST 2 rounds all 45bfcba4070bf931
+   round 2: HASH-STABLE gbdt IDENTICAL 2 rounds all edde9bd742ac76f3
+   round 3: HASH-STABLE gbdt FAST 2 rounds all 45bfcba4070bf931
+   round 3: HASH-STABLE gbdt IDENTICAL 2 rounds all edde9bd742ac76f3
+
+== lane rf: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE rf FAST 2 rounds all 0c961d27f113ab44
+   round 1: HASH-STABLE rf IDENTICAL 2 rounds all acfbdbde102e8c54
+   round 2: HASH-STABLE rf FAST 2 rounds all 0c961d27f113ab44
+   round 2: HASH-STABLE rf IDENTICAL 2 rounds all acfbdbde102e8c54
+   round 3: HASH-STABLE rf FAST 2 rounds all 0c961d27f113ab44
+   round 3: HASH-STABLE rf IDENTICAL 2 rounds all acfbdbde102e8c54
+
+== lane et: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE et FAST 2 rounds all a4d03520b4584c37
+   round 1: HASH-STABLE et IDENTICAL 2 rounds all a4d03520b4584c37
+   round 2: HASH-STABLE et FAST 2 rounds all a4d03520b4584c37
+   round 2: HASH-STABLE et IDENTICAL 2 rounds all a4d03520b4584c37
+   round 3: HASH-STABLE et FAST 2 rounds all a4d03520b4584c37
+   round 3: HASH-STABLE et IDENTICAL 2 rounds all a4d03520b4584c37
+
+== ratio table (written to bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/S/ratio.tsv) ==
+lane    n  FAST med s IDENT med s   ratio     min     max  FAST hash        IDENT hash       hash note
+kmeans  3    0.003672    0.003958   1.078   1.058   1.109  23250b50508d95f9 eeea38872c935b98 fast!=ident bits
+knn     3    0.000553    0.003307   5.985   5.927   6.638  MOVED            4c6f4a612b096067 FAST HASH MOVED across legs (3 distinct)
+dbscan  3    0.041748    0.040370   0.967   0.965   0.970  9cda87ce5c6b3c85 9cda87ce5c6b3c85 fast==ident bits
+gram    3    0.000334    0.000568   1.701   1.625   1.781  37fc8ca7a94b7568 0e9de1a0121f721a fast!=ident bits
+nt      3    0.000073    0.000049   0.667   0.584   0.674  5c68413208583222 5c68413208583222 fast==ident bits
+gemv    3    0.000018    0.000040   2.242   1.811   2.974  baa72e10387fa2c8 a0d44fa8c1343b19 fast!=ident bits
+gbdt    3    0.474488    0.474298   1.000   1.000   1.004  45bfcba4070bf931 edde9bd742ac76f3 fast!=ident bits
+rf      3    0.642074    0.638330   0.994   0.989   0.997  0c961d27f113ab44 acfbdbde102e8c54 fast!=ident bits
+et      3    2.106028    2.112028   1.003   0.998   1.006  a4d03520b4584c37 a4d03520b4584c37 fast==ident bits
+
+READ THE RATIO AS A BAND: min/max are the per-round paired ratios
+(IDENTICAL_r / FAST_r) over 3 alternated rounds on THIS box.
+The median is the band's center, not a figure to four places. Copy
+the row into bench/LANES_PRICE.md with the date, the sha and the
+machine beside it.
+
+== done: bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/S ==
+===== SWEEP TIER M (kmeans knn dbscan gram nt gemv gbdt rf et) =====
+== lanes_price: rounds 3, lanes [kmeans knn dbscan gram nt gemv gbdt rf et], smoke 0 -> bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/M ==
+== build FAST -> bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/M/bin/lanes_price.FAST ==
+== build IDENTICAL (tools/with_identical_mode.sh, mojo build form) -> bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/M/bin/lanes_price.IDENTICAL ==
+
+== lane kmeans: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE kmeans FAST 2 rounds all caa59e8ae153607e
+   round 1: HASH-STABLE kmeans IDENTICAL 2 rounds all caa59e8ae153607e
+   round 2: HASH-STABLE kmeans FAST 2 rounds all caa59e8ae153607e
+   round 2: HASH-STABLE kmeans IDENTICAL 2 rounds all caa59e8ae153607e
+   round 3: HASH-STABLE kmeans FAST 2 rounds all caa59e8ae153607e
+   round 3: HASH-STABLE kmeans IDENTICAL 2 rounds all caa59e8ae153607e
+
+== lane knn: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-MOVED knn FAST round warmup=e2084c293152f319 vs 1=2e234f8d77382625
+   round 1: HASH-STABLE knn IDENTICAL 2 rounds all ace2883778a10918
+   round 2: HASH-MOVED knn FAST round warmup=71ad199bbb431419 vs 1=b91852c3c0be1409
+   round 2: HASH-STABLE knn IDENTICAL 2 rounds all ace2883778a10918
+   round 3: HASH-MOVED knn FAST round warmup=52e0ed362090d1e5 vs 1=2c5f91733e869271
+   round 3: HASH-STABLE knn IDENTICAL 2 rounds all ace2883778a10918
+
+== lane dbscan: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE dbscan FAST 2 rounds all f67f486b1e2d7905
+   round 1: HASH-STABLE dbscan IDENTICAL 2 rounds all f67f486b1e2d7905
+   round 2: HASH-STABLE dbscan FAST 2 rounds all f67f486b1e2d7905
+   round 2: HASH-STABLE dbscan IDENTICAL 2 rounds all f67f486b1e2d7905
+   round 3: HASH-STABLE dbscan FAST 2 rounds all f67f486b1e2d7905
+   round 3: HASH-STABLE dbscan IDENTICAL 2 rounds all f67f486b1e2d7905
+
+== lane gram: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gram FAST 2 rounds all 76f85725740a26b3
+   round 1: HASH-STABLE gram IDENTICAL 2 rounds all 33eca610f6f32a1c
+   round 2: HASH-STABLE gram FAST 2 rounds all 76f85725740a26b3
+   round 2: HASH-STABLE gram IDENTICAL 2 rounds all 33eca610f6f32a1c
+   round 3: HASH-STABLE gram FAST 2 rounds all 76f85725740a26b3
+   round 3: HASH-STABLE gram IDENTICAL 2 rounds all 33eca610f6f32a1c
+
+== lane nt: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE nt FAST 2 rounds all bf48d23d15b01a74
+   round 1: HASH-STABLE nt IDENTICAL 2 rounds all bf48d23d15b01a74
+   round 2: HASH-STABLE nt FAST 2 rounds all bf48d23d15b01a74
+   round 2: HASH-STABLE nt IDENTICAL 2 rounds all bf48d23d15b01a74
+   round 3: HASH-STABLE nt FAST 2 rounds all bf48d23d15b01a74
+   round 3: HASH-STABLE nt IDENTICAL 2 rounds all bf48d23d15b01a74
+
+== lane gemv: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gemv FAST 2 rounds all 85c2a07bf282e0a5
+   round 1: HASH-STABLE gemv IDENTICAL 2 rounds all d93b9dc2340c96a4
+   round 2: HASH-STABLE gemv FAST 2 rounds all 85c2a07bf282e0a5
+   round 2: HASH-STABLE gemv IDENTICAL 2 rounds all d93b9dc2340c96a4
+   round 3: HASH-STABLE gemv FAST 2 rounds all 85c2a07bf282e0a5
+   round 3: HASH-STABLE gemv IDENTICAL 2 rounds all d93b9dc2340c96a4
+
+== lane gbdt: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gbdt FAST 2 rounds all 9277198f24f4a26f
+   round 1: HASH-STABLE gbdt IDENTICAL 2 rounds all f8ccfb0d67e1674b
+   round 2: HASH-STABLE gbdt FAST 2 rounds all 9277198f24f4a26f
+   round 2: HASH-STABLE gbdt IDENTICAL 2 rounds all f8ccfb0d67e1674b
+   round 3: HASH-STABLE gbdt FAST 2 rounds all 9277198f24f4a26f
+   round 3: HASH-STABLE gbdt IDENTICAL 2 rounds all f8ccfb0d67e1674b
+
+== lane rf: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE rf FAST 2 rounds all 32314ca1c01ab68f
+   round 1: HASH-STABLE rf IDENTICAL 2 rounds all f6605d229455c942
+   round 2: HASH-STABLE rf FAST 2 rounds all 32314ca1c01ab68f
+   round 2: HASH-STABLE rf IDENTICAL 2 rounds all f6605d229455c942
+   round 3: HASH-STABLE rf FAST 2 rounds all 32314ca1c01ab68f
+   round 3: HASH-STABLE rf IDENTICAL 2 rounds all f6605d229455c942
+
+== lane et: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE et FAST 2 rounds all f6cec505b824d346
+   round 1: HASH-STABLE et IDENTICAL 2 rounds all f6cec505b824d346
+   round 2: HASH-STABLE et FAST 2 rounds all f6cec505b824d346
+   round 2: HASH-STABLE et IDENTICAL 2 rounds all f6cec505b824d346
+   round 3: HASH-STABLE et FAST 2 rounds all f6cec505b824d346
+   round 3: HASH-STABLE et IDENTICAL 2 rounds all f6cec505b824d346
+
+== ratio table (written to bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/M/ratio.tsv) ==
+lane    n  FAST med s IDENT med s   ratio     min     max  FAST hash        IDENT hash       hash note
+kmeans  3    0.043487    0.048037   1.105   1.090   1.108  caa59e8ae153607e caa59e8ae153607e fast==ident bits
+knn     3    0.002616    0.065463  25.026  24.352  28.759  MOVED            ace2883778a10918 FAST HASH MOVED across legs (3 distinct)
+dbscan  3    0.288653    0.278964   0.966   0.966   0.969  f67f486b1e2d7905 f67f486b1e2d7905 fast==ident bits
+gram    3    0.001493    0.002247   1.505   1.413   1.839  76f85725740a26b3 33eca610f6f32a1c fast!=ident bits
+nt      3    0.000089    0.000491   5.513   5.312   5.816  bf48d23d15b01a74 bf48d23d15b01a74 fast==ident bits
+gemv    3    0.000024    0.000548  22.591  22.406  22.862  85c2a07bf282e0a5 d93b9dc2340c96a4 fast!=ident bits
+gbdt    3    0.541203    0.539605   0.997   0.975   0.998  9277198f24f4a26f f8ccfb0d67e1674b fast!=ident bits
+rf      3    0.606656    0.608880   1.004   0.999   1.004  32314ca1c01ab68f f6605d229455c942 fast!=ident bits
+et      3    3.265417    3.267929   1.001   1.000   1.006  f6cec505b824d346 f6cec505b824d346 fast==ident bits
+
+READ THE RATIO AS A BAND: min/max are the per-round paired ratios
+(IDENTICAL_r / FAST_r) over 3 alternated rounds on THIS box.
+The median is the band's center, not a figure to four places. Copy
+the row into bench/LANES_PRICE.md with the date, the sha and the
+machine beside it.
+
+== done: bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/M ==
+===== SWEEP TIER L (kmeans knn gram nt gemv gbdt rf et ) =====
+== lanes_price: rounds 3, lanes [kmeans knn gram nt gemv gbdt rf et ], smoke 0 -> bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/L ==
+== build FAST -> bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/L/bin/lanes_price.FAST ==
+== build IDENTICAL (tools/with_identical_mode.sh, mojo build form) -> bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/L/bin/lanes_price.IDENTICAL ==
+
+== lane kmeans: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE kmeans FAST 2 rounds all aa57ac4b6baa31fd
+   round 1: HASH-STABLE kmeans IDENTICAL 2 rounds all c5cc84735f29a548
+   round 2: HASH-STABLE kmeans FAST 2 rounds all aa57ac4b6baa31fd
+   round 2: HASH-STABLE kmeans IDENTICAL 2 rounds all c5cc84735f29a548
+   round 3: HASH-STABLE kmeans FAST 2 rounds all aa57ac4b6baa31fd
+   round 3: HASH-STABLE kmeans IDENTICAL 2 rounds all c5cc84735f29a548
+
+== lane knn: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-MOVED knn FAST round warmup=01378b2a7ecc2d94 vs 1=8dbeeae4de954e30
+   round 1: HASH-STABLE knn IDENTICAL 2 rounds all c41d0274e33becc9
+   round 2: HASH-MOVED knn FAST round warmup=06a97c1cdf372034 vs 1=2527795b2fb2b6b0
+   round 2: HASH-STABLE knn IDENTICAL 2 rounds all c41d0274e33becc9
+   round 3: HASH-MOVED knn FAST round warmup=31579c12fd87a2d0 vs 1=7341694db219b074
+   round 3: HASH-STABLE knn IDENTICAL 2 rounds all c41d0274e33becc9
+
+== lane gram: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gram FAST 2 rounds all cd254b4804d9d38b
+   round 1: HASH-STABLE gram IDENTICAL 2 rounds all eda189fc210388c5
+   round 2: HASH-STABLE gram FAST 2 rounds all cd254b4804d9d38b
+   round 2: HASH-STABLE gram IDENTICAL 2 rounds all eda189fc210388c5
+   round 3: HASH-STABLE gram FAST 2 rounds all cd254b4804d9d38b
+   round 3: HASH-STABLE gram IDENTICAL 2 rounds all eda189fc210388c5
+
+== lane nt: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE nt FAST 2 rounds all b7a371231823e3b4
+   round 1: HASH-STABLE nt IDENTICAL 2 rounds all bae56ae624541a84
+   round 2: HASH-STABLE nt FAST 2 rounds all b7a371231823e3b4
+   round 2: HASH-STABLE nt IDENTICAL 2 rounds all bae56ae624541a84
+   round 3: HASH-STABLE nt FAST 2 rounds all b7a371231823e3b4
+   round 3: HASH-STABLE nt IDENTICAL 2 rounds all bae56ae624541a84
+
+== lane gemv: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gemv FAST 2 rounds all 0e5ee13e02e0c38c
+   round 1: HASH-STABLE gemv IDENTICAL 2 rounds all 491b00b499e4b1f9
+   round 2: HASH-STABLE gemv FAST 2 rounds all 0e5ee13e02e0c38c
+   round 2: HASH-STABLE gemv IDENTICAL 2 rounds all 491b00b499e4b1f9
+   round 3: HASH-STABLE gemv FAST 2 rounds all 0e5ee13e02e0c38c
+   round 3: HASH-STABLE gemv IDENTICAL 2 rounds all 491b00b499e4b1f9
+
+== lane gbdt: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gbdt FAST 2 rounds all 938181d0794b1882
+   round 1: HASH-STABLE gbdt IDENTICAL 2 rounds all 9e8e5ae83e2c6f22
+   round 2: HASH-STABLE gbdt FAST 2 rounds all 938181d0794b1882
+   round 2: HASH-STABLE gbdt IDENTICAL 2 rounds all 9e8e5ae83e2c6f22
+   round 3: HASH-STABLE gbdt FAST 2 rounds all 938181d0794b1882
+   round 3: HASH-STABLE gbdt IDENTICAL 2 rounds all 9e8e5ae83e2c6f22
+
+== lane rf: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE rf FAST 2 rounds all 279b67bc45ca1961
+   round 1: HASH-STABLE rf IDENTICAL 2 rounds all e2ec6856dec3081b
+   round 2: HASH-STABLE rf FAST 2 rounds all 279b67bc45ca1961
+   round 2: HASH-STABLE rf IDENTICAL 2 rounds all e2ec6856dec3081b
+   round 3: HASH-STABLE rf FAST 2 rounds all 279b67bc45ca1961
+   round 3: HASH-STABLE rf IDENTICAL 2 rounds all e2ec6856dec3081b
+
+== lane et: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE et FAST 2 rounds all d6efc1ad9646afe1
+   round 1: HASH-STABLE et IDENTICAL 2 rounds all d6efc1ad9646afe1
+   round 2: HASH-STABLE et FAST 2 rounds all d6efc1ad9646afe1
+   round 2: HASH-STABLE et IDENTICAL 2 rounds all d6efc1ad9646afe1
+   round 3: HASH-STABLE et FAST 2 rounds all d6efc1ad9646afe1
+   round 3: HASH-STABLE et IDENTICAL 2 rounds all d6efc1ad9646afe1
+
+== ratio table (written to bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/L/ratio.tsv) ==
+lane    n  FAST med s IDENT med s   ratio     min     max  FAST hash        IDENT hash       hash note
+kmeans  3    0.166586    0.184008   1.105   1.099   1.108  aa57ac4b6baa31fd c5cc84735f29a548 fast!=ident bits
+knn     3    0.010920    0.166237  15.223  14.480  17.115  MOVED            c41d0274e33becc9 FAST HASH MOVED across legs (3 distinct)
+gram    3    0.002496    0.004472   1.792   1.644   1.826  cd254b4804d9d38b eda189fc210388c5 fast!=ident bits
+nt      3    0.000117    0.001882  16.020  15.767  16.786  b7a371231823e3b4 bae56ae624541a84 fast!=ident bits
+gemv    3    0.000092    0.002200  24.018  23.760  24.385  0e5ee13e02e0c38c 491b00b499e4b1f9 fast!=ident bits
+gbdt    3    0.599116    0.606339   1.012   1.004   1.022  938181d0794b1882 9e8e5ae83e2c6f22 fast!=ident bits
+rf      3    0.752483    0.750552   0.997   0.997   1.000  279b67bc45ca1961 e2ec6856dec3081b fast!=ident bits
+et      3    4.383442    4.366820   0.996   0.995   0.999  d6efc1ad9646afe1 d6efc1ad9646afe1 fast==ident bits
+
+READ THE RATIO AS A BAND: min/max are the per-round paired ratios
+(IDENTICAL_r / FAST_r) over 3 alternated rounds on THIS box.
+The median is the band's center, not a figure to four places. Copy
+the row into bench/LANES_PRICE.md with the date, the sha and the
+machine beside it.
+
+== done: bench/results/e1/2026-09-09_075732-mojolearn-e2-amd//sweep/L ==
+===== SWEEP SUMMARY =====
+S	kmeans	1.078	1.058-1.109	fast!=ident
+S	knn	5.985	5.927-6.638	FAST
+S	dbscan	0.967	0.965-0.970	fast==ident
+S	gram	1.701	1.625-1.781	fast!=ident
+S	nt	0.667	0.584-0.674	fast==ident
+S	gemv	2.242	1.811-2.974	fast!=ident
+S	gbdt	1.000	1.000-1.004	fast!=ident
+S	rf	0.994	0.989-0.997	fast!=ident
+S	et	1.003	0.998-1.006	fast==ident
+M	kmeans	1.105	1.090-1.108	fast==ident
+M	knn	25.026	24.352-28.759	FAST
+M	dbscan	0.966	0.966-0.969	fast==ident
+M	gram	1.505	1.413-1.839	fast!=ident
+M	nt	5.513	5.312-5.816	fast==ident
+M	gemv	22.591	22.406-22.862	fast!=ident
+M	gbdt	0.997	0.975-0.998	fast!=ident
+M	rf	1.004	0.999-1.004	fast!=ident
+M	et	1.001	1.000-1.006	fast==ident
+L	kmeans	1.105	1.099-1.108	fast!=ident
+L	knn	15.223	14.480-17.115	FAST
+L	gram	1.792	1.644-1.826	fast!=ident
+L	nt	16.020	15.767-16.786	fast!=ident
+L	gemv	24.018	23.760-24.385	fast!=ident
+L	gbdt	1.012	1.004-1.022	fast!=ident
+L	rf	0.997	0.997-1.000	fast!=ident
+L	et	0.996	0.995-0.999	fast==ident

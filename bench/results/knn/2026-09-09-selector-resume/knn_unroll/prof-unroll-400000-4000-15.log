@@ -1,0 +1,56 @@
+23664 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13ab80000000, nodemask=1)
+KNN_REF_HEADER mode IDENTICAL column nvidia index 400000 queries 4000 features 32 k 15 rounds 3 fixture dyadic-v1 selector 1 transpose 1 register_tile 1 index_tile 65536
+KNN_PHASE_TIMERS transpose_ms 0.123495
+KNN_PHASE_TIMERS distance_ms 19.176007 select_ms 21.524951 merge_ms 0.920629 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_WARMUP request 0 47.609854
+KNN_PHASE_TIMERS transpose_ms 0.108292
+KNN_PHASE_TIMERS distance_ms 19.06549 select_ms 21.399718 merge_ms 0.893555 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_WARMUP request 1 44.254277
+KNN_PHASE_TIMERS transpose_ms 0.107731
+KNN_PHASE_TIMERS distance_ms 19.088254 select_ms 21.445986 merge_ms 0.901806 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND request 1 44.086577
+KNN_PHASE_TIMERS transpose_ms 0.107601
+KNN_PHASE_TIMERS distance_ms 19.074993 select_ms 21.399227 merge_ms 0.862728 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND request 2 43.978805
+KNN_PHASE_TIMERS transpose_ms 0.107
+KNN_PHASE_TIMERS distance_ms 19.226506 select_ms 21.534177 merge_ms 1.02173 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND request 3 44.469809
+KNN_PHASE_TIMERS norms_ms 0.235602
+KNN_PHASE_TIMERS transpose_ms 0.109434
+KNN_PHASE_TIMERS distance_ms 19.048608 select_ms 21.407442 merge_ms 0.878577 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_WARMUP device 0 41.753038
+KNN_PHASE_TIMERS norms_ms 0.225777
+KNN_PHASE_TIMERS transpose_ms 0.106629
+KNN_PHASE_TIMERS distance_ms 19.099226 select_ms 21.63739 merge_ms 0.900654 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_WARMUP device 1 42.032786
+KNN_PHASE_TIMERS norms_ms 0.225417
+KNN_PHASE_TIMERS transpose_ms 0.107401
+KNN_PHASE_TIMERS distance_ms 19.089933 select_ms 21.441782 merge_ms 0.907436 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND device 1 41.833278
+KNN_PHASE_TIMERS norms_ms 0.225367
+KNN_PHASE_TIMERS transpose_ms 0.10694
+KNN_PHASE_TIMERS distance_ms 19.100504 select_ms 21.432812 merge_ms 0.889601 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND device 2 41.820448
+KNN_PHASE_TIMERS norms_ms 0.225858
+KNN_PHASE_TIMERS transpose_ms 0.107231
+KNN_PHASE_TIMERS distance_ms 19.098895 select_ms 21.446657 merge_ms 0.939254 distance_launches 112 select_launches 112 merge_launches 96 query_tile 256 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND device 3 41.871856
+KNN_REF_DEVICE_VS_REQUEST mismatched_cells 0
+KNN_REF_FINGERPRINT index_fnv1a64 16146695062279770847 distance_bits_xor 3272156
+KNN_REF_ROW0 0 147075 1075752738
+KNN_REF_ROW0 1 347872 1075802578
+KNN_REF_ROW0 2 280582 1075899932
+KNN_REF_ROW0 3 255546 1076098936
+KNN_REF_ROW0 4 158380 1076157127
+KNN_REF_ROW0 5 151319 1076280807
+KNN_REF_ROW0 6 252972 1076309764
+KNN_REF_ROW0 7 194725 1076394742
+KNN_REF_ROW0 8 125716 1076423977
+KNN_REF_ROW0 9 351008 1076424580
+KNN_REF_ROW0 10 322815 1076439373
+KNN_REF_ROW0 11 301998 1076456634
+KNN_REF_ROW0 12 77158 1076475919
+KNN_REF_ROW0 13 158980 1076482935
+KNN_REF_ROW0 14 335466 1076512547
+KNN_REF_RESULT index 400000 queries 4000 k 15 features 32 request_median_ms 44.086577 device_median_ms 41.833278 rounds 3 query_tile 256 index_tile 65536
+KNN REFERENCE PRICE PASS

@@ -1084,10 +1084,34 @@ class Mamba3Block(_MambaBase):
             False,
         )
 
+    def _call_fresh(self, x, ext):
+        """Discard-only prefill: return all reports without a host cache."""
+        b, l = int(x.shape[0]), int(x.shape[1])
+        nh = self.nheads
+        y = np.empty((b, l, self.d_model), dtype=np.float32)
+        h_last = np.empty((b, nh, _M3_HEADDIM, _M3_D_STATE), dtype=np.float32)
+        k_last = np.empty((b, nh, _M3_D_STATE), dtype=np.float32)
+        v_last = np.empty((b, nh, _M3_HEADDIM), dtype=np.float32)
+        theta_last = np.empty((b, nh, _M3_NUM_ROPE_ANGLES), dtype=np.float32)
+        addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w]
+                 + [_addr(y), _addr(h_last), _addr(k_last), _addr(v_last),
+                    _addr(theta_last)])
+        ext.mamba3_forward_fresh(addrs, [b, l, self.d_model])
+        self.h_last_ = h_last
+        self.k_last_ = k_last
+        self.v_last_ = v_last
+        self.theta_last_ = theta_last
+        return y
+
     def _call(self, x, state, step):
         what = "Mamba3Block.step" if step else "Mamba3Block.forward"
         x = _batch_tokens(x, what, self.d_model, step)
         b, l = int(x.shape[0]), int(x.shape[1])
+        fresh_ext = None
+        if state is None and not step:
+            fresh_ext = self._extension()
+            if hasattr(fresh_ext, "mamba3_forward_fresh"):
+                return self._call_fresh(x, fresh_ext)
         if state is None:
             state = self.allocate_state(b)
         nh, q = self.nheads, _M3_CHUNK_SIZE
@@ -1122,7 +1146,7 @@ class Mamba3Block(_MambaBase):
         # entries of self._w (alive on self), the ten state pieces, y and
         # the four reports.
         w = self._w
-        ext = self._extension()
+        ext = fresh_ext if fresh_ext is not None else self._extension()
         addrs = (
             # ORDER MATCHES bindings/_mojolearn_mamba.mojo::
             # mamba3_forward_binding: x, block norm.weight,

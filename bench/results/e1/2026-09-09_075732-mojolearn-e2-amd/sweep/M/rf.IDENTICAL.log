@@ -1,0 +1,18 @@
+== leg lane=rf mode=IDENTICAL round=1 08:02:46 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=rf rounds=1 smoke=False ==
+LPRICE rf IDENTICAL warmup 1500000x50.t4.d12.b128 0.613020611 f6605d229455c942
+LPRICE rf IDENTICAL 1 1500000x50.t4.d12.b128 0.608447902 f6605d229455c942
+HASH-STABLE rf IDENTICAL 2 rounds all f6605d229455c942
+== done [IDENTICAL] lane=rf ==
+== leg lane=rf mode=IDENTICAL round=2 08:02:49 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=rf rounds=1 smoke=False ==
+LPRICE rf IDENTICAL warmup 1500000x50.t4.d12.b128 0.614881453 f6605d229455c942
+LPRICE rf IDENTICAL 1 1500000x50.t4.d12.b128 0.609384897 f6605d229455c942
+HASH-STABLE rf IDENTICAL 2 rounds all f6605d229455c942
+== done [IDENTICAL] lane=rf ==
+== leg lane=rf mode=IDENTICAL round=3 08:02:52 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=rf rounds=1 smoke=False ==
+LPRICE rf IDENTICAL warmup 1500000x50.t4.d12.b128 0.615227103 f6605d229455c942
+LPRICE rf IDENTICAL 1 1500000x50.t4.d12.b128 0.608880248 f6605d229455c942
+HASH-STABLE rf IDENTICAL 2 rounds all f6605d229455c942
+== done [IDENTICAL] lane=rf ==

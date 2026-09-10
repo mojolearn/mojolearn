@@ -387,6 +387,7 @@ from std.gpu import (
 )
 from std.math import ceildiv
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 from std.sys.info import size_of
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
@@ -509,7 +510,8 @@ comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 # UNVERIFIED, RUN OWED (orchestrator; archive/plans/ensemble/PLAN.md "2026-09-01
 # candidate round"). The candidate arm is P = 4.
 # =========================================================
-comptime HIST_SMEM_COPIES_DEFAULT = 1
+# `-D MOJOLEARN_2012_SMEM_COPIES4=1` selects P = 4; 1 is shipped.
+comptime HIST_SMEM_COPIES_DEFAULT = 4 if is_defined["MOJOLEARN_2012_SMEM_COPIES4"]() else 1
 
 
 def default_smem_bin_slots[B: Bin]() -> Int:

@@ -1,0 +1,19 @@
+✨ Pixi task (check-lane-minimum in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/checks/lane_minimum_check.mojo
+DECLARED_COLUMN apple simulated False backend_declared_buildable True block 256
+LANE_MIN_PASS width 1 fixed True cells 512
+LANE_MIN_PASS width 1 fixed False cells 512
+LANE_MIN_PASS width 2 fixed True cells 512
+LANE_MIN_PASS width 2 fixed False cells 512
+LANE_MIN_PASS width 4 fixed True cells 512
+LANE_MIN_PASS width 4 fixed False cells 512
+LANE_MIN_PASS width 8 fixed True cells 512
+LANE_MIN_PASS width 8 fixed False cells 512
+LANE_MIN_PASS width 16 fixed True cells 512
+LANE_MIN_PASS width 16 fixed False cells 512
+LANE_MIN_PASS width 32 fixed True cells 512
+LANE_MIN_PASS width 32 fixed False cells 512
+LANE_MIN_PASS width 64 fixed True cells 512
+LANE_MIN_PASS width 64 fixed False cells 512
+LANE_MIN_PASS width 128 fixed True cells 512
+LANE_MIN_PASS width 128 fixed False cells 512
+LANE MINIMUM WIDTH PASS cases 16 cells 8192

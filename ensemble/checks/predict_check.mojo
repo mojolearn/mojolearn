@@ -86,6 +86,7 @@ that helper. Duplication is the deliberate choice.
 
 from std.ffi import external_call
 from std.math import log2 as mojo_log2
+from std.memory import bitcast
 
 from ensemble.decisiontree.decisiontree import (
     CRITERION_END,
@@ -99,6 +100,7 @@ from ensemble.decisiontree.decisiontree import (
     get_tree_summary_text,
 )
 from ensemble.flatnode import SparseTreeNode
+from checks.numerics import portable_log2_64   # DEVIATION 2261: the RF rule's log2, gated here against libm
 from ensemble.randomforest import (
     CLASSIFICATION,
     INT32_MAX,
@@ -114,6 +116,7 @@ from ensemble.randomforest import (
     compute_max_features,
     compute_max_features_float,
     compute_max_features_int,
+    compute_max_features_log2,
     default_rf_params_classifier,
     default_rf_params_regressor,
     n_sampled_cols,
@@ -1278,9 +1281,11 @@ def main() raises:
     #
     # `builder.cuh:240` is `max(1, IdxT(max_features * n_cols))` -- a
     # TRUNCATION. One ULP low anywhere in the ratio chain takes a column
-    # away. This is the check that says libm's log2 (and not
+    # away. This is the check that says an ACCURATE log2 (not
     # std.math.log2, which this repository has measured at ~5e-8
-    # absolute error) is what feeds it.
+    # absolute error) is what feeds it: libm's until DEVIATION 2261,
+    # the library's own `portable_log2_64` since (exact at powers of two
+    # by construction; see the gate further down).
     print("max_features -> column count (builder.cuh:240 truncation)")
     var squares: List[Int] = [4, 9, 16, 25, 36, 49, 64, 100, 144, 256, 1024]
     var roots: List[Int] = [2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 32]
@@ -1314,7 +1319,8 @@ def main() raises:
                 logs[i],
                 "columns, got",
                 k,
-                "-- Mojo's log2 would do exactly this; libm's must not",
+                "-- std.math.log2 would do exactly this; portable_log2_64"
+                " (exact at powers of two, DEVIATION 2261) must not",
             )
     # THE PERFECT SQUARES AND POWERS OF TWO ABOVE CANNOT TELL TRUNCATION
     # FROM ROUNDING, because their ratio chain lands on an integer. That
@@ -1363,13 +1369,15 @@ def main() raises:
                 k,
             )
 
-    # Is the libm `log2` in `compute_max_features_log2` actually needed,
-    # or is `std.math.log2` identical here? This repository has measured
-    # `std.math.log` at ~5e-8 absolute error against libm and had that
-    # error silently re-decide plateau ties, so the libm call was made
-    # defensively. This measures whether the defence has anything to
+    # HISTORICAL MEASUREMENT, KEPT: was the libm `log2` that
+    # `compute_max_features_log2` called (until DEVIATION 2261) actually
+    # needed, or is `std.math.log2` identical here? This repository has
+    # measured `std.math.log` at ~5e-8 absolute error against libm and
+    # had that error silently re-decide plateau ties, so the libm call was
+    # made defensively. This measures whether the defence had anything to
     # defend against, and PRINTS the answer either way rather than
-    # assuming it.
+    # assuming it. The libm `external_call` here is the ORACLE and stays;
+    # the shipped function is gated against it in the block that follows.
     var log2_disagreements: Int = 0
     var worst_n: Int = 0
     for n in range(2, 4097):
@@ -1396,6 +1404,90 @@ def main() raises:
         log2_disagreements,
         "bit-level disagreements, first at n_cols =",
         worst_n,
+    )
+
+    # DEVIATION 2261 (2026-09-08). `compute_max_features_log2` no longer
+    # calls libm: it is the library's own `portable_log2_64`. Two gates,
+    # both over EVERY n_cols in [2, 4096]:
+    #   (1) ACCURACY -- the shipped function within 2 ulp of this host's
+    #       libm `log2` (the oracle above; `check-portable-log64`'s bound,
+    #       same reason: two libms disagree in the last bit, so 0 ulp
+    #       would prove nothing), and EXACT at every power of two.
+    #   (2) INERT -- the truncated column count `n_sampled_cols` derives
+    #       from the shipped ratio equals the EXACT INTEGER
+    #       `max(1, bit_length(n) - 1)`, computed with no float at all.
+    #       That is the statement the libm era only measured ("the
+    #       disagreement never reaches the column count"); now it is
+    #       asserted against arithmetic no library owns.
+    var log2_over2: Int = 0
+    var log2_worst_ulp: Int = 0
+    var log2_pow2_inexact: Int = 0
+    for n in range(2, 4097):
+        var libm_v = external_call["log2", Float64](Float64(n))
+        var ours = portable_log2_64(Float64(n))
+        var d = Int(bitcast[DType.uint64](ours)) - Int(
+            bitcast[DType.uint64](libm_v)
+        )
+        if d < 0:
+            d = -d
+        if d > log2_worst_ulp:
+            log2_worst_ulp = d
+        if d > 2:
+            log2_over2 += 1
+        if (n & (n - 1)) == 0:
+            # a power of two: log2 must be the exact integer
+            var bl = 0
+            var t = n
+            while t > 1:
+                bl += 1
+                t >>= 1
+            if ours != Float64(bl):
+                log2_pow2_inexact += 1
+        # exact integer bit length, minus one: floor(log2(n)) with no float
+        var bit_length = 0
+        var u = n
+        while u > 0:
+            bit_length += 1
+            u >>= 1
+        var want_k = bit_length - 1
+        if want_k < 1:
+            want_k = 1
+        var shipped_k = Int(
+            n_sampled_cols(Float32(compute_max_features_log2(n)), n)
+        )
+        if shipped_k != want_k:
+            failures += 1
+            print(
+                "  FAIL log2 column count at n_cols =",
+                n,
+                ": exact bit_length - 1 is",
+                want_k,
+                ", shipped portable_log2_64 ratio truncates to",
+                shipped_k,
+            )
+    if log2_over2 != 0:
+        failures += 1
+        print(
+            "  FAIL portable_log2_64 beyond 2 ulp of libm log2 on",
+            log2_over2,
+            "of 4095 integer inputs; worst",
+            log2_worst_ulp,
+            "ulp",
+        )
+    if log2_pow2_inexact != 0:
+        failures += 1
+        print(
+            "  FAIL portable_log2_64 inexact at",
+            log2_pow2_inexact,
+            "powers of two in [2, 4096]",
+        )
+    print(
+        "  portable_log2_64 vs libm log2 over n_cols 2..4096: worst",
+        log2_worst_ulp,
+        "ulp,",
+        log2_over2,
+        "beyond 2 ulp; exact at every power of two; truncated column"
+        " count == bit_length(n) - 1 at all 4095 sizes (DEVIATION 2261)",
     )
 
     if Int(n_sampled_cols(Float32(compute_max_features(MAX_FEATURES_NONE, 7)), 7)) != 7:

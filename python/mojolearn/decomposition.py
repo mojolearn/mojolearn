@@ -40,6 +40,10 @@ class PCA(NumericModeMixin):
     (decomposition/NOT_IMPLEMENTED.tsv); this class accepts 'auto' and runs
     the Jacobi arm, and says so here.
 
+    Wide IDENTICAL full fits use transposed QR, at most min(X.shape)
+    components, and a 64-sweep/1e-6 Jacobi budget. Tall fits retain their
+    existing 15-sweep/1e-7 budget. Nonconvergence still raises.
+
     `svd_solver='full'` is the second arm and a genuinely different
     algorithm: an R-SVD of the centered data that never forms the
     covariance, so it never squares the condition number. That is
@@ -95,10 +99,10 @@ class PCA(NumericModeMixin):
                                 decomposition/checks/svd_full_check.mojo,
                                 whose ill-conditioning gate MEASURES the
                                 accuracy claim rather than asserting it.
-                                REFUSED for n_samples < n_features, by name:
-                                the wide route is an LQ factorization of the
-                                transpose and it is not written
-                                (DEVIATION 593)
+                                IDENTICAL supports n_samples < n_features
+                                through transposed QR and explicit right-basis
+                                reconstruction (DEVIATION 593). Other numeric
+                                modes retain the wide-shape refusal.
         svd_solver    refused   'randomized' and 'arpack' are NOT YET
                                 IMPLEMENTED. The tall-skinny QR that used to
                                 block both of them EXISTS now
@@ -270,12 +274,10 @@ class PCA(NumericModeMixin):
             raise ValueError("mojolearn PCA whitening requires finite X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn PCA requires at least 2 rows and 2 features")
-        if dense and x.shape[0] < x.shape[1]:
+        if dense and x.shape[0] < x.shape[1] and self.numeric_mode_used() != "identical":
             # DEVIATION 593, raised HERE as well as in the Mojo validator so
-            # the message names the estimator and the alternative rather than
-            # arriving from two layers down. R-SVD needs a tall matrix; the
-            # wide route is an LQ factorization of the transpose and it is
-            # not written.
+            # legacy modes retain their previous refusal. IDENTICAL uses
+            # the transposed QR route and validates k against min(shape).
             raise NotImplementedError(
                 f"mojolearn PCA: svd_solver='full' needs at least as many "
                 f"samples as features and got {x.shape[0]} x {x.shape[1]}. "
@@ -288,6 +290,8 @@ class PCA(NumericModeMixin):
                 "refuses to make for the solver name itself"
             )
         nc = _component_count(self.n_components, x.shape)
+        if dense and nc > min(x.shape):
+            raise ValueError("full SVD n_components cannot exceed min(n_samples, n_features)")
         self.components_ = empty((nc, x.shape[1]), "<f4")
         self.mean_ = empty((x.shape[1],), "<f4")
         self.explained_variance_ = empty((nc,), "<f4")

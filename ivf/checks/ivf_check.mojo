@@ -162,11 +162,9 @@ from neighbors.impl.neighbors.detail.knn_brute_force import KNN_METHOD_TILED
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 comptime N_ROWS = 320
-"""Larger than `SELECT_BLOCK` ON PURPOSE, so `check_ivf_refusals` can ask
-for `k = SELECT_BLOCK + 1` and reach the SELECTOR'S refusal rather than the
-candidate-count one that would fire first on a smaller index. A refusal
-check that reaches a different refusal than the one it names is a check
-about the wrong sentence."""
+"""Larger than SELECT_BLOCK so k257 reaches selection after candidate-count
+validation. IDENTICAL now admits it; the other modes retain the256 cap.
+The separate ivf_large_k_check uses1057 rows to qualify1024 and its bound."""
 
 comptime N_QUERIES = 24
 comptime DIM = 6
@@ -616,7 +614,8 @@ def check_ivf_refusals() raises:
     if not raised_inf:
         raise Error("check_ivf_refusals: a +inf in the dataset did NOT raise")
 
-    # k > SELECT_BLOCK, at the search boundary.
+    # Preserve the old selector-cap refusal outside IDENTICAL. In IDENTICAL
+    # k257 is now supported and the dedicated large-k gate covers1024/1025.
     var ctx = DeviceContext()
     var x = ivf_index_fixture(N_ROWS, DIM, 5)
     var q = ivf_query_fixture(x, N_ROWS, 2, DIM, 5)
@@ -633,10 +632,8 @@ def check_ivf_refusals() raises:
             + ": "
             + String(e)
         )
-    if not raised_k:
-        raise Error(
-            "check_ivf_refusals: k > SELECT_BLOCK did NOT raise"
-        )
+    if raised_k == IDENTICAL:
+        raise Error("check_ivf_refusals: k257 admission disagrees with numeric mode")
 
     # A probe set too small to supply k (DEVIATION 1794), PLANTED so it is
     # reached rather than hoped for. Row 0 sits alone in list 0, whose
@@ -1209,7 +1206,7 @@ def check_quantizer_is_reproducible() raises:
     ONE process, in ONE mode. It cannot see contraction (IDENTITY_PATHS row
     9), the denormal policy (row 10) or the device transcendentals (row
     12), because those need a second backend. The cross-vendor statement
-    for this k-means is `archive/research/UNSUPERVISED_IDENTITY.md`'s -- Apple, NVIDIA and
+    for this k-means is `IDENTITY_PATHS.md`'s -- Apple, NVIDIA and
     AMD produce one distinct answer under IDENTICAL -- and this lane
     inherits exactly that and no more.
     """

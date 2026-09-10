@@ -1,0 +1,10 @@
+commit=b4b2be9f parent 7b04908c
+source_ref=b4b2be9f339c9ff6b6b059dacff2a71d09bd405c
+vendor=nvidia
+gpu_requested=NVIDIA H100 80GB HBM3
+image=runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+minutes=60
+mode=rent
+card_full=<unset>
+trace_dump=<unset>
+started=2026-09-09T08:05:46Z

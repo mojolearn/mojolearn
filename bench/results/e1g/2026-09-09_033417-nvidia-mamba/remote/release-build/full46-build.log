@@ -1,0 +1,64 @@
+pid 466's current affinity list: 0,1
+pid 466's new affinity list: 0,1
+pid 479's current affinity list: 0,1
+pid 479's new affinity list: 0,1
+[07:35:35 build_sets] repo /root/mojolearn, dest /root/gemm_leg_out/release-build/build, tiers: fast deterministic identical, jobs: 1
+[07:35:35 build_sets] pixi env: default
+[08:01:01 build_sets] builds finished in 1526s (rc=0)
+[08:01:08 build_sets] vendor read-back per binary:
+    fast _mojolearn cuda
+    fast _mojolearn_gbdt cuda
+    fast _mojolearn_estimators cuda
+    fast _mojolearn_rf cuda
+    fast _mojolearn_trees cuda
+    fast _mojolearn_svm cuda
+    fast _mojolearn_solver cuda
+    fast _mojolearn_metrics cuda
+    fast _mojolearn_tsa cuda
+    fast _mojolearn_linalg cuda
+    fast _mojolearn_arima cuda
+    fast _mojolearn_training cuda
+    fast _mojolearn_gp cuda
+    fast _mojolearn_mamba cuda
+    fast _mojolearn_transformer cuda
+    deterministic _mojolearn cuda
+    deterministic _mojolearn_gbdt cuda
+    deterministic _mojolearn_estimators cuda
+    deterministic _mojolearn_rf cuda
+    deterministic _mojolearn_trees cuda
+    deterministic _mojolearn_svm cuda
+    deterministic _mojolearn_solver cuda
+    deterministic _mojolearn_metrics cuda
+    deterministic _mojolearn_tsa cuda
+    deterministic _mojolearn_linalg cuda
+    deterministic _mojolearn_arima cuda
+    deterministic _mojolearn_training cuda
+    deterministic _mojolearn_gp cuda
+    deterministic _mojolearn_mamba cuda
+    deterministic _mojolearn_transformer cuda
+    identical _mojolearn cuda
+    identical _mojolearn_gbdt cuda
+    identical _mojolearn_estimators cuda
+    identical _mojolearn_rf cuda
+    identical _mojolearn_trees cuda
+    identical _mojolearn_svm cuda
+    identical _mojolearn_solver cuda
+    identical _mojolearn_metrics cuda
+    identical _mojolearn_tsa cuda
+    identical _mojolearn_linalg cuda
+    identical _mojolearn_arima cuda
+    identical _mojolearn_training cuda
+    identical _mojolearn_gp cuda
+    identical _mojolearn_mamba cuda
+    identical _mojolearn_transformer cuda
+    identical _mojolearn_byte_lm cuda
+[08:01:08 build_sets] GPU architectures embedded, per binary:
+         46 sm_90a
+[08:01:08 build_sets] architecture set: sm_90a 
+[08:01:08 build_sets] REFUSING: MOJOLEARN_GPU_ARCHS=sm_90 was asked for but
+[08:01:08 build_sets]   every binary carries sm_90a. A set must never ship under an
+[08:01:08 build_sets]   architecture it was not verified to carry.
+Traceback (most recent call last):
+  File "<stdin>", line 15, in <module>
+AssertionError: Incorrect byte-LM inventory
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 1}

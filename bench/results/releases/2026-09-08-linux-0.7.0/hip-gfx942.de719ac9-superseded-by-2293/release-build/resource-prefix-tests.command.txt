@@ -1,0 +1,1 @@
+/usr/bin/python3 tools/amd_serial_guard.py --seconds 45 --rss-gib 12 -- /usr/bin/python3 /root/mojolearn/tools/test_linux_surface_resource_caps.py 

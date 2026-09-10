@@ -1,0 +1,1640 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""Fused attention for profile `mojolearn.identical.transformer.fp32.v1`:
+the SAME arithmetic as the eager seams S11-S19 (forward) and stages 17-24
+(backward), in the SAME fold order, with nothing materialized in HBM.
+
+THE DESIGN CONSTRAINT IS THAT NO BIT MOVES. The eager path records seven
+`[B, n_heads, L, S]` stages per forward and four per backward; at the Samba
+shape (d_model 1024, 16 heads, window 2048, seq 4096, batch 4) each one is
+1 GB and the eager forward spends its time streaming them. This file
+removes the traffic by RECOMPUTATION and not by rescaling: there is no
+online softmax here, because an online softmax changes the fold and the
+fold is the contract.
+
+    pass 1 (max)     the row maximum, `identical_fmax` over the row's
+                     VISIBLE cells (contract 5.1: the fold shape is free)
+    pass 2 (denom)   scores recomputed, `exp(s - m)`, the SERIAL ASCENDING
+                     chain from `+0.0` (contract 5.3)
+    pass 3 (ctx)     scores recomputed, `e / denom` ONE division each, the
+                     SERIAL ASCENDING fma chain from `+0.0` (contract 7.2)
+
+Each pass is one sweep over the row's visible key range with the key and
+value tiles staged through threadgroup memory; the score itself is the
+gemm profile's one-leaf chain (`head_dim <= CONTRACT_K_LEAF_MIN`, so
+`P == 1` and the fold is the ascending fma chain seeded `+0.0`, contract
+6 and 7.3), spelled with the same per-step seam the tuned GEMM plans use
+(NVIDIA rounds the FMA then flushes via hardware multiply-by-one; other
+columns use the software seam).
+
+WHY THE MASKED CELLS MAY BE SKIPPED, AND WHEN THEY MAY NOT. A masked cell
+is `ftz(s + (-FLT_MAX))`, which is exactly `-FLT_MAX` whenever
+`|s| < 2^102`; its `exp` is exactly `+0.0`, its weight is exactly `+0.0`,
+and every chain step it contributes is `acc + (+-0.0)`, which is `acc`
+unless `acc` is `-0.0`. So the fused kernels skip the masked cells under
+two conditions the host and the kernel check rather than assume:
+
+  1. THE REGIME (host, before the launch): every operand finite and
+     `head_dim * max|q| * max|k| < 2^100`, so no score can reach the
+     magnitude at which `s + (-FLT_MAX)` stops being `-FLT_MAX`; for the
+     backward also `head_dim * max|dctx| * max|v| < 2^100`. Outside it the
+     caller runs the eager path, which computes every cell.
+  2. THE CORNER (kernel, per chain): a chain that holds `-0.0` when its
+     visible run ends could be laundered to `+0.0` by a masked tail whose
+     products are `+0.0` (a flushed subnormal product is how a chain
+     reaches `-0.0`). The kernel does not reason about the tail; it sets a
+     flag and the caller runs the eager path for the whole call.
+
+Both fallbacks are EXACT by construction (the eager path is the profile)
+and both are counted by the launcher's status, which the fused check
+asserts on: a case built to hit the corner must report it.
+
+WHAT IS NOT HERE. Plants (`transformer_fixture.ScorePlant`) are an eager
+feature; a planted call takes the eager path. `head_dim` outside
+`fused_supported_head_dim` takes the eager path (the leaf tree at
+`head_dim > 128` is not spelled here). Every sabotage build takes the
+eager path, because the sabotage arms test the eager spelling.
+
+`[[ALWAYS GPU-agnostic]]`: one source; the only vendor row read is
+`lib_hardware_ftz_fma_for`, through the kernel matrix.
+"""
+
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.memory import bitcast, stack_allocation
+from std.sys import llvm_intrinsic
+from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+
+from checks.kernel_matrix import (
+    TARGET_COLUMN,
+    lib_hardware_ftz_fma_for,
+    lib_smem_page_fits_for,
+)
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_div,
+    identical_exp,
+    identical_fmax,
+    identical_mul_add,
+)
+
+
+# ===========================================================================
+# STATUS CODES AND LIMITS
+# ===========================================================================
+
+comptime FUSED_RAN = 0
+"""The fused kernels produced the output."""
+comptime FUSED_REFUSED_REGIME = 1
+"""The regime bound failed (or the head_dim is unsupported); nothing was
+written and the caller must run the eager path."""
+comptime FUSED_CORNER = 2
+"""A chain ended its visible run holding `-0.0`; the caller must run the
+eager path."""
+
+comptime FUSED_THREADS = 256
+"""Threads per block for the row-tiled kernels: `TQ * head_dim`."""
+
+comptime NEG_ZERO_BITS: UInt32 = 0x80000000
+
+comptime REGIME_BOUND: Float64 = 1267650600228229401496703205376.0
+"""`2^100`. `head_dim * max|a| * max|b|` below this keeps every dot below
+`2^102`, where `x + (-FLT_MAX)` is still exactly `-FLT_MAX` (the spacing of
+Float32 at `FLT_MAX` is `2^104`)."""
+
+comptime FUSED_HW_FTZ_FMA = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and lib_hardware_ftz_fma_for[TARGET_COLUMN]()
+)
+
+
+def _fused_page_bytes(hd: Int) -> Int:
+    """The largest shared page any of the four fused kernels claims per
+    block at `hd`, in bytes: the kernels' `stack_allocation` sizes spelled
+    once, host-side, so the column's shared limit can be asked BEFORE a
+    pipeline is created. Forward: `ks BK*(HD+1) + es TQ*(BK+1) + mp, mv
+    TQ*HD each + rs TQ`; zdot and dq: `ks, vs BKb*(HD+1) each + ys, dys
+    TQ*(BKb+1) each`; dkdv: the same with `TT == BKb` and `BJ == TQ`. At
+    `hd == 128` that is 35,600 (forward) and 33,552 (backward) bytes, over
+    a 32 KB column; at 64 it is 19,744."""
+    var tq = FUSED_THREADS // hd
+    var bk_f = hd if hd <= 64 else 64
+    var fwd = bk_f * (hd + 1) + tq * (bk_f + 1) + 2 * tq * hd + tq
+    var half = hd // 2
+    var bk_b = half if half <= 32 else 32
+    var bwd = 2 * bk_b * (hd + 1) + 2 * tq * (bk_b + 1)
+    var m = fwd
+    if bwd > m:
+        m = bwd
+    return m * 4
+
+
+comptime FUSED_FITS_16 = lib_smem_page_fits_for[TARGET_COLUMN, _fused_page_bytes(16)]()
+comptime FUSED_FITS_24 = lib_smem_page_fits_for[TARGET_COLUMN, _fused_page_bytes(24)]()
+comptime FUSED_FITS_64 = lib_smem_page_fits_for[TARGET_COLUMN, _fused_page_bytes(64)]()
+comptime FUSED_FITS_128 = lib_smem_page_fits_for[TARGET_COLUMN, _fused_page_bytes(128)]()
+
+
+def fused_supported_head_dim(hd: Int) -> Bool:
+    """The head dims this file instantiates kernels for, AND whose shared
+    page fits the column (`lib_smem_page_fits_for`, kernel matrix). All are
+    at or below `CONTRACT_K_LEAF_MIN` (128), so the score is the one-leaf
+    chain. A head dim that does not fit takes the eager path, which is the
+    same bits by construction; found by the Apple RUN OWED 2026-09-09
+    (`hd128_win20_l70`: Metal refused the 35,600-byte forward page)."""
+    return (
+        (hd == 16 and FUSED_FITS_16)
+        or (hd == 24 and FUSED_FITS_24)
+        or (hd == 64 and FUSED_FITS_64)
+        or (hd == 128 and FUSED_FITS_128)
+    )
+
+
+def fused_forward_supported_head_dim(hd: Int) -> Bool:
+    """Forward hd128 uses a smaller register-blocked page. Backward keeps
+    its original support predicate and takes eager when its page cannot
+    fit; forward and backward independently decide their exact fallback."""
+    if hd == 128:
+        return lib_smem_page_fits_for[TARGET_COLUMN, 18624]()
+    return fused_supported_head_dim(hd)
+
+
+def fused_rows_per_block(hd: Int) -> Int:
+    return FUSED_THREADS // hd
+
+
+@always_inline
+def _step(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """`ftz(fma(ftz(a), ftz(b), acc))`, the per-term seam of every chain in
+    the profile (gemm contract 4 + 5c; S19; the backward chains).
+    NVIDIA rounds FMA without FTZ, then flushes the rounded result via
+    hardware multiply-by-one. A single hardware FTZ FMA instead flushes
+    before rounding at some smallest-normal boundaries. This matches
+    NVIDIA software; other columns' FMA boundary behavior is a separate
+    numerical audit.
+    """
+    comptime if FUSED_HW_FTZ_FMA:
+        var rounded = llvm_intrinsic[
+            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
+        ](ftz(a), ftz(b), acc)
+        return llvm_intrinsic[
+            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
+        ](rounded, Float32(1.0))
+    return ftz(identical_mul_add(ftz(a), ftz(b), acc))
+
+
+@always_inline
+def _step_preflushed(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """Ascending RN-then-flush chain on operands already flushed on staging."""
+    comptime if FUSED_HW_FTZ_FMA:
+        var rounded = llvm_intrinsic[
+            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
+        ](a, b, acc)
+        return llvm_intrinsic[
+            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
+        ](rounded, Float32(1.0))
+    return ftz(identical_mul_add(a, b, acc))
+
+
+@always_inline
+def _pmul(a: Float32, b: Float32) -> Float32:
+    """`ftz(pinned_mul(ftz(a), ftz(b)))`: one rounding, `-0.0` addend."""
+    return _step(a, b, Float32(-0.0))
+
+
+@always_inline
+def _row_range(
+    t: Int, pos0: Int, key_lo: Int, window: Int, s: Int
+) -> Tuple[Int, Int]:
+    """The packed key indices `[lo, hi]` the query at row `t` sees: exactly
+    `attn_mask_kernel`'s predicate, solved for `j`."""
+    var p_q = pos0 + t
+    var hi = p_q - key_lo
+    if hi > s - 1:
+        hi = s - 1
+    var lo = 0
+    if window > 0:
+        lo = p_q - window + 1 - key_lo
+        if lo < 0:
+            lo = 0
+    return (lo, hi)
+
+
+@always_inline
+def _key_query_range(
+    j: Int, pos0: Int, key_lo: Int, window: Int, l: Int
+) -> Tuple[Int, Int]:
+    """The query rows `[lo, hi]` that see packed key `j` (may be empty,
+    `lo > hi`)."""
+    var p_k = key_lo + j
+    var lo = p_k - pos0
+    if lo < 0:
+        lo = 0
+    var hi = l - 1
+    if window > 0:
+        var w_hi = p_k - pos0 + window - 1
+        if w_hi < hi:
+            hi = w_hi
+    return (lo, hi)
+
+
+# ===========================================================================
+# THE REGIME BOUND: max |x| over a buffer, NaN as +inf
+# ===========================================================================
+
+comptime ABSMAX_TPB = 256
+comptime ABSMAX_BLOCKS = 512
+
+
+def absmax_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    buf: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """One partial per block: the plain `max` of `|x|` with NaN read as
+    `+inf`. A BOUND, not a profile value: nothing here reaches the card."""
+    var n = Int(n_in)
+    var red = stack_allocation[
+        ABSMAX_TPB,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * ABSMAX_TPB
+    var i = Int(block_idx.x) * ABSMAX_TPB + tid
+    var m = Float32(0.0)
+    while i < n:
+        var v = buf.unsafe_load(i)
+        if v != v:
+            v = bitcast[DType.float32](UInt32(0x7F800000))
+        if v < Float32(0.0):
+            v = -v
+        if v > m:
+            m = v
+        i += stride
+    red.unsafe_store(tid, m)
+    barrier()
+    var active = ABSMAX_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red.unsafe_load(tid + active)
+            if o > red.unsafe_load(tid):
+                red.unsafe_store(tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), red.unsafe_load(0))
+
+
+def device_absmax(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+) raises -> Float64:
+    """`max |buf[0:n]|` as a Float64, `+inf` if any element is not finite."""
+    if n <= 0:
+        return 0.0
+    var blocks = (n + ABSMAX_TPB - 1) // ABSMAX_TPB
+    if blocks > ABSMAX_BLOCKS:
+        blocks = ABSMAX_BLOCKS
+    var part = ctx.enqueue_create_buffer[DType.float32](blocks)
+    ctx.synchronize()
+    ctx.enqueue_function[absmax_partial_kernel](
+        part.unsafe_ptr(),
+        buf.unsafe_ptr(),
+        Int32(n),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(ABSMAX_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    var host = ctx.enqueue_create_host_buffer[DType.float32](blocks)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    ctx.synchronize()
+    var m = Float32(0.0)
+    for i in range(blocks):
+        var v = host.unsafe_ptr().unsafe_load(i)
+        if v > m:
+            m = v
+    _ = host^
+    _ = part^
+    return Float64(m)
+
+
+comptime NONFINITE_NONE: Int32 = 2147483647
+
+
+def nonfinite_partial_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    buf: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """One partial per block: the SMALLEST flat index at which `|bits| >=
+    0x7F800000` (NaN or infinity, BY BITS, contract section 8), or
+    `NONFINITE_NONE`. The host takes the minimum, so the index reported is
+    the first one, exactly as the host loop it replaces reported it."""
+    var n = Int(n_in)
+    var red = stack_allocation[
+        ABSMAX_TPB,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * ABSMAX_TPB
+    var i = Int(block_idx.x) * ABSMAX_TPB + tid
+    var best = NONFINITE_NONE
+    while i < n:
+        var au = bitcast[DType.uint32](buf.unsafe_load(i)) & UInt32(0x7FFFFFFF)
+        if au >= UInt32(0x7F800000):
+            best = Int32(i)
+            break
+        i += stride
+    red.unsafe_store(tid, best)
+    barrier()
+    var active = ABSMAX_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red.unsafe_load(tid + active)
+            if o < red.unsafe_load(tid):
+                red.unsafe_store(tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), red.unsafe_load(0))
+
+
+def device_first_nonfinite(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+) raises -> Int:
+    """The first flat index of a NaN or infinity in `buf[0:n]`, or -1.
+    ONE read of the buffer on the device, where the host loop it replaces
+    downloaded the buffer and walked it (65 ms for one block input at the
+    Samba shape, measured 2026-09-09)."""
+    if n <= 0:
+        return -1
+    var blocks = (n + ABSMAX_TPB - 1) // ABSMAX_TPB
+    if blocks > ABSMAX_BLOCKS:
+        blocks = ABSMAX_BLOCKS
+    var part = ctx.enqueue_create_buffer[DType.int32](blocks)
+    ctx.synchronize()
+    ctx.enqueue_function[nonfinite_partial_kernel](
+        part.unsafe_ptr(),
+        buf.unsafe_ptr(),
+        Int32(n),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(ABSMAX_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    var host = ctx.enqueue_create_host_buffer[DType.int32](blocks)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    ctx.synchronize()
+    var best = NONFINITE_NONE
+    for i in range(blocks):
+        var v = host.unsafe_ptr().unsafe_load(i)
+        if v < best:
+            best = v
+    _ = host^
+    _ = part^
+    if best == NONFINITE_NONE:
+        return -1
+    return Int(best)
+
+
+def regime_product_ok(hd: Int, a_max: Float64, b_max: Float64) -> Bool:
+    """`hd * a_max * b_max < 2^100`, both finite."""
+    var inf = Float64(bitcast[DType.float32](UInt32(0x7F800000)))
+    if not (a_max < inf) or not (b_max < inf):
+        return False
+    return Float64(hd) * a_max * b_max < REGIME_BOUND
+
+
+def regime_finite(x_max: Float64) -> Bool:
+    var inf = Float64(bitcast[DType.float32](UInt32(0x7F800000)))
+    return x_max < inf
+
+
+# ===========================================================================
+# THE FUSED FORWARD
+# ===========================================================================
+
+
+def fused_attn_forward_regblocked_kernel[HD: Int](
+    ctxv: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, nkv_in: Int32,
+    s_in: Int32, pos0_in: Int32, key_lo_in: Int32, window_in: Int32,
+    scale_in: Float32,
+):
+    """Register tiles preserve each ascending HD-term dot and all three
+    passes. hd64 uses 64 query rows and KS16; hd128 uses 16 rows and KS64
+    to reduce live accumulators and score-window barriers. Staging is
+    reused for V: 17,152 shared bytes at hd64, 18,624 at hd128."""
+    comptime TQ = 16 if HD == 128 else 64
+    comptime RPT = TQ // 16
+    comptime BK = 32
+    comptime KS = 64 if HD == 128 else 16
+    comptime STRIDE = KS + 4
+    var stg = stack_allocation[BK * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tile = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var stats = stack_allocation[2 * TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var tr = tid // 16
+    var tc = tid % 16
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    var t0 = (raw % ntb) * TQ
+    var h = (raw // ntb) % nh
+    var bb = raw // ntb // nh
+    var kvbase = (bb * nkv + h // (nh // nkv)) * s * HD
+    var t1 = min(t0 + TQ - 1, l - 1)
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // BK
+    var kb_hi = r1[1] // BK
+    var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
+    var mpart = SIMD[DType.float32, RPT](negmax)
+    var dacc = Float32(0.0)
+    var cacc = SIMD[DType.float32, RPT * (HD // 16)](0.0)
+    comptime for phase in range(3):
+        for kb in range(kb_lo, kb_hi + 1):
+            var dots = SIMD[DType.float32, RPT * 2](0.0)
+            comptime for pw in range(HD // KS):
+                # The two operand pages are padded along the contracted
+                # dimension; loads serve RPT*2 independent fma chains.
+                comptime for si in range((TQ + BK) * KS // 256):
+                    var i = tid + si * 256
+                    var r = i // KS
+                    var p = i % KS
+                    var x = Float32(0.0)
+                    if r < TQ:
+                        var t = t0 + r
+                        if t < l:
+                            x = ftz(q_rope.unsafe_load((bb * l + t) * nh * HD + h * HD + pw * KS + p))
+                    else:
+                        var j = kb * BK + r - TQ
+                        if j < s:
+                            x = ftz(k_cache.unsafe_load(kvbase + j * HD + pw * KS + p))
+                    stg.unsafe_store(r * STRIDE + p, x)
+                barrier()
+                comptime for p in range(KS):
+                    var qa = SIMD[DType.float32, RPT](0.0)
+                    var ka = SIMD[DType.float32, 2](0.0)
+                    comptime for u in range(RPT):
+                        qa[u] = stg.unsafe_load((tr + u * 16) * STRIDE + p)
+                    comptime for v in range(2):
+                        ka[v] = stg.unsafe_load((TQ + tc + v * 16) * STRIDE + p)
+                    comptime for u in range(RPT):
+                        comptime for v in range(2):
+                            dots[u * 2 + v] = _step_preflushed(qa[u], ka[v], dots[u * 2 + v])
+                barrier()
+            comptime for u in range(RPT):
+                var r = tr + u * 16
+                var t = t0 + r
+                var rr = _row_range(t, pos0, key_lo, window, s)
+                comptime for v in range(2):
+                    var jj = tc + v * 16
+                    var j = kb * BK + jj
+                    if t < l and j >= rr[0] and j <= rr[1]:
+                        var masked = ftz(_pmul(dots[u * 2 + v], scale_in) + Float32(0.0))
+                        comptime if phase == 0:
+                            mpart[u] = identical_fmax(mpart[u], masked)
+                        else:
+                            var e = ftz(identical_exp(ftz(ftz(masked) - ftz(stats.unsafe_load(r)))))
+                            comptime if phase == 2:
+                                e = ftz(identical_div(ftz(e), ftz(stats.unsafe_load(TQ + r))))
+                            tile.unsafe_store(r * 33 + jj, e)
+            barrier()
+            comptime if phase == 1:
+                if tid < TQ and t0 + tid < l:
+                    var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+                    comptime for jj in range(BK):
+                        var j = kb * BK + jj
+                        if j >= rr[0] and j <= rr[1]:
+                            dacc = ftz(ftz(dacc) + ftz(tile.unsafe_load(tid * 33 + jj)))
+            elif phase == 2:
+                comptime for si in range(BK * HD // 256):
+                    var i = tid + si * 256
+                    var j = kb * BK + i // HD
+                    var x = Float32(0.0)
+                    if j < s:
+                        x = ftz(v_cache.unsafe_load(kvbase + j * HD + i % HD))
+                    stg.unsafe_store(i, x)
+                barrier()
+                comptime for jj in range(BK):
+                    var j = kb * BK + jj
+                    var va = SIMD[DType.float32, HD // 16](0.0)
+                    comptime for v in range(HD // 16):
+                        va[v] = stg.unsafe_load(jj * HD + tc + v * 16)
+                    comptime for u in range(RPT):
+                        var r = tr + u * 16
+                        var rr = _row_range(t0 + r, pos0, key_lo, window, s)
+                        if t0 + r < l and j >= rr[0] and j <= rr[1]:
+                            var w = tile.unsafe_load(r * 33 + jj)
+                            comptime for v in range(HD // 16):
+                                cacc[u * (HD // 16) + v] = _step(w, va[v], cacc[u * (HD // 16) + v])
+            barrier()
+        comptime if phase == 0:
+            comptime for u in range(RPT):
+                tile.unsafe_store((tr + u * 16) * 16 + tc, mpart[u])
+            barrier()
+            if tid < TQ and t0 + tid < l:
+                var m = negmax
+                comptime for c in range(16):
+                    m = identical_fmax(m, tile.unsafe_load(tid * 16 + c))
+                stats.unsafe_store(tid, m)
+                amax.unsafe_store((bb * nh + h) * l + t0 + tid, m)
+        elif phase == 1:
+            if tid < TQ and t0 + tid < l:
+                stats.unsafe_store(TQ + tid, ftz(dacc))
+                denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))
+        barrier()
+    comptime for u in range(RPT):
+        var t = t0 + tr + u * 16
+        var rr = _row_range(t, pos0, key_lo, window, s)
+        if t < l:
+            comptime for v in range(HD // 16):
+                var x = cacc[u * (HD // 16) + v]
+                if bitcast[DType.uint32](x) == NEG_ZERO_BITS and rr[1] < s - 1:
+                    corner.unsafe_store(0, Float32(1.0))
+                ctxv.unsafe_store((bb * l + t) * nh * HD + h * HD + tc + v * 16, x)
+
+
+def fused_attn_forward_kernel[HD: Int, TQ: Int](
+    ctxv: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+    scale_in: Float32,
+):
+    """One block owns `TQ` consecutive query rows of one `(batch, head)`;
+    thread `(row, lane)`. In the score passes lane `e < BK` owns key
+    `kb * BK + e` of the current key block; in the context pass lane `d`
+    owns output column `d`. Every thread reaches every `barrier()`: the key
+    block loop bounds are block-uniform and the only early return is
+    block-uniform and precedes every barrier.
+
+    Seams, in the eager kernels' spelling: S11 `_step` chain over `p`
+    seeded `+0.0` (the one-leaf gemm cell); S12 `_pmul(dot, scale)`; S13
+    `ftz(sc + 0.0)`; S14 `identical_fmax`, any order; S15/S16
+    `ftz(identical_exp(ftz(masked - m)))`; S17 `ftz(ftz(acc) + e)`
+    ascending; S18 `ftz(identical_div(e, denom))`; S19 `_step(w, v, acc)`
+    ascending."""
+    comptime BK = HD if HD <= 64 else 64
+    comptime NT = TQ * HD
+    comptime KSTRIDE = HD + 1
+    comptime ESTRIDE = BK + 1
+    comptime SLOTS = (BK * HD + NT - 1) // NT
+
+    var ks = stack_allocation[
+        BK * KSTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var es = stack_allocation[
+        TQ * ESTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var mp = stack_allocation[
+        TQ * HD,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var mv = stack_allocation[
+        TQ * HD,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var rs = stack_allocation[
+        TQ,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    var tb = raw % ntb
+    var rest = raw // ntb
+    var h = rest % nh
+    var bb = rest // nh
+    if bb >= b:
+        return
+    var kvh = h // n_rep
+
+    var tid = Int(thread_idx.x)
+    var tr = tid // HD
+    var lane = tid - tr * HD
+    var t = tb * TQ + tr
+    var valid = t < l
+    var tt = t
+    if not valid:
+        tt = l - 1
+    var rr = _row_range(tt, pos0, key_lo, window, s)
+    var j_lo = rr[0]
+    var j_hi = rr[1]
+    var t0 = tb * TQ
+    var t1 = t0 + TQ - 1
+    if t1 > l - 1:
+        t1 = l - 1
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // BK
+    var kb_hi = r1[1] // BK
+
+    var kvbase = (bb * nkv + kvh) * s * HD
+    var qbase = (bb * l + tt) * nh * HD + h * HD
+    var row = (bb * nh + h) * l + tt
+
+    var q = stack_allocation[HD, Scalar[DType.float32]]()
+    comptime for p in range(HD):
+        q.unsafe_store(p, ftz(q_rope.unsafe_load(qbase + p)))
+
+    # ---- pass 1: the row maximum over the VISIBLE cells ---------------
+    var mpart = Float32(0.0)
+    var mvalid = False
+    for kb in range(kb_lo, kb_hi + 1):
+        comptime for si in range(SLOTS):
+            var i = tid + si * NT
+            if i < BK * HD:
+                var r = i // HD
+                var c = i - r * HD
+                var j = kb * BK + r
+                var v = Float32(0.0)
+                if j < s:
+                    v = ftz(k_cache.unsafe_load(kvbase + j * HD + c))
+                ks.unsafe_store(r * KSTRIDE + c, v)
+        barrier()
+        if valid and lane < BK:
+            var j = kb * BK + lane
+            if j >= j_lo and j <= j_hi:
+                var dot = Float32(0.0)
+                comptime for p in range(HD):
+                    dot = _step(q.unsafe_load(p), ks.unsafe_load(lane * KSTRIDE + p), dot)
+                var sc = _pmul(dot, scale_in)
+                var masked = ftz(sc + Float32(0.0))
+                if mvalid:
+                    mpart = identical_fmax(mpart, masked)
+                else:
+                    mpart = masked
+                    mvalid = True
+        barrier()
+    mp.unsafe_store(tr * HD + lane, mpart)
+    if mvalid:
+        mv.unsafe_store(tr * HD + lane, Float32(1.0))
+    else:
+        mv.unsafe_store(tr * HD + lane, Float32(0.0))
+    barrier()
+    if valid and lane == 0:
+        var m = Float32(0.0)
+        var have = False
+        for e in range(HD):
+            if mv.unsafe_load(tr * HD + e) != Float32(0.0):
+                var v = mp.unsafe_load(tr * HD + e)
+                if have:
+                    m = identical_fmax(m, v)
+                else:
+                    m = v
+                    have = True
+        amax.unsafe_store(row, m)
+        rs.unsafe_store(tr, m)
+    barrier()
+    var m_row = rs.unsafe_load(tr)
+    barrier()
+
+    # ---- pass 2: the denominator, SERIAL ASCENDING from +0.0 -----------
+    var dacc = Float32(0.0)
+    for kb in range(kb_lo, kb_hi + 1):
+        comptime for si in range(SLOTS):
+            var i = tid + si * NT
+            if i < BK * HD:
+                var r = i // HD
+                var c = i - r * HD
+                var j = kb * BK + r
+                var v = Float32(0.0)
+                if j < s:
+                    v = ftz(k_cache.unsafe_load(kvbase + j * HD + c))
+                ks.unsafe_store(r * KSTRIDE + c, v)
+        barrier()
+        if valid and lane < BK:
+            var j = kb * BK + lane
+            if j >= j_lo and j <= j_hi:
+                var dot = Float32(0.0)
+                comptime for p in range(HD):
+                    dot = _step(q.unsafe_load(p), ks.unsafe_load(lane * KSTRIDE + p), dot)
+                var sc = _pmul(dot, scale_in)
+                var masked = ftz(sc + Float32(0.0))
+                var d = ftz(ftz(masked) - ftz(m_row))
+                es.unsafe_store(tr * ESTRIDE + lane, ftz(identical_exp(d)))
+        barrier()
+        if valid and lane == 0:
+            for jj in range(BK):
+                var j = kb * BK + jj
+                if j >= j_lo and j <= j_hi:
+                    dacc = ftz(
+                        ftz(dacc) + ftz(es.unsafe_load(tr * ESTRIDE + jj))
+                    )
+        barrier()
+    if valid and lane == 0:
+        denom.unsafe_store(row, ftz(dacc))
+        rs.unsafe_store(tr, ftz(dacc))
+    barrier()
+    var d_row = rs.unsafe_load(tr)
+    barrier()
+
+    # ---- pass 3: weights and the context chain, SERIAL ASCENDING -------
+    var cacc = Float32(0.0)
+    for kb in range(kb_lo, kb_hi + 1):
+        comptime for si in range(SLOTS):
+            var i = tid + si * NT
+            if i < BK * HD:
+                var r = i // HD
+                var c = i - r * HD
+                var j = kb * BK + r
+                var v = Float32(0.0)
+                if j < s:
+                    v = ftz(k_cache.unsafe_load(kvbase + j * HD + c))
+                ks.unsafe_store(r * KSTRIDE + c, v)
+        barrier()
+        if valid and lane < BK:
+            var j = kb * BK + lane
+            if j >= j_lo and j <= j_hi:
+                var dot = Float32(0.0)
+                comptime for p in range(HD):
+                    dot = _step(q.unsafe_load(p), ks.unsafe_load(lane * KSTRIDE + p), dot)
+                var sc = _pmul(dot, scale_in)
+                var masked = ftz(sc + Float32(0.0))
+                var d = ftz(ftz(masked) - ftz(m_row))
+                var e = ftz(identical_exp(d))
+                es.unsafe_store(
+                    tr * ESTRIDE + lane,
+                    ftz(identical_div(ftz(e), ftz(d_row))),
+                )
+        barrier()
+        comptime for si in range(SLOTS):
+            var i = tid + si * NT
+            if i < BK * HD:
+                var r = i // HD
+                var c = i - r * HD
+                var j = kb * BK + r
+                var v = Float32(0.0)
+                if j < s:
+                    v = ftz(v_cache.unsafe_load(kvbase + j * HD + c))
+                ks.unsafe_store(r * KSTRIDE + c, v)
+        barrier()
+        if valid:
+            for jj in range(BK):
+                var j = kb * BK + jj
+                if j >= j_lo and j <= j_hi:
+                    cacc = _step(
+                        es.unsafe_load(tr * ESTRIDE + jj),
+                        ks.unsafe_load(jj * KSTRIDE + lane),
+                        cacc,
+                    )
+        barrier()
+    if valid:
+        if bitcast[DType.uint32](cacc) == NEG_ZERO_BITS and j_hi < s - 1:
+            corner.unsafe_store(0, Float32(1.0))
+        ctxv.unsafe_store((bb * l + t) * nh * HD + h * HD + lane, cacc)
+
+
+# ===========================================================================
+# THE FUSED BACKWARD: z, then dq, then dk and dv
+# ===========================================================================
+
+
+def fused_bwd_zdot_kernel[HD: Int, TQ: Int](
+    zdot: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+    scale_in: Float32,
+):
+    """`z = sum_j dy_j * y_j`, `bwd_softmax_zdot_kernel`'s chain, with `y`
+    recomputed from the score and `dy` recomputed as the one-leaf gemm cell
+    `dctx[t] . v[j]` (stage 17's routed OP_NT at `k = head_dim`). Lanes
+    below `HD/2` hold `q[t]` and produce `y`; lanes from `HD/2` hold
+    `dctx[t]` and produce `dy`; `BK` keys per block iteration."""
+    comptime HALF = HD // 2
+    comptime BK = HALF if HALF <= 32 else 32
+    comptime NT = TQ * HD
+    comptime KSTRIDE = HD + 1
+    comptime ESTRIDE = BK + 1
+    comptime SLOTS = (BK * HD + NT - 1) // NT
+
+    var ks = stack_allocation[
+        BK * KSTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var vs = stack_allocation[
+        BK * KSTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var ys = stack_allocation[
+        TQ * ESTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var dys = stack_allocation[
+        TQ * ESTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    var tb = raw % ntb
+    var rest = raw // ntb
+    var h = rest % nh
+    var bb = rest // nh
+    if bb >= b:
+        return
+    var kvh = h // n_rep
+
+    var tid = Int(thread_idx.x)
+    var tr = tid // HD
+    var lane = tid - tr * HD
+    var is_y = lane < HALF
+    var kj = lane
+    if not is_y:
+        kj = lane - HALF
+    var active = kj < BK
+    var t = tb * TQ + tr
+    var valid = t < l
+    var tt = t
+    if not valid:
+        tt = l - 1
+    var rr = _row_range(tt, pos0, key_lo, window, s)
+    var j_lo = rr[0]
+    var j_hi = rr[1]
+    var t0 = tb * TQ
+    var t1 = t0 + TQ - 1
+    if t1 > l - 1:
+        t1 = l - 1
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // BK
+    var kb_hi = r1[1] // BK
+
+    var kvbase = (bb * nkv + kvh) * s * HD
+    var rowbase = (bb * l + tt) * nh * HD + h * HD
+    var row = (bb * nh + h) * l + tt
+    var m_row = ftz(amax.unsafe_load(row))
+    var d_row = ftz(denom.unsafe_load(row))
+
+    var vec = stack_allocation[HD, Scalar[DType.float32]]()
+    if is_y:
+        comptime for p in range(HD):
+            vec.unsafe_store(p, ftz(q_rope.unsafe_load(rowbase + p)))
+    else:
+        comptime for p in range(HD):
+            vec.unsafe_store(p, ftz(dctx.unsafe_load(rowbase + p)))
+
+    var z = Float32(0.0)
+    for kb in range(kb_lo, kb_hi + 1):
+        comptime for si in range(SLOTS):
+            var i = tid + si * NT
+            if i < BK * HD:
+                var r = i // HD
+                var c = i - r * HD
+                var j = kb * BK + r
+                var kv = Float32(0.0)
+                var vv = Float32(0.0)
+                if j < s:
+                    kv = ftz(k_cache.unsafe_load(kvbase + j * HD + c))
+                    vv = ftz(v_cache.unsafe_load(kvbase + j * HD + c))
+                ks.unsafe_store(r * KSTRIDE + c, kv)
+                vs.unsafe_store(r * KSTRIDE + c, vv)
+        barrier()
+        if valid and active:
+            var j = kb * BK + kj
+            if j >= j_lo and j <= j_hi:
+                if is_y:
+                    var dot = Float32(0.0)
+                    comptime for p in range(HD):
+                        dot = _step(vec.unsafe_load(p), ks.unsafe_load(kj * KSTRIDE + p), dot)
+                    var sc = _pmul(dot, scale_in)
+                    var masked = ftz(sc + Float32(0.0))
+                    var e = ftz(identical_exp(ftz(ftz(masked) - m_row)))
+                    ys.unsafe_store(
+                        tr * ESTRIDE + kj, ftz(identical_div(ftz(e), d_row))
+                    )
+                else:
+                    var dy = Float32(0.0)
+                    comptime for p in range(HD):
+                        dy = _step(vec.unsafe_load(p), vs.unsafe_load(kj * KSTRIDE + p), dy)
+                    dys.unsafe_store(tr * ESTRIDE + kj, ftz(dy))
+        barrier()
+        if valid and lane == 0:
+            for jj in range(BK):
+                var j = kb * BK + jj
+                if j >= j_lo and j <= j_hi:
+                    z = _step(
+                        dys.unsafe_load(tr * ESTRIDE + jj),
+                        ys.unsafe_load(tr * ESTRIDE + jj),
+                        z,
+                    )
+        barrier()
+    if valid and lane == 0:
+        var zf = ftz(z)
+        if bitcast[DType.uint32](zf) == NEG_ZERO_BITS and j_hi < s - 1:
+            corner.unsafe_store(0, Float32(1.0))
+        zdot.unsafe_store(row, zf)
+
+
+def fused_bwd_dq_kernel[HD: Int, TQ: Int](
+    dq: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    zdot: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+    scale_in: Float32,
+):
+    """`dq[t, d]`, `bwd_dq_kernel`'s chain over the key axis, with the
+    per-cell gradient recomputed: `y` and `dy` as in the z kernel, then
+    stage 19 `ds = pmul(y, ftz(dy - z))`, stage 20 the identity, stage 21
+    `dcell = pmul(ds, scale)`, then `_step(dcell, k[j, d], acc)` ascending."""
+    comptime HALF = HD // 2
+    comptime BK = HALF if HALF <= 32 else 32
+    comptime NT = TQ * HD
+    comptime KSTRIDE = HD + 1
+    comptime ESTRIDE = BK + 1
+    comptime SLOTS = (BK * HD + NT - 1) // NT
+
+    var ks = stack_allocation[
+        BK * KSTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var vs = stack_allocation[
+        BK * KSTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var ys = stack_allocation[
+        TQ * ESTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var dys = stack_allocation[
+        TQ * ESTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    var tb = raw % ntb
+    var rest = raw // ntb
+    var h = rest % nh
+    var bb = rest // nh
+    if bb >= b:
+        return
+    var kvh = h // n_rep
+
+    var tid = Int(thread_idx.x)
+    var tr = tid // HD
+    var lane = tid - tr * HD
+    var is_y = lane < HALF
+    var kj = lane
+    if not is_y:
+        kj = lane - HALF
+    var active = kj < BK
+    var t = tb * TQ + tr
+    var valid = t < l
+    var tt = t
+    if not valid:
+        tt = l - 1
+    var rr = _row_range(tt, pos0, key_lo, window, s)
+    var j_lo = rr[0]
+    var j_hi = rr[1]
+    var t0 = tb * TQ
+    var t1 = t0 + TQ - 1
+    if t1 > l - 1:
+        t1 = l - 1
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // BK
+    var kb_hi = r1[1] // BK
+
+    var kvbase = (bb * nkv + kvh) * s * HD
+    var rowbase = (bb * l + tt) * nh * HD + h * HD
+    var row = (bb * nh + h) * l + tt
+    var m_row = ftz(amax.unsafe_load(row))
+    var d_row = ftz(denom.unsafe_load(row))
+    var z_row = ftz(zdot.unsafe_load(row))
+
+    var vec = stack_allocation[HD, Scalar[DType.float32]]()
+    if is_y:
+        comptime for p in range(HD):
+            vec.unsafe_store(p, ftz(q_rope.unsafe_load(rowbase + p)))
+    else:
+        comptime for p in range(HD):
+            vec.unsafe_store(p, ftz(dctx.unsafe_load(rowbase + p)))
+
+    var acc = Float32(0.0)
+    for kb in range(kb_lo, kb_hi + 1):
+        comptime for si in range(SLOTS):
+            var i = tid + si * NT
+            if i < BK * HD:
+                var r = i // HD
+                var c = i - r * HD
+                var j = kb * BK + r
+                var kv = Float32(0.0)
+                var vv = Float32(0.0)
+                if j < s:
+                    kv = ftz(k_cache.unsafe_load(kvbase + j * HD + c))
+                    vv = ftz(v_cache.unsafe_load(kvbase + j * HD + c))
+                ks.unsafe_store(r * KSTRIDE + c, kv)
+                vs.unsafe_store(r * KSTRIDE + c, vv)
+        barrier()
+        if valid and active:
+            var j = kb * BK + kj
+            if j >= j_lo and j <= j_hi:
+                if is_y:
+                    var dot = Float32(0.0)
+                    comptime for p in range(HD):
+                        dot = _step(vec.unsafe_load(p), ks.unsafe_load(kj * KSTRIDE + p), dot)
+                    var sc = _pmul(dot, scale_in)
+                    var masked = ftz(sc + Float32(0.0))
+                    var e = ftz(identical_exp(ftz(ftz(masked) - m_row)))
+                    ys.unsafe_store(
+                        tr * ESTRIDE + kj, ftz(identical_div(ftz(e), d_row))
+                    )
+                else:
+                    var dy = Float32(0.0)
+                    comptime for p in range(HD):
+                        dy = _step(vec.unsafe_load(p), vs.unsafe_load(kj * KSTRIDE + p), dy)
+                    dys.unsafe_store(tr * ESTRIDE + kj, ftz(dy))
+        barrier()
+        # Stages 19-21 for this block's keys, into the `y` slot the same
+        # thread just wrote (own slot: no race).
+        if valid and lane < BK:
+            var j = kb * BK + lane
+            if j >= j_lo and j <= j_hi:
+                var yv = ftz(ys.unsafe_load(tr * ESTRIDE + lane))
+                var dv = ftz(dys.unsafe_load(tr * ESTRIDE + lane))
+                var ds = _pmul(yv, ftz(ftz(dv) - ftz(z_row)))
+                ys.unsafe_store(tr * ESTRIDE + lane, _pmul(ftz(ds), scale_in))
+        barrier()
+        if valid:
+            for jj in range(BK):
+                var j = kb * BK + jj
+                if j >= j_lo and j <= j_hi:
+                    acc = _step(
+                        ys.unsafe_load(tr * ESTRIDE + jj),
+                        ks.unsafe_load(jj * KSTRIDE + lane),
+                        acc,
+                    )
+        barrier()
+    if valid:
+        if bitcast[DType.uint32](acc) == NEG_ZERO_BITS and j_hi < s - 1:
+            corner.unsafe_store(0, Float32(1.0))
+        dq.unsafe_store((bb * l + t) * nh * HD + h * HD + lane, acc)
+
+
+def fused_bwd_dkdv_kernel[HD: Int, BJ: Int](
+    dk: MutPointer[Float32, MutAnyOrigin],
+    dv: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    zdot: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+    scale_in: Float32,
+):
+    """`dk[j, d]` and `dv[j, d]`, `bwd_dk_kernel`'s and `bwd_dv_kernel`'s
+    chains over `(head in the kv group ASCENDING, query ASCENDING)`, one
+    block per `BJ` consecutive keys of one `(batch, kv head)`; thread
+    `(key, lane)`. Lanes below `HD/2` hold `k[j]` and produce `y` for
+    query `t0 + lane`; lanes from `HD/2` hold `v[j]` and produce `dy` for
+    query `t0 + lane - HD/2`; then every lane `d` folds its two chains.
+    `TT` queries per block iteration."""
+    comptime HALF = HD // 2
+    comptime TT = HALF if HALF <= 32 else 32
+    comptime NT = BJ * HD
+    comptime KSTRIDE = HD + 1
+    comptime ESTRIDE = TT + 1
+    comptime SLOTS = (TT * HD + NT - 1) // NT
+
+    var qs = stack_allocation[
+        TT * KSTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var dcs = stack_allocation[
+        TT * KSTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var ys = stack_allocation[
+        BJ * ESTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var dys = stack_allocation[
+        BJ * ESTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+
+    var njb = (s + BJ - 1) // BJ
+    var raw = Int(block_idx.x)
+    var jb = raw % njb
+    var rest = raw // njb
+    var kvh = rest % nkv
+    var bb = rest // nkv
+    if bb >= b:
+        return
+
+    var tid = Int(thread_idx.x)
+    var jr = tid // HD
+    var lane = tid - jr * HD
+    var is_y = lane < HALF
+    var kt = lane
+    if not is_y:
+        kt = lane - HALF
+    var active = kt < TT
+    var j = jb * BJ + jr
+    var valid = j < s
+    var jj = j
+    if not valid:
+        jj = s - 1
+    var qr = _key_query_range(jj, pos0, key_lo, window, l)
+    var t_lo = qr[0]
+    var t_hi = qr[1]
+    var j0 = jb * BJ
+    var j1 = j0 + BJ - 1
+    if j1 > s - 1:
+        j1 = s - 1
+    var q0 = _key_query_range(j0, pos0, key_lo, window, l)
+    var q1 = _key_query_range(j1, pos0, key_lo, window, l)
+    var tb_lo = q0[0] // TT
+    var tb_hi = q1[1] // TT
+    if q1[1] < q0[0]:
+        # No query in this call sees any key of this block: every chain
+        # is the empty chain, `+0.0`, and the block stores it.
+        tb_hi = tb_lo - 1
+
+    var kvbase = (bb * nkv + kvh) * s * HD
+    var vec = stack_allocation[HD, Scalar[DType.float32]]()
+    if is_y:
+        comptime for p in range(HD):
+            vec.unsafe_store(p, ftz(k_cache.unsafe_load(kvbase + jj * HD + p)))
+    else:
+        comptime for p in range(HD):
+            vec.unsafe_store(p, ftz(v_cache.unsafe_load(kvbase + jj * HD + p)))
+
+    var dk_acc = Float32(0.0)
+    var dv_acc = Float32(0.0)
+    var hit = False
+    for hh in range(n_rep):
+        var h = kvh * n_rep + hh
+        for tb in range(tb_lo, tb_hi + 1):
+            comptime for si in range(SLOTS):
+                var i = tid + si * NT
+                if i < TT * HD:
+                    var r = i // HD
+                    var c = i - r * HD
+                    var t = tb * TT + r
+                    var qv = Float32(0.0)
+                    var dcv = Float32(0.0)
+                    if t < l:
+                        var off = (bb * l + t) * nh * HD + h * HD + c
+                        qv = ftz(q_rope.unsafe_load(off))
+                        dcv = ftz(dctx.unsafe_load(off))
+                    qs.unsafe_store(r * KSTRIDE + c, qv)
+                    dcs.unsafe_store(r * KSTRIDE + c, dcv)
+            barrier()
+            if valid and active:
+                var t = tb * TT + kt
+                if t < l and t >= t_lo and t <= t_hi:
+                    var row = (bb * nh + h) * l + t
+                    if is_y:
+                        var dot = Float32(0.0)
+                        comptime for p in range(HD):
+                            dot = _step(qs.unsafe_load(kt * KSTRIDE + p), vec.unsafe_load(p), dot)
+                        var sc = _pmul(dot, scale_in)
+                        var masked = ftz(sc + Float32(0.0))
+                        var m_row = ftz(amax.unsafe_load(row))
+                        var d_row = ftz(denom.unsafe_load(row))
+                        var e = ftz(identical_exp(ftz(ftz(masked) - m_row)))
+                        ys.unsafe_store(
+                            jr * ESTRIDE + kt,
+                            ftz(identical_div(ftz(e), d_row)),
+                        )
+                    else:
+                        var dy = Float32(0.0)
+                        comptime for p in range(HD):
+                            dy = _step(dcs.unsafe_load(kt * KSTRIDE + p), vec.unsafe_load(p), dy)
+                        dys.unsafe_store(jr * ESTRIDE + kt, ftz(dy))
+            barrier()
+            if valid and lane < TT:
+                var t = tb * TT + lane
+                if t < l and t >= t_lo and t <= t_hi:
+                    var row = (bb * nh + h) * l + t
+                    var z_row = ftz(zdot.unsafe_load(row))
+                    var yv = ftz(ys.unsafe_load(jr * ESTRIDE + lane))
+                    var dv_ = ftz(dys.unsafe_load(jr * ESTRIDE + lane))
+                    var ds = _pmul(yv, ftz(ftz(dv_) - ftz(z_row)))
+                    dys.unsafe_store(jr * ESTRIDE + lane, _pmul(ftz(ds), scale_in))
+            barrier()
+            if valid:
+                for tk in range(TT):
+                    var t = tb * TT + tk
+                    if t < l and t >= t_lo and t <= t_hi:
+                        dk_acc = _step(
+                            dys.unsafe_load(jr * ESTRIDE + tk),
+                            qs.unsafe_load(tk * KSTRIDE + lane),
+                            dk_acc,
+                        )
+                        dv_acc = _step(
+                            ys.unsafe_load(jr * ESTRIDE + tk),
+                            dcs.unsafe_load(tk * KSTRIDE + lane),
+                            dv_acc,
+                        )
+            barrier()
+        # The end of this head's visible run for key `j`: a `-0.0` here
+        # could be laundered by the masked cells that follow in the chain.
+        if bitcast[DType.uint32](dk_acc) == NEG_ZERO_BITS:
+            hit = True
+        if bitcast[DType.uint32](dv_acc) == NEG_ZERO_BITS:
+            hit = True
+    if valid:
+        if hit:
+            corner.unsafe_store(0, Float32(1.0))
+        dk.unsafe_store(kvbase + j * HD + lane, dk_acc)
+        dv.unsafe_store(kvbase + j * HD + lane, dv_acc)
+
+
+# ===========================================================================
+# THE LAUNCHERS. Raw buffers in, so that neither the forward's nor the
+# backward's stage struct has to be imported here (both import this file).
+# ===========================================================================
+
+
+def _read_flag(
+    ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]
+) raises -> Bool:
+    var host = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=flag)
+    ctx.synchronize()
+    var v = host.unsafe_ptr().unsafe_load(0)
+    _ = host^
+    return v != Float32(0.0)
+
+
+def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
+    var f = ctx.enqueue_create_buffer[DType.float32](1)
+    f.enqueue_fill(Float32(0.0))
+    ctx.synchronize()
+    return f^
+
+
+def fused_forward_launch(
+    ctx: DeviceContext,
+    mut ctxv: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+) raises -> Int:
+    """The fused forward: `ctxv`, `amax` and `denom` are written on
+    `FUSED_RAN`; on any other status nothing the caller reads is defined
+    and the eager path must run. `k_cache`/`v_cache` are the PACKED span
+    `[B, n_kv, S, head_dim]` the eager path reads."""
+    if not fused_forward_supported_head_dim(hd):
+        return FUSED_REFUSED_REGIME
+    var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
+    var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
+    var vmax = device_absmax(ctx, v_cache, b * nkv * s * hd)
+    if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
+        return FUSED_REFUSED_REGIME
+    var corner = _zero_flag(ctx)
+    var tq = fused_rows_per_block(hd)
+    var blocks = b * nh * ((l + tq - 1) // tq)
+    var nt = hd * tq
+    if hd == 16:
+        comptime k16 = fused_attn_forward_kernel[16, FUSED_THREADS // 16]
+        ctx.enqueue_function[k16](
+            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            corner.unsafe_ptr(), q_rope.unsafe_ptr(), k_cache.unsafe_ptr(),
+            v_cache.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+    elif hd == 24:
+        comptime k24 = fused_attn_forward_kernel[24, FUSED_THREADS // 24]
+        ctx.enqueue_function[k24](
+            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            corner.unsafe_ptr(), q_rope.unsafe_ptr(), k_cache.unsafe_ptr(),
+            v_cache.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+    elif hd == 64:
+        comptime k64 = fused_attn_forward_regblocked_kernel[64]
+        blocks = b * nh * ((l + 63) // 64)
+        nt = FUSED_THREADS
+        ctx.enqueue_function[k64](
+            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            corner.unsafe_ptr(), q_rope.unsafe_ptr(), k_cache.unsafe_ptr(),
+            v_cache.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+    else:
+        comptime k128 = fused_attn_forward_regblocked_kernel[128]
+        blocks = b * nh * ((l + 15) // 16)
+        nt = FUSED_THREADS
+        ctx.enqueue_function[k128](
+            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            corner.unsafe_ptr(), q_rope.unsafe_ptr(), k_cache.unsafe_ptr(),
+            v_cache.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+    ctx.synchronize()
+    var hit = _read_flag(ctx, corner)
+    _ = corner^
+    if hit:
+        return FUSED_CORNER
+    return FUSED_RAN
+
+
+def fused_backward_launch(
+    ctx: DeviceContext,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+) raises -> Int:
+    """The fused backward: `zdot` (stage 18), `dq` (22, `[M, nh*hd]`),
+    `dk` and `dv` (23-24, `[B, n_kv, S, hd]`) on `FUSED_RAN`. `amax` and
+    `denom` are the forward's row scalars (either path writes them)."""
+    if not fused_supported_head_dim(hd):
+        return FUSED_REFUSED_REGIME
+    var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
+    var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
+    var vmax = device_absmax(ctx, v_cache, b * nkv * s * hd)
+    var dmax = device_absmax(ctx, dctx, b * l * nh * hd)
+    if not regime_product_ok(hd, qmax, kmax):
+        return FUSED_REFUSED_REGIME
+    if not regime_product_ok(hd, dmax, vmax):
+        return FUSED_REFUSED_REGIME
+    var corner = _zero_flag(ctx)
+    var tq = fused_rows_per_block(hd)
+    var row_blocks = b * nh * ((l + tq - 1) // tq)
+    var key_blocks = b * nkv * ((s + tq - 1) // tq)
+    var nt = hd * tq
+    if hd == 16:
+        comptime z16 = fused_bwd_zdot_kernel[16, FUSED_THREADS // 16]
+        comptime q16 = fused_bwd_dq_kernel[16, FUSED_THREADS // 16]
+        comptime kv16 = fused_bwd_dkdv_kernel[16, FUSED_THREADS // 16]
+        ctx.enqueue_function[z16](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), q_rope.unsafe_ptr(),
+            dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
+            amax.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale,
+            grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+        ctx.synchronize()
+        ctx.enqueue_function[q16](
+            dq.unsafe_ptr(), corner.unsafe_ptr(), q_rope.unsafe_ptr(),
+            dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
+            amax.unsafe_ptr(), denom.unsafe_ptr(), zdot.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0),
+            Int32(key_lo), Int32(window), scale,
+            grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+        ctx.enqueue_function[kv16](
+            dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+            q_rope.unsafe_ptr(), dctx.unsafe_ptr(), k_cache.unsafe_ptr(),
+            v_cache.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(key_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+    elif hd == 24:
+        comptime z24 = fused_bwd_zdot_kernel[24, FUSED_THREADS // 24]
+        comptime q24 = fused_bwd_dq_kernel[24, FUSED_THREADS // 24]
+        comptime kv24 = fused_bwd_dkdv_kernel[24, FUSED_THREADS // 24]
+        ctx.enqueue_function[z24](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), q_rope.unsafe_ptr(),
+            dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
+            amax.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale,
+            grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+        ctx.synchronize()
+        ctx.enqueue_function[q24](
+            dq.unsafe_ptr(), corner.unsafe_ptr(), q_rope.unsafe_ptr(),
+            dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
+            amax.unsafe_ptr(), denom.unsafe_ptr(), zdot.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0),
+            Int32(key_lo), Int32(window), scale,
+            grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+        ctx.enqueue_function[kv24](
+            dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+            q_rope.unsafe_ptr(), dctx.unsafe_ptr(), k_cache.unsafe_ptr(),
+            v_cache.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(key_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+    elif hd == 64:
+        comptime z64 = fused_bwd_zdot_kernel[64, FUSED_THREADS // 64]
+        comptime q64 = fused_bwd_dq_kernel[64, FUSED_THREADS // 64]
+        comptime kv64 = fused_bwd_dkdv_kernel[64, FUSED_THREADS // 64]
+        ctx.enqueue_function[z64](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), q_rope.unsafe_ptr(),
+            dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
+            amax.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale,
+            grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+        ctx.synchronize()
+        ctx.enqueue_function[q64](
+            dq.unsafe_ptr(), corner.unsafe_ptr(), q_rope.unsafe_ptr(),
+            dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
+            amax.unsafe_ptr(), denom.unsafe_ptr(), zdot.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0),
+            Int32(key_lo), Int32(window), scale,
+            grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+        ctx.enqueue_function[kv64](
+            dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+            q_rope.unsafe_ptr(), dctx.unsafe_ptr(), k_cache.unsafe_ptr(),
+            v_cache.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(key_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+    else:
+        comptime z128 = fused_bwd_zdot_kernel[128, FUSED_THREADS // 128]
+        comptime q128 = fused_bwd_dq_kernel[128, FUSED_THREADS // 128]
+        comptime kv128 = fused_bwd_dkdv_kernel[128, FUSED_THREADS // 128]
+        ctx.enqueue_function[z128](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), q_rope.unsafe_ptr(),
+            dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
+            amax.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale,
+            grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+        ctx.synchronize()
+        ctx.enqueue_function[q128](
+            dq.unsafe_ptr(), corner.unsafe_ptr(), q_rope.unsafe_ptr(),
+            dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
+            amax.unsafe_ptr(), denom.unsafe_ptr(), zdot.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0),
+            Int32(key_lo), Int32(window), scale,
+            grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+        ctx.enqueue_function[kv128](
+            dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+            q_rope.unsafe_ptr(), dctx.unsafe_ptr(), k_cache.unsafe_ptr(),
+            v_cache.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(key_blocks, 1, 1), block_dim=(nt, 1, 1),
+        )
+    ctx.synchronize()
+    var hit = _read_flag(ctx, corner)
+    _ = corner^
+    if hit:
+        return FUSED_CORNER
+    return FUSED_RAN

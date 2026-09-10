@@ -13,13 +13,15 @@ Numerical contract: 64 ordered Float64 sigma iterations, ascending neighbor
 initialization and serial Float32 coordinate updates. Unlike umap-learn's
 RNG and epochs-per-sample implementation, refinement uses this repository's
 SplitMix64 counter and floor-difference schedule. No upstream byte-parity
-claim. Host pow/exp follow the existing UMAP host optimizer convention;
-cross-device certification requires new transform fixtures. Query batching
+claim. IDENTICAL host pow/exp/log2 use the portable binary64 seams; other modes
+retain stdlib arithmetic. Cross-host certification requires matching captures. Query batching
 may change results (global sigma floor, edge weighting and RNG ordinals).
 No existing fit code is called or modified by this module.
 """
+from checks.numerics import identical_exp64, identical_log2_64, identical_pow64
+
 from max.gpu.host import DeviceContext
-from std.math import exp, isfinite, log2, pow
+from std.math import isfinite
 from neighbors.estimator import knn_search
 from umap.curve import fit_umap_curve
 from umap.optimizer import _clip, _splitmix64
@@ -38,7 +40,7 @@ def transform_memberships(distances: List[Float32], rows: Int, k: Int) raises ->
             raise Error("UMAP transform neighbors must be distance-sorted")
         mean += Float64(distances[i])
     mean /= Float64(rows * k)
-    var target = log2(Float64(k))
+    var target = identical_log2_64(Float64(k))
     var weights = List[Float32]()
     for row in range(rows):
         var lo = Float64(0)
@@ -48,7 +50,7 @@ def transform_memberships(distances: List[Float32], rows: Int, k: Int) raises ->
             var total = Float64(0)
             for j in range(1, k):
                 var distance = Float64(distances[row * k + j])
-                total += Float64(1) if distance == 0 else exp(-distance / sigma)
+                total += Float64(1) if distance == 0 else identical_exp64(-distance / sigma)
             # Keep the converged value, while retaining a fixed iteration
             # count instead of a mode-dependent early exit.
             if abs(total - target) <= Float64(1.0e-5):
@@ -63,7 +65,7 @@ def transform_memberships(distances: List[Float32], rows: Int, k: Int) raises ->
         var row_sum = Float32(0)
         for j in range(k):
             var distance = distances[row * k + j]
-            var weight = Float32(1) if distance == Float32(0) else Float32(exp(-Float64(distance) / sigma))
+            var weight = Float32(1) if distance == Float32(0) else Float32(identical_exp64(-Float64(distance) / sigma))
             weights.append(weight)
             row_sum += weight
         if not isfinite(row_sum) or row_sum <= Float32(0):
@@ -157,7 +159,7 @@ def refine_transform(
                         raise Error("UMAP transform refinement distance is not finite")
                     if distance <= Float32(0):
                         continue
-                    var powered = Float32(pow(Float64(distance), Float64(b)))
+                    var powered = Float32(identical_pow64(Float64(distance), Float64(b)))
                     var coeff = Float32(0)
                     if slot == 0:
                         coeff = -Float32(2) * a * b * (powered / distance) / (a * powered + Float32(1))

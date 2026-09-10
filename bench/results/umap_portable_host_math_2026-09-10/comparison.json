@@ -1,0 +1,38 @@
+{
+  "apple_baseline_identity-broader.log": {
+    "cells": 690,
+    "changed": 0,
+    "changed_by_stage": {},
+    "left_records_sha256": "454040e5b46af21fb0f6de4612970461849506b21c038d5c09511c1ace38cff8"
+  },
+  "apple_baseline_identity.log": {
+    "cells": 186,
+    "changed": 0,
+    "changed_by_stage": {},
+    "left_records_sha256": "f54878404742b426cbce1cf2bdde6215ee8cc6ca930902e9bf23b6f8031c42a8"
+  },
+  "cross_host_host_stages": {
+    "cells": 116,
+    "changed": 0,
+    "changed_by_stage": {},
+    "left_records_sha256": "c90ac369d0536f1f94191952e14703c2b8a52a36774cb5b92b73b0ac09196d74"
+  },
+  "cross_host_identity-broader.log": {
+    "cells": 690,
+    "changed": 0,
+    "changed_by_stage": {},
+    "left_records_sha256": "454040e5b46af21fb0f6de4612970461849506b21c038d5c09511c1ace38cff8"
+  },
+  "cross_host_identity.log": {
+    "cells": 186,
+    "changed": 0,
+    "changed_by_stage": {},
+    "left_records_sha256": "f54878404742b426cbce1cf2bdde6215ee8cc6ca930902e9bf23b6f8031c42a8"
+  },
+  "cross_host_transform": {
+    "cells": 21,
+    "changed": 0,
+    "changed_by_stage": {},
+    "left_records_sha256": "70469fed701a8ac6931b1e530715e4bdfbd4616b326f43fa28ba1dea96425ec4"
+  }
+}

@@ -120,12 +120,15 @@ from neighbors.checks.pinned_distance_tile import (
 )
 from neighbors.checks.select_radix_identical import (
     radix_topk_identical_kernel,
+    IDENTICAL_MAX_K,
 )
 from neighbors.impl.matrix.detail.select_radix import (
     SELECT_BLOCK,
     radix_topk_one_block_kernel,
 )
 
+
+comptime IVF_SELECT_LIMIT = IDENTICAL_MAX_K if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else SELECT_BLOCK
 
 comptime IVF_EXPAND_TPB = 256
 """SCHEDULING. The elementwise epilogue's threads per block on the FAST
@@ -240,23 +243,12 @@ def _select_top_k(
     fixing a thing upstream does not do is an improvement and improvements
     do not live in `impl/`.
 
-    `k > SELECT_BLOCK` is REFUSED IN BOTH MODES, which is
-    `archive/research/UNSUPERVISED_IDENTITY.md`'s owed item 5 reaching this lane unchanged:
-    the identical selector's rank pass gives one thread to each output slot
-    and a larger k needs a loop nobody has written. Refused at the launcher,
-    not silent.
+    IDENTICAL admits k up to IDENTICAL_MAX_K using the shared selector's
+    strided rank pass. Other modes retain the existing SELECT_BLOCK bound.
+    See neighbors/checks/select_radix_identical.mojo and IDENTITY_PATHS.md.
     """
-    if k > SELECT_BLOCK:
-        raise Error(
-            "ivf_flat: a selection of k = "
-            + String(k)
-            + " exceeds SELECT_BLOCK ("
-            + String(SELECT_BLOCK)
-            + "). The identical selector's rank pass gives one thread to"
-            " each output slot; a larger k needs a loop, which is"
-            " archive/research/UNSUPERVISED_IDENTITY.md's owed item 5 and is not written"
-            " until something asks for it."
-        )
+    if k > IVF_SELECT_LIMIT:
+        raise Error("ivf_flat: selection k exceeds the mode's bounded rank capacity " + String(IVF_SELECT_LIMIT))
     if k > length:
         raise Error(
             "ivf_flat: a selection of k = "
@@ -275,26 +267,41 @@ def _select_top_k(
         # to its rank rather than to an atomic slot. Atomic placement is
         # a run-to-run property, so the middle tier needs this pin, and
         # this is the same cause as `knn_brute_force.mojo`'s row-11
-        # branch. The `k > SELECT_BLOCK` and `k > length` raises above
-        # sit OUTSIDE this block and already bound both modes, so
-        # re-keying adds no new refusal -- only the eight radix passes.
+        # branch. The mode-specific rank capacity and k<=length guards
+        # run before launch; old k retains its original shared footprint.
         #
         # `:180` in this file is the row-24 DISTANCE dispatch and stays
         # keyed to identical: a vendor matmul's k-split is per-vendor,
         # not per-run.
-        ctx.enqueue_function[radix_topk_identical_kernel](
-            in_val.unsafe_ptr(),
-            out_val.unsafe_ptr(),
-            out_idx.unsafe_ptr(),
-            buf_val.unsafe_ptr(),
-            buf_idx.unsafe_ptr(),
-            Int32(length),
-            Int32(k),
-            Int32(buf_len),
-            Int32(1),
-            grid_dim=(n_rows, 1, 1),
-            block_dim=(SELECT_BLOCK, 1, 1),
-        )
+        if k <= SELECT_BLOCK:
+            ctx.enqueue_function[radix_topk_identical_kernel[SELECT_BLOCK]](
+                in_val.unsafe_ptr(),
+                out_val.unsafe_ptr(),
+                out_idx.unsafe_ptr(),
+                buf_val.unsafe_ptr(),
+                buf_idx.unsafe_ptr(),
+                Int32(length),
+                Int32(k),
+                Int32(buf_len),
+                Int32(1),
+                grid_dim=(n_rows, 1, 1),
+                block_dim=(SELECT_BLOCK, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[radix_topk_identical_kernel[IDENTICAL_MAX_K]](
+                in_val.unsafe_ptr(),
+                out_val.unsafe_ptr(),
+                out_idx.unsafe_ptr(),
+                buf_val.unsafe_ptr(),
+                buf_idx.unsafe_ptr(),
+                Int32(length),
+                Int32(k),
+                Int32(buf_len),
+                Int32(1),
+                grid_dim=(n_rows, 1, 1),
+                block_dim=(SELECT_BLOCK, 1, 1),
+            )
+
     else:
         ctx.enqueue_function[radix_topk_one_block_kernel](
             in_val.unsafe_ptr(),
@@ -402,12 +409,12 @@ def ivf_flat_search_traced(
     var n_probes = sp.n_probes
     var is_sqrt = metric_is_sqrt(index.metric)
 
-    if n_probes > SELECT_BLOCK:
+    if n_probes > IVF_SELECT_LIMIT:
         raise Error(
             "ivf_flat search: n_probes ("
             + String(n_probes)
-            + ") exceeds SELECT_BLOCK ("
-            + String(SELECT_BLOCK)
+            + ") exceeds the mode selection limit ("
+            + String(IVF_SELECT_LIMIT)
             + "); the coarse selection runs through the same selector as"
             " the final one and inherits its refusal."
         )

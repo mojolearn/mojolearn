@@ -1,0 +1,290 @@
+{
+ "logs": 126,
+ "per_query": {
+  "32": {
+   "cell_sha256": [
+    "5c182bed0a4d91b3bc56f7ca19d3e86fdb413c05b30e5db52f281856165af132"
+   ],
+   "cells": [
+    320
+   ],
+   "arms": {
+    "baseline": {
+     "median_ms": 3.979213,
+     "samples_ms": [
+      3.983025,
+      3.977525,
+      3.975491,
+      3.981677,
+      3.975576,
+      3.979213,
+      3.984029
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 0 transpose 0"
+    },
+    "both": {
+     "median_ms": 0.756649,
+     "samples_ms": [
+      0.757671,
+      0.756649,
+      0.761454,
+      0.755182,
+      0.755562,
+      0.756809,
+      0.75656
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 1"
+    },
+    "both-notile": {
+     "median_ms": 0.736419,
+     "samples_ms": [
+      0.737187,
+      0.736419,
+      0.735174,
+      0.735895,
+      0.732113,
+      0.87418,
+      0.738513
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 1"
+    },
+    "both-scalar": {
+     "median_ms": 0.804505,
+     "samples_ms": [
+      0.804199,
+      0.808518,
+      0.800761,
+      0.803441,
+      0.804505,
+      0.807472,
+      0.806627
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 1"
+    },
+    "selector": {
+     "median_ms": 1.089477,
+     "samples_ms": [
+      1.090161,
+      1.087674,
+      1.089477,
+      1.086317,
+      1.098578,
+      1.086411,
+      1.092131
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 0"
+    },
+    "transpose": {
+     "median_ms": 3.651093,
+     "samples_ms": [
+      3.651093,
+      3.650351,
+      3.640744,
+      3.642652,
+      3.652818,
+      3.652749,
+      3.651249
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 0 transpose 1"
+    }
+   },
+   "reference_cell_sha256": {
+    "q32-r0-baseline.log": "5c182bed0a4d91b3bc56f7ca19d3e86fdb413c05b30e5db52f281856165af132",
+    "q32-r0-both.log": "5c182bed0a4d91b3bc56f7ca19d3e86fdb413c05b30e5db52f281856165af132",
+    "q32-r0-selector.log": "5c182bed0a4d91b3bc56f7ca19d3e86fdb413c05b30e5db52f281856165af132",
+    "q32-r0-transpose.log": "5c182bed0a4d91b3bc56f7ca19d3e86fdb413c05b30e5db52f281856165af132"
+   },
+   "matches_reference": true
+  },
+  "128": {
+   "cell_sha256": [
+    "679afd7233b35b92ec8f90abf70992ccd795fbb5d5e73e22568e30577f39d40c"
+   ],
+   "cells": [
+    1280
+   ],
+   "arms": {
+    "baseline": {
+     "median_ms": 5.373086,
+     "samples_ms": [
+      5.362874,
+      5.430982,
+      5.363555,
+      5.378092,
+      5.40598,
+      5.373086,
+      5.348044
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 0 transpose 0"
+    },
+    "both": {
+     "median_ms": 0.96477,
+     "samples_ms": [
+      0.96477,
+      0.98088,
+      0.968191,
+      0.966557,
+      0.962942,
+      0.961425,
+      0.963534
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 1"
+    },
+    "both-notile": {
+     "median_ms": 0.959488,
+     "samples_ms": [
+      0.963935,
+      0.95743,
+      0.963636,
+      0.959627,
+      0.959488,
+      0.959468,
+      0.959377
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 1"
+    },
+    "both-scalar": {
+     "median_ms": 1.211287,
+     "samples_ms": [
+      1.209673,
+      1.210761,
+      1.211554,
+      1.211318,
+      1.212629,
+      1.2064,
+      1.211287
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 1"
+    },
+    "selector": {
+     "median_ms": 2.397744,
+     "samples_ms": [
+      2.393685,
+      2.395094,
+      2.398284,
+      2.401231,
+      2.402686,
+      2.397744,
+      2.395952
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 0"
+    },
+    "transpose": {
+     "median_ms": 3.919389,
+     "samples_ms": [
+      3.952174,
+      3.919389,
+      3.905445,
+      3.97108,
+      3.894976,
+      3.914501,
+      4.000882
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 0 transpose 1"
+    }
+   },
+   "reference_cell_sha256": {
+    "q128-r0-baseline.log": "679afd7233b35b92ec8f90abf70992ccd795fbb5d5e73e22568e30577f39d40c",
+    "q128-r0-both.log": "679afd7233b35b92ec8f90abf70992ccd795fbb5d5e73e22568e30577f39d40c",
+    "q128-r0-selector.log": "679afd7233b35b92ec8f90abf70992ccd795fbb5d5e73e22568e30577f39d40c",
+    "q128-r0-transpose.log": "679afd7233b35b92ec8f90abf70992ccd795fbb5d5e73e22568e30577f39d40c"
+   },
+   "matches_reference": true
+  },
+  "1000": {
+   "cell_sha256": [
+    "772b096585e156ad6193a63ce377939639a06b51cf4a72f77dfc18d6e8df5956"
+   ],
+   "cells": [
+    10000
+   ],
+   "arms": {
+    "baseline": {
+     "median_ms": 29.07319,
+     "samples_ms": [
+      29.020477,
+      29.092645,
+      29.138644,
+      29.01202,
+      29.209572,
+      29.07319,
+      28.851118
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 0 transpose 0"
+    },
+    "both": {
+     "median_ms": 4.48825,
+     "samples_ms": [
+      4.48642,
+      4.497788,
+      4.489502,
+      4.488219,
+      4.490723,
+      4.48825,
+      4.487974
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 1"
+    },
+    "both-notile": {
+     "median_ms": 4.396563,
+     "samples_ms": [
+      4.391241,
+      4.395409,
+      4.402202,
+      4.400236,
+      4.39586,
+      4.396563,
+      4.436325
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 1"
+    },
+    "both-scalar": {
+     "median_ms": 6.474311,
+     "samples_ms": [
+      6.473469,
+      6.472941,
+      6.481711,
+      6.474311,
+      6.472068,
+      6.476493,
+      6.476933
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 1"
+    },
+    "selector": {
+     "median_ms": 15.841746,
+     "samples_ms": [
+      15.838787,
+      15.84662,
+      15.843865,
+      15.841746,
+      15.831973,
+      15.851237,
+      15.838859
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 1 transpose 0"
+    },
+    "transpose": {
+     "median_ms": 17.633548,
+     "samples_ms": [
+      17.412008,
+      17.324292,
+      17.77383,
+      17.704576,
+      17.892411,
+      17.633548,
+      17.406682
+     ],
+     "flags": "LAYOUT_FLAGS mode IDENTICAL selector 0 transpose 1"
+    }
+   },
+   "reference_cell_sha256": {
+    "q1000-r0-baseline.log": "772b096585e156ad6193a63ce377939639a06b51cf4a72f77dfc18d6e8df5956",
+    "q1000-r0-both.log": "772b096585e156ad6193a63ce377939639a06b51cf4a72f77dfc18d6e8df5956",
+    "q1000-r0-selector.log": "772b096585e156ad6193a63ce377939639a06b51cf4a72f77dfc18d6e8df5956",
+    "q1000-r0-transpose.log": "772b096585e156ad6193a63ce377939639a06b51cf4a72f77dfc18d6e8df5956"
+   },
+   "matches_reference": true
+  }
+ }
+}

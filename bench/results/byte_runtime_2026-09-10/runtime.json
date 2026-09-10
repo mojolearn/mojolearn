@@ -1,0 +1,23 @@
+{
+  "host": "ProductName:\t\tmacOS\nProductVersion:\t\t26.5.2\nBuildVersion:\t\t25F84\n",
+  "chip": "Apple M4",
+  "mojo": "Mojo 1.0.0 (ed45d567)",
+  "binding_path": "/Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so",
+  "binding_sha256": "1c8ceb5fce2fc808db0b3f273618fb00f27b52fc3d1584405e71efae0de3bce8",
+  "binding_size": 2771352,
+  "device_execution": false,
+  "qualification": "compile and host-only checks; GPU numerical qualification owed",
+  "gemm_probe_path": "/tmp/mojolearn-gemm-labelled-probe-20260910",
+  "gemm_probe_sha256": "ac866bdb4f5b2cd475bbaef3d08d5d39b02b666687b5359f19c5d5fd182ba0cf",
+  "exit_codes": {
+    "initial_pytest_setup": 1,
+    "mojo_config": 0,
+    "native_build": 0,
+    "final_native_build": 0,
+    "gemm_probe_build": 0,
+    "host_tests_final": 0,
+    "native_host_check_final": 0,
+    "pixi_config_task": 0,
+    "parser_public_metadata": 0
+  }
+}

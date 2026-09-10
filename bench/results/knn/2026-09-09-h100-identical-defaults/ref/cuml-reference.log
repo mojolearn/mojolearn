@@ -1,0 +1,33 @@
+CUML_REF index=100000 queries=32 k=10 request_median_ms=1.125 device_median_ms=0.669
+CUML_REF_VS_OURS index=100000 queries=32 k=10 set_equal=32 ordered_equal=32 of 32
+CUML_REF index=100000 queries=32 k=15 request_median_ms=1.113 device_median_ms=0.675
+CUML_REF_VS_OURS index=100000 queries=32 k=15 set_equal=32 ordered_equal=32 of 32
+CUML_REF index=100000 queries=128 k=10 request_median_ms=0.914 device_median_ms=0.459
+CUML_REF_VS_OURS index=100000 queries=128 k=10 set_equal=128 ordered_equal=128 of 128
+CUML_REF index=100000 queries=128 k=15 request_median_ms=0.922 device_median_ms=0.470
+CUML_REF_VS_OURS index=100000 queries=128 k=15 set_equal=128 ordered_equal=128 of 128
+CUML_REF index=100000 queries=1000 k=10 request_median_ms=1.572 device_median_ms=1.081
+CUML_REF_VS_OURS index=100000 queries=1000 k=10 set_equal=1000 ordered_equal=1000 of 1000
+CUML_REF index=100000 queries=1000 k=15 request_median_ms=1.617 device_median_ms=1.111
+CUML_REF_VS_OURS index=100000 queries=1000 k=15 set_equal=1000 ordered_equal=1000 of 1000
+CUML_REF index=100000 queries=4000 k=10 request_median_ms=3.480 device_median_ms=2.904
+CUML_REF_VS_OURS index=100000 queries=4000 k=10 set_equal=4000 ordered_equal=4000 of 4000
+CUML_REF index=100000 queries=4000 k=15 request_median_ms=3.571 device_median_ms=2.957
+CUML_REF_VS_OURS index=100000 queries=4000 k=15 set_equal=4000 ordered_equal=4000 of 4000
+CUML_REF index=400000 queries=32 k=10 request_median_ms=1.546 device_median_ms=1.200
+CUML_REF_VS_OURS index=400000 queries=32 k=10 set_equal=32 ordered_equal=32 of 32
+CUML_REF index=400000 queries=32 k=15 request_median_ms=1.573 device_median_ms=1.241
+CUML_REF_VS_OURS index=400000 queries=32 k=15 set_equal=32 ordered_equal=32 of 32
+CUML_REF index=400000 queries=128 k=10 request_median_ms=1.531 device_median_ms=1.159
+CUML_REF_VS_OURS index=400000 queries=128 k=10 set_equal=128 ordered_equal=128 of 128
+CUML_REF index=400000 queries=128 k=15 request_median_ms=1.532 device_median_ms=1.197
+CUML_REF_VS_OURS index=400000 queries=128 k=15 set_equal=128 ordered_equal=128 of 128
+CUML_REF index=400000 queries=1000 k=10 request_median_ms=4.101 device_median_ms=3.659
+CUML_REF_VS_OURS index=400000 queries=1000 k=10 set_equal=1000 ordered_equal=1000 of 1000
+CUML_REF index=400000 queries=1000 k=15 request_median_ms=4.183 device_median_ms=3.750
+CUML_REF_VS_OURS index=400000 queries=1000 k=15 set_equal=1000 ordered_equal=1000 of 1000
+CUML_REF index=400000 queries=4000 k=10 request_median_ms=10.225 device_median_ms=9.632
+CUML_REF_VS_OURS index=400000 queries=4000 k=10 set_equal=4000 ordered_equal=4000 of 4000
+CUML_REF index=400000 queries=4000 k=15 request_median_ms=10.817 device_median_ms=9.756
+CUML_REF_VS_OURS index=400000 queries=4000 k=15 set_equal=4000 ordered_equal=4000 of 4000
+CUML REFERENCE DONE /root/out/ref/cuml-reference.json

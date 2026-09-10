@@ -1,0 +1,3 @@
+# Pre-existing Apple FMA boundary failure
+
+The new direct production-seam regression (source and log alongside) fails on the unchanged Apple software path: a=0x3f7fffff, b=0x00800000, c=+0 produces0x00000000, where round-to-nearest followed by explicit flush requires0x00800000. This gate uses literal expected bits rather than comparing two calls to the same device FMA. Earlier full-output/identity checks passed but did not expose this primitive boundary. This failure is retained as evidence; it must not be described as a passed gate. A scoped exact fallback is being investigated without changing shared tree arithmetic.

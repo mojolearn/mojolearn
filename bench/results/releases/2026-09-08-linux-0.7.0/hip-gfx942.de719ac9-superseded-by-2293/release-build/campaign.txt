@@ -1,0 +1,11 @@
+vendor=hip
+architecture=gfx942
+source_commit=de719ac9cbc664bc5051335b7b35505955f35627
+cpu_affinity=0,1
+work_seconds=2400
+rss_gib=12
+pixi_environment=default
+kernel_column=amd
+linux_cpu=x86-64-v3
+patchelf=/usr/bin/patchelf
+scope=one architecture full46 build; byte LM IDENTICAL only; no installed wheel or numerical admission

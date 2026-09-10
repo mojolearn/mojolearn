@@ -336,14 +336,10 @@ def check_knn_fused_tie_set_is_geometry_invariant() raises:
     tie in whatever order the blocks arrived. So FAST reports the count and
     IDENTICAL requires zero.
 
-    SKIPPED, LOUDLY, ON A COLUMN WITHOUT THE ARM (added 2026-08-23). The
-    fused arm refuses wherever the lane width is not 32 (row 23), so on
-    `MOJOLEARN_COLUMN_AMD` this check was not failing, it was asking a
-    32-lane question of a 64-lane machine and reading the refusal as a
-    crash. It prints what it skipped and why; a silent `return` here would
-    make an AMD run look like it had verified something it never ran.
+    IDENTICAL now carries native32 and CDNA64 through aligned logical32
+    queues. Other unsupported widths/modes still report a named skip.
     """
-    comptime if lib_lane_width_for[TARGET_COLUMN]() != 32:
+    comptime if lib_lane_width_for[TARGET_COLUMN]() != 32 and not (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_lane_width_for[TARGET_COLUMN]() == 64):
         print(
             "check_knn_fused_tie_set_is_geometry_invariant SKIPPED (",
             _mode_name(),

@@ -1,4 +1,11 @@
+> Start at `docs/RELEASE_CHECKLIST.md`. This file is background for when a step there refuses.
+
 # Root-only RunPod release build profile 7
+
+The `0_6_1` in this file's name is historical (DEVIATION 2290): the build it
+describes ships the version in `python/mojolearn/_version.py` (0.7.0 at the
+time of writing) under the `release-linux3` assembly profile; 0.6.1 was never
+published.
 
 Authored source only; no controller dry run, syntax check, test, build, rental
 or API call has been executed by the author. Root must review and exercise
@@ -68,3 +75,42 @@ inventories can be invalidated by parallel edits; guard timeouts preserve a
 failed or incomplete build, never a pass. Size is measured only by root after
 packing. A two-rental estimate cannot cover both NVIDIA runtime architectures
 on a typical single-GPU rental plus AMD.
+
+## DEVIATION 2292: the uplink is part of the rental
+
+The first three 0.7.0 build legs at `de719ac9` (2026-09-08, one MI325X and
+two RunPod pods) produced no artifacts, and none of the three failed for a
+reason on the box. All three lost this machine's network within about ninety
+seconds of their boxes coming up. The AMD controller recorded
+`Read from remote host 142.93.146.205: Can't assign requested address` and
+`client_loop: send disconnect: Broken pipe` at 05:54:57, could not launch the
+build (`rc=9`), and then logged `HTTP 000` against every DELETE and every
+post-destroy GET from 06:31 to 08:58. The sm_90 controller's very first poll
+went unanswered and every one after it did too, so it ran its full 2940 s
+poll deadline against a box it could not see, fetched an empty directory and
+a zero-byte console, and could not confirm its own terminate. The sm_89 leg
+on the L40S failed identically.
+
+Nothing in that evidence said the fault was local. Three hours of `HTTP 000`
+in a controller log reads as a vendor outage, and it was this desk's link.
+Both dead-man layers worked: every box was confirmed gone afterwards through
+the API, and no rental outlived its lease.
+
+The fix is not a retry. It is telling the two silences apart:
+
+- `leg_uplink_down` / `uplink_down` probe three neutral hosts that are not a
+  vendor API. If none answers, the fault is here.
+- `leg_uplink_stable` / `uplink_stable` run that probe three times, spaced,
+  in pre-flight **before any box is created**. A flapping link fails one of
+  them and the leg refuses to rent, which costs twenty seconds against a
+  one-hour rental.
+- The NVIDIA poll loop re-checks after three unanswered polls and again at
+  poll 30 and 60. It keeps polling either way, because the payload is
+  detached and the link may return inside the lease, but the log and the
+  leg record (`uplink_fault=`) now name the end that went quiet.
+- The DigitalOcean teardown labels the first `HTTP 000` the same way and
+  writes `uplink_fault=1` into the leg state, then keeps retrying the
+  destroy.
+
+A leg that comes home empty after this still costs a rental. What it no
+longer costs is the next session's time re-deciding whose fault it was.

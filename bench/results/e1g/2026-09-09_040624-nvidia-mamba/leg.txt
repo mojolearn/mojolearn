@@ -1,0 +1,10 @@
+commit=7b04908c parent 6a3ee3ea
+source_ref=7b04908cc769e6c32afc781d022103abc402ca51
+vendor=nvidia
+gpu_requested=NVIDIA L40S
+image=runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+minutes=60
+mode=rent
+card_full=<unset>
+trace_dump=<unset>
+started=2026-09-09T08:06:24Z

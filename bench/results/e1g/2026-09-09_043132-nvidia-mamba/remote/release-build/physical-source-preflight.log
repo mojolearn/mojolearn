@@ -1,0 +1,2 @@
+Physical device does not match requested architecture: ('sm_90', 'sm_90a', 'compute capability from the CUDA driver')
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 1}

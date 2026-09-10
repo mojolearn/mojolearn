@@ -5,7 +5,9 @@
 # build: tools/linux_surface_qualification.sh build /absolute/artifacts
 # build-tier: tools/linux_surface_qualification.sh build-tier OUT fast|deterministic|identical
 # qualify: tools/linux_surface_qualification.sh qualify WHEEL SHA256 cuda|hip OUT BUILD_PROVENANCE_JSON
-# qualify-release-0.6.1: same first four args, then PROOF_DIRECTORY ARCH
+# qualify-release-linux3: same first four args, then PROOF_DIRECTORY ARCH
+#   (qualify-release-0.6.1 is its deprecated alias, DEVIATION 2290; the version
+#   qualified is whatever python/mojolearn/_version.py says, read by release_audit)
 # Proof filenames: cuda-sm_89.json, cuda-sm_90.json, hip-gfx942.json.
 # Parent must impose the lease/work timeout and retain its fetch reserve.
 set -euo pipefail
@@ -108,7 +110,10 @@ assert len(outputs) == expected_count, 'Incomplete build outputs'
 PYBUILT
     exit "$status"
 fi
-[[ "$ACTION" = qualify || "$ACTION" = qualify-release-0.6.1 ]] || { echo 'Unknown qualification action'; exit 2; }
+# DEVIATION 2290: the three-architecture action is qualify-release-linux3; the
+# name it was authored under, qualify-release-0.6.1, is a deprecated alias.
+if [[ "$ACTION" = qualify-release-0.6.1 ]]; then ACTION=qualify-release-linux3; fi
+[[ "$ACTION" = qualify || "$ACTION" = qualify-release-linux3 ]] || { echo 'Unknown qualification action'; exit 2; }
 WHEEL=${1:?wheel} EXPECTED=${2:?sha256} VENDOR=${3:?cuda or hip} DEST=${4:?artifact directory}
 PROVENANCE=${5:?build-provenance.json from the complete vendor build}
 [[ "$VENDOR" = cuda || "$VENDOR" = hip ]] || exit 2
@@ -124,8 +129,8 @@ printf '1\n' > "$DEST/exit_code"
 # Audit every RECORD hash and require each embedded architecture to have all
 # 15 extension names in all three modes. A CUDA-only/HIP-only wheel is
 # admitted for that vendor and labelled explicitly; no universal claim.
-if [[ "$ACTION" = qualify-release-0.6.1 ]]; then
-    ARCH=${6:?actual runtime architecture sm_89, sm_90 or gfx942}
+if [[ "$ACTION" = qualify-release-linux3 ]]; then
+    ARCH=${6:?actual runtime architecture sm_89, sm_90, sm_90a or gfx942}
     "$PY" - "$ROOT" "$WHEEL" "$EXPECTED" "$PROVENANCE" "$VENDOR/$ARCH" "$DEST" <<'PYMULTI'
 import json, pathlib, shutil, sys
 root, wheel, expected, proof_root, key, out = sys.argv[1:]
@@ -230,11 +235,20 @@ print(json.dumps({'package': str(installed), 'version': mojolearn.__version__,
                   'vendor': mojolearn.vendor(), 'mode': mojolearn.numeric_mode()}), flush=True)
 from mojolearn import _backend
 architecture = {}
-if audit.get('assembly_profile') == 'release-0.6.1':
+# DEVIATION 2290: release_audit writes assembly_profile 'release-linux3';
+# 'release-0.6.1' is the deprecated alias retained audits may still carry.
+release_profile = audit.get('assembly_profile') in ('release-linux3', 'release-0.6.1')
+if release_profile:
     assert not os.environ.get('MOJOLEARN_GPU_ARCH'), 'Architecture override forbidden'
     device_arch, probe = _backend._device_arch(os.environ['MOJOLEARN_EXPECT_VENDOR'])
     selected = _backend.gpu_arch()
-    assert device_arch == selected == audit['runtime_architecture'], ('Wrong actual GPU architecture', device_arch, selected)
+    # DEVIATION 2293: the selected binding may be the architecture-specific
+    # build for this exact device (device sm_90 -> selected sm_90a), which is
+    # what _backend.py prefers. The audit's runtime_architecture is the name
+    # the wheel carries, so it must equal the SELECTED one; the device must be
+    # the chip that selection targets. Anything else is still refused.
+    assert selected == audit['runtime_architecture'], ('Wrong actual GPU architecture', device_arch, selected)
+    assert selected in (device_arch, device_arch + 'a'), ('Wrong actual GPU architecture', device_arch, selected)
     architecture = dict(device_architecture=device_arch, selected_architecture=selected,
                         architecture_probe=probe, architecture_override_absent=True)
 # Older bindings expose vendor but no tier getter; report that gap explicitly.
@@ -243,7 +257,7 @@ getters = {'_mojolearn': 'mojolearn_numeric_mode', '_mojolearn_gbdt': 'gbdt_nume
            '_mojolearn_linalg': 'linalg_numeric_mode', '_mojolearn_arima': 'arima_numeric_mode',
            '_mojolearn_training': 'training_numeric_mode', '_mojolearn_gp': 'gp_numeric_mode',
            '_mojolearn_mamba': 'mamba_numeric_mode', '_mojolearn_transformer': 'transformer_numeric_mode'}
-if audit.get('assembly_profile') == 'release-0.6.1' and mojolearn.numeric_mode() == 'identical':
+if release_profile and mojolearn.numeric_mode() == 'identical':  # DEVIATION 2290
     getters['_mojolearn_byte_lm'] = 'byte_lm_numeric_mode'
 all_bindings = set(getters) | {'_mojolearn_estimators', '_mojolearn_rf', '_mojolearn_trees', '_mojolearn_solver', '_mojolearn_tsa'}
 readback = {}
@@ -282,7 +296,7 @@ cd "$DEST"
 for mode in fast deterministic identical; do
     export MOJOLEARN_NUMERIC_MODE="$mode"
     surfaces=(smoke umap umap-transform umap-quality ordered-rmse mamba transformer arima)
-    if [[ "$ACTION" = qualify-release-0.6.1 && "$mode" = identical ]]; then surfaces+=(byte-lm); fi
+    if [[ "$ACTION" = qualify-release-linux3 && "$mode" = identical ]]; then surfaces+=(byte-lm); fi  # DEVIATION 2290
     for surface in "${surfaces[@]}"; do
         export MOJOLEARN_INSTALLED_RECORD="$DEST/$surface-$mode.installed.json"
         args=()

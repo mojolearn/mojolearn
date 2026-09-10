@@ -1,0 +1,376 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:350:16: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if SVD_TPB != JACOBI_TPB:
+               ^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/svd_full.mojo:274:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[0] = cs[0]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/svd_full.mojo:275:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[1] = cs[1]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/svd_full.mojo:277:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var c = rot[0]
+                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/svd_full.mojo:278:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var s = rot[1]
+                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:70:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_sabotage.mojo:337:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[0] = cs[0]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:70:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_sabotage.mojo:338:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[1] = cs[1]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:70:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_sabotage.mojo:340:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var c = rot[0]
+                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:70:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_sabotage.mojo:341:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var s = rot[1]
+                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:167:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[0] = reduced_max
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:169:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var biggest = sh[0]
+                  ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:181:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[1] = reduced_first
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:182:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[2] = Float32(1.0)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:184:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var first = sh[1]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:190:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sh[2] = Float32(-1.0)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:192:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sh[2] = Float32(1.0)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:196:10: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    if sh[2] < Float32(0.0):
+       ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:215:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:220:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:221:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if other > red[tid]:
+                       ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:222:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = other
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:225:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:244:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:249:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:250:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if other < red[tid]:
+                       ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:251:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = other
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:55:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:94:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:254:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:85:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/svd_full.mojo:153:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:157:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rot[0] = cs[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:85:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/svd_full.mojo:153:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:158:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rot[1] = cs[1]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:85:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/svd_full.mojo:153:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:161:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var c = rot[0]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:85:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/svd_full.mojo:153:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:162:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var s = rot[1]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:18:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:612:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:18:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:617:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:18:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:632:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:18:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:634:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:18:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:651:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:18:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:656:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:18:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:670:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:80:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/pca.mojo:18:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:671:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:61:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/jacobi_eigh.mojo:87:25: warning: assignment to 't' was never used; assign to '_' instead?
+                var t = 0.0
+                        ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:85:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/impl/linalg/detail/svd_full.mojo:153:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:79:20: warning: assignment to 't' was never used; assign to '_' instead?
+    var t = Float32(0.0)
+                   ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:566:14: warning: assignment to 'ok' was never used; assign to '_' instead?
+    var ok = False
+             ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/svd_full_main.mojo:16:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_full_check.mojo:70:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/checks/svd_sabotage.mojo:326:37: warning: assignment to 'thresh' was never used; assign to '_' instead?
+                var thresh = Float32(0.0)
+                                    ^
+check_qr_fold_width_is_pinned [IDENTICAL]
+    QR_TPB = 32 (power of two), SVD_TPB = 32 = JACOBI_TPB, QR_MAX_SLICES = 64, slices at 4096x8 = 64, at 16x8 = 1
+check_qr_gram_matches_float64 [IDENTICAL]
+    shipped  ||R'R - A'A||_F / ||A'A||_F = 8.820858627265157e-08
+    SVD_SAB_QR_NO_SCALE                  = nan
+    SVD_SAB_QR_NO_FTZ (RECORDED)         = 8.820858627265157e-08
+check_tsqr_agrees_with_one_block [IDENTICAL]
+      slices = 1: 7.676320688446111e-08
+      slices = 2: 1.0186181295876882e-07
+      slices = 8: 7.111567707690397e-08
+      slices = 64: 1.220280868331904e-07
+    SVD_SAB_QR_DROP_SLICE at 8 slices = 0.12557312850856953
+check_full_reflector_sign_earns_its_place [IDENTICAL]
+      salt 20261001: shipped 8.661475278013857e-09, flipped sign 3.7532682955035327e-06
+      salt 20261002: shipped 8.661304796874217e-09, flipped sign 3.753305655463104e-06
+      salt 20261003: shipped 8.661132438885863e-09, flipped sign 3.7533429420787603e-06
+      salt 20261004: shipped 8.661301892729672e-09, flipped sign 3.753381134052617e-06
+    worst shipped 8.661475278013857e-09, worst flipped 3.753381134052617e-06, shipped strictly better on 4 of 4
+check_full_spectrum_matches_float64 [IDENTICAL]
+      S[0] = 38.01439666748047, Float64 38.0143852971531, relative 2.9910591167832926e-07
+      S[1] = 37.730106353759766, Float64 37.73009817970941, relative 2.166453508425732e-07
+      S[2] = 37.2482795715332, Float64 37.24826679016585, relative 3.431399217833565e-07
+      S[3] = 37.07890701293945, Float64 37.07890986699339, relative 7.697243390376983e-08
+      S[4] = 36.88829040527344, Float64 36.888278786668536, relative 3.1496739027806633e-07
+      S[5] = 36.50568389892578, Float64 36.505680935932695, relative 8.116526004929743e-08
+      S[6] = 36.35690689086914, Float64 36.356899500277244, relative 2.0327893737577853e-07
+      S[7] = 36.342166900634766, Float64 36.342160198074495, relative 1.8442933039270258e-07
+    worst relative 3.431399217833565e-07
+check_full_components_are_orthonormal [IDENTICAL]
+    max |V'V - I| = 8.854198343399844e-07
+check_full_truncated_reconstruction_is_optimal [IDENTICAL]
+      k = 1: residual 9539.263333623354, sum of discarded S^2 9539.27190379522, relative 8.984094333183304e-07
+      k = 2: residual 8103.690889169946, sum of discarded S^2 8103.698189050323, relative 9.008085206045599e-07
+      k = 3: residual 6692.667704364414, sum of discarded S^2 6692.67424680329, relative 9.775522660415025e-07
+      k = 4: residual 5305.205643676357, sum of discarded S^2 5305.209792327718, relative 7.819957218265352e-07
+      k = 5: residual 3935.9796739119306, sum of discarded S^2 3935.982259070559, relative 6.568013924294597e-07
+      k = 6: residual 2584.1934314482532, sum of discarded S^2 2584.194780500664, relative 5.220397552225968e-07
+      k = 7: residual 1243.2033479608035, sum of discarded S^2 1243.2042645151378, relative 7.372516008950235e-07
+    worst relative 9.775522660415025e-07
+    SVD_SAB_JAC_NO_V left V at distance 0.0 from the identity (0 means it never rotated the basis)
+check_full_scale_invariance [IDENTICAL]
+    worst |{|dot|} - 1| = 1.0079185885913944e-06, worst variance ratio error = 1.1465014733422558e-06
+    SVD_SAB_JAC_ABS_TOL sweeps: 15.0 at scale 1, 4.0 at scale 1e-3
+check_full_refuses_unconverged [IDENTICAL]
+    one sweep: converged flag 0.0, rotations left 28.0
+    svd_of_r at a one-sweep budget: REFUSED
+    svd_of_r at the shipped budget of 15 sweeps: accepted
+check_full_survives_a_constant_column [IDENTICAL]
+    shipped: S[0] = 37.7465934753418, S[last] = 0.0, ratio 0.0
+    SVD_SAB_QR_RANK_TEST on one slice returned info = 8 (0 means it accepted, j+1 means it refused at column j)
+check_full_refuses_a_wide_matrix [IDENTICAL]
+    4 x 8 admitted in IDENTICAL only; 64 x 8 accepted
+check_full_mean_matches_covariance_arm [IDENTICAL]
+    8 means, 0 differ
+check_full_matches_covariance_on_well_conditioned [IDENTICAL]
+    worst singular-value disagreement 4.0455090384893544e-07, worst component |1 - |dot|| 7.428811670262547e-07
+check_full_beats_covariance_on_ill_conditioning [IDENTICAL]
+      trial 0: Float64 S[last] = 0.002282038829930096, dense relative error 1.4564611724782985e-08, covariance 1.0302891375973236e-07
+      trial 1: Float64 S[last] = 0.002252632054899784, dense relative error 1.0276858947160354e-07, covariance 7.926918322606526e-09
+      trial 2: Float64 S[last] = 0.002257626800988456, dense relative error 7.458221594436704e-08, covariance 4.523618500301206e-08
+      trial 3: Float64 S[last] = 0.002239218731213834, dense relative error 2.278731130922619e-08, covariance 5.6439508988041106e-08
+    worst dense 1.0276858947160354e-07, worst covariance 1.0302891375973236e-07, dense strictly better on 2 of 4

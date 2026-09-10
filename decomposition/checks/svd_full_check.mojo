@@ -556,9 +556,10 @@ def check_full_refuses_a_wide_matrix() raises:
         pca_full_validate(4, 8, 2)
     except e:
         raised = True
-    if not raised:
+    if raised == _IDENTICAL:
         raise Error(
-            "PCA(svd_solver='full') accepted 4 samples of 8 features. R-SVD"
+            "PCA full wide validation did not match its numeric-mode capability. "
+            "Legacy modes refuse, IDENTICAL now admits. Original: accepted 4 samples of 8 features. R-SVD"
             " needs a tall matrix and DEVIATION 593 says it refuses a wide"
             " one by name"
         )
@@ -573,7 +574,7 @@ def check_full_refuses_a_wide_matrix() raises:
             "PCA(svd_solver='full') refused a legitimate 64 x 8 fit, so the"
             " wide refusal is over-broad"
         )
-    print("    4 x 8 refused, 64 x 8 accepted")
+    print("    4 x 8 admitted in IDENTICAL only; 64 x 8 accepted")
 
 
 # ===========================================================================

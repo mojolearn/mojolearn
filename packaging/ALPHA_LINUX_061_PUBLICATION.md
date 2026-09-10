@@ -1,12 +1,20 @@
-# Fresh combined Linux 0.6.1 alpha publication
+> Start at `docs/RELEASE_CHECKLIST.md`. This file is background for when a step there refuses.
+
+# Fresh combined Linux alpha publication (authored as 0.6.1)
 
 Source changes are authored, not executed or publication-ready evidence.
 Published 0.6.0 files and the stable workflow route remain unchanged. Root owns
 version changes, all tests/builds/runtime qualification, staging and publication.
+The 061 in this file's name is historical (DEVIATION 2290): the version this
+route publishes is the one in `python/mojolearn/_version.py` (0.7.0 at the
+time of writing); 0.6.1 was never published. Every check below reads that
+file rather than a literal.
 
-A Linux 0.6.1 alpha wheel must carry a fresh
-`mojolearn-0.6.1.dist-info/LINUX_PAYLOAD.json` from the packer's
-`--profile release-0.6.1`. The alpha staging verifier refuses an inherited
+A Linux alpha wheel of the released version must carry a fresh
+`mojolearn-<version>.dist-info/LINUX_PAYLOAD.json` (for 0.7.0,
+`mojolearn-0.7.0.dist-info/LINUX_PAYLOAD.json`) from the packer's
+`--profile release-linux3` (`release-0.6.1` is accepted as a deprecated
+alias). The alpha staging verifier refuses an inherited
 native overlay for this Linux version and refuses attaching
 `ALPHA_PROVENANCE.json` to the fresh combined payload. Existing macOS/older
 alpha overlay contracts remain distinct; no inherited artifact receives new
@@ -17,7 +25,7 @@ The root-prepared alpha manifest extends its exact wheel-name/SHA mapping:
 ```json
 {
   "schema": "mojolearn.alpha-release.v1",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "release_profile": "alpha-api",
   "files": {"EXACT_WHEEL_FILENAME.whl": "EXACT_FINAL_WHEEL_SHA256"},
   "linux_qualification": {

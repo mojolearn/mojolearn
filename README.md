@@ -1,42 +1,156 @@
 # mojolearn
 
-Current 0.6.1 source defaults to **IDENTICAL** mode. Set `MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` explicitly to opt into another supported mode. Certification remains configuration-specific; this default does not certify every feature. Published 0.6.0 files are unchanged.
-
 [![PyPI](https://img.shields.io/pypi/v/mojolearn.svg)](https://pypi.org/project/mojolearn/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22068632.svg)](https://doi.org/10.5281/zenodo.22068632)
 
-**GPU machine learning in Mojo, with an explicit reproducibility contract.**
+**Machine learning that trains and predicts bitwise identically across Apple,
+NVIDIA and AMD GPUs.**
 
-mojolearn provides Python APIs with familiar scikit-learn shapes over one
-Mojo source tree targeting Apple Metal, NVIDIA CUDA, and AMD HIP. Its defining
-feature is a choice of numerical contract on every supported estimator:
+Give mojolearn the same code, data, hyperparameters and seed on an Apple M4,
+an NVIDIA H100 and an AMD MI325X, and you get the same bits on all three. Not
+close, not within a tolerance. The same bits. A model trained on AMD and the
+same model trained on NVIDIA are byte for byte the same model, and either one
+makes exactly the same predictions. This is `identical` mode, and **it is the
+default**. The claim is proven by stage-level identity cards and separating
+sabotage tests, never inferred from a final-output hash, and it holds only for
+the configurations recorded in [the support matrix](SUPPORT_MATRIX.md).
+
+## What bitwise identity means, and why it is not the default
+
+Floating-point addition is not associative, so the order in which a GPU sums
+numbers changes the answer. Vendors choose that order differently, and they
+differ again in FMA contraction, denormal handling, tie-breaking, and how
+`exp`, `log` and the other elementary functions are spelled. Two GPUs given
+the same job return two slightly different answers, and the difference does
+not stay small. One rounding can flip a tree learner's winning split and
+every node beneath it. It can redraw UMAP's neighbor graph and the embedding
+built from it. Inside a training loop it perturbs a gradient, then the
+optimizer state, then every step after that, so two machines running the same
+job walk away with two different models.
+
+Mojo and MAX compile one source for Metal, CUDA and HIP, which is what makes
+the code portable. Portability is inherited. Identity is not, and none of the
+above is fixed by recompiling. mojolearn supplies the part that does not come
+for free.
+
+- An inventory, at the algorithm level, of every operation that can move
+  model bits.
+- A frozen numerical profile covering reduction order, partitioning, FMA
+  policy, flush-to-zero seams, transcendental spellings and tie rules.
+- Portable replacements for order-dependent reductions and for closed vendor
+  libraries whose internals cannot be pinned.
+- A per-estimator choice of `fast`, same-device `deterministic`, or
+  cross-device `identical`, with an explicit refusal when the promise cannot
+  be met.
+- Optional stage hashing and three-vendor certificates that test the promise
+  instead of asserting it.
+
+The kernels are mojolearn's own, in Mojo. Identical mode does not delegate to
+PyTorch, to MAX's matrix-multiplication kernels, or to vendor BLAS and solver
+libraries, because owning the arithmetic and the reduction order is the whole
+mechanism.
+
+## What it is for
+
+Exact model bytes make a computation auditable. Replay a certified workload on
+different supported hardware, compare the recorded stage traces, and you can
+say where two runs first diverged with no tolerance to argue about. That is
+the basis for audits, regression tests and model change control, and it
+matters most in finance, healthcare, legal services and government, where a
+review can require a computation to be reproduced and its changes accounted
+for.
+
+It also lets a job move. Train on rented NVIDIA capacity, continue on AMD from
+the checkpoint, and the run stays on the same trajectory rather than a nearby
+one. Hardware stops being a confounding variable in a mixed fleet.
+
+There is a second reason to be here, independent of the contract. CatBoost,
+XGBoost, LightGBM and cuML have no Metal backend, so GPU tree training and GPU
+classical learning have not run on Apple silicon at all. One Mojo source
+builds for Metal, CUDA and HIP, which puts them on the laptop as well as the
+datacenter.
+
+The reference has to be created and replayed under the same numerical profile.
+Identity does not certify a run performed in `fast` mode, in another
+framework, or on a device that has not passed the same checks.
+
+## The evidence behind the claim
+
+- **Neural inference and training.** Mamba and transformer forward
+  computations agree bit for bit across the three vendors on their recorded
+  fixtures, as do gradients, optimizer updates and checkpoint bytes in
+  fixed-shape transformer training. A two-block, 34,944-parameter byte-level
+  language model trained on real text ran 128 steps with byte-identical
+  parameters, gradients, optimizer state and loss on Apple Metal, NVIDIA CUDA
+  and AMD HIP; held-out loss fell from 5.5413 to 2.8436 on all three
+  ([three-vendor record](bench/results/resume/2026-09-07-root-byte-lm-three-vendor/README.md)).
+  Checkpoint continuation between NVIDIA and AMD, in both directions,
+  preserves the uninterrupted training trajectory
+  ([cross-vendor record](bench/results/resume/2026-09-06-root-byte-lm-cross-vendor/README.md)).
+  Metal checkpoint resume remains open.
+- **Trees and classical learning.** Gradient boosting, random forests, Extra
+  Trees, k-means, DBSCAN, k-NN, PCA, truncated SVD, OLS, ridge, logistic
+  regression, FP32 matrix multiplication, isolation forest and ARIMA filtering
+  carry three-vendor cards for recorded configurations. Model state and
+  recorded training stages match, not only predictions.
+- **UMAP.** Neighbor selection and iterative updates match across the three
+  vendors on named fixtures.
+
+Two other modes sit beside `identical`, selectable at runtime on every
+supported estimator:
 
 | mode | contract |
 |---|---|
 | `fast` | Optimize for throughput; repeated fits need not return identical bits. |
-| `deterministic` | The same build, input, and device return the same bits on repeated runs. |
+| `deterministic` | The same build, input, and device return the same bits on repeated runs. It makes no cross-vendor promise. |
 | `identical` | Certified configurations return the same bits across Metal, CUDA, and HIP. |
 
-`IDENTICAL` is supported by stage-level identity cards and separating
-sabotage tests. It is not inferred from a final-output hash. Claims apply only
-to configurations recorded in [the support matrix](SUPPORT_MATRIX.md).
+Bitwise identity carries implementation and execution costs. Measured against
+cuML, cuBLAS and PyTorch, `identical` mode is competitive on some measured
+tree workloads and substantially slower on many classical, matrix and neural
+workloads. Those measurements reflect both the numerical constraints and
+optimization gaps in the current kernels. The numbers are in the accompanying
+paper; the raw records behind them live under `bench/results/`.
+
+**`identical` is the default**, in the published <!--fact:version-->0.7.0<!--/fact--> wheels and in this
+source. You opt out of it, not into it, by setting
+`MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment before
+import, or by calling `mojolearn.set_numeric_mode(...)` in code.
+Certification stays configuration-specific, so the default does not certify
+every feature, and a
+configuration that cannot meet the contract raises a named error rather than
+quietly returning weaker arithmetic.
+
+## Who this is for
+
+- People who need a reproducibility contract, same bits on repeated runs or
+  across vendors, and will pay for it in time. The cost is small on some
+  measured tree workloads and large elsewhere; see the paper before deciding.
+- People on Apple silicon who want GPU gradient boosting, random forests,
+  Extra Trees, clustering, nearest neighbors, decompositions and linear
+  models without leaving the machine.
+- Not yet people training real neural networks. The certified trainers are
+  fixed small shapes, an MLP and the two-block byte LM above. Larger models,
+  other shapes and other optimizers are outside the evidence, and the byte-LM
+  native trainer is not in any published wheel.
 
 ## Install
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-pip install mojolearn==0.6.0
+pip install mojolearn
 ```
 
-Version **0.6.0 is published on PyPI** as an alpha API release for macOS
-arm64 and AMD Linux x86-64 (`gfx942`). It exposes public `linalg`, `umap`,
-`training`, Mamba and Transformer APIs, including UMAP transform/CSR support.
-**NVIDIA Linux remains source-build-only.** The Linux wheel contains HIP
-binaries, not CUDA. New byte-LM native training needs a separate source build.
-The wheels preserve identified base native/runtime bytes; newer Python API
-exposure does not inherit every numerical certificate. See the
-[release evidence](bench/results/releases/2026-09-06-alpha-api/README.md) and
+Version **<!--fact:version-->0.7.0<!--/fact--> is published on PyPI** as an alpha API release, a macOS arm64
+wheel and one Linux x86-64 wheel that now carries **CUDA sm_89, CUDA sm_90 and
+HIP gfx942** together, each in all three numeric modes, plus the
+identical-mode byte-LM trainer extension per architecture. NVIDIA Linux is no
+longer source-build-only. Installed per-architecture qualification was not run
+for the Linux wheel. The wheels expose public `linalg`, `umap`, `training`,
+Mamba and Transformer APIs, including UMAP transform and CSR support. Newer
+Python API exposure does not inherit every numerical certificate. See
+[CHANGELOG.md](CHANGELOG.md) and the
 [support matrix](SUPPORT_MATRIX.md) for exact artifacts and limits.
 There is no CPU fallback.
 Run the diagnostic command before depending on a new machine:
@@ -49,6 +163,76 @@ The exact wheel, architecture, Python, and evidence boundaries live in
 [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md). Source builds may support hardware
 outside the architectures packaged in a released wheel; that is not the same
 as released-wheel support.
+
+## Project status
+
+### Stability and release cadence
+
+mojolearn went from 0.1.0 on 2026-08-23 to <!--fact:version-->0.7.0<!--/fact--> on <!--fact:version_date-->2026-09-09<!--/fact-->, seven PyPI
+releases in under three weeks (0.1.0, 0.2.0, 0.3.0, 0.3.1, 0.5.0, 0.6.0,
+0.7.0; 0.3.2, 0.4.0 and 0.6.1 are recorded in [CHANGELOG.md](CHANGELOG.md) but
+were not published to PyPI). One release was yanked. 0.3.0, published
+2026-08-30 as the first release with a Linux wheel, had been compiled for the
+build machine's CPU and
+carried unconditional AVX-512 instructions in its host code, so every numeric
+mode died with SIGILL on any x86-64 host without AVX-512. It is yanked on PyPI
+with the reason "SIGILL on x86-64 without AVX-512; use 0.3.1". 0.3.1 pinned
+the Linux baseline to x86-64-v3 and added a gate on the shipped binary; the
+defect and both gates are documented in
+`packaging/linux/isa_baseline_linux.py` and `packaging/wheel_ci.py`.
+
+The Python API is beta and will change between minor versions. The stable
+surface is the set of numerical profiles (`fast`, `deterministic`,
+`identical`) and the certified configurations recorded in
+[SUPPORT_MATRIX.md](SUPPORT_MATRIX.md): a profile version changes only
+through an explicit decision, and a numerical change must either prove itself
+bit-inert or introduce a new profile version. For production or archival work
+pin both the package version and the numeric profile, in code or through
+`MOJOLEARN_NUMERIC_MODE`. A certificate names a commit, a configuration (the
+fixture, the numeric profile, the parameters) and the devices it ran on, and
+never more. A newer version, a different shape or an unrun vendor column is
+not covered by it.
+
+### Maintenance and bus factor
+
+The project has one maintainer today. Three things limit what that means for
+a reader.
+
+Every claim in this repository is backed by a recorded artifact under
+`bench/results/` that names its commit, device, toolchain, mode and
+limitations, and each is reproducible from the commands in the docs
+([verification](docs/VERIFY.md), [conformance bundles](docs/CONFORMANCE.md),
+[release runbook](docs/PYPI_RELEASE.md)). Historical cards and investigations
+under `bench/results/` and `archive/` are evidence, not current guidance;
+[SUPPORT_MATRIX.md](SUPPORT_MATRIX.md) is updated only from recorded evidence.
+
+Contributions are governed by [CONTRIBUTING.md](CONTRIBUTING.md) and
+[GOVERNANCE.md](GOVERNANCE.md). A contributor needs one GPU of any vendor and
+marks the vendor columns they did not run `cross-vendor-pending`; closing a
+cross-vendor claim is a maintainer job. Any change that can move `identical`
+bits must show that it is bit-inert, supply a separating fixture and a
+profile-version decision, or add a named refusal. External pull requests get
+an admission report and a hosted CPU report; there is no GPU automation and
+no automatic merge. Governance uses lazy consensus with a seven-day objection
+window, maintainership is explicitly transferable, a sole maintainer records
+nominations in a public issue, and the succession steps for a sole maintainer
+(nominate two successors, transfer access, document release and certification
+steps, rotate credentials, publish open blockers) are written down. The code
+is Apache-2.0.
+
+You can verify a certificate without trusting the maintainer. On any
+supported GPU, `MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify`
+runs a pinned fixture, captures its stage-level identity card and compares it
+with the reference card shipped in the installation; `python -m mojolearn
+check-fixture` checks the fixture's input hashes without a GPU. Recorded
+cards carry stage tags, dtypes, element counts and raw-bit hashes and are
+compared with `tools/identity_trace_diff.py`, the one comparator the
+repository uses. `python -m mojolearn conformance` exports and validates
+bundles so another implementation can compare itself without running Mojo,
+and `tools/verify_umap_qualification.py` rechecks retained release evidence
+against a wheel without GPU work. One local run establishes one build on one
+device; a cross-vendor claim needs every named leg, and the cards for each
+leg are in the tree.
 
 ## Quick start
 
@@ -128,13 +312,23 @@ replacement. Defaults follow the upstream GPU implementation mirrored by an
 algorithm where applicable. Unsupported parameters raise explicitly rather
 than being silently ignored.
 
-## What the identity claim means
+## The exact scope of the claim
+
+Fix a source commit, a supported configuration, a seed and byte-identical
+input. On any two certified machines, every recorded training stage has the
+same bits, and either model produces exactly the same predictions. This is a
+claim about the trained model, not byte-for-byte equality of archive
+metadata. If a configuration cannot meet the contract, the library raises a
+named error instead of silently returning a possibly different model; a
+refusal is reported as a refusal, never counted as a pass.
 
 Cross-vendor identity is a profile, not a statement that every GPU operation
 is universally identical. A profile fixes relevant reduction order,
 partitioning, FMA policy, flush-to-zero seams, transcendental spellings, and
 tie rules. A numerical change must either prove bit-inertness against the
-profile or introduce a new profile version.
+profile or introduce a new profile version. Additional devices must pass the
+same identity checks; the guarantee covers only devices and configurations
+that have.
 
 The project distinguishes four artifact classes:
 
@@ -149,7 +343,22 @@ under `bench/results/` and `archive/` are evidence, not current guidance.
 
 ## Limitations
 
-- GPU hardware is required.
+What will get in your way first:
+
+- GPU hardware is required. There is no CPU fallback, and the library refuses
+  rather than silently running elsewhere.
+- mojolearn is not a drop-in replacement for scikit-learn, CatBoost or cuML.
+  Parameter coverage is intentionally smaller than any of them, and
+  unsupported parameters raise.
+- Source builds need the Mojo toolchain through [pixi](https://pixi.sh), and
+  one build targets one GPU architecture. NVIDIA Linux is source-build-only
+  today.
+- The support matrix is honest about gaps. Several public surfaces still have
+  vendor legs or independent-reference checks pending, and an unrun column is
+  pending, never inferred.
+
+And the standing limits of the contract itself:
+
 - Released-wheel support is narrower than source-build support.
 - `fast` deliberately makes no repeatability promise.
 - `deterministic` does not promise agreement between different devices.
@@ -173,14 +382,19 @@ supported GPU; maintainers close cross-vendor certification columns.
 
 Current priorities are in [ROADMAP.md](ROADMAP.md). See also
 [verification](docs/VERIFY.md), [release](docs/PYPI_RELEASE.md),
-[porting rules](PORTING_RULES.md), [contributing](CONTRIBUTING.md), and
-[attribution](NOTICE).
+[porting rules](PORTING_RULES.md), [contributing](CONTRIBUTING.md),
+[governance](GOVERNANCE.md), and [attribution](NOTICE).
 
 ## Provenance and citation
 
-The shipped implementation is Mojo. Algorithmic designs derive in part from
-CatBoost, cuML, cuVS, RAFT, and FAISS; exact provenance and licenses are in
-`NOTICE`, `DERIVATION_MAP.tsv`, source headers, and the archived derivation
+The shipped implementation is Mojo, all of it written for this repository. Its
+kernels mirror the GPU designs of CatBoost, cuML, cuVS, RAFT and FAISS,
+deliberately and file for file, under the repository's copy-do-not-improve
+rule ([PORTING_RULES.md](PORTING_RULES.md)). By line count, between 67% and
+70% of the Mojo here has no upstream file it corresponds to, and the remainder
+is that mirrored substrate; the bounds and how they were computed are in
+`NOTICE`. Exact provenance and licenses are in `NOTICE`, the
+`DERIVATION_MAP.tsv` tables, source headers, and the archived derivation
 ledger.
 
 To cite mojolearn, use [CITATION.cff](CITATION.cff). The concept DOI is

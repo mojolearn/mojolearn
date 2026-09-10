@@ -1,0 +1,23 @@
+vendor=amd
+arch=hip/gfx942
+image=188571990
+size=gpu-mi325x1-256gb
+region=tor1
+commit=340de7a116a819d2c8613bd5ee45434004e82d78
+archive_sha256=a9f52dea208ebfaf31cb1482ded487f5304bd0b3085741b9956996008eada629
+archive_bytes=8596266
+deadman_seconds=3600
+fetch_reserve=900
+started=2026-09-09T09:32:05Z
+droplet=598992784
+created=2026-09-09T09:32:07Z
+ip=138.197.129.120
+ON_DROPLET_DEADMAN_ARMED
+qualify_wheel=mojolearn-0.7.0-py3-none-manylinux_2_35_x86_64.whl
+qualify_wheel_sha256=39d5d16876d64dd752019afb77ef04a3153f7f39d962d325b461fb228f9c0b61
+work_seconds=2400
+build_exit=1
+qualify_admission=RED
+qualify_error=[Errno 2] No such file or directory: '/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/releases/2026-09-08-linux-0.7.0/qualification/hip-gfx942-20260909T093149Z/release-build/qualification.json'
+destroyed=2026-09-09T09:34:05Z verified_http_404
+finished=2026-09-09T09:34:05Z rc=0

@@ -1,0 +1,75 @@
+{"package": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/__init__.py", "version": "0.7.0", "vendor": "hip", "mode": "fast"}
+{"package": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/__init__.py", "version": "0.7.0", "vendor": "hip", "mode": "fast", "wheel_sha256": "afb5dd8a06ba62ff222168fad7440e6558fb7e1fd43018ac7c648321e4fb9d75", "installed_bindings": {"_mojolearn": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn.so", "sha256": "6ff3cfd063cf6f85c0501aa521c837f56e48c77ae85995616d2237a5cd5c8d40", "mode_code": 0}, "_mojolearn_arima": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_arima.so", "sha256": "769d01d51962bfe0e7c91b9143bbbccbcc38f067b071b9c40816e5d8c88cbc7b", "mode_code": 0}, "_mojolearn_estimators": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_estimators.so", "sha256": "466974ac03656de2a5241ba764ec3313679383513aab398de62922afc3add37b", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_gbdt": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_gbdt.so", "sha256": "8d10a6a27b7b955a1e37e64f9becf036524047b28ae7046a4ff27ee4d5389964", "mode_code": 0}, "_mojolearn_gp": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_gp.so", "sha256": "8f6a6948901fe70ae513145a895cb109fa1f60e0b8136e80a98e49311718f5d9", "mode_code": 0}, "_mojolearn_linalg": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_linalg.so", "sha256": "d3384a7fe608efc6a5416b30488126f7e635e309129f1c7b65aad919b988636e", "mode_code": 0}, "_mojolearn_mamba": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_mamba.so", "sha256": "86e5c8d3a76234167bc7e2e615d15e77336076e1f0d7423d3ba409166c3e0c6c", "mode_code": 0}, "_mojolearn_metrics": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_metrics.so", "sha256": "1a01e0fee7dcfb63f5f5623ce2e1fe72a03a685f70615216e664ebbff0125e89", "mode_code": 0}, "_mojolearn_rf": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_rf.so", "sha256": "679934df3e23d01edc8779c7787a9ef5e8a9031116c7fb4ea7177975a9487465", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_solver": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_solver.so", "sha256": "33da2d5cb06dd17f2d2ab2cc9eae910275148b02951cf721308a78a57d763026", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_svm": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_svm.so", "sha256": "d84d1f0d1cbfb9d5ef360318cbb55f34652a49c0bd889344970ebc22a9b8e477", "mode_code": 0}, "_mojolearn_training": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_training.so", "sha256": "4d27eed0dbbb663e586797ea48020d9a94dcf395b8c643e9d70ae5af1bc4cdbd", "mode_code": 0}, "_mojolearn_transformer": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_transformer.so", "sha256": "6d902a561dbc3df2959a3c6c330b2d2e9c4fa464f9987dd8e20c0e5b621078f4", "mode_code": 0}, "_mojolearn_trees": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_trees.so", "sha256": "955c59fe58ea542cf29b30d1d536a6e67958c7fecbe9dea8a35303431297dc2d", "mode_readback": "unavailable; build provenance and functional gate required"}, "_mojolearn_tsa": {"path": "/root/rel061-build/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/_mojolearn_tsa.so", "sha256": "a88c0d7a11ee235d289e415ec90389e06efd3730fee01fe969692fc572c64c33", "mode_readback": "unavailable; build provenance and functional gate required"}}, "device_architecture": "gfx942", "selected_architecture": "gfx942", "architecture_probe": "gfx_target_version in /sys/class/kfd/kfd/topology/nodes/1/properties", "architecture_override_absent": true}
+
+  REFUSALS (Python side, no device)
+    pass a float64 x is refused BY NAME (no silent downcast)
+    pass the refusal message names bfloat16 (a reduced-precision profile ships under its own version, contract section 11)
+    pass a 2-D x is refused for forward (only step squeezes)
+    pass an x whose d_model is not the weights' is refused
+    pass a multi-token step is refused
+    pass step without a state is refused
+    pass a float64 weight is refused by its own name
+    pass q_proj/o_proj are square at every legal config, so their transpose is shape-indistinguishable (NAMED LIMIT: no exact-shape check can see it; the trap is asserted on the non-square k_proj below)
+    pass a transposed projection cannot cross as a plausible buffer (exact-shape refusal; the OP_NT trap's Python face)
+    pass a missing weight name is refused (no silent zero weight)
+    pass d_model = 32 with n_heads = 3 is refused (d_model == n_heads*head_dim; LlamaDims.validate carries the same rule)
+    pass a wrong-shape state buffer is refused by name
+    pass a state allocated for another batch size is refused
+
+  REFERENCE (contract float64, config A: n_kv 1, n_rep 2, it 64)
+    pass y has x's shape
+    pass y is finite
+    pass block output matches the contract's float64 reference at the adopted anchor tolerance (rtol 1e-5, atol 1e-6; header says how to recalibrate honestly if accuracy alone fails it)
+
+  REFERENCE (contract float64, config B: n_kv 2, n_rep 1, it 300)
+    pass y has x's shape
+    pass block output matches the reference with n_rep 1 and the k = 300 down_proj (the GEMM's P = 3 ragged fold inside the composition, contract section 3)
+
+  STATE (cached_tokens and the packed cache)
+    pass cached_tokens after an L=4 prefill is 4
+    pass [REPORT, not asserted] a carried-state prefill == the stateless prefill (the discarded cache is not an input): same
+    pass keys() hands back the packed used region's shape
+    pass values() hands back the packed used region's shape
+    pass the key cache is nonzero after a prefill (the state really came back)
+
+  DECODE (bitwise reported; fast tier)
+    pass [REPORT, not asserted] step token 0 == prefill token 0: same
+    pass [REPORT, not asserted] step token 1 == prefill token 1: same
+    pass [REPORT, not asserted] step token 2 == prefill token 2: same
+    pass [REPORT, not asserted] step token 3 == prefill token 3: same
+    pass cached_tokens after 4 steps is 4
+    pass [REPORT, not asserted] the packed key cache after 4 steps == the prefill's: same
+    pass [REPORT, not asserted] the packed value cache after 4 steps == the prefill's: same
+
+  RESUMPTION (bitwise reported; fast tier)
+    pass cached_tokens after L-1 tokens is L-1
+    pass [REPORT, not asserted] the L-1 prefill's rows == the whole prefill's first L-1 rows (prefix property): same
+    pass cached_tokens after the step is L
+    pass [REPORT, not asserted] one decode step after L-1 == prefill token L-1 (contract 7.2: one spelling serves both paths): same
+    pass [REPORT, not asserted] split == whole: the packed key cache: same
+    pass [REPORT, not asserted] split == whole: the packed value cache: same
+
+  DETERMINISM (repeat call bitwise reported; fast tier)
+    pass [REPORT, not asserted] the same fresh prefill through the binding twice is byte-identical: same
+
+  MOJO REFUSALS (reached from Python, refused by name)
+    pass a step past max_tokens is refused IN MOJO by name (the cache would grow past its capacity)
+    pass max_tokens past 8192 is refused IN MOJO by name (DEVIATION 812's absolute-position ceiling)
+    pass cached_tokens outside [0, max_tokens] is refused BY NAME at the binding boundary (DEVIATION 795(iv): the two sides disagree about the state)
+    pass a NaN in x is refused IN MOJO under the upstream name (llama_refuse_bad_call; payloads are vendor-shaped)
+    pass an odd head_dim is refused IN MOJO by name (RoPE pairs halves; LlamaDims.validate)
+
+  CORPUS DEBT (transformer/corpus)
+    pass transformer/corpus found walking up from this file
+    pass [OWED, recorded debt -- no comparison ran] corpus tolerance arm: transformer/corpus holds a generator and no case data (the lane's phase 7 row: gen_corpus.py has never been executed). The float64 reference above is this file's own transcription, not an independent artifact. This row FAILS once case data appears, until the ref64 arm is wired
+
+  44 checks, 0 failed
+
+test_transformer_surface: the fast arms passed. The contract
+reference (both configs), the shapes, the cache bookkeeping
+and every refusal hold.
+THE CROSS-PATH BITWISE ARMS WERE REPORTED, NOT ASSERTED: fast promises
+speed only (the lane's clause (d) fails under FAST by
+construction) and deterministic promises repeat-run bits
+only. Re-run under MOJOLEARN_NUMERIC_MODE=identical for the
+fully asserted form.

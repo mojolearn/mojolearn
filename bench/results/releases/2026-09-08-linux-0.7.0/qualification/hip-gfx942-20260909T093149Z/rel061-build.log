@@ -1,0 +1,14 @@
+pid 3664's current affinity list: 0-19
+pid 3664's new affinity list: 0,1
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/verify_linux_surface_qualification.py", line 363, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/root/mojolearn/tools/verify_linux_surface_qualification.py", line 350, in main
+    (out / 'qualification-sources.json').write_text(json.dumps(sources(root), indent=2) + '\n')
+                                                               ^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/verify_linux_surface_qualification.py", line 195, in sources
+    require((directory / 'x.f32').is_file(), 'Missing installed Mamba corpus: ' + case)
+  File "/root/mojolearn/tools/verify_linux_surface_qualification.py", line 180, in require
+    raise ValueError(message)
+ValueError: Missing installed Mamba corpus: base_b2_l4_d8

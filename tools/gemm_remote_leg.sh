@@ -310,6 +310,18 @@
 #                                  SUBSTRING match; keep it narrow.
 #   MOJOLEARN_GEMM_LEG_PAYLOAD     gemm, phase8, speed, or mamba;
 #                                  --payload wins.
+#   MOJOLEARN_GEMM_LEG_EXTRA       gemm payload only: a local POSIX sh file
+#                                  shipped to /root/gemm_leg_extra.sh and run
+#                                  on the box AFTER the device check and the
+#                                  card, from /root/mojolearn with pixi on
+#                                  PATH; its stdout/stderr land in
+#                                  remote/extra.log and anything it writes
+#                                  under /root/gemm_leg_out comes home with
+#                                  the fetch. This is how a lane runs its
+#                                  timing drivers on the same box and lease
+#                                  as the identity gates, without a second
+#                                  rental and without holding a pod open by
+#                                  hand (the GEMM lane, 2026-09-09).
 #   MOJOLEARN_GEMM_LEG_APPLE_DIR   phase8 only: the Apple bootstrap directory
 #                                  this box's column will be judged against.
 #                                  The default is the newest one under
@@ -612,6 +624,7 @@ GPU_ID=""
 IMAGE=""
 SSH_TARGET=""
 LOCAL_CARD="${MOJOLEARN_GEMM_LEG_LOCAL_CARD:-}"
+LEG_EXTRA="${MOJOLEARN_GEMM_LEG_EXTRA:-}"
 SWEEP=0
 READY_TIMEOUT="${MOJOLEARN_GEMM_LEG_READY_TIMEOUT:-600}"
 CARD_FULL="${MOJOLEARN_GEMM_CARD_FULL:-}"
@@ -628,6 +641,9 @@ POD_TERMINATED=0
 DEADMAN_PID=""
 DEADMAN_DIR=""
 FETCH_RED=0
+# DEVIATION 2292: set when neutral hosts stop answering, so the leg record
+# says the silence was on THIS side rather than leaving a reader to guess.
+UPLINK_FAULT=0
 KEY_RED=0
 ARMED=0
 TMPD=""
@@ -658,6 +674,48 @@ leg_usage() {
 
 leg_say() { printf '[%s %s] %s\n' "$(date +%T)" "${VENDOR:-leg}" "$*"; }
 leg_die() { printf '\n%s\n' "$*" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# WHICH SIDE OF THE WIRE DIED (DEVIATION 2292)
+# ---------------------------------------------------------------------------
+# An unanswered ssh poll and an HTTP 000 say the same small thing: a packet
+# did not come back. They do NOT say whether the BOX is gone or whether THIS
+# MACHINE has no uplink, and the leg spends the rest of the hour acting on
+# that difference. On 2026-09-08 all three 0.7.0 release legs lost the Mac's
+# network about one minute after their boxes came up. Each one then polled a
+# box it could not reach until its deadline, fetched an empty directory, and
+# could not confirm its own terminate -- and NOTHING IN THE ARTIFACTS SAID
+# THE FAULT WAS HERE. Three hours of HTTP 000 in a log reads like a vendor
+# outage; it was this desk's Wi-Fi.
+#
+# Three neutral hosts, none of them a vendor API, settle it. If none of them
+# answers either, the fault is local, and that is written down as a finding
+# in the leg's own output where the next reader will see it.
+leg_uplink_down() {
+    for _uh in https://pypi.org/ https://github.com/ https://www.google.com/; do
+        if curl -s -o /dev/null --max-time 8 "$_uh" 2>/dev/null; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+# BEFORE THE BILL STARTS, not after. One probe proves nothing about the next
+# five minutes, so this is three rounds spaced apart: a link that is flapping
+# fails at least one of them, and a leg that never creates a box cannot lose
+# one. Twenty seconds against a one-hour rental.
+leg_uplink_stable() {
+    _ur=1
+    while [ "$_ur" -le 3 ]; do
+        if leg_uplink_down; then
+            echo "    uplink probe $_ur/3: NO neutral host answered."
+            return 1
+        fi
+        [ "$_ur" -lt 3 ] && sleep 7
+        _ur=$((_ur + 1))
+    done
+    return 0
+}
 
 # ---------------------------------------------------------------------------
 # argument validation -- refuse everything unknown BY NAME
@@ -817,9 +875,13 @@ if [ "$PAYLOAD" = "speed" ]; then
         gemmseq)   SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gemm transformer attention mlp rmsnorm mamba selective_scan}" ;;
         classical) SPEED_LANES="${MOJOLEARN_SPEED_LANES:-kmeans dbscan pca ols knn cd kde linkage svm metrics ivf hdbscan cholesky gmm gp krr nystroem rbfsampler resample spectral holtwinters kpss}" ;;
         forest)    SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gbdt-symmetric gbdt-depthwise gbdt-lossguide rf et iforest}" ;;
+        # DEVIATION 2266: named conformance checks on the box. Each lane is a
+        # .mojo check file (run in FAST and IDENTICAL), a pixi task, or
+        # `bench:<task>` for the bench environment (the CatBoost oracles).
+        checks)    SPEED_LANES="${MOJOLEARN_SPEED_LANES:-}" ;;
     esac
     case "$SPEED_FAMILY" in
-        gemmseq|classical|forest) : ;;
+        gemmseq|classical|forest|checks) : ;;
         *)
             echo "gemm_remote_leg: --family must be one of gemmseq, classical," >&2
             echo "  trees (alias: forest). Got '$SPEED_FAMILY'." >&2
@@ -872,6 +934,9 @@ fi
 # Replace gfx942 with the actual rented GPU target; it is not autodetected.
 # Root runs either command through the existing leased transport/guards.
 NVIDIA_CAMPAIGN=${MOJOLEARN_NVIDIA_CAMPAIGN:-0}
+LEG_QUALIFY=0
+QUAL_BASE=
+QUAL_SHA=
 MAMBA_CERT_ONLY=${MOJOLEARN_MAMBA_CERT_ONLY:-0}
 case "$MAMBA_CERT_ONLY" in 0|1) ;; *) echo 'MOJOLEARN_MAMBA_CERT_ONLY must be 0 or 1' >&2; exit 2 ;; esac
 CONTINUED_CERT_CHECKS=${MOJOLEARN_CONTINUED_CERT_CHECKS:-0}
@@ -879,7 +944,29 @@ case "$CONTINUED_CERT_CHECKS" in 0|1) ;; *) echo 'MOJOLEARN_CONTINUED_CERT_CHECK
 case "$NVIDIA_CAMPAIGN" in 0|1|2|3|4|5|6|7) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0..7 (7 is one-architecture release build)" ;; esac
 if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
     [ "$VENDOR" = nvidia ] && [ "$PAYLOAD" = mamba ] || leg_die 'Release profile 7 requires nvidia --payload mamba'
-    case "$GPU_ARCHS" in sm_89|sm_90) ;; *) leg_die 'Release profile 7 requires explicit actual sm_89 or sm_90' ;; esac
+    # DEVIATION 2293: sm_90a is the Hopper slot's other legal spelling, and on
+    # an H100 it is the ONLY one the compiler will produce. Asking for sm_90
+    # there yields 46 binaries all carrying sm_90a and build_sets.sh refuses
+    # the set, correctly, for being named something it was not verified to
+    # carry. The packer's Hopper slot accepts either; so does this gate. What
+    # is still refused is any architecture that is not one of the three the
+    # release profile ships.
+    case "$GPU_ARCHS" in sm_89|sm_90|sm_90a) ;; *) leg_die 'Release profile 7 requires explicit actual sm_89, sm_90 or sm_90a' ;; esac
+    # DEVIATION 2298: the same profile-7 rental, doing the OTHER half. Ada
+    # (sm_89) is the one architecture DigitalOcean cannot supply -- its L40S
+    # and Ada cards report no available regions -- so the installed
+    # qualification for that column has to come from here. Same knobs as
+    # tools/do_release061_leg.sh's qualify mode, same meaning.
+    if [ -n "${MOJOLEARN_QUALIFY_WHEEL:-}" ]; then
+        QUAL_WHEEL="$MOJOLEARN_QUALIFY_WHEEL"
+        QUAL_PROOFS="${MOJOLEARN_QUALIFY_PROOFS:?qualify mode needs the proof directory}"
+        [ -f "$QUAL_WHEEL" ] || leg_die "no wheel at $QUAL_WHEEL"
+        [ -d "$QUAL_PROOFS" ] || leg_die "no proof directory at $QUAL_PROOFS"
+        case "$QUAL_WHEEL" in *manylinux*) ;; *) leg_die "REFUSING: qualify the REPAIRED wheel; $QUAL_WHEEL is not manylinux-tagged" ;; esac
+        LEG_QUALIFY=1
+        QUAL_BASE=$(basename "$QUAL_WHEEL")
+        QUAL_SHA=$(shasum -a 256 "$QUAL_WHEEL" | cut -d' ' -f1)
+    fi
 fi
 if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
     if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
@@ -1395,7 +1482,11 @@ leg_check_tree_clean() {
     if [ "$PAYLOAD" = "phase8" ]; then _paths="$LEG_SOURCE_PATHS_PHASE8"; fi
     if [ "$PAYLOAD" = "speed" ]; then _paths="$LEG_SOURCE_PATHS_SPEED"; fi
     if [ "$PAYLOAD" = "mamba" ]; then _paths="$LEG_SOURCE_PATHS_MAMBA"; fi
-    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then _paths=.; fi
+    # DEVIATION 2267: the whole tree, minus results and lease records, which
+    # cannot reach a float and which THIS LEG creates before the gate runs
+    # (its own bench/results/e1g/<stamp>-nvidia-mamba/ refused two release
+    # builds on 2026-09-08).
+    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then _paths=". :!bench/results"; fi
     # The list is a deliberate word list, so it is unquoted.
     # shellcheck disable=SC2086
     _dirty=$(git status --porcelain -- $_paths 2>/dev/null || true)
@@ -2357,13 +2448,32 @@ leg_cancel_deadman() {
 # ---------------------------------------------------------------------------
 
 leg_preflight() {
+    # THIS MACHINE'S UPLINK IS PART OF THE RENTAL (DEVIATION 2292). Every
+    # later step -- polling, fetching, and the terminate that stops the bill
+    # -- runs over it, so a link that is already flapping is a reason not to
+    # create anything.
+    echo "  pre-flight: this machine's uplink"
+    if leg_uplink_stable; then
+        echo "    uplink up on all three probes"
+    else
+        leg_die "REFUSING to rent: this machine could not reach ANY neutral
+  host. Nothing was created, so nothing is billing. The box is not the
+  problem here and neither is the vendor API; fix this desk's network and
+  run the leg again."
+    fi
     # Two GETs, both free, both preventing an orphan rather than cleaning one
     # up. Re-running a leg that failed late is the ordinary way to end up
     # paying for two boxes.
     echo "  pre-flight: existing leases on this machine"
     tools/runpod_guard.sh list 2>&1 | sed 's/^/    /' || true
     _live=$(tools/runpod_guard.sh list 2>/dev/null | grep -c 'min left' || true)
-    if [ "${_live:-0}" -gt 0 ]; then
+    if [ "${_live:-0}" -gt 0 ] && [ "${LEG_ALLOW_CONCURRENT:-0}" = "1" ]; then
+        # DEVIATION 2210 (ported from the grid branch): --allow-concurrent covers
+        # recorded leases as well as pods; each leg terminates by its own pod id
+        # and arms its own dead-man, and the caller owns confirming every lease
+        # is gone.
+        echo "    CONCURRENT: $_live unexpired lease(s) recorded; --allow-concurrent was passed."
+    elif [ "${_live:-0}" -gt 0 ]; then
         leg_die "REFUSING to rent: $_live unexpired lease(s) are recorded above.
   Another leg is running, or one ended without terminating its box. Deal
   with that first -- 'tools/gemm_remote_leg.sh reap' terminates and VERIFIES.
@@ -2669,7 +2779,10 @@ uname -a > "$OUT/uname.txt" 2>&1
   | awk '{print $1}' > "$OUT/source_sha256.txt"
 if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi >/dev/null 2>&1; then
   if [ "@NVIDIACAMPAIGN@" != 0 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
-    timeout -k 10 120 sh -c 'curl -fsSL --max-time 30 https://pixi.sh/install.sh | sh' > "$OUT/pixi_install.log" 2>&1
+    # DEVIATION 2269: 30 s was not enough for the pod to fetch the pixi tarball
+    # from GitHub on 2026-09-08 (two release builds died at bootstrap, exit 127);
+    # the unbounded installer the speed legs use never failed. 300 s, one retry.
+    timeout -k 10 400 sh -c 'curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh || (sleep 10; curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh)' > "$OUT/pixi_install.log" 2>&1
   else
     curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
   fi
@@ -2777,11 +2890,23 @@ RELEASE_TOOLS_SETUP
         release_seconds=$((work_remaining - 20))
         if [ "$release_seconds" -gt 2400 ]; then release_seconds=2400; fi
         printf '%s\n' '@COMMIT@' > "$ROOT/commit.txt"
+        if [ '@QUALIFY@' = 1 ]; then
+            # DEVIATION 2298: 25 installed jobs from the wheel's own bytes on
+            # THIS device. The driver refuses an architecture override and
+            # records the device it actually found.
+            MOJOLEARN_EXPECT_VENDOR=cuda \
+              timeout -k 20 "$work_remaining" bash tools/linux_surface_qualification.sh \
+                qualify-release-linux3 "/root/@QUALWHEEL@" '@QUALSHA@' cuda \
+                "$OUT/release-build" /root/proofs '@GPUARCHS@' \
+                > "$OUT/release-build-console.log" 2>&1
+            release_rc=$?
+        else
         MOJOLEARN_COMMIT='@COMMIT@' MOJOLEARN_PYTHON="$release_system_python" \
           MOJOLEARN_RELEASE_BUILD_SECONDS="$release_seconds" MOJOLEARN_BUILD_PIXI_ENV=default \
           timeout -k 20 "$work_remaining" bash tools/release061_remote_build.sh \
             cuda '@GPUARCHS@' "$OUT/release-build" > "$OUT/release-build-console.log" 2>&1
         release_rc=$?
+        fi
     fi
     echo "release_build_exit=$release_rc" >> "$OUT/leg.txt"
     echo 'scope=one actual CUDA architecture full46 build; no installed wheel qualification' >> "$OUT/leg.txt"
@@ -3053,6 +3178,13 @@ if [ "@SWEEP@" = "1" ]; then
     MOJOLEARN_GEMM_CARD_ARM=device MOJOLEARN_COLUMN_OUT="$OUT/colinv" \
         sh tools/gemm_column_invariance.sh > "$OUT/column_invariance.log" 2>&1
     echo "column_invariance_exit=$?" >> "$OUT/leg.txt"
+fi
+
+# MOJOLEARN_GEMM_LEG_EXTRA: the lane's own work, after the gates, same box,
+# same lease. Bounded by the leg's poll deadline, not by this file.
+if [ -f /root/gemm_leg_extra.sh ]; then
+    sh /root/gemm_leg_extra.sh > "$OUT/extra.log" 2>&1
+    echo "extra_exit=$?" >> "$OUT/leg.txt"
 fi
 
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
@@ -3954,6 +4086,37 @@ LGBMPROBE
         fi
     done
     ;;
+checks)
+    # DEVIATION 2266: conformance checks on a rented GPU. A `bench:` lane
+    # needs the gbdt binding (check-bfa-oracle imports _mojolearn_gbdt) and
+    # the bench environment, which pixi installs on first use inside the
+    # arm's budget; the other lanes need only the default environment.
+    case " @SPEEDLANES@ " in
+        *" bench:"*)
+            for _pass in 1 2; do
+                if [ "$_pass" = "1" ]; then _skip=1; else _skip=""; fi
+                MOJOLEARN_SKIP_BUILD_GATE="$_skip" bash bindings/build_gbdt.sh \
+                    > "$LOGS/build.binding.gbdt.pass$_pass.log" 2>&1
+                echo "binding_build_exit gbdt.pass$_pass=$?" >> "$OUT/leg.txt"
+            done
+            ;;
+    esac
+    for L in @SPEEDLANES@; do
+        _tag=$(printf '%s' "$L" | tr '/:' '__')
+        case "$L" in
+            *.mojo)
+                runarm "checks.$_tag.fast.log" pixi run mojo run -I . "$L"
+                runarm "checks.$_tag.identical.log" pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . "$L"
+                ;;
+            bench:*)
+                runarm "checks.$_tag.log" pixi run -e bench "${L#bench:}"
+                ;;
+            *)
+                runarm "checks.$_tag.log" pixi run "$L"
+                ;;
+        esac
+    done
+    ;;
 esac
 
 # WHAT ACTUALLY CAME OUT, counted on the box, so a fetch that loses files is
@@ -3999,6 +4162,9 @@ leg_check_remote_body() {
         -e "s|@DUMP@|$LEG_DUMP|g" \
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
         -e "s|@NVIDIACAMPAIGN@|$NVIDIA_CAMPAIGN|g" \
+        -e "s|@QUALIFY@|$LEG_QUALIFY|g" \
+        -e "s|@QUALWHEEL@|$QUAL_BASE|g" \
+        -e "s|@QUALSHA@|$QUAL_SHA|g" \
         -e "s|@MAMBACERTONLY@|$MAMBA_CERT_ONLY|g" \
         -e "s|@CONTINUEDCERT@|$CONTINUED_CERT_CHECKS|g" \
         -e "s|@KNNLAYOUTONLY@|$KNN_LAYOUT_ONLY|g" \
@@ -4188,6 +4354,48 @@ RELEASE_SOURCE
             leg_ssh "python3 -B /root/mojolearn/tools/byte_lm_handoff_transport.py unpack /root/byte-lm-handoffs/foreign.zip --output /root/byte-lm-handoffs/foreign --sha256 $BYTE_FOREIGN_SHA --vendor $_foreign_vendor --kind head64" > "$OUT/foreign-transport.log" 2>&1 || leg_die "Remote foreign handoff refused"
         fi
     fi
+    if [ "$LEG_QUALIFY" = 1 ]; then
+        # THE BYTES QUALIFIED ARE THE BYTES PUBLISHED: sha compared both ends.
+        leg_say "shipping the repaired wheel ($(wc -c < "$QUAL_WHEEL" | tr -d ' ') bytes, sha256 $QUAL_SHA)"
+        leg_ssh "cat > /root/$QUAL_BASE" < "$QUAL_WHEEL" || leg_die "wheel upload failed"
+        _rsha=$(leg_ssh "sha256sum /root/$QUAL_BASE" | cut -d' ' -f1)
+        [ "$_rsha" = "$QUAL_SHA" ] || leg_die "wheel sha mismatch after transfer ($_rsha)"
+        leg_ssh 'mkdir -p /root/proofs'
+        for _p in "$QUAL_PROOFS"/*.json; do
+            leg_ssh "cat > /root/proofs/$(basename "$_p")" < "$_p" || leg_die "proof upload failed: $_p"
+        done
+        # mamba/corpus is excluded from the archive on purpose; the INSTALLED
+        # jobs read it. Only the three CORPUS_CASES names, 4.6 MB not 63.
+        _cases=$(python3 -c "import sys;sys.path.insert(0,'$PWD/tools');from verify_linux_surface_qualification import CORPUS_CASES;print(' '.join(CORPUS_CASES))")
+        [ -n "$_cases" ] || leg_die "could not read CORPUS_CASES"
+        # shellcheck disable=SC2086
+        ( cd "$PWD" && tar czf "$TMPD/corpus.tgz" $(for _c in $_cases; do echo "mamba/corpus/$_c"; done) ) || leg_die "corpus tar failed"
+        # transformer/corpus TOO (92 KB). The bounded mamba archive carries
+        # transformer/corpus/gen_corpus.py but not the corpus itself, and the
+        # installed transformer surface asserts the corpus landed -- it failed
+        # in all three modes on the first sm_89 column for exactly that reason,
+        # while both DigitalOcean columns passed because their whole-tree
+        # archive happened to include it.
+        ( cd "$PWD" && tar czf "$TMPD/tcorpus.tgz" transformer/corpus ) || leg_die "transformer corpus tar failed"
+        leg_ssh 'cat > /root/tcorpus.tgz' < "$TMPD/tcorpus.tgz" || leg_die "transformer corpus upload failed"
+        leg_ssh 'tar -xzf /root/tcorpus.tgz -C /root/mojolearn' || leg_die "transformer corpus unpack failed"
+        leg_ssh 'test -d /root/mojolearn/transformer/corpus' || leg_die "transformer corpus did not land"
+        leg_ssh 'cat > /root/corpus.tgz' < "$TMPD/corpus.tgz" || leg_die "corpus upload failed"
+        leg_ssh 'tar -xzf /root/corpus.tgz -C /root/mojolearn' || leg_die "corpus unpack failed"
+        for _c in $_cases; do
+            leg_ssh "test -f /root/mojolearn/mamba/corpus/$_c/x.f32" || leg_die "corpus case $_c did not land"
+        done
+        leg_say "shipped wheel, $(ls "$QUAL_PROOFS"/*.json | wc -l | tr -d ' ') proofs and the corpora"
+    fi
+    if [ -n "$LEG_EXTRA" ] && [ "$PAYLOAD" = "gemm" ]; then
+        [ -f "$LEG_EXTRA" ] || leg_die "MOJOLEARN_GEMM_LEG_EXTRA=$LEG_EXTRA does not exist."
+        sh -n "$LEG_EXTRA" || leg_die "MOJOLEARN_GEMM_LEG_EXTRA=$LEG_EXTRA is not valid sh."
+        cp "$LEG_EXTRA" "$OUT/extra_body.sh"
+        leg_ssh 'umask 022; cat > /root/gemm_leg_extra.sh' < "$LEG_EXTRA"
+        leg_say "shipped the extra body: $LEG_EXTRA"
+    else
+        leg_ssh 'rm -f /root/gemm_leg_extra.sh' > /dev/null 2>&1 || true
+    fi
     leg_ssh 'umask 022; cat > /root/gemm_leg.sh' < "$OUT/remote_body.sh"
     leg_run_payload
 }
@@ -4295,6 +4503,24 @@ leg_run_payload() {
                     echo "    poll $_unreach: the box did not answer. The payload is"
                     echo "    DETACHED, so this says nothing about the run itself."
                     echo "    Retrying until the deadline."
+                fi
+                # DEVIATION 2292: after three unanswered polls, ask a neutral
+                # host whether this machine has a network at all. Polling
+                # continues either way -- the payload is detached and the link
+                # may come back inside the lease -- but the log stops implying
+                # the box is at fault when it is not.
+                if [ "$_unreach" = "3" ] || [ "$_unreach" = "30" ] || [ "$_unreach" = "60" ]; then
+                    if leg_uplink_down; then
+                        echo "    THIS MACHINE HAS NO UPLINK. No neutral host answered"
+                        echo "    either, so the silence is HERE, not on the box. The"
+                        echo "    payload is detached and its own dead-man will end the"
+                        echo "    box at the lease whatever this end does. Still polling"
+                        echo "    in case the link returns before the lease expires."
+                        UPLINK_FAULT=1
+                    else
+                        echo "    poll $_unreach: neutral hosts DO answer, so this"
+                        echo "    machine has a network and the BOX is the silent end."
+                    fi
                 fi ;;
         esac
         sleep 30
@@ -5772,6 +5998,7 @@ fi
     echo "pod=$POD_ID"
     echo "gpu_requested=$GPU_ID"
     echo "red=$RED"
+    echo "uplink_fault=$UPLINK_FAULT"
     if [ "$PAYLOAD" = "phase8" ]; then
         echo "e1_dir=$E1_DEST"
         echo "apple_dir=${APPLE_DIR:-<none>}"

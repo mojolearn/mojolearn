@@ -36,37 +36,32 @@ def main() raises:
     # comptime assertion plus a host fold, the neighborhood is one kernel,
     # and the label check is two fits.
     #
-    # THE FOUR WEIGHTED GATES WERE BLOCKED ON THE TOOLCHAIN, NOT DROPPED,
-    # AND THE BLOCK IS NOW CLEARED. Building any of them used to raise
-    # `DeadArgumentElimination surveyUse failed`, an LLVM pass assertion,
-    # and take the whole dbscan build down, which is why `sample_weight`
-    # shipped IMPLEMENTED AND UNGATED.
+    # THE FOUR WEIGHTED GATES WERE BLOCKED ON THE TOOLCHAIN, NOT DROPPED.
+    # Building any of them used to raise `DeadArgumentElimination surveyUse
+    # failed`, a compiler assertion at -O2 and above, and take the whole
+    # dbscan build down, which is why `sample_weight` shipped IMPLEMENTED
+    # AND UNGATED until 2026-09-01, and why this file built at `-O1` from
+    # then until 2026-09-09.
     #
-    # THE CURE IS THE OPTIMIZATION LEVEL, NOT THE SOURCE. `pixi run
-    # check-dbscan` passes `-O1`. MEASURED on an Apple M4, 2026-09-01: -O3 and -O2 both assert, -O1 and -O0 both build, and `DeadArgumentElimination` is an -O2-and-above pass, so
-    # nothing in this file was ever the trigger. Four candidate source
-    # rewrites were tried first, on the theory that some construct here
-    # surveyed badly, and EVERY ONE OF THEM STILL ASSERTED AT -O3:
-    # replacing `vertex_deg_dispatch` with the parametric `vertex_deg_run`,
-    # splitting `_fit_weighted`'s conditionally-dead argument into two
-    # functions, hoisting a ternary out of an append, and copying a
-    # `List[List[Int]]` element before passing it. The first of those has
-    # been REVERTED, because it took the dispatcher out from under the gate
-    # for no benefit.
+    # THE TRIGGER WAS ONE LOOP, AND IT IS GONE (2026-09-09, NVIDIA L40S,
+    # Mojo 1.0.0 ed45d567): `_host_weighted_degree_strided`'s `while k <
+    # len(cols): ...; k += width`, a `len()` re-read in the condition of a
+    # loop whose step is a runtime `Int` argument. The bound is now read
+    # once before the loop. The reduced repro is
+    # `dbscan/checks/compiler_repro_dead_arg_elim.mojo`; the four 2026-09-01
+    # rewrites were never the cure and their sites say so.
     #
-    # THE BISECT THAT FOUND IT, kept because the handle is reusable. The
-    # IMPORT above is what pulls a gate into codegen, so an import and its
-    # call must BOTH be commented to disable one. Enabling them one at a
-    # time showed TWO independent triggers, not one: the fold gate alone
-    # asserts, and the three fit gates alone assert. That is why a
-    # single-candidate build that still crashed would have retired a good
-    # fix, and it is why nothing was retired on one build.
+    # THE BISECT, kept because the handle is reusable. The IMPORT above is
+    # what pulls a gate into codegen, so an import and its call must BOTH
+    # be commented to disable one. One entry point per gate showed the fold
+    # gate and the degree-oracle gate assert alone (both call the strided
+    # host fold) while the uniform and duplicate gates build clean, which
+    # is what the 2026-09-01 record's "two independent triggers" were.
     #
-    # WHAT IT COST, in the past tense at last: from the day `sample_weight`
-    # landed until 2026-09-01 nothing had asserted that a uniform weight
-    # reproduces the unweighted labels, that duplicating a point equals
-    # weight two, or that the weighted degree's fold is the pinned width.
-    # All four now print OK. Apple M4 only; a three-vendor leg is owed.
+    # MEASURED: with the fix, this file at -O3 and at -O1 prints
+    # byte-identical output (17 gates) in both the FAST and the IDENTICAL
+    # build on the L40S. The Apple M4 run of the default -O3 task is owed.
+    # A three-vendor leg for the weighted numbers is still owed.
     check_dbscan_weighted_fold_is_pinned()
     check_dbscan_manhattan_neighborhood()
     check_dbscan_manhattan_changes_the_labels()
