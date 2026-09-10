@@ -3,6 +3,32 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## 0.8.0 (unreleased 2026-09-10)
+
+New native builds are required. This entry describes source changes; publication
+and installed-wheel support will be recorded after the artifacts are uploaded.
+
+- Added optional GPU `parallel_groves` prediction for Random Forest and Extra
+  Trees, sharing resident forest storage, vector-leaf traversal and reusable
+  prediction buffers. The default remains `sequential`; the two engines use
+  different floating-point reduction orders. Packed-node traversal remains an
+  experimental build option.
+- Added bounded Random Forest classifier `class_weight` support, per-tree GBDT
+  feature sampling and optional minimum child Hessian eligibility for Newton
+  depthwise/lossguide growth. Unsupported combinations raise explicitly.
+- Added GBDT classifier/regressor adapters and sklearn-style forest parameter
+  and scoring protocols. Fitted numeric modes are retained for prediction.
+- Added GPU regression errors, classification counts and scores, log loss,
+  binary ROC AUC and precision-recall curves, with mode-aware arithmetic.
+- Added GPU `StandardScaler` and `MinMaxScaler` with transformer protocols,
+  and bounded serial GPU `cross_val_score` support for compatible pipelines.
+- Improved automatic neighbor query batching and IDENTICAL wide full PCA.
+- Added compiled host buffer conversion helpers and staged the NumPy-free
+  buffer core. The estimator layer is not yet NumPy-free.
+- Generalized byte-language-model shapes and added reusable device training
+  sessions. These are separate from the classical-ML feature additions.
+- Flattened implementation directories and corrected release build policy pins.
+
 ## 0.7.0 (published 2026-09-09)
 
 Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) from commit fe6067ba;

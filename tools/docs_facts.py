@@ -83,9 +83,12 @@ def facts():
         raise SystemExit("docs_facts: no __version__ in python/mojolearn/_version.py")
     out["version"] = m.group(1)
 
-    m = re.search(r"^## (\d+\.\d+\.\d+) \(published (\d{4}-\d{2}-\d{2})\)", _read("CHANGELOG.md"), re.M)
+    m = re.search(r"^## (\d+\.\d+\.\d+) \((?:published|unreleased) (\d{4}-\d{2}-\d{2})\)", _read("CHANGELOG.md"), re.M)
     out["changelog_version"] = m.group(1) if m else ""
     out["version_date"] = m.group(2) if m else ""
+    published = re.search(r"^## (\d+\.\d+\.\d+) \(published (\d{4}-\d{2}-\d{2})\)", _read("CHANGELOG.md"), re.M)
+    out["published_version"] = published.group(1) if published else ""
+    out["published_date"] = published.group(2) if published else ""
 
     m = re.search(
         r'os\.environ\.get\(\s*"MOJOLEARN_NUMERIC_MODE"\s*,\s*"([a-z]+)"',
@@ -114,7 +117,7 @@ def _sources_agree(f):
     for label, got in (
         ("python/pyproject.toml", f["pyproject_version"]),
         ("CITATION.cff", f["citation_version"]),
-        ("CHANGELOG.md newest published heading", f["changelog_version"]),
+        ("CHANGELOG.md newest release heading", f["changelog_version"]),
     ):
         if got and got != v:
             bad.append(f"  {label} says {got}; python/mojolearn/_version.py says {v}")

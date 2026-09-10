@@ -192,7 +192,10 @@ def main():
             f"({_backend.gpu_arch_how()}), the leg built {a.arch!r}")
 
     per = {}
-    for name in ALL_BINDINGS:
+    names_to_load = ALL_BINDINGS
+    if os.environ.get("MOJOLEARN_PACKAGE_BYTE_LM", "0") == "1" and mode == "identical":
+        names_to_load += ("_mojolearn_byte_lm",)
+    for name in names_to_load:
         try:
             per[name] = _backend.read_vendor(_backend.binding(name))
         except Exception as exc:

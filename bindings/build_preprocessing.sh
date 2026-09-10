@@ -1,6 +1,7 @@
 #!/bin/sh
 # Compile a separate preprocessing extension; launch fit/forward/inverse before install.
 set -eu
+MACOS_FLOOR="11.0"
 cd "$(dirname "$0")/.."
 if [ "${MOJOLEARN_BUILD_LOCK_HELD:-}" != 1 ]; then
     exec tools/with_build_lock.sh sh bindings/build_preprocessing.sh "$@"
@@ -20,7 +21,7 @@ link_flags=""
 target_flags=""
 if [ "$(uname)" = Darwin ]; then
     sdk=$(xcrun --sdk macosx --show-sdk-version)
-    link_flags="-Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker $sdk"
+    link_flags="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $sdk"
     target_flags="--target-cpu apple-m1 --target-accelerator metal:1"
 else
     case "$(uname -m)" in

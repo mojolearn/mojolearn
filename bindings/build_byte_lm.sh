@@ -3,6 +3,7 @@
 # Invoke through the corresponding NVIDIA/AMD/macOS serial guard.
 # Requires explicit IDENTICAL mode; Linux additionally needs one GPU target.
 set -eu
+MACOS_FLOOR="11.0"
 byte_lm_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$byte_lm_root"
 [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || { echo 'byte LM supports only MOJOLEARN_NUMERIC_MODE=identical' >&2; exit 2; }
@@ -19,7 +20,7 @@ if [ "$byte_lm_system" = Darwin ]; then
     unset MACOSX_DEPLOYMENT_TARGET
     byte_lm_sdk=$(xcrun --sdk macosx --show-sdk-version)
     set -- --target-cpu apple-m1 -D MOJOLEARN_COLUMN_APPLE \
-        -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker "$byte_lm_sdk"
+        -Xlinker -platform_version -Xlinker macos -Xlinker "$MACOS_FLOOR" -Xlinker "$byte_lm_sdk"
 elif [ "$byte_lm_system" = Linux ]; then
 case "${MOJOLEARN_GPU_ARCHS:-}" in
     sm_[0-9]*|gfx[0-9]*) ;;
@@ -31,7 +32,7 @@ esac
 # Fixed compiler concurrency; this script never starts a second worker/build.
 set -- --target-accelerator "$MOJOLEARN_GPU_ARCHS"
 case "$(uname -m)" in
-    x86_64) set -- "$@" --target-cpu x86-64-v3 ;;
+    x86_64) set -- "$@" --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} ;;
     aarch64) ;;
     *) echo 'byte LM: unsupported Linux host architecture' >&2; exit 2 ;;
 esac

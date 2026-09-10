@@ -73,6 +73,13 @@ SOURCES = [
 
 def main():
     want = truth()
+    # Byte LM is an explicit IDENTICAL-only profile addition, not a binding
+    # required in FAST/DETERMINISTIC. Each pack/build/smoke must still name it.
+    profile_only = {"_mojolearn_byte_lm"}
+    if not profile_only <= want:
+        print("FAIL profile-only binding disappeared from backend")
+        return 1
+    want -= profile_only
     print(f"source of truth: python/mojolearn/_backend.py _MODULES "
           f"({len(want)} extensions)")
     bad = 0
@@ -83,6 +90,11 @@ def main():
                   f"file have diverged, which is its own defect")
             bad += 1
             continue
+        text = (ROOT / path).read_text()
+        for name in profile_only:
+            if name not in text:
+                print(f"  MISSING profile-specific binding {name}: {path}")
+                bad += 1
         missing = sorted(want - got)
         extra = sorted(got - want)
         if not missing and not extra:
