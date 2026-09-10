@@ -404,10 +404,11 @@ def _convert(a, dtype, order):
     """`a` itself when it already has `dtype` and `order`, else a converted
     copy. Returns `(Array, copied)`.
 
-    A float64 -> float32 conversion goes through the base binding's host
-    converters when the binding is built (DEVIATION 2470, 2471): the flat
-    cast, or ONE fused cast-and-transpose when a C-order source wants
-    column-major output. Without the binding the pure-Python path below
+    A conversion to float32 goes through the base binding's host
+    converters when the binding is built (DEVIATION 2470-2472): the flat
+    float64 cast, ONE fused cast-and-transpose when a float64 block wants
+    the other layout, or the tiled float32 transpose when only the layout
+    changes. Without the binding the pure-Python path below
     runs and produces the same bytes; the native path is a speed choice,
     never a different answer, and `tests/test_native_convert.py` holds the
     two to byte equality.
@@ -416,8 +417,8 @@ def _convert(a, dtype, order):
         # a (1, n) or (n, 1) block is both C- and F-contiguous; relabeling
         # it is free and is not a copy
         return a._as_order(order), False
-    if a.dtype == "<f8" and dtype == "<f4" and a.size:
-        out = _native_f64_to_f32(a, order)
+    if dtype == "<f4" and a.dtype in ("<f8", "<f4") and a.size:
+        out = _native_to_f32(a, order)
         if out is not None:
             return out, True
     if a.dtype != dtype:
@@ -425,18 +426,28 @@ def _convert(a, dtype, order):
     return a._as_order(order), True
 
 
-def _native_f64_to_f32(a, order):
-    """`a` (float64) as a float32 Array in `order` through the native
-    converters, or None when the binding is not built (the caller then
-    takes the pure-Python path). The result always owns fresh storage."""
-    if order == "F" and a.order == "C" and a.ndim == 2 and not a._both_orders():
-        fn = _native("cast_colmajor_f64_to_f32")
+def _native_to_f32(a, order):
+    """`a` (float64 or float32) as a float32 Array in `order` through the
+    native converters, or None when the binding is not built (the caller
+    then takes the pure-Python path). The result always owns fresh
+    storage. Called only when a conversion is actually needed."""
+    # A 2-D block whose layout must flip. An F-order [rows, cols] block IS
+    # a C-order [cols, rows] matrix, so the same kernel serves both
+    # directions with the dimensions swapped (DEVIATION 2471, 2472).
+    if a.ndim == 2 and not a._both_orders() and a.order != order:
+        rows, cols = a.shape
+        if a.order == "F":
+            rows, cols = cols, rows
+        fn = _native(
+            "cast_colmajor_f64_to_f32" if a.dtype == "<f8" else "transpose_f32"
+        )
         if fn is None:
             return None
         store = _output_store("f", a.size)
-        rows, cols = a.shape
         fn(a._addr, store.buffer_info()[0], rows, cols)
-        return Array._owned(store, a.shape, "<f4", "F")
+        return Array._owned(store, a.shape, "<f4", order)
+    if a.dtype == "<f4":
+        return None  # a relabel or a rank-1/-N reorder: the Python path
     fn = _native("cast_f64_to_f32")
     if fn is None:
         return None

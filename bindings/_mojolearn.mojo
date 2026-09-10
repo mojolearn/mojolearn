@@ -599,7 +599,7 @@ def rbc_knn_search_binding(
     return PythonObject(n_dists)
 
 # ===========================================================================
-# HOST CONVERTERS, DEVIATION 2470 and 2471 (2026-09-10).
+# HOST CONVERTERS, DEVIATION 2470, 2471 and 2472 (2026-09-10).
 #
 # `python/mojolearn/_buffer.py` turns whatever a caller hands an estimator
 # into the float32 block the kernels read. When NumPy left the Python layer
@@ -703,24 +703,75 @@ def cast_colmajor_f64_to_f32_binding(
     var sp = _f64_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
     with GILReleased(Python()):
-        var r0 = 0
-        while r0 < nr:
-            var r1 = min(r0 + _TILE_ROWS, nr)
-            var c0 = 0
-            while c0 < nc:
-                var c1 = min(c0 + _TILE_COLS, nc)
-                # Inside the tile: one column at a time, so the writes are
-                # contiguous and the strided reads stay within the tile's
-                # rows, which the previous column just pulled into cache.
-                for c in range(c0, c1):
-                    var dbase = c * nr
-                    for r in range(r0, r1):
-                        dp.unsafe_store(
-                            dbase + r,
-                            sp.unsafe_load(r * nc + c).cast[DType.float32](),
-                        )
-                c0 = c1
-            r0 = r1
+        _tiled_transpose_to_f32(sp, dp, nr, nc)
+    return PythonObject(0)
+
+
+def _tiled_transpose_to_f32[
+    S: DType
+](
+    sp: MutPointer[Scalar[S], MutUntrackedOrigin],
+    dp: MutPointer[Float32, MutUntrackedOrigin],
+    nr: Int,
+    nc: Int,
+):
+    """`dp[c * nr + r] = Float32(sp[r * nc + c])` over `_TILE_ROWS` x
+    `_TILE_COLS` tiles. The one loop behind DEVIATION 2471 (float64 in)
+    and 2472 (float32 in, where the cast is the identity and compiles
+    away). Caller holds valid, non-overlapping, non-empty buffers and has
+    released the GIL."""
+    var r0 = 0
+    while r0 < nr:
+        var r1 = min(r0 + _TILE_ROWS, nr)
+        var c0 = 0
+        while c0 < nc:
+            var c1 = min(c0 + _TILE_COLS, nc)
+            # Inside the tile: one column at a time, so the writes are
+            # contiguous and the strided reads stay within the tile's
+            # rows, which the previous column just pulled into cache.
+            for c in range(c0, c1):
+                var dbase = c * nr
+                for r in range(r0, r1):
+                    dp.unsafe_store(
+                        dbase + r,
+                        sp.unsafe_load(r * nc + c).cast[DType.float32](),
+                    )
+            c0 = c1
+        r0 = r1
+
+
+def transpose_f32_binding(
+    src_addr: PythonObject,
+    dst_addr: PythonObject,
+    rows: PythonObject,
+    cols: PythonObject,
+) raises -> PythonObject:
+    """Read a C-contiguous float32 `[rows, cols]` matrix at `src`, write its
+    COLUMN-MAJOR layout at `dst`, `dst[c * rows + r] == src[r * cols + c]`
+    (DEVIATION 2472). Returns 0. A pure move, no arithmetic: every float32
+    bit pattern, NaN payloads included, arrives unchanged. The same call
+    turns a column-major `[rows, cols]` block into C order, because that
+    block IS a C-contiguous `[cols, rows]` matrix: pass `rows=cols,
+    cols=rows`. An empty matrix writes nothing and reads neither address;
+    a negative dimension is refused rather than read. `src` and `dst`
+    must not overlap.
+    """
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    if nr < 0:
+        raise Error(
+            "transpose_f32: rows must be non-negative, got " + String(nr)
+        )
+    if nc < 0:
+        raise Error(
+            "transpose_f32: cols must be non-negative, got " + String(nc)
+        )
+    if nr == 0 or nc == 0:
+        return PythonObject(0)
+    var sp = _f32_ptr(Int(py=src_addr))
+    var dp = _f32_ptr(Int(py=dst_addr))
+    with GILReleased(Python()):
+        _tiled_transpose_to_f32(sp, dp, nr, nc)
     return PythonObject(0)
 
 
@@ -743,6 +794,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[cast_colmajor_f64_to_f32_binding](
             "cast_colmajor_f64_to_f32"
         )
+        m.def_function[transpose_f32_binding]("transpose_f32")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

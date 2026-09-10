@@ -1,4 +1,4 @@
-"""Time the host converters, DEVIATION 2470/2471, against NumPy INSIDE ONE
+"""Time the host converters, DEVIATION 2470/2471/2472, against NumPy INSIDE ONE
 THERMAL WINDOW, per docs/lanes/BRIEF_native_convert_2026-09-10.md.
 
 Three arms per shape, interleaved, at least PAIRS rounds:
@@ -30,7 +30,7 @@ from mojolearn import _buffer
 
 PAIRS = 9
 SHAPES = [(1_000_000, 10), (2_000_000, 20)]
-KEYS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32")
+KEYS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32")
 
 
 def _ms(fn, *args):
@@ -56,6 +56,15 @@ def run_case(label, x, numpy_fn, ours_fn, ref_bytes):
     the NumPy first/last spread. Every sample is checked against the
     NumPy bytes so a fast wrong answer cannot post a time."""
     samples = {"numpy": [], "native": [], "python": []}
+    # One untimed round first. Runs 1-4 voided windows on a COLD first NumPy
+    # sample (3.84 ms then a flat 3.1; 82.8 then a flat 54) followed by no
+    # upward trend: page-cache and allocator warm-up, not heat. The drift
+    # rule is for heat, so the cold sample is spent here and not compared.
+    numpy_fn(x)
+    _force_present()
+    ours_fn(x)
+    _force_absent()
+    ours_fn(x)
     for _ in range(PAIRS):
         t, r = _ms(numpy_fn, x)
         assert r.tobytes(order="F" if r.flags.f_contiguous and not r.flags.c_contiguous else "C") == ref_bytes
@@ -100,8 +109,24 @@ def main():
             lambda x: _buffer.as_f32_colmajor(x, name="X"),
             ref_f,
         ))
-        # the zero-copy borrow: float32 F -> float32 F
+        # float32 transpose only, both directions (DEVIATION 2472)
+        x32c = np.ascontiguousarray(x64, dtype=np.float32)
+        rows.append(run_case(
+            f"{shape[0]:,} x {shape[1]} f32 C -> f32 F (as_f32_colmajor)",
+            x32c,
+            lambda x: np.asfortranarray(x),
+            lambda x: _buffer.as_f32_colmajor(x, name="X"),
+            ref_f,
+        ))
         x32f = np.asfortranarray(x64, dtype=np.float32)
+        rows.append(run_case(
+            f"{shape[0]:,} x {shape[1]} f32 F -> f32 C (as_f32_c)",
+            x32f,
+            lambda x: np.ascontiguousarray(x),
+            lambda x: _buffer.as_f32_c(x, name="X"),
+            ref_c,
+        ))
+        # the zero-copy borrow: float32 F -> float32 F
         rows.append(run_case(
             f"{shape[0]:,} x {shape[1]} f32 F -> f32 F (borrow)",
             x32f,

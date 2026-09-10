@@ -1,5 +1,6 @@
-"""The native host converters of DEVIATION 2470 (`cast_f64_to_f32`) and
-2471 (`cast_colmajor_f64_to_f32`) are BYTE-IDENTICAL to NumPy, and the
+"""The native host converters of DEVIATION 2470 (`cast_f64_to_f32`), 2471
+(`cast_colmajor_f64_to_f32`) and 2472 (`transpose_f32`) are BYTE-IDENTICAL
+to NumPy, and the
 pure-Python fallback in `_buffer` produces the same bytes with the binding
 forced absent.
 
@@ -234,15 +235,49 @@ def test_tail_lengths_every_residue():
         _bytes_equal(dst.tobytes(), x.astype(np.float32).tobytes())
 
 
+@pytest.mark.parametrize("shape", _shapes())
+def test_transpose_f32_matches_numpy_both_directions(shape):
+    fn = _fn("transpose_f32")
+    x = _matrix(shape, seed=shape[0] * 3 + shape[1] * 31).astype(np.float32)
+    # plant NaN payloads and both signed zeros: a pure move keeps every bit
+    flat = x.reshape(-1)
+    if flat.size >= 3:
+        flat[0] = np.frombuffer(struct.pack("<I", 0x7FC0BEEF), np.float32)[0]
+        flat[1] = np.float32(-0.0)
+        flat[2] = np.frombuffer(struct.pack("<I", 0xFFA00001), np.float32)[0]
+    src = array.array("f", x.tobytes())
+    dst = array.array("f", bytes(4 * x.size))
+    assert fn(src.buffer_info()[0], dst.buffer_info()[0], *shape) == 0
+    assert dst.tobytes() == np.asfortranarray(x).tobytes(order="F")
+    # the other direction: the column-major block as a C [cols, rows] source
+    back = array.array("f", bytes(4 * x.size))
+    assert fn(dst.buffer_info()[0], back.buffer_info()[0], shape[1], shape[0]) == 0
+    assert back.tobytes() == x.tobytes()
+
+
+def test_transpose_f32_empty_and_negative():
+    fn = _fn("transpose_f32")
+    assert fn(0, 0, 0, 3) == 0 and fn(0, 0, 3, 0) == 0
+    with pytest.raises(Exception, match="transpose_f32: rows must be non-negative"):
+        fn(0, 0, -2, 3)
+    with pytest.raises(Exception, match="transpose_f32: cols must be non-negative"):
+        fn(0, 0, 3, -2)
+    with pytest.raises(Exception, match="null buffer address"):
+        fn(0, 0, 2, 2)
+
+
 # --------------------------------------------- through _buffer, both arms
 
+_KEYS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32")
+
+
 def _forced_absent(monkeypatch):
-    monkeypatch.setitem(_buffer._NATIVE, "cast_f64_to_f32", None)
-    monkeypatch.setitem(_buffer._NATIVE, "cast_colmajor_f64_to_f32", None)
+    for key in _KEYS:
+        monkeypatch.setitem(_buffer._NATIVE, key, None)
 
 
 def _forced_present(monkeypatch):
-    for key in ("cast_f64_to_f32", "cast_colmajor_f64_to_f32"):
+    for key in _KEYS:
         monkeypatch.delitem(_buffer._NATIVE, key, raising=False)
     if _buffer._native("cast_f64_to_f32") is None:
         pytest.skip("base binding not built")
@@ -250,10 +285,13 @@ def _forced_present(monkeypatch):
 
 @pytest.mark.parametrize("shape", _shapes())
 @pytest.mark.parametrize("src_order", ["C", "F"])
-def test_as_f32_c_two_arms(monkeypatch, shape, src_order):
-    x = _matrix(shape, seed=11)
+@pytest.mark.parametrize("src_dtype", [np.float64, np.float32])
+def test_as_f32_c_two_arms(monkeypatch, shape, src_order, src_dtype):
+    x = _matrix(shape, seed=11).astype(src_dtype)
     if src_order == "F":
         x = np.asfortranarray(x)
+    if src_dtype is np.float32 and (src_order == "C" or 1 in shape):
+        pytest.skip("already float32 in the target layout: a borrow, tested below")
     want = np.ascontiguousarray(x, dtype=np.float32)
 
     _forced_absent(monkeypatch)
@@ -270,10 +308,13 @@ def test_as_f32_c_two_arms(monkeypatch, shape, src_order):
 
 @pytest.mark.parametrize("shape", _shapes())
 @pytest.mark.parametrize("src_order", ["C", "F"])
-def test_as_f32_colmajor_two_arms(monkeypatch, shape, src_order):
-    x = _matrix(shape, seed=17)
+@pytest.mark.parametrize("src_dtype", [np.float64, np.float32])
+def test_as_f32_colmajor_two_arms(monkeypatch, shape, src_order, src_dtype):
+    x = _matrix(shape, seed=17).astype(src_dtype)
     if src_order == "F":
         x = np.asfortranarray(x)
+    if src_dtype is np.float32 and (src_order == "F" or 1 in shape):
+        pytest.skip("already float32 in the target layout: a borrow, tested below")
     want = np.asfortranarray(x, dtype=np.float32)
 
     _forced_absent(monkeypatch)
