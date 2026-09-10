@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Execution spelling of an already-pinned Mamba3 FP32 fold step.
+"""REJECTED hardware-FTZ experiment, used only by its adversarial check.
 
-The optional NVIDIA spelling uses the same kernel-matrix row as GEMM and
-fused attention. Inputs/results flush to signed zero; one RN FMA, unchanged
-leaf order. The old software spelling remains the default for A/B gates.
+Do not call this from production kernels. On H100 the opt-in FTZ spelling
+fails 0x3f7fffff * 0x00800000 + 0: zero instead of smallest normal.
+The original software spelling remains the default and all runtime callers
+were withdrawn after this regression was exposed.
 """
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined

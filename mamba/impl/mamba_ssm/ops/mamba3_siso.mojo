@@ -1790,7 +1790,7 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
         m3_phase_tick(ctx, phase_tick, String("m3_state_decay_kernel"))
-        comptime if is_defined["MOJOLEARN_MAMBA3_SHARED_INCREMENT_V"]() and lib_smem_page_fits_for[TARGET_COLUMN, 512]():
+        comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V"]() and lib_smem_page_fits_for[TARGET_COLUMN, 512]():
             ctx.enqueue_function[m3_state_increment_shared_v_kernel](
                 pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
                 v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
@@ -1814,7 +1814,7 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
         m3_phase_tick(ctx, phase_tick, String("m3_state_scan_kernel"))
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_TILED_QKS"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_QKS"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
         ctx.enqueue_function[m3_qk_s_tiled_kernel](
             qk_s.unsafe_ptr(),
             rotq_work.unsafe_ptr(),
@@ -1856,7 +1856,7 @@ def m3_siso_forward(
         block_dim=(MAMBA3_TPB, 1, 1),
     )
     m3_phase_tick(ctx, phase_tick, String("m3_yintra_kernel"))
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_TILED_YSTATE"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_YSTATE"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
         ctx.enqueue_function[m3_ystate_tiled_kernel](
             ystate.unsafe_ptr(),
             rotq_work.unsafe_ptr(),

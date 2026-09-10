@@ -230,6 +230,9 @@ def _write_f32(addr: Int, values: List[Float32]) raises:
         p.unsafe_store(i, values[i])
 
 
+comptime M3_DIRECT_TRANSFER = M3_BULK_TRANSFER and not is_defined["MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER"]()
+
+
 def _m3_read_f32(addr: Int, n: Int) raises -> List[Float32]:
     comptime if not M3_BULK_TRANSFER:
         return _read_f32(addr, n)
@@ -251,7 +254,7 @@ def _m3_write_f32(addr: Int, values: List[Float32]) raises:
 
 
 def _m3_upload_addr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not is_defined["MOJOLEARN_MAMBA3_DIRECT_TRANSFER"]():
+    comptime if not M3_DIRECT_TRANSFER:
         return m3_upload(ctx, _m3_read_f32(addr, n))
     else:
         var src = _f32_ptr(addr)
@@ -270,7 +273,7 @@ def _m3_upload_addr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffe
 
 
 def _m3_download_addr(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, addr: Int) raises:
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not is_defined["MOJOLEARN_MAMBA3_DIRECT_TRANSFER"]():
+    comptime if not M3_DIRECT_TRANSFER:
         _m3_write_f32(addr, m3_download(ctx, buf, n))
     else:
         var dst = _f32_ptr(addr)
@@ -757,7 +760,7 @@ def _m3_load_weights(ctx: DeviceContext, a: List[Int], dims: Mamba3Dims) raises 
     var di = dims.d_inner
     var dip = dims.d_in_proj()
     var nh = dims.nheads
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_DIRECT_TRANSFER"]():
+    comptime if M3_DIRECT_TRANSFER:
         var norm_w = _m3_upload_addr(ctx, a[1], dm)
         var w_in = _m3_upload_addr(ctx, a[2], dip * dm)
         var dt_bias = _m3_upload_addr(ctx, a[3], nh)

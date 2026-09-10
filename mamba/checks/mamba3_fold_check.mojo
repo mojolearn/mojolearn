@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Hardware/software seam comparison on finite adversarial FP32 triples.
+"""Regression reproducer for the rejected hardware FTZ spelling.
 
 Every acc is flushed before the comparison, as required by the fold seam.
-The -0 addend cases also certify pinned products, including signed zero.
-Build IDENTICAL with MOJOLEARN_MAMBA3_HARDWARE_FOLD to exercise NVIDIA.
+The -0 addend cases exercise pinned products, including signed zero.
+Build IDENTICAL with MOJOLEARN_MAMBA3_HARDWARE_FOLD on NVIDIA to
+reproduce its expected rejection; production kernels never use that flag.
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
