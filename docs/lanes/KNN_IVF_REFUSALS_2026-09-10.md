@@ -35,10 +35,11 @@ and unsupported widths retain their previous entry refusals.
 The fused gate checks query counts 1, 9, and 17 with k = 1, 8, 32, and 64.
 It uses different queries in neighboring logical groups, duplicate vectors,
 and independent integer-distance ordering. It also checks all 2048 mappings
-from 64 virtual lanes to their 32 logical broadcast sources. Native Apple and NVIDIA H100, plus both devices with a declared AMD
-column, pass all twelve cases. The latter is
-real Metal execution of the scoped implementation plus address emulation,
-not physical CDNA execution.
+from 64 virtual lanes to their 32 logical broadcast sources. Native Apple
+and NVIDIA H100, plus both devices with a declared AMD column, pass all
+twelve cases. The override runs execute the scoped implementation on their
+underlying Metal or CUDA backend, alongside address emulation; they are not
+physical CDNA execution.
 
 The full identity driver also exercises AUTO's separate tiled small-k
 selector. In a simulation of the AMD column, that selector must use its
@@ -46,7 +47,8 @@ shared integer tree through `MOJOLEARN_KNN_IDENTICAL_TREE_SELECT`; its
 physical 64-lane shuffle cannot run on a 32-lane device. The original Apple
 simulation omitted this flag and failed. The corrected simulation passes,
 while the explicit fused logical-group implementation remains active. Both
-the original failure and corrected result are archived. Actual CDNA compilation also passes for gfx942, with
+the original failure and corrected result are archived. Actual CDNA
+compilation also passes for gfx942, with
 `MOJOLEARN_REQUIRE_CDNA_TARGET=1` asserting a real CDNA compilation target
 rather than a column override. These binaries were not run on CDNA;
 physical device validation remains **RUN OWED**. NVIDIA validation used an
