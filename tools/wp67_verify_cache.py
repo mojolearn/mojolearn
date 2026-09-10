@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 cache=Path('/root/wp67-compile')
 source=Path('/root/mojolearn')
+assert (cache/'.pixi').resolve()==(source/'.pixi').resolve()
 rows={}
 for path in cache.rglob('*.mojo'):
     relative=path.relative_to(cache)

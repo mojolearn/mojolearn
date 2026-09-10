@@ -11,6 +11,10 @@ export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2
 PY=/opt/venv/bin/python
 [ -x "$PY" ] || PY=python3
 "$PY" -m pip install -q numpy scipy scikit-learn pytest einops > "$OUT/dependencies.log" 2>&1
+# Keep the harness outside the source tree before reversing the product patch.
+for helper in surface_capture classical_capture gp_predict_bench knn_classify_bench lm_surface verify_cache; do
+    cp "tools/wp67_$helper.py" "/root/wp67_$helper.py"
+done
 # The invoking extra body provides a reviewed patch between baseline/candidate.
 cp /root/wp67.patch "$OUT/source.patch"
 # Candidate source arrives through the immutable source archive. Save changed
@@ -47,11 +51,13 @@ PY
             case "$binding" in byte_lm|mamba|training|transformer) [ "$mode" = identical ] || continue ;; esac
             script=bindings/build_$binding.sh
             [ "$binding" != base ] || script=bindings/build.sh
-            if [ "$arm" = after ] && [ "$mode" = identical ] && [ -f "$OUT/preflight-identical.exit" ] && [ "$(cat "$OUT/preflight-identical.exit")" = 0 ]; then
+            if [ "$arm" = after ] && [ -f "$OUT/preflight-$mode.exit" ] && [ "$(cat "$OUT/preflight-$mode.exit")" = 0 ]; then
                 python3 /root/wp67_verify_cache.py
                 name=_mojolearn_$binding
                 [ "$binding" != base ] || name=_mojolearn
-                cp "/root/wp67-compile/python/mojolearn/identical/$name.so" "python/mojolearn/identical/$name.so"
+                tierdir=$mode
+                [ "$mode" != fast ] || tierdir=.
+                cp "/root/wp67-compile/python/mojolearn/$tierdir/$name.so" "python/mojolearn/$tierdir/$name.so"
                 printf 'reused source-verified preflight build %s\n' "$binding" > "$DIR/build-$binding.log"
                 continue
             fi
