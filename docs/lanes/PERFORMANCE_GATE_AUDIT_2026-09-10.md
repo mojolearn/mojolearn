@@ -57,7 +57,7 @@ Trees remain outside this lane. No performance default was changed by this audit
 
 ## Full Apple target measured after the audit
 
-The continuation ran 400k/4000/d32 at k10 and k15 with ordinary phase-disabled
+The continuation ran 400k/ 4000/d32 at k10 and k15 with ordinary phase-disabled
 timing, five rounds after two warmups, both arm orders. Current preflight
 request times are 3.6–7.4% lower at k10 and 4.1–6.3% lower at k15 than the
 safe NO_PREFLIGHT control. All eight paired outputs and cross-order hashes
@@ -68,3 +68,23 @@ limitations: `bench/results/knn_large_gate_audit_2026-09-10/README.md`.
 Mamba original large-shape regime diagnosis, Transformer original large-shape
 numerical admission, and physical H100 GEMM occupancy remain open. No small
 check in this pass qualified any of those.
+
+
+## Scoped Apple metadata promotion
+
+The subsequent continuation promotes per-request vector exponent minima only
+on Apple IDENTICAL, transposed register distance path, Euclidean return_sqrt,
+exactly 400k index / 4000 queries / 32 features, k10 or 15. This is intentionally
+narrow: other shapes keep the previous per-tile preflight. The forced candidate
+saved 23.0–25.7% in a stable large paired window. A freshly compiled actual
+default saved 15.7–25.0% against NO_METADATA in both orders; its later device
+window drifted, so those absolute timings are not a universal price. The
+ranking remained favorable. Five rounds after two warmups, full outputs across
+all arms/orders/windows equal, 396584-case four-arm integer oracle, mutation
+check and 24 distance layouts pass. Two below-scope controls confirm fallback;
+their timings do not drive promotion. Evidence and exact flags/source hashes:
+`bench/results/knn_metadata_2026-09-10/README.md`.
+
+The NVIDIA GEMM scalar shared-read candidate was rejected on the actual three
+Llama t512 shapes: flat QKV, ~0.6% up improvement, slight down regression.
+Its static occupancy remained one block/SM. No GEMM switch.

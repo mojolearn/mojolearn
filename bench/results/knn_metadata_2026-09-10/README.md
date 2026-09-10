@@ -120,3 +120,8 @@ when the runtime policy was narrowed to the measured metric/layout as well as
 dimensions. Those partial files are local and excluded from price evidence.
 Phase class timers exclude upfront metadata preparation; the ordinary prices
 above include it. The harness requires price mode for metadata comparisons.
+
+Root integration: final merged layout harness also cross-compiled for Linux
+x86-64-v3/sm_90 with IDENTICAL enabled. This checks NVIDIA code generation
+only; no NVIDIA execution or new timing claim. Log and sidecar hashes are
+retained in merged-nvidia-compile files.

@@ -7,6 +7,7 @@ are separate. Trees remain outside this lane.
 
 | Area | Latest usable evidence | Remaining work |
 |---|---|---|
+| Apple kNN, measured 400k/4k/d32 k10/k15 | Actual scoped default saves 15.7–25.0% request time in both orders; all outputs match | Expand scope only with additional large evidence; late-window drift is retained |
 | NVIDIA kNN, 400k index / 4k queries / d32 | 27.526 ms k10 and 31.861 ms k15; 2.69x / 2.95x cached cuML | Tune NVIDIA distance/selection costs; Apple metadata does not change this ratio |
 | H100 dense GEMM, actual Llama t512 | Accepted staging 4.07–4.52x cached FP32 cuBLAS; 9.73–11.28 useful TFLOP/s | Current offline cubin is limited to one block/SM; scalar shared-read trial rejected |
 | L40S attention, original HD64 window fixture | Corrected-seam forward 140.3 ms / fwd+bwd 493.7 ms; 3.91x / 4.32x cached SDPA | Backward and operand reuse remain targets; reference is the same model/driver tuple on an earlier physical pod |
@@ -54,4 +55,4 @@ next candidate is explicit aligned 128-bit loads of contiguous index values
 inside the existing 8x4 distance tile, with scalar ragged fallback, if SASS
 shows the compiler currently emits scalar loads. Preserve tile indexing and
 ascending feature FMA order. This differs from the already rejected column
-remapping. Validate on 400k/4000/d32 at both k10 and k15 before any default.
+remapping. Validate on 400k/ 4000/d32 at both k10 and k15 before any default.
