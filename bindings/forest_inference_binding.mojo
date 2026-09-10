@@ -96,7 +96,13 @@ def forest_vector_groves_binding(outputs: PythonObject) raises -> PythonObject:
 def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool, REUSE_IO: Bool = False](
     handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
     params: PythonObject) raises -> PythonObject:
-    """Experimental borrowed-pointer A/B entry; output may change on error."""
+    """Borrowed synchronous prediction; REUSE_IO=True is the public default.
+
+    DEVIATION 2483: parallel_groves already selects this pointer-through body
+    through forest_predict_resident_reuse_gpu. The REUSE_IO=False export and
+    List-based forest_predict_resident_gpu remain comparison arms. Output may
+    change on a nonfinite-result error; caller ownership lasts until return.
+    """
     if len(params) != 3:
         raise Error("resident prediction requires rows, features, outputs")
     var rows = Int(py=params[0])

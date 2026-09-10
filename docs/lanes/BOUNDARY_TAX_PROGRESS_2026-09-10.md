@@ -53,12 +53,25 @@ optimization gate. NVIDIA/AMD attribution remains owed. No competitor ratio is i
 
 ## Packages
 
-- WP1: pointer-through X and bulk pinned staging in progress; preserve label
-  validation/quantization. Float64 direct-to-pinned fusion is a follow-on.
+- WP1a: committed as `630ae89b` (parent `ade09042`). ET borrows X and
+  bulk-copies pinned storage through the existing trainer. Labels still use
+  their original validation/quantization path and an O(rows) List; the removed
+  X List was O(rows × features). Borrowed/List dataset bytes and complete
+  classifier/regressor forests match with bootstrap on/off in all three modes
+  on Metal. RF forwards the live X address to WP4 and bulk-copies inputs.
+  Float64 direct-to-pinned fusion is a follow-on, with a benchmark prepared
+  against the actual transpose implementation; a flat-cast proxy is not
+  enough evidence. Binding integration and large vendor timing are separate.
 - WP2: typed native fit handle/export in progress. Device-resident handoff
   is a follow-on after the host export protocol qualifies.
-- WP3: the borrowed-pointer, reusable-I/O path is already the default. Added
-  routing and native List/into comparisons; see corrected brief.
+- WP3: the borrowed-pointer, reusable-I/O path remains the default. The six-cell
+  Metal matrix passes FAST/DETERMINISTIC/IDENTICAL with separate-array and
+  packed-sibling layouts. Complete RF/ET outputs match the retained List path
+  at widths 1/2/3/5/8/9, including ragged forests, subnormal inputs and row/tree
+  tails; workspace resize/reuse/empty/lifecycle and packed-leaf negative controls
+  pass. Compiled mode/vendor/layout readbacks and source/binary hashes are in
+  [WP3 evidence](../../bench/results/boundary_tax_2026-09-10/wp3/RESULTS.md).
+  These are correctness checks, not new timing or cross-vendor qualification.
 - WP4: device identity-row fill and optional borrowed-X OOB path pass native
   checks in FAST, DETERMINISTIC and IDENTICAL on Metal. Both input layouts,
   signed zero/subnormal inputs, row-count tails and full forest/OOB fingerprints
@@ -76,4 +89,7 @@ optimization gate. NVIDIA/AMD attribution remains owed. No competitor ratio is i
   [WP5 evidence](../../bench/results/boundary_tax_2026-09-10/wp5/README.md).
   NVIDIA/AMD correctness and large narrow/wide NVIDIA timing remain owed;
   these small correctness fixtures establish no speed gain.
-- WP8: vectorized byte comparison/copy pending after WP1's builder edit.
+- WP8: vectorized full-capacity byte comparison and memcpy candidate prepared.
+  Scattered-byte, vector-boundary, scalar-tail and actual skip checks pass on
+  Metal FAST. Same-process large-fit scalar-reference/candidate timing remains
+  required before committing the candidate default.

@@ -145,3 +145,45 @@ def test_resident_default_requires_reuse_binding(monkeypatch):
     model = fitted(RandomForestRegressor, 'parallel_groves')
     with pytest.raises(RuntimeError, match='rebuild'):
         model.predict(np.ones((2, 1), dtype=np.float32))
+
+
+@pytest.mark.parametrize('cls', CLASSES)
+@pytest.mark.parametrize('mode', ['fast', 'deterministic', 'identical'])
+def test_wp3_public_default_borrows_input_and_output(cls, mode, monkeypatch):
+    """Sabotage alternate entries so fallback cannot masquerade as reach."""
+    import ctypes
+    from mojolearn._arrays import _addr_ro
+    from mojolearn._buffer import as_f32_c
+
+    reached = []
+    def forbidden(*args):
+        pytest.fail('public prediction reached staged or uncached comparison arm')
+    def predict(handle, source, destination, dims):
+        reached.append((source, destination, tuple(dims)))
+        inp = (ctypes.c_float * dims[0]).from_address(source)
+        out = (ctypes.c_float * (dims[0] * dims[2])).from_address(destination)
+        for row in range(dims[0]):
+            for column in range(dims[2]):
+                out[row * dims[2] + column] = inp[row] + column
+        return dims[0]
+    native = SimpleNamespace(forest_prepare_gpu=lambda *args: 1,
+                             forest_predict_resident_gpu=forbidden,
+                             forest_predict_resident_into_gpu=forbidden,
+                             forest_predict_resident_reuse_gpu=predict,
+                             forest_release_gpu=lambda handle: None)
+    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    model = fitted(cls, 'parallel_groves')
+    model.numeric_mode = model._fit_numeric_mode = mode
+    source, _ = as_f32_c(np.array([[2.], [7.], [-3.]], np.float32), name='X')
+    # ET widens its public outputs after this boundary; inspect its native
+    # vote buffer before that established public conversion.
+    call = model._vote if hasattr(model, "_vote") else (
+        model.predict_proba if model._num_outputs > 1 else model.predict)
+    result = call(source)
+    assert reached[0][0] == _addr_ro(source)
+    assert reached[0][1] == _addr_ro(result)
+    expected = np.array([[2. + j for j in range(model._num_outputs)],
+                         [7. + j for j in range(model._num_outputs)],
+                         [-3. + j for j in range(model._num_outputs)]], np.float32)
+    np.testing.assert_array_equal(np.asarray(result).reshape(expected.shape).view(np.uint32),
+                                  expected.view(np.uint32))

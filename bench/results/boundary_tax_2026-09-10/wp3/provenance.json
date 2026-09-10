@@ -1,0 +1,71 @@
+{
+  "command": "nice -n 19 tools/with_build_lock.sh bash tools/check_forest_resident_layouts.sh bench/results/boundary_tax_2026-09-10/wp3",
+  "source_sha256": {
+    "tools/check_forest_resident_layouts.sh": "9f3638c8668b6b7dc26a8e820debf9bc29b4dbfbe7978dfbd092b185ce3d0113",
+    "checks/forest_inference_model.mojo": "5745c2b8a75582e92fa88c4e75a610f92fd2ff5924aef205a6edfb1b84872ac0",
+    "core/forest_inference_model.mojo": "43f7b47e33a5a3bad1f8d06ba006b7136a84f821d966cabaee905ffddc60ea24",
+    "core/forest_inference.mojo": "10b36c6c256fb2fb5fb28f3421fbec713f61fc508b5adc3640185301c1c8ed7b"
+  },
+  "cells": [
+    {
+      "mode": "fast",
+      "numeric_mode": 0,
+      "vendor": "metal",
+      "layout": "separate_arrays",
+      "layout_cases": 12,
+      "workspace_cases": 2,
+      "binary_sha256": "7c62e851e2693eaeb70ebbe033642a5dd8a93d4cf7b4dcb737a8d382ea4cfe5c",
+      "binary_saved": "/tmp/mojolearn-boundary-wp3-binaries/fast-separate_arrays"
+    },
+    {
+      "mode": "fast",
+      "numeric_mode": 0,
+      "vendor": "metal",
+      "layout": "packed_siblings",
+      "layout_cases": 12,
+      "workspace_cases": 2,
+      "binary_sha256": "3e0a5266487656c4c3edf3f024dcb82d986a60bb4a8b8f40e7cf6b0191a316c5",
+      "binary_saved": "/tmp/mojolearn-boundary-wp3-binaries/fast-packed_siblings"
+    },
+    {
+      "mode": "deterministic",
+      "numeric_mode": 2,
+      "vendor": "metal",
+      "layout": "separate_arrays",
+      "layout_cases": 12,
+      "workspace_cases": 2,
+      "binary_sha256": "2df5deff33a05bd900fbed14b21496482c6a172816d862599e91cf94f3746230",
+      "binary_saved": "/tmp/mojolearn-boundary-wp3-binaries/deterministic-separate_arrays"
+    },
+    {
+      "mode": "deterministic",
+      "numeric_mode": 2,
+      "vendor": "metal",
+      "layout": "packed_siblings",
+      "layout_cases": 12,
+      "workspace_cases": 2,
+      "binary_sha256": "a02ea9766185690d151025db162c26709e0a2955331aa135cd8fd7dcd851748c",
+      "binary_saved": "/tmp/mojolearn-boundary-wp3-binaries/deterministic-packed_siblings"
+    },
+    {
+      "mode": "identical",
+      "numeric_mode": 1,
+      "vendor": "metal",
+      "layout": "separate_arrays",
+      "layout_cases": 12,
+      "workspace_cases": 2,
+      "binary_sha256": "56071f03be8493dd803b2484f2e4b4ba5dc8a23a1c32feec3a9dd1f8f428da3f",
+      "binary_saved": "/tmp/mojolearn-boundary-wp3-binaries/identical-separate_arrays"
+    },
+    {
+      "mode": "identical",
+      "numeric_mode": 1,
+      "vendor": "metal",
+      "layout": "packed_siblings",
+      "layout_cases": 12,
+      "workspace_cases": 2,
+      "binary_sha256": "977a20f369b1a5aee26d21c68348d46487fda85fc5264cd6562d9c70c515b993",
+      "binary_saved": "/tmp/mojolearn-boundary-wp3-binaries/identical-packed_siblings"
+    }
+  ]
+}

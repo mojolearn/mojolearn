@@ -204,7 +204,7 @@ struct ResidentForest(Movable):
     def prepare_workspace(mut self, rows: Int) raises:
         # DEVIATION BLOCK FOREST-IO-REUSE-1:
         # nvForest cef3a50d forest_model.hpp:284-308 borrows caller-owned GPU
-        # buffers; our NumPy boundary requires host/device copies. Retain one
+        # buffers; our host-buffer boundary requires host/device copies. Retain one
         # exact-size pair, avoiding two device allocations on equal-size calls.
         # No high-water cache: resizing releases the previous pair. Public
         # parallel_groves selects reuse after the September 10 large-data gate:

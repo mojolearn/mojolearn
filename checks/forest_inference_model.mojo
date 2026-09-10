@@ -81,6 +81,10 @@ def check_layout[RF_INPUT: Bool](outputs: Int) raises:
     var expected = forest_predict_gpu[RF_INPUT, True](ctx, offsets, columns,
         thresholds, left, leaves, x, 5, 2, outputs)
     var model = ResidentForest(offsets, columns, thresholds, left, leaves, 2, outputs)
+    # WP3/2483: compare the retained List boundary to BOTH pointer entries on
+    # the same ragged model/input. RF and ET threshold semantics, class-vector
+    # tails and subnormal inputs are covered by this existing fixture.
+    var staged = model.predict[RF_INPUT](x, 5, 2, outputs)
     for reuse in range(2):
         var actual = List[Float32](length=5 * outputs, fill=Float32(-7))
         model.predict_into[RF_INPUT](x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
@@ -88,6 +92,8 @@ def check_layout[RF_INPUT: Bool](outputs: Int) raises:
         for i in range(len(actual)):
             if bitcast[DType.uint32](actual[i]) != bitcast[DType.uint32](expected[i]):
                 raise Error("resident layout/direct GPU bit mismatch")
+            if bitcast[DType.uint32](actual[i]) != bitcast[DType.uint32](staged[i]):
+                raise Error("WP3 List/pointer boundary bit mismatch")
     comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
         # Sabotage actual packed device leaf data, then require prediction to
         # change. This proves the candidate buffer is reached, not just built.
