@@ -1,0 +1,12 @@
+1722 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x781e40000000, nodemask=2)
+WEIGHT_CASE True {0: 1, 1: 5} plain= 41ad9e69539f4bb260d51096702a72b2f8254b7d8945650292edaa1f6b8815f9 weighted= e746b5507c4e88767d4a0c79490e179de957364c599a18a4db566ba292e99965 max_probability_change= 0.717412531375885
+WEIGHT_CASE True balanced plain= 41ad9e69539f4bb260d51096702a72b2f8254b7d8945650292edaa1f6b8815f9 weighted= c31ef69ba330092721dd47edf3dd9e7048afe018bdebbd178628256f9b921a24 max_probability_change= 0.7299154996871948
+WEIGHT_CASE True {0: 0, 1: 1} plain= 41ad9e69539f4bb260d51096702a72b2f8254b7d8945650292edaa1f6b8815f9 weighted= e3c5660bd842cb278913f0d4a37603ce0b9103927d4f15780d435c3907605065 max_probability_change= 0.9959839582443237
+WEIGHT_CASE False {0: 1, 1: 5} plain= fd67b0ab9fbff735b571db7d0e21e44256f76adb322bf60f878641ddff26294a weighted= fd67b0ab9fbff735b571db7d0e21e44256f76adb322bf60f878641ddff26294a max_probability_change= 0.0
+Traceback (most recent call last):
+  File "/root/mojolearn/checks/rf_class_weight_smoke.py", line 60, in <module>
+    main()
+  File "/root/mojolearn/checks/rf_class_weight_smoke.py", line 49, in main
+    assert fingerprint(model) != fingerprint(plain), 'weighted path did not affect model'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: weighted path did not affect model
