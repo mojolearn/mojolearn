@@ -2,13 +2,17 @@
 """Compare fresh-prefill output/reports with the original explicit-state path."""
 from pathlib import Path
 import runpy
+import os
 import numpy as np
 from mojolearn import Mamba3Block
 
 root = Path(__file__).resolve().parents[1]
 weights_for = runpy.run_path(str(root / 'python/mojolearn/tests/test_mamba_surface.py'), run_name='m3_helpers')['m3_weights']
 checked = 0
-for batch, length, dm in [(1, 1, 32), (2, 63, 64), (2, 64, 64), (2, 65, 64), (1, 129, 32)]:
+shapes = [(1, 1, 32), (2, 63, 64), (2, 64, 64), (2, 65, 64), (1, 129, 32)]
+if os.environ.get("MOJOLEARN_MAMBA3_FRESH_LARGE") == "1":
+    shapes += [(8, 4096, 512), (8, 1024, 2048)]
+for batch, length, dm in shapes:
     rng = np.random.default_rng(71 + length)
     weights = weights_for(rng, dm)
     fresh = Mamba3Block(weights)
@@ -16,6 +20,7 @@ for batch, length, dm in [(1, 1, 32), (2, 63, 64), (2, 64, 64), (2, 65, 64), (1,
     state = stateful.allocate_state(batch)
     x = rng.uniform(-0.2, 0.2, (batch, length, dm)).astype(np.float32)
     has_fresh = hasattr(fresh._extension(), 'mamba3_forward_fresh')
+    assert has_fresh, 'dedicated fresh entry was not compiled; gate cannot certify an unused path'
     if has_fresh:
         def forbidden_cache(*args, **kwargs):
             raise AssertionError('fresh path allocated a discarded host state')
