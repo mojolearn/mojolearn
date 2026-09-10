@@ -104,6 +104,8 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_exp,
@@ -1527,7 +1529,7 @@ def m3_siso_forward(
             grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
-    comptime if M3_LEGACY_STATEPASS:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or M3_LEGACY_STATEPASS:
         ctx.enqueue_function[m3_statepass_kernel](
             pass_states.unsafe_ptr(),
             h_last.unsafe_ptr(),
