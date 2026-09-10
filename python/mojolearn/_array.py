@@ -401,6 +401,19 @@ class Array:
                 "memoryview; use numpy.asarray (zero-copy), tobytes() or "
                 "reshape() for a C-order copy"
             )
+        if self.size == 0:
+            # CPython refuses `cast(fmt, shape)` with a zero in the shape.
+            # A 1-D empty Array exports as a typed empty view (so `bytes()`
+            # and `memoryview()` work); an empty matrix raises BufferError
+            # so `numpy.asarray` falls through to `__array_interface__`,
+            # which carries the (0, k) shape exactly (found 2026-09-10 by
+            # the DEVIATION 2489 gate on an all-zero affinity matrix).
+            if self.ndim == 1:
+                return self._mv.cast("B").cast(_CODE[self.dtype])
+            raise BufferError(
+                "mojolearn: an empty matrix has no memoryview shape; use "
+                "numpy.asarray (zero-copy), tobytes() or reshape(-1)"
+            )
         return self._mv.cast("B").cast(_CODE[self.dtype], self.shape)
 
     def _flat(self):

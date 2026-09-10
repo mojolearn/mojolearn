@@ -33,10 +33,12 @@ Python path itself printed green on 2026-09-02 in all three tiers,
 44 checks 0 failed each (`tests/test_transformer_surface.py`), on ONE
 APPLE M4 and no other vendor -- its NVIDIA and AMD columns are OWED.
 
-    import numpy as np
     from mojolearn.transformer import TransformerBlock
 
-    blk = TransformerBlock(weights, n_heads=2)  # dict of float32 arrays,
+    blk = TransformerBlock(weights, n_heads=2)  # dict of float32 buffers
+                                                # (any buffer-protocol
+                                                # object: array.array,
+                                                # memoryview, an ndarray),
                                                 # upstream parameter names
     y = blk.forward(x)                          # (B, L, d_model) -> same
     st = blk.allocate_state(batch_size=1, max_tokens=64)
