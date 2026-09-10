@@ -53,7 +53,8 @@ def read_npz(path, expected_format):
         for name in z.files:
             out[name] = z[name]
     tag = scalar_str(out, "format") if "format" in out else ""
-    if tag != expected_format:
+    accepted = expected_format if isinstance(expected_format, tuple) else (expected_format,)
+    if tag not in accepted:
         raise ValueError(
             f"mojolearn: {path!r} holds model format {tag!r}, this loader "
             f"reads {expected_format!r}"

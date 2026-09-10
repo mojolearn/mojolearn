@@ -470,9 +470,9 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
         """Write the fitted forest to `path` as an npz.
 
         The file holds the five prediction arrays exactly as fitted, raw
-        bytes and exact dtypes, so a model saved on one machine and loaded
-        on another predicts the SAME BITS. Floats never pass through
-        decimal text. The bytes of the file itself are a pure function of
+        bytes and exact dtypes. GPU-parallel archives also retain their
+        inference engine and numeric mode in a separately versioned format.
+        Floats never pass through decimal text. The bytes of the file itself are a pure function of
         the model (see `_serialize.write_npz`), so equal models give equal
         file hashes across machines.
         """
@@ -498,6 +498,7 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
         }
         if hasattr(self, "classes_"):
             arrays["classes"] = np.asarray(self.classes_)
+        self._archive_inference_metadata(arrays, _MODEL_FORMAT)
         return _serialize.write_npz(path, arrays)
 
     @classmethod
@@ -505,7 +506,7 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
         """Load a forest saved by `save`. The result predicts; it does not
         refit. Loading a file saved by the other estimator class raises
         rather than reinterpreting its leaves."""
-        arrays = _serialize.read_npz(path, _MODEL_FORMAT)
+        arrays = _serialize.read_npz(path, (_MODEL_FORMAT, _MODEL_FORMAT + "-parallel-groves-1"))
         saved_as = _serialize.scalar_str(arrays, "estimator")
         if saved_as != cls.__name__:
             raise ValueError(
@@ -514,6 +515,7 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
             )
         obj = cls.__new__(cls)
         obj.device = _serialize.scalar_str(arrays, "device")
+        obj._restore_inference_metadata(arrays, _MODEL_FORMAT)
         obj._offsets = _serialize.exact(arrays, "offsets", np.int32)
         obj._colid = _serialize.exact(arrays, "colid", np.int32)
         obj._quesval = _serialize.exact(arrays, "quesval", np.float32)
@@ -577,6 +579,7 @@ class RandomForestClassifier(_RandomForestBase):
         n_streams=_CUML_DEFAULT_N_STREAMS,
         max_batch_size=_CUML_DEFAULT_MAX_BATCH,
         device="gpu",
+        inference_engine="sequential",
     ):
         code = _criterion_code(criterion, _CLS_CRITERIA, "classifier")
         if min_weight_fraction_leaf:
@@ -615,7 +618,7 @@ class RandomForestClassifier(_RandomForestBase):
     def predict_proba(self, X):
         Xa, n_rows, n_features = self._check_predict_input(X)
         out = np.empty(n_rows * self._num_outputs, dtype=np.float32)
-        wrote = self._bind("_mojolearn_rf").rf_predict_proba(
+        wrote = self._prediction_function("rf_predict_proba")(
             _addr_ro(self._offsets),
             _addr_ro(self._colid),
             _addr_ro(self._quesval),
@@ -690,6 +693,7 @@ class RandomForestRegressor(_RandomForestBase):
         n_streams=_CUML_DEFAULT_N_STREAMS,
         max_batch_size=_CUML_DEFAULT_MAX_BATCH,
         device="gpu",
+        inference_engine="sequential",
     ):
         code = _criterion_code(criterion, _REG_CRITERIA, "regressor")
         if min_weight_fraction_leaf:
@@ -732,7 +736,7 @@ class RandomForestRegressor(_RandomForestBase):
     def predict(self, X):
         Xa, n_rows, n_features = self._check_predict_input(X)
         out = np.empty(n_rows, dtype=np.float32)
-        wrote = self._bind("_mojolearn_rf").rf_predict_reg(
+        wrote = self._prediction_function("rf_predict_reg")(
             _addr_ro(self._offsets),
             _addr_ro(self._colid),
             _addr_ro(self._quesval),

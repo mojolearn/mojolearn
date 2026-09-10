@@ -29,6 +29,7 @@ def forest_estimator(kind):
             if mode is not None and (not isinstance(mode, str) or
                     mode.strip().lower() not in ("fast", "deterministic", "identical")):
                 raise ValueError("numeric_mode must be fast, deterministic, identical or None")
+            self._validate_inference_engine(bound.arguments.get("inference_engine", "sequential"))
             original(self, *args, **kwargs)
             for name in cls._parameter_names:
                 setattr(self, name, bound.arguments[name])
@@ -108,6 +109,39 @@ class ForestProtocol:
     def _bind(self, name=None):
         from . import _backend
         return _backend.binding(name or self._BINDING, self._effective_mode())
+
+    @staticmethod
+    def _validate_inference_engine(engine):
+        if not isinstance(engine, str) or engine not in ("sequential", "parallel_groves"):
+            raise ValueError("inference_engine must be 'sequential' or 'parallel_groves'")
+        return engine
+
+    def _prediction_engine(self):
+        return self._validate_inference_engine(getattr(self, "inference_engine", "sequential"))
+
+    def _prediction_function(self, sequential_name):
+        engine = self._prediction_engine()
+        native = self._bind()
+        name = sequential_name if engine == "sequential" else sequential_name + "_gpu_parallel"
+        function = getattr(native, name, None)
+        if function is None:
+            raise RuntimeError("rebuild the forest binding for inference_engine=" + repr(engine))
+        return function
+
+    def _archive_inference_metadata(self, arrays, sequential_format):
+        if self._prediction_engine() == "parallel_groves":
+            arrays["format"] = np.asarray(sequential_format + "-parallel-groves-1")
+            arrays["numeric_mode"] = np.asarray(self._effective_mode())
+
+    def _restore_inference_metadata(self, arrays, sequential_format):
+        from . import _serialize
+        if _serialize.scalar_str(arrays, "format") == sequential_format:
+            self.inference_engine = "sequential"
+        else:
+            self.inference_engine = "parallel_groves"
+            mode = self._validated_mode(_serialize.scalar_str(arrays, "numeric_mode"))
+            self.numeric_mode = mode
+            self._fit_numeric_mode = mode
 
     def __sklearn_is_fitted__(self):
         return hasattr(self, "_offsets")

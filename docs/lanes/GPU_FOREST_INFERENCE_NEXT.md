@@ -1,13 +1,18 @@
+Implementation update: an opt-in shared GPU engine is now wired for all four
+RF/ET estimators. Public names are `sequential` and `parallel_groves`; see the
+[engine contract](../FOREST_INFERENCE_ENGINES.md). The audit below records the
+original source analysis and explains the fixed-graph design and remaining work.
+
 # Shared GPU forest inference: next bounded slice
 
 The active H100 run reported a 26.43 s public RF probability call for 500,000
 held-out rows and 100 trees, versus a 7.65 s full-fit warmup. These are preliminary
 single-call observations, not stable performance results. `prediction_ms` includes
 boundary copying, reconstruction, traversal and output copying; it does not isolate
-traversal. GPU training does not imply GPU prediction. No GPU inference speedup
-has been measured or implemented by this audit.
+traversal. GPU training does not imply GPU prediction. The new opt-in engine and bounded qualification are described in the linked
+engine contract; training and inference measurements remain separate.
 
-## Actual current paths
+## Sequential paths retained alongside the GPU engine
 
 RF `bindings/_mojolearn_rf.mojo:541` rebuilds trees from flat NumPy arrays, copies
 row-major X into a Mojo host List, invokes host `RandomForest.predict_proba`, and
@@ -98,7 +103,7 @@ The following paths are relative to that pinned nvForest checkout:
   applies postprocessing. `detail/postprocessor.hpp:52–74` divides by the
   average factor before bias/other configured transformations.
 
-Consequently nvForest's production summation is not the legacy host left-fold
+Consequently nvForest's production summation is not the sequential host left-fold
 through trees. Its association depends on task assignment, grove count and
 chunk/block choices. A literal copy can be a legitimate FAST candidate, but
 cannot be assumed to preserve our current IDENTICAL tree accumulation or
@@ -107,9 +112,9 @@ This is now a source-supported design constraint, not a missing-source blocker.
 
 ## Legacy-bit reference option: shared seam and arithmetic constraints
 
-A proposed shared module such as `core/forest_inference.mojo` can take the existing
+The shared module `core/forest_inference.mojo` takes the existing
 flat buffers plus dimensions and a small feature-comparison policy. Both bindings
-would upload those buffers, launch the same kernel, and return the existing ABI
+upload those buffers, launch the same kernel, and return the existing ABI
 outputs. No new model format is needed. Keep a reference route until qualification.
 
 First use one independent GPU worker per row/output component, walking trees in
@@ -136,11 +141,11 @@ the supported domain or record a versioned numerical correction with independent
 oracles and user-visible scope. Do not silently drop signed-zero, subnormal or
 cancellation cases. Training-mode contracts are not evidence for inference bits.
 
-## Legacy-bit reference sequence (candidate A, not the final performance target)
+## Ordered-fold reference sequence (candidate A, not the final performance target)
 
 1. Use the resolved nvForest source above for packed traversal, shared-input
    caching and vector-leaf layout decisions. Explicitly choose an IDENTICAL
-   arithmetic deviation: retain the legacy sequential tree fold rather than
+   arithmetic deviation: retain the sequential tree fold rather than
    copying nvForest's grove/shuffle reduction. The first bounded GPU slice can
    parallelize rows while preserving that fold. A later per-tree-output kernel
    plus ordered fold is possible but adds rows×trees×outputs scratch; do not
@@ -169,21 +174,21 @@ cancellation cases. Training-mode contracts are not evidence for inference bits.
    The first implementation may upload per call and must include that cost in
    public timing. Do not hide setup cost by timing a private resident-buffer API.
 
-No product code or builds changed for this document. Public upstream source was acquired and read; no native compilation or GPU job
-was performed. The RF/ET shared inference opportunity is concrete; its speed and cross-vendor numerical qualification
-remain open work.
+The shared engine and new native entrypoints are implemented. Bounded CUDA and
+Metal kernel checks and public CUDA RF/ET checks passed; broader cross-vendor
+large-model coverage and HIP remain open. See the engine contract for results.
 
 ## Updated target: GPU parallel inference with a fixed IDENTICAL topology
 
 The user's target is GPU-parallel inference and cross-GPU identity, not retaining
-the old serial tree fold indefinitely. The legacy fold is an oracle/reference
+the old serial tree fold indefinitely. The sequential fold is an oracle/reference
 option, not a permanent restriction on the production design. Two concrete
 implementations should be distinguished:
 
 | Candidate | Parallel work | Association | Role |
 |---|---|---|---|
 | A: row-parallel | Rows (and optionally output components); trees visited serially | Existing tree-order fold, subject to explicit device arithmetic seams | Simple reference, migration diagnostic |
-| B: fixed-grove GPU | Rows × 32 logical tree groups, each group visits a strided tree subset | Fixed group-local folds plus fixed 16,8,4,2,1 reduction | Proposed IDENTICAL GPU prototype |
+| B: fixed-grove GPU | Rows × 32 logical tree groups, each group visits a strided tree subset | Fixed group-local folds plus fixed 16,8,4,2,1 reduction | Implemented opt-in `parallel_groves` engine |
 
 Candidate B follows the production nvForest decomposition read at
 `cpp/include/nvforest/detail/infer_kernel/gpu.cuh:110–175` (row/tree task mapping,
@@ -193,67 +198,34 @@ rather than use `detail/infer/gpu.cuh:103–179` device-dependent chunk/block si
 This permits parallel tree traversal while keeping the reduction graph invariant.
 It can change prediction bits relative to the previous host traversal. Report
 that numerical migration directly, compare quality, and require new cross-device
-exact-output gates; do not hide it behind a legacy-bit claim.
+exact-output gates; do not hide it behind a sequential-bit equivalence claim.
 
-### Exact first prototype
+### Implemented first GPU engine
 
-* Shared RF/ET flat-array input: offsets, columns, thresholds, local left-child
-  indices and contiguous Float32 node×output leaf values, plus row-major Float32
-  X. Keep both public prediction ABIs. Initially binary/multiclass classification
-  with 2–32 outputs and single-output regression; explicitly refuse unsupported
-  dimensions in the candidate instead of silently running a host prediction.
-  This output bound is a prototype specialization, not a new permanent API cap.
-* Fix `G=32` logical groves and `R=4` rows per block; use 128 physical threads,
-  `row_lane=thread_id % 4`, `grove=thread_id // 4`. Block b owns rows 4b..4b+3.
-  A worker visits tree IDs `grove, grove+32, ...` in increasing order. Each
-  traversal starts at local node0 and adds the reached leaf vector into its own
-  `workspace[row_lane, output, grove]`, initialized to positive zero. This is
-  exactly the strided-grove decomposition, with fixed rather than discovered G/R.
-* The first version uses shared output workspace and reads X directly from
-  device memory: at most `4*32*32*4 = 16384` bytes for 32 output classes.
-  Node/leaf buffers are shared read-only. Avoid an additional input cache until
-  its fit on all target devices is established; nvForest's optional shared input
-  copy can be ported later without altering arithmetic. A worker loops over
-  components at each leaf, so it traverses each assigned tree only once.
-* After all groups finish, synchronize the entire block. For offsets
-  `16,8,4,2,1`, logical groves below the offset add the value at `grove+offset`
-  into their own slot, then every physical thread executes a block barrier.
-  This explicit shared-memory reduction avoids assuming a CUDA warp maps to
-  an AMD wavefront or Metal SIMD group. Grove0 divides each output by the tree
-  count once. All inactive tail-row workers participate in every barrier but
-  skip input loads/output stores. Empty groves retain +0. No atomics, scheduler-
-  dependent sums, or architecture-selected grove counts occur in IDENTICAL.
-* Use the project's mode-aware Float32 helpers at every group accumulation,
-  every reduction edge, and final division. For IDENTICAL, specify FTZ at the
-  same arithmetic seams and portable division; do not let contraction/reassociation
-  create a vendor-specific graph. Regression cancellation and signed zero must
-  be tested explicitly. FAST can use native arithmetic on this same fixed graph
-  first; only a later measured FAST variant may use nvForest-style adaptive
-  geometry. DETERMINISTIC fixes this graph for repeatability on its target.
-* Preserve RF's feature-FTZ versus ET's raw-feature policy. Direct flat arrays
-  retain `<=` going left, local left-child addressing and right=left+1. If GPUs
-  flush ET comparison inputs, implement finite Float32 comparison using ordered
-  integer keys with ±0 equivalence, rather than changing leaf assignment. Do
-  not apply nvForest's `<` without its importer threshold/child transformations
-  (`detail/decision_forest_builder.hpp:162–176`). NaN/missing-value support is
-  outside this finite-input slice and must be an explicit refusal.
-* Compute all probabilities/scalar predictions on GPU. A follow-up small GPU
-  argmax can emit encoded class IDs using first-maximum tie breaking, followed
-  only by host mapping to arbitrary `classes_`. No new CPU traversal is required.
-  The first synchronous wrapper uploads current arrays per call and downloads
-  results, with measured setup cost; cached model residency is a separate task.
-
-The essential cross-GPU invariant is the **same tree-to-grove assignment and the
-same ordered arithmetic edges**, not equal physical occupancy. Different devices
-may execute different numbers of these fixed blocks concurrently without changing
-outputs. If 16 KiB shared memory is unavailable on a supported device, add a
-workspace implementation preserving the same logical graph or refuse the candidate;
-do not silently change G. Larger output counts can later use separate output
-stripes while retaining exactly the same group sums and reduction schedule.
+* The shared RF/ET buffers retain offsets, column IDs, thresholds, local left
+  children, contiguous Float32 node/output leaves and row-major Float32 X.
+  Positive output dimensions are supported within explicit Int32 element bounds;
+  this scalar-output implementation introduces no arbitrary 32-class cap.
+* A 128-thread block handles four scalar `(row, output)` items. Logical grove
+  `thread_id % 32` visits trees g, g+32, ... for its item. `thread_id // 32`
+  selects the item, and each thread keeps one Float32 accumulator. This
+  parallelizes rows, components and tree groups, but repeats traversal for each
+  component; nvForest's vector-leaf traversal reuse remains a next optimization.
+* The shared reduction workspace is 128 Float32 values (512 bytes). Steps
+  16/8/4/2/1 use whole-block barriers and explicit indices, independent of
+  hardware warp/wave width. Inactive tail items still execute all barriers.
+  Grove zero divides once by the number of trees. No floating atomics or
+  scheduling-dependent association are used.
+* Both bindings upload and download through the shared helper. Host graph and
+  finite-value validation prevent cyclic/out-of-bounds traversal before launch.
+  Persistent device models and borrowed input buffers are not implemented yet.
+* The public names are `sequential` (existing default) and `parallel_groves`
+  (opt-in GPU). A test-only ordered-fold GPU kernel is retained as a graph
+  reference; it is not an additional public inference-engine setting.
 
 ### Qualification for this numerical migration
 
-Before public-default selection, compare B with A and the legacy host route on
+Before public-default selection, compare B with A and the sequential host route on
 identical stored RF/ET forests, checking quality and explaining any changed bits.
 Independently construct a CPU test oracle for B's exact group mapping and reduction
 graph (test-only arithmetic, not a product CPU backend). Check complete Float32
