@@ -343,7 +343,7 @@ def check_knn_fused_tie_set_is_geometry_invariant() raises:
     crash. It prints what it skipped and why; a silent `return` here would
     make an AMD run look like it had verified something it never ran.
     """
-    comptime if lib_lane_width_for[TARGET_COLUMN]() != 32:
+    comptime if lib_lane_width_for[TARGET_COLUMN]() != 32 and not (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_lane_width_for[TARGET_COLUMN]() == 64):
         print(
             "check_knn_fused_tie_set_is_geometry_invariant SKIPPED (",
             _mode_name(),
