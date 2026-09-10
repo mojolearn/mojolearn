@@ -14,7 +14,7 @@ written on the CPU through the SAME seams (`identical_mul_add`,
 `identical_mul`, `ftz`, `identical_exp`, `identical_div`, `identical_rsqrt`,
 `identical_sin`, `identical_cos`, `identical_fmax`, `identical_silu`,
 `portable_powf`, and gemm v1's `gemm_oracle`), so that the device card of
-`transformer/impl/transformers/models/llama/modeling_llama.mojo` can be
+`transformer/impl/llama/modeling_llama.mojo` can be
 diffed against it bitwise. The device kernels will be an INDEPENDENT
 transcription of the same order; nothing here is imported by them except the
 seam functions themselves, which are shared BY DESIGN -- one arithmetic, two

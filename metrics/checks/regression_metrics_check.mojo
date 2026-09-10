@@ -97,8 +97,8 @@ from metrics.checks.pinned_sum import (
     sabotage_shifted_host_tree_sum,
     virtual_block_sum,
 )
-from metrics.impl.metrics.kl_divergence import kl_divergence
-from metrics.impl.metrics.r2_score import r2_score_py
+from metrics.impl.kl_divergence import kl_divergence
+from metrics.impl.r2_score import r2_score_py
 from metrics.impl.stats.detail.kl_divergence import (
     kl_divergence_launch,
     kld_op,

@@ -81,7 +81,7 @@ from neighbors.impl.distance.detail.pairwise_distance_base import (
     TARGET_GPU_CORES,
     max_active_blocks_per_core,
 )
-from neighbors.impl.neighbors.detail.fused_l2_knn import fused_l2_knn_grid
+from neighbors.impl.detail.fused_l2_knn import fused_l2_knn_grid
 
 
 def _pin(name: String, got: Int, want: Int) raises:

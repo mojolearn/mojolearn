@@ -41,7 +41,7 @@ on every machine, so their `cub::BlockScan` and this loop are the same
 function and there is nothing for `IDENTICAL` to pin.
 """
 
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.kmeans_params import (
     METRIC_L2_EXPANDED,
     METRIC_L2_SQRT_EXPANDED,
 )
@@ -57,7 +57,7 @@ between them hold fewer than `k` vectors (`:106-108`). This implementation REFUS
 that case by name instead (DEVIATION 1794): a caller who gets `k` slots
 back, some of them a sentinel, has to know to test for the sentinel, and
 the implemented selector cannot take `k > len` at all -- the same hole
-`neighbors/impl/neighbors/detail/knn_brute_force.mojo` refuses `k >
+`neighbors/impl/detail/knn_brute_force.mojo` refuses `k >
 n_index` for, for the same reason, in the same words."""
 
 

@@ -4,7 +4,7 @@
 helpers the device kernels use, plus a Float64 reference and the fixtures.
 
 NO REFERENCE FILE. cuML ships one backend and needs no oracle. This file is what
-`solver/impl/solver/cd.mojo` is gated against BIT FOR BIT under IDENTICAL
+`solver/impl/cd.mojo` is gated against BIT FOR BIT under IDENTICAL
 (`check_cd_device_equals_oracle`), stage by stage: the column norms, the
 means, and after EVERY epoch the coefficient vector, the residual and the
 `ConvState` triple. Under FAST the same comparison is a REPORT.

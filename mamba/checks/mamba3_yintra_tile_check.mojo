@@ -3,8 +3,8 @@
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from mamba.impl.mamba_ssm.modules.mamba3_transfer import m3_upload, m3_download
-from mamba.impl.mamba_ssm.ops.mamba3_siso import m3_yintra_kernel, m3_yintra_tiled_kernel
+from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
+from mamba.impl.ops.mamba3_siso import m3_yintra_kernel, m3_yintra_tiled_kernel
 
 
 def run_case(ctx: DeviceContext, l: Int, q0: Int, q: Int, adverse: Bool) raises -> Int:

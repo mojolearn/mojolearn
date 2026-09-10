@@ -76,7 +76,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
-from glm.impl.glm.ols import OLS_ALGO_EIG, ols_fit_traced
+from glm.impl.ols import OLS_ALGO_EIG, ols_fit_traced
 from glm.impl.linalg.detail.lstsq import OLS_ELEM_TPB
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 

@@ -9,8 +9,8 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_AMD, column_is_simulated, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from neighbors.impl.neighbors.detail.fused_l2_knn import fused_l2_knn
-from neighbors.impl.neighbors.topk.logical_warp32 import logical32_source_lane
+from neighbors.impl.detail.fused_l2_knn import fused_l2_knn
+from neighbors.impl.topk.logical_warp32 import logical32_source_lane
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import upload_f32
 
 

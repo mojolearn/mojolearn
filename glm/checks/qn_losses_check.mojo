@@ -4,7 +4,7 @@
 QN_LOSS_SVC_L1, QN_LOSS_SVC_L2, QN_LOSS_SVR_L1, QN_LOSS_SVR_L2): oracle,
 reach, identity.
 
-DEVIATIONS 707-708 (the implements, `glm/impl/glm/qn/glm_linear.mojo`,
+DEVIATIONS 707-708 (the implements, `glm/impl/qn/glm_linear.mojo`,
 `glm_svm.mojo`) and 712-713 (the gates here). See `glm/README.md`, "QN
 losses". Every check runs over ALL SIX losses. The checks:
 
@@ -84,19 +84,19 @@ from glm.checks.multinomial_check import (
     _upload,
     _zeros,
 )
-from glm.impl.glm.qn.glm_base import GLMDims, GLMWithData
-from glm.impl.glm.qn.glm_linear import (
+from glm.impl.qn.glm_base import GLMDims, GLMWithData
+from glm.impl.qn.glm_linear import (
     abs_loss_dz_kernel,
     squared_loss_dz_kernel,
 )
-from glm.impl.glm.qn.glm_svm import (
+from glm.impl.qn.glm_svm import (
     svc_l1_loss_dz_kernel,
     svc_l2_loss_dz_kernel,
     svr_l1_loss_dz_kernel,
     svr_l2_loss_dz_kernel,
 )
-from glm.impl.glm.qn.qn import qn_fit_x
-from glm.impl.glm.qn.qn_util import OPT_SUCCESS
+from glm.impl.qn.qn import qn_fit_x
+from glm.impl.qn.qn_util import OPT_SUCCESS
 from glm.impl.linear_model.qn import (
     QN_LOSS_ABS,
     QN_LOSS_SQUARED,

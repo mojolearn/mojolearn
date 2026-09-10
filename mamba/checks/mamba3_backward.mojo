@@ -607,12 +607,12 @@ def mamba3_backward_topology_site(which: Int) -> String:
     if core:
         return (
             mamba3_backward_topology_name(which)
-            + " -- NOT WRITTEN; mamba/impl/mamba_ssm/ops/"
+            + " -- NOT WRITTEN; mamba/impl/ops/"
             + "mamba3_siso_backward.mojo (does not exist)"
         )
     return (
         mamba3_backward_topology_name(which)
-        + " -- NOT WRITTEN; mamba/impl/mamba_ssm/modules/"
+        + " -- NOT WRITTEN; mamba/impl/modules/"
         + "mamba3_backward.mojo (does not exist)"
     )
 

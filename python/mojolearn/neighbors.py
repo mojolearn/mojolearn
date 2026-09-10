@@ -31,7 +31,7 @@ _DIST_LP_UNEXPANDED = 9
 #: THE BALL COVER'S OWN TABLE, and it is NOT `_METRIC_TABLE`.
 #:
 #: Two rows differ, both for reasons that are about the INDEX and not about
-#: the metric's name (`neighbors/impl/neighbors/ball_cover/common.mojo`,
+#: the metric's name (`neighbors/impl/ball_cover/common.mojo`,
 #: DEVIATION 564 and DEVIATION 565).
 #:
 #:   'euclidean' / 'l2'  goes to L2SqrtUNexpanded here where the brute-force
@@ -231,7 +231,7 @@ def _resolve_rbc_metric(cls_name, metric, p):
             f"mojolearn {cls_name}: metric='sqeuclidean' is REFUSED on the "
             "random ball cover. The pruning here IS THE TRIANGLE "
             "INEQUALITY on the landmark radii "
-            "(neighbors/impl/neighbors/ball_cover/common.mojo, DEVIATION "
+            "(neighbors/impl/ball_cover/common.mojo, DEVIATION "
             "565), and SQUARED Euclidean distance does not satisfy it even "
             "though Euclidean distance does: on three collinear points at "
             "unit spacing it gives 4 against 1 + 1. A cover built on it "
@@ -278,7 +278,7 @@ def _resolve_rbc_metric(cls_name, metric, p):
                 f"mojolearn {cls_name}: metric='minkowski' with p={p!r} is "
                 "REFUSED on the random ball cover. The pruning here IS THE "
                 "TRIANGLE INEQUALITY on the landmark radii "
-                "(neighbors/impl/neighbors/ball_cover/common.mojo, "
+                "(neighbors/impl/ball_cover/common.mojo, "
                 "DEVIATION 564), and |x|^p is not subadditive below p = 1, "
                 "so Lp at p < 1 is not a metric at all: at p = 1/2 the "
                 "points (0,0), (1,0), (1,1) give a direct distance of 4 "
@@ -451,7 +451,7 @@ class NearestNeighbors(NumericModeMixin):
                 "want is an index instead of a full scan, that is 'rbc': "
                 "it is EXACT, not approximate, it has no per-query stack, "
                 "and it is the same structure RadiusNeighbors uses "
-                "(neighbors/impl/neighbors/ball_cover/knn.mojo)."
+                "(neighbors/impl/ball_cover/knn.mojo)."
             )
 
     def fit(self, X, y=None):
@@ -499,7 +499,7 @@ class NearestNeighbors(NumericModeMixin):
 
         if self.algorithm == "rbc":
             # THE INDEXED ARM. Same answer, computed by pruning instead of
-            # by comparing every pair: `neighbors/impl/neighbors/ball_cover/
+            # by comparing every pair: `neighbors/impl/ball_cover/
             # knn.mojo` proves each bound exact and
             # `neighbors/checks/ball_cover_knn_check.mojo` gates it against
             # a host brute force with no tolerance.
@@ -879,7 +879,7 @@ class RadiusNeighbors(NumericModeMixin):
 
     **This is not brute force and it is not one of scikit-learn's trees.**
     The index is cuVS's random ball cover
-    (`neighbors/impl/neighbors/ball_cover/`), which DBSCAN has used for its
+    (`neighbors/impl/ball_cover/`), which DBSCAN has used for its
     eps neighbourhood since this library's first release. It returns the
     EXACT set -- its pruning is a triangle-inequality bound, not an
     approximation -- and `neighbors/checks/radius_check.mojo` asserts that

@@ -44,7 +44,7 @@ from transformer.checks.transformer_backward import (
     LlamaBackwardStages,
     bwd_attention_eager_stages,
 )
-from transformer.impl.transformers.models.llama.fused_attention import (
+from transformer.impl.llama.fused_attention import (
     FUSED_CORNER,
     FUSED_RAN,
     FUSED_REFUSED_REGIME,
@@ -53,7 +53,7 @@ from transformer.impl.transformers.models.llama.fused_attention import (
     fused_supported_head_dim,
     fused_forward_supported_head_dim,
 )
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
     LlamaDims,
     PLANT_AT_NONE,

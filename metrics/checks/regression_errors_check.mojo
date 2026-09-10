@@ -6,7 +6,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, portable_sqrtf, numeric_mode_name
 from metrics.checks.device_io import upload_f32
-from metrics.impl.metrics.regression_errors import regression_error
+from metrics.impl.regression_errors import regression_error
 from metrics.estimator import regression_error_host
 
 

@@ -61,7 +61,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from cholesky.checks.potrf import CHOL_ELEM_TPB, CHOL_PANEL_TPB
 from cholesky.checks.trsm import CHOL_SOLVE_TPB
 from cluster.estimator import kmeans_fit
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     METRIC_L2_EXPANDED,
 )

@@ -79,7 +79,7 @@ from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext
 
 from cluster.estimator import kmeans_fit
-from neighbors.impl.neighbors.detail.knn_brute_force import KNN_METHOD_AUTO
+from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.estimator import (
     knn_classifier_predict,
     knn_regressor_predict,
@@ -571,7 +571,7 @@ def rbc_knn_search_binding(
     The return value is the CANDIDATE COUNT and not a tile size: brute force
     over the same shapes would compute `n_index * n_queries`, so the caller
     can divide and see how much the index pruned instead of assuming it
-    pruned anything. `neighbors/impl/neighbors/ball_cover/knn.mojo` explains
+    pruned anything. `neighbors/impl/ball_cover/knn.mojo` explains
     why that number is the one worth returning.
     """
     if len(params) != 6:

@@ -34,7 +34,7 @@ Files:
   axis; IDENTITY_PATHS row 24's contract kept).
 - `neighbors/checks/transposed_index_distance_candidate.mojo`: `y_stride`
   argument so a column tile of the transposed index can be addressed.
-- `neighbors/impl/neighbors/detail/knn_brute_force.mojo`: the routing
+- `neighbors/impl/detail/knn_brute_force.mojo`: the routing
   constants read the rows (names `EXPERIMENTAL_SMALLK_IDENTICAL` /
   `EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL` kept for the drivers),
   `identical_index_tile(n_index)`, and `_tiled_brute_force_knn_impl` loops

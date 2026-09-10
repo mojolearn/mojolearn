@@ -24,7 +24,7 @@ from cluster.impl.distance.unfused_distance_nn import (
     REDUCE_MIN_LANES,
     REDUCE_MIN_TPB,
 )
-from dbscan.impl.dbscan.vertexdeg.algo import VD_TPB
+from dbscan.impl.vertexdeg.algo import VD_TPB
 from decomposition.checks.jacobi_eigh_device import JACOBI_TPB
 from checks.kernel_matrix import (
     COLUMN_AMD,

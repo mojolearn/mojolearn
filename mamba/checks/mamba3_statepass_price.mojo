@@ -14,11 +14,11 @@ from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from mamba.checks.mamba_fixture import corpus_tensor
 from mamba.checks.mamba3_fixture import m3_case_weights, m3_case_seed, M3_TID_X
-from mamba.impl.mamba_ssm.modules.mamba3 import (
+from mamba.impl.modules.mamba3 import (
     Mamba3DeviceWeights, Mamba3DeviceStages, allocate_inference_cache,
     mamba3_block_forward,
 )
-from mamba.impl.transformers.models.mamba.modeling_mamba import mamba_upload, mamba_download
+from mamba.impl.modeling.modeling_mamba import mamba_upload, mamba_download
 
 
 def main() raises:

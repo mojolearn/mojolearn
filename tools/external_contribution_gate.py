@@ -30,8 +30,8 @@ MAX_SOURCE_BYTES = 2 * 1024 * 1024
 EXACT_OPTIMIZATIONS = {
     "core/gemm.mojo": "matrix", "core/gram_splitk.mojo": "matrix",
     "neighbors/checks/pinned_distance_tile.mojo": "knn",
-    "neighbors/impl/neighbors/detail/knn_brute_force.mojo": "knn",
-    "neighbors/impl/neighbors/detail/fused_l2_knn.mojo": "knn",
+    "neighbors/impl/detail/knn_brute_force.mojo": "knn",
+    "neighbors/impl/detail/fused_l2_knn.mojo": "knn",
     "umap/optimizer.mojo": "umap", "umap/optimizer_fast.mojo": "umap",
     "umap/spectral_init.mojo": "umap", "umap/transform.mojo": "umap",
 }

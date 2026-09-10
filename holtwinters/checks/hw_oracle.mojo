@@ -21,8 +21,8 @@ design -- that is the pin -- and `hw_eval.mojo`'s header names it.
 
 from std.math import fma, sqrt
 
-from holtwinters.impl.holtwinters.internal.hw_decompose import host_filter, host_r1qt
-from holtwinters.impl.holtwinters.internal.hw_optim import (
+from holtwinters.impl.internal.hw_decompose import host_filter, host_r1qt
+from holtwinters.impl.internal.hw_optim import (
     HW_DEC_ALPHA_HI,
     HW_DEC_ALPHA_LO,
     HW_DEC_BETA_HI,
@@ -38,8 +38,8 @@ from holtwinters.impl.holtwinters.internal.hw_optim import (
     HW_DEC_RHO_ZERO,
     HW_DEC_ZERO_DIR,
 )
-from holtwinters.impl.holtwinters.internal.hw_utils import STMP_EPS
-from holtwinters.impl.holtwinters.runner import (
+from holtwinters.impl.internal.hw_utils import STMP_EPS
+from holtwinters.impl.runner import (
     HW_ALPHA0,
     HW_BETA0,
     HW_GAMMA0,

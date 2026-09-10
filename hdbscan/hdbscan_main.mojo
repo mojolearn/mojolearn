@@ -9,7 +9,7 @@
         tools/with_identical_mode.sh pixi run mojo run -I . hdbscan/hdbscan_main.mojo
     python3 tools/identity_trace_diff.py /tmp/hdbscan.apple.card /tmp/hdbscan.other.card
 
-Runs `hdbscan/impl/hdbscan/runner.mojo::fit_hdbscan` (cuML's
+Runs `hdbscan/impl/runner.mojo::fit_hdbscan` (cuML's
 `_fit_hdbscan`, dense mutual reachability by DEVIATION 1600,
 L2SqrtExpanded, Excess of Mass) on the `blobs96` fixture and records every
 stage through `core/identity_trace.mojo`. THE FIT ITSELF EMITS THE CARD:
@@ -67,12 +67,12 @@ from hdbscan.checks.hdbscan_fixture import (
     hfixture_n,
     hfixture_name,
 )
-from hdbscan.impl.hdbscan.runner import (
+from hdbscan.impl.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
     HDBSCANParams,
     fit_hdbscan,
 )
-from hdbscan.impl.hdbscan.detail.select import CLUSTER_SELECTION_EOM
+from hdbscan.impl.detail.select import CLUSTER_SELECTION_EOM
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )

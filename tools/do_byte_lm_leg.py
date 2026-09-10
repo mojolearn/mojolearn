@@ -153,7 +153,7 @@ def main():
     mamba_paths = run(['git', '-C', str(root), 'ls-tree', '-r', '--name-only',
                       COMMIT, '--', 'mamba'], 30, capture_output=True).stdout.decode().splitlines()
     mamba_paths = [name for name in mamba_paths if name.endswith('.mojo')]
-    if 'mamba/impl/transformers/models/mamba/modeling_mamba.mojo' not in mamba_paths:
+    if 'mamba/impl/modeling/modeling_mamba.mojo' not in mamba_paths:
         raise ValueError('Frozen source lacks transitive Mamba arithmetic')
     with source.open('xb') as stream:
         run(['git', '-C', str(root), 'archive', COMMIT, '--', *PATHS, *mamba_paths], 60, stdout=stream)

@@ -8,9 +8,9 @@ from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
-from transformer.impl.transformers.models.llama.fused_attention import _step, FUSED_HW_FTZ_FMA
+from transformer.impl.llama.fused_attention import _step, FUSED_HW_FTZ_FMA
 from gemm.checks.gemm_identical import _tuned_step
-from transformer.impl.transformers.models.llama.modeling_llama import _upload, _download, _zeros
+from transformer.impl.llama.modeling_llama import _upload, _download, _zeros
 
 
 def compare_kernel(results: MutPointer[Float32, MutAnyOrigin], words: MutPointer[Float32, MutAnyOrigin], count_in: Int32):

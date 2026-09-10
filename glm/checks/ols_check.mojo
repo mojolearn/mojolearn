@@ -103,7 +103,7 @@ from max.gpu.host import DeviceContext
 
 from std.math import sqrt
 
-from glm.impl.glm.ols import OLS_ALGO_EIG, ols_fit, ols_fit_weighted
+from glm.impl.ols import OLS_ALGO_EIG, ols_fit, ols_fit_weighted
 from glm.impl.linalg.detail.lstsq import lstsq_eig
 
 
@@ -291,7 +291,7 @@ def check_ols_dispatch_routes_special_shapes() raises:
     `check_ols_dispatch_guard` and it asserted that both shapes RAISED. That
     was right while the only alternative was `lstsqSvdJacobi`
     (`cusolverDnGesvdj`); it is wrong now that both have a portable route
-    (DEVIATIONS 550 and 551, `glm/impl/glm/ols.mojo`). The half of it that
+    (DEVIATIONS 550 and 551, `glm/impl/ols.mojo`). The half of it that
     still matters is unchanged and is asserted below: an ordinary shape must
     not be diverted, or the other two assertions would prove nothing.
 
@@ -975,7 +975,7 @@ def check_ols_host_surface_takes_the_guard() raises:
     """`ols_fit_host` goes THROUGH `olsFit`'s dispatch, not around it.
 
     THE DEFECT THIS GATES, FOUND BY DEVIATION 527's AUDIT AND NOT BY ANY
-    GREEN CHECK. `glm/impl/glm/ols.mojo` exists because reaching `lstsq_eig`
+    GREEN CHECK. `glm/impl/ols.mojo` exists because reaching `lstsq_eig`
     directly skips `ols.cuh:112-113`, which switches away from the
     normal-equations solver at `n_cols > n_rows` (where `A^T A` is singular
     by construction) and at `n_cols == 1`. That file's docstring records the
@@ -1939,7 +1939,7 @@ def check_ols_duplicating_a_row_equals_doubling_its_weight() raises:
 
         fit(A, b, w = [2, 1, 1, ...])  ==  fit([a_0; A], [b_0; b], no w)
 
-    to float32 noise. Nothing in `glm/impl/glm/ols.mojo` knows that; it does
+    to float32 noise. Nothing in `glm/impl/ols.mojo` knows that; it does
     a `sqrt` and a row multiply. A weight applied to the wrong axis, applied
     once instead of as a square root, or applied to `A` and not to `b`, all
     fail this and none of them fails a "did it run" check.

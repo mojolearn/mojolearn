@@ -21,7 +21,7 @@ from gemm.checks.gemm_backward import (
 )
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims
 
-from mamba.impl.mamba_ssm.ops.selective_scan_backward import (
+from mamba.impl.ops.selective_scan_backward import (
     bwd_da_partial_floats,
     bwd_dh_floats,
     bwd_h_checkpoint_floats,
@@ -33,7 +33,7 @@ from mamba.impl.mamba_ssm.ops.selective_scan_backward import (
     selective_scan_bwd_scan_into,
     selective_scan_checkpoint_fn,
 )
-from mamba.impl.transformers.models.mamba.modeling_mamba_backward import (
+from mamba.impl.modeling.modeling_mamba_backward import (
     mamba_backward_block_sabotage_name,
     mamba_bwd_concat_p_into,
     mamba_bwd_concat_xp_into,
@@ -413,49 +413,49 @@ def mamba_backward_topology_site(which: Int) -> String:
     """`"T1 file::function"`, the kernel that implements one declaration."""
     if which == TOPO_T1:
         return String(
-            "T1 mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo"
+            "T1 mamba/impl/ops/selective_scan_backward.mojo"
             "::selective_scan_bwd_scan_kernel"
         )
     if which == TOPO_T2:
         return String(
-            "T2 mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo"
+            "T2 mamba/impl/ops/selective_scan_backward.mojo"
             "::selective_scan_checkpoint_kernel (producer),"
             " ::selective_scan_bwd_scan_kernel (reader)"
         )
     if which == TOPO_T3:
         return String(
-            "T3 mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo"
+            "T3 mamba/impl/ops/selective_scan_backward.mojo"
             "::mamba_bwd_dbc_kernel"
         )
     if which == TOPO_T4:
         return String(
-            "T4 mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo"
+            "T4 mamba/impl/ops/selective_scan_backward.mojo"
             "::mamba_bwd_da_partial_kernel"
         )
     if which == TOPO_T5:
         return String(
-            "T5 mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo"
+            "T5 mamba/impl/ops/selective_scan_backward.mojo"
             "::mamba_bwd_param_fold_kernel"
         )
     if which == TOPO_T6:
         return String(
-            "T6 mamba/impl/transformers/models/mamba/"
+            "T6 mamba/impl/modeling/"
             "modeling_mamba_backward.mojo::mamba_bwd_du_join_kernel"
         )
     if which == TOPO_T7:
         return String(
-            "T7 mamba/impl/transformers/models/mamba/"
+            "T7 mamba/impl/modeling/"
             "modeling_mamba_backward.mojo::mamba_bwd_norm_kernel"
         )
     if which == TOPO_T8:
         return String(
-            "T8 mamba/impl/transformers/models/mamba/"
+            "T8 mamba/impl/modeling/"
             "modeling_mamba_backward.mojo::mamba_bwd_norm_kernel (the final"
             " store; THE ABSORPTION SITE)"
         )
     if which == TOPO_S14B:
         return String(
-            "S14b mamba/impl/transformers/models/mamba/"
+            "S14b mamba/impl/modeling/"
             "modeling_mamba_backward.mojo::mamba_bwd_ddtp_kernel"
         )
     return String("?")

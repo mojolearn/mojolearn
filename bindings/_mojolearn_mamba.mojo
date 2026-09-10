@@ -16,9 +16,9 @@ joined later the same day, under the same ABI.
 
 THE BINDING CALLS THE CERTIFIED ENTRY POINTS AND NOTHING ELSE. Every
 forward below goes through `mamba_block_forward`
-(`mamba/impl/transformers/models/mamba/modeling_mamba.mojo`),
-`mamba2_block_forward` (`mamba/impl/mamba_ssm/modules/mamba2.mojo`) or
-`mamba3_block_forward` (`mamba/impl/mamba_ssm/modules/mamba3.mojo`) --
+(`mamba/impl/modeling/modeling_mamba.mojo`),
+`mamba2_block_forward` (`mamba/impl/modules/mamba2.mojo`) or
+`mamba3_block_forward` (`mamba/impl/modules/mamba3.mojo`) --
 the SAME functions `mamba/checks/mamba_check.mojo`, `mamba2_check.mojo`
 and `mamba3_check.mojo` gate. NO arithmetic is respelled in this file: a
 binding-side copy of any seam would be a second spelling of a pinned
@@ -135,8 +135,8 @@ rc 134), an open defect. Build:
 from std.memory import memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
-from mamba.impl.mamba_ssm.ops.mamba3_siso import m3_phase_tick
-from mamba.impl.mamba_ssm.modules.mamba3_transfer import M3_BULK_TRANSFER, m3_upload, m3_download
+from mamba.impl.ops.mamba3_siso import m3_phase_tick
+from mamba.impl.modules.mamba3_transfer import M3_BULK_TRANSFER, m3_upload, m3_download
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -154,7 +154,7 @@ from mamba.checks.mamba_fixture import (
     MambaDims,
     MambaWeights,
 )
-from mamba.impl.transformers.models.mamba.modeling_mamba import (
+from mamba.impl.modeling.modeling_mamba import (
     BLOCK_ANY_SABOTAGE,
     MambaDeviceStages,
     MambaDeviceState,
@@ -163,7 +163,7 @@ from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
     mamba_upload,
 )
-from mamba.impl.mamba_ssm.modules.mamba_simple import mamba_step
+from mamba.impl.modules.mamba_simple import mamba_step
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
     M2_D_CONV,
@@ -172,7 +172,7 @@ from mamba.checks.mamba2_fixture import (
     Mamba2Dims,
     Mamba2Weights,
 )
-from mamba.impl.mamba_ssm.modules.mamba2 import (
+from mamba.impl.modules.mamba2 import (
     BLOCK2_ANY_SABOTAGE,
     Mamba2DeviceStages,
     Mamba2DeviceState,
@@ -187,7 +187,7 @@ from mamba.checks.mamba3_fixture import (
     Mamba3Dims,
     Mamba3Weights,
 )
-from mamba.impl.mamba_ssm.modules.mamba3 import (
+from mamba.impl.modules.mamba3 import (
     BLOCK3_ANY_SABOTAGE,
     Mamba3DeviceStages,
     Mamba3DeviceState,
@@ -196,14 +196,14 @@ from mamba.impl.mamba_ssm.modules.mamba3 import (
 )
 
 
-from mamba.impl.mamba_ssm.modules.mamba2_prefill_backward import mamba2_prefill_backward
+from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
 from mamba.checks.mamba2_backward import ANY_BWD2_SABOTAGE
-from mamba.impl.mamba_ssm.modules.mamba3_prefill_backward import mamba3_prefill_backward
+from mamba.impl.modules.mamba3_prefill_backward import mamba3_prefill_backward
 from mamba.checks.mamba3_backward import ANY_BWD3_SABOTAGE
-from mamba.impl.transformers.models.mamba.modeling_mamba_prefill_backward import mamba1_prefill_backward
+from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
 from mamba.checks.mamba_backward import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
-from mamba.impl.transformers.models.mamba.modeling_mamba_backward import ANY_BWD_BLOCK_SABOTAGE
-from mamba.impl.mamba_ssm.ops.selective_scan_backward import ANY_BWD_SCAN_SABOTAGE
+from mamba.impl.modeling.modeling_mamba_backward import ANY_BWD_BLOCK_SABOTAGE
+from mamba.impl.ops.selective_scan_backward import ANY_BWD_SCAN_SABOTAGE
 from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
 

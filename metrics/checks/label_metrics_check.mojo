@@ -70,14 +70,14 @@ from metrics.checks.fixtures import (
     labels_true_pred,
     plant_singleton,
 )
-from metrics.impl.metrics.accuracy_score import accuracy_score_py
-from metrics.impl.metrics.adjusted_rand_index import adjusted_rand_index
-from metrics.impl.metrics.completeness_score import completeness_score
-from metrics.impl.metrics.entropy import entropy
-from metrics.impl.metrics.homogeneity_score import homogeneity_score
-from metrics.impl.metrics.mutual_info_score import mutual_info_score
-from metrics.impl.metrics.rand_index import rand_index
-from metrics.impl.metrics.v_measure import v_measure
+from metrics.impl.accuracy_score import accuracy_score_py
+from metrics.impl.adjusted_rand_index import adjusted_rand_index
+from metrics.impl.completeness_score import completeness_score
+from metrics.impl.entropy import entropy
+from metrics.impl.homogeneity_score import homogeneity_score
+from metrics.impl.mutual_info_score import mutual_info_score
+from metrics.impl.rand_index import rand_index
+from metrics.impl.v_measure import v_measure
 from metrics.impl.stats.detail.contingency_matrix import (
     CMAT_SMEM_MAX_DIM,
     contingency_matrix,

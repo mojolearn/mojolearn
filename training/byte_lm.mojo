@@ -48,7 +48,7 @@ from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
     LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward,
 )

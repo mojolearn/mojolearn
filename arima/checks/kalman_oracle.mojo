@@ -4,7 +4,7 @@
 
 `kalman_host_f32` replays `init_batched_kalman_matrices_kernel`,
 `kalman_init_state_kernel` and `batched_kalman_loop_kernel`
-(`arima/impl/arima/batched_kalman.mojo`) serially on the host, one series
+(`arima/impl/batched_kalman.mojo`) serially on the host, one series
 at a time, ascending, in Float32 through the SAME numeric helpers
 (`identical_mul_add`, `ftz`, `identical_log`), so under IDENTICAL the
 device buffers must equal these lists BIT FOR BIT. The tiny dense

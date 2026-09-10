@@ -9,7 +9,7 @@ _mojolearn_estimators.mojo:198` calls `ols_fit_host` and
 
 DEVIATION 527 -- THE GUARD WAS BYPASSED ON EXACTLY THIS PATH
 -------------------------------------------------------------
-`ols_fit_host` called `lstsq_eig` DIRECTLY. `glm/impl/glm/ols.mojo` exists
+`ols_fit_host` called `lstsq_eig` DIRECTLY. `glm/impl/ols.mojo` exists
 because that is not safe: `ols.cuh:112-113` switches away from the
 normal-equations solver when `n_cols > n_rows` or `n_cols == 1`, because
 `A^T A` is singular by construction in the first case and cuML's own Python
@@ -27,7 +27,7 @@ CORRECTED 2026-09-01. The sentence that stood here said the host surface now
 gets "the same REFUSAL every other caller already got" at both shapes. There
 is no refusal at either shape any more: `n_cols == 1` takes `lstsq_eig`
 (DEVIATION 551) and `n_cols > n_rows` takes `lstsq_min_norm` (DEVIATION 550),
-and `glm/impl/glm/ols.mojo`'s docstring carries why. What the gate
+and `glm/impl/ols.mojo`'s docstring carries why. What the gate
 `check_ols_host_surface_takes_the_guard` asserts is therefore no longer that
 those shapes raise; it is that the host surface takes the same DISPATCH --
 that a wide fit through this door lands on the min-norm route and leaves the
@@ -39,13 +39,13 @@ from max.gpu.host import DeviceContext
 
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
-from glm.impl.glm.ols import (
+from glm.impl.ols import (
     OLS_ALGO_EIG,
     ols_fit_traced,
     ols_fit_weighted_traced,
 )
-from glm.impl.glm.qn.qn import qn_decision_function, qn_fit_x
-from glm.impl.glm.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
+from glm.impl.qn.qn import qn_decision_function, qn_fit_x
+from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
 from glm.impl.linear_model.qn import QN_LOSS_LOGISTIC, QNParams
 from checks.numerics import ftz, identical_exp64
 

@@ -78,7 +78,7 @@ changing anything about that order.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cluster.impl.cluster.detail.kmeans_common import metric_is_sqrt
+from cluster.impl.detail.kmeans_common import metric_is_sqrt
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
@@ -173,7 +173,7 @@ def _expanded_distances(
     """`z[m x n] = ||q_i||^2 + ||y_j||^2 - 2 q_i . y_j`, mode-dispatched.
 
     A COPY OF `tiled_brute_force_knn`'s dispatch
-    (`neighbors/impl/neighbors/detail/knn_brute_force.mojo:170-205`),
+    (`neighbors/impl/detail/knn_brute_force.mojo:170-205`),
     with the query row offset threaded through because this file calls it
     once for the whole query set (against the centroids) and once per query
     (against that query's candidates). NEITHER KERNEL IS WRITTEN HERE.

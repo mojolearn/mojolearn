@@ -57,7 +57,7 @@ from checks.numerics import (
     identical_exp,
     identical_mul_add,
 )
-from svm.impl.svm.svm_parameter import KERNEL_LINEAR, KERNEL_RBF, KernelParams
+from svm.impl.svm_parameter import KERNEL_LINEAR, KERNEL_RBF, KernelParams
 
 
 #: SABOTAGE (svc_check "std exp under IDENTICAL"): route the RBF exponential

@@ -17,7 +17,7 @@ from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from neighbors.estimator import knn_search
 from neighbors.checks.select_radix_identical import composite_key
-from neighbors.impl.neighbors.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL
+from neighbors.impl.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL
 
 
 def _coordinate(row: Int, feature: Int, salt: Int) -> Float32:

@@ -1106,8 +1106,8 @@ check-mamba2-block = "mojo run -I . mamba/checks/mamba2_check.mojo"
 check-mamba3-block = "mojo run -I . mamba/checks/mamba3_check.mojo"
 # COMPILE ONLY, and the name says so. Builds the mamba backward's routing
 # layer AND, since 2026-09-03, its two kernel files
-# (mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo and
-# mamba/impl/transformers/models/mamba/modeling_mamba_backward.mojo).
+# (mamba/impl/ops/selective_scan_backward.mojo and
+# mamba/impl/modeling/modeling_mamba_backward.mojo).
 # **IT ASSERTS NOTHING ABOUT ANY GRADIENT**: no value is checked, no bits are
 # compared, no kernel is launched, and plan gates MB1-MB10 do not exist.
 #

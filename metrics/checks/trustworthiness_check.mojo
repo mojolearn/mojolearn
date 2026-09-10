@@ -58,7 +58,7 @@ from core.identity_trace import IdentityTrace
 
 from metrics.checks.fixtures import bits64, hashed_points, u01, splitmix
 from metrics.checks.pinned_distance import host_l2sqrt_unexpanded
-from metrics.impl.metrics.trustworthiness import trustworthiness_score
+from metrics.impl.trustworthiness import trustworthiness_score
 from metrics.impl.stats.detail.trustworthiness_score import (
     TRUST_MAX_K,
     trustworthiness_rank_sum,

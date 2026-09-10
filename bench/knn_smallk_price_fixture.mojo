@@ -23,7 +23,7 @@ from std.os import getenv
 from std.time import perf_counter_ns
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from neighbors.estimator import knn_search
-from neighbors.impl.neighbors.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL
+from neighbors.impl.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL
 
 
 def _coordinate(row: Int, feature: Int, salt: Int) -> Float32:

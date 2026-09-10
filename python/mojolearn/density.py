@@ -34,7 +34,7 @@ _METRICS = {
 
 #: The metric each algorithm arm can serve. The ball cover computes Euclidean
 #: distances for its landmark radii and its three pruning bounds
-#: (`neighbors/impl/neighbors/ball_cover/`), so it serves L2 only; the brute
+#: (`neighbors/impl/ball_cover/`), so it serves L2 only; the brute
 #: arm serves both. Stated as data rather than as an `if` so the error
 #: message below can list the arm that DOES serve what was asked.
 _ARM_METRICS = {
@@ -112,7 +112,7 @@ class DBSCAN(NumericModeMixin):
                                        not return theirs either)
 
     **`algorithm='rbc'` IS THE DEFAULT AND IT IS NOT cuML's** (DEVIATION 35,
-    `dbscan/impl/dbscan/runner.mojo`): cuML's Python default is `'brute'`,
+    `dbscan/impl/runner.mojo`): cuML's Python default is `'brute'`,
     and on an int32-label build like this one cuML's dispatch never reaches
     the ball cover at all. The ball cover is the default here because it
     measured 2.7x-27x faster at 16k-200k rows on this hardware and

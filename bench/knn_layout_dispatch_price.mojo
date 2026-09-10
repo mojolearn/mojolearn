@@ -14,7 +14,7 @@ arms. No timing loop or environment-controlled production dispatch is added.
 """
 from bench.knn_smallk_price_fixture import run_price
 from checks.numerics import numeric_mode_name
-from neighbors.impl.neighbors.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL, EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL
+from neighbors.impl.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL, EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL
 
 
 def main() raises:

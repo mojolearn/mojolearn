@@ -9,7 +9,7 @@ something, and that something has to be spelled where a reader can follow
 every rounding: one thread, one loop, ascending, through `ftz`,
 `identical_mul_add`, `identical_exp` and `gemm_oracle_cell` (the normative
 v1 GEMM cell), with the same working-set rule, the same block-solve logic
-and the same tie-breaks as `svm/impl/svm/*.mojo`. The device gate in
+and the same tie-breaks as `svm/impl/*.mojo`. The device gate in
 `svc_check.mojo` is device == oracle, bitwise, on alphas, on `f` after every
 outer iteration, on the working-set sequence, on `b`, and on the decision
 function.
@@ -69,8 +69,8 @@ from gemm.checks.gemm_oracle import (
     leaf_end,
 )
 from checks.numerics import ftz, identical_exp, identical_mul_add
-from svm.impl.svm.smosolver import fold_order_for, hash_f32_list
-from svm.impl.svm.svm_parameter import (
+from svm.impl.smosolver import fold_order_for, hash_f32_list
+from svm.impl.svm_parameter import (
     EPSILON_SVR,
     KERNEL_LINEAR,
     KERNEL_RBF,

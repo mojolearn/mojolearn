@@ -9,7 +9,7 @@ This gate deliberately refuses IDENTICAL, whose four arms have a separate
 bitwise qualification driver in knn_layout_dispatch_check.mojo.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from neighbors.impl.neighbors.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL, EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL
+from neighbors.impl.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL, EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL
 from neighbors.checks.estimator_check import (
     check_knn_search_arms_agree,
     check_knn_search_matches_host,

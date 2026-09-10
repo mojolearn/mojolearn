@@ -65,7 +65,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import STATS_TPB
 from core.identity_trace import IdentityTrace, first_divergence
-from glm.impl.glm.ridge import (
+from glm.impl.ridge import (
     RIDGE_ALGO_EIG,
     RIDGE_ALGO_SVD,
     RIDGE_SMALL_THRESH,

@@ -53,7 +53,7 @@ class AgglomerativeClustering:
 
     Mirrors `cuml.cluster.AgglomerativeClustering` on top of cuML's
     `ML::linkage::single_linkage`; the Mojo entry is
-    `hierarchy/impl/hierarchy/linkage.mojo` and the host surface is
+    `hierarchy/impl/linkage.mojo` and the host surface is
     `hierarchy/estimator.mojo`.
 
     TWO DEFAULTS DIFFER FROM THE ESTIMATORS THIS MIRRORS, AND BOTH CHANGE

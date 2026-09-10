@@ -135,7 +135,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 
 from core.identity_trace import FNV_OFFSET, fnv1a64_bytes
-from glm.impl.glm.ols import OLS_ALGO_EIG, ols_fit
+from glm.impl.ols import OLS_ALGO_EIG, ols_fit
 from glm.impl.linalg.detail.lstsq import OLS_ELEM_TPB
 from checks.numerics import numeric_mode_name
 

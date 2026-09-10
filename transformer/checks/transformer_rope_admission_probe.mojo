@@ -3,7 +3,7 @@
 from std.memory import bitcast
 from std.os import getenv
 from max.gpu.host import DeviceContext
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaRopeTable, _download,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL

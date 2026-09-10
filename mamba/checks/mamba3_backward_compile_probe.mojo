@@ -63,7 +63,7 @@ from mamba.checks.mamba3_backward import (
     mamba3_rope_pair_indices,
     mamba3_rope_pair_is_rotated,
 )
-from mamba.impl.mamba_ssm.modules.mamba3_backward import (
+from mamba.impl.modules.mamba3_backward import (
     mamba3_backward_block_norm_into,
     mamba3_backward_pack_in_proj_into,
 )

@@ -16,7 +16,7 @@ from gemm.checks.gemm_backward import (
 )
 from gemm.checks.gemm_identical import identical_gemm
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
-from mamba.impl.transformers.models.mamba.modeling_mamba import pinned_mul
+from mamba.impl.modeling.modeling_mamba import pinned_mul
 from checks.numerics import (
     ftz,
     identical_div,
@@ -24,12 +24,12 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sigmoid,
 )
-from transformer.impl.transformers.models.llama.fused_attention import (
+from transformer.impl.llama.fused_attention import (
     FUSED_RAN,
     device_first_nonfinite,
     fused_backward_launch,
 )
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     ATTN_PATH_EAGER,
     timing_on,
     timing_tick,

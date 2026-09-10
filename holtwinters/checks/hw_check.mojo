@@ -124,7 +124,7 @@ measured verdict of every arm):
 
 THE PACK ARMS (DEVIATION 930) are the same `-D MOJOLEARN_HW_SABOTAGE_<NAME>=1`
 switch, but they are declared in THIS file rather than on the switchboard in
-`holtwinters/impl/holtwinters/internal/hw_utils.mojo`, because they do not
+`holtwinters/impl/internal/hw_utils.mojo`, because they do not
 sabotage a kernel: they corrupt the flat buffer after the pointer entry wrote
 it, which is byte for byte what a wrongly spelled writer would have left, and
 the buffer is all the assertions can see. Each must break the clauses named
@@ -204,14 +204,14 @@ from holtwinters.checks.hw_oracle import (
     oracle_forecast,
     oracle_sse_at,
 )
-from holtwinters.impl.holtwinters.internal.hw_decompose import host_filter, host_r1qt
-from holtwinters.impl.holtwinters.internal.hw_utils import (
+from holtwinters.impl.internal.hw_decompose import host_filter, host_r1qt
+from holtwinters.impl.internal.hw_utils import (
     HW_OPTIM_TPB,
     bound_device,
     hw_float32_inf,
     hw_sabotage_name,
 )
-from holtwinters.impl.holtwinters.runner import (
+from holtwinters.impl.runner import (
     HW_ALPHA0,
     HW_BETA0,
     HW_GAMMA0,
@@ -1861,7 +1861,7 @@ def check_hw_decision_branches() raises:
 #
 # THE SABOTAGE ARMS. Nine arms already in this lane are `-D
 # MOJOLEARN_HW_SABOTAGE_<NAME>=1` switches on the ONE switchboard in
-# `holtwinters/impl/holtwinters/internal/hw_utils.mojo`, because they
+# `holtwinters/impl/internal/hw_utils.mojo`, because they
 # sabotage device kernels. These eight do not: they corrupt the flat BUFFER
 # after the pointer entry has written it, which is byte for byte what a
 # wrong writer would have left there, and the buffer is the only thing the

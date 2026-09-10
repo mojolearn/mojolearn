@@ -122,7 +122,7 @@ from kernel_methods.checks.kernel_matrix import (
     KM_KERNEL_RBF,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from svm.impl.svm.svm_parameter import KernelParams
+from svm.impl.svm_parameter import KernelParams
 
 
 def _mode_name() -> String:

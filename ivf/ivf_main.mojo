@@ -65,7 +65,7 @@ from std.os import getenv
 
 from max.gpu.host import DeviceContext
 
-from cluster.impl.cluster.kmeans_params import METRIC_L2_EXPANDED
+from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_and_search_host
 from ivf.checks.ivf_fixture import ivf_index_fixture, ivf_query_fixture
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name

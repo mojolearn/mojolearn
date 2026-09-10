@@ -54,7 +54,7 @@ from hdbscan.checks.mutual_reachability_dense import (
     mutual_reachability_dense,
     refuse_nonfinite_device,
 )
-from hdbscan.impl.hdbscan.detail.reachability import (
+from hdbscan.impl.detail.reachability import (
     CORE_TPB,
     compute_core_dists,
 )

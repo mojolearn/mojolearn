@@ -113,7 +113,7 @@ from transformer.checks.transformer_oracle import (
 from transformer.checks.transformer_backward_oracle import (
     transformer_block_backward_oracle,
 )
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
     LlamaDeviceWeights,
     LlamaDims,

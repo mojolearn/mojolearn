@@ -7,7 +7,7 @@ from max.gpu.host import DeviceContext
 from checks.numerics import numeric_mode_name
 from metrics.checks.device_io import upload_i32, download_f32
 from metrics.estimator import confusion_matrix_host, precision_recall_fscore_host
-from metrics.impl.metrics.classification import prf_finish_kernel, confusion_finish_kernel
+from metrics.impl.classification import prf_finish_kernel, confusion_finish_kernel
 
 
 def close(got: Float32, expected: Float64) raises:

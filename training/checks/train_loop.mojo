@@ -153,7 +153,7 @@ from training.checks.optimizer import (
 )
 from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
 
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
     LlamaDeviceWeights,
     LlamaDims,

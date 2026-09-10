@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The gate file of profile `mojolearn.identical.mamba3.siso.fp32.v1`
 (`mamba/IDENTICAL_MAMBA3_CONTRACT.md` section 8). NO REFERENCE FILE: it runs the
-device block (`mamba/impl/mamba_ssm/modules/mamba3.mojo` around
+device block (`mamba/impl/modules/mamba3.mojo` around
 `ops/mamba3_siso.mojo`) against the host oracle
 (`mamba/checks/mamba3_oracle.mojo`) and compares every recorded stage BY
 BITS.
@@ -149,7 +149,7 @@ from mamba.checks.mamba3_oracle import (
     mamba3_block_oracle,
     pinned_mul,
 )
-from mamba.impl.mamba_ssm.modules.mamba3 import (
+from mamba.impl.modules.mamba3 import (
     BLOCK3_ANY_SABOTAGE,
     Mamba3DeviceStages,
     Mamba3DeviceState,
@@ -158,8 +158,8 @@ from mamba.impl.mamba_ssm.modules.mamba3 import (
     mamba3_block_forward,
     mamba3_sabotage_name,
 )
-from mamba.impl.mamba_ssm.ops.mamba3_siso import m3_n_chunks, m3_q_eff
-from mamba.impl.transformers.models.mamba.modeling_mamba import (
+from mamba.impl.ops.mamba3_siso import m3_n_chunks, m3_q_eff
+from mamba.impl.modeling.modeling_mamba import (
     mamba_download,
     mamba_upload,
 )

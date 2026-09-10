@@ -312,7 +312,7 @@ def gemm_shape_provenance(i: Int) -> String:
         )
     if i == 6:
         return String(
-            "cluster/impl/cluster/detail/min_cluster_distance_compute"
+            "cluster/impl/detail/min_cluster_distance_compute"
             ".mojo:308, and bench/linalg_price_main.mojo:120 prices it --"
             " the arm measured at ~4.7x, so v1 is comparable against it."
         )

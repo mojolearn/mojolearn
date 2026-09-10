@@ -85,7 +85,7 @@
           "category": "gate/oracle"
         },
         {
-          "path": "isolation_forest/impl/isolation_forest/isolation_forest.mojo",
+          "path": "isolation_forest/impl.mojo",
           "line": 59,
           "category": "production/library"
         },
@@ -449,7 +449,7 @@
           "source": "return sqrt(acc)"
         },
         {
-          "path": "neighbors/impl/neighbors/detail/fused_l2_knn.mojo",
+          "path": "neighbors/impl/detail/fused_l2_knn.mojo",
           "line": 805,
           "category": "production/library",
           "source": "out_dists.unsafe_store(idx, sqrt(v))"
@@ -461,7 +461,7 @@
           "source": "best_value = sqrt(best_value)"
         },
         {
-          "path": "neighbors/impl/neighbors/ball_cover/ball_cover.mojo",
+          "path": "neighbors/impl/ball_cover/ball_cover.mojo",
           "line": 203,
           "category": "production/library",
           "source": "var s = Int(sqrt(Float64(m)))"
@@ -785,13 +785,13 @@
           "source": "var eps = 0.30 * sqrt(Float64(d) / 8.0)"
         },
         {
-          "path": "glm/impl/glm/qn/simple_mat/dense.mojo",
+          "path": "glm/impl/qn/simple_mat/dense.mojo",
           "line": 246,
           "category": "production/library",
           "source": "return sqrt(squared_norm(ctx, u, n, scalar))"
         },
         {
-          "path": "holtwinters/impl/holtwinters/internal/hw_optim.mojo",
+          "path": "holtwinters/impl/internal/hw_optim.mojo",
           "line": 237,
           "category": "production/library",
           "source": "return sqrt(x)"
@@ -967,7 +967,7 @@
           "category": "gate/oracle"
         },
         {
-          "path": "neighbors/impl/neighbors/detail/fused_l2_knn.mojo",
+          "path": "neighbors/impl/detail/fused_l2_knn.mojo",
           "line": 220,
           "category": "production/library"
         },
@@ -977,7 +977,7 @@
           "category": "production/library"
         },
         {
-          "path": "neighbors/impl/neighbors/ball_cover/ball_cover.mojo",
+          "path": "neighbors/impl/ball_cover/ball_cover.mojo",
           "line": 166,
           "category": "production/library"
         },
@@ -1172,12 +1172,12 @@
           "category": "benchmark"
         },
         {
-          "path": "glm/impl/glm/qn/simple_mat/dense.mojo",
+          "path": "glm/impl/qn/simple_mat/dense.mojo",
           "line": 244,
           "category": "production/library"
         },
         {
-          "path": "holtwinters/impl/holtwinters/internal/hw_optim.mojo",
+          "path": "holtwinters/impl/internal/hw_optim.mojo",
           "line": 235,
           "category": "production/library"
         },

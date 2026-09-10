@@ -87,7 +87,7 @@ from metrics.checks.device_io import download_f32, upload_f32, upload_i32
 from metrics.checks.fixtures import bits32, bits64, hashed_points, u01
 from metrics.checks.pinned_distance import host_l2sqrt_unexpanded
 from metrics.checks.pinned_sum import host_tree_sum
-from metrics.impl.metrics.silhouette_score_batched_float import (
+from metrics.impl.silhouette_score_batched_float import (
     silhouette_score,
 )
 from metrics.impl.stats.detail.batched.silhouette_score import (

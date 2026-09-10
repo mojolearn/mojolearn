@@ -38,11 +38,11 @@ from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from spectral.checks.spectral_fixture import blobs_fixture, hashed_graph_fixture
-from spectral.impl.cuvs.cluster.detail.spectral import (
+from spectral.impl.cluster.detail.spectral import (
     SpectralClusteringParams,
     fit_predict_dataset,
 )
-from spectral.impl.cuvs.preprocessing.spectral.detail.spectral_embedding import (
+from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     transform_graph,
 )

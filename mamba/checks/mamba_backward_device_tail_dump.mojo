@@ -5,7 +5,7 @@ from std.memory import bitcast
 from std.os import getenv
 
 from mamba.checks.mamba_fixture import MambaDims, corpus_case, corpus_case_weights, corpus_case_x
-from mamba.impl.transformers.models.mamba.modeling_mamba_prefill_backward import mamba1_prefill_backward
+from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
 
 
 def _objective_cotangent(n: Int) -> List[Float32]:

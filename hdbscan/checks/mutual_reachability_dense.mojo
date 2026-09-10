@@ -45,7 +45,7 @@ THAN ONE.
 (b) THE EPILOGUE HOOK DOES NOT EXIST IN THIS TREE.
     `mutual_reachability_knn_l2` needs `tiled_brute_force_knn`'s
     `DistanceEpilogue` template parameter, and
-    `neighbors/impl/neighbors/detail/knn_brute_force.mojo` carries no
+    `neighbors/impl/detail/knn_brute_force.mojo` carries no
     such parameter (`neighbors/NOT_IMPLEMENTED.tsv` records the epilogue
     template as not implemented). Adding one is the NEIGHBORS lane's call, not
     this lane's, and it is named in this lane's README under WHAT THE

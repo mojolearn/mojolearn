@@ -561,18 +561,18 @@ def mamba2_backward_topology_site(which: Int) -> String:
     if which == TOPO2_M2_6_CLAMP or which == TOPO2_JOIN:
         return (
             mamba2_backward_topology_name(which)
-            + " -- NOT WRITTEN; mamba/impl/mamba_ssm/modules/"
+            + " -- NOT WRITTEN; mamba/impl/modules/"
             + "mamba2_backward.mojo (does not exist)"
         )
     if which == TOPO2_T7_NORM or which == TOPO2_T8_ABSORB:
         return (
             mamba2_backward_topology_name(which)
-            + " -- NOT WRITTEN; mamba/impl/mamba_ssm/modules/"
+            + " -- NOT WRITTEN; mamba/impl/modules/"
             + "mamba2_backward.mojo (does not exist)"
         )
     return (
         mamba2_backward_topology_name(which)
-        + " -- NOT WRITTEN; mamba/impl/mamba_ssm/modules/"
+        + " -- NOT WRITTEN; mamba/impl/modules/"
         + "ssd_minimal_backward.mojo (does not exist)"
     )
 

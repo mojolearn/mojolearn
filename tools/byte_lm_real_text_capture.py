@@ -283,8 +283,8 @@ def validate_platform_vendor(expected_vendor):
 
 SOURCE_DIRECTORIES = ('checks', 'core', 'gemm', 'embedding', 'transformer', 'training', 'mamba')
 REQUIRED_MAMBA_SOURCES = (
-    'mamba/impl/transformers/models/mamba/modeling_mamba.mojo',
-    'mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo',
+    'mamba/impl/modeling/modeling_mamba.mojo',
+    'mamba/impl/ops/selective_scan_interface.mojo',
     'mamba/checks/mamba_fixture.mojo',
 )
 

@@ -4,7 +4,7 @@
 
 `SeasonalType`, `OptimCriterion`, `OptimParams` and `Norm`, as the ints and
 the struct they are. The defaults `runner.cuh::HoltWintersOptim` fills in
-live in `holtwinters/impl/holtwinters/runner.mojo::default_optim_params`.
+live in `holtwinters/impl/runner.mojo::default_optim_params`.
 """
 
 

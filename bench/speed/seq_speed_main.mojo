@@ -12,7 +12,7 @@
 2026-08-25 by an agent that was forbidden to run anything, against the
 signatures it read in `transformer/impl/.../modeling_llama.mojo`,
 `mamba/impl/.../modeling_mamba.mojo` and
-`mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo`. Every sentence
+`mamba/impl/ops/selective_scan_interface.mojo`. Every sentence
 below that says what a number WILL be is a prediction. The first run of this
 file is a BUILD, not a benchmark, and the mamba lane's FAST arm has per the
 lane notes never been built on some vendors at all.
@@ -178,7 +178,7 @@ from transformer.checks.transformer_fixture import TID_W_UP as T_TID_W_UP
 from transformer.checks.transformer_fixture import TID_W_V as T_TID_W_V
 from transformer.checks.transformer_fixture import TID_X as T_TID_X
 from transformer.checks.transformer_fixture import fixture_tensor
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     PLANT_AT_NONE,
     LlamaDeviceStages,
     LlamaDeviceWeights,
@@ -202,8 +202,8 @@ from mamba.checks.mamba_fixture import (
     corpus_x,
     fan_in_scale,
 )
-from mamba.impl.mamba_ssm.ops.selective_scan_interface import selective_scan_fn
-from mamba.impl.transformers.models.mamba.modeling_mamba import (
+from mamba.impl.ops.selective_scan_interface import selective_scan_fn
+from mamba.impl.modeling.modeling_mamba import (
     MambaDeviceStages,
     MambaDeviceState,
     MambaDeviceWeights,

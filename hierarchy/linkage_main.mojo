@@ -9,7 +9,7 @@
         tools/with_identical_mode.sh pixi run mojo run -I . hierarchy/linkage_main.mojo
     python3 tools/identity_trace_diff.py /tmp/linkage.apple.card /tmp/linkage.other.card
 
-Runs `hierarchy/impl/hierarchy/linkage.mojo::single_linkage` (cuML's
+Runs `hierarchy/impl/linkage.mojo::single_linkage` (cuML's
 entry, PAIRWISE connectivity, L2SqrtExpanded) on the check's hashed
 "three blobs plus duplicates" fixture and records every stage through
 `core/identity_trace.mojo`:
@@ -46,7 +46,7 @@ from hierarchy.impl.cluster.detail.connectivities import (
     pairwise_distances,
 )
 from hierarchy.impl.cluster.detail.mst import build_sorted_mst
-from hierarchy.impl.hierarchy.linkage import single_linkage
+from hierarchy.impl.linkage import single_linkage
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 

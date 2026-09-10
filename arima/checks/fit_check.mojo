@@ -71,8 +71,8 @@ from checks.numerics import (
     numeric_mode_name,
 )
 from core.identity_trace import IdentityTrace
-from glm.impl.glm.qn.qn_util import LBFGSParam, check_convergence
-from glm.impl.glm.qn.qn_linesearch import ls_success
+from glm.impl.qn.qn_util import LBFGSParam, check_convergence
+from glm.impl.qn.qn_linesearch import ls_success
 
 from arima.checks.fit_oracle import (
     build_ls_system_f64,
@@ -101,19 +101,19 @@ from arima.checks.fixtures import (
     sub_batch_series,
     upload_f32,
 )
-from arima.impl.arima.batched_fit import (
+from arima.impl.batched_fit import (
     ARIMA_FIT_H,
     arima_fit_params,
     batched_fit,
 )
-from arima.impl.arima.estimate_x0 import (
+from arima.impl.estimate_x0 import (
     INVP_AR_TESTED,
     INVP_AR_VALID,
     INVP_MA_TESTED,
     INVP_MA_VALID,
     estimate_x0,
 )
-from arima.impl.arima.lbfgs_host import armijo_ok, check_convergence_at
+from arima.impl.lbfgs_host import armijo_ok, check_convergence_at
 from arima.impl.linalg.batched.least_squares import (
     LS_MAX_COLS,
     householder_qr_solve,
@@ -702,7 +702,7 @@ def _device_objective_grad(
     actually descends on. `order` must have `d = D = 0` here: the gate uses
     undifferenced orders so the comparison against `grad_f64_central` needs
     no second differencing path to agree about."""
-    from arima.impl.arima.batched_arima import batched_loglike_grad
+    from arima.impl.batched_arima import batched_loglike_grad
 
     var N = order.complexity()
     var dy = upload_f32(ctx, y)
@@ -966,8 +966,8 @@ def check_jones_inverse_is_below_the_fd_step() raises:
 
 
 def check_lbfgs_rules_match_glm(ctx: DeviceContext) raises:
-    """`arima/impl/arima/lbfgs_host.mojo` RE-SPELLS two decision rules that
-    `glm/impl/glm/qn/` already owns, because glm's take device buffers and
+    """`arima/impl/lbfgs_host.mojo` RE-SPELLS two decision rules that
+    `glm/impl/qn/` already owns, because glm's take device buffers and
     cannot be called per series. A duplicated rule drifts; this asserts it
     has not, by running both spellings over a grid and comparing.
 

@@ -13,7 +13,7 @@ shares no code with the Holt-Winters and KPSS lanes that
 WHAT THIS CLOSES. `bindings/_mojolearn_tsa.mojo` says in its own header that
 `arima/` is deliberately absent because the lane has no `fit` and an `ARIMA`
 class would have to ask the caller for the answer before computing it. THAT
-STOPPED BEING TRUE when `arima/impl/arima/batched_fit.mojo` landed
+STOPPED BEING TRUE when `arima/impl/batched_fit.mojo` landed
 (2026-09-01) with `estimate_x0`, the Householder QR least squares and the
 batched L-BFGS, all gated by `arima/checks/fit_check.mojo` in both numeric
 tiers. What was missing after that was only the Python door, and this file

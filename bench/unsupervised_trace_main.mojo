@@ -63,10 +63,10 @@ from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import bitcast
 
-from cluster.impl.cluster.detail.kmeans import kmeans_fit_main
-from cluster.impl.cluster.kmeans_params import INIT_ARRAY, KMeansParams
+from cluster.impl.detail.kmeans import kmeans_fit_main
+from cluster.impl.kmeans_params import INIT_ARRAY, KMeansParams
 from dbscan.estimator import dbscan_fit
-from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE
+from dbscan.impl.runner import EPS_NN_BRUTE_FORCE
 from neighbors.estimator import knn_search
 from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name

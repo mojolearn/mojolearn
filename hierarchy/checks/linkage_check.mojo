@@ -125,7 +125,7 @@ from hierarchy.impl.cluster.detail.connectivities import (
     pairwise_distances,
 )
 from hierarchy.impl.cluster.detail.mst import build_sorted_mst
-from hierarchy.impl.hierarchy.linkage import single_linkage
+from hierarchy.impl.linkage import single_linkage
 from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
@@ -572,7 +572,7 @@ def check_linkage_dendrogram_and_labels() raises:
 
 
 def check_linkage_entry_matches_stages() raises:
-    """The cuML `single_linkage` entry (`hierarchy/impl/hierarchy/linkage.
+    """The cuML `single_linkage` entry (`hierarchy/impl/linkage.
     mojo`) returns the same children and labels bytes as the staged run, on
     every fixture: REACH of the real entry, not a reconstruction of it."""
     var ctx = DeviceContext()

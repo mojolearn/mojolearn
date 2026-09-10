@@ -60,7 +60,7 @@ from neighbors.estimator import (
     knn_search,
     plan_query_tile,
 )
-from neighbors.impl.neighbors.detail.knn_brute_force import (
+from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     KNN_METHOD_FUSED,
     KNN_METHOD_TILED,

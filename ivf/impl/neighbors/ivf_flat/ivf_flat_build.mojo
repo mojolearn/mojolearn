@@ -13,7 +13,7 @@ THEIR THREE STEPS, AND WHICH OF OURS IS WHICH
 | theirs | line | ours |
 |---|---|---|
 | train the quantizer on a strided subsample | `:414-437` | the WHOLE dataset (DEVIATION 1781) through the implemented k-means |
-| `kmeans::predict` the labels, in batches | `:222-224` | `cluster/impl/cluster/kmeans.mojo::predict`, one call |
+| `kmeans::predict` the labels, in batches | `:222-224` | `cluster/impl/kmeans.mojo::predict`, one call |
 | `build_index_kernel` scatters into the lists | `:317-325` | `ivf/checks/list_layout.mojo::build_list_layout` (DEVIATIONS 1782/1783) |
 
 **THE COARSE QUANTIZER IS NOT THEIR QUANTIZER, AND THAT IS DEVIATION 1780.**
@@ -36,11 +36,11 @@ carry:
 
 WHICH K-MEANS ENTRY POINT, AND WHY THAT ONE
 ---------------------------------------------
-`cluster/impl/cluster/detail/kmeans.mojo::kmeans_fit_main_traced`, with
+`cluster/impl/detail/kmeans.mojo::kmeans_fit_main_traced`, with
 `tag_prefix = "ivf.quantizer."`.
 
 NOT `cluster/estimator.mojo::kmeans_fit` and not
-`cluster/impl/cluster/kmeans.mojo::fit`, and the reason is the CARD.
+`cluster/impl/kmeans.mojo::fit`, and the reason is the CARD.
 Both of those construct their own `IdentityTrace()` internally
 (`detail/kmeans.mojo:953`), which reads `MOJOLEARN_IDENTITY_TRACE` and
 appends a SECOND record numbered `seq 0` into the file this lane is already
@@ -63,10 +63,10 @@ way it is there -- a stale membership is a stale summation set.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cluster.impl.cluster.detail.kmeans import kmeans_fit_main_traced
-from cluster.impl.cluster.detail.kmeans_common import metric_is_sqrt
-from cluster.impl.cluster.kmeans import predict
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.detail.kmeans import kmeans_fit_main_traced
+from cluster.impl.detail.kmeans_common import metric_is_sqrt
+from cluster.impl.kmeans import predict
+from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     KMeansParams,
 )

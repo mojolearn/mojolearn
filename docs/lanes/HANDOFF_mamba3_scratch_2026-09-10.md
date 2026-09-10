@@ -31,7 +31,7 @@ Root's first Apple gate should compile/run the native check with IDENTICAL, UNIN
 
 ## Definite-write audit (candidate bcc511d7)
 
-References below name functions, with line numbers at this candidate revision. `block` means `mamba/impl/mamba_ssm/modules/mamba3.mojo`; `siso` means `mamba/impl/mamba_ssm/ops/mamba3_siso.mojo`; `m1` means `mamba/impl/transformers/models/mamba/modeling_mamba.mojo`. Let M=B*L, T=q0+L, C=ceil(T/Q), N=128 and P=64. Only logical cells are consumed or traced; allocation's max(n,1) sentinel is not a logical cell.
+References below name functions, with line numbers at this candidate revision. `block` means `mamba/impl/modules/mamba3.mojo`; `siso` means `mamba/impl/ops/mamba3_siso.mojo`; `m1` means `mamba/impl/modeling/modeling_mamba.mojo`. Let M=B*L, T=q0+L, C=ceil(T/Q), N=128 and P=64. Only logical cells are consumed or traced; allocation's max(n,1) sentinel is not a logical cell.
 
 | Field(s) | Definite write and extent |
 | --- | --- |
@@ -67,7 +67,7 @@ Root reports Apple baseline/poison native default and long traces byte-equal, pl
 
 ## Transformer follow-on review (no edits)
 
-`LlamaDeviceStages.__init__` in `transformer/impl/transformers/models/llama/modeling_llama.mojo`:1193 also zero-fills projection, norm, MLP and attention scratch. A bounded follow-on could opt out only for fully written linear stages: both norm sums/outputs, q/k/v projections, q/k rotary outputs, context/output projection, residuals and MLP intermediates. These are produced by `llama_rms_norm_kernel`:1315, GEMM with no accumulation, `apply_rotary_pos_emb_kernel`:1601, attention context/scatter or fused forward, `silu_kernel`:2404 and `mlp_gated_kernel`:2431. Attention context needs route-specific proof before inclusion.
+`LlamaDeviceStages.__init__` in `transformer/impl/llama/modeling_llama.mojo`:1193 also zero-fills projection, norm, MLP and attention scratch. A bounded follow-on could opt out only for fully written linear stages: both norm sums/outputs, q/k/v projections, q/k rotary outputs, context/output projection, residuals and MLP intermediates. These are produced by `llama_rms_norm_kernel`:1315, GEMM with no accumulation, `apply_rotary_pos_emb_kernel`:1601, attention context/scatter or fused forward, `silu_kernel`:2404 and `mlp_gated_kernel`:2431. Attention context needs route-specific proof before inclusion.
 
 Do NOT mechanically apply the Mamba list to transformer cache storage: `kv_append_kernel`:1723 writes only the active packed B*nkv*S*HD prefix, while stage cache buffers have S_cap capacity. The non-window path at line3298 copies whole stage buffers into the persistent cache; an unwritten capacity tail could therefore become observable. Preserve k_cache/v_cache zeros unless a separate capacity-tail proof or exact clearing rule is implemented. Preserve LlamaKVCache's own zeros, lean attention placeholders, and unused packed-head scratch until their backward/materialization consumers are audited. The RoPE table kernel:1473 fully writes both tables, but removing those two fills has much smaller volume than linear stages. Measure current allocation phase before selecting this follow-on; no transformer source changes are proposed here.
 

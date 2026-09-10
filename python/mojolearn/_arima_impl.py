@@ -8,10 +8,10 @@ WHAT LANDED HERE, AND WHAT USED TO STAND IN ITS PLACE. Until 2026-09-01
 `python/mojolearn/__init__.py` carried an `_NOT_YET["ARIMA"]` entry saying
 the lane had a likelihood, a gradient and a predict but NO `fit`, so an
 `ARIMA` class would have to demand its own answer as an argument. That was
-true and it is now false. `arima/impl/arima/estimate_x0.mojo` (the starting
+true and it is now false. `arima/impl/estimate_x0.mojo` (the starting
 parameters, over an own-written Householder QR that beats the normal
 equations 7.4e-07 against 1.5e-04 and is strictly better on 6 of 6 series)
-and `arima/impl/arima/batched_fit.mojo` (an own-written batched L-BFGS with
+and `arima/impl/batched_fit.mojo` (an own-written batched L-BFGS with
 a shared line search, no scipy) closed that gap and are gated by
 `arima/checks/fit_check.mojo` in BOTH numeric tiers. The `_NOT_YET` entry is
 deleted rather than reworded, because the fix for a sentence explaining an
@@ -103,7 +103,7 @@ def _series_major(y, name):
 
     NO FINITENESS CHECK HAPPENS HERE, deliberately. A NaN or an infinity is
     refused BY NAME, with the flat index of the offender, in
-    `arima/impl/arima/batched_arima.mojo::_refuse_non_finite`. Checking it
+    `arima/impl/batched_arima.mojo::_refuse_non_finite`. Checking it
     here as well would make that refusal unreachable from Python and would
     silently take over a decision the implemented code owns.
     """
@@ -235,7 +235,7 @@ class ARIMA(NumericModeMixin):
                                     device, so there is no double arm here
                                     to pick (DEVIATION 670). These are
                                     float32 answers to a float32 problem
-        non-finite y      refused   `arima/impl/arima/batched_arima.mojo::
+        non-finite y      refused   `arima/impl/batched_arima.mojo::
                                     _refuse_non_finite`, which names the
                                     flat index. cuML instead has a MISSING
                                     OBSERVATION path (`missing = isnan(yt)`

@@ -98,20 +98,20 @@ from svm.checks.smo_oracle import (
     _row_norm,
     _vec_index,
 )
-from svm.impl.svm.smoblocksolve import SMO_WS_SIZE
-from svm.impl.svm.smosolver import (
+from svm.impl.smoblocksolve import SMO_WS_SIZE
+from svm.impl.smosolver import (
     SmoSolver,
     SmoTrace,
     fold_order_for,
     launch_block_solve,
 )
-from svm.impl.svm.svc_impl import (
+from svm.impl.svc_impl import (
     svc_fit,
     svc_predict,
     unique_labels_sorted,
 )
-from svm.impl.svm.svr_impl import svr_fit, svr_predict
-from svm.impl.svm.svm_parameter import (
+from svm.impl.svr_impl import svr_fit, svr_predict
+from svm.impl.svm_parameter import (
     EPSILON_SVR,
     KERNEL_LINEAR,
     KERNEL_RBF,
@@ -1475,7 +1475,7 @@ def _svr_init_f(rfx: RegFixture) -> List[Float32]:
 #
 # These are the load-bearing part of the regression lane and the reason
 # `SmoSolver.solve`'s refusal can come out at all. A device-versus-oracle
-# comparison proves that `svm/impl/svm/*.mojo` and `svm/checks/smo_oracle.mojo`
+# comparison proves that `svm/impl/*.mojo` and `svm/checks/smo_oracle.mojo`
 # agree; it cannot prove that either is SOLVING AN SVR, because both were
 # written from one reading of `smosolver.cuh` and a shared misreading of
 # `SvrInit`'s signs or of `CombineCoefs`' direction would sit in both. Each
@@ -2042,7 +2042,7 @@ def _run_svr_device(
 
     THIS CALLS THE SHIPPED FUNCTIONS AND DOES NOT REPRODUCE THEM. It held an
     inlined copy of `svrFitX` until 2026-09-01, written before
-    `svm/impl/svm/svr_impl.mojo` existed, and every gate in this file was
+    `svm/impl/svr_impl.mojo` existed, and every gate in this file was
     therefore a statement about the copy rather than about the code a caller
     reaches. `svr_fit` and `svr_predict` are that code; the two Python entry
     points in `svm/estimator.mojo` call the same pair, so what these 26
@@ -2203,7 +2203,7 @@ def check_svr_device_matches_oracle(
             " The host property gates (objective, KKT, tube) run without the"
             " device and are what that clause was waiting on; delete the"
             " `if self.svmType == EPSILON_SVR: raise` block in"
-            " svm/impl/svm/smosolver.mojo::solve and re-run."
+            " svm/impl/smosolver.mojo::solve and re-run."
         )
     if not _is_identical():
         print(

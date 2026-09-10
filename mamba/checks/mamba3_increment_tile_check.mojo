@@ -3,8 +3,8 @@
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from mamba.impl.mamba_ssm.modules.mamba3_transfer import m3_upload, m3_download
-from mamba.impl.mamba_ssm.ops.mamba3_siso import (
+from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
+from mamba.impl.ops.mamba3_siso import (
     m3_state_increment_kernel, m3_state_increment_shared_v_kernel,
     m3_state_increment_tiled_kernel,
 )

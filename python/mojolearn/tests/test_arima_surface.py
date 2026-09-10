@@ -449,7 +449,7 @@ def arm_refusals(rep, y):
     `_arima_impl.py`; the MOJO half arrives as a bare `Exception` and its
     policy lives in `arima/impl/tsa/arima_common.mojo::validate_order`,
     `arima/estimator.mojo::_refuse_method` and
-    `arima/impl/arima/batched_arima.mojo::_refuse_non_finite`. A refusal
+    `arima/impl/batched_arima.mojo::_refuse_non_finite`. A refusal
     that migrated from the second half to the first would be a policy moved
     out of reach of every Mojo gate, and the type in these rows is what
     would catch that.

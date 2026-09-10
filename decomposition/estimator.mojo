@@ -3,7 +3,7 @@
 """Host-pointer surfaces for PCA and truncated SVD.
 
 THE IDENTITY CARD (DEVIATION 518, 2026-08-23 -- the same deviation also
-repairs the k-means++ card, see `cluster/impl/cluster/detail/kmeans.mojo`
+repairs the k-means++ card, see `cluster/impl/detail/kmeans.mojo`
 `init_scalable_kmeans_plus_plus`). `pca_fit_host` and `tsvd_fit_host` are
 the paths `mojolearn.PCA` / `mojolearn.TruncatedSVD` take, and neither left
 a stage card: `decomposition/` has no `IdentityTrace` anywhere below this

@@ -321,10 +321,10 @@ from kernel_methods.estimator import (
     rbf_sampler_transform_host,
 )
 from kernel_methods.checks.kernel_matrix import KM_KERNEL_RBF
-from svm.impl.svm.svm_parameter import KernelParams
+from svm.impl.svm_parameter import KernelParams
 
 # ---- spectral --------------------------------------------------------------
-from spectral.impl.cuvs.cluster.detail.spectral import (
+from spectral.impl.cluster.detail.spectral import (
     SpectralClusteringParams,
     fit_predict_dataset,
 )

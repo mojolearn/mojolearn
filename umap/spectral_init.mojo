@@ -7,7 +7,7 @@ from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
 from spectral.impl.sparse.coo import CooGraph
-from spectral.impl.spectral.spectral_embedding import (
+from spectral.impl.spectral_embedding import (
     MLSpectralEmbeddingParams,
     transform_connectivity,
 )

@@ -202,7 +202,7 @@ fi
 # WHAT SHOULD BE IN HERE. The blob names carry the kernel's MODULE PATH
 # (measured on the built _mojolearn_mamba.so: `mamba_impl_mamba_ssm_...`,
 # `gemm_checks_gemm_identical_...`), so the floored prefix for this binding
-# is `transformer` (`transformer/impl/transformers/models/llama/
+# is `transformer` (`transformer/impl/llama/
 # modeling_llama.mojo`'s kernels: llama_rms_norm_kernel,
 # llama_rope_table_kernel, apply_rotary_pos_emb_kernel, kv_append_kernel,
 # the gather/scatter copies, the attn_* softmax chain, silu_kernel,

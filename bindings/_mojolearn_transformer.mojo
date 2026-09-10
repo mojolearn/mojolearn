@@ -14,7 +14,7 @@ could import.
 
 THE BINDING CALLS THE CERTIFIED ENTRY POINT AND NOTHING ELSE. Every call
 below goes through `llama_decoder_layer_forward`
-(`transformer/impl/transformers/models/llama/modeling_llama.mojo`) --
+(`transformer/impl/llama/modeling_llama.mojo`) --
 the SAME function `transformer/checks/transformer_check.mojo` gates
 (through its planted twin, with the plant OFF). NO arithmetic is
 respelled in this file: a binding-side copy of any seam would be a
@@ -148,10 +148,10 @@ from transformer.checks.transformer_fixture import RMS_EPS, ROPE_THETA
 
 # `_upload`/`_download` by their underscore names is DEVIATION 1112's
 # settled pattern (`transformer_check.mojo` imports the same pair).
-from transformer.impl.transformers.models.llama.fused_attention import (
+from transformer.impl.llama.fused_attention import (
     fused_forward_supported_head_dim,
 )
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     ATTN_PATH_EAGER,
     BLOCK_ANY_SABOTAGE,
     PLANT_AT_NONE,

@@ -235,7 +235,7 @@ from mamba.checks.mamba_fixture import (
     corpus_weights,
     corpus_x,
 )
-from mamba.impl.transformers.models.mamba.modeling_mamba import (
+from mamba.impl.modeling.modeling_mamba import (
     MambaDeviceStages,
     MambaDeviceState,
     MambaDeviceWeights,
@@ -260,7 +260,7 @@ from transformer.checks.transformer_fixture import (
     fixture_weights,
     fixture_x,
 )
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
     LlamaDeviceWeights,
     LlamaDims,

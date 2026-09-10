@@ -60,7 +60,7 @@ only one of the tree's two segmented sorts that takes RAGGED segments
 a CSR), and it is bit-exact on every vendor. It is still the wrong SHAPE here:
 
   1. it puts the segment on `grid.y`, and CUDA caps `maxGridSize[1]` at 65,535.
-     DBSCAN's default `batch_size` is `n_rows` (`dbscan/impl/dbscan/
+     DBSCAN's default `batch_size` is `n_rows` (`dbscan/impl/
      runner.mojo:302`), so `n_segments` is 200,000 on this lane's own scaling
      fixture. `gbdt/` never hit this because its segments are leaves, bounded
      by `2^depth`.

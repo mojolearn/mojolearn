@@ -7,7 +7,7 @@ claimed, none left unassigned). The shape of this document is
 `mamba/IDENTICAL_MAMBA_CONTRACT.md`'s, which is `gemm/IDENTICAL_FP32_CONTRACT.md`'s,
 on purpose. NOTHING IN THIS DOCUMENT HAS RUN. It is the builders'
 instruction sheet; the code forms it names (`mamba/checks/mamba2_oracle.mojo`,
-`mamba/impl/mamba_ssm/modules/ssd_minimal.mojo`, `mamba2.mojo`) do not exist
+`mamba/impl/modules/ssd_minimal.mojo`, `mamba2.mojo`) do not exist
 yet, and every gate below is RUN OWED with its command spelled.
 
 **THE PROFILE NAME IS PART OF THE CONTRACT.** Every card, gate and claim
@@ -418,11 +418,11 @@ follow the lane's naming convention.
    generator extension (mamba2 cases, section 8g). Gate:
    `pixi run check-mamba2-corpus` at the base cases. RUN OWED.
 3. **Phase 2 — SSD core on device.**
-   `mamba/impl/mamba_ssm/modules/ssd_minimal.mojo` (S10-S19 + h_last), no
+   `mamba/impl/modules/ssd_minimal.mojo` (S10-S19 + h_last), no
    float crossing a thread boundary outside the pinned folds. Gates: (a),
    (b), (f)'s SSD arms at B=1 L=4. RUN OWED.
 4. **Phase 3 — the block, prefill.**
-   `mamba/impl/mamba_ssm/modules/mamba2.mojo` (S1-S9, S20-S22 composed
+   `mamba/impl/modules/mamba2.mojo` (S1-S9, S20-S22 composed
    around phase 2; projections through `core/gemm.mojo::gemm_nt`). Gates:
    (a), (b), (c), (e), remaining (f) arms. RUN OWED.
 5. **Phase 4 — decode resumption.** Same file, section 5's three-piece
@@ -533,7 +533,7 @@ ONE COLUMN. Nothing here is a cross-vendor claim; phase 6 owns that.
   VARIABLE and that was CHECKED rather than assumed -- cb8ea360 to
   cd56e8ce moves only `packaging/linux/build_sets.sh`, which mamba2
   does not compile, and across 4515b284 to cb8ea360 the only delta in
-  anything mamba2 compiles (`impl/mamba_ssm/modules/mamba2.mojo`,
+  anything mamba2 compiles (`impl/modules/mamba2.mojo`,
   `ssd_minimal.mojo`, `checks/mamba2_oracle.mojo`, `mamba2_check.mojo`,
   `checks/numerics.mojo` at the repository root) is a COMMENT BLOCK in
   `checks/numerics.mojo`, no code. The ORIGINAL 2026-09-01 Apple card

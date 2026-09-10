@@ -53,7 +53,7 @@ provenance when using it; do not treat a log footer alone as a new certificate.
 ## Missing integration and next source changes
 
 - [ ] kNN: inspect existing opt-in dispatch in
-  [knn_brute_force.mojo](../neighbors/impl/neighbors/detail/knn_brute_force.mojo).
+  [knn_brute_force.mojo](../neighbors/impl/detail/knn_brute_force.mojo).
   Integration already exists behind `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL`
   and `MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL`; do not add a duplicate
   dispatch. Missing work is bounded shape/data qualification, installed-binary

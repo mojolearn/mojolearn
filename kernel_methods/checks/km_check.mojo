@@ -225,7 +225,7 @@ from resample.checks.index_map import (
     RESAMPLE_KIND_MONTE_CARLO,
     RESAMPLE_KIND_PERMUTATION,
 )
-from svm.impl.svm.svm_parameter import KernelParams
+from svm.impl.svm_parameter import KernelParams
 
 
 # ===========================================================================

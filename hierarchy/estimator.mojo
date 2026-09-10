@@ -10,7 +10,7 @@ a `mojolearn.AgglomerativeClustering().fit(X)` actually runs. The shape is
 `dbscan/estimator.mojo`'s: host pointers in, device buffers owned here for
 exactly one call, results read back, nothing retained.
 
-The implemented entry is `hierarchy/impl/hierarchy/linkage.mojo::single_linkage`
+The implemented entry is `hierarchy/impl/linkage.mojo::single_linkage`
 (cuML `cpp/src/hierarchy/linkage.cu`, forwarding to cuVS
 `cluster/detail/single_linkage.cuh` and RAFT's Boruvka MST). The lane's
 README, `NOT_IMPLEMENTED.tsv` are the record of what is and is
@@ -91,7 +91,7 @@ from max.gpu.host import DeviceContext
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )
-from hierarchy.impl.hierarchy.linkage import LINKAGE_DEFAULT_C, single_linkage
+from hierarchy.impl.linkage import LINKAGE_DEFAULT_C, single_linkage
 
 
 def linkage_fit_host(

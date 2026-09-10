@@ -68,7 +68,7 @@ WHAT THIS SURFACE DOES NOT ADD. Every other refusal already exists one layer
 down and is raised there by name. `arima/impl/tsa/arima_common.mojo::
 validate_order` refuses exog (`n_exog != 0`), `rd > 8`, `r > 5`, `p, q, P, Q
 > 8`, `d + D > 2`, a seasonal order with `s < 2` and an order with no
-parameters at all; `arima/impl/arima/batched_arima.mojo::_refuse_non_finite`
+parameters at all; `arima/impl/batched_arima.mojo::_refuse_non_finite`
 refuses a non-finite series with its flat index; `predict` refuses `start <
 0` and `end <= start`. `validate_order` is called HERE as well, before any
 device work, so a refused parameter costs nothing, and it is called again
@@ -87,8 +87,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 
-from arima.impl.arima.batched_arima import batched_diff, batched_loglike, predict
-from arima.impl.arima.batched_fit import batched_fit
+from arima.impl.batched_arima import batched_diff, batched_loglike, predict
+from arima.impl.batched_fit import batched_fit
 from arima.impl.tsa.arima_common import (
     ARIMAOrder,
     ARIMAParams,

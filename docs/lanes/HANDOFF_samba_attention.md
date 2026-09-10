@@ -12,7 +12,7 @@ brief was verified; what ran and what did not is listed exactly below.
   key-span refusal (fixes one surface-test arm; NOT re-run on a GPU)
 - (this file and `bench/results/attnlane_2026-09-09/` follow)
 
-Files changed: `transformer/impl/transformers/models/llama/modeling_llama.mojo`,
+Files changed: `transformer/impl/llama/modeling_llama.mojo`,
 `transformer/checks/transformer_oracle.mojo`, `transformer_fixture.mojo`,
 `transformer_check.mojo`, `transformer_backward.mojo`,
 `transformer_backward_oracle.mojo`, `transformer_backward_check.mojo`,

@@ -159,7 +159,7 @@ from solver.checks.record_canon import (
     canon_nan_list,
     canon_nan_sabotage_name,
 )
-from solver.impl.solver.cd import (
+from solver.impl.cd import (
     SAB_SOFT_SWAP,
     SAB_ZERO_FOLD_MAX,
     SAB_ZERO_FOLD_MAX_SWAPPED,

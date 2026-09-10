@@ -12,7 +12,7 @@ THE DISTANCE STEP, AND WHICH ARM. `pairwise_distances` (`:133-176`) calls
 cuh:292-322`), which for `L2Expanded`/`L2SqrtExpanded` is
 `cuvs::distance::distance<...>`: the expanded identity `||x||^2 + ||y||^2 -
 2 x.y` over precomputed row norms. This tree's spelling of that identity is
-the one `neighbors/impl/neighbors/detail/knn_brute_force.mojo:160-202`
+the one `neighbors/impl/detail/knn_brute_force.mojo:160-202`
 already uses for the same upstream call:
 
     FAST       `core/row_norms.row_norm_kernel` -> `core/gemm.gemm_nt` (MAX

@@ -18,7 +18,7 @@ in `svm/estimator.mojo`, `svr_fit` / `svr_predict` in
 
 WHAT THE TWO CLASSES SHARE, AND WHAT THEY DO NOT. One `SmoSolver`, one
 kernel-matrix path, one set of refusals in
-`svm/impl/svm/svm_parameter.mojo::check_rung1_scope`. They differ in the
+`svm/impl/svm_parameter.mojo::check_rung1_scope`. They differ in the
 gradient initialization (`SvrInit` writes `f = +-epsilon - y` and a `+-1`
 label vector), the domain size (`n_train = 2 * n_rows`) and how the
 coefficients are combined (`CombineCoefs` folds the two alpha halves), and
@@ -632,7 +632,7 @@ def _as_targets(y, n_rows):
 
     NO FINITENESS CHECK HERE EITHER, and that is deliberate rather than an
     omission copied from `_as_labels`. `check_finite_list` in
-    `svm/impl/svm/svr_impl.mojo::svr_fit` refuses a non-finite target BY
+    `svm/impl/svr_impl.mojo::svr_fit` refuses a non-finite target BY
     NAME with the offending flat index (DEVIATION 636), before any device
     work reaches a kernel, and a
     duplicate check on this side would make that refusal unreachable from
@@ -671,13 +671,13 @@ class SVR(NumericModeMixin):
 
         C               honored   the penalty. Refused if not finite or not
                                   positive, by `_svm_impl.py` and again by
-                                  `svm/impl/svm/svm_parameter.mojo`
+                                  `svm/impl/svm_parameter.mojo`
                                   (DEVIATION 636)
         epsilon         honored   the half-width of the insensitive tube,
                                   cuML's `param.epsilon`, the parameter the
                                   whole rung-2 implementation exists for. Passed
                                   through UNCLAMPED so that
-                                  `svm/impl/svm/svm_parameter.mojo::
+                                  `svm/impl/svm_parameter.mojo::
                                   check_rung1_scope`'s two refusals -- not
                                   finite, and negative -- stay reachable
                                   from this surface. They fire before any
@@ -697,11 +697,11 @@ class SVR(NumericModeMixin):
                                   and TANH, both refused
         tol             honored   the stopping tolerance. Refused if not
                                   finite or not positive, by `_svm_impl.py`
-                                  and `svm/impl/svm/svm_parameter.mojo`
+                                  and `svm/impl/svm_parameter.mojo`
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below. The TRAINING LRU it
                                   also names upstream is unimplemented and
-                                  `svm/impl/svm/svm_parameter.mojo` refuses
+                                  `svm/impl/svm_parameter.mojo` refuses
                                   a non-zero one; `svm/estimator.mojo` pins
                                   the training value at 0 so that refusal
                                   is never reached from here
@@ -735,8 +735,8 @@ class SVR(NumericModeMixin):
         sparse X        refused   `svrFitSparse` and every CSR arm are
                                   unimplemented; dense row-major float32 only.
                                   `_arrays.py::as_f32_c` is what refuses
-        non-finite X    refused   `svm/impl/svm/svr_impl.mojo` at fit and
-                                  `svm/impl/svm/svc_impl.mojo` at predict
+        non-finite X    refused   `svm/impl/svr_impl.mojo` at fit and
+                                  `svm/impl/svc_impl.mojo` at predict
                                   name the flat index (DEVIATION 636)
                                   rather than fitting it
         non-finite y    refused   the same `check_finite_list`, same

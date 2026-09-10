@@ -19,7 +19,7 @@ from std.memory import bitcast
 from bench.knn_smallk_dispatch_fixture import run_check, _coordinate
 from checks.numerics import numeric_mode_name
 from neighbors.estimator import knn_search
-from neighbors.impl.neighbors.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL, EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL
+from neighbors.impl.detail.knn_brute_force import EXPERIMENTAL_SMALLK_IDENTICAL, EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL
 from neighbors.impl.distance.detail.distance_ops import DIST_L2_EXPANDED, DIST_L2_SQRT_EXPANDED, DIST_L1, DIST_COSINE_EXPANDED
 
 

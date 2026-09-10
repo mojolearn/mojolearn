@@ -480,10 +480,10 @@ arithmetic lands on it. Then, smallest first, one gate per phase:
    `mamba3_siso_fwd_ref`/`step_ref` verbatim. Gate:
    `pixi run check-mamba3-corpus` base cases. RUN OWED.
 3. **Phase M3-2 — SISO core on device.**
-   `mamba/impl/mamba_ssm/ops/mamba3_siso.mojo` (S7-S20, S22 + reports).
+   `mamba/impl/ops/mamba3_siso.mojo` (S7-S20, S22 + reports).
    Gates: (a), (b), the core arms of (f) at B=1 L=4. RUN OWED.
 4. **Phase M3-3 — the block, prefill.**
-   `mamba/impl/mamba_ssm/modules/mamba3.mojo` (S1-S6, S21, S23 composed
+   `mamba/impl/modules/mamba3.mojo` (S1-S6, S21, S23 composed
    around phase M3-2). Gates: (a), (b), (c), (e), remaining (f). RUN
    OWED.
 5. **Phase M3-4 — decode resumption.** The DEVIATION-831 buffer. Gates:

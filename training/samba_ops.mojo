@@ -35,7 +35,7 @@ from gemm.checks.gemm_identical import (
 from gemm.checks.gemm_oracle import OP_NT
 from training.checks.optimizer_oracle import microbatch_split_is_identical
 from transformer.checks.transformer_backward import bwd_rms_norm
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     llama_rms_norm,
 )
 

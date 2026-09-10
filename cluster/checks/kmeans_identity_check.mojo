@@ -50,8 +50,8 @@ from std.memory import bitcast
 from core.identity_trace import IdentityTrace, first_divergence
 from core.pinned_reduce import pinned_block_sum
 from core.row_norms import NORM_TPB, row_norm_kernel
-from cluster.impl.cluster.detail.kmeans import kmeans_fit_main
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.detail.kmeans import kmeans_fit_main
+from cluster.impl.kmeans_params import (
     INIT_ARRAY,
     KMeansParams,
 )

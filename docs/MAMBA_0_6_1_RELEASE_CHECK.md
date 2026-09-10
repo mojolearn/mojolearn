@@ -5,7 +5,7 @@
 Source-only audit; no new test, build, timing, or GPU execution occurred.
 
 **The earlier Mamba3 FAST key-state miss is already repaired in current source.**
-`mamba/impl/mamba_ssm/modules/mamba3.mojo:424` contains `m3_dt_softplus`:
+`mamba/impl/modules/mamba3.mojo:424` contains `m3_dt_softplus`:
 FAST uses `portable_log1pf(exp(x))` for `x <= 20`; S6 calls this helper at
 line 486. This preserves small dt contributions before rotary-angle accumulation.
 Reading the same helper from retained `run3/source.tar.gz` shows the same branch

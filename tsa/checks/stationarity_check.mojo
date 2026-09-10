@@ -103,8 +103,8 @@ from tsa.impl.timeSeries.stationarity import (
     kpss_pvalue,
     kpss_stat_from_sums,
 )
-from tsa.impl.tsa.auto_arima import select_d
-from tsa.impl.tsa.stationarity import kpss_test
+from tsa.impl.auto_arima import select_d
+from tsa.impl.stationarity import kpss_test
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

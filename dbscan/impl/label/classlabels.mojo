@@ -19,7 +19,7 @@ cuML's got different numbers for the same clustering.
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from dbscan.impl.dbscan.adjgraph.algo import exclusive_scan
+from dbscan.impl.adjgraph.algo import exclusive_scan
 from dbscan.impl.sparse.detail.csr import MAX_LABEL
 
 

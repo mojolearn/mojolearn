@@ -27,13 +27,13 @@ from mamba.checks.mamba2_fixture import (
     m2_case_x,
     m2_corpus_case,
 )
-from mamba.impl.mamba_ssm.modules.mamba2 import (
+from mamba.impl.modules.mamba2 import (
     Mamba2DeviceStages,
     Mamba2DeviceWeights,
     allocate_inference_cache,
     mamba2_block_forward,
 )
-from mamba.impl.mamba_ssm.modules.mamba2_backward import (
+from mamba.impl.modules.mamba2_backward import (
     Mamba2BackwardTail,
     mamba2_backward_d_skip_into,
     mamba2_backward_gnorm_into,
@@ -42,8 +42,8 @@ from mamba.impl.mamba_ssm.modules.mamba2_backward import (
     mamba2_backward_input_projection_into,
     mamba2_backward_block_norm_into,
 )
-from mamba.impl.mamba_ssm.modules.ssd_minimal import m2_q_eff
-from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
+from mamba.impl.modules.ssd_minimal import m2_q_eff
+from mamba.impl.ops.mamba2_ssd_backward import (
     Mamba2SSDBackwardState,
     Mamba2SSDDiscretizeBackward,
     Mamba2ConvBackward,
@@ -57,7 +57,7 @@ from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     mamba2_conv_backward_prefill_into,
     mamba2_s18_direct_dpass_into,
 )
-from mamba.impl.transformers.models.mamba.modeling_mamba import (
+from mamba.impl.modeling.modeling_mamba import (
     mamba_download,
     mamba_upload,
     mamba_zeros,

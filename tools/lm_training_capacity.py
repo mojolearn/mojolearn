@@ -24,7 +24,7 @@ _spec.loader.exec_module(_config)
 SOURCES = (
     "python/mojolearn/_byte_lm_config.py",
     "training/byte_lm.mojo",
-    "transformer/impl/transformers/models/llama/modeling_llama.mojo",
+    "transformer/impl/llama/modeling_llama.mojo",
     "transformer/checks/transformer_backward.mojo",
 )
 

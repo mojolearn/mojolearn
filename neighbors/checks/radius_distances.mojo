@@ -14,7 +14,7 @@ register at the moment it decides a point is inside eps. Adding a store there
 costs nothing to compute. It was rejected, for the same three reasons
 IDENTITY_PATHS row 61 rejected the composite sort key:
 
-  * `neighbors/impl/neighbors/ball_cover/registers.mojo` is marked partial.
+  * `neighbors/impl/ball_cover/registers.mojo` is marked partial.
     Its shape follows cuML's closely, and the value of that is that a reader
     can diff it against the reference. Five new stores
     at five sites is exactly the kind of local improvement that makes the
@@ -68,7 +68,7 @@ them. That is the same reason IDENTITY_PATHS row 61 exempts the dense arm.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_idx, thread_idx
 
-from neighbors.impl.neighbors.ball_cover.common import (
+from neighbors.impl.ball_cover.common import (
     RBC_METRIC_DEFAULT,
     rbc_cmp_dist,
     rbc_true_dist,

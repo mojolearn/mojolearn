@@ -131,18 +131,18 @@ from neighbors.impl.distance.detail.distance_ops import (
     DIST_LP_UNEXPANDED,
     metric_value_name,
 )
-from neighbors.impl.neighbors.ball_cover.ball_cover import (
+from neighbors.impl.ball_cover.ball_cover import (
     rbc_build_index,
     rbc_eps_nn_query_count,
     rbc_eps_nn_query_fill,
     rbc_n_landmarks,
 )
-from neighbors.impl.neighbors.ball_cover.common import (
+from neighbors.impl.ball_cover.common import (
     RBC_FLT_MAX,
     rbc_cmp_bound,
     rbc_validate_metric,
 )
-from neighbors.impl.neighbors.ball_cover.knn import (
+from neighbors.impl.ball_cover.knn import (
     rbc_knn_query,
     rbc_knn_query_scaled,
 )

@@ -60,7 +60,7 @@ THE POLICY CHOICES
 
 from max.gpu.host import DeviceContext
 
-from cluster.impl.cluster.kmeans_params import METRIC_L2_EXPANDED
+from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from core.identity_trace import IdentityTrace
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_flat_build
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (

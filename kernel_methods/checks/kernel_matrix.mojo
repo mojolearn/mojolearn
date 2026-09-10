@@ -42,7 +42,7 @@ WHAT IS NOT HERE, AND WHERE IT IS
   distance.mojo::pairwise_distance` at `DIST_L1`, an implementation of RAFT's `l1.cuh`,
   one thread per cell with an ascending feature walk and every seam already
   flushed.
-- `KernelParams` itself: `svm/impl/svm/svm_parameter.mojo`, which is
+- `KernelParams` itself: `svm/impl/svm_parameter.mojo`, which is
   `ML::matrix::KernelParams {kernel, degree, gamma, coef0}`. This lane adds
   ONE value to its kernel enumeration -- `KM_KERNEL_LAPLACIAN` -- and adds it
   HERE rather than in `svm/`, which this lane may not edit and which would
@@ -130,7 +130,7 @@ from svm.impl.distance.kernel_matrices import (
     kernel_workspace_floats,
     row_norms_l2sq,
 )
-from svm.impl.svm.svm_parameter import (
+from svm.impl.svm_parameter import (
     KERNEL_LINEAR,
     KERNEL_POLYNOMIAL,
     KERNEL_PRECOMPUTED,
@@ -142,7 +142,7 @@ from svm.impl.svm.svm_parameter import (
 
 # ===========================================================================
 # The kernel enumeration. The first five values ARE
-# `svm/impl/svm/svm_parameter.mojo`'s, imported rather than restated, so a
+# `svm/impl/svm_parameter.mojo`'s, imported rather than restated, so a
 # `KernelParams` built here is the same struct their solver reads and a value
 # can never mean two things in one repository.
 # ===========================================================================

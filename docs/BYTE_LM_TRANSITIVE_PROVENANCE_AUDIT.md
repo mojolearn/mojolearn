@@ -31,10 +31,10 @@ must not be described as a complete transitive numerical-source inventory.
 
 The same archive's Llama module imports `batchinv_norm_chunk`, `pinned_mul`
 and `residual_add_kernel` from
-`mamba/impl/transformers/models/mamba/modeling_mamba.mojo`. Its adjacent comment
+`mamba/impl/modeling/modeling_mamba.mojo`. Its adjacent comment
 explicitly says the Transformer build compiles that module and its scan file.
 That module imports `mamba/checks/mamba_fixture.mojo` and
-`mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo`. Package initializer
+`mamba/impl/ops/selective_scan_interface.mojo`. Package initializer
 files and other declared imports are additional provenance dependencies; the
 three highlighted files are not a claim of exhaustive compiler dependency
 closure.
@@ -72,9 +72,9 @@ remote inventories listed above**:
 
 | Path | Recorded SHA256 |
 |---|---|
-| `mamba/impl/transformers/models/mamba/modeling_mamba.mojo` | `b7c683d65a151ab3e43d51e0e32e48f4de51e135a2e0e65e762f393b989ad08a` |
+| `mamba/impl/modeling/modeling_mamba.mojo` | `b7c683d65a151ab3e43d51e0e32e48f4de51e135a2e0e65e762f393b989ad08a` |
 | `mamba/checks/mamba_fixture.mojo` | `d4c9f21d2ea882d3f14fc1959af5d6a936bf359fec4e0126ec77375ee2121d4c` |
-| `mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo` | `ab24c17f729df1c17899b6ff98fb7e6eb1ad458798b9d2b5a55d8dc4d560b20d` |
+| `mamba/impl/ops/selective_scan_interface.mojo` | `ab24c17f729df1c17899b6ff98fb7e6eb1ad458798b9d2b5a55d8dc4d560b20d` |
 
 The inspected inventories also contain matching stored entries for Mamba2,
 Mamba3, Mamba-simple and SSD-minimal modules. Those examples show the transport

@@ -72,7 +72,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 - k-NN OVER AN INDEX EXISTS since 2026-09-01: `rbc_knn_search` at the bottom
   of this file, over the same random ball cover the radius surface uses. It
   is EXACT, not approximate, and it is the honest answer to a request for
-  `algorithm='kd_tree'`; `neighbors/impl/neighbors/ball_cover/knn.mojo`
+  `algorithm='kd_tree'`; `neighbors/impl/ball_cover/knn.mojo`
   carries the bounds, their proofs and DEVIATIONS 558 to 567. What is still
   owed there is the same fitted device handle the radius bullet owes, and a
   `bench/` row: no arm of that lane has measured SPEED, only exactness and
@@ -124,7 +124,7 @@ from neighbors.impl.knn.knn import (
     knn_classify,
     knn_regress,
 )
-from neighbors.impl.neighbors.detail.knn_brute_force import (
+from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     METRIC_FROM_IS_SQRT,
     brute_force_knn_impl,
@@ -209,15 +209,15 @@ def knn_metric_from_name(name: String) raises -> Int:
         )
     raise Error("mojolearn k-NN: unknown metric '" + name + "'")
 from neighbors.checks.radius_distances import rbc_edge_distances
-from neighbors.impl.neighbors.ball_cover.common import (
+from neighbors.impl.ball_cover.common import (
     RBC_METRIC_DEFAULT,
     rbc_validate_metric,
 )
-from neighbors.impl.neighbors.ball_cover.knn import (
+from neighbors.impl.ball_cover.knn import (
     RBC_KNN_MAX_K,
     rbc_knn_query,
 )
-from neighbors.impl.neighbors.ball_cover.ball_cover import (
+from neighbors.impl.ball_cover.ball_cover import (
     rbc_build_index,
     rbc_eps_nn_query_count,
     rbc_eps_nn_query_fill,
@@ -1051,7 +1051,7 @@ def knn_regressor_predict(
 # THE COST OF THAT CHOICE IS AN INDEX BUILT TWICE, and it is written down here
 # rather than hidden. `rbc_build_index` depends only on `(x, m, n_cols,
 # n_landmarks, seed)` and never on the query, so DBSCAN builds it once and
-# queries it per batch (`dbscan/impl/dbscan/runner.mojo:361`). This surface
+# queries it per batch (`dbscan/impl/runner.mojo:361`). This surface
 # cannot, because nothing survives between the two Python calls. Making it
 # survive means a fitted device handle, which this tree does not have anywhere
 # yet, and introducing the first one to save a build on the first radius
@@ -1424,7 +1424,7 @@ def radius_neighbors_fill(
 # The INDEXED k-NN entry point. `knn_search` above is exact brute force and
 # stays the default; this is the same answer computed by pruning instead of
 # by comparing every pair, and it is what a caller asking for a spatial index
-# actually wants. `neighbors/impl/neighbors/ball_cover/knn.mojo` carries the
+# actually wants. `neighbors/impl/ball_cover/knn.mojo` carries the
 # bounds and their proofs, and `NOT_IMPLEMENTED.tsv`'s kd-tree row records why
 # a tree is not the structure that answers that request on a GPU.
 #

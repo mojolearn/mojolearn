@@ -132,7 +132,7 @@ from kde.impl.distance.distance_ops import (
     DIST_LINF,
     DIST_LP_UNEXPANDED,
 )
-from kde.impl.kde.kde import score_samples
+from kde.impl.kde import score_samples
 from kde.impl.neighbors.kernel_density import (
     KDE_ELEM_TPB,
     KDE_KERNEL_COSINE,

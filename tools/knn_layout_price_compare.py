@@ -23,7 +23,7 @@ SOURCE_FILES = (
     "bench/knn_layout_dispatch_check.mojo", "bench/knn_layout_dispatch_price.mojo",
     "bench/knn_smallk_dispatch_check.mojo", "bench/knn_smallk_dispatch_price.mojo",
     "bench/knn_smallk_dispatch_fixture.mojo", "bench/knn_smallk_price_fixture.mojo",
-    "neighbors/impl/neighbors/detail/knn_brute_force.mojo",
+    "neighbors/impl/detail/knn_brute_force.mojo",
     "neighbors/checks/select_smallk_identical_candidate.mojo",
     "neighbors/checks/transposed_index_distance_candidate.mojo",
 )

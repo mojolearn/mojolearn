@@ -355,7 +355,7 @@ from transformer.checks.transformer_backward_oracle import (
     softmax_backward_into,
     transformer_block_backward_oracle,
 )
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     PLANT_AT_NONE,
     LlamaDeviceStages,
     LlamaDeviceWeights,

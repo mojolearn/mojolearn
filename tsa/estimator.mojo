@@ -8,10 +8,10 @@ in and out, a `DeviceContext` created per call and destroyed with it, no
 pointer retained past the call.
 
 `kpss_test_host` runs `ML::Stationarity::kpss_test`
-(`tsa/impl/tsa/stationarity.mojo`) on a batch and writes back the per
+(`tsa/impl/stationarity.mojo`) on a batch and writes back the per
 series stationarity flag and the per series statistic.
 `select_d_host` runs auto_arima's "Choose the hyper-parameter d" loop
-(`tsa/impl/tsa/auto_arima.mojo::select_d`) and writes back the chosen `d`
+(`tsa/impl/auto_arima.mojo::select_d`) and writes back the chosen `d`
 per series.
 
 LAYOUT, AND IT IS cuML's. `y` is `batch_size * n_obs` float32 with each
@@ -42,8 +42,8 @@ as certified across vendors.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from tsa.impl.timeSeries.stationarity import KPSS_ELEM_TPB, download_results
-from tsa.impl.tsa.auto_arima import select_d
-from tsa.impl.tsa.stationarity import kpss_test
+from tsa.impl.auto_arima import select_d
+from tsa.impl.stationarity import kpss_test
 
 
 def _upload_f32(

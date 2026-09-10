@@ -47,7 +47,7 @@ from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import PIN_CROSS_VENDOR  # DEVIATION 551
 
-from neighbors.impl.neighbors.ball_cover.ball_cover import (
+from neighbors.impl.ball_cover.ball_cover import (
     rbc_build_index,
     rbc_eps_nn_query_count,
     rbc_eps_nn_query_dense,

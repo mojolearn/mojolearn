@@ -21,7 +21,7 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_BWD_SABOTAGE
 from training.checks.loss import ANY_LOSS_SABOTAGE
 from training.checks.optimizer import ANY_SABOTAGE as OPT_SABOTAGE
 from transformer.checks.transformer_backward import BWD_ANY_SABOTAGE, LlamaBackwardStages
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDeviceStages, LlamaRopeTable,
 )
 from training.checkpoint import Checkpoint, load_checkpoint, save_checkpoint

@@ -25,18 +25,18 @@ inside a file that carries its own `main` it is TRANSCRIBED and says so at
 the site, which is the same choice `bench/lanes_price_main.mojo` made for the
 metrics lane and `bench/gemm_price_main.mojo` made for the gemm card.
 
-    kmeans      cluster/impl/cluster/kmeans::fit         bench/bench_main.mojo's shape
-    dbscan      dbscan/impl/dbscan/dbscan::dbscan_fit_impl
+    kmeans      cluster/impl/kmeans::fit         bench/bench_main.mojo's shape
+    dbscan      dbscan/impl::dbscan_fit_impl
     pca         decomposition/impl/linalg/detail/pca::pca_fit
     ols         glm/impl/linalg/detail/lstsq::lstsq_eig
     knn         neighbors/impl/.../knn_brute_force::brute_force_knn_impl
-    cd          solver/impl/solver/cd::cd_fit_traced     Lasso
-    kde         kde/impl/kde/kde::score_samples
-    linkage     hierarchy/impl/hierarchy/linkage::single_linkage
-    svm         svm/impl/svm/svc_impl::svc_fit           FIT ONLY, see below
-    metrics     metrics/impl/metrics/*                   eleven metrics, one pass
+    cd          solver/impl/cd::cd_fit_traced     Lasso
+    kde         kde/impl::score_samples
+    linkage     hierarchy/impl/linkage::single_linkage
+    svm         svm/impl/svc_impl::svc_fit           FIT ONLY, see below
+    metrics     metrics/impl/*                   eleven metrics, one pass
     ivf         ivf/estimator::ivf_flat_build_and_search_host
-    hdbscan     hdbscan/impl/hdbscan/runner::fit_hdbscan
+    hdbscan     hdbscan/impl/runner::fit_hdbscan
     cholesky    cholesky/checks/potrf::potrf_lower + trsm::cho_solve
     gmm         mixture/estimator::gaussian_mixture_fit
     gp          gaussian_process/estimator::gpr_fit_host + gpr_predict_host
@@ -46,7 +46,7 @@ metrics lane and `bench/gemm_price_main.mojo` made for the gemm card.
     resample    resample/estimator::bootstrap_host          the bootstrap
     spectral    spectral/impl/.../spectral::fit_predict_dataset
     holtwinters holtwinters/estimator::holtwinters_fit_host_traced
-    kpss        tsa/impl/tsa/stationarity::kpss_test
+    kpss        tsa/impl/stationarity::kpss_test
 
 WHAT ONE ROUND IS. One fit (or one score pass) through the lane's public
 entry on a fixture built ONCE, before the loop, and re-initialized where the
@@ -153,8 +153,8 @@ from core.identity_trace import FNV_OFFSET, FNV_PRIME, IdentityTrace, _hex16
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 # ---- kmeans ----------------------------------------------------------------
-from cluster.impl.cluster.kmeans import fit as kmeans_fit_api
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.kmeans import fit as kmeans_fit_api
+from cluster.impl.kmeans_params import (
     INIT_ARRAY,
     KMeansParams,
     METRIC_L2_EXPANDED,
@@ -162,7 +162,7 @@ from cluster.impl.cluster.kmeans_params import (
 from checks.fixed_point import choose_scale
 
 # ---- dbscan ----------------------------------------------------------------
-from dbscan.impl.dbscan.dbscan import dbscan_fit_impl
+from dbscan.impl.dbscan import dbscan_fit_impl
 
 # ---- pca -------------------------------------------------------------------
 from decomposition.impl.linalg.detail.pca import pca_fit
@@ -171,7 +171,7 @@ from decomposition.impl.linalg.detail.pca import pca_fit
 from glm.impl.linalg.detail.lstsq import lstsq_eig
 
 # ---- knn -------------------------------------------------------------------
-from neighbors.impl.neighbors.detail.knn_brute_force import (
+from neighbors.impl.detail.knn_brute_force import (
     brute_force_knn_impl,
     compute_norms,
     KNN_METHOD_AUTO,
@@ -181,12 +181,12 @@ from neighbors.impl.neighbors.detail.knn_brute_force import (
 
 # ---- cd --------------------------------------------------------------------
 from solver.checks.cd_oracle import fixture_planted_sparse
-from solver.impl.solver.cd import CdLaunch, cd_fit_traced
+from solver.impl.cd import CdLaunch, cd_fit_traced
 from solver.impl.solvers.params import LOSS_SQRD_LOSS
 
 # ---- kde -------------------------------------------------------------------
 from kde.checks.kde_fixture import query_fixture, train_fixture, weight_fixture
-from kde.impl.kde.kde import score_samples
+from kde.impl.kde import score_samples
 from kde.impl.neighbors.kernel_density import (
     host_sum_weights,
     kde_fit_validate,
@@ -207,12 +207,12 @@ from hierarchy.checks.linkage_oracle import (
     fixture_name,
 )
 from hierarchy.impl.cluster.detail.connectivities import DISTANCE_L2_SQRT_EXPANDED
-from hierarchy.impl.hierarchy.linkage import single_linkage
+from hierarchy.impl.linkage import single_linkage
 
 # ---- svm -------------------------------------------------------------------
 from svm.checks.svc_check import all_fixtures
-from svm.impl.svm.smosolver import SmoTrace
-from svm.impl.svm.svc_impl import svc_fit
+from svm.impl.smosolver import SmoTrace
+from svm.impl.svc_impl import svc_fit
 
 # ---- metrics ---------------------------------------------------------------
 from metrics.checks.device_io import upload_f32 as met_upload_f32
@@ -224,17 +224,17 @@ from metrics.checks.fixtures import (
     labels_true_pred,
     u01,
 )
-from metrics.impl.metrics.accuracy_score import accuracy_score_py
-from metrics.impl.metrics.adjusted_rand_index import adjusted_rand_index
-from metrics.impl.metrics.completeness_score import completeness_score
-from metrics.impl.metrics.entropy import entropy
-from metrics.impl.metrics.homogeneity_score import homogeneity_score
-from metrics.impl.metrics.kl_divergence import kl_divergence
-from metrics.impl.metrics.mutual_info_score import mutual_info_score
-from metrics.impl.metrics.r2_score import r2_score_py
-from metrics.impl.metrics.silhouette_score_batched_float import silhouette_score
-from metrics.impl.metrics.trustworthiness import trustworthiness_score_traced
-from metrics.impl.metrics.v_measure import v_measure
+from metrics.impl.accuracy_score import accuracy_score_py
+from metrics.impl.adjusted_rand_index import adjusted_rand_index
+from metrics.impl.completeness_score import completeness_score
+from metrics.impl.entropy import entropy
+from metrics.impl.homogeneity_score import homogeneity_score
+from metrics.impl.kl_divergence import kl_divergence
+from metrics.impl.mutual_info_score import mutual_info_score
+from metrics.impl.r2_score import r2_score_py
+from metrics.impl.silhouette_score_batched_float import silhouette_score
+from metrics.impl.trustworthiness import trustworthiness_score_traced
+from metrics.impl.v_measure import v_measure
 
 # ---- ivf -------------------------------------------------------------------
 from ivf.estimator import ivf_flat_build_and_search_host
@@ -250,8 +250,8 @@ from hdbscan.checks.hdbscan_fixture import (
     hfixture_n,
     hfixture_name,
 )
-from hdbscan.impl.hdbscan.detail.select import CLUSTER_SELECTION_EOM
-from hdbscan.impl.hdbscan.runner import (
+from hdbscan.impl.detail.select import CLUSTER_SELECTION_EOM
+from hdbscan.impl.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
     HDBSCANParams,
     fit_hdbscan,
@@ -327,7 +327,7 @@ from kernel_methods.checks.km_fixture import (
     km_fixture_y,
 )
 from kernel_methods.checks.kernel_matrix import KM_KERNEL_RBF
-from svm.impl.svm.svm_parameter import KernelParams
+from svm.impl.svm_parameter import KernelParams
 
 # ---- resample --------------------------------------------------------------
 from resample.estimator import bootstrap_host
@@ -342,7 +342,7 @@ from resample.checks.statistics import STAT_MEAN
 
 # ---- spectral --------------------------------------------------------------
 from spectral.checks.spectral_fixture import blobs_fixture
-from spectral.impl.cuvs.cluster.detail.spectral import (
+from spectral.impl.cluster.detail.spectral import (
     SpectralClusteringParams,
     fit_predict_dataset,
 )
@@ -350,12 +350,12 @@ from spectral.impl.cuvs.cluster.detail.spectral import (
 # ---- holtwinters -----------------------------------------------------------
 from holtwinters.estimator import holtwinters_fit_host_traced
 from holtwinters.checks.hw_fixture import hw_fixture, spec_additive
-from holtwinters.impl.holtwinters.runner import HW_DEFAULT_EPS
+from holtwinters.impl.runner import HW_DEFAULT_EPS
 
 # ---- kpss ------------------------------------------------------------------
 from tsa.checks.fixtures import kpss_fixture
 from tsa.checks.fixtures import upload_f32 as tsa_upload_f32
-from tsa.impl.tsa.stationarity import kpss_test
+from tsa.impl.stationarity import kpss_test
 
 
 # ============================================================================

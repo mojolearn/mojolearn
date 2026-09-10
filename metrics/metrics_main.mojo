@@ -52,22 +52,22 @@ from metrics.checks.fixtures import (
     labels_true_pred,
     u01,
 )
-from metrics.impl.metrics.accuracy_score import accuracy_score_py
-from metrics.impl.metrics.adjusted_rand_index import (
+from metrics.impl.accuracy_score import accuracy_score_py
+from metrics.impl.adjusted_rand_index import (
     adjusted_rand_index_traced,
 )
-from metrics.impl.metrics.completeness_score import completeness_score
-from metrics.impl.metrics.entropy import entropy_traced
-from metrics.impl.metrics.homogeneity_score import homogeneity_score
-from metrics.impl.metrics.kl_divergence import kl_divergence_traced
-from metrics.impl.metrics.mutual_info_score import mutual_info_score_traced
-from metrics.impl.metrics.r2_score import r2_score_py_parts_traced
-from metrics.impl.metrics.rand_index import rand_index
-from metrics.impl.metrics.silhouette_score_batched_float import (
+from metrics.impl.completeness_score import completeness_score
+from metrics.impl.entropy import entropy_traced
+from metrics.impl.homogeneity_score import homogeneity_score
+from metrics.impl.kl_divergence import kl_divergence_traced
+from metrics.impl.mutual_info_score import mutual_info_score_traced
+from metrics.impl.r2_score import r2_score_py_parts_traced
+from metrics.impl.rand_index import rand_index
+from metrics.impl.silhouette_score_batched_float import (
     silhouette_score,
 )
-from metrics.impl.metrics.trustworthiness import trustworthiness_score_traced
-from metrics.impl.metrics.v_measure import v_measure
+from metrics.impl.trustworthiness import trustworthiness_score_traced
+from metrics.impl.v_measure import v_measure
 from metrics.impl.stats.detail.mutual_info_score import (
     contingency_matrix_host,
 )

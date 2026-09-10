@@ -8,7 +8,7 @@ follows is `archive/evidence/gemm/PYTHON_SURFACE_GATE.md`.
 
 WHAT THIS CLOSES
 ----------------
-`svm/impl/svm/svr_impl.mojo`, `svm/estimator.mojo`'s `svr_fit_host` /
+`svm/impl/svr_impl.mojo`, `svm/estimator.mojo`'s `svr_fit_host` /
 `svr_predict_host`, `bindings/_mojolearn_svm.mojo`'s `svr_fit` /
 `svr_predict` and `python/mojolearn/_svm_impl.py`'s `SVR` put the
 epsilon-SVR solver in reach of a Python caller. NOTHING IN THAT PATH IS

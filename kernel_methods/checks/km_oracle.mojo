@@ -69,7 +69,7 @@ from checks.numerics import (
     identical_mul_add,
     identical_tanh,
 )
-from svm.impl.svm.svm_parameter import KernelParams
+from svm.impl.svm_parameter import KernelParams
 
 
 # ===========================================================================

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The callable surface over the k-means fit.
 
-**Why this file exists.** `cluster/impl/cluster/kmeans.mojo` already has
+**Why this file exists.** `cluster/impl/kmeans.mojo` already has
 `fit`, `predict` and `fit_predict`, faithfully mirroring
 `cuvs/src/cluster/kmeans.cuh`. None of them is callable by anyone outside this
 repository, for two reasons that are both this file's job to fix:
@@ -106,10 +106,10 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 
 from max.gpu.host import DeviceContext
 
-from cluster.impl.cluster.detail.kmeans_common import metric_is_sqrt
-from cluster.impl.cluster.kmeans import fit_predict
+from cluster.impl.detail.kmeans_common import metric_is_sqrt
+from cluster.impl.kmeans import fit_predict
 from core.row_norms import NORM_TPB, row_norm_kernel
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.kmeans_params import (
     INIT_ARRAY,
     INIT_KMEANS_PLUS_PLUS,
     KMeansParams,

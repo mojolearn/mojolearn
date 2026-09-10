@@ -205,7 +205,7 @@ comptime SAB_STD_SQRT = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT"]()
 #: which 26.08 replaced (`detail/spectral_embedding.cuh:67`). This is not a
 #: choice of ours being tested; it is a REGRESSION ARM against the older
 #: upstream. READ BY
-#: `impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo`; it
+#: `impl/preprocessing/detail/spectral_embedding.mojo`; it
 #: lives here because that module imports this one and the reverse would
 #: be a cycle. The device arm's `ncv` then differs from the oracle's, which
 #: recomputes it, so the two cards carry DIFFERENT NUMBERS OF STAGES: this

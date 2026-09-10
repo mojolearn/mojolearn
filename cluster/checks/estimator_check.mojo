@@ -41,7 +41,7 @@ of use for exactly that reason, and the redundant-looking
 from max.gpu.host import DeviceContext
 
 from cluster.estimator import KMeansFitResult, kmeans_fit, plan_sum_scale
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.kmeans_params import (
     INIT_ARRAY,
     METRIC_L2_EXPANDED,
 )

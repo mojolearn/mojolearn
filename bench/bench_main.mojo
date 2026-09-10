@@ -23,16 +23,16 @@ threefold between thermal windows**, so the alternation is not optional.
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 
-from cluster.impl.cluster.kmeans import fit as kmeans_fit_api
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.kmeans import fit as kmeans_fit_api
+from cluster.impl.kmeans_params import (
     INIT_ARRAY,
     KMeansParams,
     METRIC_L2_EXPANDED,
 )
-from dbscan.impl.dbscan.dbscan import dbscan_fit_impl
+from dbscan.impl.dbscan import dbscan_fit_impl
 from decomposition.impl.linalg.detail.pca import pca_fit
 from glm.impl.linalg.detail.lstsq import lstsq_eig
-from neighbors.impl.neighbors.detail.knn_brute_force import (
+from neighbors.impl.detail.knn_brute_force import (
     brute_force_knn_impl,
     compute_norms,
 )

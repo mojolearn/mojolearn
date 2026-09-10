@@ -134,11 +134,11 @@ from spectral.checks.spectral_oracle import (
     oracle_embedding,
 )
 from spectral.checks.symmetric_eig_host import pin_column_signs, symmetric_eig_host
-from spectral.impl.cuvs.cluster.detail.spectral import (
+from spectral.impl.cluster.detail.spectral import (
     SpectralClusteringParams,
     fit_predict_dataset,
 )
-from spectral.impl.cuvs.preprocessing.spectral.detail.spectral_embedding import (
+from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     create_connectivity_graph,
     transform_dataset,
@@ -871,7 +871,7 @@ def check_spectral_device_equals_oracle() raises:
     # bits under IDENTICAL, and `check_spectral_launch_invariance` covers
     # the repeat) so the oracle has the COO to run on.
     var tr2 = IdentityTrace.disabled()
-    from spectral.impl.cuvs.preprocessing.spectral.detail.spectral_embedding import (
+    from spectral.impl.preprocessing.detail.spectral_embedding import (
         create_connectivity_graph,
     )
     var w = create_connectivity_graph(ctx, params, data, n, 4, tr2)
@@ -951,7 +951,7 @@ def check_spectral_knn_graph_matches_host() raises:
     params.has_seed = True
     params.seed = 42
     var tr = IdentityTrace.disabled()
-    from spectral.impl.cuvs.preprocessing.spectral.detail.spectral_embedding import (
+    from spectral.impl.preprocessing.detail.spectral_embedding import (
         create_connectivity_graph,
     )
     var w = create_connectivity_graph(ctx, params, data, n, d, tr)

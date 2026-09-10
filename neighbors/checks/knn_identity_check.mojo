@@ -23,7 +23,7 @@ WHAT EACH ARM OWES, AND THEY ARE DIFFERENT DEBTS
   order. So its tie set is not merely reproducible, it is NAMED: the lowest
   indices win. That is checkable against arithmetic rather than against a
   previous run, and it is what `check_knn_tie_set_is_lowest_index` asserts.
-- **FUSED** (`neighbors/impl/neighbors/topk`'s `WarpSelect`): its comparator is
+- **FUSED** (`neighbors/impl/topk`'s `WarpSelect`): its comparator is
   `Comparators.cuh:17`, the DISTANCE ONLY. Under IDENTICAL its tie set is a
   pure function of `(m, n, k)` and the pinned policy -- because `grid_x` is
   pinned to 1 so no mutex merge decides anything, and a row's lanes see the
@@ -41,7 +41,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from neighbors.estimator import knn_search
-from neighbors.impl.neighbors.detail.knn_brute_force import (
+from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     KNN_METHOD_FUSED,
     KNN_METHOD_TILED,
@@ -310,7 +310,7 @@ def check_knn_fused_tie_set_is_geometry_invariant() raises:
     THIS CLAUSE USED TO READ "`faiss_select`'s comparator compares the
     distance only, so the fused arm cannot NAME its tie set", and that stopped
     being true on 2026-08-31 when the selector was rewritten clean-room
-    (`neighbors/impl/neighbors/topk/`). The new one orders on the PAIR --
+    (`neighbors/impl/topk/`). The new one orders on the PAIR --
     `(key, value)`, smaller payload first on an equal key -- so its tie set IS
     nameable and is deterministic by index.
 

@@ -10,7 +10,7 @@ through the SAME seam functions the Mamba-1 lane certified
 (`identical_mul_add`, `ftz`, `identical_exp`, `identical_div`,
 `identical_rsqrt`, `identical_silu`, `identical_softplus`, and DEVIATION
 788's `identical_clamp`) plus GEMM v1's `gemm_oracle`, so the device card of
-`mamba/impl/mamba_ssm/modules/mamba2.mojo` / `ssd_minimal.mojo` is diffed
+`mamba/impl/modules/mamba2.mojo` / `ssd_minimal.mojo` is diffed
 against it bitwise. The device kernels are an INDEPENDENT transcription of
 the same order; nothing below is imported by them except the seam functions
 themselves (one arithmetic, two spellings of the loops around it -- the

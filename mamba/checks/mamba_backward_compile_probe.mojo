@@ -14,8 +14,8 @@
 # `gemm/checks/gemm_backward.mojo`.
 #
 # SINCE 2026-09-03 IT ALSO COVERS THE ARITHMETIC. The two kernel files
-# `mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo` and
-# `mamba/impl/transformers/models/mamba/modeling_mamba_backward.mojo` are
+# `mamba/impl/ops/selective_scan_backward.mojo` and
+# `mamba/impl/modeling/modeling_mamba_backward.mojo` are
 # pulled in through `_force_elaborate_kernels`, so a syntax or type error in
 # any of the fourteen new launchers or the ten new kernels fails this build.
 # **THAT IS STILL NOT A RESULT ABOUT GRADIENTS.** No value is asserted, no
@@ -76,7 +76,7 @@ from mamba.checks.mamba_backward import (
 # THE ARITHMETIC, imported from the two kernel files DIRECTLY rather than
 # through `mamba_backward`'s re-exports, so that this probe fails on a broken
 # kernel file even if the routing layer's import list drifts.
-from mamba.impl.mamba_ssm.ops.selective_scan_backward import (
+from mamba.impl.ops.selective_scan_backward import (
     bwd_da_partial_floats,
     bwd_dh_floats,
     bwd_h_checkpoint_floats,
@@ -88,7 +88,7 @@ from mamba.impl.mamba_ssm.ops.selective_scan_backward import (
     selective_scan_bwd_scan_into,
     selective_scan_checkpoint_fn,
 )
-from mamba.impl.transformers.models.mamba.modeling_mamba_backward import (
+from mamba.impl.modeling.modeling_mamba_backward import (
     mamba_backward_block_sabotage_name,
     mamba_bwd_concat_p_into,
     mamba_bwd_concat_xp_into,

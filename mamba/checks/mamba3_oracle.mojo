@@ -17,7 +17,7 @@ sibling lanes certified (`identical_mul_add`, `ftz`, `identical_exp`,
 `portable_cosf`/`portable_sinf` -- DEVIATION 820's pair, whose device
 certification is a PRECONDITION, contract phase M3-0, RUN OWED) plus GEMM
 v1's `gemm_oracle`, so the device card of
-`mamba/impl/mamba_ssm/modules/mamba3.mojo` / `ops/mamba3_siso.mojo` is
+`mamba/impl/modules/mamba3.mojo` / `ops/mamba3_siso.mojo` is
 diffed against it bitwise. The device kernels are an INDEPENDENT
 transcription of the same order; nothing below is imported by them except
 the seam functions themselves (one arithmetic, two spellings of the loops

@@ -120,13 +120,13 @@ from arima.checks.kalman_oracle import (
     kalman_host_f32,
     kalman_host_f64,
 )
-from arima.impl.arima.batched_arima import (
+from arima.impl.batched_arima import (
     CANONICAL_NAN_BITS,
     batched_loglike,
     batched_loglike_grad,
     predict,
 )
-from arima.impl.arima.batched_kalman import batched_kalman_filter
+from arima.impl.batched_kalman import batched_kalman_filter
 from arima.impl.timeSeries.arima_helpers import (
     batched_jones_transform_host,
     finalize_forecast_host,

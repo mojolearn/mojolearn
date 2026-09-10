@@ -65,7 +65,7 @@ from arima.checks.fixtures import (
     upload_f32,
     upload_params,
 )
-from arima.impl.arima.batched_arima import batched_loglike
+from arima.impl.batched_arima import batched_loglike
 from arima.impl.linalg.batched.matrix import LYAP_R2_MAX
 
 

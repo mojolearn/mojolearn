@@ -44,7 +44,7 @@ which is a different sentence and `ivf/NOT_IMPLEMENTED.tsv` says which is which.
 
 from std.memory import bitcast
 
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.kmeans_params import (
     METRIC_COSINE_EXPANDED,
     METRIC_L2_EXPANDED,
     METRIC_L2_SQRT_EXPANDED,

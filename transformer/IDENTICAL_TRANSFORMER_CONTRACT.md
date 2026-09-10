@@ -37,13 +37,13 @@ softmax and nothing else.** Everything below was read in the tree on
 
 | piece | verdict | where it already is |
 |---|---|---|
-| RMSNorm, all four seams | **REUSED** | mamba contract seams S1-S4. Host form `mamba/checks/mamba_oracle.mojo:249-262`. Device form `mamba/impl/transformers/models/mamba/modeling_mamba.mojo::mamba_rms_norm_kernel` (:529-575) and its launcher `::mamba_rms_norm` (:578-598). See the eps note below. |
+| RMSNorm, all four seams | **REUSED** | mamba contract seams S1-S4. Host form `mamba/checks/mamba_oracle.mojo:249-262`. Device form `mamba/impl/modeling/modeling_mamba.mojo::mamba_rms_norm_kernel` (:529-575) and its launcher `::mamba_rms_norm` (:578-598). See the eps note below. |
 | residual add | **REUSED** | mamba contract seam S16, `modeling_mamba.mojo::residual_add_kernel` (:988-1004). |
 | SiLU | **REUSED** | `checks/numerics.mojo::identical_silu` over `::portable_siluf`, DEVIATION 744, IDENTITY_PATHS row 53. |
 | every linear projection (q, k, v, o, gate, up, down) | **REUSED** | profile `mojolearn.identical.gemm.fp32.v1`, entry `gemm/checks/gemm_identical.mojo::identical_gemm(ctx, c, a, b, m, n, k, op)` (:1363), ops `OP_NN = 0`, `OP_NT = 1`, `OP_TN = 2` from `gemm/checks/gemm_oracle.mojo:194-198`. Certified three-vendor at E3 round 11 (`144aa5b`), IDENTITY_PATHS row 40. |
 | **the QK product** | **REUSED**, and this was not on the lane brief's list | it is a `gemm.fp32.v1` `OP_NT` cell with `k = head_dim` (section 4, seam S11). |
 | exp, division, rsqrt, sqrt, log, cos, pow | **REUSED** | `checks/numerics.mojo`. `portable_expf`, `identical_div`, `identical_rsqrt`, `portable_sqrtf`, `portable_cosf`, `portable_powf`. DEVIATIONS 258 and 740-746, IDENTITY_PATHS rows 10, 12, 49-54. |
-| `pinned_mul`, the uncontractible multiply | **REUSED IN SPIRIT, COPIED IN FACT** | DEVIATION 720. It is NOT in `checks/numerics.mojo`. Three identical copies exist, at `mamba/checks/mamba_oracle.mojo:41`, `mamba/impl/transformers/models/mamba/modeling_mamba.mojo:207` and `mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo:263`. This lane needs a fourth or an import. DEVIATION 816, section 12.3. |
+| `pinned_mul`, the uncontractible multiply | **REUSED IN SPIRIT, COPIED IN FACT** | DEVIATION 720. It is NOT in `checks/numerics.mojo`. Three identical copies exist, at `mamba/checks/mamba_oracle.mojo:41`, `mamba/impl/modeling/modeling_mamba.mojo:207` and `mamba/impl/ops/selective_scan_interface.mojo:263`. This lane needs a fourth or an import. DEVIATION 816, section 12.3. |
 | `identical_fmax`, the order-free maximum | **REUSED**, and it was built for this seam | `checks/numerics.mojo::identical_fmax` over `::portable_fmaxf`, DEVIATION 825, landed 2026-08-24. It is the softmax row maximum (section 5.1) and it closes IDENTITY_PATHS row 13 at this site. |
 | deterministic block folds | **BOTH REFUSED** | `core/pinned_reduce.mojo::pinned_block_sum` (:73), `::pinned_block_max` (:159), `::pinned_block_min` (:193). `pinned_block_sum` may not be the softmax denominator (section 5.3) and `pinned_block_max` may not be the softmax row max (section 5.1). Neither refusal is about determinism; both helpers are perfectly deterministic. They compute different answers. |
 | the stage card and the differ | **REUSED** | `core/identity_trace.mojo` (`IdentityTrace.record_device` :313, `::record_host` :369), `tools/identity_trace_diff.py`. |
@@ -792,7 +792,7 @@ IDENTITY_PATHS row 40 closed on three vendors at `144aa5b` on 2026-08-23.
     transformer/checks/transformer_fixture.mojo  config, weights, planted cases
     transformer/checks/transformer_oracle.mojo   the NORMATIVE host oracle
     transformer/checks/transformer_check.mojo    the gates and the sabotages
-    transformer/impl/transformers/models/llama/modeling_llama.mojo
+    transformer/impl/llama/modeling_llama.mojo
                                                     the device spelling
     transformer/corpus/                             the independent torch reference
     transformer/NOT_IMPLEMENTED.tsv                            scope

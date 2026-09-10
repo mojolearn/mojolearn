@@ -12,7 +12,7 @@ DEVIATION 550.
 
 WHY THE OLD REFUSAL WAS RIGHT ABOUT THE MATH AND WRONG ABOUT THE CONCLUSION
 ---------------------------------------------------------------------------
-`glm/impl/glm/ols.mojo` used to raise here, and the reason it gave was
+`glm/impl/ols.mojo` used to raise here, and the reason it gave was
 correct as far as it went:
 
     with `n_cols > n_rows` the Gram matrix is singular by construction

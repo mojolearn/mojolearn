@@ -36,7 +36,7 @@ what that costs.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from isolation_forest.impl.isolation_forest.isolation_forest import (
+from isolation_forest.impl.isolation_forest import (
     IF_params,
     IFLaunchKnobs,
     IsolationForestModel,

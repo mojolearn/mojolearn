@@ -82,7 +82,7 @@ def cd_fit_binding(
         5  l1_ratio           (float; Lasso passes 1.0)
         6  tol                (float)
         7  shuffle            (0/1; selection='random' is 1 and is REFUSED
-                               BY NAME by solver/impl/solver/cd.mojo,
+                               BY NAME by solver/impl/cd.mojo,
                                DEVIATION 611 reserved and not spent)
         8  has_sample_weight  (0/1; 1 is REFUSED BY NAME by the same file)
 

@@ -16,7 +16,7 @@ where theirs is a CLOSED library call, which is the deviation below.
 These are written as PER-SERIES device functions over raw pointers (one
 thread per series, the shape their `thrust::for_each` lambdas already
 have) and called from the initialization kernels in
-`arima/impl/arima/batched_kalman.mojo`. The sizes are tiny (`r <= 5`, so
+`arima/impl/batched_kalman.mojo`. The sizes are tiny (`r <= 5`, so
 the Kronecker system is at most 25 x 25): the loops are serial and
 ascending, and every multiply-add is `identical_mul_add`.
 

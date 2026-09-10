@@ -43,7 +43,7 @@ from isolation_forest.checks.if_fixture import (
     plant_signed_zero_column,
     to_column_major,
 )
-from isolation_forest.impl.isolation_forest.isolation_forest import (
+from isolation_forest.impl.isolation_forest import (
     IF_params,
     IsolationForestModel,
     fit,

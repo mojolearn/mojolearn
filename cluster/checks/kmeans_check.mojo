@@ -59,7 +59,7 @@ from cluster.impl.distance.fused_distance_nn.simt_kernel import (
 from neighbors.impl.distance.detail.pairwise_distance_base import (
     launch_config_generator,
 )
-from cluster.impl.cluster.detail.min_cluster_distance_compute import (
+from cluster.impl.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
     min_cluster_and_distance_compute,
     min_cluster_and_distance_compute_unfused,
@@ -75,7 +75,7 @@ from cluster.checks.reduce_by_key import (
     launch_accumulate_weight_per_cluster,
     zero_i32_kernel,
 )
-from cluster.impl.cluster.kmeans import fit
+from cluster.impl.kmeans import fit
 from cluster.checks.plus_plus import (
     PLUS_PLUS_TPB,
     chunk_sums_kernel,
@@ -88,7 +88,7 @@ from cluster.checks.scalable_init import (
     scalable_uniform,
     select_scatter_kernel,
 )
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     INIT_ARRAY,
     KMeansParams,

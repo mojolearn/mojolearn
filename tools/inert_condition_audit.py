@@ -61,7 +61,7 @@ into `bench/results/`. Reporting only that number would be true and useless.
 
 The wide definition also accepts an IN-SOURCE LEDGER that says MEASURED and
 names the arm -- `mamba/checks/mamba_check.mojo`'s ledger and
-`mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo`'s, plus
+`mamba/impl/ops/selective_scan_interface.mojo`'s, plus
 `IDENTITY_PATHS.md` rows that record arms "RUN AND BITTEN". Those are real
 measurements that were simply written into source and into the path table
 rather than into `bench/results/`.

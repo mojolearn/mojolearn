@@ -11,7 +11,7 @@ four node arrays, the flat stack) is exactly what a mis-implementation hides in,
 and a gate that runs the same function twice cannot see it. This file
 is written from `isolation_tree_builder.cuh` again, recursively, over
 `List`s, with the ONE thing that must be shared shared: the RNG
-(`impl/curand/curand_kernel.mojo`) and its consumption order (rows,
+(`impl/rng/xorwow.mojo`) and its consumption order (rows,
 then features, then per node `sample_bounded(n_cols)` + `curand_uniform`
 in pre-order, left child first -- which is what their explicit stack,
 pushing right then left, walks).
@@ -32,20 +32,20 @@ drifts from its own double is caught before a device is asked anything.
 from std.math import log, exp2
 from std.memory import bitcast
 
-from isolation_forest.impl.curand.curand_kernel import (
+from isolation_forest.impl.rng.xorwow import (
     XorwowTables,
     curand,
     curand_init,
     curand_uniform,
     curandStateXORWOW,
 )
-from isolation_forest.impl.isolation_forest.isolation_forest import (
+from isolation_forest.impl.isolation_forest import (
     IF_params,
     ceil_log2_int,
     compute_c_normalization,
     compute_global_max_nodes_per_tree,
 )
-from isolation_forest.impl.isolation_forest.isolation_tree_builder import (
+from isolation_forest.impl.isolation_tree_builder import (
     EULER_MASCHERONI_F32,
 )
 from checks.numerics import ftz, identical_log, identical_mul_add, identical_pow

@@ -24,7 +24,7 @@ while the session was rate-limited; `n5h6et424b5oj6` DELETE 204, GET 404).
 - (this file, `bench/OPPONENT_REFERENCE.md` rows, and
   `bench/results/attnlane_fused_2026-09-09/round2_8b996d6d/` follow)
 
-Files: `transformer/impl/transformers/models/llama/fused_attention.mojo`
+Files: `transformer/impl/llama/fused_attention.mojo`
 (new), `modeling_llama.mojo`, `transformer/checks/transformer_backward.mojo`,
 `transformer_backward_check.mojo`, `transformer_fused_check.mojo` (new),
 `bindings/_mojolearn_transformer.mojo`, `transformer/bench_window_timing.py`,
@@ -182,7 +182,7 @@ still agree), 116 checks 0 failed.
 ## Next commands for a fresh agent, in order
 
 1. `git checkout lane/fused-attention`; read this file and
-   `transformer/impl/transformers/models/llama/fused_attention.mojo`'s header.
+   `transformer/impl/llama/fused_attention.mojo`'s header.
 2. Rent one L40S: `MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key sh tools/attn_pod.sh up "NVIDIA L40S"`
    (creates, arms `tools/runpod_guard.sh` for 60 minutes, installs pixi);
    `sh tools/attn_pod.sh ship <sha> /root/mojolearn`; put the two reference

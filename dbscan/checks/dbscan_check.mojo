@@ -40,18 +40,18 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
-from dbscan.impl.dbscan.adjgraph.algo import (
+from dbscan.impl.adjgraph.algo import (
     exclusive_scan,
     scan_blocks_needed,
 )
-from dbscan.impl.dbscan.dbscan import (
+from dbscan.impl.dbscan import (
     compute_batch_size,
     dbscan_fit_impl,
     dbscan_fit_impl_weighted,
 )
-from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
-from dbscan.impl.dbscan.runner import dbscan_fit, rbc_take_one_pass
-from dbscan.impl.dbscan.vertexdeg.algo import (
+from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
+from dbscan.impl.runner import dbscan_fit, rbc_take_one_pass
+from dbscan.impl.vertexdeg.algo import (
     VD_TPB,
     WVD_TPB,
     eps_neighborhood_kernel,
@@ -1449,7 +1449,7 @@ def _fit_metric(
     """One unweighted fit on the BRUTE arm, labels read back.
 
     BRUTE and not RBC: the ball cover is Euclidean-only by construction
-    (`neighbors/impl/neighbors/ball_cover/`), and `dbscan_fit` REFUSES
+    (`neighbors/impl/ball_cover/`), and `dbscan_fit` REFUSES
     `metric != L2` on that arm rather than downgrading. Pinning the arm here
     keeps this check about the metric.
     """
@@ -1479,7 +1479,7 @@ def check_dbscan_manhattan_refused_on_the_ball_cover() raises:
 
     The refusal is about SCOPE and not about the algorithm: the ball cover's
     pruning rests on the triangle inequality, which L1 satisfies. What is
-    Euclidean is `neighbors/impl/neighbors/ball_cover/`'s implementation of
+    Euclidean is `neighbors/impl/ball_cover/`'s implementation of
     the landmark radii and the three bounds, and that is another lane's file.
 
     The sabotage is the same fixture on the BRUTE arm, which must NOT raise:

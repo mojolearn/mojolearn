@@ -113,9 +113,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import STATS_TPB
 from core.identity_trace import IdentityTrace, first_divergence
-from glm.impl.glm.qn.glm_base import GLMDims, GLMWithData
-from glm.impl.glm.qn.qn import qn_decision_function, qn_fit_x
-from glm.impl.glm.qn.qn_util import OPT_MAX_ITERS_REACHED, OPT_SUCCESS
+from glm.impl.qn.glm_base import GLMDims, GLMWithData
+from glm.impl.qn.qn import qn_decision_function, qn_fit_x
+from glm.impl.qn.qn_util import OPT_MAX_ITERS_REACHED, OPT_SUCCESS
 from glm.impl.linear_model.qn import (
     QN_LOSS_LOGISTIC,
     QN_LOSS_SOFTMAX,

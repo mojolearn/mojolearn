@@ -107,10 +107,10 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     range_key,
 )
 from mamba.checks.mamba_oracle import pinned_mul as pinned_mul_oracle
-from mamba.impl.mamba_ssm.ops.selective_scan_interface import (
+from mamba.impl.ops.selective_scan_interface import (
     pinned_mul as pinned_mul_scan,
 )
-from mamba.impl.transformers.models.mamba.modeling_mamba import (
+from mamba.impl.modeling.modeling_mamba import (
     pinned_mul as pinned_mul_block,
 )
 

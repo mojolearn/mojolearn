@@ -4,7 +4,7 @@
 `mamba/IDENTICAL_MAMBA_CONTRACT.md` section 8 names.
 
 NO REFERENCE FILE. It runs the device block
-(`mamba/impl/transformers/models/mamba/modeling_mamba.mojo`) against the
+(`mamba/impl/modeling/modeling_mamba.mojo`) against the
 host oracle (`mamba/checks/mamba_oracle.mojo`) and compares every recorded
 stage BY BITS.
 
@@ -458,8 +458,8 @@ from mamba.checks.mamba_fixture import (
 from mamba.checks.mamba_oracle import MambaState, MambaStages, mamba_block_oracle
 from mamba.checks.mamba_backward_oracle import mamba_block_backward_oracle
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
-from mamba.impl.mamba_ssm.modules.mamba_simple import allocate_inference_cache, mamba_step
-from mamba.impl.transformers.models.mamba.modeling_mamba import (
+from mamba.impl.modules.mamba_simple import allocate_inference_cache, mamba_step
+from mamba.impl.modeling.modeling_mamba import (
     BLOCK_ANY_SABOTAGE,
     MambaDeviceStages,
     MambaDeviceState,

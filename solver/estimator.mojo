@@ -10,7 +10,7 @@ what a `mojolearn.Lasso().fit(X, y)` actually runs. The shape is
 device buffers owned here for exactly one call, results read back, nothing
 retained.
 
-The implemented solver is `solver/impl/solver/cd.mojo` (cuML
+The implemented solver is `solver/impl/cd.mojo` (cuML
 `cpp/src/solver/cd.cuh`, pinned at `v26.08.00` = `265b9da`); the lane's
 README, `NOT_IMPLEMENTED.tsv` are the record of what is and is
 not in it. Nothing here re-decides any of that: every guard cdFit carries is
@@ -73,7 +73,7 @@ that cannot leave a card. The trace is off unless the variable is set.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from solver.impl.solver.cd import CdLaunch, cd_fit_traced, cd_predict
+from solver.impl.cd import CdLaunch, cd_fit_traced, cd_predict
 from solver.impl.solvers.params import LOSS_SQRD_LOSS
 
 

@@ -196,7 +196,7 @@ comptime SALT_LABEL: UInt64 = 0x00000000_00000003
 # ----------------------------------------------------------------------------
 # Hashing. splitmix64, chosen because it is short enough to audit right here
 # and is already the generator this repository uses elsewhere
-# (`cluster/impl/cluster/detail/kmeans.mojo:132`).
+# (`cluster/impl/detail/kmeans.mojo:132`).
 # ----------------------------------------------------------------------------
 def splitmix64(x: UInt64) -> UInt64:
     """splitmix64.

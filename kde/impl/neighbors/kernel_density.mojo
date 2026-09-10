@@ -22,7 +22,7 @@ and has no `kde`. The 25.08 cuML Python file above IS the algorithm the
 26.08 fused kernel was written to reproduce -- the same six log-kernels
 with the same `FLOAT_MIN` sentinel, the same normalization, the same
 per-row logsumexp -- and is the version read symbol by symbol here.
-`kde/impl/kde/kde.mojo` carries the 26.08 entry's shape (enum values,
+`kde/impl/kde.mojo` carries the 26.08 entry's shape (enum values,
 signature, `sum_weights` passed in) over this algorithm. When cuVS 26.08
 is cloned the fused kernel is the next implementation; `kde/NOT_IMPLEMENTED.tsv` names it.
 

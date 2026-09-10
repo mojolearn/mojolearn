@@ -3,7 +3,7 @@
 """Multinomial logistic regression (cuML `qnFit`, QN_LOSS_SOFTMAX, L-BFGS):
 oracle, reach, identity.
 
-DEVIATIONS 705-706 (the implementation, `glm/impl/glm/qn/glm_softmax.mojo`) and
+DEVIATIONS 705-706 (the implementation, `glm/impl/qn/glm_softmax.mojo`) and
 709-711 (the gates here). See `glm/README.md`, "QN losses". The checks:
 
     check_softmax_fd_gradient           the FLOAT64 host objective's analytic
@@ -91,14 +91,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.column_stats import STATS_TPB
 from core.gemm import PINNED_GEMM_TPB, gemm_nt, pinned_gemm_nt_kernel
 from core.identity_trace import IdentityTrace, first_divergence
-from glm.impl.glm.qn.glm_base import GLMDims, GLMWithData
-from glm.impl.glm.qn.glm_softmax import (
+from glm.impl.qn.glm_base import GLMDims, GLMWithData
+from glm.impl.qn.glm_softmax import (
     SOFTMAX_MAX_SEED,
     softmax_loss_dz_kernel,
     softmax_row_max,
 )
-from glm.impl.glm.qn.qn import qn_decision_function, qn_fit_x
-from glm.impl.glm.qn.qn_util import (
+from glm.impl.qn.qn import qn_decision_function, qn_fit_x
+from glm.impl.qn.qn_util import (
     FLOAT_EPSILON,
     LBFGS_LS_BT_ARMIJO,
     LBFGS_LS_BT_WOLFE,

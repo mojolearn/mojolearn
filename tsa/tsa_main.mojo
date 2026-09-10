@@ -29,8 +29,8 @@ from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from tsa.checks.fixtures import bits32, download_f32, kpss_fixture, upload_f32
 from tsa.impl.timeSeries.stationarity import download_results
-from tsa.impl.tsa.auto_arima import select_d
-from tsa.impl.tsa.stationarity import kpss_test
+from tsa.impl.auto_arima import select_d
+from tsa.impl.stationarity import kpss_test
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

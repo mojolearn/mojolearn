@@ -102,7 +102,7 @@ from kernel_methods.impl.kernel_ridge.kernel_ridge import (
     kernel_ridge_workspace_floats,
 )
 from checks.numerics import ftz, identical_div, identical_sqrt
-from svm.impl.svm.svm_parameter import KernelParams
+from svm.impl.svm_parameter import KernelParams
 
 
 # ===========================================================================

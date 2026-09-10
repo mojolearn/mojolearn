@@ -142,7 +142,7 @@ class LinearRegression(NumericModeMixin):
     REASON. `olsFit` takes `sqrt` of the weights, multiplies row `i` of X
     and entry `i` of y by it, solves, and undoes the scaling
     (ols.cuh:99-110, 129-141). Both halves of the scaling are implemented and run
-    ON THE DEVICE in `glm/impl/glm/ols.mojo::ols_fit_weighted`; what is not
+    ON THE DEVICE in `glm/impl/ols.mojo::ols_fit_weighted`; what is not
     yet in place is a BINDING that can hand a weight pointer across
     (`bindings/_mojolearn_estimators.mojo::ols_fit_binding` takes a fixed
     `params` of length 2). Until it is, this class applies the same two
@@ -165,7 +165,7 @@ class LinearRegression(NumericModeMixin):
     (center X and y on the DEVICE) and `postProcessData` (intercept =
     mean(y) - mu_X . coef; preprocess.cuh:98-176). The implemented `ols_fit`
     REFUSES `fit_intercept` by name because those two are not implemented
-    (glm/impl/glm/ols.mojo). This class therefore does the centering here,
+    (glm/impl/ols.mojo). This class therefore does the centering here,
     in numpy: column means and the y mean in float64, subtracted in float32,
     and the intercept as `mean(y) - sum(mu_X * coef)` with `math.fsum`
     (exactly rounded; NO BLAS dot, which would be a platform-dependent host
@@ -264,7 +264,7 @@ class Ridge(NumericModeMixin):
 
     Mirrors `cuml/python/cuml/linear_model/ridge.pyx` on top of
     `cuml/cpp/src/glm/ridge.cuh::ridgeFit` (DEVIATION 545; the Mojo implementation is
-    `glm/impl/glm/ridge.mojo` and the design note there is worth reading:
+    `glm/impl/ridge.mojo` and the design note there is worth reading:
     their `eig` solver is an SVD through the eigendecomposition of `X.T @ X`
     followed by `ridgeSolve`, NOT "OLS with alpha added", and so is ours).
     Solves `min ||y - Xw||^2 + alpha ||w||^2`; the same objective as
@@ -403,7 +403,7 @@ class LogisticRegression(NumericModeMixin):
 
     Mirrors `cuml/python/cuml/linear_model/logistic_regression.py` on top of
     `cuml/python/cuml/solvers/qn.pyx` and `cuml/cpp/src/glm/qn/` (DEVIATIONS
-    546-549; the Mojo implementation is `glm/impl/glm/qn/*.mojo`, one file per
+    546-549; the Mojo implementation is `glm/impl/qn/*.mojo`, one file per
     theirs). The objective is `mean_i logloss_i + (1/(2 C n)) ||w||^2`
     (`penalty_normalized=True`: cuML divides the penalty by n so that its
     minimizer is scikit-learn's `LogisticRegression(C)` minimizer), the
@@ -423,7 +423,7 @@ class LogisticRegression(NumericModeMixin):
                                   'l1' and 'elasticnet' set l1 != 0, which
                                   selects OWL-QN (qn_solvers.cuh:420-445),
                                   implemented 2026-09-01 as
-                                  glm/impl/glm/qn/qn_solvers.mojo::min_owlqn
+                                  glm/impl/qn/qn_solvers.mojo::min_owlqn
                                   (DEVIATION 552)
         C               honored   inverse regularization strength, > 0
         tol             honored   grad_tol = tol, change_tol = tol * 0.01,

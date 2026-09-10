@@ -195,7 +195,7 @@ pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
 
 # `_gpu_shared_mem` is a prefix the compiler puts on the blob symbol; it is
 # not part of the Metal function name. The blob name carries the DEFINING
-# module's path with `/` and `.` flattened to `_`, so `solver/impl/solver/
+# module's path with `/` and `.` flattened to `_`, so `solver/impl/
 # cd.mojo`'s kernels begin `solver` and `hierarchy/impl/...`'s begin
 # `hierarchy`.
 air_blobs() {

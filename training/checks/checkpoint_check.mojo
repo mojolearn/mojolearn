@@ -91,7 +91,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import FNV_OFFSET, IdentityTrace, fnv1a64_bytes
 
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
     LlamaDeviceWeights,
     LlamaRopeTable,

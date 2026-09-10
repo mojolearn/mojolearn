@@ -7,7 +7,7 @@ from std.os import getenv
 from max.gpu.host import DeviceContext
 from checks.numerics import numeric_mode_name
 from std.gpu import block_idx, block_dim, thread_idx
-from mamba.impl.mamba_ssm.ops.mamba3_siso import m3_angle_rate
+from mamba.impl.ops.mamba3_siso import m3_angle_rate
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
@@ -31,13 +31,13 @@ from mamba.checks.mamba3_fixture import (
     m3_case_x,
     m3_corpus_case,
 )
-from mamba.impl.mamba_ssm.modules.mamba3 import (
+from mamba.impl.modules.mamba3 import (
     Mamba3DeviceStages,
     Mamba3DeviceWeights,
     allocate_inference_cache,
     mamba3_block_forward,
 )
-from mamba.impl.mamba_ssm.modules.mamba3_backward import (
+from mamba.impl.modules.mamba3_backward import (
     mamba3_beta_join_kernel,
     mamba3_backward_gate_skip_into,
     mamba3_backward_qkdot_into,
@@ -60,7 +60,7 @@ from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_pack_in_proj_into,
     mamba3_backward_block_norm_into,
 )
-from mamba.impl.transformers.models.mamba.modeling_mamba import (
+from mamba.impl.modeling.modeling_mamba import (
     mamba_download,
     mamba_upload,
     mamba_zeros,

@@ -10,7 +10,7 @@ the contract's arithmetic order written on the CPU through the SAME seams
 (`identical_mul_add`, `ftz`, `identical_exp`, `identical_div`,
 `identical_rsqrt`, `identical_silu`, `identical_softplus`, GEMM v1's
 `gemm_oracle`), so the device card of
-`mamba/impl/transformers/models/mamba/modeling_mamba.mojo` is diffed
+`mamba/impl/modeling/modeling_mamba.mojo` is diffed
 against it bitwise. The device kernels are an INDEPENDENT transcription of
 the same order; nothing below is imported by them except the seam functions
 themselves, which are shared BY DESIGN (one arithmetic, two spellings of

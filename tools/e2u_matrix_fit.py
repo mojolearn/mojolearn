@@ -320,7 +320,7 @@ cell("dbscan_chain_iter5000_brute", "dbscan", _X="X_chain", eps=0.1875,
      min_samples=2, max_iterations=5000, algorithm="brute")
 # metric='manhattan' is SERVED on the brute arm as of 2026-09-01
 # (DEVIATION 27) and REFUSED on the ball cover, whose landmark radii and
-# pruning bounds are Euclidean (neighbors/impl/neighbors/ball_cover/). Both
+# pruning bounds are Euclidean (neighbors/impl/ball_cover/). Both
 # cells stay: the refusal is a behaviour and is compared across vendors like
 # any other.
 cell("dbscan_metric_manhattan", "dbscan", metric="manhattan",

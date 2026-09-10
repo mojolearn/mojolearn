@@ -4,12 +4,12 @@ from std.sys import argv
 from std.memory import bitcast
 from core.identity_trace import IdentityTrace
 from max.gpu.host import DeviceContext
-from mamba.impl.mamba_ssm.modules.mamba_simple import check_reference_decode as reference_gate
+from mamba.impl.modules.mamba_simple import check_reference_decode as reference_gate
 from mamba.checks.mamba_check import (
     clause_d, run_step, stage_names, stage_kind, token_slice, compare_stage, KIND_TOKEN,
 )
-from mamba.impl.mamba_ssm.modules.mamba_simple import allocate_inference_cache, mamba_step
-from mamba.impl.transformers.models.mamba.modeling_mamba import (
+from mamba.impl.modules.mamba_simple import allocate_inference_cache, mamba_step
+from mamba.impl.modeling.modeling_mamba import (
     MambaDeviceWeights, MambaDeviceStages, mamba_download,
 )
 from mamba.checks.mamba_fixture import corpus_case, corpus_case_weights, corpus_case_x

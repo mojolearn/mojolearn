@@ -29,7 +29,7 @@ from bench.knn_smallk_dispatch_fixture import _coordinate
 from checks.kernel_matrix import TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from neighbors.estimator import DEFAULT_QUERY_TILE, knn_search, plan_query_tile
-from neighbors.impl.neighbors.detail.knn_brute_force import (
+from neighbors.impl.detail.knn_brute_force import (
     EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL,
     EXPERIMENTAL_SMALLK_IDENTICAL,
     KNN_INDEX_TILE_IDENTICAL,

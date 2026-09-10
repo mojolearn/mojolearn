@@ -11,7 +11,7 @@ because the confirmation needs a timer inside the runner. This is that timer.
 Every fit here runs with `phase_timing = True`, which makes `dbscan_fit`
 print one line per phase per batch (the format and its mapping onto cuML's
 nvtx ranges are documented on `dbscan_fit` in
-`dbscan/impl/dbscan/runner.mojo`):
+`dbscan/impl/runner.mojo`):
 
     PHASE budget mbytes <mb> batch <b>
     PHASE plan n_rows <N> batch <b> n_batches <nb> method <rbc|brute>
@@ -45,8 +45,8 @@ from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 
-from dbscan.impl.dbscan.dbscan import dbscan_fit_impl
-from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
+from dbscan.impl.dbscan import dbscan_fit_impl
+from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 
 
 def _u01(row: Int, k: Int, salt: Int) -> Float64:

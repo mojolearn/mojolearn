@@ -47,12 +47,12 @@ THE ARMS, and why the tiled k-NN one is separated from the default:
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 
-from cluster.impl.cluster.detail.kmeans import kmeans_fit_main
-from cluster.impl.cluster.kmeans_params import INIT_ARRAY, KMeansParams
-from dbscan.impl.dbscan.dbscan import dbscan_fit_impl
-from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE
+from cluster.impl.detail.kmeans import kmeans_fit_main
+from cluster.impl.kmeans_params import INIT_ARRAY, KMeansParams
+from dbscan.impl.dbscan import dbscan_fit_impl
+from dbscan.impl.runner import EPS_NN_BRUTE_FORCE
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from neighbors.impl.neighbors.detail.knn_brute_force import (
+from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     KNN_METHOD_TILED,
     brute_force_knn_impl,

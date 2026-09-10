@@ -121,7 +121,7 @@ from isolation_forest.checks.if_oracle import (
     oracle_scores,
     oracle_scores_f64,
 )
-from isolation_forest.impl.curand.curand_kernel import (
+from isolation_forest.impl.rng.xorwow import (
     CURAND_2POW32_INV,
     XORWOW_TABLE_WORDS,
     XorwowTables,
@@ -131,7 +131,7 @@ from isolation_forest.impl.curand.curand_kernel import (
     curandStateXORWOW,
     _curand_uniform,
 )
-from isolation_forest.impl.isolation_forest.isolation_forest import (
+from isolation_forest.impl.isolation_forest import (
     IF_params,
     IFLaunchKnobs,
     IsolationForestModel,
@@ -146,7 +146,7 @@ from isolation_forest.impl.isolation_forest.isolation_forest import (
     read_i64,
     score_samples,
 )
-from isolation_forest.impl.isolation_forest.isolation_tree_builder import (
+from isolation_forest.impl.isolation_tree_builder import (
     EULER_MASCHERONI_F32,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name

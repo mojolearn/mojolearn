@@ -3,7 +3,7 @@
 
 from max.gpu.host import DeviceContext
 
-from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
+from mamba.impl.ops.mamba2_ssd_backward import (
     Mamba2SSDBackwardState,
     Mamba2SSDScaleReduction,
     Mamba2SSDDiscretizeBackward,
@@ -18,7 +18,7 @@ from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     mamba2_conv_backward_prefill_into,
 )
 from mamba.checks.mamba2_fixture import Mamba2Dims
-from mamba.impl.mamba_ssm.modules.mamba2_backward import (
+from mamba.impl.modules.mamba2_backward import (
     Mamba2BackwardTail,
     mamba2_backward_input_projection_into,
     mamba2_backward_block_norm_into,

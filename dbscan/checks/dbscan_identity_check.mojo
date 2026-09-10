@@ -45,7 +45,7 @@ the checks assert on those points specifically.
 
 from max.gpu.host import DeviceContext, HostBuffer
 
-from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
+from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 from dbscan.estimator import dbscan_fit
 from checks.kernel_matrix import (
     TARGET_COLUMN,

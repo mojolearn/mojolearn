@@ -125,9 +125,9 @@ implementing side. Five arms are fused and **none is a candidate for replacement
 | arm | file | why routing it through GEMM is wrong |
 |---|---|---|
 | `fused_distance_nn_kernel` | `cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:245` | its product feeds a per-row `(value, key)` argmin held in registers. At 200,000 rows x 16 clusters the materialized product is 3.2 M floats this kernel never writes |
-| `fused_l2_knn_kernel` | `neighbors/impl/neighbors/detail/fused_l2_knn.mojo:297` | its product feeds a register-resident `WarpSelect`. The alternative is a 409.6 MB distance matrix per tile, about 23 GB of traffic across eight tiles, for 51.2 GFLOP of work |
+| `fused_l2_knn_kernel` | `neighbors/impl/detail/fused_l2_knn.mojo:297` | its product feeds a register-resident `WarpSelect`. The alternative is a 409.6 MB distance matrix per tile, about 23 GB of traffic across eight tiles, for 51.2 GFLOP of work |
 | `eps_unexp_neigh_kernel` | `dbscan/impl/neighbors/epsilon_neighborhood.mojo:132` | **it is not a matrix product at all.** It accumulates `Σ(x−y)²` UNEXPANDED then thresholds and reduces degrees in the same kernel. Reaching it through a GEMM needs `‖x‖²+‖y‖²−2x·y`, a DIFFERENT arithmetic with different cancellation, and in DBSCAN one ULP moves a point across `<= eps` and flips an adjacency BIT (IDENTITY_PATHS row 19) |
-| `eps_dist_sq` | `neighbors/impl/neighbors/ball_cover/common.mojo:58` | a per-pair functor called from nine ball-cover kernel sites whose value feeds an eps compare or a 1-NN argmin immediately. There is no matrix here |
+| `eps_dist_sq` | `neighbors/impl/ball_cover/common.mojo:58` | a per-pair functor called from nine ball-cover kernel sites whose value feeds an eps compare or a 1-NN argmin immediately. There is no matrix here |
 | `std_dev_partials_kernel` | `gbdt/methods/random_score_helper.mojo:86` | DEVIATION 137 fused `DivideVector` + `DotProduct` so their `tmp` vector is never materialized |
 
 Two more are contractions but not GEMMs and stay where they are,

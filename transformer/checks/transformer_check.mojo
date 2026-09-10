@@ -4,7 +4,7 @@
 path `transformer/IDENTICAL_TRANSFORMER_CONTRACT.md` section 10 names.
 
 NO REFERENCE FILE. It runs the device block
-(`transformer/impl/transformers/models/llama/modeling_llama.mojo`) against
+(`transformer/impl/llama/modeling_llama.mojo`) against
 the host oracle (`transformer/checks/transformer_oracle.mojo`) and
 compares every recorded stage BY BITS.
 
@@ -290,7 +290,7 @@ from transformer.checks.transformer_oracle import (
     stage_tag,
     transformer_block_oracle,
 )
-from transformer.impl.transformers.models.llama.modeling_llama import (
+from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE,
     PLANT_AT_NONE,
     LlamaDeviceStages,

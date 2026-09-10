@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The callable surface over DBSCAN.
 
-`dbscan/impl/dbscan/dbscan.mojo:132` already has `dbscan_fit_impl`,
+`dbscan/impl.mojo:132` already has `dbscan_fit_impl`,
 mirroring `cuml/cpp/src/dbscan/dbscan.cuh:101`. It takes `DeviceBuffer`s, so
 a caller holding a numpy array cannot reach it. This file is the same shape as
 `neighbors/estimator.mojo` and `cluster/estimator.mojo`: host pointers in,
@@ -28,7 +28,7 @@ THE POLICY CHOICES
 
 2. **`eps_nn_method` DEFAULTS TO `EPS_NN_RBC`, the random ball cover, AND
    THAT IS THIS IMPLEMENTATION'S DEFAULT, NOT cuML's** -- DEVIATION 35 in
-   `dbscan/impl/dbscan/runner.mojo`: cuML's Python default is
+   `dbscan/impl/runner.mojo`: cuML's Python default is
    `algorithm='brute'` and on an int32-label build their dispatch never
    reaches RBC. (This item used to say "cuML's default"; corrected
    2026-08-23.) The ball cover measured 2.7x-27x faster at 16k-200k rows
@@ -57,7 +57,7 @@ THE POLICY CHOICES
    cuML's `runner.cuh:300-306` and scikit-learn's `_dbscan.py:451-455`, and
    they agree. Nothing else in the fit reads it. The weight sum is a FLOAT
    reduction, so its fold is pinned exactly like every other reduction in
-   this tree (DEVIATION 28, `dbscan/impl/dbscan/vertexdeg/algo.mojo`);
+   this tree (DEVIATION 28, `dbscan/impl/vertexdeg/algo.mojo`);
    an unpinned fold would put an AMD fit and a CUDA fit on opposite sides of
    `>= min_samples` for a point sitting on the threshold, which is a
    different MODEL and not a last-bit difference in a reported number.
@@ -87,7 +87,7 @@ THE POLICY CHOICES
 WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 ----------------------------------------------------------
 
-- The L1 arm on the BALL COVER. `neighbors/impl/neighbors/ball_cover/`
+- The L1 arm on the BALL COVER. `neighbors/impl/ball_cover/`
   computes Euclidean distances for its landmark radii and its three pruning
   bounds, so `metric='manhattan'` is served by `algorithm='brute'` and
   refused by name on `'rbc'`. The ball cover's pruning rests on the triangle
@@ -107,8 +107,8 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 
 from max.gpu.host import DeviceContext
 
-from dbscan.impl.dbscan.dbscan import dbscan_fit_impl_weighted
-from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
+from dbscan.impl.dbscan import dbscan_fit_impl_weighted
+from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_L1,
     DBSCAN_METRIC_L2,

@@ -77,9 +77,9 @@ from std.memory import bitcast
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cluster.impl.cluster.detail.kmeans_common import metric_is_sqrt
-from cluster.impl.cluster.kmeans import predict
-from cluster.impl.cluster.kmeans_params import (
+from cluster.impl.detail.kmeans_common import metric_is_sqrt
+from cluster.impl.kmeans import predict
+from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     KMeansParams,
     METRIC_COSINE_EXPANDED,
@@ -156,7 +156,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode
 from neighbors.estimator import knn_search
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 from neighbors.impl.matrix.detail.select_radix import SELECT_BLOCK
-from neighbors.impl.neighbors.detail.knn_brute_force import KNN_METHOD_TILED
+from neighbors.impl.detail.knn_brute_force import KNN_METHOD_TILED
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -1150,7 +1150,7 @@ def _device_assignment(
     n_lists: Int,
     dim: Int,
 ) raises -> List[UInt32]:
-    """`cluster/impl/cluster/kmeans.mojo::predict` against given centres.
+    """`cluster/impl/kmeans.mojo::predict` against given centres.
 
     The build's assignment step, called directly so the tie question can be
     asked without a k-means fit in the way. `x_norm` is computed here for

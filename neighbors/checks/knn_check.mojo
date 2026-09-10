@@ -53,7 +53,7 @@ from core.row_norms import NORM_TPB, row_norm_kernel
 from neighbors.impl.distance.detail.pairwise_distance_base import (
     launch_config_generator,
 )
-from neighbors.impl.neighbors.detail.fused_l2_knn import (
+from neighbors.impl.detail.fused_l2_knn import (
     FKNN_MBLK,
     FKNN_NBLK,
     FKNN_SMEM_PAGE_X,
@@ -63,7 +63,7 @@ from neighbors.impl.neighbors.detail.fused_l2_knn import (
     fused_l2_knn_grid,
     fused_l2_knn_launch,
 )
-from neighbors.impl.neighbors.detail.knn_brute_force import (
+from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_FUSED,
     brute_force_knn_impl,
     compute_norms,
@@ -1277,7 +1277,7 @@ def check_dispatch_takes_fused() raises:
 # ---------------------------------------------------------------------------
 # THE REGISTER-RESIDENT SELECTOR. Everything above this line was written
 # against a shared-memory placeholder in the selector slot; these three are
-# written against `neighbors/impl/neighbors/topk`'s `WarpSelect`, which is what
+# written against `neighbors/impl/topk`'s `WarpSelect`, which is what
 # `fused_l2_knn.cuh:221-222` actually instantiates.
 #
 # The call contract that makes them necessary: `WarpSelect::checkThreadQ`

@@ -69,10 +69,10 @@ that ran them, and no cross-vendor card has been diffed for this header.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from svm.impl.svm.smosolver import SmoTrace
-from svm.impl.svm.svc_impl import svc_fit, svc_predict
-from svm.impl.svm.svr_impl import svr_fit, svr_predict
-from svm.impl.svm.svm_parameter import (
+from svm.impl.smosolver import SmoTrace
+from svm.impl.svc_impl import svc_fit, svc_predict
+from svm.impl.svr_impl import svr_fit, svr_predict
+from svm.impl.svm_parameter import (
     C_SVC,
     EPSILON_SVR,
     KERNEL_LINEAR,
@@ -456,7 +456,7 @@ def svr_predict_host(
     NO `predict_class`, because a regressor has no epilogue to choose, and
     NO label pair, because there are no classes to map onto. The two dummy
     labels the launch needs are written here and are never read;
-    `svm/impl/svm/svr_impl.mojo`'s header says why they exist at all.
+    `svm/impl/svr_impl.mojo`'s header says why they exist at all.
 
     `buffer_size_mib` is their `param.cache_size` at the `SVM::predict` call
     site, the n_rows BATCH knob, and `check_svr_device_is_launch_invariant`

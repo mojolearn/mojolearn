@@ -239,12 +239,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode
 
 # ---- cd --------------------------------------------------------------------
 from solver.checks.cd_oracle import fixture_planted_sparse
-from solver.impl.solver.cd import CdLaunch, cd_fit_traced
+from solver.impl.cd import CdLaunch, cd_fit_traced
 from solver.impl.solvers.params import LOSS_SQRD_LOSS
 
 # ---- kde -------------------------------------------------------------------
 from kde.checks.kde_fixture import query_fixture, train_fixture, weight_fixture
-from kde.impl.kde.kde import score_samples
+from kde.impl.kde import score_samples
 from kde.impl.neighbors.kernel_density import (
     host_sum_weights,
     kde_fit_validate,
@@ -264,7 +264,7 @@ from hierarchy.checks.linkage_oracle import (
     fixture_name,
 )
 from hierarchy.impl.cluster.detail.connectivities import DISTANCE_L2_SQRT_EXPANDED
-from hierarchy.impl.hierarchy.linkage import single_linkage
+from hierarchy.impl.linkage import single_linkage
 
 # ---- svm -------------------------------------------------------------------
 from svm.checks.svc_check import Fixture, _run_device, all_fixtures
@@ -278,18 +278,18 @@ from metrics.checks.fixtures import (
     labels_true_pred,
     u01,
 )
-from metrics.impl.metrics.accuracy_score import accuracy_score_py
-from metrics.impl.metrics.adjusted_rand_index import adjusted_rand_index
-from metrics.impl.metrics.completeness_score import completeness_score
-from metrics.impl.metrics.entropy import entropy
-from metrics.impl.metrics.homogeneity_score import homogeneity_score
-from metrics.impl.metrics.kl_divergence import kl_divergence
-from metrics.impl.metrics.mutual_info_score import mutual_info_score
-from metrics.impl.metrics.r2_score import r2_score_py
-from metrics.impl.metrics.rand_index import rand_index
-from metrics.impl.metrics.silhouette_score_batched_float import silhouette_score
-from metrics.impl.metrics.trustworthiness import trustworthiness_score_traced
-from metrics.impl.metrics.v_measure import v_measure
+from metrics.impl.accuracy_score import accuracy_score_py
+from metrics.impl.adjusted_rand_index import adjusted_rand_index
+from metrics.impl.completeness_score import completeness_score
+from metrics.impl.entropy import entropy
+from metrics.impl.homogeneity_score import homogeneity_score
+from metrics.impl.kl_divergence import kl_divergence
+from metrics.impl.mutual_info_score import mutual_info_score
+from metrics.impl.r2_score import r2_score_py
+from metrics.impl.rand_index import rand_index
+from metrics.impl.silhouette_score_batched_float import silhouette_score
+from metrics.impl.trustworthiness import trustworthiness_score_traced
+from metrics.impl.v_measure import v_measure
 
 # ---- gemm ------------------------------------------------------------------
 from bench.gemm_shapes import (
@@ -309,11 +309,11 @@ from gemm.checks.gemm_oracle import OP_NT as ORACLE_OP_NT
 from gemm.checks.gemm_oracle import OP_TN as ORACLE_OP_TN
 
 # ---- kmeans / knn / dbscan (bench/identity_price_main.mojo's arms) ----------
-from cluster.impl.cluster.detail.kmeans import kmeans_fit_main
-from cluster.impl.cluster.kmeans_params import INIT_ARRAY, KMeansParams
-from dbscan.impl.dbscan.dbscan import dbscan_fit_impl
-from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE
-from neighbors.impl.neighbors.detail.knn_brute_force import (
+from cluster.impl.detail.kmeans import kmeans_fit_main
+from cluster.impl.kmeans_params import INIT_ARRAY, KMeansParams
+from dbscan.impl.dbscan import dbscan_fit_impl
+from dbscan.impl.runner import EPS_NN_BRUTE_FORCE
+from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     KNN_METHOD_TILED,
     brute_force_knn_impl,
@@ -586,7 +586,7 @@ def run_cd(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
         # so each round is the SAME fit, not a continuation. And `cdFit`
         # MUTATES `x` and `labels` IN PLACE under fit_intercept (centered,
         # then un-centered by `postProcessData`, which does not restore the
-        # bits exactly -- `solver/impl/solver/cd.mojo::cd_fit` says so),
+        # bits exactly -- `solver/impl/cd.mojo::cd_fit` says so),
         # so both are re-uploaded every round: the first smoke run of this
         # harness printed a warm-up hash that differed from every later
         # round's, which was the un-restored input, not the kernel.
@@ -1068,7 +1068,7 @@ def run_kmeans(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
     for r in range(rounds + 1):
         # The fit READS `cent` as its starting set under `INIT_ARRAY` and
         # overwrites it with the best restart
-        # (`cluster/impl/cluster/detail/kmeans.mojo:922`'s docstring says
+        # (`cluster/impl/detail/kmeans.mojo:922`'s docstring says
         # both), so the seed is re-uploaded every round and every round is
         # therefore the SAME fit rather than a continuation. That is the
         # only re-initialization the upstream arm does between its repeats

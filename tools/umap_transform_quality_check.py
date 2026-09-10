@@ -40,7 +40,7 @@ SOURCE_FILES = (
     "umap/curve.mojo", "umap/optimizer.mojo", "umap/graph.mojo",
     "umap/spectral_init.mojo", "umap/sparse_estimator.mojo",
     "umap/sparse_graph.mojo", "umap/sparse_optimizer.mojo",
-    "neighbors/impl/neighbors/detail/knn_brute_force.mojo", "neighbors/estimator.mojo",
+    "neighbors/impl/detail/knn_brute_force.mojo", "neighbors/estimator.mojo",
     "neighbors/checks/pinned_distance_tile.mojo",
     "neighbors/checks/select_radix_identical.mojo", "core/row_norms.mojo",
     "checks/numerics.mojo", "bindings/_mojolearn_metrics.mojo",

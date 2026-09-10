@@ -126,20 +126,20 @@ from hdbscan.checks.mutual_reachability_dense import (
     MR_TPB,
     mutual_reachability_dense,
 )
-from hdbscan.impl.hdbscan.detail.reachability import (
+from hdbscan.impl.detail.reachability import (
     CORE_TPB,
     compute_core_dists,
     mutual_reachability_graph,
     mutual_reachability_knn_l2,
 )
-from hdbscan.impl.hdbscan.detail.select import (
+from hdbscan.impl.detail.select import (
     CLUSTER_SELECTION_EOM,
     CLUSTER_SELECTION_LEAF,
     SELECT_TPB,
     cluster_epsilon_search,
 )
-from hdbscan.impl.hdbscan.detail.stabilities import STAB_TPB
-from hdbscan.impl.hdbscan.runner import (
+from hdbscan.impl.detail.stabilities import STAB_TPB
+from hdbscan.impl.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
     GRAPH_BUILD_NN_DESCENT,
     HDBSCANOutput,

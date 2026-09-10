@@ -5,7 +5,7 @@
 The shape is `hierarchy/estimator.mojo`'s and `dbscan/estimator.mojo`'s:
 host pointers in, device buffers owned here for exactly one call, results
 read back, nothing retained. The implemented entry is
-`hdbscan/impl/hdbscan/runner.mojo::fit_hdbscan` (cuML `runner.h:152-234`)
+`hdbscan/impl/runner.mojo::fit_hdbscan` (cuML `runner.h:152-234`)
 and this file re-decides none of it.
 
 **THIS IS NOT WIRED TO `bindings/` AND THERE IS NO PYTHON CLASS YET.**
@@ -39,12 +39,12 @@ WHAT IS REFUSED, AND WHERE
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from hdbscan.impl.hdbscan.runner import (
+from hdbscan.impl.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
     HDBSCANParams,
     fit_hdbscan,
 )
-from hdbscan.impl.hdbscan.detail.select import CLUSTER_SELECTION_EOM
+from hdbscan.impl.detail.select import CLUSTER_SELECTION_EOM
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )
@@ -153,6 +153,6 @@ def hdbscan_probabilities_host(n_rows: Int) raises:
         " segmented Max over the condensed tree's parent CSR plus a"
         " per-point ratio. To close this refusal, add a `deaths` fold"
         " beside DEVIATION 1604's `births` fold in"
-        " hdbscan/impl/hdbscan/detail/stabilities.mojo (same segments,"
+        " hdbscan/impl/detail/stabilities.mojo (same segments,"
         " reversed comparison) and a per-edge epilogue"
     )
