@@ -132,6 +132,8 @@ rc 134), an open defect. Build:
 `bash bindings/build_mamba.sh` (per tier via MOJOLEARN_NUMERIC_MODE).
 """
 
+from std.memory import memcpy
+from mamba.impl.mamba_ssm.modules.mamba3_transfer import M3_BULK_TRANSFER, m3_upload, m3_download
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -223,6 +225,26 @@ def _write_f32(addr: Int, values: List[Float32]) raises:
     var p = _f32_ptr(addr)
     for i in range(len(values)):
         p.unsafe_store(i, values[i])
+
+
+def _m3_read_f32(addr: Int, n: Int) raises -> List[Float32]:
+    comptime if not M3_BULK_TRANSFER:
+        return _read_f32(addr, n)
+    else:
+        var p = _f32_ptr(addr)
+        var out = List[Float32](length=n, fill=Float32(0.0))
+        if n > 0:
+            memcpy(dest=out.unsafe_ptr(), src=p, count=n)
+        return out^
+
+
+def _m3_write_f32(addr: Int, values: List[Float32]) raises:
+    comptime if not M3_BULK_TRANSFER:
+        _write_f32(addr, values)
+    else:
+        var p = _f32_ptr(addr)
+        if len(values) > 0:
+            memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
 
 
 def mamba_numeric_mode_binding() raises -> PythonObject:
@@ -720,15 +742,15 @@ def _mamba3_run(
         )
 
     var w = Mamba3Weights(dims)
-    w.norm_w = _read_f32(a[1], dm)
-    w.w_in = _read_f32(a[2], dip * dm)
-    w.dt_bias = _read_f32(a[3], nh)
-    w.bnorm_w = _read_f32(a[4], M3_D_STATE)
-    w.cnorm_w = _read_f32(a[5], M3_D_STATE)
-    w.b_bias = _read_f32(a[6], nh * M3_D_STATE)
-    w.c_bias = _read_f32(a[7], nh * M3_D_STATE)
-    w.d_skip = _read_f32(a[8], nh)
-    w.w_out = _read_f32(a[9], dm * di)
+    w.norm_w = _m3_read_f32(a[1], dm)
+    w.w_in = _m3_read_f32(a[2], dip * dm)
+    w.dt_bias = _m3_read_f32(a[3], nh)
+    w.bnorm_w = _m3_read_f32(a[4], M3_D_STATE)
+    w.cnorm_w = _m3_read_f32(a[5], M3_D_STATE)
+    w.b_bias = _m3_read_f32(a[6], nh * M3_D_STATE)
+    w.c_bias = _m3_read_f32(a[7], nh * M3_D_STATE)
+    w.d_skip = _m3_read_f32(a[8], nh)
+    w.w_out = _m3_read_f32(a[9], dm * di)
 
     var theta_n = b * nh * M3_NUM_ROPE_ANGLES
     var h_n = b * nh * M3_HEADDIM * M3_D_STATE
@@ -740,16 +762,16 @@ def _mamba3_run(
     var dw = Mamba3DeviceWeights(ctx, w)
     # The caller's ten-piece state over the fresh zeros (DEVIATION 794).
     var dstate = Mamba3DeviceState(ctx, b, dims)
-    dstate.buf_qrot = mamba_upload(
-        ctx, _read_f32(a[12], qrow_n * M3_D_STATE)
+    dstate.buf_qrot = m3_upload(
+        ctx, _m3_read_f32(a[12], qrow_n * M3_D_STATE)
     )
-    dstate.buf_krot = mamba_upload(
-        ctx, _read_f32(a[13], qrow_n * M3_D_STATE)
+    dstate.buf_krot = m3_upload(
+        ctx, _m3_read_f32(a[13], qrow_n * M3_D_STATE)
     )
-    dstate.buf_v = mamba_upload(ctx, _read_f32(a[14], qrow_n * M3_HEADDIM))
-    dstate.buf_dt = mamba_upload(ctx, _read_f32(a[15], qrow_n))
-    dstate.buf_sig = mamba_upload(ctx, _read_f32(a[16], qrow_n))
-    dstate.buf_adt = mamba_upload(ctx, _read_f32(a[17], qrow_n))
+    dstate.buf_v = m3_upload(ctx, _m3_read_f32(a[14], qrow_n * M3_HEADDIM))
+    dstate.buf_dt = m3_upload(ctx, _m3_read_f32(a[15], qrow_n))
+    dstate.buf_sig = m3_upload(ctx, _m3_read_f32(a[16], qrow_n))
+    dstate.buf_adt = m3_upload(ctx, _m3_read_f32(a[17], qrow_n))
     dstate.buf_len = q0
     if pend == 1:
         # THROUGH the lane's own helper, AFTER buf_len is set, so its
@@ -757,47 +779,47 @@ def _mamba3_run(
         # the lane's own words (DEVIATION 794).
         dstate.set_input_states(
             ctx,
-            _read_f32(a[10], theta_n),
-            _read_f32(a[11], h_n),
-            _read_f32(a[18], k_n),
-            _read_f32(a[19], v_n),
+            _m3_read_f32(a[10], theta_n),
+            _m3_read_f32(a[11], h_n),
+            _m3_read_f32(a[18], k_n),
+            _m3_read_f32(a[19], v_n),
         )
     else:
-        dstate.theta = mamba_upload(ctx, _read_f32(a[10], theta_n))
-        dstate.h = mamba_upload(ctx, _read_f32(a[11], h_n))
+        dstate.theta = m3_upload(ctx, _m3_read_f32(a[10], theta_n))
+        dstate.h = m3_upload(ctx, _m3_read_f32(a[11], h_n))
         # Idle outside a pending continuation, uploaded anyway so the
         # caller's bytes round-trip unchanged (DEVIATION 792's rule).
-        dstate.pend_k = mamba_upload(ctx, _read_f32(a[18], k_n))
-        dstate.pend_v = mamba_upload(ctx, _read_f32(a[19], v_n))
+        dstate.pend_k = m3_upload(ctx, _m3_read_f32(a[18], k_n))
+        dstate.pend_v = m3_upload(ctx, _m3_read_f32(a[19], v_n))
     var dstages = Mamba3DeviceStages(ctx, b, l, q0, dims)
-    var dx = mamba_upload(ctx, _read_f32(a[0], b * l * dm))
+    var dx = m3_upload(ctx, _m3_read_f32(a[0], b * l * dm))
 
     var trace = IdentityTrace.disabled()
     mamba3_block_forward(
         ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
     )
 
-    _write_f32(a[20], mamba_download(ctx, dstages.residual_out, b * l * dm))
+    _m3_write_f32(a[20], m3_download(ctx, dstages.residual_out, b * l * dm))
     # The FOUR reports (contract section 7's ssd.* stages), NOT the
     # resumption state -- DEVIATION 794's last clause.
-    _write_f32(a[21], mamba_download(ctx, dstages.h_last, h_n))
-    _write_f32(a[22], mamba_download(ctx, dstages.k_last, k_n))
-    _write_f32(a[23], mamba_download(ctx, dstages.v_last, v_n))
-    _write_f32(a[24], mamba_download(ctx, dstages.theta_last, theta_n))
-    _write_f32(a[10], mamba_download(ctx, dstate.theta, theta_n))
-    _write_f32(a[11], mamba_download(ctx, dstate.h, h_n))
-    _write_f32(
-        a[12], mamba_download(ctx, dstate.buf_qrot, qrow_n * M3_D_STATE)
+    _m3_write_f32(a[21], m3_download(ctx, dstages.h_last, h_n))
+    _m3_write_f32(a[22], m3_download(ctx, dstages.k_last, k_n))
+    _m3_write_f32(a[23], m3_download(ctx, dstages.v_last, v_n))
+    _m3_write_f32(a[24], m3_download(ctx, dstages.theta_last, theta_n))
+    _m3_write_f32(a[10], m3_download(ctx, dstate.theta, theta_n))
+    _m3_write_f32(a[11], m3_download(ctx, dstate.h, h_n))
+    _m3_write_f32(
+        a[12], m3_download(ctx, dstate.buf_qrot, qrow_n * M3_D_STATE)
     )
-    _write_f32(
-        a[13], mamba_download(ctx, dstate.buf_krot, qrow_n * M3_D_STATE)
+    _m3_write_f32(
+        a[13], m3_download(ctx, dstate.buf_krot, qrow_n * M3_D_STATE)
     )
-    _write_f32(a[14], mamba_download(ctx, dstate.buf_v, qrow_n * M3_HEADDIM))
-    _write_f32(a[15], mamba_download(ctx, dstate.buf_dt, qrow_n))
-    _write_f32(a[16], mamba_download(ctx, dstate.buf_sig, qrow_n))
-    _write_f32(a[17], mamba_download(ctx, dstate.buf_adt, qrow_n))
-    _write_f32(a[18], mamba_download(ctx, dstate.pend_k, k_n))
-    _write_f32(a[19], mamba_download(ctx, dstate.pend_v, v_n))
+    _m3_write_f32(a[14], m3_download(ctx, dstate.buf_v, qrow_n * M3_HEADDIM))
+    _m3_write_f32(a[15], m3_download(ctx, dstate.buf_dt, qrow_n))
+    _m3_write_f32(a[16], m3_download(ctx, dstate.buf_sig, qrow_n))
+    _m3_write_f32(a[17], m3_download(ctx, dstate.buf_adt, qrow_n))
+    _m3_write_f32(a[18], m3_download(ctx, dstate.pend_k, k_n))
+    _m3_write_f32(a[19], m3_download(ctx, dstate.pend_v, v_n))
     var out_len = dstate.buf_len
     _ = dw^
     _ = dstate^

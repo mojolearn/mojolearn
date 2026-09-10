@@ -74,6 +74,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from mamba.impl.mamba_ssm.modules.mamba3_transfer import m3_upload as mamba_upload, m3_download as mamba_download
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
@@ -123,9 +124,7 @@ from mamba.impl.mamba_ssm.ops.mamba3_siso import (
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     _refuse_nonfinite_named,
-    mamba_download,
     mamba_rms_norm,
-    mamba_upload,
     mamba_zeros,
     residual_add_kernel,
 )
