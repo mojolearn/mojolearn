@@ -30,7 +30,7 @@ cp bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py too
 mkdir -p python/mojolearn/identical
 export PYTHONPATH="$repo/python" MOJOLEARN_NUMERIC_MODE=identical
 for arm in baseline tiled; do
-  extra=()
+  extra=(-D MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE=1)
   if [ "$arm" = tiled ]; then extra=(-D MOJOLEARN_MAMBA3_TILED_INCREMENT=1); fi
   mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 "${extra[@]}" -I . mamba/checks/mamba3_check.mojo -o "$out/native-$arm" > "$out/build-native-$arm.log" 2>&1
   MOJOLEARN_IDENTITY_TRACE="$out/default-$arm.trace" "$out/native-$arm" > "$out/native-$arm.log" 2>&1

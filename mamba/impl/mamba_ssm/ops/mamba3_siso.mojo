@@ -107,7 +107,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN, column_max_block_size, lib_smem_page_fits_for
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -1841,7 +1841,17 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
         m3_phase_tick(ctx, phase_tick, String("m3_state_decay_kernel"))
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_TILED_INCREMENT"]() and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+        # One million increment cells provides ample independent tile work.
+        # Only tiny and original large grid cases have been priced; the cutoff
+        # is an occupancy guard, not a measured optimum across intermediate sizes.
+        # Apple retains its prior default until separately performance-validated.
+        var use_increment_tile = False
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+            comptime if is_defined["MOJOLEARN_MAMBA3_TILED_INCREMENT"]():
+                use_increment_tile = True
+            elif TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE"]():
+                use_increment_tile = b * nc * nh >= 128
+        if use_increment_tile:
             ctx.enqueue_function[m3_state_increment_tiled_kernel](
                 pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
                 v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
