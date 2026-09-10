@@ -1,0 +1,10 @@
+4466 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7aee80000000, nodemask=2)
+4466 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x524e80000000, nodemask=1)
+M3_FRESH_CASE_PASS 1 1 32 dedicated_entry True
+M3_FRESH_CASE_PASS 2 63 64 dedicated_entry True
+M3_FRESH_CASE_PASS 2 64 64 dedicated_entry True
+M3_FRESH_CASE_PASS 2 65 64 dedicated_entry True
+M3_FRESH_CASE_PASS 1 129 32 dedicated_entry True
+M3_FRESH_CASE_PASS 8 4096 512 dedicated_entry True
+M3_FRESH_CASE_PASS 8 1024 2048 dedicated_entry True
+M3_FRESH_PASS 39087232 output/report cells and matching mutable-weight refusals

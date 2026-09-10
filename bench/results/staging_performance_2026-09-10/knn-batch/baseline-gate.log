@@ -1,0 +1,6 @@
+4999 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538540000000, nodemask=1)
+QUERY_BATCH_CASE 513 513 17 10 0 used_tile 256
+QUERY_BATCH_CASE 513 513 17 10 1 used_tile 256
+QUERY_BATCH_CASE 65537 513 8 15 0 used_tile 256
+QUERY_BATCH_CASE 65537 513 8 15 1 used_tile 256
+QUERY BATCH PASS enabled False cases 2

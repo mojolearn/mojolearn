@@ -1,0 +1,58 @@
+{
+  "outputs": [
+    {
+      "output": "nearest distances",
+      "shape": [
+        513,
+        15
+      ],
+      "dtype": "float32",
+      "sha256": "374040df5b6bab34c1ba273855b82a52826a25bb6f2d2f950921dba650a91d13"
+    },
+    {
+      "output": "nearest indices",
+      "shape": [
+        513,
+        15
+      ],
+      "dtype": "int64",
+      "sha256": "090faa046cd0afca5f618e04066b285883bb4fdeb5f7adc24897105d4a48d38a"
+    },
+    {
+      "output": "KNeighborsClassifier predict",
+      "shape": [
+        513
+      ],
+      "dtype": "int64",
+      "sha256": "8177bd9667049992354f32669b8749b3a3991ceb6ed4694dff6a49256c4a3d26"
+    },
+    {
+      "output": "classifier classes",
+      "shape": [
+        3
+      ],
+      "dtype": "int32",
+      "sha256": "50681db447d25f550871a9c39ccbf86ea91152fabd48a30c92acf21748c75955"
+    },
+    {
+      "output": "classifier probabilities",
+      "shape": [
+        513,
+        3
+      ],
+      "dtype": "float32",
+      "sha256": "6a307aa10adb459a37340e0bc89d9a0887bb79bb25db9ea028a335787ce7035c"
+    },
+    {
+      "output": "KNeighborsRegressor predict",
+      "shape": [
+        513
+      ],
+      "dtype": "float32",
+      "sha256": "ae383f0cb29c2e6c61936e0f011c640f6cec2e49af872ac4e9d361c27258754a"
+    }
+  ],
+  "apple_tile": 256,
+  "nvidia_tile": 512,
+  "verdict": "PASS"
+}

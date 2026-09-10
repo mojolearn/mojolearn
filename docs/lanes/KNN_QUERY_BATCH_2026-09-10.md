@@ -60,3 +60,30 @@ batch size. This is not a new total-memory guarantee; beyond this measured
 scope the existing planner's minimum32 behavior is preserved verbatim.
 If timing wins, production default admission should additionally require
 NVIDIA IDENTICAL; portable Apple opt-in remains qualification only.
+
+## Adopted result
+
+Main `de042700` enables the bounded schedule for NVIDIA IDENTICAL, with
+`MOJOLEARN_KNN_LEGACY_QUERY_TILE` as the A/B control. Explicit requested
+starting tiles above512 keep historical budgeting too; the new accounting
+cannot expand an old explicit1024 request into a much larger allocation.
+Apple retains256 unless explicitly opting into the qualification flag.
+
+Both H100 orders preserve every output word. Pooled request medians are
+29.194590→27.499942ms at400k/4000/d32/k10 (5.80% less), and
+33.625961→31.865536ms at k15 (5.24% less). The d8/1000-query control improves
+5.97%; the clamped small/tail controls use identical tile sizes and move
+about1%, so no gain is attributed there. The final flag-free seven-round
+build records27.525704/31.860726ms request and26.369018/30.658421ms device.
+It passes the planner, native/public layout gates, and complete output
+comparison against the original256 baseline. No cuML timing was repeated.
+
+Python previously passed256 explicitly, bypassing the new default. Main
+`78248bb7` changes its default to0, the existing automatic-planner sentinel.
+Explicit positive requests remain honored subject to the cap. Other modes'
+effective default stays256. Rebuilt IDENTICAL bindings on Apple and H100
+pass `tools/knn_public_query_batch_check.py`: NearestNeighbors, classifier
+predictions/probabilities and regressor predictions match explicit256
+byte-for-byte. The gate observes actual backend/mode and used tile: Apple256,
+NVIDIA512. Python `query_tile` now reports0 for an automatic request;
+`used_query_tile_` remains the actual scheduled value.

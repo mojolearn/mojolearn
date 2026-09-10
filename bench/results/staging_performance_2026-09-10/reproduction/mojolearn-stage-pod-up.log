@@ -1,0 +1,13 @@
+[06:34:19 attn-pod] creating mojolearn-attn-20260910_063419 (NVIDIA H100 80GB HBM3, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04). THE BILL STARTS HERE.
+[06:34:20 attn-pod] pod kpq865uami33s3 created; waiting for ssh (10 min cap)
+[06:34:56 attn-pod] ssh target: -p 12990 root@103.207.149.102
+[06:34:56 attn-pod] ARMING THE LEASE (60 minutes) BEFORE ANY WORK
+arming a 60-minute self-kill on pod kpq865uami33s3 ...
+ARMED. Pod kpq865uami33s3 is TERMINATED through the API in 60 minutes.
+  lease: /Users/andrewhendel/CascadeProjects/mojolearn/tools/../bench/results/runpod_leases/kpq865uami33s3.lease
+  extend with: tools/runpod_guard.sh extend kpq865uami33s3 '-p 12990 root@103.207.149.102' <minutes>
+[06:35:04 attn-pod] bootstrapping pixi on the box
+name, driver_version, memory.total [MiB]
+NVIDIA H100 80GB HBM3, 580.126.09, 81559 MiB
+pixi 0.80.0
+[06:37:25 attn-pod] up. State in /tmp/mojolearn-stage-performance-pod.env

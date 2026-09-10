@@ -501,3 +501,107 @@ portable host math were correctness/capability work, not new opponent timing
 rows. Their executable gates and limitations are recorded in
 `docs/lanes/HANDOFF_identity_continuation_2026-09-10.md`. Existing cuML/cuBLAS
 prices and comparison qualifications remain unchanged.
+
+### Sep10 GEMM operand staging (IDENTICAL, cached opponents)
+
+Source `c89a73d8` moves only input FTZ into the shared-operand load stage;
+per-step rounded FMA/FTZ and the reduction tree are unchanged. NVIDIA H100
+80GB HBM3, driver580.126.09, Mojo1.0.0(ed45d567), one warmup and seven rounds.
+The same-pod control and candidate run in both orders; the reverse-order
+medians below are representative of both. Complete output fingerprints match,
+and the seven existing device gates plus798 adversarial plan cases pass on
+Apple/H100. NVIDIA adopts it; Apple retains the previous default.
+
+| Shape | Same-pod baseline ms | Staged ms | Cached cuBLAS FP32 ms | Staged / cached |
+|---|---:|---:|---:|---:|
+| llama8b.qkv.t512 |1.940172|1.523785|0.374|4.07x|
+| llama8b.mlp_up.t512 |7.581844|6.177937|1.379|4.48x|
+| llama8b.mlp_down.t512 |6.791881|5.356788|1.185|4.52x|
+| pca.transform.wide.8192x64x128 |0.032999|0.025159|0.026|0.97x|
+| kmeans.dist.4096x64x64 |0.022839|0.018727|0.023|0.81x|
+
+Opponent prices above are the existing Aug25 H100 rows, unchanged. These are
+cached-reference ratios, not fresh paired opponent trials; physical GPU/host
+variation must not be counted as a source speedup. The paired dense savings
+are18.5–21.6%. All raw samples, hardware UUID and scripts:
+`bench/results/staging_performance_2026-09-10/gemm-stage/`.
+
+The rejected kNN coalesced-column experiment also measured400k/4000/d32/k10,
+k15;400k/1000/d8/k10;10k/32/d32/k15;65537/129/d17/k10. Full outputs match,
+but the target workloads do not improve. The three additional control shapes
+have no opponent price assigned; no opponent was run. The raw measurements
+and complete-output hashes are retained in the same evidence directory under
+`knn-stage/`, so they need not be repeated merely to recover their values.
+
+### Sep10 bounded kNN query batches (IDENTICAL, cached cuML)
+
+Main `de042700` uses512-query batches on NVIDIA through400k index rows;
+`78248bb7` wires Python's automatic request to that planner. Larger indices
+and explicit starting tiles above512 keep historical budgeting. Apple keeps
+256. Known batch-dependent scratch in the admitted scope is <=522.6MiB;
+this is not a total-memory guarantee. Source changes do not alter row
+arithmetic, tie ordering, distance layout or selection.
+
+H100 GPU-504d7226-23e4-42fe-6ed9-64586e4da2e2, driver580.126.09,
+Mojo1.0.0(ed45d567), dyadic-v1, two warmups. Five rounds per arm in each
+order; a final default build then takes seven rounds. All five experiment
+shapes' complete outputs match across arms/orders; Apple/H100 native and
+rebuilt public Python gates pass.
+
+| index / queries / features / k | Paired baseline request ms | Paired512 request ms | Final default request ms | Cached cuML request ms | Final / cached |
+|---|---:|---:|---:|---:|---:|
+|400000 /4000 /32 /10|29.194590|27.499942|27.525704|10.225|2.69x|
+|400000 /4000 /32 /15|33.625961|31.865536|31.860726|10.817|2.95x|
+|400000 /1000 /8 /10|5.950702|5.595354|—|—|—|
+|10000 /32 /32 /15|0.149774|0.148186|—|—|—|
+|65537 /129 /17 /10|0.366868|0.370769|—|—|—|
+
+Final k10/k15 device medians are26.369018/30.658421ms. The target request
+savings are5.8%/5.2% against same-pod baselines. Old cuML rows retain their
+original provenance and are not newly paired measurements. The last two
+controls clamp to identical batches, so their small timing changes are not
+attributed to the new policy. Evidence: `knn-batch/` and `knn-final/` under
+`bench/results/staging_performance_2026-09-10/`. Earlier16-row Sep10 prices
+above are retained as historical captures from their recorded physical GPU.
+
+### Sep10 end-to-end effect of GEMM staging
+
+Same H100 as the staging rows above, IDENTICAL, original seed7 fixtures,
+complete output SHA unchanged. Both run orders use the same physical device.
+Mamba has one warmup plus five rounds; transformer one plus seven. This
+changes only shared GEMM scheduling; Mamba scratch zero-initialization stays.
+
+| Workload | Baseline ms (order0) | Default ms (order0) | Baseline ms (order1) | Default ms (order1) |
+|---|---:|---:|---:|---:|
+|Mamba3 B8/L1024/D2048|102.724629|95.521010|103.468360|93.319228|
+|Transformer B8/L4096/D512|206.074415|202.123621|206.111947|200.625729|
+|Transformer B8/L1024/D2048|191.636596|172.340987|189.356467|168.650821|
+
+The first paired wide-Mamba trials show7.0–9.8% less time, but a later
+same-binary repeat also exposes an unstable wide baseline. No stable new
+Mamba price or opponent ratio is qualified. The19.383267ms Torch reference
+is retained unchanged.
+Transformer saves1.9–2.7% narrow and10.1–10.9% wide; all82 full-array checks
+and both large full-output hashes match. Its original Torch numerical gate
+still fails, so no qualified Torch ratio is supplied and Torch is not retimed.
+
+Narrow Mamba has no qualified new performance claim: the *same* original
+baseline library measured56.767391ms in the first run but229.788203 and
+225.317191ms later. New default was222.376963/222.875569ms in those later
+runs. Tiny Mamba measured1.220500/1.231913ms baseline versus1.243062/1.260955ms
+default; no tiny improvement is claimed. The original scratch experiment's
+236.131446ms narrow result cannot establish source-caused regression when
+that baseline also enters the slow regime. Scratch is archived for lack of
+stable positive evidence. Raw times and every full-output SHA are retained;
+no faster regime is selected to manufacture a current ratio.
+
+Evidence: `final-stage/`, `mamba-stage/` and `mamba-repeat/` under
+`bench/results/staging_performance_2026-09-10/`.
+
+The final same-binary repeat (baseline/default/baseline, all full hashes
+unchanged) measured narrow248.337356/251.352344/250.333956ms and
+wide102.489213/97.158484/283.757282ms. This invalidates a stable new
+Mamba performance claim for either large shape; it is not evidence of a
+source-caused4x regression. Baseline library SHA256 equality and GPU
+before/after/process snapshots accompany `mamba-repeat/`. No cause is
+established, and no additional opponent run would resolve this own-side issue.
