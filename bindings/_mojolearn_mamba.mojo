@@ -133,6 +133,9 @@ rc 134), an open defect. Build:
 """
 
 from std.memory import memcpy
+from std.time import perf_counter_ns
+from std.sys.compile import is_defined
+from mamba.impl.mamba_ssm.ops.mamba3_siso import m3_phase_tick
 from mamba.impl.mamba_ssm.modules.mamba3_transfer import M3_BULK_TRANSFER, m3_upload, m3_download
 from std.os import abort
 from std.python import Python, PythonObject
@@ -741,6 +744,9 @@ def _mamba3_run(
             + "; the two sides of this boundary disagree about the state"
         )
 
+    var phase_tick = 0
+    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
+        phase_tick = Int(perf_counter_ns())
     var w = Mamba3Weights(dims)
     w.norm_w = _m3_read_f32(a[1], dm)
     w.w_in = _m3_read_f32(a[2], dip * dm)
@@ -759,7 +765,9 @@ def _mamba3_run(
     var v_n = b * nh * M3_HEADDIM
 
     var ctx = DeviceContext()
+    m3_phase_tick(ctx, phase_tick, String("surface.weight_lists_and_context"))
     var dw = Mamba3DeviceWeights(ctx, w)
+    m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
     # The caller's ten-piece state over the fresh zeros (DEVIATION 794).
     var dstate = Mamba3DeviceState(ctx, b, dims)
     dstate.buf_qrot = m3_upload(
@@ -791,14 +799,18 @@ def _mamba3_run(
         # caller's bytes round-trip unchanged (DEVIATION 792's rule).
         dstate.pend_k = m3_upload(ctx, _m3_read_f32(a[18], k_n))
         dstate.pend_v = m3_upload(ctx, _m3_read_f32(a[19], v_n))
+    m3_phase_tick(ctx, phase_tick, String("surface.state_upload"))
     var dstages = Mamba3DeviceStages(ctx, b, l, q0, dims)
+    m3_phase_tick(ctx, phase_tick, String("surface.stage_allocations"))
     var dx = m3_upload(ctx, _m3_read_f32(a[0], b * l * dm))
 
+    m3_phase_tick(ctx, phase_tick, String("surface.x_upload"))
     var trace = IdentityTrace.disabled()
     mamba3_block_forward(
         ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
     )
 
+    m3_phase_tick(ctx, phase_tick, String("surface.block"))
     _m3_write_f32(a[20], m3_download(ctx, dstages.residual_out, b * l * dm))
     # The FOUR reports (contract section 7's ssd.* stages), NOT the
     # resumption state -- DEVIATION 794's last clause.
@@ -820,12 +832,16 @@ def _mamba3_run(
     _m3_write_f32(a[17], m3_download(ctx, dstate.buf_adt, qrow_n))
     _m3_write_f32(a[18], m3_download(ctx, dstate.pend_k, k_n))
     _m3_write_f32(a[19], m3_download(ctx, dstate.pend_v, v_n))
+    m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
     var out_len = dstate.buf_len
     _ = dw^
     _ = dstate^
     _ = dstages^
     _ = dx^
+    m3_phase_tick(ctx, phase_tick, String("surface.buffer_destruction"))
     _ = ctx^
+    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
+        print("M3_PHASE", "surface.context_destruction", Float64(Int(perf_counter_ns()) - phase_tick) / 1e6)
     return out_len
 
 
