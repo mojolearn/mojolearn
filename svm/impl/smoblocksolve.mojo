@@ -83,8 +83,7 @@ from max.gpu.sync import barrier
 
 from checks.numerics import ftz, identical_mul_add
 from svm.checks.pinned_argreduce import (
-    pinned_block_argmax,
-    pinned_block_argmin,
+    block_argext,
     sabotage_block_max_hw,
     sabotage_block_max_nokey,
 )
@@ -174,17 +173,12 @@ def smo_block_solve_kernel[
         var f_tmp = pos_inf
         if active and in_upper(a, y, C):
             f_tmp = f
-        var res = pinned_block_argmin[WSIZE](f_tmp, key)
+        # DEVIATION 2491: the reduction returns the winning THREAD beside
+        # the (value, key) pair; the ballot through threadgroup memory that
+        # used to recover it (two barriers) is gone.
+        var res = block_argext[WSIZE, False](f_tmp, key)
         var f_u = res[0]
-        var u_key = res[1]
-        # `u` is the THREAD holding the winning (value, key); theirs keeps
-        # the thread id as the pair's key. One ballot through threadgroup
-        # memory recovers it from the training index (keys are unique).
-        if active and key == u_key:
-            sh_tmp[0] = Float32(tid)
-        barrier()
-        var u = Int(sh_tmp[0])
-        barrier()
+        var u = Int(res[2])
 
         # select f_max to check stopping condition
         f_tmp = neg_inf
@@ -203,7 +197,7 @@ def smo_block_solve_kernel[
         elif SAB_FMAX_HWMAX_SWAP:
             f_max = sabotage_block_max_hw[WSIZE, True](f_tmp)
         else:
-            var resm = pinned_block_argmax[WSIZE](f_tmp, key)
+            var resm = block_argext[WSIZE, True](f_tmp, key)
             f_max = resm[0]
 
         # f_max - f_u is used to check stopping condition.
@@ -225,13 +219,8 @@ def smo_block_solve_kernel[
             f_tmp = ftz(ftz(d * d) / eta_ui)
         else:
             f_tmp = neg_inf
-        var res2 = pinned_block_argmax[WSIZE](f_tmp, key)
-        var l_key = res2[1]
-        if active and key == l_key:
-            sh_tmp[0] = Float32(tid)
-        barrier()
-        var l = Int(sh_tmp[0])
-        barrier()
+        var res2 = block_argext[WSIZE, True](f_tmp, key)
+        var l = Int(res2[2])
         var Kli = Float32(0.0)
         if active:
             Kli = kernel.unsafe_load(l * n_ws + tid)

@@ -51,7 +51,8 @@ SABOTAGE ARMS (the foot of this file) are not called by the implementation; they
 the spellings the row-39 gate must reject.
 """
 
-from std.gpu import thread_idx
+from std.gpu import thread_idx, lane_id, WARP_SIZE
+from std.gpu.primitives.warp import shuffle_xor
 from std.math import max
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -147,6 +148,116 @@ def pinned_block_argmax[
     var rk = keys[0]
     barrier()
     return (rv, rk)
+
+
+# ---------------------------------------------------------------------------
+# DEVIATION 2491 (2026-09-10): THE SAME SELECTION, TWO BARRIERS INSTEAD OF
+# TWELVE. The halving trees above are kept as the reference spelling (and
+# for a block narrower than a warp); the block solve calls the functions
+# below. A warp folds its (value, key) pairs with `shuffle_xor` butterflies
+# (no barrier), lane 0 of each warp posts the warp's winner to threadgroup
+# memory, one barrier, and EVERY thread folds the WARPS posted winners in
+# ascending warp order, one barrier to protect the slots for the next call.
+#
+# WHY THE BITS CANNOT MOVE. The compare is the module docstring's `ov < mv
+# or (ov == mv and ok < mk)` (`>` for the max), a TOTAL order on (value,
+# key) away from NaN, and keys are unique training indices. The minimum of
+# a finite set under a total order is one element; every fold topology, any
+# lane width, any warp count returns that element. `+0.0 == -0.0` is TRUE
+# on every vendor, so the key decides the signed-zero tie exactly as the
+# tree does (row 39), and the returned value is that element's own bits.
+# NaN never wins (both predicates false) and never reaches a record
+# (DEVIATION 637). So this is the pinned selection with a cheaper schedule,
+# not a new arm; IDENTICAL takes it too, and the SVC card gates it.
+#
+# The third return is the THREAD holding the winner, which the block solve
+# used to recover by a ballot through threadgroup memory (two more
+# barriers per reduction); it rides along in the fold for free.
+# ---------------------------------------------------------------------------
+
+
+@always_inline
+def _arg_better[MAX: Bool](
+    ov: Float32, ok: Int32, mv: Float32, mk: Int32
+) -> Bool:
+    """Does (ov, ok) beat (mv, mk)? Strict on value, smaller key on a tie."""
+    var tie: Bool
+    comptime if SAB_ARG_TIE_HIGH:
+        tie = ov == mv and ok > mk
+    else:
+        tie = ov == mv and ok < mk
+    comptime if MAX:
+        return ov > mv or tie
+    else:
+        return ov < mv or tie
+
+
+@always_inline
+def block_argext[
+    block_size: Int, MAX: Bool
+](value: Float32, key: Int32) -> Tuple[Float32, Int32, Int32]:
+    """`min` (or `max` when `MAX`) over `(value, key)` lexicographically,
+    returned to all threads as (value, key, thread of the winner)."""
+    var tid = Int(thread_idx.x)
+    var v = value
+    var k = key
+    var t = Int32(tid)
+    comptime if block_size < WARP_SIZE or block_size % WARP_SIZE != 0:
+        # Narrower than a warp (or ragged): the reference tree, then one
+        # ballot for the thread.
+        var slot = stack_allocation[
+            1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        ]()
+        var r: Tuple[Float32, Int32]
+        comptime if MAX:
+            r = pinned_block_argmax[block_size](v, k)
+        else:
+            r = pinned_block_argmin[block_size](v, k)
+        if k == r[1]:
+            slot[0] = t
+        barrier()
+        var win = slot[0]
+        barrier()
+        return (r[0], r[1], win)
+    else:
+        comptime WARPS = block_size // WARP_SIZE
+        var offset = 1
+        while offset < WARP_SIZE:
+            var ov = shuffle_xor(v, UInt32(offset))
+            var ok = shuffle_xor(k, UInt32(offset))
+            var ot = shuffle_xor(t, UInt32(offset))
+            if _arg_better[MAX](ov, ok, v, k):
+                v = ov
+                k = ok
+                t = ot
+            offset *= 2
+        var vals = stack_allocation[
+            WARPS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+        ]()
+        var keys = stack_allocation[
+            WARPS, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        ]()
+        var tids = stack_allocation[
+            WARPS, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        ]()
+        var w = tid // WARP_SIZE
+        if Int(lane_id()) == 0:
+            vals[w] = v
+            keys[w] = k
+            tids[w] = t
+        barrier()
+        var rv = vals[0]
+        var rk = keys[0]
+        var rt = tids[0]
+        comptime for i in range(1, WARPS):
+            var ov = vals[i]
+            var ok = keys[i]
+            if _arg_better[MAX](ov, ok, rv, rk):
+                rv = ov
+                rk = ok
+                rt = tids[i]
+        barrier()
+        return (rv, rk, rt)
 
 
 # ---------------------------------------------------------------------------

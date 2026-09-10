@@ -1,0 +1,13 @@
+mode=fast vendor=metal sklearn=1.9.0 numpy=2.5.2
+
+# paired: sklearn libsvm (one core) vs ours FAST; HIGGS prefix, 28 features, RBF C=1 gamma=1/(d var); min of pairs
+| rows | sklearn fit ms | ours fit ms | fit ratio | sklearn predict 10k ms | ours predict 10k ms | predict ratio | acc sklearn / ours | n_sv sklearn / ours | sklearn fit spread |
+|---:|---:|---:|---:|---:|---:|---:|---|---|---:|
+| 5000 | 606 | 144 | 4.2x | 1716 | 20 | 86.8x | 0.6219 / 0.6218 | 4242 / 4242 | -0.1% |
+| 20000 | 10561 | 531 | 19.9x | 6561 | 68 | 96.6x | 0.6480 / 0.6481 | 16220 / 16219 | -0.5% |
+
+# ours alone, min of 3
+| rows | fit ms | predict 10k ms | acc | n_sv |
+|---:|---:|---:|---:|---:|
+| 50000 | 1867 | 121 | 0.6635 | 39349 |
+| 100000 | 4941 | 194 | 0.6729 | 76942 |

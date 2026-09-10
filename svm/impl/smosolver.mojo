@@ -72,6 +72,7 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import IdentityTrace, fnv1a64_bytes, FNV_OFFSET
+from ensemble.instruments import StageTimes
 from checks.numerics import ftz, identical_mul_add
 from svm.checks.device_select import (
     SEL_TPB,
@@ -635,7 +636,13 @@ struct SmoSolver(Movable):
 
         card.record_device[DType.float32](ctx, "svm.init.f", self.f, self.n_train)
 
+        # MOJOLEARN_STAGE_TIMES=1: the outer loop's phases as a wall table
+        # (ensemble/instruments.mojo, DEVIATION 402); a staged run drains per
+        # phase and is not a timing. Zero cost when unset.
+        var st = StageTimes()
+        var t_fit = st.start()
         while keep_going:
+            var t0 = st.start()
             ctx.enqueue_function[fill_f32_kernel](
                 self.delta_alpha.unsafe_ptr(), Float32(0.0), Int32(n_ws),
                 grid_dim=_grid(n_ws), block_dim=SEL_TPB,
@@ -643,8 +650,12 @@ struct SmoSolver(Movable):
             ws.select_ws(
                 ctx, self.f, self.alpha, self.y_train, self.C_vec
             )
+            st.stop(ctx, "smo.select_ws", t0)
+            t0 = st.start()
             cache.init_working_set(ctx, ws.idx)
             cache.get_square_tile_without_caching(ctx, x)
+            st.stop(ctx, "smo.square_tile", t0)
+            t0 = st.start()
 
             var max_iter_this_block = max_inner_iter
             if max_iter != -1:
@@ -667,6 +678,8 @@ struct SmoSolver(Movable):
             ctx.enqueue_copy(
                 dst_ptr=self.host_return_buff.unsafe_ptr(), src_buf=self.return_buff
             )
+            st.stop(ctx, "smo.block_solve", t0)
+            t0 = st.start()
 
             # GetNonzeroDeltaAlpha
             ctx.enqueue_function[flag_nonzero_f32_kernel](
@@ -679,9 +692,11 @@ struct SmoSolver(Movable):
             _ = self.select.select_f32(
                 ctx, self.delta_alpha, self.nz_flags, self.nz_da, n_ws
             )
+            st.stop(ctx, "smo.nonzero_select", t0)
             # The following should be performed only for elements with
             # nonzero delta_alpha
             if nnz_da > 0:
+                t0 = st.start()
                 # DEVIATION 634: the fold order, from the host.
                 var nz_host = read_i32(ctx, self.nz_da_idx, nnz_da)
                 var order = fold_order_for(nz_host)
@@ -694,8 +709,12 @@ struct SmoSolver(Movable):
                 )
                 ctx.synchronize()
                 _ = hord^
+                st.stop(ctx, "smo.fold_order_host", t0)
                 var bd = cache.init_full_tile_batching(ctx, x, self.nz_da_idx, nnz_da)
+                t0 = st.start()
                 while cache.get_next_batch_kernel(ctx, x, bd):
+                    st.stop(ctx, "smo.full_tile_kernel", t0)
+                    t0 = st.start()
                     self.update_f(
                         ctx, bd.offset, bd.batch_size, nnz_da, cache.kernel_tile
                     )
@@ -713,6 +732,10 @@ struct SmoSolver(Movable):
                             nnz_da,
                             cache.kernel_tile,
                         )
+                    st.stop(ctx, "smo.update_f", t0)
+                    t0 = st.start()
+                st.stop(ctx, "smo.full_tile_kernel", t0)
+            t0 = st.start()
             # DEVIATION 637: the NaN scan of alpha and f, read back with diff.
             ctx.enqueue_function[set_i32_kernel](
                 self.nan_flag.unsafe_ptr(), Int32(0), grid_dim=1, block_dim=1,
@@ -729,6 +752,7 @@ struct SmoSolver(Movable):
                 dst_ptr=self.host_nan_flag.unsafe_ptr(), src_buf=self.nan_flag
             )
             ctx.synchronize()
+            st.stop(ctx, "smo.nan_scan_readback", t0)
 
             var diff = self.host_return_buff.unsafe_ptr().unsafe_load(0)
             var inner = Int(self.host_return_buff.unsafe_ptr().unsafe_load(1))
@@ -767,10 +791,16 @@ struct SmoSolver(Movable):
                 self.trace.nnz_seq.append(nnz_da)
 
         # CUML_LOG_DEBUG("SMO solver finished after %d outer iterations...")
+        var t_res = st.start()
         var res = Results(ctx, n_rows, n_cols, self.svmType)
         res.get(
             ctx, x, self.y_train, self.C_vec, self.alpha, self.f, model
         )
+        st.stop(ctx, "smo.results", t_res)
+        st.stop_host("fit_total", t_fit)
+        if st.enabled:
+            print("smo outer iterations: " + String(self.n_outer_iter) + ", inner: " + String(self.n_iter))
+        st.report()
         model.n_iter = self.n_iter
         if isnan(model.b):
             # DEVIATION 637: `-(b_up + b_low)/2` with b_up = +inf, b_low = -inf
