@@ -3,28 +3,78 @@
 [![PyPI](https://img.shields.io/pypi/v/mojolearn.svg)](https://pypi.org/project/mojolearn/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22068632.svg)](https://doi.org/10.5281/zenodo.22068632)
 
-**GPU machine learning in Mojo for Apple, NVIDIA and AMD GPUs, with an
-explicit reproducibility contract.**
+**Machine learning that trains and predicts bitwise identically across Apple,
+NVIDIA and AMD GPUs.**
 
-CatBoost, XGBoost, LightGBM and cuML have no Metal backend. mojolearn is one
-Mojo source that builds for Apple Metal, NVIDIA CUDA and AMD HIP, so GPU tree
-training and GPU classical learning run on Apple silicon, hardware the
-originals cannot reach. Its kernels mirror the GPU designs of CatBoost, cuML,
-cuVS, RAFT and FAISS, deliberately and file for file, under the repository's
-copy-do-not-improve rule ([PORTING_RULES.md](PORTING_RULES.md)), and the
-correspondence is recorded per file in the `DERIVATION_MAP.tsv` tables.
+Give mojolearn the same code, data, hyperparameters and seed on an Apple M4,
+an NVIDIA H100 and an AMD MI325X, and its opt-in `identical` mode returns the
+same bits on all three. Not close, not within a tolerance. The same bits. A
+model trained on AMD and the same model trained on NVIDIA are byte for byte
+the same model, and either one makes exactly the same predictions. The claim
+is proven by stage-level identity cards and separating sabotage tests, never
+inferred from a final-output hash, and it holds only for the configurations
+recorded in [the support matrix](SUPPORT_MATRIX.md).
 
-Beside that portability sits a numerical contract, and it is what the rest of
-this repository is built around. The same machine-learning workload can
-produce different bits on different GPUs, changing predictions, learned models
-and subsequent training updates. In mojolearn's opt-in `identical` mode,
-supported inference and training return the same bits on certified Apple,
-NVIDIA and AMD GPUs. The claim is proven by stage-level identity cards and
-separating sabotage tests, never inferred from a final-output hash, and it
-applies only to configurations recorded in
-[the support matrix](SUPPORT_MATRIX.md).
+## What bitwise identity means, and why it is not the default
 
-What the contract covers today, with the evidence each claim rests on:
+Floating-point addition is not associative, so the order in which a GPU sums
+numbers changes the answer. Vendors choose that order differently, and they
+differ again in FMA contraction, denormal handling, tie-breaking, and how
+`exp`, `log` and the other elementary functions are spelled. Two GPUs given
+the same job return two slightly different answers, and the difference does
+not stay small. One rounding can flip a tree learner's winning split and
+every node beneath it. It can redraw UMAP's neighbor graph and the embedding
+built from it. Inside a training loop it perturbs a gradient, then the
+optimizer state, then every step after that, so two machines running the same
+job walk away with two different models.
+
+Mojo and MAX compile one source for Metal, CUDA and HIP, which is what makes
+the code portable. Portability is inherited. Identity is not, and none of the
+above is fixed by recompiling. mojolearn supplies the part that does not come
+for free.
+
+- An inventory, at the algorithm level, of every operation that can move
+  model bits.
+- A frozen numerical profile covering reduction order, partitioning, FMA
+  policy, flush-to-zero seams, transcendental spellings and tie rules.
+- Portable replacements for order-dependent reductions and for closed vendor
+  libraries whose internals cannot be pinned.
+- A per-estimator choice of `fast`, same-device `deterministic`, or
+  cross-device `identical`, with an explicit refusal when the promise cannot
+  be met.
+- Optional stage hashing and three-vendor certificates that test the promise
+  instead of asserting it.
+
+The kernels are mojolearn's own, in Mojo. Identical mode does not delegate to
+PyTorch, to MAX's matrix-multiplication kernels, or to vendor BLAS and solver
+libraries, because owning the arithmetic and the reduction order is the whole
+mechanism.
+
+## What it is for
+
+Exact model bytes make a computation auditable. Replay a certified workload on
+different supported hardware, compare the recorded stage traces, and you can
+say where two runs first diverged with no tolerance to argue about. That is
+the basis for audits, regression tests and model change control, and it
+matters most in finance, healthcare, legal services and government, where a
+review can require a computation to be reproduced and its changes accounted
+for.
+
+It also lets a job move. Train on rented NVIDIA capacity, continue on AMD from
+the checkpoint, and the run stays on the same trajectory rather than a nearby
+one. Hardware stops being a confounding variable in a mixed fleet.
+
+There is a second reason to be here, independent of the contract. CatBoost,
+XGBoost, LightGBM and cuML have no Metal backend, so GPU tree training and GPU
+classical learning have not run on Apple silicon at all. One Mojo source
+builds for Metal, CUDA and HIP, which puts them on the laptop as well as the
+datacenter.
+
+The reference has to be created and replayed under the same numerical profile.
+Identity does not certify a run performed in `fast` mode, in another
+framework, or on a device that has not passed the same checks.
+
+## The evidence behind the claim
 
 - **Neural inference and training.** Mamba and transformer forward
   computations agree bit for bit across the three vendors on their recorded
@@ -70,13 +120,12 @@ unchanged.
 
 ## Who this is for
 
+- People who need a reproducibility contract, same bits on repeated runs or
+  across vendors, and will pay for it in time. The cost is small on some
+  measured tree workloads and large elsewhere; see the paper before deciding.
 - People on Apple silicon who want GPU gradient boosting, random forests,
   Extra Trees, clustering, nearest neighbors, decompositions and linear
   models without leaving the machine.
-- People who need a reproducibility contract on trees or classical models,
-  same bits on repeated runs or across vendors, and will pay for it in time.
-  The cost is small on some measured tree workloads and large elsewhere; see
-  the paper before deciding.
 - Not yet people training real neural networks. The certified trainers are
   fixed small shapes, an MLP and the two-block byte LM above. Larger models,
   other shapes and other optimizers are outside the evidence, and the byte-LM
@@ -258,7 +307,7 @@ replacement. Defaults follow the upstream GPU implementation mirrored by an
 algorithm where applicable. Unsupported parameters raise explicitly rather
 than being silently ignored.
 
-## What the identity claim means
+## The exact scope of the claim
 
 Fix a source commit, a supported configuration, a seed and byte-identical
 input. On any two certified machines, every recorded training stage has the
@@ -333,9 +382,14 @@ Current priorities are in [ROADMAP.md](ROADMAP.md). See also
 
 ## Provenance and citation
 
-The shipped implementation is Mojo. Algorithmic designs derive in part from
-CatBoost, cuML, cuVS, RAFT, and FAISS; exact provenance and licenses are in
-`NOTICE`, `DERIVATION_MAP.tsv`, source headers, and the archived derivation
+The shipped implementation is Mojo, all of it written for this repository. Its
+kernels mirror the GPU designs of CatBoost, cuML, cuVS, RAFT and FAISS,
+deliberately and file for file, under the repository's copy-do-not-improve
+rule ([PORTING_RULES.md](PORTING_RULES.md)). By line count, between 67% and
+70% of the Mojo here has no upstream file it corresponds to, and the remainder
+is that mirrored substrate; the bounds and how they were computed are in
+`NOTICE`. Exact provenance and licenses are in `NOTICE`, the
+`DERIVATION_MAP.tsv` tables, source headers, and the archived derivation
 ledger.
 
 To cite mojolearn, use [CITATION.cff](CITATION.cff). The concept DOI is
