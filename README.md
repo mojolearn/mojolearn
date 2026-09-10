@@ -7,13 +7,13 @@
 NVIDIA and AMD GPUs.**
 
 Give mojolearn the same code, data, hyperparameters and seed on an Apple M4,
-an NVIDIA H100 and an AMD MI325X, and its opt-in `identical` mode returns the
-same bits on all three. Not close, not within a tolerance. The same bits. A
-model trained on AMD and the same model trained on NVIDIA are byte for byte
-the same model, and either one makes exactly the same predictions. The claim
-is proven by stage-level identity cards and separating sabotage tests, never
-inferred from a final-output hash, and it holds only for the configurations
-recorded in [the support matrix](SUPPORT_MATRIX.md).
+an NVIDIA H100 and an AMD MI325X, and you get the same bits on all three. Not
+close, not within a tolerance. The same bits. A model trained on AMD and the
+same model trained on NVIDIA are byte for byte the same model, and either one
+makes exactly the same predictions. This is `identical` mode, and **it is the
+default**. The claim is proven by stage-level identity cards and separating
+sabotage tests, never inferred from a final-output hash, and it holds only for
+the configurations recorded in [the support matrix](SUPPORT_MATRIX.md).
 
 ## What bitwise identity means, and why it is not the default
 
@@ -112,11 +112,14 @@ workloads. Those measurements reflect both the numerical constraints and
 optimization gaps in the current kernels. The numbers are in the accompanying
 paper; the raw records behind them live under `bench/results/`.
 
-The 0.6.1 source in this checkout defaults to **`identical`** mode. Set
-`MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` explicitly to opt into
-another supported mode. Certification remains configuration-specific; this
-default does not certify every feature. The published 0.6.0 files are
-unchanged.
+**`identical` is the default**, in the published 0.7.0 wheels and in this
+source. You opt out of it, not into it, by setting
+`MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment before
+import, or by calling `mojolearn.set_numeric_mode(...)` in code.
+Certification stays configuration-specific, so the default does not certify
+every feature, and a
+configuration that cannot meet the contract raises a named error rather than
+quietly returning weaker arithmetic.
 
 ## Who this is for
 
@@ -136,17 +139,18 @@ unchanged.
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-pip install mojolearn==0.6.0
+pip install mojolearn
 ```
 
-Version **0.6.0 is published on PyPI** as an alpha API release for macOS
-arm64 and AMD Linux x86-64 (`gfx942`). It exposes public `linalg`, `umap`,
-`training`, Mamba and Transformer APIs, including UMAP transform/CSR support.
-**NVIDIA Linux remains source-build-only.** The Linux wheel contains HIP
-binaries, not CUDA. New byte-LM native training needs a separate source build.
-The wheels preserve identified base native/runtime bytes; newer Python API
-exposure does not inherit every numerical certificate. See the
-[release evidence](bench/results/releases/2026-09-06-alpha-api/README.md) and
+Version **0.7.0 is published on PyPI** as an alpha API release, a macOS arm64
+wheel and one Linux x86-64 wheel that now carries **CUDA sm_89, CUDA sm_90 and
+HIP gfx942** together, each in all three numeric modes, plus the
+identical-mode byte-LM trainer extension per architecture. NVIDIA Linux is no
+longer source-build-only. Installed per-architecture qualification was not run
+for the Linux wheel. The wheels expose public `linalg`, `umap`, `training`,
+Mamba and Transformer APIs, including UMAP transform and CSR support. Newer
+Python API exposure does not inherit every numerical certificate. See
+[CHANGELOG.md](CHANGELOG.md) and the
 [support matrix](SUPPORT_MATRIX.md) for exact artifacts and limits.
 There is no CPU fallback.
 Run the diagnostic command before depending on a new machine:
@@ -164,11 +168,12 @@ as released-wheel support.
 
 ### Stability and release cadence
 
-mojolearn went from 0.1.0 on 2026-08-23 to 0.6.0 on 2026-09-06, six PyPI
-releases in two weeks (0.1.0, 0.2.0, 0.3.0, 0.3.1, 0.5.0, 0.6.0; 0.3.2 and
-0.4.0 are recorded in [CHANGELOG.md](CHANGELOG.md) but were not published to
-PyPI). One release was yanked. 0.3.0, published 2026-08-30 as the first
-release with a Linux wheel, had been compiled for the build machine's CPU and
+mojolearn went from 0.1.0 on 2026-08-23 to 0.7.0 on 2026-09-09, seven PyPI
+releases in under three weeks (0.1.0, 0.2.0, 0.3.0, 0.3.1, 0.5.0, 0.6.0,
+0.7.0; 0.3.2, 0.4.0 and 0.6.1 are recorded in [CHANGELOG.md](CHANGELOG.md) but
+were not published to PyPI). One release was yanked. 0.3.0, published
+2026-08-30 as the first release with a Linux wheel, had been compiled for the
+build machine's CPU and
 carried unconditional AVX-512 instructions in its host code, so every numeric
 mode died with SIGILL on any x86-64 host without AVX-512. It is yanked on PyPI
 with the reason "SIGILL on x86-64 without AVX-512; use 0.3.1". 0.3.1 pinned

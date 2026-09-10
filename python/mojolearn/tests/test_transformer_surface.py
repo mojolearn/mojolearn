@@ -77,7 +77,7 @@ case data). Re-run per tier, with the binding REBUILT first.
 
 HOW TO RUN IT
 -------------
-    # 1. build the extension (fast is the default tier)
+    # 1. build the extension (identical is the default tier)
     bash bindings/build_transformer.sh
 
     # 2. the gate, FROM THE REPOSITORY ROOT (the debt arm reads

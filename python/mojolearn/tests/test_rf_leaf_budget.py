@@ -132,7 +132,7 @@ here.
 
 HOW TO RUN IT
 -------------
-    # the extension, if it is not already built (fast is the default tier)
+    # the extension, if it is not already built (identical is the default tier)
     bash bindings/build_rf.sh
 
     # the gate

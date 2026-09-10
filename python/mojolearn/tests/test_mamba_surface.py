@@ -49,7 +49,7 @@ expose or certify Python backward; native backward has a separate certificate.
 
 HOW TO RUN IT
 -------------
-    # 1. build the extension (fast is the default tier)
+    # 1. build the extension (identical is the default tier)
     bash bindings/build_mamba.sh
 
     # 2. the gate, FROM THE REPOSITORY ROOT (it reads mamba/corpus/)

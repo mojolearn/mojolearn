@@ -35,7 +35,7 @@ ladder is UNRUN (HANDOFF_2026-09-01.md section 5).
 
 HOW TO RUN IT
 -------------
-    # 1. build the extension (fast is the default tier)
+    # 1. build the extension (identical is the default tier)
     bash bindings/build_gp.sh
 
     # 2. the gate
