@@ -1426,8 +1426,8 @@ def fit_with_test(
         # permutation 2 is never searched on. That reads like an
         # off-by-one in their code and it is transcribed rather than
         # corrected, because a fit that searched on a permutation theirs
-        # never searches on would not be answering the same question.
- It is the same expression in their feature-parallel
+        # never searches on would not be answering the same question. It is
+        # the same expression in their feature-parallel
         # learner (`dynamic_boosting.h:286-289`), which is evidence it is
         # deliberate or at least old.
         var learn_perm_count = perm_count - 1 if est_p != 0 else 1
