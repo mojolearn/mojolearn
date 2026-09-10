@@ -515,13 +515,20 @@ def quantized_hist_group_features_for[column: Int]() -> Int:
 
 
 def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
-    """SCHEDULING row (DEVIATION 1907): whether the leaf reorder's stable one-bit partition may take the SINGLE-PASS decoupled-lookback path (`gbdt/gpu_util/kernel/reorder_single_pass.mojo`) for a level whose leaf bound is above CatBoost's `FastSortSize()` == 500,000 rows."""
-    comptime if identical:
-        return False
+    """SCHEDULING row (DEVIATION 1907): stable partition above 500,000 rows.
+
+    IDENTICAL's NVIDIA candidate requires an explicit build define until
+    a large-input identity and timing run exercises the routed kernel.
+    Small identity fixtures cannot reach this branch. The kill switch wins
+    over the opt-in, and other vendors retain the established partition.
+    """
     comptime if is_defined["MOJOLEARN_2042_FAST_NO_LOOKBACK"]():
         return False
-    comptime if column == COLUMN_AMD:
-        return False
+    comptime if identical:
+        return (
+            column == COLUMN_NVIDIA
+            and is_defined["MOJOLEARN_IDENTICAL_SINGLE_PASS_PARTITION"]()
+        )
     return column == COLUMN_NVIDIA
 
 

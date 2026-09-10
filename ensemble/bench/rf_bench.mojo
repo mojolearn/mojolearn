@@ -29,6 +29,11 @@ the SAME BITS.
 """
 
 from core.launch_log import log_launch
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from ensemble.checks.fingerprint_probe import _fingerprint
+from ensemble.decisiontree.batched_levelalgo.builder import HIST_ITEMS_PER_THREAD
+from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import HIST_SMEM_COPIES_DEFAULT
+from ensemble.randomforest import ROWS_SORTED_SAMPLE
 from std.os import getenv
 from std.sys import argv
 from std.time import perf_counter_ns
@@ -251,6 +256,7 @@ def run_arm[
     n_bins: Int = MAX_N_BINS,
     timed: Bool = True,
     score: Bool = True,
+    fingerprint: Bool = False,
 ) raises:
     """One arm. `timed=False` fits once and prints ACCURACY ONLY.
 
@@ -324,6 +330,9 @@ def run_arm[
         if timed:
             print("ARM", name, Float64(t1 - t0) / 1.0e6)
 
+        if fingerprint:
+            print("MODEL", name, _fingerprint(forest))
+
         if score and rep == reps - 1:
             # ACCURACY, beside the timing and not in a separate window.
             # A speed number without it is not a result.
@@ -380,7 +389,8 @@ def run_arm[
 
 
 def run_reg_arm(
-    ctx: DeviceContext, name: String, n_rows: Int, n_cols: Int
+    ctx: DeviceContext, name: String, n_rows: Int, n_cols: Int,
+    fingerprint: Bool = False,
 ) raises:
     """The REGRESSION arm, RF_BENCH_REG-gated. It exists because the
     lane's losing gbm-bench row (year: 515k x 90, MSE) is a regression
@@ -426,6 +436,8 @@ def run_reg_arm(
         ctx.synchronize()
         var t1 = perf_counter_ns()
         print("ARM", name, Float64(t1 - t0) / 1.0e6)
+        if fingerprint:
+            print("MODEL", name, _fingerprint(forest))
         _ = forest^
 
     _ = dx^
@@ -557,6 +569,36 @@ def main() raises:
     var profile = False
     var profile_large = False
     var args = argv()
+    # Candidate A/B uses the same bit patterns and reports full model hashes
+    # outside fit timing. Positional sizes keep a smoke run distinguishable.
+    if len(args) > 1 and args[1] == "--tune":
+        if len(args) != 5:
+            raise Error("usage: --tune <clf|reg> <rows> <cols>")
+        var task = args[2]
+        var rows = Int(args[3])
+        var cols = Int(args[4])
+        if rows < MAX_N_BINS or cols < 3:
+            raise Error("tuning requires rows >= 128 and cols >= 3")
+        if task != "clf" and task != "reg":
+            raise Error("tuning task must be clf or reg")
+        print("CONFIG", GLOBAL_NUMERIC_MODE, "sorted", ROWS_SORTED_SAMPLE,
+              "items", HIST_ITEMS_PER_THREAD, "copies", HIST_SMEM_COPIES_DEFAULT)
+        var canary = Canary(ctx)
+        # A fresh-process GPU clock ramp can outlive one small fit. Keep
+        # every warmup visible; the gate excludes only these explicit tags.
+        for _ in range(5):
+            canary.tick(ctx, "warmup")
+        canary.tick(ctx, "pre")
+        var name = "rf-" + task + "@" + String(rows) + "x" + String(cols)
+        if task == "clf":
+            run_arm(ctx, name, rows, cols, MAX_N_BINS, True, False, True)
+        else:
+            run_reg_arm(ctx, name, rows, cols, True)
+        canary.tick(ctx, "post")
+        _ = canary^
+        _ = ctx^
+        return
+
     for i in range(len(args)):
         # `--checksum` generates the data, prints the digest and does NOT
         # fit. It exists so the two arms can be proven to be fitting the

@@ -84,7 +84,9 @@ def as_f32_colmajor(x, name):
     docstring had promised all along ("pass `X` already in Fortran order
     to avoid it") while the old pair still copied it twice. Same element
     values, same flat order: the float64 -> float32 cast is the same
-    elementwise cast either way, so no output bit can move.
+    elementwise cast either way, so no output bit can move. Large contiguous
+    row-major native-float inputs now use row tiles for cache locality, still
+    writing directly into one final allocation with that same cast.
     """
     a = np.asarray(x)
     if a.ndim != 2:
@@ -95,7 +97,22 @@ def as_f32_colmajor(x, name):
         raise ValueError(f"mojolearn: {name} is empty, shape {a.shape}")
     copied = False
     if a.dtype != np.float32 or not a.flags["F_CONTIGUOUS"]:
-        a = np.asfortranarray(a, dtype=np.float32)
+        # Large row-major matrices otherwise get scanned once per column,
+        # repeatedly fetching the same cache lines. Copy row tiles into one
+        # final F-order allocation so a tile's source rows stay cache-local.
+        # Restrict to native floats: other dtypes/strides retain NumPy's
+        # conversion semantics. Small/narrow matrices do not amortize the
+        # Python loop. Both paths use NumPy's same elementwise float32 cast.
+        if (a.flags["C_CONTIGUOUS"] and not a.flags["F_CONTIGUOUS"]
+                and a.dtype in (np.dtype("float32"), np.dtype("float64"))
+                and a.nbytes >= 8 * 1024 * 1024 and a.shape[1] >= 8):
+            converted = np.empty(a.shape, dtype=np.float32, order="F")
+            tile_rows = max(1, (256 * 1024) // (a.shape[1] * a.itemsize))
+            for start in range(0, a.shape[0], tile_rows):
+                converted[start:start + tile_rows] = a[start:start + tile_rows]
+            a = converted
+        else:
+            a = np.asfortranarray(a, dtype=np.float32)
         copied = True
     # `a.T` of an F-contiguous array is C-contiguous, so this reshape is
     # a VIEW; nothing after this line copies.

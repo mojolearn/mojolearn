@@ -1,0 +1,177 @@
+ACQUIRED by 'ensemble-rf-lane' (pid 93446)
+RELEASED
+CONFIG 0 sorted False items 1 copies 1
+CANARY fast_baseline:warmup 57.861 nodes 79
+CANARY fast_baseline:pre 51.659 nodes 79
+SUM rf-clf@100000x50 24994577132/149745
+ARM rf-clf@100000x50 682.698
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 661.305
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 670.638
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 652.887
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 651.24
+MODEL rf-clf@100000x50 8028910272602357896
+CANARY fast_baseline:post 30.785 nodes 79
+CONFIG 0 sorted False items 1 copies 1
+CANARY fast_baseline:warmup 46.341 nodes 79
+CANARY fast_baseline:pre 31.535 nodes 79
+SUM rf-reg@100000x50 24994577132
+ARM rf-reg@100000x50 1118.616
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1050.812
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1268.373
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1058.265
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1633.357
+MODEL rf-reg@100000x50 4934262964422892218
+CANARY fast_baseline:post 30.515 nodes 79
+CONFIG 0 sorted True items 1 copies 1
+CANARY fast_sorted:warmup 60.978 nodes 79
+CANARY fast_sorted:pre 45.407 nodes 79
+SUM rf-clf@100000x50 24994577132/149745
+ARM rf-clf@100000x50 717.569
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 705.037
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 867.29
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 682.883
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 685.974
+MODEL rf-clf@100000x50 8028910272602357896
+CANARY fast_sorted:post 35.574 nodes 79
+CONFIG 0 sorted True items 1 copies 1
+CANARY fast_sorted:warmup 45.566 nodes 79
+CANARY fast_sorted:pre 48.517 nodes 79
+SUM rf-reg@100000x50 24994577132
+ARM rf-reg@100000x50 1214.139
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1152.433
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1140.427
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1198.263
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1218.708
+MODEL rf-reg@100000x50 4934262964422892218
+CANARY fast_sorted:post 38.059 nodes 79
+CONFIG 0 sorted False items 4 copies 1
+CANARY fast_items4:warmup 38.038 nodes 79
+CANARY fast_items4:pre 36.007 nodes 79
+SUM rf-clf@100000x50 24994577132/149745
+ARM rf-clf@100000x50 812.62
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 653.866
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 639.983
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 664.645
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 640.595
+MODEL rf-clf@100000x50 8028910272602357896
+CANARY fast_items4:post 32.253 nodes 79
+CONFIG 0 sorted False items 4 copies 1
+CANARY fast_items4:warmup 40.112 nodes 79
+CANARY fast_items4:pre 33.888 nodes 79
+SUM rf-reg@100000x50 24994577132
+ARM rf-reg@100000x50 1149.656
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1092.355
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1124.205
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1099.649
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1095.926
+MODEL rf-reg@100000x50 4934262964422892218
+CANARY fast_items4:post 32.672 nodes 79
+CONFIG 0 sorted False items 1 copies 4
+CANARY fast_copies4:warmup 43.204 nodes 79
+CANARY fast_copies4:pre 40.857 nodes 79
+SUM rf-clf@100000x50 24994577132/149745
+ARM rf-clf@100000x50 1043.42
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 970.698
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 908.241
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 904.567
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 871.613
+MODEL rf-clf@100000x50 8028910272602357896
+CANARY fast_copies4:post 33.918 nodes 79
+CONFIG 0 sorted False items 1 copies 4
+CANARY fast_copies4:warmup 38.695 nodes 79
+CANARY fast_copies4:pre 38.767 nodes 79
+SUM rf-reg@100000x50 24994577132
+ARM rf-reg@100000x50 1136.213
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1147.337
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1131.268
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1123.338
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1765.274
+MODEL rf-reg@100000x50 4934262964422892218
+CANARY fast_copies4:post 35.7 nodes 79
+CONFIG 0 sorted False items 4 copies 4
+CANARY fast_combined:warmup 57.224 nodes 79
+CANARY fast_combined:pre 52.563 nodes 79
+SUM rf-clf@100000x50 24994577132/149745
+ARM rf-clf@100000x50 673.465
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 618.313
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 848.235
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 699.168
+MODEL rf-clf@100000x50 8028910272602357896
+ARM rf-clf@100000x50 636.574
+MODEL rf-clf@100000x50 8028910272602357896
+CANARY fast_combined:post 29.634 nodes 79
+CONFIG 0 sorted False items 4 copies 4
+CANARY fast_combined:warmup 66.975 nodes 79
+CANARY fast_combined:pre 52.1 nodes 79
+SUM rf-reg@100000x50 24994577132
+ARM rf-reg@100000x50 1233.488
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1477.04
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1308.293
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 1300.351
+MODEL rf-reg@100000x50 4934262964422892218
+ARM rf-reg@100000x50 995.569
+MODEL rf-reg@100000x50 4934262964422892218
+CANARY fast_combined:post 30.905 nodes 79
+RESULT {"mode": "fast", "variant": "baseline", "task": "clf", "median_ms": 657.096, "model_hashes": ["8028910272602357896"], "identity_pass": true, "baseline_over_candidate": 1.0, "canary_spread": 1.692905128625266, "exceeds_canary_noise": false}
+RESULT {"mode": "fast", "variant": "baseline", "task": "reg", "median_ms": 1163.319, "model_hashes": ["4934262964422892218"], "identity_pass": true, "baseline_over_candidate": 1.0, "canary_spread": 1.692905128625266, "exceeds_canary_noise": false}
+RESULT {"mode": "fast", "variant": "sorted", "task": "clf", "median_ms": 695.5055, "model_hashes": ["8028910272602357896"], "identity_pass": true, "baseline_over_candidate": 0.9447746998406196, "canary_spread": 1.692905128625266, "exceeds_canary_noise": false}
+RESULT {"mode": "fast", "variant": "sorted", "task": "reg", "median_ms": 1175.348, "model_hashes": ["4934262964422892218"], "identity_pass": true, "baseline_over_candidate": 0.9897655843205587, "canary_spread": 1.692905128625266, "exceeds_canary_noise": false}
+RESULT {"mode": "fast", "variant": "items4", "task": "clf", "median_ms": 647.2305, "model_hashes": ["8028910272602357896"], "identity_pass": true, "baseline_over_candidate": 1.0152426376692694, "canary_spread": 1.692905128625266, "exceeds_canary_noise": false}
+RESULT {"mode": "fast", "variant": "items4", "task": "reg", "median_ms": 1097.7875, "model_hashes": ["4934262964422892218"], "identity_pass": true, "baseline_over_candidate": 1.0596941575669245, "canary_spread": 1.692905128625266, "exceeds_canary_noise": false}
+RESULT {"mode": "fast", "variant": "copies4", "task": "clf", "median_ms": 906.404, "model_hashes": ["8028910272602357896"], "identity_pass": true, "baseline_over_candidate": 0.7249482570685919, "canary_spread": 1.692905128625266, "exceeds_canary_noise": false}
+RESULT {"mode": "fast", "variant": "copies4", "task": "reg", "median_ms": 1139.3025, "model_hashes": ["4934262964422892218"], "identity_pass": true, "baseline_over_candidate": 1.021080002896509, "canary_spread": 1.692905128625266, "exceeds_canary_noise": false}
+RESULT {"mode": "fast", "variant": "combined", "task": "clf", "median_ms": 667.871, "model_hashes": ["8028910272602357896"], "identity_pass": true, "baseline_over_candidate": 0.9838666449059774, "canary_spread": 1.7737396234055478, "exceeds_canary_noise": false}
+RESULT {"mode": "fast", "variant": "combined", "task": "reg", "median_ms": 1304.3220000000001, "model_hashes": ["4934262964422892218"], "identity_pass": true, "baseline_over_candidate": 0.8918955595320787, "canary_spread": 1.7737396234055478, "exceeds_canary_noise": false}
+
+=== quiet_window verdict ===
+window 51.6s, 26 process samples
+   process scan: clean across 26 samples
+      (noted, below the voiding threshold: com.apple.Virtua 231.2%)
+      (noted, below the voiding threshold: Code 98.1%)
+      (noted, below the voiding threshold: ssh 41.1%)
+   canary spread 1.77x in group fast_combined exceeds the gross-contamination bound 1.50x  [fast_baseline: 1.69x [fast_baseline:warmup=57.9ms  fast_baseline:pre=51.7ms  fast_baseline:post=30.8ms  fast_baseline:warmup=46.3ms  fast_baseline:pre=31.5ms  fast_baseline:post=30.5ms]; fast_combined: 1.77x [fast_combined:warmup=57.2ms  fast_combined:pre=52.6ms  fast_combined:post=29.6ms  fast_combined:warmup=67.0ms  fast_combined:pre=52.1ms  fast_combined:post=30.9ms]; fast_copies4: 1.20x [fast_copies4:warmup=43.2ms  fast_copies4:pre=40.9ms  fast_copies4:post=33.9ms  fast_copies4:warmup=38.7ms  fast_copies4:pre=38.8ms  fast_copies4:post=35.7ms]; fast_items4: 1.12x [fast_items4:warmup=38.0ms  fast_items4:pre=36.0ms  fast_items4:post=32.3ms  fast_items4:warmup=40.1ms  fast_items4:pre=33.9ms  fast_items4:post=32.7ms]; fast_sorted: 1.36x [fast_sorted:warmup=61.0ms  fast_sorted:pre=45.4ms  fast_sorted:post=35.6ms  fast_sorted:warmup=45.6ms  fast_sorted:pre=48.5ms  fast_sorted:post=38.1ms]; CROSS-GROUP canary ratio 1.46x (fast_baseline vs fast_sorted) is the CODE under test, not the box -- record it]
+
+   RESOLUTION FLOOR 0.56x .. 1.77x
+   A fixed workload moved by 77% inside this window, so any ratio
+   in that band is the machine and not the code.
+
+VOID: the canary moved
+The ARM numbers above are not a measurement. Do not quote them.

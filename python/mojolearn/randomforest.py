@@ -56,7 +56,7 @@ import numpy as np
 
 from . import _mojolearn_rf, _serialize
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
+from ._arrays import _addr, _addr_ro, as_f32_c, as_f32_colmajor
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
@@ -398,10 +398,9 @@ class _RandomForestBase(NumericModeMixin):
         n_rows, n_features = Xa.shape
         if len(y_arr) != n_rows:
             raise ValueError(f"y has {len(y_arr)} rows, X has {n_rows}")
-        # Column-major is the builder's layout (cuML's `data` is
-        # column-major); asfortranarray is that copy, named in the module
-        # docstring.
-        Xf = np.asfortranarray(Xa, dtype=np.float32)
+        # Pack once into the builder's column-major layout. Large row-major
+        # inputs use cache-local tiles; float32 F-order inputs are borrowed.
+        Xf, _, _ = as_f32_colmajor(Xa, "X")
         params = self._fit_params(n_rows, n_features, n_classes)
         out = fit_fn(
             _addr_ro(Xf), _addr_ro(y_arr), params, self._cfg["criterion"]

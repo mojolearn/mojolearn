@@ -1,0 +1,200 @@
+{
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "binary_sha256": {
+    "fast_baseline": "20ed631107519f40326b78e933d00327d5bac935fdf6ad571e266e95f257b8d3",
+    "fast_items4": "ec9b0cd8f43a89965e48f7478b7e9146faf2ab55b0481ad2cf2488d033f500ba",
+    "identical_baseline": "d1b0477737239b6fb5f5b615b56319ad86800f162f05e7bf1928aa5fd7d25f4d",
+    "identical_items4": "62b69cdadf0b0254d4ff6e4896fcd02da550f96cf70d98740405cbf0759fd0d8"
+  },
+  "rows": 100000,
+  "cols": 50,
+  "rounds": 2,
+  "records": [
+    {
+      "mode": "fast",
+      "variant": "baseline",
+      "task": "clf",
+      "median_ms": 676.544,
+      "samples_ms": [
+        789.29,
+        672.957,
+        690.437,
+        648.856,
+        663.089,
+        664.29,
+        707.379,
+        680.131
+      ],
+      "model_hashes": [
+        "8028910272602357896"
+      ],
+      "identity_pass": true,
+      "baseline_over_candidate": 1.0,
+      "canary_spread": 1.1392683414406612,
+      "exceeds_canary_noise": false
+    },
+    {
+      "mode": "fast",
+      "variant": "baseline",
+      "task": "reg",
+      "median_ms": 1122.057,
+      "samples_ms": [
+        1378.289,
+        1046.271,
+        1071.823,
+        1059.949,
+        1222.266,
+        1111.034,
+        1133.08,
+        1162.887
+      ],
+      "model_hashes": [
+        "4934262964422892218"
+      ],
+      "identity_pass": true,
+      "baseline_over_candidate": 1.0,
+      "canary_spread": 1.1392683414406612,
+      "exceeds_canary_noise": false
+    },
+    {
+      "mode": "fast",
+      "variant": "items4",
+      "task": "clf",
+      "median_ms": 605.9535000000001,
+      "samples_ms": [
+        704.517,
+        666.449,
+        595.163,
+        598.195,
+        616.852,
+        601.485,
+        599.489,
+        610.422
+      ],
+      "model_hashes": [
+        "8028910272602357896"
+      ],
+      "identity_pass": true,
+      "baseline_over_candidate": 1.1164949125634227,
+      "canary_spread": 1.1392683414406612,
+      "exceeds_canary_noise": false
+    },
+    {
+      "mode": "fast",
+      "variant": "items4",
+      "task": "reg",
+      "median_ms": 1049.369,
+      "samples_ms": [
+        1339.485,
+        1897.934,
+        1173.845,
+        1031.038,
+        1012.815,
+        1004.319,
+        1053.589,
+        1045.149
+      ],
+      "model_hashes": [
+        "4934262964422892218"
+      ],
+      "identity_pass": true,
+      "baseline_over_candidate": 1.0692682936126379,
+      "canary_spread": 1.1392683414406612,
+      "exceeds_canary_noise": false
+    },
+    {
+      "mode": "identical",
+      "variant": "baseline",
+      "task": "clf",
+      "median_ms": 730.2964999999999,
+      "samples_ms": [
+        860.14,
+        805.718,
+        751.813,
+        708.78,
+        700.923,
+        667.522,
+        753.79,
+        660.027
+      ],
+      "model_hashes": [
+        "8028910272602357896"
+      ],
+      "identity_pass": true,
+      "baseline_over_candidate": 1.0,
+      "canary_spread": 1.8815931108719053,
+      "exceeds_canary_noise": false
+    },
+    {
+      "mode": "identical",
+      "variant": "baseline",
+      "task": "reg",
+      "median_ms": 1109.212,
+      "samples_ms": [
+        1076.95,
+        1092.036,
+        1113.63,
+        1424.458,
+        1062.942,
+        1104.794,
+        1132.068,
+        1149.811
+      ],
+      "model_hashes": [
+        "17025452328278596191"
+      ],
+      "identity_pass": true,
+      "baseline_over_candidate": 1.0,
+      "canary_spread": 1.8815931108719053,
+      "exceeds_canary_noise": false
+    },
+    {
+      "mode": "identical",
+      "variant": "items4",
+      "task": "clf",
+      "median_ms": 605.373,
+      "samples_ms": [
+        612.511,
+        588.998,
+        597.923,
+        593.888,
+        616.936,
+        630.968,
+        598.235,
+        618.907
+      ],
+      "model_hashes": [
+        "8028910272602357896"
+      ],
+      "identity_pass": true,
+      "baseline_over_candidate": 1.2063578983535768,
+      "canary_spread": 1.8815931108719053,
+      "exceeds_canary_noise": false
+    },
+    {
+      "mode": "identical",
+      "variant": "items4",
+      "task": "reg",
+      "median_ms": 1028.757,
+      "samples_ms": [
+        964.812,
+        944.759,
+        970.814,
+        1036.903,
+        1120.865,
+        1020.611,
+        1050.056,
+        1149.272
+      ],
+      "model_hashes": [
+        "17025452328278596191"
+      ],
+      "identity_pass": true,
+      "baseline_over_candidate": 1.0782060292177842,
+      "canary_spread": 1.8815931108719053,
+      "exceeds_canary_noise": false
+    }
+  ],
+  "identity_failures": [],
+  "timing_requires_clean_quiet_window": true
+}

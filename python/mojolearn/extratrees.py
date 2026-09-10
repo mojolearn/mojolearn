@@ -80,7 +80,7 @@ import numpy as np
 
 from . import _mojolearn_trees, _serialize
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
+from ._arrays import _addr, _addr_ro, as_f32_c, as_f32_colmajor
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-extratrees-1"
@@ -225,10 +225,9 @@ class _ExtraTreesBase(NumericModeMixin):
             raise ValueError(
                 f"y has {len(y)} rows, X has {n_rows}"
             )
-        # Column-major is the builder's layout (cuML's `data` is
-        # column-major); asfortranarray is that copy, named in the module
-        # docstring.
-        Xf = np.asfortranarray(Xa, dtype=np.float32)
+        # Pack once into the builder's column-major layout. Large row-major
+        # inputs use cache-local tiles; float32 F-order inputs are borrowed.
+        Xf, _, _ = as_f32_colmajor(Xa, "X")
         ya = np.ascontiguousarray(y, dtype=np.float32)
         params = _fit_params(
             n_rows, n_features, n_classes, self._cfg, self.device,
