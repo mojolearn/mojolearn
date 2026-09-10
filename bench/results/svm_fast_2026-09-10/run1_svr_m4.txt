@@ -1,0 +1,9 @@
+SVR n=5000 sk    fit      695 ms predict10k    1780 ms rmse 0.5039
+SVR n=5000 ours  fit      295 ms predict10k      21 ms rmse 0.5039
+SVR n=5000 sk    fit      701 ms predict10k    1788 ms rmse 0.5039
+SVR n=5000 ours  fit      211 ms predict10k      98 ms rmse 0.5039
+SVR n=20000 sk    fit    10958 ms predict10k    7017 ms rmse 0.4867
+SVR n=20000 ours  fit     1219 ms predict10k      64 ms rmse 0.4867
+SVR n=20000 sk    fit    10884 ms predict10k    7033 ms rmse 0.4867
+SVR n=20000 ours  fit     1184 ms predict10k     106 ms rmse 0.4867
+(inline run, MOJOLEARN_NUMERIC_MODE=fast, FAST Metal build at b1ba346d, sklearn 1.9.0 SVR cache_size=2000, HIGGS prefix rows x 28 features, gamma=1/(d var), epsilon 0.1, C 1)

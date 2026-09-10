@@ -24,3 +24,14 @@ window: ours fit 1.66 s at 20,000 and 7.45 s at 50,000; predict 250 ms and
 One GPU against one core: libsvm has no threading. The ratios are what
 they are at these shapes and grow with rows; they are not a claim about
 any other library or box.
+
+## SVR, same session (`run1_svr_m4.txt`)
+
+Same solver, same two changes. HIGGS label as the regression target,
+epsilon 0.1, two alternating pairs, both pairs shown; RMSE on the same
+10,000-row tail is equal to sklearn's at four decimals in every cell.
+
+| rows | sklearn fit | ours fit | sklearn predict 10k | ours predict 10k | rmse both |
+|---:|---:|---:|---:|---:|---:|
+| 5,000 | 695 / 701 ms | 295 / 211 ms | 1,780 / 1,788 ms | 21 / 98 ms | 0.5039 |
+| 20,000 | 10,958 / 10,884 ms | 1,219 / 1,184 ms | 7,017 / 7,033 ms | 64 / 106 ms | 0.4867 |
