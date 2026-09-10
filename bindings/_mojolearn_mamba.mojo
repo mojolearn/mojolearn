@@ -789,7 +789,7 @@ def _m3_load_weights(ctx: DeviceContext, a: List[Int], dims: Mamba3Dims) raises 
         return Mamba3DeviceWeights(ctx, w)
 
 
-def _mamba3_run(
+def _mamba3_run[discard_state: Bool = False](
     a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
 ) raises -> Int:
     """The GIL-free half of the two Mamba-3 entry points. Returns the
@@ -834,31 +834,32 @@ def _mamba3_run(
     m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
     # The caller's ten-piece state over the fresh zeros (DEVIATION 794).
     var dstate = Mamba3DeviceState(ctx, b, dims)
-    dstate.buf_qrot = _m3_upload_addr(ctx, a[12], qrow_n * M3_D_STATE)
-    dstate.buf_krot = _m3_upload_addr(ctx, a[13], qrow_n * M3_D_STATE)
-    dstate.buf_v = _m3_upload_addr(ctx, a[14], qrow_n * M3_HEADDIM)
-    dstate.buf_dt = _m3_upload_addr(ctx, a[15], qrow_n)
-    dstate.buf_sig = _m3_upload_addr(ctx, a[16], qrow_n)
-    dstate.buf_adt = _m3_upload_addr(ctx, a[17], qrow_n)
-    dstate.buf_len = q0
-    if pend == 1:
-        # THROUGH the lane's own helper, AFTER buf_len is set, so its
-        # fresh-state refusal (buf_len must be 0) fires from Python by
-        # the lane's own words (DEVIATION 794).
-        dstate.set_input_states(
-            ctx,
-            _m3_read_f32(a[10], theta_n),
-            _m3_read_f32(a[11], h_n),
-            _m3_read_f32(a[18], k_n),
-            _m3_read_f32(a[19], v_n),
-        )
-    else:
-        dstate.theta = _m3_upload_addr(ctx, a[10], theta_n)
-        dstate.h = _m3_upload_addr(ctx, a[11], h_n)
-        # Idle outside a pending continuation, uploaded anyway so the
-        # caller's bytes round-trip unchanged (DEVIATION 792's rule).
-        dstate.pend_k = _m3_upload_addr(ctx, a[18], k_n)
-        dstate.pend_v = _m3_upload_addr(ctx, a[19], v_n)
+    comptime if not discard_state:
+        dstate.buf_qrot = _m3_upload_addr(ctx, a[12], qrow_n * M3_D_STATE)
+        dstate.buf_krot = _m3_upload_addr(ctx, a[13], qrow_n * M3_D_STATE)
+        dstate.buf_v = _m3_upload_addr(ctx, a[14], qrow_n * M3_HEADDIM)
+        dstate.buf_dt = _m3_upload_addr(ctx, a[15], qrow_n)
+        dstate.buf_sig = _m3_upload_addr(ctx, a[16], qrow_n)
+        dstate.buf_adt = _m3_upload_addr(ctx, a[17], qrow_n)
+        dstate.buf_len = q0
+        if pend == 1:
+            # THROUGH the lane's own helper, AFTER buf_len is set, so its
+            # fresh-state refusal (buf_len must be 0) fires from Python by
+            # the lane's own words (DEVIATION 794).
+            dstate.set_input_states(
+                ctx,
+                _m3_read_f32(a[10], theta_n),
+                _m3_read_f32(a[11], h_n),
+                _m3_read_f32(a[18], k_n),
+                _m3_read_f32(a[19], v_n),
+            )
+        else:
+            dstate.theta = _m3_upload_addr(ctx, a[10], theta_n)
+            dstate.h = _m3_upload_addr(ctx, a[11], h_n)
+            # Idle outside a pending continuation, uploaded anyway so the
+            # caller's bytes round-trip unchanged (DEVIATION 792's rule).
+            dstate.pend_k = _m3_upload_addr(ctx, a[18], k_n)
+            dstate.pend_v = _m3_upload_addr(ctx, a[19], v_n)
     m3_phase_tick(ctx, phase_tick, String("surface.state_upload"))
     var dstages = Mamba3DeviceStages(ctx, b, l, q0, dims)
     m3_phase_tick(ctx, phase_tick, String("surface.stage_allocations"))
@@ -878,16 +879,17 @@ def _mamba3_run(
     _m3_download_addr(ctx, dstages.k_last, k_n, a[22])
     _m3_download_addr(ctx, dstages.v_last, v_n, a[23])
     _m3_download_addr(ctx, dstages.theta_last, theta_n, a[24])
-    _m3_download_addr(ctx, dstate.theta, theta_n, a[10])
-    _m3_download_addr(ctx, dstate.h, h_n, a[11])
-    _m3_download_addr(ctx, dstate.buf_qrot, qrow_n * M3_D_STATE, a[12])
-    _m3_download_addr(ctx, dstate.buf_krot, qrow_n * M3_D_STATE, a[13])
-    _m3_download_addr(ctx, dstate.buf_v, qrow_n * M3_HEADDIM, a[14])
-    _m3_download_addr(ctx, dstate.buf_dt, qrow_n, a[15])
-    _m3_download_addr(ctx, dstate.buf_sig, qrow_n, a[16])
-    _m3_download_addr(ctx, dstate.buf_adt, qrow_n, a[17])
-    _m3_download_addr(ctx, dstate.pend_k, k_n, a[18])
-    _m3_download_addr(ctx, dstate.pend_v, v_n, a[19])
+    comptime if not discard_state:
+        _m3_download_addr(ctx, dstate.theta, theta_n, a[10])
+        _m3_download_addr(ctx, dstate.h, h_n, a[11])
+        _m3_download_addr(ctx, dstate.buf_qrot, qrow_n * M3_D_STATE, a[12])
+        _m3_download_addr(ctx, dstate.buf_krot, qrow_n * M3_D_STATE, a[13])
+        _m3_download_addr(ctx, dstate.buf_v, qrow_n * M3_HEADDIM, a[14])
+        _m3_download_addr(ctx, dstate.buf_dt, qrow_n, a[15])
+        _m3_download_addr(ctx, dstate.buf_sig, qrow_n, a[16])
+        _m3_download_addr(ctx, dstate.buf_adt, qrow_n, a[17])
+        _m3_download_addr(ctx, dstate.pend_k, k_n, a[18])
+        _m3_download_addr(ctx, dstate.pend_v, v_n, a[19])
     m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
     var out_len = dstate.buf_len
     _ = dw^
@@ -1007,6 +1009,33 @@ def mamba3_forward_binding(
     var out_len = 0
     with GILReleased(Python()):
         out_len = _mamba3_run(a, b, l, dm, q0, pend)
+    return PythonObject(out_len)
+
+
+def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Fresh zero-state prefill whose resumption state has no caller owner.
+
+    The 15 pointers are x, nine weights, y, and four public reports. The
+    ordinary device state constructor supplies exact zeros; the same block
+    and ordered refusals run. No discarded state crosses the host boundary.
+    """
+    if len(addrs) != 15 or len(params) != 3:
+        raise Error("mamba3_forward_fresh: expected 15 addresses and 3 parameters (B, L, d_model)")
+    var a = List[Int]()
+    for i in range(10):
+        a.append(Int(py=addrs[i]))
+    for i in range(10):
+        a.append(0)
+    for i in range(10, 15):
+        a.append(Int(py=addrs[i]))
+    var b = Int(py=params[0])
+    var l = Int(py=params[1])
+    var dm = Int(py=params[2])
+    if b < 1 or l < 1:
+        raise Error("mamba3_forward_fresh: B and L must be positive")
+    var out_len = 0
+    with GILReleased(Python()):
+        out_len = _mamba3_run[True](a, b, l, dm, 0, 0)
     return PythonObject(out_len)
 
 
@@ -1183,6 +1212,8 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
         m.def_function[mamba2_decode_step_binding]("mamba2_decode_step")
         m.def_function[mamba3_backward_binding]("mamba3_backward")
         m.def_function[mamba3_forward_binding]("mamba3_forward")
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MAMBA3_FRESH_PREFILL"]():
+            m.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
         m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         return m.finalize()
     except e:
