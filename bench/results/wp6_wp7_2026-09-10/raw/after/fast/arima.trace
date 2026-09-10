@@ -1,0 +1,179 @@
+# arima_fit_ptr_host: batch_size=6 n_obs=512 order=(1,0,0) seasonal=(0,0,0,0) k=1 max_iterations=1000
+# arima_fit_ptr_host: batch_size=6 n_obs=512 order=(1,0,0) seasonal=(0,0,0,0) k=0 max_iterations=1000
+# format: mojolearn-identity-trace v1
+0	fit.x0.sigma2	f32	6	3df9e313959505b8
+1	fit.x0.ar	f32	6	ffa1471a1acbf5af
+2	fit.x0.ns.info_ls	i32	6	81d23fd7003c2305
+3	fit.x0.ns.invparams	u8	6	e1dc4fe9a65974d7
+4	fit.x0	f32	12	3b3a9ba09032ac95
+5	fit.init.x	f32	12	3b3a9ba09032ac95
+6	fit.init.loss	f32	6	b2b11b2e40c110d6
+7	fit.init.grad	f32	12	352f7280203d5227
+8	fit.x	f32	12	3b3a9ba09032ac95
+9	fit.loss	f32	6	b2b11b2e40c110d6
+10	fit.n_iter	i32	6	81d23fd7003c2305
+11	fit.retcode	i32	6	81d23fd7003c2305
+12	fit.t_x	f32	12	fa292bbd41fdb944
+# arima_fit_ptr_host: batch_size=6 n_obs=512 order=(1,0,0) seasonal=(0,0,0,0) k=0 max_iterations=1000
+# format: mojolearn-identity-trace v1
+0	fit.x0.sigma2	f32	6	3df9e313959505b8
+1	fit.x0.ar	f32	6	ffa1471a1acbf5af
+2	fit.x0.ns.info_ls	i32	6	81d23fd7003c2305
+3	fit.x0.ns.invparams	u8	6	e1dc4fe9a65974d7
+4	fit.x0	f32	12	3b3a9ba09032ac95
+5	fit.init.x	f32	12	3b3a9ba09032ac95
+6	fit.init.loss	f32	6	b2b11b2e40c110d6
+7	fit.init.grad	f32	12	352f7280203d5227
+8	fit.x	f32	12	3b3a9ba09032ac95
+9	fit.loss	f32	6	b2b11b2e40c110d6
+10	fit.n_iter	i32	6	81d23fd7003c2305
+11	fit.retcode	i32	6	81d23fd7003c2305
+12	fit.t_x	f32	12	fa292bbd41fdb944
+# arima_fit_ptr_host: batch_size=6 n_obs=512 order=(0,0,1) seasonal=(0,0,0,0) k=0 max_iterations=1000
+# format: mojolearn-identity-trace v1
+0	fit.x0.sigma2	f32	6	6633bdacbe90fe50
+1	fit.x0.ma	f32	6	00c4c65cccefc216
+2	fit.x0.ns.info_ls	i32	6	81d23fd7003c2305
+3	fit.x0.ns.invparams	u8	6	74d5593d31695e05
+4	fit.x0	f32	12	01504f1ab4794c02
+5	fit.init.x	f32	12	01504f1ab4794c02
+6	fit.init.loss	f32	6	71bd3d789d9ebc61
+7	fit.init.grad	f32	12	a3e1e4f4d39d7d69
+8	fit.iter0001.x	f32	12	61d9a5b1b01f1315
+9	fit.iter0001.loss	f32	6	5ca226b18257324e
+10	fit.iter0001.grad	f32	12	5bc61e6982e18a70
+11	fit.iter0001.ls	i32	12	f3619f9299420892
+12	fit.iter0002.x	f32	12	55b3282d71d91f00
+13	fit.iter0002.loss	f32	6	a685c4858df52bf5
+14	fit.iter0002.grad	f32	12	1f7d75fd320dca3a
+15	fit.iter0002.ls	i32	12	8367f9d81aa5f835
+16	fit.iter0003.x	f32	12	281f291e78ecb01a
+17	fit.iter0003.loss	f32	6	d5cbbcdf8eaeec76
+18	fit.iter0003.grad	f32	12	00fb8a5e86d50f4d
+19	fit.iter0003.ls	i32	12	e47ad817dc759ff6
+20	fit.x	f32	12	281f291e78ecb01a
+21	fit.loss	f32	6	d5cbbcdf8eaeec76
+22	fit.n_iter	i32	6	0e4b24d00a6e1fb5
+23	fit.retcode	i32	6	81d23fd7003c2305
+24	fit.t_x	f32	12	443320799201ffdc
+# arima_fit_ptr_host: batch_size=6 n_obs=512 order=(1,0,1) seasonal=(0,0,0,0) k=0 max_iterations=1000
+# format: mojolearn-identity-trace v1
+0	fit.x0.sigma2	f32	6	00a765bcaa0d8fd6
+1	fit.x0.ar	f32	6	d7c8d5e2cb989817
+2	fit.x0.ma	f32	6	8d5188f714cfc695
+3	fit.x0.ns.info_ls	i32	6	81d23fd7003c2305
+4	fit.x0.ns.invparams	u8	6	5e91fb1b9caf01af
+5	fit.x0	f32	18	70adb746081cd329
+6	fit.init.x	f32	18	70adb746081cd329
+7	fit.init.loss	f32	6	9403ef2039146e1f
+8	fit.init.grad	f32	18	3922c4e15a4156a5
+9	fit.iter0001.x	f32	18	09f998e56cfea70e
+10	fit.iter0001.loss	f32	6	413d24c845edab98
+11	fit.iter0001.grad	f32	18	5e761ce98f13d030
+12	fit.iter0001.ls	i32	12	e61c3755543850f7
+13	fit.iter0002.x	f32	18	19f065ddec66723d
+14	fit.iter0002.loss	f32	6	e15641bd011b2cea
+15	fit.iter0002.grad	f32	18	6287aa0f725d5d59
+16	fit.iter0002.ls	i32	12	8db40a8fe9341ca4
+17	fit.iter0003.x	f32	18	0fada7b894d88054
+18	fit.iter0003.loss	f32	6	4116f6ccda0bb7bf
+19	fit.iter0003.grad	f32	18	2050744ff1bfedff
+20	fit.iter0003.ls	i32	12	8db40a8fe9341ca4
+21	fit.iter0004.x	f32	18	00b6c8a3bb23a6f0
+22	fit.iter0004.loss	f32	6	fc8b16861801d21f
+23	fit.iter0004.grad	f32	18	0c00efae92f326f4
+24	fit.iter0004.ls	i32	12	8db40a8fe9341ca4
+25	fit.iter0005.x	f32	18	07602b79e5535a4c
+26	fit.iter0005.loss	f32	6	3aa3d445df112a47
+27	fit.iter0005.grad	f32	18	20fd4cf1f18964d6
+28	fit.iter0005.ls	i32	12	8db40a8fe9341ca4
+29	fit.x	f32	18	07602b79e5535a4c
+30	fit.loss	f32	6	3aa3d445df112a47
+31	fit.n_iter	i32	6	b88ee1aeaa5fcfc2
+32	fit.retcode	i32	6	81d23fd7003c2305
+33	fit.t_x	f32	18	3c43d08a7b8487cc
+# arima_fit_ptr_host: batch_size=6 n_obs=512 order=(1,1,1) seasonal=(0,0,0,0) k=1 max_iterations=1000
+# format: mojolearn-identity-trace v1
+0	fit.x0.sigma2	f32	6	28c17fc054264a1e
+1	fit.x0.ar	f32	6	6c9ff6485137a22c
+2	fit.x0.ma	f32	6	f0d692b7c2036614
+3	fit.x0.mu	f32	6	7da08eb68bbaad25
+4	fit.x0.ns.info_ls	i32	6	81d23fd7003c2305
+5	fit.x0.ns.invparams	u8	6	5e91fb1b9caf01af
+6	fit.x0	f32	24	d7646d90e17da683
+7	fit.init.x	f32	24	d7646d90e17da683
+8	fit.init.loss	f32	6	9affcba75aba3238
+9	fit.init.grad	f32	24	8d3a3c0687bdc17e
+10	fit.iter0001.x	f32	24	6753ee42a9203af0
+11	fit.iter0001.loss	f32	6	67f94bdfd5debe00
+12	fit.iter0001.grad	f32	24	96ff84c2eebfe1ac
+13	fit.iter0001.ls	i32	12	5851b24b0f46c675
+14	fit.iter0002.x	f32	24	5e2735a8abba0ae9
+15	fit.iter0002.loss	f32	6	3ae748c441fc5d9b
+16	fit.iter0002.grad	f32	24	985826e34d9158a2
+17	fit.iter0002.ls	i32	12	641677580e2b202c
+18	fit.x	f32	24	5e2735a8abba0ae9
+19	fit.loss	f32	6	3ae748c441fc5d9b
+20	fit.n_iter	i32	6	3b7f7c1b78d7a4b6
+21	fit.retcode	i32	6	81d23fd7003c2305
+22	fit.t_x	f32	24	c3e3f721dc731f18
+# arima_fit_ptr_host: batch_size=6 n_obs=512 order=(1,0,0) seasonal=(0,0,0,0) k=0 max_iterations=1000
+# format: mojolearn-identity-trace v1
+0	fit.x0.sigma2	f32	6	3df9e313959505b8
+1	fit.x0.ar	f32	6	ffa1471a1acbf5af
+2	fit.x0.ns.info_ls	i32	6	81d23fd7003c2305
+3	fit.x0.ns.invparams	u8	6	e1dc4fe9a65974d7
+4	fit.x0	f32	12	3b3a9ba09032ac95
+5	fit.init.x	f32	12	3b3a9ba09032ac95
+6	fit.init.loss	f32	6	b2b11b2e40c110d6
+7	fit.init.grad	f32	12	352f7280203d5227
+8	fit.x	f32	12	3b3a9ba09032ac95
+9	fit.loss	f32	6	b2b11b2e40c110d6
+10	fit.n_iter	i32	6	81d23fd7003c2305
+11	fit.retcode	i32	6	81d23fd7003c2305
+12	fit.t_x	f32	12	fa292bbd41fdb944
+# arima_fit_ptr_host: batch_size=3 n_obs=512 order=(1,0,0) seasonal=(0,0,0,0) k=0 max_iterations=1000
+# format: mojolearn-identity-trace v1
+0	fit.x0.sigma2	f32	3	adc2dcae4d7d0dd3
+1	fit.x0.ar	f32	3	4ef4b62c58ca9ff6
+2	fit.x0.ns.info_ls	i32	3	5467b0da1d106495
+3	fit.x0.ns.invparams	u8	3	e1f3241870f44620
+4	fit.x0	f32	6	f6745caa088c86f2
+5	fit.init.x	f32	6	f6745caa088c86f2
+6	fit.init.loss	f32	3	54f126802e8d946d
+7	fit.init.grad	f32	6	8b6e480abea26e84
+8	fit.x	f32	6	f6745caa088c86f2
+9	fit.loss	f32	3	54f126802e8d946d
+10	fit.n_iter	i32	3	5467b0da1d106495
+11	fit.retcode	i32	3	5467b0da1d106495
+12	fit.t_x	f32	6	b8a011188ac1a68d
+# arima_fit_ptr_host: batch_size=1 n_obs=512 order=(1,0,0) seasonal=(0,0,0,0) k=0 max_iterations=1000
+# format: mojolearn-identity-trace v1
+0	fit.x0.sigma2	f32	1	e6460cb74452cbf8
+1	fit.x0.ar	f32	1	313973b901674621
+2	fit.x0.ns.info_ls	i32	1	4d25767f9dce13f5
+3	fit.x0.ns.invparams	u8	1	af63be4c8601b992
+4	fit.x0	f32	2	3625b4cb62ae75be
+5	fit.init.x	f32	2	3625b4cb62ae75be
+6	fit.init.loss	f32	1	885c9b34b4ab88a3
+7	fit.init.grad	f32	2	16d7a2d5efcd31bd
+8	fit.x	f32	2	3625b4cb62ae75be
+9	fit.loss	f32	1	885c9b34b4ab88a3
+10	fit.n_iter	i32	1	4d25767f9dce13f5
+11	fit.retcode	i32	1	4d25767f9dce13f5
+12	fit.t_x	f32	2	68ff4b3372db3221
+# arima_fit_ptr_host: batch_size=1 n_obs=512 order=(1,0,0) seasonal=(0,0,0,0) k=0 max_iterations=1000
+# format: mojolearn-identity-trace v1
+0	fit.x0.sigma2	f32	1	e6460cb74452cbf8
+1	fit.x0.ar	f32	1	313973b901674621
+2	fit.x0.ns.info_ls	i32	1	4d25767f9dce13f5
+3	fit.x0.ns.invparams	u8	1	af63be4c8601b992
+4	fit.x0	f32	2	3625b4cb62ae75be
+5	fit.init.x	f32	2	3625b4cb62ae75be
+6	fit.init.loss	f32	1	885c9b34b4ab88a3
+7	fit.init.grad	f32	2	16d7a2d5efcd31bd
+8	fit.x	f32	2	3625b4cb62ae75be
+9	fit.loss	f32	1	885c9b34b4ab88a3
+10	fit.n_iter	i32	1	4d25767f9dce13f5
+11	fit.retcode	i32	1	4d25767f9dce13f5
+12	fit.t_x	f32	2	68ff4b3372db3221

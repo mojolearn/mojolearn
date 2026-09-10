@@ -1,0 +1,16 @@
+# knn n_index=8 n_queries=8 d=1 k=3 method=2 sqrt=True metric=L2SqrtExpanded metric_arg=2.0
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	8	948f0321bcbdbf5d
+1	knn.query_norm	f32	8	948f0321bcbdbf5d
+2	knn.out_dist	f32	24	8afc553bed09eb4f
+3	knn.out_idx	u32	24	314240a4bb134895
+4	knn.sorted_dist	f32	24	8afc553bed09eb4f
+5	knn.sorted_idx	u32	24	314240a4bb134895
+# knn n_index=8 n_queries=8 d=1 k=3 method=2 sqrt=True metric=L2SqrtExpanded metric_arg=2.0
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	8	948f0321bcbdbf5d
+1	knn.query_norm	f32	8	948f0321bcbdbf5d
+2	knn.out_dist	f32	24	8afc553bed09eb4f
+3	knn.out_idx	u32	24	314240a4bb134895
+4	knn.sorted_dist	f32	24	8afc553bed09eb4f
+5	knn.sorted_idx	u32	24	314240a4bb134895

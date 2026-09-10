@@ -1,0 +1,959 @@
+22994 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11e4c0000000, nodemask=1)
+/root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:1261:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with ':'
+    """THE HEADLINE. Every output byte is held fixed across:
+       ^
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:86:
+/root/wp67-compile/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:86:
+/root/wp67-compile/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:86:
+/root/wp67-compile/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:152:
+Imported from /root/wp67-compile/hierarchy/impl/cluster/detail/connectivities.mojo:56:
+Imported from /root/wp67-compile/core/row_norms.mojo:60:
+/root/wp67-compile/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:152:
+Imported from /root/wp67-compile/hierarchy/impl/cluster/detail/connectivities.mojo:56:
+Imported from /root/wp67-compile/core/row_norms.mojo:60:
+/root/wp67-compile/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:152:
+Imported from /root/wp67-compile/hierarchy/impl/cluster/detail/connectivities.mojo:56:
+Imported from /root/wp67-compile/core/row_norms.mojo:60:
+/root/wp67-compile/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:152:
+Imported from /root/wp67-compile/hierarchy/impl/cluster/detail/connectivities.mojo:56:
+Imported from /root/wp67-compile/core/row_norms.mojo:60:
+/root/wp67-compile/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:86:
+/root/wp67-compile/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:86:
+/root/wp67-compile/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:442:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:451:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:465:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:467:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        regy[j] = sy[
+                                  ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:481:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:492:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[
+                                    ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:514:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:524:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:538:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:639:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:670:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:675:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:745:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:75:
+/root/wp67-compile/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:75:
+/root/wp67-compile/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:202:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:203:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:204:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:205:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:206:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt64(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:230:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:231:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:232:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:242:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:244:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:249:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:293:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:294:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:299:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:300:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:302:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:303:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:304:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:304:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:309:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:312:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:312:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:318:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:360:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_val[slot] = o_val.unsafe_load(slot)
+        ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:361:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_idx[slot] = o_idx.unsafe_load(slot)
+        ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:366:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[slot], s_idx[slot], select_min)
+                                  ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:366:53: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[slot], s_idx[slot], select_min)
+                                               ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:369:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                             ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:369:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:371:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_val.unsafe_store(rank, s_val[slot])
+                                 ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:110:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:372:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_idx.unsafe_store(rank, s_idx[slot])
+                                 ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:221:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:222:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:223:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:224:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:225:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_BACK_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:226:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt32(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:252:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:253:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:254:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:266:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:268:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:273:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:331:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:332:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:338:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:339:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:343:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:344:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:345:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:345:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:348:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:352:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:352:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:354:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:170:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:356:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var needed = Int(ctr[CTR_K])
+                             ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:684:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    val_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:689:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    idx_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:537:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:550:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:307:22: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                heads[page + warp] = group_min
+                ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:309:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var winner = heads[page]
+                         ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:311:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var other = heads[page + w]
+                            ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:325:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            heads[tid] = mine
+            ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:330:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var other = heads[tid + stride]
+                                ~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:331:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    if other < heads[tid]:
+                               ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:332:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        heads[tid] = other
+                        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:335:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var winner = heads[0]
+                         ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:440:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            keys[slot] = composite_key(v, running_indices.unsafe_load(row * k + slot), select_min)
+            ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:441:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            vals[slot] = v
+            ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:444:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            keys[slot] = composite_key(v, partial_indices.unsafe_load(row * k + slot - k) + base, select_min)
+            ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:445:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            vals[slot] = v
+            ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:450:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key = keys[slot]
+                  ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:460:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if keys[j] < key:
+               ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:463:61: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            running_values.unsafe_store(row * k + rank, vals[slot])
+                                                        ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:301:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:432:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:624:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_val: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:629:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_idx: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:571:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_val: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:576:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_idx: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:518:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:601:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:647:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:666:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:283:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:367:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:130:
+Imported from /root/wp67-compile/hdbscan/impl/detail/reachability.mojo:117:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:375:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+/root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:820:30: warning: assignment to 'want' was never used; assign to '_' instead?
+            var want = UInt32(0x80000000)
+                             ^
+/root/wp67-compile/hdbscan/checks/hdbscan_check.mojo:1909:25: warning: assignment to 'skipped' was never used; assign to '_' instead?
+    var skipped = String("the guard-skipped run RAISED anyway")
+                        ^
+hdbscan_check mode=IDENTICAL
+check_hdbscan_refusals OK [IDENTICAL]: 15 arms and parameters raise BY NAME (the sparse mutual reachability graph, its k-NN epilogue, the epsilon search, L1, NN_DESCENT, min_samples 0 and > n_rows, min_cluster_size 1 and > n_rows, alpha 0, an unknown selection method, n_rows 1, a NaN coordinate and two overflowing rows)
+check_core_distances_vs_oracle OK [IDENTICAL]: blobs96 96 core distances bitwise equal to the host k-th order statistic; 0 of 96 rows have a TIED k-th neighbour, where the value is gated and the neighbour identity is not claimed
+check_core_distances_vs_oracle OK [IDENTICAL]: gradient90 90 core distances bitwise equal to the host k-th order statistic; 0 of 90 rows have a TIED k-th neighbour, where the value is gated and the neighbour identity is not claimed
+check_core_distances_vs_oracle OK [IDENTICAL]: dups_lattice48 48 core distances bitwise equal to the host k-th order statistic; 44 of 48 rows have a TIED k-th neighbour, where the value is gated and the neighbour identity is not claimed
+check_core_distances_vs_oracle OK [IDENTICAL]: blob_plus_outlier41 41 core distances bitwise equal to the host k-th order statistic; 0 of 41 rows have a TIED k-th neighbour, where the value is gated and the neighbour identity is not claimed
+check_core_distances_vs_oracle OK [IDENTICAL]: signed_zero48 48 core distances bitwise equal to the host k-th order statistic; 0 of 48 rows have a TIED k-th neighbour, where the value is gated and the neighbour identity is not claimed
+check_core_distances_vs_oracle OK [IDENTICAL]: pos_zero48 48 core distances bitwise equal to the host k-th order statistic; 0 of 48 rows have a TIED k-th neighbour, where the value is gated and the neighbour identity is not claimed
+check_core_distances_vs_oracle OK [IDENTICAL]: nested_ladder48 48 core distances bitwise equal to the host k-th order statistic; 3 of 48 rows have a TIED k-th neighbour, where the value is gated and the neighbour identity is not claimed
+  permutation RECORDED [IDENTICAL] dups_lattice48: 1109 tied pairs; reversed row order agree=False, noise moved on 28 of 48 points. EXPECTED and not asserted: the MST tie-break is a total order on row INDICES, so a permutation can select a different equal-weight MST. Upstream breaks the same tie with a cuRAND draw
+check_mutual_reachability_ties OK [IDENTICAL]: dups_lattice48 symmetric on 1128 pairs with 1109 tied pairs, 2304 cells bitwise equal to the host three-way max, the reversed-row-order result RECORDED above rather than asserted, and the planted (+0, -0) max resolves to +0.0 on every cell
+check_condensed_tree_vs_oracle OK [IDENTICAL]: blobs96 100 condensed edges over 5 clusters, node for node, lambdas bitwise
+check_condensed_tree_vs_oracle OK [IDENTICAL]: gradient90 92 condensed edges over 3 clusters, node for node, lambdas bitwise
+check_condensed_tree_vs_oracle OK [IDENTICAL]: dups_lattice48 48 condensed edges over 1 clusters, node for node, lambdas bitwise
+check_condensed_tree_vs_oracle OK [IDENTICAL]: blob_plus_outlier41 45 condensed edges over 5 clusters, node for node, lambdas bitwise
+check_condensed_tree_vs_oracle OK [IDENTICAL]: signed_zero48 52 condensed edges over 5 clusters, node for node, lambdas bitwise
+check_condensed_tree_vs_oracle OK [IDENTICAL]: pos_zero48 52 condensed edges over 5 clusters, node for node, lambdas bitwise
+check_condensed_tree_vs_oracle OK [IDENTICAL]: nested_ladder48 58 condensed edges over 11 clusters, node for node, lambdas bitwise
+check_stabilities_vs_oracle OK [IDENTICAL]: blobs96 5 cluster stabilities bitwise equal to the host serial ascending fold (DEVIATIONS 1603/1604/1605)
+check_stabilities_vs_oracle OK [IDENTICAL]: gradient90 3 cluster stabilities bitwise equal to the host serial ascending fold (DEVIATIONS 1603/1604/1605)
+check_stabilities_vs_oracle OK [IDENTICAL]: dups_lattice48 1 cluster stabilities bitwise equal to the host serial ascending fold (DEVIATIONS 1603/1604/1605)
+check_stabilities_vs_oracle OK [IDENTICAL]: blob_plus_outlier41 5 cluster stabilities bitwise equal to the host serial ascending fold (DEVIATIONS 1603/1604/1605)
+check_stabilities_vs_oracle OK [IDENTICAL]: signed_zero48 5 cluster stabilities bitwise equal to the host serial ascending fold (DEVIATIONS 1603/1604/1605)
+check_stabilities_vs_oracle OK [IDENTICAL]: pos_zero48 5 cluster stabilities bitwise equal to the host serial ascending fold (DEVIATIONS 1603/1604/1605)
+check_stabilities_vs_oracle OK [IDENTICAL]: nested_ladder48 11 cluster stabilities bitwise equal to the host serial ascending fold (DEVIATIONS 1603/1604/1605)
+check_labels_vs_oracle OK [IDENTICAL]: blobs96 96 labels, 3 returned clusters, 0 outliers. ASSERTED: every planted-noise point came back -1 and no two planted clusters were merged. RECORDED: the most any one of the 3 planted clusters was split into is 1 returned clusters, and 0 planted-cluster points came back as noise
+check_labels_vs_oracle OK [IDENTICAL]: gradient90 90 labels match the oracle, 2 clusters, 70 outliers (this fixture plants no assignment; the oracle is the only control)
+check_labels_vs_oracle OK [IDENTICAL]: dups_lattice48 48 labels match the oracle, 0 clusters, 48 outliers (this fixture plants no assignment; the oracle is the only control)
+check_labels_vs_oracle OK [IDENTICAL]: blob_plus_outlier41 41 labels, 2 returned clusters, 1 outliers. ASSERTED: every planted-noise point came back -1 and no two planted clusters were merged. RECORDED: the most any one of the 2 planted clusters was split into is 1 returned clusters, and 0 planted-cluster points came back as noise
+check_labels_vs_oracle OK [IDENTICAL]: signed_zero48 48 labels, 2 returned clusters, 0 outliers. ASSERTED: every planted-noise point came back -1 and no two planted clusters were merged. RECORDED: the most any one of the 2 planted clusters was split into is 1 returned clusters, and 0 planted-cluster points came back as noise
+check_labels_vs_oracle OK [IDENTICAL]: pos_zero48 48 labels, 2 returned clusters, 0 outliers. ASSERTED: every planted-noise point came back -1 and no two planted clusters were merged. RECORDED: the most any one of the 2 planted clusters was split into is 1 returned clusters, and 0 planted-cluster points came back as noise
+check_labels_vs_oracle OK [IDENTICAL]: nested_ladder48 48 labels match the oracle, 6 clusters, 0 outliers (this fixture plants no assignment; the oracle is the only control)
+check_permutation_invariance RECORDED [IDENTICAL]: blobs96 has 236 tied pairs of 4560, so the MST's index tie-break can select a different (equally minimal) tree under a permutation. Result: partition agrees=True, noise moved on 0 of 96 points. Upstream's answer under the same tie is a cuRAND draw (DEVIATION 620); ours is a function of the row order
+check_permutation_invariance RECORDED [IDENTICAL]: gradient90 has 206 tied pairs of 4005, so the MST's index tie-break can select a different (equally minimal) tree under a permutation. Result: partition agrees=True, noise moved on 0 of 90 points. Upstream's answer under the same tie is a cuRAND draw (DEVIATION 620); ours is a function of the row order
+check_permutation_invariance RECORDED [IDENTICAL]: dups_lattice48 has 1109 tied pairs of 1128, so the MST's index tie-break can select a different (equally minimal) tree under a permutation. Result: partition agrees=True, noise moved on 34 of 48 points. Upstream's answer under the same tie is a cuRAND draw (DEVIATION 620); ours is a function of the row order
+check_permutation_invariance RECORDED [IDENTICAL]: blob_plus_outlier41 has 71 tied pairs of 820, so the MST's index tie-break can select a different (equally minimal) tree under a permutation. Result: partition agrees=True, noise moved on 0 of 41 points. Upstream's answer under the same tie is a cuRAND draw (DEVIATION 620); ours is a function of the row order
+check_permutation_invariance RECORDED [IDENTICAL]: signed_zero48 has 108 tied pairs of 1128, so the MST's index tie-break can select a different (equally minimal) tree under a permutation. Result: partition agrees=True, noise moved on 0 of 48 points. Upstream's answer under the same tie is a cuRAND draw (DEVIATION 620); ours is a function of the row order
+check_permutation_invariance RECORDED [IDENTICAL]: pos_zero48 has 108 tied pairs of 1128, so the MST's index tie-break can select a different (equally minimal) tree under a permutation. Result: partition agrees=True, noise moved on 0 of 48 points. Upstream's answer under the same tie is a cuRAND draw (DEVIATION 620); ours is a function of the row order
+check_permutation_invariance RECORDED [IDENTICAL]: nested_ladder48 has 113 tied pairs of 1128, so the MST's index tie-break can select a different (equally minimal) tree under a permutation. Result: partition agrees=True, noise moved on 0 of 48 points. Upstream's answer under the same tie is a cuRAND draw (DEVIATION 620); ours is a function of the row order
+check_launch_invariance OK [IDENTICAL]: blobs96 labels, core distances and stabilities identical across tile 256/64, MST 256/128, mr 256/64, core 256/64, stability 256/64, select 256/64, a 1024-float NaN padding and a 37-float 1e30 padding; and 1369 mutual reachability cells identical alone and inside the full 96-row launch
+check_card_is_emitted OK [IDENTICAL]: 24 stages recorded, and two cards taken at two launch shapes are record-for-record identical (/tmp/hdbscan_check_card_a.trace, /tmp/hdbscan_check_card_b.trace)
+check_hdbscan_signed_zero_inputs OK [IDENTICAL]: a -0.0 coordinate on every row moves no core distance, no stability and no label against the +0.0 twin fixture
+check_hdbscan_selection_leaf OK [IDENTICAL]: the LEAF arm matches the oracle's leaf rule on all 7 fixtures. RECORDED: it differs from the EOM selection on 3 of them (so the two arms ARE distinguished by this suite)
+check_hdbscan_float64_reference OK [IDENTICAL]: blobs96 MST total relative error 2.842114932378355e-07 against a Float64 direct-form mutual reachability MST
+check_hdbscan_float64_reference OK [IDENTICAL]: gradient90 MST total relative error 2.5122830745964336e-08 against a Float64 direct-form mutual reachability MST
+check_hdbscan_float64_reference OK [IDENTICAL]: dups_lattice48 MST total relative error 5.588524766111424e-09 against a Float64 direct-form mutual reachability MST
+check_hdbscan_float64_reference OK [IDENTICAL]: blob_plus_outlier41 MST total relative error 8.133707822254955e-07 against a Float64 direct-form mutual reachability MST
+check_hdbscan_float64_reference OK [IDENTICAL]: signed_zero48 MST total relative error 1.0430641650687909e-06 against a Float64 direct-form mutual reachability MST
+check_hdbscan_float64_reference OK [IDENTICAL]: pos_zero48 MST total relative error 1.0430641650687909e-06 against a Float64 direct-form mutual reachability MST
+check_hdbscan_float64_reference OK [IDENTICAL]: nested_ladder48 MST total relative error 2.773660732781484e-05 against a Float64 direct-form mutual reachability MST
+check_hdbscan_sabotages OK: HDB_SAB_MR_TWO_WAY FAILED the mutual-reachability gate as required: 24 of 1128 pairs became asymmetric
+check_hdbscan_sabotages OK: HDB_SAB_CORE_KTH_PLUS_ONE FAILED the core-distance gate as required: 96 of 96 core distances moved
+check_hdbscan_sabotages OK: HDB_SAB_CONDENSE_DFS FAILED the condensed-tree gate as required on nested_ladder48: 30 condensed children moved (device 58 edges / 11 clusters, sabotaged 58 edges / 11 clusters)
+check_hdbscan_sabotages RECORDED: HDB_SAB_CONDENSE_DFS moved 0 condensed children on blobs96 (100 edges, 5 clusters). 0 is the DERIVED answer: 5 clusters means four cluster edges means two case-1 nodes, and two case-1 nodes in one tree are ancestor and descendant, an order both walks agree on
+check_hdbscan_sabotages OK: HDB_SAB_MST_ORIENT_RAW FAILED the condensed-tree gate as required on blobs96: 30 parents, 34 children and 6 sizes moved (DEVIATION 1614; the 2026-08-25 pre-pin failure was 30/34/6)
+check_hdbscan_sabotages OK: HDB_SAB_EOM_NO_UPDATE FAILED the selection gate as required on 2 of 7 fixtures: blobs96(0 flags, 0 labels, 1 stabilities) nested_ladder48(0 flags, 0 labels, 4 stabilities)
+check_hdbscan_sabotages RECORDED [IDENTICAL]: HDB_SAB_STABILITY_DESCENDING moved 1 of 5 stabilities on blobs96 (a summation order; a fixture whose segments are all one or two terms cannot separate the two directions, and that is a property of the fixture)
+check_hdbscan_sabotages RECORDED [IDENTICAL]: HDB_SAB_LAMBDA_STD_DIV moved 0 of 100 condensed lambdas on blobs96 (Apple's divide is correctly rounded, so 0 is the expected answer HERE; this is the arm that would move on a column whose divide is approximate -- the DEVIATION 258 shape, one operation over)
+check_hdbscan_sabotages RECORDED [IDENTICAL]: HDB_SAB_HW_MAX moved 0 of 16 PLANTED (+0, -0) cells; first none. IDENTITY_PATHS row 39: the stdlib max returns the SECOND operand on Apple and the IEEE-2019 maximum on NVIDIA and AMD, so this arm's answer is a fact about the toolchain. LLVM may also fold a maxnum into a compare-select, in which case 0 is a fact about the fold and not about the pin
+check_hdbscan_sabotages RECORDED [IDENTICAL]: HDB_SAB_SKIP_GUARDS -- the run still raised, from a guard this arm does not skip: hierarchy.pairwise_distances: 2 of 9216 distance cells are NaN (a non-finite input row, or two rows whose squared norms overflow Float32 so the expanded identity is inf - inf); refused by name (DEVIATION 623, IDENTITY_PATHS row 39): a computed NaN's payload is the vendor's and cannot sit in a recorded stage. FACT 2 (IDENTITY_PATHS row 39): Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD 0xffc00000. That is the byte DEVIATION 1607 keeps out of hdbscan.core_dists and hdbscan.mr.dists
+hdbscan_check mode=IDENTICAL ALL OK

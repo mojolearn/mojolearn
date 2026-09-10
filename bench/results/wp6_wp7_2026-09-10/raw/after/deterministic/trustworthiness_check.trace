@@ -1,0 +1,30 @@
+# knn n_index=523 n_queries=523 d=2 k=6 method=2 sqrt=True metric=L2SqrtExpanded metric_arg=2.0
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	523	8e770ebaab974fe8
+1	knn.query_norm	f32	523	8e770ebaab974fe8
+2	knn.out_dist	f32	3138	592519f66ab7ea29
+3	knn.out_idx	u32	3138	ff68b126c1d9d7db
+4	knn.sorted_dist	f32	3138	592519f66ab7ea29
+5	knn.sorted_idx	u32	3138	ff68b126c1d9d7db
+6	trust.emb_ind	u32	3138	ff68b126c1d9d7db
+7	trust.rank_sum	i64	1	cccd566c08bcdfed
+# knn n_index=523 n_queries=523 d=6 k=6 method=2 sqrt=True metric=L2SqrtExpanded metric_arg=2.0
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	523	122e781029eb8651
+1	knn.query_norm	f32	523	122e781029eb8651
+2	knn.out_dist	f32	3138	de9f39bca80629d0
+3	knn.out_idx	u32	3138	3c350fe3b564266a
+4	knn.sorted_dist	f32	3138	de9f39bca80629d0
+5	knn.sorted_idx	u32	3138	3c350fe3b564266a
+6	trust.emb_ind	u32	3138	3c350fe3b564266a
+7	trust.rank_sum	i64	1	a8c7f832281a39c5
+# knn n_index=523 n_queries=523 d=6 k=6 method=2 sqrt=True metric=L2SqrtExpanded metric_arg=2.0
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	523	1d59452c3a1be4e9
+1	knn.query_norm	f32	523	1d59452c3a1be4e9
+2	knn.out_dist	f32	3138	63dfd7df3e0f5574
+3	knn.out_idx	u32	3138	57623a8fea580ae3
+4	knn.sorted_dist	f32	3138	63dfd7df3e0f5574
+5	knn.sorted_idx	u32	3138	57623a8fea580ae3
+6	trust.emb_ind	u32	3138	57623a8fea580ae3
+7	trust.rank_sum	i64	1	b657d318f0c1377f

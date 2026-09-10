@@ -1,0 +1,5 @@
+14662 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32ce80000000, nodemask=1)
+14662 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b0600000000, nodemask=2)
+evaluating False
+PASS False eval generalized call
+{"arrays_captured": 26, "capture": "/root/gemm_leg_out/wp67/after/identical/byte_lm-0-eval.bin"}

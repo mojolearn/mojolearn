@@ -1,0 +1,131 @@
+9026 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b69c0000000, nodemask=2)
+Imported from /root/mojolearn/tsa/checks/stationarity_check.mojo:100:
+Imported from /root/mojolearn/tsa/impl/timeSeries/stationarity.mojo:95:
+/root/mojolearn/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/tsa/checks/stationarity_check.mojo:100:
+Imported from /root/mojolearn/tsa/impl/timeSeries/stationarity.mojo:95:
+/root/mojolearn/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/tsa/checks/stationarity_check.mojo:100:
+Imported from /root/mojolearn/tsa/impl/timeSeries/stationarity.mojo:95:
+/root/mojolearn/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/tsa/checks/stationarity_check.mojo:100:
+Imported from /root/mojolearn/tsa/impl/timeSeries/stationarity.mojo:95:
+/root/mojolearn/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+9026 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x535540000000, nodemask=1)
+== tsa/checks/stationarity_check.mojo [IDENTICAL] STATS_TPB=128 N_OBS=520 ==
+check_kpss_device_equals_oracle [IDENTICAL]
+  (d, D, s) = (0, 0, 0)
+    y_diff: 4160 cells, 0 differ
+    y_means: 8 cells, 0 differ
+    y_cent: 4160 cells, 0 differ
+    s2A: 8 cells, 0 differ
+    s2B: 8 cells, 0 differ
+    cumsum: 4160 cells, 0 differ
+    eta: 8 cells, 0 differ
+    stat: 8 cells, 0 differ
+    flags: 0 of 8 differ
+    lags = 19
+  (d, D, s) = (1, 0, 0)
+    y_diff: 4152 cells, 0 differ
+    y_means: 8 cells, 0 differ
+    y_cent: 4152 cells, 0 differ
+    s2A: 8 cells, 0 differ
+    s2B: 8 cells, 0 differ
+    cumsum: 4152 cells, 0 differ
+    eta: 8 cells, 0 differ
+    stat: 8 cells, 0 differ
+    flags: 0 of 8 differ
+    lags = 19
+  (d, D, s) = (2, 0, 0)
+    y_diff: 4144 cells, 0 differ
+    y_means: 8 cells, 0 differ
+    y_cent: 4144 cells, 0 differ
+    s2A: 8 cells, 0 differ
+    s2B: 8 cells, 0 differ
+    cumsum: 4144 cells, 0 differ
+    eta: 8 cells, 0 differ
+    stat: 8 cells, 0 differ
+    flags: 0 of 8 differ
+    lags = 19
+  (d, D, s) = (0, 1, 4)
+    y_diff: 4128 cells, 0 differ
+    y_means: 8 cells, 0 differ
+    y_cent: 4128 cells, 0 differ
+    s2A: 8 cells, 0 differ
+    s2B: 8 cells, 0 differ
+    cumsum: 4128 cells, 0 differ
+    eta: 8 cells, 0 differ
+    stat: 8 cells, 0 differ
+    flags: 0 of 8 differ
+    lags = 19
+  (d, D, s) = (1, 1, 4)
+    y_diff: 4120 cells, 0 differ
+    y_means: 8 cells, 0 differ
+    y_cent: 4120 cells, 0 differ
+    s2A: 8 cells, 0 differ
+    s2B: 8 cells, 0 differ
+    cumsum: 4120 cells, 0 differ
+    eta: 8 cells, 0 differ
+    stat: 8 cells, 0 differ
+    flags: 0 of 8 differ
+    lags = 19
+check_kpss_matches_float64 [IDENTICAL]
+    d=0 D=0 ar1_phi0.5: f32 0.06711778044700623 f64 0.06711782613283865 rel 6.806810508475513e-07
+    d=0 D=0 random_walk: f32 1.2836899757385254 f64 1.283689019845494 rel 7.446453281269108e-07
+    d=0 D=0 ar1_phi0.9: f32 0.21574094891548157 f64 0.21574091724696953 rel 1.4678954942377547e-07
+    d=0 D=0 random_walk_x2^-66: f32 47.03968811035156 f64 2.372699883966438 rel 18.825384756084446 (FTZ-dominated by construction: reported, not asserted)
+    d=0 D=0 linear_trend: f32 2.7037079334259033 f64 2.703708031692118 rel 3.634498014172252e-08
+    d=0 D=0 ma1_theta0.6: f32 0.1972968876361847 f64 0.19729679859077429 rel 4.513271935599145e-07
+    d=0 D=0 ar1_with_neg_zero: f32 0.36325329542160034 f64 0.36325341944898104 rel 3.414348607844944e-07
+    d=1 D=0 ar1_phi0.5: f32 0.0314439982175827 f64 0.031443959048103265 rel 1.2456917202377562e-06
+    d=1 D=0 random_walk: f32 0.22616250813007355 f64 0.22616388043454652 rel 6.067743754384556e-06
+    d=1 D=0 ar1_phi0.9: f32 0.03283637389540672 f64 0.03283638198936948 rel 2.464937446394797e-07
+    d=1 D=0 random_walk_x2^-66: f32 0.0 f64 0.10806423166123877 rel 1.0 (FTZ-dominated by construction: reported, not asserted)
+    d=1 D=0 ma1_theta0.6: f32 0.028599798679351807 f64 0.028599777118790387 rel 7.53871658859467e-07
+    d=1 D=0 ar1_with_neg_zero: f32 0.02086210437119007 f64 0.020862125225437143 rel 9.996223705357972e-07
+    d=0 D=1 ar1_phi0.5: f32 0.04806026816368103 f64 0.04806033939704805 rel 1.4821652928620626e-06
+    d=0 D=1 random_walk: f32 0.22817033529281616 f64 0.22817001155322755 rel 1.4188524881306473e-06
+    d=0 D=1 ar1_phi0.9: f32 0.03607066720724106 f64 0.03607068425086074 rel 4.7250613721966254e-07
+    d=0 D=1 random_walk_x2^-66: f32 0.0 f64 0.10793920837805206 rel 1.0 (FTZ-dominated by construction: reported, not asserted)
+    d=0 D=1 ma1_theta0.6: f32 0.053086891770362854 f64 0.053086932901478937 rel 7.747879531642459e-07
+    d=0 D=1 ar1_with_neg_zero: f32 0.018157048150897026 f64 0.01815704488931769 rel 1.7963161716865984e-07
+check_kpss_constant_series_is_defined [IDENTICAL]
+    d=0 constant: stat 0x00000000 stationary True
+    d=1 linear_trend: stat 0x00000000 stationary True
+check_kpss_refuses_by_name [IDENTICAL]
+    n_obs <= d + s*D: raised: stationarity: n_obs (16) must be greater than d + s*D (17)
+    D > 0 with s < 2: raised: prepare_data: seasonal differencing needs s >= 2 (s=1), refused by name (arima.pyx:310)
+    d + D > 2: raised: prepare_data: d + D must be <= 2 (d=2, D=1), refused by name (arima.pyx:313)
+    NaN in y: raised: kpss_test: y contains a non-finite value at index 5; missing or infinite observations are refused by name
+    inf in y: raised: kpss_test: y contains a non-finite value at index 7; missing or infinite observations are refused by name
+check_kpss_launch_invariant [IDENTICAL]
+    elem 256/no pad vs elem 64/pad 37 poisoned: 0 cells differ
+    elem 128/pad 37 of -0.0: 0 cells differ
+    batch of 8 vs batch of 3 [3, 0, 7]: 0 cells differ
+    run twice: 0 cells differ
+check_kpss_fold_order_is_visible [IDENTICAL]
+    descending fold moves 7 of 8 statistics; Float64 fold moves 2
+check_kpss_ftz_seam_is_reached [IDENTICAL]
+    random_walk_x2^-66: device s2A 0x05275bd4, oracle with ftz 0x05275bd4, oracle without ftz 0x052ec0b0
+check_select_d [IDENTICAL]
+    ar1_phi0.5: d = 0 (host replay 0)
+    random_walk: d = 1 (host replay 1)
+    ar1_phi0.9: d = 0 (host replay 0)
+    random_walk_x2^-66: d = 1 (host replay 1)
+    constant: d = 0 (host replay 0)
+    linear_trend: d = 1 (host replay 1)
+    ma1_theta0.6: d = 0 (host replay 0)
+    ar1_with_neg_zero: d = 0 (host replay 0)
+ALL TSA CHECKS PASSED [IDENTICAL]

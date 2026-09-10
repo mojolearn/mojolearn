@@ -1,0 +1,103 @@
+34329 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x307640000000, nodemask=1)
+== mojolearn.tests.test_svr_surface ==
+   surface mojolearn.SVR (svm/, epsilon-SVR)
+
+  PROVENANCE
+    pass the loaded binary exports svr_fit
+    pass the loaded binary exports svr_predict
+    pass the binary reports a tier it knows
+
+  REFUSALS
+    pass kernel='poly' is refused by name
+    pass kernel='sigmoid' is refused by name
+    pass kernel='precomputed' is refused by name
+    pass an unknown kernel name is refused
+    pass gamma='scale' is refused and names the deviation
+    pass an unknown gamma name is refused
+    pass a negative gamma is refused
+    pass degree is refused, naming the kernel that would read it
+    pass coef0 is refused, naming the kernels that would read it
+    pass a non-positive C is refused
+    pass a non-finite C is refused
+    pass a non-positive tol is refused
+    pass a non-positive cache_size is refused
+    pass max_iter=0 is refused
+    pass a negative nochange_steps is refused
+    pass verbose is refused, naming what it would have selected
+    pass output_type is refused
+    pass shrinking is not a parameter of this class and says so
+    pass sample_weight is refused in fit()
+    pass a 2-D y is refused
+    pass a y of the wrong length is refused
+    pass a 1-D X is refused
+    pass predict before fit is refused
+    pass a predict X with the wrong width is refused
+    pass a negative epsilon is refused BY THE SOLVER'S scope check
+    pass a non-finite epsilon is refused BY THE SOLVER'S scope check
+    pass a NaN target is refused BY NAME with its index (DEVIATION 636)
+    pass a non-finite X cell is refused BY NAME (DEVIATION 636)
+
+  PLANTED
+    pass the fit found at least one support vector
+    pass n_features_in_ is the width of X
+    pass n_iter_ came back positive
+    pass coef_ recovers the planted weights
+    pass intercept_ recovers the planted offset
+    pass predict reproduces the training targets to the noise floor
+    pass score() is a high R^2 on a noiseless fit
+    pass kernel='rbf' fits the same problem (its own two kernels run)
+
+  TUBE
+    pass n_support_ does not grow from epsilon=0.0000 to 0.0200
+    pass n_support_ does not grow from epsilon=0.0200 to 0.0600
+    pass n_support_ does not grow from epsilon=0.0600 to 0.1500
+    pass n_support_ does not grow from epsilon=0.1500 to 0.5000
+    pass the widest tube is STRICTLY smaller than the narrowest
+    pass every NON-support row lies inside the tube
+    pass a narrow tube still fits
+    pass the widest tube does not fit BETTER than the narrow one
+
+  SHAPES
+    pass n_support_ is at most n_rows, never 2 * n_rows
+    pass dual_coef_ is (1, n_support_)
+    pass support_ is (n_support_,)
+    pass support_vectors_ is (n_support_, n_features)
+    pass intercept_ is (1,)
+    pass the model arrays are float32
+    pass support_ is int32
+    pass every support index is a row of X
+    pass the support indices are distinct and ascending
+    pass support_vectors_ ARE the rows support_ names
+    pass every folded dual coefficient is bounded by C
+    pass coef_ raises AttributeError for a non-linear kernel
+
+  INVARIANCE
+    pass [REPORT, not asserted] row 7 alone == row 7 inside the full call: MOVED -- 1 of 1 cells differ; first at flat index 0, 0x3f30e8d0 vs 0x3f30e8d8
+    pass [REPORT, not asserted] rows 40:73 as a block == the same rows inside the full call: same
+    pass [REPORT, not asserted] the whole matrix through a 0.001038 MiB predict buffer == one batch: same
+    pass [REPORT, not asserted] kernel='linear': row 99 alone == row 99 in the batch: MOVED -- 1 of 1 cells differ; first at flat index 0, 0xbd5fdda0 vs 0xbd5fed40
+
+  GAMMA
+    pass 'auto' resolves to 1 / n_features
+    pass [REPORT, not asserted] gamma='auto' == the same number written out: same
+    pass gamma='auto' agrees with the same number to float32 tolerance in EVERY tier
+    pass a DIFFERENT gamma gives a different answer, so the row above is not vacuous
+
+  binary tier   fast
+  env asked for fast
+  vendor        cuda
+
+  planted   n=150 k=5  linear n_SV=150 R2=0.998445  rbf n_SV=148
+
+  tube      epsilon  0.0000   0.0200   0.0600   0.1500   0.5000
+            n_SV        150      107        7        6        5
+            R^2      0.9984   0.9985   0.9984   0.9919   0.9193
+
+  67 checks, 0 failed
+
+test_svr_surface: the fast arms passed. The tube, the shapes, the
+planted recovery and the refusals hold. THE BITWISE ARMS WERE
+REPORTED, NOT ASSERTED: this tier promises speed only and its
+bits are allowed to move. Re-run under
+MOJOLEARN_NUMERIC_MODE=identical for the asserted form.
+{"arrays_captured": 23, "capture": "/root/gemm_leg_out/wp67/after/fast/svr.bin"}

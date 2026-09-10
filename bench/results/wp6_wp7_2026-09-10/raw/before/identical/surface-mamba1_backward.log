@@ -1,0 +1,8 @@
+2941 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19e100000000, nodemask=2)
+2941 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33b4c0000000, nodemask=1)
+..s..
+----------------------------------------------------------------------
+Ran 5 tests in 2.730s
+
+OK (skipped=1)
+{"arrays_captured": 88, "capture": "/root/gemm_leg_out/wp67/before/identical/mamba1_backward.bin"}

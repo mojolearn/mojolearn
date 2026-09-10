@@ -1,0 +1,4 @@
+6305 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11a740000000, nodemask=1)
+training False 0
+PASS False train generalized call
+{"arrays_captured": 15, "capture": "/root/gemm_leg_out/wp67/before/identical/byte_lm-0-train.bin"}

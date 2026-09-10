@@ -1,0 +1,811 @@
+19920 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x791700000000, nodemask=2)
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:88:
+/root/wp67-compile/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:88:
+/root/wp67-compile/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:88:
+/root/wp67-compile/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:88:
+/root/wp67-compile/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:134:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:76:
+Imported from /root/wp67-compile/core/row_norms.mojo:60:
+/root/wp67-compile/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:134:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:76:
+Imported from /root/wp67-compile/core/row_norms.mojo:60:
+/root/wp67-compile/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:134:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:76:
+Imported from /root/wp67-compile/core/row_norms.mojo:60:
+/root/wp67-compile/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:134:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:76:
+Imported from /root/wp67-compile/core/row_norms.mojo:60:
+/root/wp67-compile/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:221:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:222:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:223:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:224:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:225:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_BACK_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:226:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt32(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:252:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:253:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:254:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:266:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:268:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:273:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:331:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:332:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:338:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:339:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:343:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:344:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:345:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:345:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:348:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:352:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:352:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:354:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:158:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_radix.mojo:356:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var needed = Int(ctr[CTR_K])
+                             ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:88:
+/root/wp67-compile/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:202:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:203:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:204:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:205:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:206:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt64(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:230:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:231:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:232:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:242:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:244:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:249:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:293:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:294:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:299:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:300:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:302:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:303:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:304:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:304:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:309:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:312:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:312:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:318:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:360:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_val[slot] = o_val.unsafe_load(slot)
+        ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:361:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_idx[slot] = o_idx.unsafe_load(slot)
+        ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:366:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[slot], s_idx[slot], select_min)
+                                  ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:366:53: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[slot], s_idx[slot], select_min)
+                                               ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:369:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                             ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:369:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:371:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_val.unsafe_store(rank, s_val[slot])
+                                 ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:150:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/wp67-compile/neighbors/checks/select_radix_identical.mojo:372:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_idx.unsafe_store(rank, s_idx[slot])
+                                 ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:442:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:451:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:465:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:467:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        regy[j] = sy[
+                                  ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:481:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:492:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[
+                                    ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:514:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:524:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:538:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:639:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:670:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:675:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:180:
+/root/wp67-compile/neighbors/impl/detail/fused_l2_knn.mojo:745:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:81:
+Imported from /root/wp67-compile/cluster/impl/kmeans.mojo:39:
+Imported from /root/wp67-compile/cluster/impl/detail/min_cluster_distance_compute.mojo:73:
+/root/wp67-compile/cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:477:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    s_xnorm[i] = nv
+                    ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:81:
+Imported from /root/wp67-compile/cluster/impl/kmeans.mojo:39:
+Imported from /root/wp67-compile/cluster/impl/detail/min_cluster_distance_compute.mojo:73:
+/root/wp67-compile/cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:485:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                s_ynorm[i2] = nv2
+                ~~~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:81:
+Imported from /root/wp67-compile/cluster/impl/kmeans.mojo:39:
+Imported from /root/wp67-compile/cluster/impl/detail/min_cluster_distance_compute.mojo:73:
+/root/wp67-compile/cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:493:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                rxn[i] = s_xnorm[i * tr + accrowid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:81:
+Imported from /root/wp67-compile/cluster/impl/kmeans.mojo:39:
+Imported from /root/wp67-compile/cluster/impl/detail/min_cluster_distance_compute.mojo:73:
+/root/wp67-compile/cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:496:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                ryn[j] = s_ynorm[j * tc + acccolid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:75:
+/root/wp67-compile/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:75:
+/root/wp67-compile/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:684:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    val_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:689:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    idx_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:134:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/wp67-compile/cluster/impl/detail/kmeans.mojo:63:
+/root/wp67-compile/cluster/checks/plus_plus.mojo:247:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        carry[0] = Float32(0.0)
+        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:134:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/wp67-compile/cluster/impl/detail/kmeans.mojo:63:
+/root/wp67-compile/cluster/checks/plus_plus.mojo:258:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            csum.unsafe_store(i, base + carry[0] + inc)
+                                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:134:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/wp67-compile/cluster/impl/detail/kmeans.mojo:63:
+/root/wp67-compile/cluster/checks/plus_plus.mojo:261:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+            ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:134:
+Imported from /root/wp67-compile/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/wp67-compile/cluster/impl/detail/kmeans.mojo:63:
+/root/wp67-compile/cluster/checks/plus_plus.mojo:261:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:537:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:550:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:307:22: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                heads[page + warp] = group_min
+                ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:309:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var winner = heads[page]
+                         ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:311:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var other = heads[page + w]
+                            ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:325:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            heads[tid] = mine
+            ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:330:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var other = heads[tid + stride]
+                                ~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:331:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    if other < heads[tid]:
+                               ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:332:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        heads[tid] = other
+                        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:335:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var winner = heads[0]
+                         ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:440:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            keys[slot] = composite_key(v, running_indices.unsafe_load(row * k + slot), select_min)
+            ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:441:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            vals[slot] = v
+            ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:444:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            keys[slot] = composite_key(v, partial_indices.unsafe_load(row * k + slot - k) + base, select_min)
+            ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:445:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            vals[slot] = v
+            ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:450:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key = keys[slot]
+                  ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:460:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if keys[j] < key:
+               ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:113:
+/root/wp67-compile/neighbors/checks/select_smallk_identical_candidate.mojo:463:61: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            running_values.unsafe_store(row * k + rank, vals[slot])
+                                                        ~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:301:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:432:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:624:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_val: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:629:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_idx: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:571:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_val: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:576:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_idx: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:518:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:601:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:647:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:666:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:283:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:367:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/wp67-compile/ivf/checks/ivf_check.mojo:156:
+Imported from /root/wp67-compile/neighbors/estimator.mojo:128:
+Imported from /root/wp67-compile/neighbors/impl/detail/knn_brute_force.mojo:174:
+/root/wp67-compile/neighbors/impl/matrix/detail/select_warpsort.mojo:375:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Included from /root/wp67-compile/ivf/checks/ivf_check.mojo:81:
+Included from /root/wp67-compile/cluster/impl/kmeans.mojo:39:
+/root/wp67-compile/cluster/impl/detail/min_cluster_distance_compute.mojo:197:41: warning: assignment to 'data_batch' was never used; assign to '_' instead?
+    var data_batch = get_data_batch_size(batch_samples, n_samples)
+                                        ^
+Included from /root/wp67-compile/ivf/checks/ivf_check.mojo:81:
+Included from /root/wp67-compile/cluster/impl/kmeans.mojo:39:
+/root/wp67-compile/cluster/impl/detail/min_cluster_distance_compute.mojo:198:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+ivf_check mode=IDENTICAL
+check_nprobe_equals_nlists_is_brute_force OK [IDENTICAL]: 120 slots, distances AND indices bit for bit against neighbors/ knn_search's TILED arm; every query scored all 320 candidates
+  refused  algorithm=ivf_pq: ivf_pq: NOT IMPLEMENTED. cuvs/src/neighbors/ivf_pq/ is a different algorithm (product quantization, a codebook per subspace and a LUT scan), out of this lane's scope by its brief. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=hnsw: hnsw: REFUSED PERMANENTLY in this repository. cuVS's cpp/include/cuvs/neighbors/hnsw.hpp dispatches to the hnswlib CPU graph; it is not a GPU algorithm and ENGINEERING_RULES.md 0b-ii says there is no CPU path here. This is a refusal, not an unimplemented item, and it does not become one later.
+  refused  algorithm=cagra: cagra: NOT IMPLEMENTED. cuvs/src/neighbors/cagra.cuh is a graph index, out of this lane's scope by its brief. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=ivf_sq: ivf_sq: NOT IMPLEMENTED (cuvs/src/neighbors/ivf_sq/, scalar quantization over an IVF index). See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=ivf_rabitq: ivf_rabitq: NOT IMPLEMENTED (cuvs/src/neighbors/ivf_rabitq/). See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=scann: scann: NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=vamana: vamana: NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=nn_descent: nn_descent: NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  metric=cosine: ivf_flat: metric 'cosine' is CosineExpanded, which is ivf_flat_search.cuh:130-141's own arm (a per-cell divide by the norm product) and is NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  metric=inner_product: ivf_flat: metric 'inner_product' takes ivf_flat_search.cuh:142-145's default arm (alpha=1, beta=0, select_max) and is NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  metric=hamming: ivf_flat: unknown metric 'hamming'. This implementation carries l2_expanded and l2_sqrt_expanded.
+  refused  metric=CosineExpanded: ivf_flat build: metric CosineExpanded is not implemented; this implementation carries L2Expanded and L2SqrtExpanded (ivf_flat_search.cuh:110-129's arm).
+  refused  kmeans_trainset_fraction=0.5 (DEVIATION 1781): ivf_flat build: kmeans_trainset_fraction = 0.5 is REFUSED (DEVIATION 1781). Their trainset row count (ivf_flat_build.cuh:416-418) is a truncated float product, so near an integer boundary two hosts train the quantizer on DIFFERENT ROWS and the whole index differs. Only 1.0 (the whole dataset, no truncation) is accepted. Closure: implementation their stride as exact integer arithmetic, the way IDENTITY_PATHS row 18 closed compute_max_features.
+  refused  adaptive_centers=True: ivf_flat build: adaptive_centers=True is NOT IMPLEMENTED (DEVIATION 1793). Their own header says it makes the centroids depend on the ORDER new data is added in (ivf_flat.hpp:41-46); that is an order dependence in the index itself, and extend() is not implemented either.
+  refused  conservative_memory_allocation=True: ivf_flat build: conservative_memory_allocation is NOT IMPLEMENTED (DEVIATION 1782). It selects `align_max` for their per-list allocation (ivf_flat.hpp:96-100); this implementation lays the lists out CSR and has no per-list allocation to align.
+  refused  add_data_on_build=False: ivf_flat build: add_data_on_build=False is NOT IMPLEMENTED (DEVIATION 1793). It leaves the index trained and empty for a later extend(), and extend() is not implemented. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  n_lists > n_rows (their :404): ivf_flat build: number of rows (320) can't be less than n_lists (321), their RAFT_EXPECTS at ivf_flat_build.cuh:404
+  refused  n_probes=0: ivf_flat search: n_probes (number of clusters to probe) must be positive, their RAFT_EXPECTS at ivf_flat_search.cuh:329
+  refused  n_probes=7: ivf_flat search: n_probes (7) exceeds n_lists (6). Theirs clamps at ivf_flat_search.cuh:331; this implementation REFUSES, because n_probes is a numeric parameter (DEVIATION 1787) and a clamped one is a card that does not say which computation ran.
+  refused  NaN in the dataset: ivf_flat: dataset value at flat position 3 (row 1, column 1) is not finite. Every stage here is a card stage and a computed NaN carries the vendor's payload (IDENTITY_PATHS row 39).
+  refused  +inf in the dataset: ivf_flat: dataset value at flat position 1 (row 0, column 1) is not finite. Every stage here is a card stage and a computed NaN carries the vendor's payload (IDENTITY_PATHS row 39).
+  refused  probed lists hold fewer than k: ivf_flat search: query 0 probes 1 lists holding 1 vectors between them, fewer than k = 5. Their kOutOfBoundsRecord short-fill (ivf_common.cuh:106-108) is not implemented. Raise n_probes, or lower k, or rebuild with fewer lists.
+check_ivf_refusals OK [IDENTICAL]: 22 refusals by name; ivf_flat, both implemented metrics and the default parameter set all resolve
+check_list_layout_and_index_carry OK [IDENTICAL]: offsets partition 320 rows, the carry is a permutation and ascends within every list, list_data matches x[carry] bit for bit, and IVF_SAB_CARRY_POSITION moves 4 of 5 returned identities
+check_empty_list OK [IDENTICAL]: list 2 empty, all 6 probed, answer bit-identical to brute force; IVF_SAB_EMPTY_COUNTS_ONE overcounts to 321
+check_assignment_ties OK [IDENTICAL]: 8 exactly equidistant points to list 0 in both centroid orders; the probe tie goes to the lower id and IVF_SAB_PROBE_TIE_HIGH flips it
+check_quantizer_is_reproducible OK [IDENTICAL]: two builds, same 36 centroid bytes, same 6 norms, same 320 labels and layout slots. ONE DEVICE, ONE PROCESS: rows 9, 10 and 12 cannot fail this and E1 is not shortened by it.
+check_search_vs_oracle OK [IDENTICAL]: 360 slots over hashed / duplicate / signed-zero fixtures, every distance AND index bit for bit against the serial oracle
+  REPORT recall@k=5 n_probes=1 of 6 = 0.8166666666666667  (1286 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=2 of 6 = 0.9833333333333333  (2607 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=3 of 6 = 1.0  (3911 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=4 of 6 = 1.0  (5187 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=6 of 6 = 1.0  (7680 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+check_recall_is_reported OK [IDENTICAL]: 5 n_probes values REPORTED; the only assertion is recall == 1.0 at n_probes == n_lists
+check_launch_invariance OK [IDENTICAL]: 120 slots unmoved across tile_tpb 256/64, expand_tpb 256/64, a workspace padded by 157 cells, and query 5 alone versus inside 24
+check_card_is_emitted OK [IDENTICAL]: 78 records, 15 ivf.* stages plus 63 ivf.quantizer.* stages, two runs record-identical
+check_ivf_sabotages OK [IDENTICAL]: the production merge ascends over 128 candidates; IVF_SAB_LIST_ARRIVAL_ORDER breaks it at 12 positions and IVF_SAB_MERGE_PROBE_ORDER at 1
+ivf_check mode=IDENTICAL ALL OK

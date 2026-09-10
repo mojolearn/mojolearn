@@ -1,0 +1,8 @@
+........................................................................ [ 81%]
+................                                                         [100%]
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type _ByteLMSession has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+88 passed, 1 warning in 1.15s

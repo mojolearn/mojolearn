@@ -1,0 +1,26 @@
+5862 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x111580000000, nodemask=1)
+training False 0
+training False 1
+Timeout (0:00:30)!
+Thread 0x00007029b55ee000 (most recent call first):
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 457 in _run_impl
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 409 in _run
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 486 in train_step
+  File "/root/wp67_lm_surface.py", line 17 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 98 in _run_module_code
+  File "<frozen runpy>", line 291 in run_path
+  File "/root/wp67_surface_capture.py", line 64 in main
+  File "/root/wp67_surface_capture.py", line 79 in <module>
+Timeout (0:00:30)!
+Thread 0x00007029b55ee000 (most recent call first):
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 457 in _run_impl
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 409 in _run
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 486 in train_step
+  File "/root/wp67_lm_surface.py", line 17 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 98 in _run_module_code
+  File "<frozen runpy>", line 291 in run_path
+  File "/root/wp67_surface_capture.py", line 64 in main
+  File "/root/wp67_surface_capture.py", line 79 in <module>
+Terminated

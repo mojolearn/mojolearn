@@ -1,0 +1,42 @@
+35322 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x325900000000, nodemask=1)
+ivf_check mode=FAST
+check_nprobe_equals_nlists_is_brute_force REPORT [FAST]: 45 of 120 distances and 0 indices differ from the tiled brute force. A REPORT and not an assertion: the FAST distances come from MAX's matmul, called at m=1 here and m=n_queries there, and the FAST selector resolves a tie by atomic arrival.
+  refused  algorithm=ivf_pq: ivf_pq: NOT IMPLEMENTED. cuvs/src/neighbors/ivf_pq/ is a different algorithm (product quantization, a codebook per subspace and a LUT scan), out of this lane's scope by its brief. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=hnsw: hnsw: REFUSED PERMANENTLY in this repository. cuVS's cpp/include/cuvs/neighbors/hnsw.hpp dispatches to the hnswlib CPU graph; it is not a GPU algorithm and ENGINEERING_RULES.md 0b-ii says there is no CPU path here. This is a refusal, not an unimplemented item, and it does not become one later.
+  refused  algorithm=cagra: cagra: NOT IMPLEMENTED. cuvs/src/neighbors/cagra.cuh is a graph index, out of this lane's scope by its brief. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=ivf_sq: ivf_sq: NOT IMPLEMENTED (cuvs/src/neighbors/ivf_sq/, scalar quantization over an IVF index). See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=ivf_rabitq: ivf_rabitq: NOT IMPLEMENTED (cuvs/src/neighbors/ivf_rabitq/). See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=scann: scann: NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=vamana: vamana: NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  algorithm=nn_descent: nn_descent: NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  metric=cosine: ivf_flat: metric 'cosine' is CosineExpanded, which is ivf_flat_search.cuh:130-141's own arm (a per-cell divide by the norm product) and is NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  metric=inner_product: ivf_flat: metric 'inner_product' takes ivf_flat_search.cuh:142-145's default arm (alpha=1, beta=0, select_max) and is NOT IMPLEMENTED. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  metric=hamming: ivf_flat: unknown metric 'hamming'. This implementation carries l2_expanded and l2_sqrt_expanded.
+  refused  metric=CosineExpanded: ivf_flat build: metric CosineExpanded is not implemented; this implementation carries L2Expanded and L2SqrtExpanded (ivf_flat_search.cuh:110-129's arm).
+  refused  kmeans_trainset_fraction=0.5 (DEVIATION 1781): ivf_flat build: kmeans_trainset_fraction = 0.5 is REFUSED (DEVIATION 1781). Their trainset row count (ivf_flat_build.cuh:416-418) is a truncated float product, so near an integer boundary two hosts train the quantizer on DIFFERENT ROWS and the whole index differs. Only 1.0 (the whole dataset, no truncation) is accepted. Closure: implementation their stride as exact integer arithmetic, the way IDENTITY_PATHS row 18 closed compute_max_features.
+  refused  adaptive_centers=True: ivf_flat build: adaptive_centers=True is NOT IMPLEMENTED (DEVIATION 1793). Their own header says it makes the centroids depend on the ORDER new data is added in (ivf_flat.hpp:41-46); that is an order dependence in the index itself, and extend() is not implemented either.
+  refused  conservative_memory_allocation=True: ivf_flat build: conservative_memory_allocation is NOT IMPLEMENTED (DEVIATION 1782). It selects `align_max` for their per-list allocation (ivf_flat.hpp:96-100); this implementation lays the lists out CSR and has no per-list allocation to align.
+  refused  add_data_on_build=False: ivf_flat build: add_data_on_build=False is NOT IMPLEMENTED (DEVIATION 1793). It leaves the index trained and empty for a later extend(), and extend() is not implemented. See ivf/NOT_IMPLEMENTED.tsv.
+  refused  n_lists > n_rows (their :404): ivf_flat build: number of rows (320) can't be less than n_lists (321), their RAFT_EXPECTS at ivf_flat_build.cuh:404
+  refused  n_probes=0: ivf_flat search: n_probes (number of clusters to probe) must be positive, their RAFT_EXPECTS at ivf_flat_search.cuh:329
+  refused  n_probes=7: ivf_flat search: n_probes (7) exceeds n_lists (6). Theirs clamps at ivf_flat_search.cuh:331; this implementation REFUSES, because n_probes is a numeric parameter (DEVIATION 1787) and a clamped one is a card that does not say which computation ran.
+  refused  NaN in the dataset: ivf_flat: dataset value at flat position 3 (row 1, column 1) is not finite. Every stage here is a card stage and a computed NaN carries the vendor's payload (IDENTITY_PATHS row 39).
+  refused  +inf in the dataset: ivf_flat: dataset value at flat position 1 (row 0, column 1) is not finite. Every stage here is a card stage and a computed NaN carries the vendor's payload (IDENTITY_PATHS row 39).
+  refused  k = SELECT_BLOCK + 1 = 257: ivf_flat: selection k exceeds the mode's bounded rank capacity 256
+  refused  probed lists hold fewer than k: ivf_flat search: query 0 probes 1 lists holding 1 vectors between them, fewer than k = 5. Their kOutOfBoundsRecord short-fill (ivf_common.cuh:106-108) is not implemented. Raise n_probes, or lower k, or rebuild with fewer lists.
+check_ivf_refusals OK [FAST]: 23 refusals by name; ivf_flat, both implemented metrics and the default parameter set all resolve
+check_list_layout_and_index_carry OK [FAST]: offsets partition 320 rows, the carry is a permutation and ascends within every list, list_data matches x[carry] bit for bit, and IVF_SAB_CARRY_POSITION moves 4 of 5 returned identities
+check_empty_list OK [FAST]: list 2 empty, all 6 probed, candidate counts exact, IVF_SAB_EMPTY_COUNTS_ONE overcounts to 321; the 50 value differences against brute force are a REPORT under FAST (see check_nprobe_equals_nlists_is_brute_force)
+check_assignment_ties OK [FAST]: 8 exactly equidistant points to list 0 in both centroid orders; the probe tie goes to the lower id and IVF_SAB_PROBE_TIE_HIGH flips it
+check_quantizer_is_reproducible OK [FAST]: two builds, same 36 centroid bytes, same 6 norms, same 320 labels and layout slots. ONE DEVICE, ONE PROCESS: rows 9, 10 and 12 cannot fail this and E1 is not shortened by it.
+check_search_vs_oracle REPORT [FAST]: 148 of 360 slots differ from the serial oracle. A REPORT: under FAST the distances are MAX's matmul and the selector resolves a tie by atomic arrival, and no host can replay either.
+  REPORT recall@k=5 n_probes=1 of 6 = 0.8166666666666667  (1286 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=2 of 6 = 0.9833333333333333  (2607 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=3 of 6 = 1.0  (3911 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=4 of 6 = 1.0  (5187 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=6 of 6 = 1.0  (7680 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+check_recall_is_reported OK [FAST]: 5 n_probes values REPORTED; the only assertion is recall == 1.0 at n_probes == n_lists
+check_launch_invariance REPORT [FAST]: tile_tpb moved 0, expand_tpb moved 0, alone-vs-batch moved 0 of 240. A REPORT under FAST: the vendor matmul is entitled to a different k-split per shape, so the batch arm in particular is expected to move.
+check_card_is_emitted OK [FAST]: 78 records, 15 ivf.* stages plus 63 ivf.quantizer.* stages, two runs record-identical
+check_ivf_sabotages OK [FAST]: the production merge ascends over 128 candidates; IVF_SAB_LIST_ARRIVAL_ORDER breaks it at 12 positions and IVF_SAB_MERGE_PROBE_ORDER at 1
+ivf_check mode=FAST ALL OK

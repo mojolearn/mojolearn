@@ -1,0 +1,43 @@
+34189 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70cc40000000, nodemask=1)
+
+  PROVENANCE
+    pass the _mojolearn_gp binding loads
+    pass the binding's tier is the requested tier
+
+  REFUSALS
+    pass optimizer='fmin_l_bfgs_b' (sklearn's default) is refused
+    pass n_restarts_optimizer=3 is refused
+    pass normalize_y=True is refused
+    pass copy_X_train=False is refused
+    pass random_state=0 is refused
+    pass a non-Kernel kernel object is refused
+    pass a 2-D y is refused by name
+    pass predict(return_cov=True) is refused
+    pass sample_y is refused with the closure condition
+    pass Matern nu=0.7 is refused at fit, in Mojo, by name
+    pass alpha=NaN is refused at fit, in Mojo, by name
+
+  POSTERIOR
+    pass the factorization succeeded
+    pass L_ is (n, n) and alpha_ (the dual vector) is (n,)
+    pass the posterior mean recovers the training targets
+    pass every std is non-negative
+    pass the per-point clamp flags and their count agree (DEVIATION 1760)
+    pass log_marginal_likelihood() is the fit-time value and finite
+
+  INVARIANCE
+    pass [REPORT, not asserted] row 0 predicted alone == row 0 in the batch: same
+
+  FAILED-FIT
+    pass duplicate rows with alpha=0 fail the factorization (info_ != 0), reported rather than raised (DEVIATION 1634)
+    pass predict on the failed fit is refused, in Mojo, by name
+    pass log_marginal_likelihood on the failed fit is refused
+
+  23 checks, 0 failed
+
+test_gp_surface: the fast arms passed. The posterior recovery,
+the shapes, the clamp bookkeeping, the failed-fit path and the
+refusals hold. THE BITWISE ARM WAS REPORTED, NOT ASSERTED:
+this tier promises speed only. Re-run under
+MOJOLEARN_NUMERIC_MODE=identical for the asserted form.
+{"arrays_captured": 4, "capture": "/root/gemm_leg_out/wp67/after/fast/gp.bin"}

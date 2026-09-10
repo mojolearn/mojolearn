@@ -61,11 +61,14 @@ runtime-staging failures are retained as diagnostics, not counted as passes.
 - `comparisons.json`: all 61 byte-comparison outcomes, including their kinds.
 - `capture-inventory.json`: frame counts and SHA-256 hashes for output captures.
 - `integration-comparisons.json`: controlled candidate versus integrated main.
-- `qualification.tar.gz`: raw captures, traces, build/check logs, failed runs,
-  staged drivers, the original source patch and synthetic corpus fixtures.
-  Native executables and full source tarballs are omitted. The local rental
-  bundle `/tmp/wp67-rental2/results.tar` retains the binaries and original
-  source archive; `/tmp/wp67-rental2/integration-source.tar` retains integration.
+- `raw/`: public text traces, final check/surface logs and recorded exit states.
+- `artifacts.json`: SHA-256 hashes and absolute locations for the complete raw
+  capture archive and the four native benchmark binaries, retained outside the
+  repository at `/Users/andrewhendel/CascadeProjects/mojolearn-evidence/wp6_wp7_2026-09-10/`.
+  The archive includes raw array captures, synthetic corpus fixtures, build logs,
+  failed runs, staged drivers and the original source patch. Repository policy
+  forbids tarballs and fixture dumps under `bench/results/`.
+  `/tmp/wp67-rental2/integration-source.tar` retains the integration source archive.
 - `repeat-runtime-closure.json` and `repeat-runtime-packages.json`: the ELF
   closure staged from the exact lockfile-pinned MAX/Mojo packages for the
   clean-node GP repeat. The first clean-node attempt lacked those libraries;

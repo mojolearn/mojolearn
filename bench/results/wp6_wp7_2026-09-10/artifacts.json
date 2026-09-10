@@ -1,0 +1,29 @@
+{
+  "qualification_archive": {
+    "path": "/Users/andrewhendel/CascadeProjects/mojolearn-evidence/wp6_wp7_2026-09-10/qualification.tar.gz",
+    "bytes": 12589118,
+    "sha256": "0e9e08247f7ba5c102a5402fe8a98d890522d7fd1d73aa4ace7b35f608429bfb"
+  },
+  "native_binaries": {
+    "gp-before.so": {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn-evidence/wp6_wp7_2026-09-10/gp-before.so",
+      "sha256": "b155c4575fa7b0f4cd816af46a34bb9111a3725ab1964afc6cd954e3a2e30694"
+    },
+    "gp-after.so": {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn-evidence/wp6_wp7_2026-09-10/gp-after.so",
+      "sha256": "5b57c4b2f5a13b70aac32036758689b02098d806ad6cbc8c13b008c8a928f6e4"
+    },
+    "knn-before.so": {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn-evidence/wp6_wp7_2026-09-10/knn-before.so",
+      "sha256": "0e900b475a0aa6ccdd28492bc96dfa10dda855f4da8b097dd6b019aa74b5fccc"
+    },
+    "knn-after.so": {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn-evidence/wp6_wp7_2026-09-10/knn-after.so",
+      "sha256": "d73332e9c78158ec3d27460a9ad628f2308f14aa6ac0ba76f8db78ab3f414daa"
+    }
+  },
+  "runtime": {
+    "path": "/Users/andrewhendel/CascadeProjects/mojolearn-evidence/wp6_wp7_2026-09-10/runtime.tar.gz",
+    "sha256": "15cf8c9ca8f3924af9e29a5d9357ace3c614c8b75393dd1b66ebb508bb5f7b4c"
+  }
+}

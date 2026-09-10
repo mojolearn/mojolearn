@@ -1,0 +1,25 @@
+35597 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58f480000000, nodemask=2)
+== metrics/checks/trustworthiness_check.mojo [FAST] ==
+check_trust_rank_sum_exact [FAST]
+    rank sum device 291291 host 291291
+    embedded neighbor sets vs Float64 host k-NN: 0 rows differ
+    t 0.7837041712302066 (0x3fe9141ac525854c) sklearn formula 0x3fe9141ac525854c
+  OK
+check_trust_perfect_and_scrambled [FAST]
+    perfect embedding: rank sum 0 t 1.0
+    scrambled embedding: t 0.49563942155970964
+  OK
+check_trust_planted_duplicates [FAST]
+    rank sum device 189301 host(j < e) 189301 host(j <= e) 191658
+  OK
+check_trust_refusals [FAST]
+    n_neighbors=0: trustworthiness: n_neighbors must be >= 1
+    n_neighbors=n: trustworthiness: n_neighbors (523) must be >= 1 and < n_samples / 2; n_samples is 523 (cuML trustworthiness.pyx:114)
+    2 * n_neighbors >= n: trustworthiness: n_neighbors (262) must be >= 1 and < n_samples / 2; n_samples is 523 (cuML trustworthiness.pyx:114)
+    n_neighbors=TRUST_MAX_K: trustworthiness: n_neighbors + 1 = 257 exceeds TRUST_MAX_K = 256 (refused by name)
+    batchSize=0: trustworthiness: batchSize must be >= 1
+  OK
+check_trust_launch_invariant [FAST]
+    b256 g1d 291291 b64 g1d 291291 b256 g2d 291291 b64 g2d 291291
+  OK
+ALL GROUP D CHECKS PASSED [FAST]

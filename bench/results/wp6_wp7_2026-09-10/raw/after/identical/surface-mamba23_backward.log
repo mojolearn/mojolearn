@@ -1,0 +1,8 @@
+13976 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1826c0000000, nodemask=2)
+13976 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x731e00000000, nodemask=1)
+...ss
+----------------------------------------------------------------------
+Ran 5 tests in 0.029s
+
+OK (skipped=2)
+{"arrays_captured": 220, "capture": "/root/gemm_leg_out/wp67/after/identical/mamba23_backward.bin"}
