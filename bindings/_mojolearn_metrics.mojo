@@ -66,6 +66,7 @@ from metrics.estimator import (
     r2_score_host,
     regression_error_host,
     log_loss_host,
+    binary_ranking_host,
     confusion_matrix_host,
     precision_recall_fscore_host,
     rand_score_host,
@@ -360,6 +361,42 @@ def regression_error_binding[absolute: Bool = False, root: Bool = False](
     return PythonObject(Float64(result))
 
 
+
+
+def roc_auc_score_binding(true_addr: PythonObject, score_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    _want(String("roc_auc_score"),params,1)
+    var n = Int(py=params[0])
+    if n <= 0 or n > 2147483647:
+        raise Error("roc_auc_score: invalid n")
+    var y = _load_i32(Int(py=true_addr),n)
+    var scores = _load_f32(Int(py=score_addr),n)
+    var output = _f32_ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        var result = binary_ranking_host[False](y,scores,n)
+        output.unsafe_store(0,result[0][0])
+    return PythonObject(1)
+
+
+def precision_recall_curve_binding(true_addr: PythonObject, score_addr: PythonObject, precision_addr: PythonObject, recall_addr: PythonObject, threshold_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    _want(String("precision_recall_curve"),params,1)
+    var n = Int(py=params[0])
+    if n <= 0 or n > 2147483647:
+        raise Error("precision_recall_curve: invalid n")
+    var y = _load_i32(Int(py=true_addr),n)
+    var scores = _load_f32(Int(py=score_addr),n)
+    var precision = _f32_ptr(Int(py=precision_addr))
+    var recall = _f32_ptr(Int(py=recall_addr))
+    var thresholds = _f32_ptr(Int(py=threshold_addr))
+    var m = 0
+    with GILReleased(Python()):
+        var result = binary_ranking_host[True](y,scores,n)
+        m = result[1]
+        for i in range(m+1):
+            precision.unsafe_store(i,result[0][i])
+            recall.unsafe_store(i,result[0][n+1+i])
+        for i in range(m):
+            thresholds.unsafe_store(i,result[0][2*(n+1)+i])
+    return PythonObject(m)
 
 
 def log_loss_binding(
@@ -820,6 +857,8 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         m.def_function[completeness_score_binding]("completeness_score")
         m.def_function[v_measure_score_binding]("v_measure_score")
         m.def_function[r2_score_binding]("r2_score")
+        m.def_function[roc_auc_score_binding]("roc_auc_score")
+        m.def_function[precision_recall_curve_binding]("precision_recall_curve")
         m.def_function[log_loss_binding]("log_loss")
         m.def_function[confusion_matrix_binding]("confusion_matrix")
         m.def_function[precision_recall_fscore_binding]("precision_recall_fscore")

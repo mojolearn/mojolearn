@@ -1,0 +1,4 @@
+PASS binary ranking fast
+PASS binary ranking deterministic
+PASS binary ranking identical
+PASS 90 public GPU binary-ranking smoke checks

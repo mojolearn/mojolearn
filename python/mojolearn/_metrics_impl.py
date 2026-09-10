@@ -70,6 +70,8 @@ __all__ = [
     "recall_score",
     "f1_score",
     "log_loss",
+    "roc_auc_score",
+    "precision_recall_curve",
     "adjusted_rand_score",
     "completeness_score",
     "entropy",
@@ -962,6 +964,97 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     return float(result[0])
 
 
+
+def _binary_ranking_inputs(y_true, y_score, sample_weight):
+    if sample_weight is not None:
+        raise NotImplementedError("binary ranking metrics do not yet support sample_weight")
+    true, kind = _classification_labels(y_true, "y_true")
+    classes = sorted(set(true))
+    if len(classes) > 2:
+        raise ValueError("binary ranking metrics support at most two observed classes")
+    scores = np.asarray(y_score)
+    if scores.dtype != np.dtype("float32"):
+        raise TypeError("binary ranking scores must have dtype float32")
+    if scores.ndim != 1 or len(scores) != len(true):
+        raise ValueError("binary ranking scores must be one-dimensional with the same length as y_true")
+    if not np.all(np.isfinite(scores)):
+        raise ValueError("binary ranking scores must be finite")
+    if len(true) > np.iinfo(np.int32).max:
+        raise ValueError("binary ranking metrics exceed the native Int32 indexing bound")
+    return true, kind, classes, np.ascontiguousarray(scores)
+
+
+def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
+                  max_fpr=None, multi_class="raise", labels=None, numeric_mode=None):
+    """GPU binary ROC AUC from finite one-dimensional Float32 scores.
+
+    Both observed classes are required. Targets are strings or integers and
+    the larger sorted class is positive. Scores may be probabilities or
+    arbitrary finite decision scores. Ties are grouped before integration.
+    The result is a Python float representing the GPU Float32 scalar.
+    Only full binary AUC is implemented: weights, explicit labels, nondefault
+    averaging/multiclass options and partial AUC are refused.
+    """
+    if average != "macro" or multi_class != "raise" or labels is not None:
+        raise NotImplementedError("roc_auc_score currently supports binary defaults "
+                                  "average='macro', multi_class='raise', labels=None only")
+    if max_fpr is not None and (isinstance(max_fpr, (bool, np.bool_)) or
+            not isinstance(max_fpr, (int, float, np.integer, np.floating)) or max_fpr != 1):
+        raise NotImplementedError("roc_auc_score supports only full AUC (max_fpr=None or 1)")
+    true, _, classes, scores = _binary_ranking_inputs(y_true, y_score, sample_weight)
+    if len(classes) != 2:
+        raise ValueError("roc_auc_score requires both positive and negative classes")
+    encoded = np.asarray([int(v == classes[1]) for v in true], dtype=np.int32)
+    result = np.empty(1, dtype=np.float32)
+    _get_binding(numeric_mode).roc_auc_score(
+        _addr_ro(encoded), _addr_ro(scores), _addr(result), [len(true)])
+    return float(result[0])
+
+
+def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=None,
+                           drop_intermediate=False, numeric_mode=None):
+    """GPU binary PR curve with ascending distinct Float32 score thresholds.
+
+    Precision/recall have one more element than thresholds and end at (1,0).
+    Targets are strings or integers. Without pos_label, only observed subsets
+    [0], [1], [-1], [0,1], or [-1,1] are accepted and 1 is positive.
+    Other binary labels require an explicit same-type pos_label. A missing
+    positive class is allowed: threshold recalls are one, with terminal zero,
+    and a warning is emitted. Weights and drop_intermediate=True are refused.
+    All three output arrays are Float32. Scores must be finite, not necessarily
+    probabilities; no CPU sorting or metric reduction is used.
+    """
+    if not isinstance(drop_intermediate, (bool, np.bool_)):
+        raise ValueError("drop_intermediate must be a bool")
+    if drop_intermediate:
+        raise NotImplementedError("precision_recall_curve does not yet support drop_intermediate=True")
+    true, kind, classes, scores = _binary_ranking_inputs(y_true, y_score, sample_weight)
+    if pos_label is None:
+        if kind != "integer" or classes not in ([0], [1], [-1], [0, 1], [-1, 1]):
+            raise ValueError("pos_label must be specified for labels outside {0,1} or {-1,1}")
+        positive = 1
+    else:
+        values, positive_kind = _classification_labels([pos_label], "pos_label")
+        if kind != positive_kind:
+            raise ValueError("pos_label must use the same type as y_true")
+        positive = values[0]
+    encoded = np.asarray([int(v == positive) for v in true], dtype=np.int32)
+    n = len(true)
+    precision = np.empty(n + 1, dtype=np.float32)
+    recall = np.empty(n + 1, dtype=np.float32)
+    thresholds = np.empty(n, dtype=np.float32)
+    size = int(_get_binding(numeric_mode).precision_recall_curve(
+        _addr_ro(encoded), _addr_ro(scores), _addr(precision), _addr(recall),
+        _addr(thresholds), [n]))
+    if not 1 <= size <= n:
+        raise RuntimeError("precision_recall_curve returned an invalid threshold count")
+    if positive not in classes:
+        import warnings
+        warnings.warn("No positive class found in y_true; recall is set to one "
+                      "for all thresholds.", UserWarning, stacklevel=2)
+    return precision[:size + 1].copy(), recall[:size + 1].copy(), thresholds[:size].copy()
+
+
 def _selected_labels(labels, kind, observed):
     if labels is None:
         return observed.copy()
@@ -1115,8 +1208,6 @@ _NOT_PORTED = {
     "normalized_mutual_info_score": "normalization conventions and public validation are not implemented",
     "adjusted_mutual_info_score": "expected mutual information and its public contract are not implemented",
     "fowlkes_mallows_score": "public score and normalization checks are not implemented",
-    "roc_auc_score": "planned stable score ordering, tie grouping and GPU prefix counts",
-    "precision_recall_curve": "planned shared ordered-count primitive and curve endpoint contract",
     "hinge_loss": "GPU margin reduction and its public label contract are not implemented",
 }
 

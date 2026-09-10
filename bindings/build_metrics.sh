@@ -320,6 +320,13 @@ assert abs(M.recall_score(ct, cp, labels=[1], average="macro") - 2 / 3) < 1e-6
 prob = np.array([0.25, 0.75], dtype=np.float32)
 assert abs(M.log_loss([0, 1], prob) + np.log(0.75)) < 1e-6
 assert abs(M.log_loss([0, 1], prob, normalize=False) + 2 * np.log(0.75)) < 1e-6
+# Shared binary score sort, tied counts, integration and curve endpoints.
+rank_scores = np.array([0.1, 0.4, 0.35, 0.8], dtype=np.float32)
+assert abs(M.roc_auc_score([0, 0, 1, 1], rank_scores) - 0.75) < 1e-6
+rp, rr, rt = M.precision_recall_curve([0, 0, 1, 1], rank_scores)
+np.testing.assert_allclose(rp, [0.5, 2 / 3, 0.5, 1, 1], rtol=1e-6)
+np.testing.assert_array_equal(rr, [1, 1, 0.5, 0.5, 0])
+np.testing.assert_array_equal(rt, rank_scores[[0, 2, 1, 3]])
 
 M.kl_divergence(np.abs(y) + 1e-3, np.abs(yhat) + 1e-3)   # group B
 M.silhouette_score(X, lt)                      # group C, the batched path

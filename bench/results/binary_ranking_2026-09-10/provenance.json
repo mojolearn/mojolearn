@@ -1,0 +1,16 @@
+{
+  "base_commit": "f38ee93e4c33a9173d2db40f695352085587d4af",
+  "python": "3.13.15",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "sha256": {
+    "python/mojolearn/_mojolearn_metrics.so": "e3ca608fe1380b84bcff0d280d8b2482b632031c6d62788b3b0a0b6acd06235c",
+    "python/mojolearn/deterministic/_mojolearn_metrics.so": "290db316bd0c91128d3ae9bd6633592241b4a61ff122eb60a0f4e3e1b2f4cb96",
+    "python/mojolearn/identical/_mojolearn_metrics.so": "b5e53db1f883109ba17ab27453333f3b4f4702cca19a85f35847007cb6d96d80",
+    "metrics/impl/metrics/binary_ranking.mojo": "62913822c32a633a38d2d5bfe516379d71ed5577e26dd107c98a4887db580c21",
+    "metrics/estimator.mojo": "f220cef8d13878ae12cb3dd717feca0246880091f80926cf4e20e1fc3ec5c67f",
+    "bindings/_mojolearn_metrics.mojo": "a97851355e2504ab2d80dc6338b63254c07192842d5c01cbdbb32112d1a9fa42",
+    "bindings/build_metrics.sh": "6c4c6d647cb7c1dbb26ec1147c380eb8aa486905b28c3fb0a53874776a955bc8",
+    "python/mojolearn/_metrics_impl.py": "a9c6ec5556b8c9b826c5c18d8350b992e55491c661fd23a165581b14142f330f",
+    "checks/binary_ranking_smoke.py": "3a033ea85d7580f7874b33f721fce26fac4a9d446d2a2e2e2614a92bc7925046"
+  }
+}

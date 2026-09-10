@@ -10,7 +10,9 @@ A2 unweighted confusion counts and precision/recall/F1 are implemented;
 [the classification contract](GPU_CLASSIFICATION_METRICS.md) records its bounded
 label, averaging and device qualification scope. Bounded [GPU log loss](GPU_LOG_LOSS.md)
 is now implemented with build/smoke validation only; broader numerical
-qualification remains pending. Ranking curves and the remaining phases follow. A complete cross-vendor
+qualification remains pending. Bounded [binary ROC-AUC and precision-recall
+curves](GPU_RANKING_METRICS.md) are the implemented A3 scoring slice, with
+local build/smoke validation only. The remaining phases follow. A complete cross-vendor
 pipeline has not been qualified. Metrics and estimator compatibility take priority over
 the longer-tail tree features.
 
@@ -71,7 +73,7 @@ messages as each feature lands instead of advertising unimplemented names.
 | --- | --- | --- |
 | A1: regression metrics | Implement public MSE, RMSE and MAE over GPU residual kernels and the existing pinned reduction infrastructure. Start with finite 1-D Float32 inputs, then weights/multioutput. Reuse audited SSE work; define result precision and finite/empty input behavior. | Hand-computed cases (weighted when enabled), independent high-precision reference, cancellation/extreme-value cases, mode and vendor checks, installed public calls. |
 | A2: classification metrics | Expose integer confusion counts using contingency infrastructure; derive precision/recall/F1 with explicit binary/micro/macro/weighted conventions. Implement clipped-probability log loss using the pinned log path in IDENTICAL. | Label ordering, absent classes, zero division, weights, binary/multiclass and normalization oracles; integer count identity and final scalar bits. |
-| A3: ranking curves | Implement binary ROC-AUC and PR curve from stable score ordering, grouped ties and prefix counts; share one ordered-count primitive. Assess existing GPU sort limits first, then add scalable stable sorting if needed. Define integration, endpoints and degenerate-class behavior. | Tied scores, shuffled equal-score rows, all-equal scores, weighted cases, independent rank/AUC and curve oracles, large inputs; extend multiclass/multilabel separately. |
+| A3: ranking curves | Bounded binary ROC-AUC and PR curves implemented; [contract](GPU_RANKING_METRICS.md). GPU score ordering, grouped ties and prefix counts; weights and multiclass/multilabel remain unsupported. | Local build/smoke only this turn. Full tied-score, row-order, degenerate-class, independent rank/curve, large-input and cross-device qualification remains queued. |
 | B1: sklearn protocol pilot | Start with RF/ET, a shared explicit parameter registry and raw constructor parameter storage. Ensure validated `_cfg` is rebuilt when parameters change; preserve mode in parameter discovery. Add get/set parameters, fitted-state checks, classifier/regressor tags and default accuracy/R² score through mode-aware metrics. Reuse sklearn public protocol where appropriate without requiring its training backend. | `clone` retains every parameter including numeric_mode, does not copy fitted state, nested Pipeline updates change native parameters, invalid combinations still refuse, fit returns self, serial GridSearchCV/refit works. |
 | B2: GBDT classifier/regressor contract | Provide bounded sklearn classifier/regressor adapters around existing GBDT semantics before changing its raw `predict` API. Classification adapters use class predictions/probabilities; regression adapters use numeric predictions. Add accuracy/R² default score using the mode-aware metrics. | sklearn scoring uses the correct response method, labels/classes/tags agree, mode survives cloning/refit/save-load, explicit loss support. Preserve existing raw approximation prediction behavior. |
 | C1: scalers | Mirror StandardScaler population-variance and MinMaxScaler contracts in Mojo: fixed reduction schedule, defined precision, zero-variance/range handling, then elementwise transform/inverse transform. Own learned statistics and propagate numeric_mode. | Independent moments, constant columns, weights where supported, NaN policy, overflow/cancellation, fit-transform/inverse behavior and round trips; transformed bytes compared across devices. |
@@ -80,7 +82,7 @@ messages as each feature lands instead of advertising unimplemented names.
 | D2: cross-validation/search | Implement serial cross_val_score orchestration around clone/fit/predict/metric; use sklearn GridSearchCV through compatibility first rather than build another search engine. Fit transformations and quantizers on training folds only. | No preprocessing/quantization/target leakage, explicit score direction, stable fold aggregation and best-parameter ties, reproducible refit, errors/cancellation and bounded device memory. |
 | E: pipeline qualification | Compose a bounded numeric preprocessing → training → prediction → scoring workflow with owned/device-aware data and explicit mode at every stage. Save the transforms, model and schema together. | Cross-vendor intermediate and final identity using installed artifacts, complete provenance, independent accuracy checks and end-to-end time/memory measurements. |
 
-A1/A2 and B1 can run as independent source lanes. A3 needs a sort design
+A1/A2 and B1 can run as independent source lanes. A3 used a sort design
 audit, not just another reduction. C1 can reuse the metric reduction contract.
 B2 depends on scoring semantics; D2 depends on cloning and fold generation.
 Scalers and encoders also implement the shared parameter/clone/tags protocol
@@ -99,19 +101,27 @@ This turn deliberately runs build/smoke checks only at the user's request.
 Full qualification remains queued: probabilities at 0/1 and neighboring
 representable values, absent classes, permuted columns, ragged lengths,
 independent high-precision oracles and repeated/interleaved-mode fingerprints.
-Cross-vendor identity and throughput remain unmeasured. ROC-AUC/PR curves
-still require an ordered score/count primitive, not a logarithm or sum alone.
+Cross-vendor identity and throughput remain unmeasured.
 
-The next A3 implementation can reuse `launch_radix_sort_bins` in
-`gbdt/gpu_util/kernel/radix_sort.mojo` for stable UInt32 key/index sorting,
-the Float32 key mapping in `gbdt/gpu_util/kernel/segmented_sort.mojo`, and
-`launch_scan_vector_u32` in `gbdt/gpu_util/kernel/scan.mojo` for inclusive
-positive counts and tie-end compaction. Complement sortable keys for descending
-order, canonicalize signed zero, and compare integer keys for ties so subnormal
-scores are not merged by floating-point flushing. Emit TP/FP only at complete
-tie-group ends. Keep scan input/output separate and widen products before AUC
-arithmetic. The existing radix sort uses 32 one-bit passes and serial block-total
-scans; measure its scaling before calling this a high-throughput ranking path.
+## Binary ranking metrics: bounded A3 slice
+
+[ROC-AUC and precision-recall curves](GPU_RANKING_METRICS.md) now share GPU
+score ordering and grouped threshold counts. This scores binary predictions;
+it does not implement learning-to-rank or group-aware tree objectives.
+Weights, multiclass/multilabel scoring and broader numerical qualification
+remain pending. This turn uses local build/smoke checks only.
+
+The A3 implementation reuses `launch_radix_sort_bins` in
+`gbdt/gpu_util/kernel/radix_sort.mojo` for stable ascending UInt32 key/label
+sorting and the Float32 key mapping pattern from segmented sorting. It
+reuses radix integer scan kernels for exclusive positive counts and parallel
+group-start compaction. Signed zero is canonicalized; integer keys identify
+ties so subnormal scores remain distinct. Groups compute PR suffix ratios
+and thresholds or exact Int64 AUC contributions in parallel. AUC alone uses
+an ascending serial final sum; numerator and denominator convert separately
+to Float32 for division. The 32 one-bit radix passes, serial block-total
+scans and serial AUC final fold remain potential scaling limits; measure
+scaling before calling this a high-throughput ranking path.
 
 ## Why sklearn compatibility is not just three methods
 
@@ -129,6 +139,31 @@ as the compatibility specification: cloning, constructor parameters, tags,
 learned attributes, response methods and metadata routing matter. Qualify an
 explicit sklearn version range. Start with serial search; GPU process/thread
 concurrency and per-worker context ownership are separate work.
+
+## Next implementation slice: GPU scalers
+
+Start C1 with dense finite Float32 `MinMaxScaler`, then `StandardScaler`.
+Use sklearn `preprocessing/_data.py` (`partial_fit`, `transform`,
+`inverse_transform`, `_handle_zeros_in_scale`, `_is_constant_feature`) and
+`utils/extmath.py::_incremental_mean_and_var` as behavior references; inspect
+cuML's `python/cuml/cuml/_thirdparty/sklearn/preprocessing/_data.py` GPU path.
+
+Reuse `core/pinned_reduce.mojo` min/max/sum primitives and the metric
+chunk/finalize structure for scalable column statistics. Existing
+`core/column_stats.mojo` mean/shift kernels and `solver/impl/stats/mean.mojo`
+are candidates after checking their row/column layouts. StandardScaler needs
+population variance with a centered reduction, not PCA sample covariance or
+the cancellation-prone difference of squared moments. sklearn's Float64
+accumulation and near-constant detection need an explicit documented
+counterpart; a Float32 exact-zero shortcut is not equivalent.
+
+The first public contract should own learned statistics, return copied
+transforms, preserve numeric mode and support inverse transforms and a
+transformer-specific clone/get/set/tags protocol. Reuse forest parameter
+registration ideas, not forest scoring or forest fitted-state detection.
+Define feature ranges, clipping, constant columns, subnormal/signed-zero
+behavior and overflow handling. Weights, sparse inputs, NaNs and incremental
+`partial_fit` can follow separately. Scaling remains optional for trees.
 
 ## The first end-to-end IDENTICAL claim
 
@@ -178,6 +213,7 @@ qualify that entire pipeline as cross-vendor IDENTICAL.
 Do not claim arbitrary sklearn pipelines are identical, or that no competitor
 can offer a similar guarantee. Publish the precise certified workflow and
 its intermediate evidence instead. This plan remains the implementation and qualification queue. A1 unweighted
-Float32 errors, A2 unweighted confusion/PRF, bounded log loss and B1 forest
-compatibility are implemented slices; log loss has only build/smoke validation;
+Float32 errors, A2 unweighted confusion/PRF, bounded log loss, A3 binary
+ROC-AUC/PR curves and B1 forest compatibility are implemented slices; log
+loss and A3 have only build/smoke validation;
 weights, multiple outputs and broader protocol support remain pending.

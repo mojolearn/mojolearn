@@ -43,6 +43,7 @@ from max.gpu.host import DeviceContext
 from std.math import isfinite
 from metrics.impl.metrics.regression_errors import regression_error
 from metrics.impl.metrics.log_loss import log_loss
+from metrics.impl.metrics.binary_ranking import binary_ranking
 from metrics.impl.metrics.classification import confusion_matrix, precision_recall_fscore, MAX_CONFUSION_CLASSES, MAX_PRF_CLASSES
 
 from metrics.checks.device_io import download_f32, upload_f32, upload_i32
@@ -524,3 +525,30 @@ def log_loss_host(y: List[Int32], probability: List[Float32], n: Int, k: Int, no
     _ = dp^
     _ = ctx^
     return result
+
+
+def binary_ranking_host[curve: Bool](y: List[Int32], scores: List[Float32], n: Int) raises -> Tuple[List[Float32], Int]:
+    if n <= 0 or n > 2147483647 or len(y) < n or len(scores) < n:
+        raise Error("binary ranking: invalid input length")
+    var has_zero = False
+    var has_one = False
+    for i in range(n):
+        if y[i] == 0:
+            has_zero = True
+        elif y[i] == 1:
+            has_one = True
+        else:
+            raise Error("binary ranking: labels must encode 0 or 1")
+        if not isfinite(scores[i]):
+            raise Error("binary ranking: scores must be finite")
+    comptime if not curve:
+        if not has_zero or not has_one:
+            raise Error("roc_auc_score: both classes required")
+    var ctx = DeviceContext()
+    var dy = upload_i32(ctx,y)
+    var ds = upload_f32(ctx,scores)
+    var result = binary_ranking[curve](ctx,dy,ds,n)
+    _ = dy^
+    _ = ds^
+    _ = ctx^
+    return result^
