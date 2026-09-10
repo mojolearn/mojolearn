@@ -51,3 +51,11 @@ scoping as well.
 Source commits: IVF163ff740, fused4f201954, gates1241294b, comments597fc803.
 Root owns local builds and any backend compilation. No GPU was rented by this
 lane, no tree source was edited, and no opponent benchmark was rerun.
+
+Final Apple validation: full IVF regression gate, native fused exact12-case
+gate and native identity driver all pass. The257-probe coarse gate passes.
+The initial declared64 full-identity run failed because its separate AUTO
+small-k selector requested native64 collectives on Apple32. The corrected
+simulation uses TREE_SELECT for that separate tiled selector and passes;
+explicit fused logical32 still executes. Both original failure and corrected
+pass are archived, not hidden or counted as physical AMD evidence.

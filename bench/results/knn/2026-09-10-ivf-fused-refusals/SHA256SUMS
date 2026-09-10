@@ -1,3 +1,11 @@
+04b62430fd87e04f631eaf289923cafa8346021ed4905e37c5d64c5cda00218a  apple-full/fused-native.log.gz
+4fab28438d0e04de78bf7e23609a858730858d250ab93ef7c6f9d4b80fb4550e  apple-full/fused-simulated64.log.gz
+2a1f78f1202e573a18b80bdcc4cfa1e6ad1ce9fdd219cf1b2f2a320d1657a3ec  apple-full/identity-native.log.gz
+b08e9d03f2b30917055ea7b660c130eb14caece6f17ae3b363d906829876287d  apple-full/identity-simulated64.log.gz
+71ee4910c0e4b9cf272332984d96fe6959d3bddb309dfe8abbb06b671bcd23b5  apple-full/ivf-full.log.gz
+593937ffa816ba50eabc6f0d69240ee96ac446b74051be3948a8513b5832159c  apple-full/ivf-large.log.gz
 c7ccbcedc8bb74dfe73f86016afcefc15f742573f27681a75545f1dfe907800d  ivf-large-k-apple.log.gz
+b5df81ddcd24c6e53085ce77c39789409e02a424afba2c8546d8ad6fc8e43c02  ivf-large-probes-apple.log.gz
+9d7eeb8d9ad459109ff8d616b8d87d0416ec3f8770c8d9d2edab71ba68d7a367  knn-identity-sim-final-apple.log.gz
 7be2581b7442360b4750e2b76b3044deec5185303dd7e4c9f2cede94c3b7fc76  knn-ivf-refusal-gates.sh
 cf3bd46972558d1a23a546fa97bac61e54df30306693d8e15ebefe114b8588f6  knn-logical32-sim-apple.log.gz
