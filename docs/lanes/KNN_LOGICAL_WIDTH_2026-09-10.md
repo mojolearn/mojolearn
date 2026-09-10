@@ -61,3 +61,9 @@ _cufft,_rocblas,_miopen); no readable backend source was present at
 lib/mojo. This inventory cannot establish emit/link/runtime support for a
 fourth physical backend. Explicit-policy execution on Metal is only policy
 and portable-kernel evidence, never Intel/Qualcomm/RDNA device admission.
+
+Apple execution results: native16cases8192cells PASS; explicit spec-baseline
+simulation16cases4096cells PASS; Intel,Qualcomm,RDNA simulations each16cases
+8192cells PASS. Existing36 long-selector cases PASS. These simulations run
+on Apple and force shared memory; none grants fourth-physical-device status.
+Logs are compressed under bench/results/knn/2026-09-10-logical-width/.
