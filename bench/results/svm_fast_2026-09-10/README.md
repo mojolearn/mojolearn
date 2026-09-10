@@ -35,3 +35,10 @@ epsilon 0.1, two alternating pairs, both pairs shown; RMSE on the same
 |---:|---:|---:|---:|---:|---:|
 | 5,000 | 695 / 701 ms | 295 / 211 ms | 1,780 / 1,788 ms | 21 / 98 ms | 0.5039 |
 | 20,000 | 10,958 / 10,884 ms | 1,219 / 1,184 ms | 7,017 / 7,033 ms | 64 / 106 ms | 0.4867 |
+
+## Predict after DEVIATION 2493 (fused decision pass), same session
+
+HIGGS 50,000-row model, 39,349 support vectors, min of 3: 10,000
+predictions 121 ms to 40 ms; 100,000 predictions 783 ms to 312 ms.
+Decision values bit-equal to the tiled FAST path on both shapes; linear
+kernel labels equal too. The paired table above predates this change.

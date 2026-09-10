@@ -30,10 +30,13 @@ layout, not an arithmetic, and.
 
 from std.builtin.sort import sort
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 from core.identity_trace import IdentityTrace
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from svm.checks.device_select import SEL_TPB, read_f32, upload_f32
 from svm.impl.distance.kernel_matrices import (
     kernel_op,
@@ -42,6 +45,7 @@ from svm.impl.distance.kernel_matrices import (
 )
 from svm.impl.smosolver import SmoSolver, SmoTrace
 from svm.impl.svm_parameter import (
+    KERNEL_LINEAR,
     KERNEL_RBF,
     KernelParams,
     SvmModel,
@@ -185,6 +189,209 @@ def svc_fit(
     return model^
 
 
+
+# ---------------------------------------------------------------------------
+# DEVIATION 2493 (2026-09-10): THE FUSED FAST DECISION PASS
+# ---------------------------------------------------------------------------
+# `svc_predict` below is upstream's shape: a `[batch x n_support]` kernel
+# tile per batch (`kernel_op`), then `decision_kernel` folding each row of
+# the tile against the dual coefficients, batches sized by `cache_size`.
+# The fold reads the tile with a stride of `n_support` between neighbouring
+# threads, so every batch's 4 x batch x n_support bytes are written once
+# and read back uncoalesced; at 100,000 rows against 39,349 support
+# vectors that is 75 batches and about 15 GB of tile traffic for a
+# 783 ms predict on the M4.
+#
+# FAST folds the decision inside the kernel evaluation instead: one thread
+# per query row with its features in registers, the support vectors
+# streamed through shared memory with their squared norms and dual
+# coefficients, `acc += dual_j * K(x_i, sv_j)` ascending in j, then the
+# `+ b` and the label epilogue. No tile, no batch loop, one launch. Linear
+# and RBF; register rows up to `SVC_FUSED_KREG` features (wider inputs keep
+# the tiled path). IDENTICAL and DETERMINISTIC keep the tiled path with its
+# recorded `svm.predict.*` card. FAST only; the FAST arm is free to move.
+comptime SVC_FUSED_TPB = 128
+comptime SVC_FUSED_TILE_FLOATS = 3072
+comptime SVC_FUSED_KREG = 64
+
+
+def svc_fused_decision_kernel[KPAD: Int](
+    preds: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    sv: MutPointer[Float32, MutAnyOrigin],
+    dual: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_support_in: Int32,
+    k_in: Int32,
+    is_rbf_in: Int32,
+    gain: Float32,
+    b: Float32,
+    label0: Float32,
+    label1: Float32,
+    predict_class_in: Int32,
+):
+    from std.math import exp
+
+    comptime ROWS = SVC_FUSED_TILE_FLOATS // KPAD
+    var n_rows = Int(n_rows_in)
+    var n_support = Int(n_support_in)
+    var k = Int(k_in)
+    var is_rbf = Int(is_rbf_in) != 0
+    var tid = Int(thread_idx.x)
+    var i = Int(block_idx.x) * SVC_FUSED_TPB + tid
+    var active = i < n_rows
+
+    var tile = stack_allocation[
+        SVC_FUSED_TILE_FLOATS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tile_dual = stack_allocation[
+        ROWS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var tile_norm = stack_allocation[
+        ROWS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var xreg = stack_allocation[KPAD, Scalar[DType.float32]]()
+    var nx = Float32(0.0)
+    comptime for f in range(KPAD):
+        var v = Float32(0.0)
+        if active and f < k:
+            v = x.unsafe_load(i * k + f)
+        xreg.unsafe_store(f, v)
+        nx += v * v
+
+    var acc = Float32(0.0)
+    var j0 = 0
+    while j0 < n_support:
+        var rows_here = n_support - j0
+        if rows_here > ROWS:
+            rows_here = ROWS
+        barrier()
+        var total = rows_here * KPAD
+        var idx = tid
+        while idx < total:
+            var r = idx // KPAD
+            var f = idx - r * KPAD
+            var v = Float32(0.0)
+            if f < k:
+                v = sv.unsafe_load((j0 + r) * k + f)
+            tile.unsafe_store(idx, v)
+            idx += SVC_FUSED_TPB
+        idx = tid
+        while idx < rows_here:
+            tile_dual.unsafe_store(idx, dual.unsafe_load(j0 + idx))
+            # The support row's squared norm, formed here from the tile
+            # (the row is in shared memory already; one thread per row).
+            var nsv = Float32(0.0)
+            comptime for f in range(KPAD):
+                var t = sv.unsafe_load((j0 + idx) * k + f) if f < k else Float32(0.0)
+                nsv += t * t
+            tile_norm.unsafe_store(idx, nsv)
+            idx += SVC_FUSED_TPB
+        barrier()
+        if active:
+            for r in range(rows_here):
+                var tb = r * KPAD
+                var dot = Float32(0.0)
+                comptime for f in range(KPAD):
+                    dot += xreg.unsafe_load(f) * tile.unsafe_load(tb + f)
+                var kv: Float32
+                if is_rbf:
+                    kv = exp(-gain * (nx + tile_norm.unsafe_load(r) - dot * Float32(2.0)))
+                else:
+                    kv = dot
+                acc += tile_dual.unsafe_load(r) * kv
+        j0 += ROWS
+    if active:
+        var val = acc + b
+        if predict_class_in != 0:
+            preds.unsafe_store(i, label0 if val < Float32(0.0) else label1)
+        else:
+            preds.unsafe_store(i, val)
+
+
+def _svc_fused_launch[KPAD: Int](
+    ctx: DeviceContext,
+    mut preds: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut sv: DeviceBuffer[DType.float32],
+    mut dual: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_support: Int,
+    k: Int,
+    is_rbf: Bool,
+    gain: Float32,
+    b: Float32,
+    label0: Float32,
+    label1: Float32,
+    predict_class: Bool,
+) raises:
+    ctx.enqueue_function[svc_fused_decision_kernel[KPAD]](
+        preds.unsafe_ptr(), x.unsafe_ptr(), sv.unsafe_ptr(), dual.unsafe_ptr(),
+        Int32(n_rows), Int32(n_support), Int32(k), Int32(1 if is_rbf else 0),
+        gain, b, label0, label1, Int32(1 if predict_class else 0),
+        grid_dim=((n_rows + SVC_FUSED_TPB - 1) // SVC_FUSED_TPB, 1, 1),
+        block_dim=(SVC_FUSED_TPB, 1, 1),
+    )
+
+
+def svc_fused_decision(
+    ctx: DeviceContext,
+    mut preds: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut sv: DeviceBuffer[DType.float32],
+    mut dual: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_support: Int,
+    k: Int,
+    is_rbf: Bool,
+    gain: Float32,
+    b: Float32,
+    label0: Float32,
+    label1: Float32,
+    predict_class: Bool,
+) raises -> Bool:
+    """DEVIATION 2493's dispatch: True when the fused pass served the
+    prediction, False when k is too wide for a register row."""
+    var kpad = ((k + 3) // 4) * 4
+    if kpad == 4:
+        _svc_fused_launch[4](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 8:
+        _svc_fused_launch[8](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 12:
+        _svc_fused_launch[12](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 16:
+        _svc_fused_launch[16](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 20:
+        _svc_fused_launch[20](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 24:
+        _svc_fused_launch[24](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 28:
+        _svc_fused_launch[28](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 32:
+        _svc_fused_launch[32](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 36:
+        _svc_fused_launch[36](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 40:
+        _svc_fused_launch[40](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 44:
+        _svc_fused_launch[44](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 48:
+        _svc_fused_launch[48](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 52:
+        _svc_fused_launch[52](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 56:
+        _svc_fused_launch[56](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 60:
+        _svc_fused_launch[60](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    elif kpad == 64:
+        _svc_fused_launch[64](ctx, preds, x, sv, dual, n_rows, n_support, k, is_rbf, gain, b, label0, label1, predict_class)
+    else:
+        return False
+    return True
+
+
 def svc_predict(
     ctx: DeviceContext,
     model: SvmModel,
@@ -233,6 +440,31 @@ def svc_predict(
     var sv = upload_f32(ctx, model.support_matrix)
     var dual = upload_f32(ctx, model.dual_coefs)
     var d_preds = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    # DEVIATION 2493: FAST with no card recording folds the decision inside
+    # the kernel evaluation; no tile, no batch loop.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        if not card.enabled and n_cols <= SVC_FUSED_KREG and (
+            kp.kernel == KERNEL_RBF or kp.kernel == KERNEL_LINEAR
+        ):
+            ctx.synchronize()
+            if svc_fused_decision(
+                ctx, d_preds, x, sv, dual, n_rows, n_support, n_cols,
+                kp.kernel == KERNEL_RBF, Float32(kp.gamma), model.b,
+                model.unique_labels[0], model.unique_labels[1], predict_class,
+            ):
+                ctx.synchronize()
+                preds = read_f32(ctx, d_preds, n_rows)
+                for i in range(n_rows):
+                    if preds[i] != preds[i]:
+                        raise Error(
+                            "svm predict: NaN decision value at row " + String(i)
+                            + " (floating point overflow; DEVIATION 637)"
+                        )
+                _ = x^
+                _ = sv^
+                _ = dual^
+                _ = d_preds^
+                return preds^
     var K = ctx.enqueue_create_buffer[DType.float32](n_batch * n_support)
     var nl2 = n_rows if kp.kernel == KERNEL_RBF else 1
     var l2_input = ctx.enqueue_create_buffer[DType.float32](nl2)

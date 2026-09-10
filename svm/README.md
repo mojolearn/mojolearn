@@ -42,3 +42,12 @@ untouched by these changes. Numbers against scikit-learn:
 `bench/results/svm_fast_2026-09-10/`. The next phase by size is
 `select_ws` (a 32-pass one-bit radix sort, about 130 launches per outer
 iteration, 0.58 s of the 2.2 s).
+
+**2493** (same day) `svm/impl/svc_impl.mojo::svc_fused_decision`, FAST
+only: predict folds `sum_j dual_j K(x_i, sv_j)` inside the kernel
+evaluation, one thread per query row, support vectors streamed through
+shared memory; no `[batch x n_support]` tile, no batch loop, no
+stride-`n_support` reads. HIGGS 50k model (39,349 SVs), 10,000 predictions
+121 ms to 40 ms, 100,000 predictions 783 ms to 312 ms, decision values
+bit-equal to the tiled FAST path. SVR predict shares it. Taken only when no
+identity card is recording; IDENTICAL keeps the tiled path.
