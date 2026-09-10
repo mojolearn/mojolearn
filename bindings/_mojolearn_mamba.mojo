@@ -261,6 +261,13 @@ def _m3_upload_addr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffe
         var src = _f32_ptr(addr)
         var count = max(n, 1)
         var dev = ctx.enqueue_create_buffer[DType.float32](count)
+        # DeviceContext accepts ordinary host pointers; the Python frame
+        # retains each NumPy array until the synchronized copy completes.
+        comptime if is_defined["MOJOLEARN_MAMBA3_CALLER_TRANSFER"]():
+            if n > 0:
+                ctx.enqueue_copy(dst_buf=dev, src_ptr=src)
+                ctx.synchronize()
+                return dev^
         var host = ctx.enqueue_create_host_buffer[DType.float32](count)
         ctx.synchronize()
         if n > 0:
@@ -278,6 +285,14 @@ def _m3_download_addr(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], 
         _m3_write_f32(addr, m3_download(ctx, buf, n))
     else:
         var dst = _f32_ptr(addr)
+        comptime if is_defined["MOJOLEARN_MAMBA3_CALLER_TRANSFER"]():
+            if n == len(buf):
+                ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
+            else:
+                var direct_view = buf.create_sub_buffer[DType.float32](0, n)
+                ctx.enqueue_copy(dst_ptr=dst, src_buf=direct_view)
+            ctx.synchronize()
+            return
         var host = ctx.enqueue_create_host_buffer[DType.float32](n)
         ctx.synchronize()
         if n == len(buf):
