@@ -1,7 +1,8 @@
 # GPU tree growth scope and working memory
 
 Pipeline and mode decision (2026-09-10): [GPU_PIPELINE_PLAN.md](GPU_PIPELINE_PLAN.md).
-Keep DETERMINISTIC for now; prioritize metrics and estimator interoperability.
+Keep DETERMINISTIC supported. Latest priority is competitor-relative tree
+performance; metrics and interoperability remain implemented foundations.
 A1 unweighted Float32 errors, A2 unweighted GPU confusion/precision/recall/F1,
 and B1 RF/ET sklearn compatibility are implemented on the tree lane; contracts and remaining work are tracked in the pipeline plan.
 
@@ -131,3 +132,19 @@ projection runs once per sampled boosting tree, not at every depth/leaf split
 and not merely once per fit or growth-policy selection. Its cost can amortize
 over a deep tree. Decide from whole-fit measurements rather than rejecting
 packing on its name or assuming it is negligible.
+
+## Performance priority update — 2026-09-10
+
+The user explicitly does not want FAST-versus-IDENTICAL speed as the project
+objective. Prioritize IDENTICAL RF/ET optimization and NVIDIA cuML RF comparison;
+retain FAST RF/cuML and FAST symmetric GBDT/CatBoost comparisons. ET needs a real
+equivalent competitor before calling a result ET parity. HIP qualification and
+performance are separate from cuML, which targets NVIDIA. See the roadmap's
+performance priorities for measurement and rollout.
+
+Tree overlap is currently an audited design, not a production feature or flag.
+Implement an opt-in control first, with private scratch and fixed RNG/output
+ordering; retain serial fallback until whole-fit and memory evidence supports
+promotion. IDENTICAL may match other modes where exact integer work dominates,
+but no equal-speed guarantee follows for floating reductions, regression or
+weighted workloads. Do not change its numerical contract to chase a ratio.
