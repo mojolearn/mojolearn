@@ -1,101 +1,75 @@
 # WP6 / WP7 host transfers — September 10, 2026
 
-Scope: non-tree WP6 and WP7. WP8 and tree bindings/estimators belong to
-other work. The starting source is d9285a63, including the NumPy-free
-integration (36d48b07); the earlier statement that the native converters
-were not wired into estimators is superseded by that integration.
+Scope: non-tree WP6 and WP7 (DEVIATIONS 2486–2487). Tree bindings,
+GBDT, isolation forest and WP8 belong to the other lane.
 
-## Checked foundation
+## Implementation
 
-`bindings/hostptr.mojo` implements DEVIATION 2486: typed non-null pointer
-constructors, the hostpass B2 SIMD-8 Float32 copy with a scalar tail, and
-Transformer's existing owned-list memcpy read. Counts are elements;
-callers validate spans and own lifetimes. No arithmetic or tier dispatch
-changes. No production binding calls this module yet.
+`bindings/hostptr.mojo` is the shared typed-pointer and byte-copy module.
+The non-tree GP, byte-LM, Mamba, SVM, metrics, preprocessing, estimator,
+linalg, ARIMA, TSA, solver, training, Transformer and base bindings delegate
+their local pointer helpers to it. Each binding migration has its own commit.
+Pointer-only migrations do not claim to remove a matrix copy.
 
-Host gate: 37,184 checked cells, five pointer/length refusals, plus same-span
-copy checks. Covers lengths 0/1/2/7/8/9/15/16/17/31/32/33/2049, offsets 0–7,
-untouched boundary sentinels, signed zeros, infinities, subnormals and NaN
-payloads. This copy has no numeric-mode dependency. Apple M4 host execution
-passed; other hosts remain RUN OWED. This is correctness evidence, not a
-performance measurement or estimator surface gate.
+GP prediction bulk-copies the quadratic Cholesky factor and removes its unused
+prediction-only zero target list. Byte-LM bulk-copies three state inputs and
+four outputs, and moves the captured parameter, optimizer and gradient lists
+instead of copying them. Moved capture fields are reset to empty lists so the
+capture remains destructible. Validation, publication and ownership checks
+remain in place. Mamba uses the shared bulk reader for its formerly scalar
+arms; SVM support matrices, metric labels, scaler results and KDE inputs and
+outputs use the shared copies.
 
-```
-nice -n 19 pixi run mojo -I . checks/hostptr_check.mojo
-```
+The listed non-tree estimator upload helpers now copy into their existing
+pinned allocations with the shared SIMD-8 body. Existing DMA, synchronization
+and source lifetimes are preserved. ARIMA's batched-fit helper and spectral's
+check-side device I/O already used list copies plus DMA; those are unchanged.
 
-## GP candidate, not activated
+WP7 removes duplicate immutable kernel-method and GP uploads by borrowing the
+input buffers and making non-owning sub-buffer views for legacy callees.
+Mixture prediction, scoring and responsibilities reuse one precision upload;
+the fit's distinct inverse remains distinct. Spectral removes the pinned copy
+used only for host normalization. HDBSCAN removes the pre-download sync and
+retains the copy-completion sync.
 
-`bench/results/wp6_hostptr_2026-09-10/gp-candidate-UNQUALIFIED.patch` is a
-reviewable first binding migration. It delegates pointer constructors,
-changes fit input reads and factor/dual output writes to bulk copies,
-changes prediction's quadratic factor/input reads, and removes the unused
-prediction-only y_train fill. The empty/negative n_star staging behavior
-remains so gpr_predict_host retains its named refusal. The patch is NOT
-applied to production source and has NOT passed compilation or a surface
-gate. Apply only after capturing the baseline:
+kNN classification retains the search's device index allocation. Host sorting
+still runs and sets a flag if it shifts any element. Only that case uploads
+the corrected order; classification otherwise reuses the original allocation.
+Weighted arithmetic remains in its existing host order. This does not claim
+to eliminate the weighted arm's distance download or weight upload.
 
-```
-git apply bench/results/wp6_hostptr_2026-09-10/gp-candidate-UNQUALIFIED.patch
-```
+## Qualification in progress
 
-The unchanged GP baseline build, using build_gp.sh under the local guard,
-was terminated after compressed memory grew by more than 256 MiB. Entry
-already had about 6.1 GB swap and 5.7 GB compressed memory on a 16 GiB Mac.
-A lower-concurrency retry was refused before launch because memory pressure
-was no longer normal. Neither failure is a source/compiler verdict. Limits
-were not weakened; no other lane's process was stopped. Logs and guard
-telemetry are retained beside the patch.
+The shared helper passed 54,944 host bit checks on Apple M4, including signed
+zeros, infinities, subnormals, NaN payloads, integer labels, misalignment,
+tails and boundary sentinels. Five named pointer/length refusals and same-span
+copies passed. The gate lives at `checks/hostptr_check.mojo`; a directory named
+`bindings/checks/` shadows the root package during binding compilation. Main's
+8d87cc92 fixed that build-path problem; d330a49d is the refreshed GPU baseline.
+The earlier `gp-candidate-UNQUALIFIED.patch` is a historical draft, superseded
+by the actual source changes on this branch; do not apply it again.
 
-RUN OWED, with normal memory pressure, before applying the candidate:
+NVIDIA qualification uses an expiring RTX 4090 rental, bounded builds/checks,
+complete exported-array captures and estimator cards. Classical surfaces run
+in all three numeric tiers; neural surfaces run only in IDENTICAL, matching
+main's current supported split. Test repairs apply equally to both versions:
+Mamba's Torch oracle needs contiguous input for negative-stride fixtures, and
+Transformer's tests must export `Array` before NumPy dtype/view operations and
+restore cache buffers through supported assignment. Reference tolerances are
+unchanged. Missing corpus files and the `einops` oracle dependency were supplied.
 
-```
-PATH="$HOME/.pixi/bin:$PATH" MOJOLEARN_COMPILE_JOBS=1 \
-MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_TARGET_COLUMN=apple \
-nice -n 19 python3 tools/macos_serial_guard.py --seconds 180 --rss-gib 4 \
-  --memory-policy user-tiny -- sh bindings/build_gp.sh
-PYTHONPATH=python MOJOLEARN_NUMERIC_MODE=identical \
-  /tmp/mojolearn-root-validation-20260906/bin/python \
-  python/mojolearn/tests/test_gp_surface.py
-```
+The unchanged baseline times out on a second Byte-LM native call on this
+rental, including a stateless-only process. Stack diagnostics locate it inside
+`byte_lm_run_configured`/`byte_lm_session_run`; it is not a measured copy-sweep
+regression. One training or evaluation call per fresh process is captured for
+both lifetime modes. This does not qualify repeated-call training on NVIDIA.
+The failed multi-call runs are retained separately from passing captures.
 
-Retain baseline binary and full output bytes, then apply candidate, repeat
-build/surface gate, and cmp the output capture. Read gp_numeric_mode and
-vendor from each binary. Repeat surface/output gates for other advertised
-tiers; NVIDIA/AMD execution is RUN OWED. The n_train=20,000 prediction timing
-is RUN OWED: its factor alone is 1.6 GB, so do not launch it under the current
-memory pressure. Use an already constructed model to avoid a large fit;
-interleave at least five old/new pairs after warmup within a bounded run.
-No speed gain, opponent update, or default promotion follows from this work.
-
-## Remaining sequence
-
-After GP admission, migrate byte-LM (three model reads, four captured model/
-gradient copies and output writes), Mamba, non-tree SVM, metrics and
-preprocessing, then the listed non-tree estimator upload helpers. One binding
-migration per commit. Keep owned-state/failure validation intact; inspect
-moves separately from byte copies. GBDT/isolation-forest work is excluded.
-
-WP7 remains unimplemented. Source inspection confirms mutable input operands
-in kernel_methods/checks/kernel_matrix.mojo::km_kernel_matrix and
-gaussian_process/checks/kernels.mojo::gp_kernel_matrix. Removing duplicate
-uploads requires checking their callees as well as those signatures;
-retaining pointer lifetimes is mandatory. Mixture's E-step precision inputs,
-spectral's host-only sum-scale staging, kNN classification's returned index
-buffers, and HDBSCAN's pre-download synchronizations still need their own
-fingerprint gates. No WP7 deletion is qualified by the host helper check.
-
-Integration correction: the hostptr gate now lives under root `checks/`. A
-`bindings/checks/` directory shadows the product `checks` imports when the
-binding builds use `-I . -I bindings`; this blocked ET/RF extension builds.
-The helper and gate behavior are unchanged. Retained run logs keep their
-original executed paths.
-
-## Build-path correction
-
-The host helper check lives in root `checks/`: a `bindings/checks/` directory
-shadows the root package when compiling binding entry points. The first
-remote baseline build exposed this import-resolution failure; no arithmetic
-ran. Another lane had independently fixed the location in 8d87cc92; that
-commit is now included in the refreshed baseline. The scoped rental was terminated and absence verified (HTTP 404). The
-extended host gate includes integer labels and passes 54,944 bit checks.
+Large timing gates are native complete calls, not kernel-only measurements:
+GP prediction from a preconstructed 20,000-row factor (1.6 GB), and kNN
+classification at 400k rows / 4k queries / 32 features, k=10/15 and both
+weight policies. Each uses warmup plus five alternating old/new pairs and
+complete result-bit comparisons. A baseline range above 20% disqualifies the
+timing window. No opponent runs or new opponent ratios are part of this sweep.
+Final timing and comparison results remain pending. Estimator execution on
+Apple and AMD remains RUN OWED; the host helper test is not a substitute.
