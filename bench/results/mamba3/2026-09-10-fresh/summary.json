@@ -1,0 +1,26 @@
+[
+  {
+    "shape": "lane.b2_l4_d32",
+    "baseline_ms": 1.246909,
+    "final_ms": 0.981355,
+    "reduction_percent": 21.296983180007523,
+    "reused_torch_ms": 1.477005,
+    "ratio_to_reused_torch": 0.6644222599111039
+  },
+  {
+    "shape": "narrow.b8_l4096_d512",
+    "baseline_ms": 87.192103,
+    "final_ms": 70.828952,
+    "reduction_percent": 18.766780977859888,
+    "reused_torch_ms": 16.396241,
+    "ratio_to_reused_torch": 4.319828672925703
+  },
+  {
+    "shape": "wide.b8_l1024_d2048",
+    "baseline_ms": 166.11355,
+    "final_ms": 124.409189,
+    "reduction_percent": 25.105935668703726,
+    "reused_torch_ms": 19.383267,
+    "ratio_to_reused_torch": 6.418380812687562
+  }
+]

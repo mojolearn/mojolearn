@@ -1,0 +1,39 @@
+1503 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10c280000000, nodemask=1)
+mamba3 block gate (IDENTICAL_MAMBA3_CONTRACT.md section 8); profile mojolearn.identical.mamba3.siso.fp32.v1; build mode IDENTICAL
+shape: B = 2 L = 65 d_model = 64
+  OK    norm.sumsq  (130 cells)
+  OK    norm.out  (8320 cells)
+  OK    in_proj.out  (71500 cells)
+  OK    A.out  (260 cells)
+  OK    dt.out  (260 cells)
+  OK    adt.out  (260 cells)
+  OK    trap.sigma  (260 cells)
+  OK    trap.scale  (260 cells)
+  OK    bcnorm.B  (16640 cells)
+  OK    bcnorm.C  (16640 cells)
+  OK    angle.theta  (8320 cells)
+  OK    rot.q  (33280 cells)
+  OK    rot.k  (33280 cells)
+  OK    qkdot.out  (260 cells)
+  OK    kscale.out  (33280 cells)
+  OK    dacs.out  (512 cells)
+  OK    seg.L  (32768 cells)
+  OK    pass.states  (65536 cells)
+  OK    yintra.out  (16640 cells)
+  OK    ystate.out  (16640 cells)
+  OK    skip.out  (16640 cells)
+  OK    gate.out  (16640 cells)
+  OK    out_proj.out  (8320 cells)
+  OK    residual.out  (8320 cells)
+  OK    ssd.h_last  (32768 cells)
+  OK    ssd.k_last  (512 cells)
+  OK    ssd.v_last  (256 cells)
+  OK    ssd.theta_last  (128 cells)
+  OK    state.h  (32768 cells)
+  OK    state.theta  (128 cells)
+card: 28 records, contract section 7 wants 28
+card: all 28 tags present, once each, in section 7's order
+GATE A PASS: every stage bit-identical to the oracle at this shape.
+GATE B PASS: 8 repeated launches, identical bits, every stage
+GATE C PASS: row bits independent of launch companions (B in {1,2,3}), negative control differed on 198579 cells
+One shape, one launch history, one box. Everything else in contract section 8 is OWED: the sabotage arms (one build each), decode / decode-cross / continuation / refusal / corpus arms, the other shapes and L set, FAST recording, the portable-trig device certification (phase M3-0), and every column that is not this machine (phase M3-6).

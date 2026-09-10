@@ -1,0 +1,23 @@
+[
+  {
+    "file": "seq.mamba3.lane.b2_l4_d32.f32.bin",
+    "bytes": 1024,
+    "baseline_sha256": "eae333a1e2c1d7524d374cbf1e2a798a3272d91e8f42252ca82c8c2c4841b42f",
+    "actual_sha256": "eae333a1e2c1d7524d374cbf1e2a798a3272d91e8f42252ca82c8c2c4841b42f",
+    "equal": true
+  },
+  {
+    "file": "seq.mamba3.narrow.b8_l4096_d512.f32.bin",
+    "bytes": 67108864,
+    "baseline_sha256": "871e385b8d1f87312114ff970f8b3882d3197095b0cd3b29fdcb8da99a7bc0c3",
+    "actual_sha256": "871e385b8d1f87312114ff970f8b3882d3197095b0cd3b29fdcb8da99a7bc0c3",
+    "equal": true
+  },
+  {
+    "file": "seq.mamba3.wide.b8_l1024_d2048.f32.bin",
+    "bytes": 67108864,
+    "baseline_sha256": "57c721ca686729bc13ac3a552e19aed4710b3785adb07ce0e7d8458b3b6a1280",
+    "actual_sha256": "57c721ca686729bc13ac3a552e19aed4710b3785adb07ce0e7d8458b3b6a1280",
+    "equal": true
+  }
+]
