@@ -1,5 +1,16 @@
 # Performance continuation, September 10
 
+Resident LM follow-up: a 62-second M4 pilot at **20.45M parameters / context
+2048 / V8192** measured complete-step medians of 8.115 s reconstructed and
+6.769 s resident (**16.6% lower**). Three timed pairs all improved and four
+complete output comparisons passed. Synthetic batches and a sub-target model
+still do not establish 125M-scale training time. Resident execution is now the
+Metal real-text capture runner default; generalized training can use
+`resident=True`. Public API and CUDA/HIP defaults remain unchanged. Evidence:
+`bench/results/lm_session_adoption_2026-09-10/`; details in
+`HANDOFF_lm_session_2026-09-10.md`. No opponent ratio changed.
+
+
 Ratios below compare our IDENTICAL arm with the opponent's recorded fast arm.
 Reuse `bench/OPPONENT_REFERENCE.md` only for its exact hardware, driver,
 library, shape, fixture and timing scope. Internal before/after improvements

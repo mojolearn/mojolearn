@@ -29,7 +29,8 @@ def test_mismatched_platform_vendor_refuses(monkeypatch, system, vendor):
         capture.validate_platform_vendor(vendor)
 
 
-def test_transfer_decodes_and_retains_same_bytes_after_source_replacement(tmp_path):
+@pytest.mark.parametrize('resident', [False, True])
+def test_transfer_decodes_and_retains_same_bytes_after_source_replacement(tmp_path, resident):
     source = tmp_path / 'incoming.json'
     target = tmp_path / 'retained.json'
     raw = b'{"capture":"fixed"}'
@@ -37,11 +38,12 @@ def test_transfer_decodes_and_retains_same_bytes_after_source_replacement(tmp_pa
     result = object()
     class Loader:
         @classmethod
-        def from_checkpoint_bytes(cls, encoded):
+        def from_checkpoint_bytes(cls, encoded, **kwargs):
+            assert kwargs == {'resident': resident}
             assert type(encoded) is bytes and encoded == raw
             source.write_bytes(b'changed after capture')
             return result
-    restored, receipt = capture.load_foreign_checkpoint(Loader, source, target)
+    restored, receipt = capture.load_foreign_checkpoint(Loader, source, target, resident=resident)
     assert restored is result and target.read_bytes() == raw
     assert receipt['sha256'] == capture.sha(raw)
     assert receipt['loaded_from_immutable_bytes'] is True
@@ -52,7 +54,7 @@ def test_transfer_decodes_and_retains_same_bytes_after_source_replacement(tmp_pa
 def test_transfer_refuses_symlink_and_oversize_before_decode(tmp_path):
     class Loader:
         @classmethod
-        def from_checkpoint_bytes(cls, encoded):
+        def from_checkpoint_bytes(cls, encoded, **kwargs):
             raise AssertionError('invalid incoming file reached decoder')
     source = tmp_path / 'source'
     source.write_bytes(b'x')
