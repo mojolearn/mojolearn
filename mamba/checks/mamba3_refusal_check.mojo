@@ -44,8 +44,8 @@ def main() raises:
     if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not M3_DEVICE_REFUSAL:
         raise Error("mamba3_refusal_check requires the IDENTICAL device refusal")
     var ctx = DeviceContext()
-    var finite = List[UInt32](0, 0x80000000, 1, 0x80000001, 0x007FFFFF, 0x807FFFFF, 0x3F800000, 0xBF800000, 0x7F7FFFFF, 0xFF7FFFFF)
-    var lengths = List[Int](0, 1, 17, 255, 256, 257, 1003, 32769, 70001)
+    var finite: List[UInt32] = [0, 0x80000000, 1, 0x80000001, 0x007FFFFF, 0x807FFFFF, 0x3F800000, 0xBF800000, 0x7F7FFFFF, 0xFF7FFFFF]
+    var lengths: List[Int] = [0, 1, 17, 255, 256, 257, 1003, 32769, 70001]
     var total = 0
     for n in lengths:
         # One unscanned bad suffix proves the extent is honored.
@@ -57,9 +57,10 @@ def main() raises:
         total += 1
         if n == 0:
             continue
-        var bad_bits = List[UInt32](0x7F800000, 0xFF800000, 0x7FC00001, 0xFFC12345, 0x7F800001, 0xFF800001)
+        var bad_bits: List[UInt32] = [0x7F800000, 0xFF800000, 0x7FC00001, 0xFFC12345, 0x7F800001, 0xFF800001]
         for bits in bad_bits:
-            for where in List[Int](0, n // 2, n - 1):
+            var positions: List[Int] = [0, n // 2, n - 1]
+            for where in positions:
                 var bad = values.copy()
                 # Put another kind at the tail to test index precedence.
                 bad[n - 1] = bitcast[DType.float32](UInt32(0x7FC01234))
@@ -70,8 +71,8 @@ def main() raises:
                 run_case(ctx, bad, n, Int64(where) * 2 + kind)
                 total += 1
     # Named buffers keep caller order, even if the second has index zero.
-    var first = List[Float32](0.0, 1.0, bitcast[DType.float32](UInt32(0xFF800000)))
-    var second = List[Float32](bitcast[DType.float32](UInt32(0x7FC00001)))
+    var first: List[Float32] = [0.0, 1.0, bitcast[DType.float32](UInt32(0xFF800000))]
+    var second: List[Float32] = [bitcast[DType.float32](UInt32(0x7FC00001))]
     var da = m3_upload(ctx, first)
     var db = m3_upload(ctx, second)
     var got = String("")
