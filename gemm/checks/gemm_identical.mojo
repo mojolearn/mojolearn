@@ -140,6 +140,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
+    gemm_wide_split_for,
     lib_smem_page_fits_for,
     lib_smem_pages_for,
 )
@@ -449,7 +450,10 @@ comptime PLAN_SPLIT_64_4X4 = 15
 #: `choose_gemm_plan` does not pick them; the forced-plan sweep times them.
 comptime PLAN_TUNED_64_4X4_K32 = 16
 comptime PLAN_TUNED_128_8X8_K32 = 17
-comptime GEMM_PLAN_COUNT = 18
+#: Wider split tile, retaining each leaf's ascending arithmetic and fold.
+#: KS=16 keeps its shared page within every column's memory limit.
+comptime PLAN_SPLIT_128_8X8 = 18
+comptime GEMM_PLAN_COUNT = 19
 
 #: Threads per block for `PLAN_FLAT`. SCHEDULING: each thread owns a whole
 #: output cell, so this moves WHICH thread computes a cell and never the
@@ -499,6 +503,8 @@ def gemm_plan_name(plan: Int) -> String:
         return _tuned_plan_name(TUNED_RPT, TUNED_CPT, TUNED_KBLK)
     if plan == PLAN_TUNED_128_8X8_K32:
         return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, TUNED_128_KS)
+    if plan == PLAN_SPLIT_128_8X8:
+        return _split_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16)
     if plan == PLAN_SPLIT_64_4X4:
         return _split_plan_name(TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_KBLK)
     if plan == PLAN_SPLIT_32_2X2:
@@ -2123,6 +2129,7 @@ def _is_split_plan(plan: Int) -> Bool:
     return (
         plan == PLAN_SPLIT_32_2X2
         or plan == PLAN_SPLIT_64_4X4
+        or plan == PLAN_SPLIT_128_8X8
         or plan == PLAN_SPLIT_16_1X1
         or plan == PLAN_SPLIT_1X256
         or plan == PLAN_SPLIT_8X64
@@ -2171,6 +2178,11 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
             if m == 1:
                 return PLAN_SPLIT_1X256
             return PLAN_SPLIT_8X64
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and gemm_wide_split_for[TARGET_COLUMN]():
+            # Full tiles only: padding a just-over-128 shape to 256 would
+            # do more work than the existing 64-wide plan.
+            if p_count >= 512 and m % 128 == 0 and n % 128 == 0 and m * n <= 128 * 1024:
+                return PLAN_SPLIT_128_8X8
         if m >= 64 and n >= 64 and m * n <= 128 * 1024:
             return PLAN_SPLIT_64_4X4
         if m >= 32 and n >= 32 and m * n <= 128 * 1024:
@@ -2456,6 +2468,10 @@ def identical_gemm_with_plan(
             )
         elif plan == PLAN_SPLIT_64_4X4:
             _launch_split[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_KBLK](
+                ctx, c, a, b, ws, m, n, k, leaf, p_count, st
+            )
+        elif plan == PLAN_SPLIT_128_8X8:
+            _launch_split[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16](
                 ctx, c, a, b, ws, m, n, k, leaf, p_count, st
             )
         elif plan == PLAN_SPLIT_16_1X1:

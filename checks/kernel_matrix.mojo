@@ -887,3 +887,13 @@ def knn_index_tile_columns_for[column: Int, identical: Bool]() -> Int:
     if _knn_identical_round_column(column):
         return KNN_IDENTICAL_INDEX_TILE
     return 0
+
+
+def gemm_wide_split_for[column: Int]() -> Bool:
+    """Execution-only wide split-K tiles on the measured NVIDIA column.
+
+    The 128x128/KS16 tile reduces operand reloads for complete output tiles.
+    Other columns keep their previous dispatcher pending local timings;
+    every column's all-plan correctness gate still exercises the new tile.
+    """
+    return column == COLUMN_NVIDIA

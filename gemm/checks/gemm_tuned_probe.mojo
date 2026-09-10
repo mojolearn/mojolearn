@@ -9,6 +9,8 @@ dispatcher, `choose_gemm_plan`) at every row of `bench/gemm_shapes.mojo`,
 both outputs POISONED first and the poison counted, then times the pair
 call by call. `MOJOLEARN_GEMM_PLAN=<id>` forces one plan on the second arm;
 `MOJOLEARN_SPEED_SHAPES` and `MOJOLEARN_SPEED_ROUNDS` as in the speed lane.
+`MOJOLEARN_GEMM_BASELINE_PLAN=<id>` selects a named baseline; -2 selects
+current dispatch, and -1 (default) retains the pre-tuned plan.
 """
 from std.memory import bitcast
 from std.os import getenv
@@ -117,7 +119,14 @@ def main() raises:
     print("== dispatcher vs the untuned plan, BITS and TIME ==")
     var same = 0; var moved = 0; var refused = 0
     var forced = _env_int("MOJOLEARN_GEMM_PLAN", -1)
+    var baseline = _env_int("MOJOLEARN_GEMM_BASELINE_PLAN", -1)
     var rounds = _env_int("MOJOLEARN_SPEED_ROUNDS", 3)
+    if forced < -1 or forced >= GEMM_PLAN_COUNT:
+        raise Error("gemm_tuned_probe: invalid forced plan")
+    if baseline < -2 or baseline >= GEMM_PLAN_COUNT:
+        raise Error("gemm_tuned_probe: invalid baseline plan")
+    if rounds < 1:
+        raise Error("gemm_tuned_probe: rounds must be positive")
     for i in range(GEMM_SHAPE_COUNT):
         if not _shape_selected(gemm_shape_name(i)):
             continue
@@ -130,6 +139,10 @@ def main() raises:
         var na = k * m if op == OP_TN else m * k
         var nb = n * k if op == OP_NT else k * n
         var old_plan = choose_gemm_plan_untuned(m, n, k)
+        if baseline == -2:
+            old_plan = choose_gemm_plan(m, n, k)
+        elif baseline >= 0:
+            old_plan = baseline
         var new_plan = forced if forced >= 0 else choose_gemm_plan(m, n, k)
         var w1 = identical_gemm_workspace_floats(m, n, k, old_plan)
         var w2 = identical_gemm_workspace_floats(m, n, k, new_plan)
@@ -184,6 +197,8 @@ def main() raises:
         _ = ctx^
     print()
     print("   " + String(same) + " match, " + String(moved) + " MOVED, " + String(refused) + " refused.")
+    if refused != 0 or same + moved == 0:
+        raise Error("gemm_tuned_probe: refused or empty comparison")
     if moved != 0:
         raise Error("gemm_tuned_probe: the dispatcher MOVED BITS on " + String(moved)
                     + " shapes. A faster plan that changes the answer is not this profile.")

@@ -1,0 +1,5 @@
+2991 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b3d80000000, nodemask=2)
+== dispatcher vs the untuned plan, BITS and TIME ==
+   OK  gram.128sq.x100003 [SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle) -> SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]  m=128 n=128 k=100003  BITS MATCH  untuned=0.4922947142857143ms dispatch=0.3846757142857143ms  speedup=1.2797655167803679x
+
+   1 match, 0 MOVED, 0 refused.

@@ -359,3 +359,7 @@ the forced sweep; `MOJOLEARN_SPEED_ROUNDS` sets the rounds.
 5. `ols.predict.gemv.64Kx16` (P = 1) and `pca.transform.8192x4x4` (P = 1)
    stay on their old plans by design (one leaf, nothing to split); they
    are 0.5x-1.6x already.
+
+## 2026-09-09 follow-up: wide split tiles
+
+Retained plan18 (128x128, KS16) and NVIDIA-only scheduling row `gemm_wide_split_for`. Dispatcher restricts it to full128 tiles, >=512 leaves, <=131072 output cells and the existing workspace cap. H10016-shape interleaved probe: identical digests/no poison, 31.6–36.8% less time than plan15; Gram128x100003 0.5763→0.3892ms. L40S exploratory Gram128 0.492→0.385ms. Final19-plan device gates pass Apple/NVIDIA, Apple backward10gates pass. Rectangular dense and forced-stack candidates lost and were removed. Evidence and exact provenance: `bench/results/gemm_followup_2026-09-09/README.md`. Gram32 and dense Llama remain unchanged in this follow-up.
