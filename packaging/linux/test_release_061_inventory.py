@@ -51,7 +51,9 @@ class ReleaseInventory(unittest.TestCase):
             result = packer.release_inventory(sets, proofs, version, root)
             self.assertEqual(result['version'], version)
             self.assertEqual(result['assembly_profile'], packer.RELEASE_PROFILE)
-            self.assertEqual(len(result['extensions']), 138)
+            # 16 common extensions x 3 modes x 3 architectures, plus
+            # one IDENTICAL-only language-model extension per architecture.
+            self.assertEqual(len(result['extensions']), 147)
             self.assertTrue(result['optional_native']['_mojolearn_byte_lm']['included'])
             self.assertEqual(result['optional_native']['_mojolearn_byte_lm']['unsupported_modes'],
                              ['fast', 'deterministic'])
