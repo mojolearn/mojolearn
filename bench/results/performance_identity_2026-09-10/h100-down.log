@@ -1,0 +1,3 @@
+[05:33:40 attn-pod] terminating ujlg5ytky38cvv
+[05:33:40 attn-pod] DELETE -> HTTP 204
+[05:33:46 attn-pod] VERIFIED GONE (GET -> HTTP 404)

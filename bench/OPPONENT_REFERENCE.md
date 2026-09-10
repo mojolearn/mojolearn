@@ -102,24 +102,40 @@ them. k=10 and k=15 are separate rows; do not substitute one for the other.
 
 | index | queries | k | cuML brute NearestNeighbors request | cuML device | IDENTICAL request Sep10 | IDENTICAL device Sep10 | request ratio |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 100k x 32 | 32 | 10 | 1.125 | 0.669 | 0.530 | 0.265 | 0.47x |
-| 100k x 32 | 128 | 10 | 0.914 | 0.459 | 0.683 | 0.415 | 0.75x |
-| 100k x 32 | 1000 | 10 | 1.572 | 1.081 | 2.771 | 2.477 | 1.76x |
-| 100k x 32 | 4000 | 10 | 3.480 | 2.904 | 10.014 | 9.635 | 2.88x |
-| 400k x 32 | 32 | 10 | 1.546 | 1.200 | 1.983 | 1.027 | 1.28x |
-| 400k x 32 | 128 | 10 | 1.531 | 1.159 | 2.593 | 1.632 | 1.69x |
-| 400k x 32 | 1000 | 10 | 4.101 | 3.659 | 10.794 | 9.808 | 2.63x |
-| 400k x 32 | 4000 | 10 | 10.225 | 9.632 | 39.305 | 38.226 | 3.84x |
-| 100k x 32 | 32 | 15 | 1.113 | 0.675 | 0.577 | 0.309 | 0.52x |
-| 100k x 32 | 128 | 15 | 0.922 | 0.470 | 0.728 | 0.457 | 0.79x |
-| 100k x 32 | 1000 | 15 | 1.617 | 1.111 | 3.123 | 2.818 | 1.93x |
-| 100k x 32 | 4000 | 15 | 3.571 | 2.957 | 11.441 | 11.004 | 3.20x |
-| 400k x 32 | 32 | 15 | 1.573 | 1.241 | 2.160 | 1.204 | 1.37x |
-| 400k x 32 | 128 | 15 | 1.532 | 1.197 | 2.764 | 1.802 | 1.80x |
-| 400k x 32 | 1000 | 15 | 4.183 | 3.750 | 12.167 | 11.164 | 2.91x |
-| 400k x 32 | 4000 | 15 | 10.817 | 9.756 | 44.814 | 43.676 | 4.14x |
+| 100k x 32 | 32 | 10 | 1.125 | 0.669 | 0.528 | 0.262 | 0.47x |
+| 100k x 32 | 128 | 10 | 0.914 | 0.459 | 0.657 | 0.388 | 0.72x |
+| 100k x 32 | 1000 | 10 | 1.572 | 1.081 | 2.535 | 2.243 | 1.61x |
+| 100k x 32 | 4000 | 10 | 3.480 | 2.904 | 9.091 | 8.711 | 2.61x |
+| 400k x 32 | 32 | 10 | 1.546 | 1.200 | 1.959 | 1.000 | 1.27x |
+| 400k x 32 | 128 | 10 | 1.531 | 1.159 | 2.476 | 1.521 | 1.62x |
+| 400k x 32 | 1000 | 10 | 4.101 | 3.659 | 9.830 | 8.847 | 2.40x |
+| 400k x 32 | 4000 | 10 | 10.225 | 9.632 | 35.486 | 34.402 | 3.47x |
+| 100k x 32 | 32 | 15 | 1.113 | 0.675 | 0.571 | 0.304 | 0.51x |
+| 100k x 32 | 128 | 15 | 0.922 | 0.470 | 0.703 | 0.431 | 0.76x |
+| 100k x 32 | 1000 | 15 | 1.617 | 1.111 | 2.892 | 2.583 | 1.79x |
+| 100k x 32 | 4000 | 15 | 3.571 | 2.957 | 10.515 | 10.077 | 2.94x |
+| 400k x 32 | 32 | 15 | 1.573 | 1.241 | 2.124 | 1.168 | 1.35x |
+| 400k x 32 | 128 | 15 | 1.532 | 1.197 | 2.652 | 1.688 | 1.73x |
+| 400k x 32 | 1000 | 15 | 4.183 | 3.750 | 11.216 | 10.203 | 2.68x |
+| 400k x 32 | 4000 | 15 | 10.817 | 9.756 | 40.956 | 39.814 | 3.79x |
 
-The Sep10 IDENTICAL columns use source `8266f1c0`, NVIDIA H100 80GB HBM3,
+The current Sep10 IDENTICAL columns use the eight-query register tile from
+`edada38d` with `MOJOLEARN_KNN_IDENTICAL_ROWS8=1` (adopted as default in
+`0e213d65`; original lane commits `8fdfd85f` and `c03bbcfc`). NVIDIA H100 80GB HBM3, driver580.126.09, Mojo1.0.0(ed45d567),
+IDENTICAL, dyadic-v1, two warmups and seven rounds; evidence:
+`bench/results/knn/2026-09-10-logical-width/h100/`. The archived cuML tuple
+is reused unchanged. All16 new-grid index/distance fingerprints match the
+previous corrected baseline. Exact396584-triplet and24-layout gates pass.
+At400k/4000 queries, paired k10 request39.31 ->35.46ms (~9.8% less),
+k15 44.80 ->40.93ms (~8.6% less). Eight-feature coverage is flat to0.9%
+slower; this is not a universal shape-speedup claim. Logical-width extraction
+alone was performance-neutral in alternating baseline/candidate measurements.
+The final default build, without the experimental flag, passes the same oracle
+and layouts and records k10 request35.473274/device34.374416ms and k15
+request40.942684/device39.805605ms in seven rounds; those paired validation
+samples are separate from the complete-grid medians tabulated above.
+
+Historical previous Sep10 columns used source `8266f1c0`, NVIDIA H100 80GB HBM3,
 driver 580.126.09, Mojo 1.0.0 (ed45d567), IDENTICAL mode, dyadic-v1,
 two warmups and seven timed rounds. The opponent is the archived matched
 hardware/driver reference above, not rerun. Evidence and all 16 price logs:
@@ -351,13 +367,21 @@ explicit when quoting the ratio. This is the FP32 reference scan.
 
 | shape | torch FP32 ms | numerical admission | IDENTICAL public ms Sep10 | ratio |
 |---|---:|---|---:|---:|
-| lane.b2_l4_d32 | 1.477005 | PASS | 0.981355 | 0.66x |
-| narrow.b8_l4096_d512 | 16.396241 | PASS | 70.828952 | 4.32x |
-| wide.b8_l1024_d2048 | 19.383267 | PASS | 124.409189 | 6.42x |
+| lane.b2_l4_d32 | 1.477005 | PASS | 0.984050 | 0.67x |
+| narrow.b8_l4096_d512 | 16.396241 | PASS | 65.868374 | 4.02x |
+| wide.b8_l1024_d2048 | 19.383267 | PASS | 120.395977 | 6.21x |
 
-Sep10 public medians use the final default fresh-prefill/caller-copy path,
-five timed rounds, same H100 model/driver, and matching full output SHA.
-Source, runtime and samples: `bench/results/mamba3/2026-09-10-fresh/`.
+Latest Sep10 public medians use the guarded NVIDIA increment tile on large
+calls, plus the existing fresh-prefill/caller-copy path. Five timed rounds,
+same H100 model/driver, and matching full output SHA. Source, runtime and
+samples: `bench/results/mamba3/2026-09-10-increment-tile/`. Final default
+source `ba4e3257` (lane `eded801f`) passes 39,087,232 output/report cells and 102 public checks.
+Same-pod baseline -> final: narrow72.118117 ->65.868374ms; wide126.097558
+->120.395977ms. Initial forced-tile samples also improve (66.936124 and
+122.015735ms). Small calls and Apple retain the previous increment default.
+The earlier Sep10 measurements remain archived in
+`bench/results/mamba3/2026-09-10-fresh/`; do not use their different physical
+pod as this optimization's before/after control.
 The small lane row measures overhead; do not extrapolate it to large shapes.
 
 Source directory:
@@ -411,3 +435,27 @@ against a matched FP64 diagnostic with comparable error magnitudes. This
 is numerical evidence, not a new timing row or a qualified speed ratio.
 The comparator defaults and tolerance remain unchanged. Reuse this
 investigation before spending another opponent run on the same mismatch.
+
+### H100 transformer caller-transfer measurements (2026-09-10)
+
+These are own public IDENTICAL timings, not admitted opponent ratios. The
+original Torch admission failure above remains unchanged; no opponent was
+retimed and no tolerance or comparator default changed. H100 80GB HBM3,
+driver 580.126.09, Mojo 1.0.0 (ed45d567), Python 3.11.10/NumPy 1.26.3.
+Original seed-7 large fixtures, one logged warmup and seven timed rounds per
+build/order. Each call includes host inputs/weights, refusal checks, device
+work, output and cache transfers. Final source `f31508bb`.
+
+| shape | legacy first ms | candidate first ms | legacy reverse ms | final default reverse ms |
+|---|---:|---:|---:|---:|
+| narrow.b8_l4096_d512 | 265.319614 | 245.827597 | 255.330876 | 245.223133 |
+| wide.b8_l1024_d2048 | 261.891093 | 246.565180 | 260.435883 | 245.318148 |
+
+All82 small full-array records (including backward gradients and carried/ring
+caches) match across builds, as do both full16,777,216-cell large output SHA256
+values. Final flag-absent defaults pass on Apple and NVIDIA. The reversed
+order confirms approximately4%/6% less request time; the initial narrow
+baseline was noisier. Apple paired samples show a consistent small-HD64 win
+and variable HD128 timing. Evidence, raw samples and source hashes:
+`bench/results/transformer_transfer_2026-09-10/`. No qualified Torch ratio
+may be inferred from these own-versus-own measurements.
