@@ -220,6 +220,20 @@ def main() raises:
                 fh.write_bytes(Span(bytes))
             print("KNN_REF_DUMP", dump, n_queries * k)
 
+        # Optional exact A/B artifact outside both timed regions: interleaved
+        # index and distance UInt32 words, little endian, all selected cells.
+        var full_dump = String(getenv("MOJOLEARN_KNN_REF_DUMP_FULL"))
+        if full_dump != "":
+            var words = List[UInt8]()
+            for cell in range(n_queries * k):
+                for field in range(2):
+                    var word = expected_i[cell] if field == 0 else expected_d[cell]
+                    for byte in range(4):
+                        words.append(UInt8((word >> UInt32(8 * byte)) & UInt32(255)))
+            with open(full_dump, "w") as fh:
+                fh.write_bytes(Span(words))
+            print("KNN_REF_DUMP_FULL", full_dump, n_queries * k)
+
         print(
             "KNN_REF_RESULT", "index", n_index, "queries", n_queries, "k", k,
             "features", d, "request_median_ms", _median(request_ms.copy()),
