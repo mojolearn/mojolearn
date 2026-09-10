@@ -76,3 +76,19 @@ Do NOT mechanically apply the Mamba list to transformer cache storage: `kv_appen
 Root reports first medians baseline/uninitialized: narrow 56.767391/236.131446 ms, wide 104.340496/103.713224 ms, tiny 1.1889/1.0680 ms. These are preliminary single-order measurements; output hashes matched so far and poison arm remained pending. Do not enable this candidate by default on this evidence, including a tiny-shape carveout. Final combined GEMM validation should use zero-initialized Mamba3 stages.
 
 Read-only regression inspection finds identical allocation sizes/order and numerical launches, and a synchronized input upload before numerical stage use. No missing allocation-readiness barrier has been established. Deferred allocation, physical placement/first-touch behavior, and external runtime conditions are hypotheses only. Poison restores the fills and synchronization while retaining the new helper/constructor code, making its timing a useful discriminator. If poison restores narrow speed, a bounded next diagnostic is uninitialized allocation with a synchronize per allocation; this separates the removed synchronization from removed memory writes. Existing PHASE_TIMERS synchronizes stage construction, so compare against an uninstrumented arm and do not mistake that extra barrier for a neutral observer. No additional code or device work was performed for this diagnosis.
+
+## Final H100 decision: rejected
+
+Root completed the three arms on the same H100, with all GPU jobs serialized by predecessor completion files. There was no overlapping kNN GPU work. Each arm used the baseline GEMM implementation to isolate scratch allocation; no opponent was measured.
+
+| Public shape | Baseline ms | Uninitialized ms | Poison ms |
+| --- | ---: | ---: | ---: |
+| tiny | 1.188908 | 1.068041 | 1.220964 |
+| narrow B8/L4096/D512 | 56.767391 | 236.131446 | 56.415820 |
+| wide B8/L1024/D2048 | 104.340496 | 103.713224 | 103.963660 |
+
+All native default and long trace comparisons, decode-cross, continuation, refusals, large fresh/report checks and public surface checks passed. All six complete-output SHA256 comparisons (three shapes each for uninitialized and poison against baseline) passed. Poison fills therefore found no observed stale scratch read in the tested cases. The static definite-write audit remains useful, but arithmetic admission alone does not justify production adoption.
+
+The uninitialized narrow arm regressed 4.16x. Restoring memory fills and their synchronizations in the poison arm restored approximately baseline timing. This establishes an association with the removed initialization sequence, not whether physical allocation, first-touch, synchronization, placement or another runtime effect caused the regression. The experiment changes fills and synchronization together and cannot distinguish them. No allocator or clock cause is claimed. The tiny improvement does not justify a separate default dispatch from this single three-arm run; wide offers no material repeatable win here.
+
+**Reject the scratch optimization.** Root archived its candidate patch and reproduction driver, and restored the three production/check source files to d557b851 behavior in `9c10d749`. Final combined Mamba3 validation uses the accepted GEMM change only, retaining zero-initialized stages. The raw remote evidence was produced under `/root/evidence/mamba-stage`, including `price-baseline.log`, `price-uninitialized.log`, `price-poison.log`, `timings.json` and `full-output-identity.json`; root owns its durable local archive and final combined evidence. This handoff records root-reported completed results; the implementing agent performed no build, GPU execution or independent retiming.
