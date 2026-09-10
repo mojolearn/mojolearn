@@ -61,6 +61,13 @@ optimization gate. NVIDIA/AMD attribution remains owed. No competitor ratio is i
   routing and native List/into comparisons; see corrected brief.
 - WP4: device identity-row fill and borrowed-X OOB path in progress, including
   IDENTICAL FTZ compatibility checks.
-- WP5: eight-slot flat-input cindex staging prepared, with NaN refusal retained
-  for eval/predict inputs. Per-cell/tail/ring-wrap gates are pending.
+- WP5: eight-slot flat-input cindex staging implemented, retaining eval/predict
+  NaN refusal. FAST/DETERMINISTIC/IDENTICAL per-cell oracle and columns-twin
+  gates pass at rows/features 1/19, 257/35, 8193/67, with ring wraps, skipped
+  constants, mixed layouts, source-mutation reach, and late NaN refusal.
+  Existing IDENTICAL NaN fit/predict/save-load integration passes (4000
+  predictions; Min/Max negative control moves 3979 rows). See
+  [WP5 evidence](../../bench/results/boundary_tax_2026-09-10/wp5/README.md).
+  NVIDIA/AMD correctness and large narrow/wide NVIDIA timing remain owed;
+  these small correctness fixtures establish no speed gain.
 - WP8: vectorized byte comparison/copy pending after WP1's builder edit.

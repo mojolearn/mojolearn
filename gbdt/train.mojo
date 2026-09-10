@@ -221,13 +221,24 @@ def _build_cindex_from_floats(
     )
     ctx.enqueue_memset(cindex, UInt32(0))
 
-    var xdev = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    # the count-first borders layout `binarize_float_feature_kernel`
-    # reads (their `sharedBorders[0]` broadcast)
-    var hbo = ctx.enqueue_create_host_buffer[DType.float32](256)
-    var bdev = ctx.enqueue_create_buffer[DType.float32](256)
+    # DEVIATION 2485 (boundary-tax WP5): mirror the existing columns
+    # staging ring. Bulk copy unchanged AsIs values; retain NaN scanning
+    # here because eval/predict buffers have not passed border validation.
+    # Eight slots are retained until a drain before reuse and at return.
+    # No quantization arithmetic/layout changes; local timing is OWED.
+    comptime _CINDEX_SLOTS = 8
+    var xdevs = List[DeviceBuffer[DType.float32]]()
+    var hxs = List[HostBuffer[DType.float32]]()
+    var hbos = List[HostBuffer[DType.float32]]()
+    var bdevs = List[DeviceBuffer[DType.float32]]()
+    for _ in range(_CINDEX_SLOTS):
+        xdevs.append(ctx.enqueue_create_buffer[DType.float32](n_rows))
+        hxs.append(ctx.enqueue_create_host_buffer[DType.float32](n_rows))
+        hbos.append(ctx.enqueue_create_host_buffer[DType.float32](256))
+        bdevs.append(ctx.enqueue_create_buffer[DType.float32](256))
+    ctx.synchronize()
     comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
+    var staged = 0
     for f in range(n_features):
         if len(borders[f]) == 0:
             continue
@@ -236,33 +247,47 @@ def _build_cindex_from_floats(
         if len(nan_treatment) == n_features:
             treat = nan_treatment[f]
         var sub = nan_substitution(treat)
-        for r in range(n_rows):
-            var v = x_colmajor[f * n_rows + r]
-            if v != v:
-                if treat == NAN_TREATMENT_AS_IS:
+        var slot = staged % _CINDEX_SLOTS
+        if staged >= _CINDEX_SLOTS and slot == 0:
+            # one drain per revolution frees every slot in the ring
+            ctx.synchronize()
+        var hx = hxs[slot].unsafe_ptr()
+        var hbo = hbos[slot].unsafe_ptr()
+        var src = x_colmajor.unsafe_ptr() + f * n_rows
+        if treat == NAN_TREATMENT_AS_IS:
+            # Unlike the training-only columns path, this also consumes
+            # eval/predict data. Preserve its unseen-NaN refusal before
+            # copying the unchanged finite/Inf/signed-zero source bits.
+            for r in range(n_rows):
+                var v = src.unsafe_load(r)
+                if v != v:
+                    # Prior slots can still own queued uploads/kernels.
+                    ctx.synchronize()
                     raise Error(
                         "There are NaNs in feature number " + String(f)
                         + " but there were no NaNs in the learn dataset"
                     )
-                v = sub
-            hx.unsafe_ptr().unsafe_store(r, v)
-        ctx.enqueue_copy(dst_buf=xdev, src_ptr=hx.unsafe_ptr())
-        hbo.unsafe_ptr().unsafe_store(0, Float32(len(borders[f])))
+            memcpy(dest=hx, src=src, count=n_rows)
+        else:
+            for r in range(n_rows):
+                var v = src.unsafe_load(r)
+                if v != v:
+                    v = sub
+                hx.unsafe_store(r, v)
+        hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
-            hbo.unsafe_ptr().unsafe_store(1 + b, borders[f][b])
-        ctx.enqueue_copy(dst_buf=bdev, src_ptr=hbo.unsafe_ptr())
+            hbo.unsafe_store(1 + b, borders[f][b])
+        ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
+        ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
         ctx.enqueue_function[binarize_float_feature_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-            xdev.unsafe_ptr(), Int32(n_rows),
-            bdev.unsafe_ptr(), cindex.unsafe_ptr(),
+            xdevs[slot].unsafe_ptr(), Int32(n_rows),
+            bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
             grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
             block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
         )
-        ctx.synchronize()
-        _ = bdev^  # past the drain (step-33 race class, device side)
-        _ = xdev^  # past the drain (step-33 race class, device side)
-        _ = hx^  # past the drain (step-33 race class)
-        _ = hbo^  # past the drain (step-33 race class)
+        staged += 1
+    ctx.synchronize()
     return cindex^
 
 
