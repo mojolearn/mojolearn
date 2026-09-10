@@ -53,7 +53,7 @@ def main() raises:
     refused(ByteConfig(2, 32, 32, 4, 2, 8, 0))
     refused(ByteConfig(1048576, 8192, 2, 1, 1, 2, 2))
     refused(ByteConfig(1, 1, 1048576, 1, 1, 1048576, 2))
-    refused(ByteConfig(1, 8192, 32, 32, 1, 1, 2))
+    refused(ByteConfig(1, 8192, 64, 32, 1, 2, 2))
     var rejected = False
     try:
         _ = default.param_count(20)
