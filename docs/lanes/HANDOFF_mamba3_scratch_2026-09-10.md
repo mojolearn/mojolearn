@@ -98,3 +98,15 @@ The initial uninitialized narrow measurement was 4.16x the initial baseline, and
 Root's final GEMM-only comparison reused the identical `baseline.so` from the scratch experiment, with zero-initialized stages. Narrow baseline medians became 229.788 and 225.317 ms in two comparison orders, versus the original 56.767391 ms. The new GEMM default measured 222.377 and 222.876 ms. Thus both original and modified libraries can occupy the slow narrow regime; the initial 4.16x contrast cannot be attributed to removing scratch fills. Earlier statements describing it as an optimization-induced regression are superseded by this observation.
 
 Wide remained comparatively stable: baseline 102.725/103.468 ms versus GEMM default 95.521/93.319 ms, with unchanged complete outputs. These rounded root-reported values provide context only; the final GEMM evidence and opponent ledger are owned by root. The scratch candidate remains unadopted because no stable positive evidence supports it, not because a scratch-specific slowdown has been established. Root is collecting an isolated identical-binary repeat with hardware context after all jobs; no source change or causal conclusion follows from that pending diagnosis.
+
+## Final isolated identical-binary repeat: no qualified Mamba3 speed claim
+
+After every other GPU job completed, root repeated the original baseline, final GEMM default, and identical original baseline again. Baseline library SHA256 checks matched, and all complete output SHA256 values remained unchanged.
+
+| Isolated arm | Tiny ms | Narrow ms | Wide ms |
+| --- | ---: | ---: | ---: |
+| baseline0 | 1.267016 | 248.337356 | 102.489213 |
+| default0 | 1.246534 | 251.352344 | 97.158484 |
+| identical baseline1 | 1.271963 | 250.333956 | 283.757282 |
+
+The wide baseline now also changes timing regime within an identical-binary repeat. The earlier two-order wide 7–10% improvement is an observation, not a stable current price. **No new Mamba3 speedup claim or ratio against a cached opponent is qualified for any shape by this run.** The scratch candidate stays unadopted, the accepted GEMM arithmetic change has separate GEMM evidence, and Mamba3 end-to-end latency remains unresolved. Root archived before/after GPU query and process snapshots alongside these results. No hardware, allocator, scheduling or compiler cause is inferred from the available evidence.
