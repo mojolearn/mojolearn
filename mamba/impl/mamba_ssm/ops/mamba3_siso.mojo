@@ -364,6 +364,36 @@ def m3_angle_rate(raw: Float32) -> Float32:
     return ftz(pinned_mul(identical_tanh(ftz(raw)), M3_PI))
 
 
+comptime M3_PARALLEL_ANGLE_INCREMENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT"]()
+
+
+def m3_angle_increment_kernel(
+    increments: MutPointer[Float32, MutAnyOrigin],
+    in_proj: MutPointer[Float32, MutAnyOrigin],
+    dt_work: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, q0_in: Int32, nh_in: Int32,
+    dip_in: Int32, c_ang_in: Int32,
+):
+    # tanh and rate*dt are independent of the recurrent angle. Materialize
+    # their already-rounded result in theta_out before its owning chain
+    # consumes and overwrites it. The serial mod-2pi chain is unchanged.
+    comptime r_ang = M3_NUM_ROPE_ANGLES
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var q0 = Int(q0_in)
+    if cell >= Int(b_in) * l * nh * r_ang:
+        return
+    var mm = cell // (nh * r_ang)
+    var bb = mm // l
+    var li = mm % l
+    var hh = (cell // r_ang) % nh
+    var r = cell % r_ang
+    var a = m3_angle_rate(in_proj.unsafe_load(mm * Int(dip_in) + Int(c_ang_in) + r))
+    var inc = ftz(pinned_mul(a, ftz(dt_work.unsafe_load((bb * (q0 + l) + q0 + li) * nh + hh))))
+    increments.unsafe_store(cell, inc)
+
+
 def m3_angle_kernel(
     theta_out: MutPointer[Float32, MutAnyOrigin],  # [M, H, R]
     theta_state: MutPointer[Float32, MutAnyOrigin],  # [B, H, R] in/out
@@ -396,12 +426,16 @@ def m3_angle_kernel(
     var qv = m3_q_eff()
     for li in range(l):
         var mm = bb * l + li
-        var a = m3_angle_rate(in_proj.unsafe_load(mm * dip + c_ang + r))
-        var inc = ftz(
-            pinned_mul(
-                a, ftz(dt_work.unsafe_load((bb * t_work + q0 + li) * nh + hh))
+        var inc: Float32
+        comptime if M3_PARALLEL_ANGLE_INCREMENT:
+            inc = theta_out.unsafe_load((mm * nh + hh) * r_ang + r)
+        else:
+            var a = m3_angle_rate(in_proj.unsafe_load(mm * dip + c_ang + r))
+            inc = ftz(
+                pinned_mul(
+                    a, ftz(dt_work.unsafe_load((bb * t_work + q0 + li) * nh + hh))
+                )
             )
-        )
         comptime if SAB3_ANGLE_MOD_PER_CHUNK:
             # SABOTAGE (829's falsifier 1): accumulate UNMODDED within a
             # working chunk, mod the OUTPUTS per element and the running
@@ -1441,6 +1475,13 @@ def m3_siso_forward(
         grid_dim=(_grid(b * t_work * nh), 1, 1),
         block_dim=(MAMBA3_TPB, 1, 1),
     )
+    comptime if M3_PARALLEL_ANGLE_INCREMENT:
+        ctx.enqueue_function[m3_angle_increment_kernel](
+            theta_out.unsafe_ptr(), in_proj.unsafe_ptr(), dt_work.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(q0), Int32(nh), Int32(dip), Int32(c_ang),
+            grid_dim=(_grid(b * l * nh * r_ang), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
     ctx.enqueue_function[m3_angle_kernel](
         theta_out.unsafe_ptr(),
         theta_state.unsafe_ptr(),
