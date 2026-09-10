@@ -53,7 +53,8 @@ calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
-from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for
+from std.sys import llvm_intrinsic
+from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for, knn_distance_hardware_flush_for
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
 
 from checks.numerics import (
@@ -162,6 +163,12 @@ def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     boundary: 0x3f7fffff * 0x00800000 + 0 returns zero there, while the
     required rounded FMA is 0x00800000. Keep the software FTZ seam.
     """
+    comptime if knn_distance_hardware_flush_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
+        # Match the corrected GEMM seam: rounding occurs BEFORE the hardware
+        # input/output FTZ on multiplication by exactly one. Bare fma.ftz is
+        # deliberately excluded because it fails at the minnormal boundary.
+        var rounded = llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, acc)
+        return llvm_intrinsic["llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False](rounded, Float32(1.0))
     var result = ftz(identical_mul_add(a, b, acc))
     comptime if knn_distance_zero_fma_repair_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
         if (bitcast[DType.uint32](result) & 0x7fffffff) == 0:
