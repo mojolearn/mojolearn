@@ -79,8 +79,10 @@ The existing opponent table receives updated16 IDENTICAL prices through
 `bench/results/knn/2026-09-10-logical-width/opponent-table.patch`. Its archived
 cuML tuple is reused unchanged; opponent admission checks indices, not bitwise
 cuML distances. No opponent or fourth-device benchmark was invented.
-Final default-without-ROWS8-flag verification is queued separately; the probe
-and default resolve to the same eight-row NVIDIA implementation.
+Final flag-absent default source c03bbcfc passes the396584x3 oracle and24
+layout fixtures. Seven-round request/device medians are35.473274/34.374416ms
+for k10 and40.942684/39.805605ms for k15; both fingerprints match the
+prior corrected baseline. All final logs were fetched before GPU release.
 
 Evidence: `bench/results/knn/2026-09-10-logical-width/`, including commands,
 compressed build/gate/pricing logs, rejected initial compile error, metadata
