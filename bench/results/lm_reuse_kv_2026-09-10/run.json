@@ -1,0 +1,16 @@
+{
+  "base_commit": "de4cf2351a975742ecaa69067c2049e00f136abd",
+  "numeric_mode": "identical",
+  "native_vendor": "metal",
+  "requested_attention_paths": [
+    "fused",
+    "eager"
+  ],
+  "host_tests_passed": 76,
+  "qualification": "Local numerical and bitwise regression only; no large performance or memory measurement",
+  "source_sha256": {
+    "training/byte_lm.mojo": "b087ef79369031b619cbf913f4794acc524045ef509d736dec9652bfa18bdffd",
+    "tools/lm_training_capacity.py": "f51990ca8fad8ba295df9a9daa6769aebb26cf5eb146fc85d66a9e8f46002aa8"
+  },
+  "binary_sha256": "20bd32764b9eb8cd4da8d77de6fdad0e5152ac1570651aea01615d9c709b96e4"
+}

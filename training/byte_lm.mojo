@@ -399,6 +399,7 @@ struct ByteTrainer(Movable):
     var buffers: ByteBuffers
     var weights: List[LlamaDeviceWeights]
     var rope: LlamaRopeTable
+    var prefill_cache: LlamaKVCache
     var forward: List[LlamaDeviceStages]
     var backward: List[LlamaBackwardStages]
     var optimizer: OptimizerConfig
@@ -423,6 +424,7 @@ struct ByteTrainer(Movable):
         self.forward = List[LlamaDeviceStages]()
         self.backward = List[LlamaBackwardStages]()
         self.rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
+        self.prefill_cache = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
         for layer in range(config.n_layers):
             self.weights.append(_block_weights(ctx, initial_params, layer, config))
             # The trace-disabled trainer uses the existing fused attention path.
@@ -519,17 +521,20 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         # Move the current stages out while borrowing the preceding residual.
         # No extra activation copy; restore canonical layer order after the call.
         var stages = tr.forward.pop(layer)
-        var kv = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
+        # Upstream modeling_llama.py:402-412 visits independent decoder layers.
+        # Training always starts a full prefill: s=0 makes kv_append_kernel
+        # read only fresh K/V. Reuse storage, never another layer's history.
+        # Backward reads the per-layer stages.k_cache/v_cache, not this scratch.
+        tr.prefill_cache.s = 0
         var prefix = String("byte.block") + String(layer) + ".forward"
         if layer == 0:
-            llama_decoder_layer_forward(ctx, stages, kv, tr.rope, tr.weights[layer],
+            llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                 tr.buffers.x, config.batch, config.length, 0, trace, prefix)
         else:
-            llama_decoder_layer_forward(ctx, stages, kv, tr.rope, tr.weights[layer],
+            llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                 tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix)
         ctx.synchronize()
         tr.forward.insert(layer, stages^)
-        _ = kv^
     identical_gemm_into(ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
         tr.buffers.lm_w, tr.buffers.head_ws, M, config.vocab_size, config.d_model, OP_NT)
     ctx.synchronize()

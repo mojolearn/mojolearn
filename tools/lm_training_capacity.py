@@ -54,6 +54,7 @@ def report(shape, *, materialized_attention=False):
         "allocation_subset_bytes": allocations,
         "allocation_subset_total_gib": sum(allocations.values()) / 2 ** 30,
         "omissions": ["GEMM/optimizer/loss workspaces", "linear activations",
+                      "reusable prefill KV workspace",
                       "duplicate weights and gradients", "host state and captures",
                       "allocator/runtime overhead"],
         "fit_admitted": False,
