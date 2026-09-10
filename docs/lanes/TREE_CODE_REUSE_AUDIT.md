@@ -2,7 +2,7 @@
 
 This is a source audit of the current tree lane, not a performance claim. RF lives in `ensemble/`, ET in `extratrees/`, and boosting in `gbdt/`. The user's current instruction prioritizes shared GPU implementations. Historical comments preserving duplicate files to avoid concurrent lane edits are not a lasting architectural justification.
 
-`PORTING_RULES.md` requires preserving the actual upstream computation and dispatch, including fused kernels. Its GPU-only rule permits required host control-plane work and independent test oracles; it does not justify a public CPU training or prediction backend. Sharing a scalar host/device arithmetic primitive does not introduce such a backend.
+`ENGINEERING_RULES.md` requires preserving the actual upstream computation and dispatch, including fused kernels. Its GPU-only rule permits required host control-plane work and independent test oracles; it does not justify a public CPU training or prediction backend. Sharing a scalar host/device arithmetic primitive does not introduce such a backend.
 
 ## Consolidation implemented
 
