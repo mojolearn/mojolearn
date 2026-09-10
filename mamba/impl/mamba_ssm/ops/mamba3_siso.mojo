@@ -22,7 +22,7 @@ oracle `mamba/checks/mamba3_oracle.mojo` is the ANSWER bit for bit, and
 this file is an independent transcription of the same order sharing only
 `checks/numerics.mojo` with it.
 
-WHY NO FLOAT CROSSES A THREAD BOUNDARY IN THIS FILE (the mamba2 rule,
+WHY NO FLOATING-POINT FOLD CROSSES A THREAD BOUNDARY (the mamba2 rule,
 unchanged): every kernel owns its output cell entirely -- the angle
 recurrence is one thread per (b, h, angle-index) serial chain; the dacs
 cumsum and each segsum column are one thread per serial chain; every
@@ -30,6 +30,11 @@ contraction cell (S14's QK dot, S16's s and its fold, S17's read-out,
 S20's increment) is one thread computing its gemm-v1 leaf IN REGISTERS
 (every core contraction has k <= 128, ONE leaf -- see DEVIATION 834); the
 inter-chunk pass is one thread per (b, h, p, n) walking chunks serially.
+The IDENTICAL execution plan materializes independent angle increments
+and S20 decay factors before their consumers, and each chunk increment
+owns its entire ascending Q-term fold. The rounded operands and both
+serial recurrence orders are unchanged; no partial floating sum is reduced
+across threads.
 No shared memory, no warp primitive, no atomic, no cross-block reduction.
 Contract clauses 8(b) and 8(c) are properties of this SHAPE.
 
