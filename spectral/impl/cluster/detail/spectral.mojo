@@ -29,6 +29,7 @@ copied from `kmeans_fit` line for line; `cluster/` is frozen for this lane
 and is READ, IMPORTED, not edited.
 """
 
+from bindings.hostptr import f32_ptr
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from cluster.estimator import plan_sum_scale
@@ -97,11 +98,10 @@ def fit_predict_graph(
 
     # --- kmeans::fit_predict (:54-61), through cluster/'s implemented entry, with
     # the device setup `cluster/estimator.mojo::kmeans_fit` performs.
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n_samples * n_features)
-    ctx.synchronize()
-    for i in range(n_samples * n_features):
-        h.unsafe_ptr().unsafe_store(i, embedding_out[i])
-    var sum_scale = plan_sum_scale(h.unsafe_ptr(), n_samples, n_features)
+    # DEVIATION 2487: this planning pass is host-only. Borrow the existing
+    # embedding list; its following upload keeps the owner live.
+    var sum_scale = plan_sum_scale(
+        f32_ptr(Int(embedding_out.unsafe_ptr())), n_samples, n_features)
     var weight_scale = choose_scale(Float64(n_samples), n_samples)
     var cd = config.n_clusters * n_features
     var x = upload_f32(ctx, embedding_out)
@@ -155,7 +155,6 @@ def fit_predict_graph(
     for i in range(n_samples):
         labels.append(Int32(got[i]))
     trace.record_list_i32("spectral.labels", labels)
-    _ = h^
     _ = x^
     _ = weights^
     _ = centroids^

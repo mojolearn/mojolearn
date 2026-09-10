@@ -18,6 +18,8 @@ retain stdlib arithmetic. Cross-host certification requires matching captures. Q
 may change results (global sigma floor, edge weighting and RNG ordinals).
 No existing fit code is called or modified by this module.
 """
+# DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from bindings.hostptr import copy_f32
 from checks.numerics import identical_exp64, identical_log2_64, identical_pow64
 
 from max.gpu.host import DeviceContext
@@ -201,10 +203,8 @@ def transform(
     var hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
     ctx.synchronize()
-    for i in range(len(training_data)):
-        hx.unsafe_ptr().unsafe_store(i, training_data[i])
-    for i in range(len(queries)):
-        hq.unsafe_ptr().unsafe_store(i, queries[i])
+    copy_f32(training_data.unsafe_ptr(), hx.unsafe_ptr(), len(training_data))
+    copy_f32(queries.unsafe_ptr(), hq.unsafe_ptr(), len(queries))
     _ = knn_search(ctx, hx.unsafe_ptr(), n_train, hq.unsafe_ptr(), n_queries,
                    n_features, k, hd.unsafe_ptr(), hi.unsafe_ptr())
     ctx.synchronize()

@@ -602,8 +602,8 @@ def gmm_e_step(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut means: DeviceBuffer[DType.float32],
-    mut prec: DeviceBuffer[DType.float32],
-    mut linv: DeviceBuffer[DType.float32],
+    prec_input: DeviceBuffer[DType.float32],
+    linv_input: DeviceBuffer[DType.float32],
     mut log_det_chol: DeviceBuffer[DType.float32],
     mut log_weights: DeviceBuffer[DType.float32],
     mut scratch: DeviceBuffer[DType.float32],
@@ -669,6 +669,9 @@ def gmm_e_step(
             + " n_components="
             + String(ncomp)
         )
+    # DEVIATION 2487: prediction can borrow the same precision twice.
+    var prec = prec_input.create_sub_buffer[DType.float32](0, len(prec_input))
+    var linv = linv_input.create_sub_buffer[DType.float32](0, len(linv_input))
     var need_scratch = gmm_estep_scratch_floats(n, d)
     if len(scratch) < need_scratch:
         raise Error(

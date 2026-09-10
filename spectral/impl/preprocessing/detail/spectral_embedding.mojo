@@ -45,6 +45,7 @@ an arithmetic; `cluster/detail/spectral.mojo` wanted row-major anyway (it
 transposes theirs to get it, `spectral.cuh:47-52`).
 """
 
+from bindings.hostptr import copy_f32
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -163,8 +164,7 @@ def create_connectivity_graph(
     var h_dist = ctx.enqueue_create_host_buffer[DType.float32](nnz)
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](nnz)
     ctx.synchronize()
-    for i in range(n_samples * n_features):
-        h_data.unsafe_ptr().unsafe_store(i, dataset[i])
+    copy_f32(dataset.unsafe_ptr(), h_data.unsafe_ptr(), n_samples * n_features)
     # brute_force (L2SqrtExpanded), dataset against itself (:150-159)
     _ = knn_search(
         ctx,

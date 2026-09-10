@@ -44,6 +44,8 @@ on the device. These entries are the one-shot form, which is what the gates
 and the card use.
 """
 
+# DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from bindings.hostptr import copy_f32
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -118,8 +120,7 @@ def _upload(
     var n = len(values)
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
+    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^
@@ -244,16 +245,8 @@ def kernel_ridge_fit_host(
 
     var ctx = DeviceContext()
 
-    # DEVIATION 1684. The training Gram is `K(X, X)` and `km_kernel_matrix`
-    # takes its two operands as two MUTABLE buffers, which Mojo refuses to
-    # satisfy from one allocation (archive/reference/PORTING.md 24, and
-    # `decomposition/impl/linalg/detail/pca.mojo` carries the same note for
-    # `X^T X`). So `X` is uploaded TWICE. The alternative -- a special
-    # diagonal path -- would be a SECOND kernel-matrix code path reached only
-    # when the two operands are the same, which is exactly the non-default
-    # path `ENGINEERING_RULES` rule 8 is about. One path, one extra copy of `X`.
+    # DEVIATION 2487: self-kernel operands share one uploaded allocation.
     var xa = _upload(ctx, x)
-    var xb = _upload(ctx, x)
     var dy = _upload(ctx, y)
     trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
 
@@ -266,7 +259,7 @@ def kernel_ridge_fit_host(
     ctx.synchronize()
 
     km_kernel_matrix(
-        ctx, kp, dk, xa, xb, n_samples, n_samples, n_features,
+        ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
         na, nb, kws, elem_tpb, sabotage,
     )
     ctx.synchronize()
@@ -309,7 +302,6 @@ def kernel_ridge_fit_host(
 
     var dual = _download(ctx, dy, n_samples * n_targets)
     _ = xa^
-    _ = xb^
     _ = dy^
     _ = dk^
     _ = na^
@@ -586,7 +578,6 @@ def nystroem_fit_host(
 
     var ctx = DeviceContext()
     var ca = _upload(ctx, comp)
-    var cb = _upload(ctx, comp)
     var dk = ctx.enqueue_create_buffer[DType.float32](q * q)
     var na = ctx.enqueue_create_buffer[DType.float32](q)
     var nb = ctx.enqueue_create_buffer[DType.float32](q)
@@ -595,7 +586,7 @@ def nystroem_fit_host(
     )
     ctx.synchronize()
     km_kernel_matrix(
-        ctx, kp, dk, ca, cb, q, q, n_features, na, nb, kws, elem_tpb, sabotage
+        ctx, kp, dk, ca, ca, q, q, n_features, na, nb, kws, elem_tpb, sabotage
     )
     ctx.synchronize()
     trace.record_device(ctx, "nys.basis_kernel", dk, q * q)
@@ -682,7 +673,6 @@ def nystroem_fit_host(
 
     # --- `U / sqrt(S) @ V`, on the device ---
     var dq0 = _upload(ctx, vecs_ord)
-    var dq1 = _upload(ctx, vecs_ord)
     var dsq = _upload(ctx, sqrt_s)
     var dz = ctx.enqueue_create_buffer[DType.float32](q * q)
     var dnorm = ctx.enqueue_create_buffer[DType.float32](q * q)
@@ -702,15 +692,14 @@ def nystroem_fit_host(
     trace.record_device(ctx, "nys.scaled", dz, q * q)
     # `Z . Q^T`: cell `(i, j)` is `sum_k Z[i][k] Q[j][k]`, and `Q` is stored
     # with eigenvector `k` in COLUMN `k`, so this is `OP_NT` with `Q` as the
-    # right operand. `dq1` is a SECOND upload of the same values because Mojo
+    # right operand. `dq0` is a SECOND upload of the same values because Mojo
     # refuses one buffer as two mutable kernel arguments (DEVIATION 1684).
-    identical_gemm_into(ctx, dnorm, dz, dq1, gws, q, q, q, OP_NT)
+    identical_gemm_into(ctx, dnorm, dz, dq0, gws, q, q, q, OP_NT)
     ctx.synchronize()
     trace.record_device(ctx, "nys.normalization", dnorm, q * q)
 
     var norm = _download(ctx, dnorm, q * q)
     _ = ca^
-    _ = cb^
     _ = dk^
     _ = na^
     _ = nb^
@@ -718,7 +707,6 @@ def nystroem_fit_host(
     _ = dvec^
     _ = dinfo^
     _ = dq0^
-    _ = dq1^
     _ = dsq^
     _ = dz^
     _ = dnorm^

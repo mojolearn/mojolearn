@@ -61,6 +61,8 @@ or every list is one iteration stale. That is not a tidiness point here the
 way it is there -- a stale membership is a stale summation set.
 """
 
+# DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from cluster.impl.detail.kmeans import kmeans_fit_main_traced
@@ -98,8 +100,7 @@ def upload_f32(
         raise Error("upload_f32: refusing to upload an empty list")
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
+    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^

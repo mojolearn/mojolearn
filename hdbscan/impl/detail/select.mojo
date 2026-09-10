@@ -463,7 +463,6 @@ def _download_f32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
     var v = buf.create_sub_buffer[DType.float32](0, n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
     ctx.synchronize()
@@ -479,7 +478,6 @@ def _download_i32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
 ) raises -> List[Int32]:
     var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.synchronize()
     var v = buf.create_sub_buffer[DType.int32](0, n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
     ctx.synchronize()

@@ -39,6 +39,8 @@ on the device and `score_samples` reuses it. This entry is the one-shot form,
 which is what the gates and the card use.
 """
 
+# DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
@@ -101,8 +103,7 @@ def _upload(
     var n = len(values)
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
+    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^

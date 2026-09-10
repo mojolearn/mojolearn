@@ -39,6 +39,8 @@ it) and has no row in `IDENTITY_PATHS.md`. Nothing here may be described
 as certified across vendors.
 """
 
+# DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from tsa.impl.timeSeries.stationarity import KPSS_ELEM_TPB, download_results
@@ -59,8 +61,7 @@ def _upload_f32(
     var count = n if n > 0 else 1
     var buf = ctx.enqueue_create_buffer[DType.float32](count)
     var host = ctx.enqueue_create_host_buffer[DType.float32](count)
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, ptr.unsafe_load(i))
+    copy_f32(ptr, host.unsafe_ptr(), max(0, n))
     if n > 0:
         ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()

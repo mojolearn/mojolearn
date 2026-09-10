@@ -32,6 +32,8 @@ BUILT AND GATED ON ONE APPLE M4 IN BOTH MODES, 2026-08-25. NO SECOND VENDOR
 HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 """
 
+# DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from bindings.hostptr import copy_f32
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -162,8 +164,7 @@ def _upload(
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
+    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^

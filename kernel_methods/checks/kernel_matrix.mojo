@@ -430,8 +430,8 @@ def km_kernel_matrix(
     ctx: DeviceContext,
     kp: KernelParams,
     mut out: DeviceBuffer[DType.float32],
-    mut a: DeviceBuffer[DType.float32],
-    mut b: DeviceBuffer[DType.float32],
+    a_input: DeviceBuffer[DType.float32],
+    b_input: DeviceBuffer[DType.float32],
     m: Int,
     n: Int,
     k: Int,
@@ -462,6 +462,10 @@ def km_kernel_matrix(
     if m <= 0 or n <= 0:
         return
 
+    # DEVIATION 2487: read-only handles can name one input twice.
+    # Views bridge legacy mutable-handle callees; the input kernels only read.
+    var a = a_input.create_sub_buffer[DType.float32](0, len(a_input))
+    var b = b_input.create_sub_buffer[DType.float32](0, len(b_input))
     var via_copy = km_sabotage_touches_kernel_matrix(sabotage)
     var grid_all = (m * n + elem_tpb - 1) // elem_tpb
 

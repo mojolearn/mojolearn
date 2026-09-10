@@ -89,6 +89,8 @@ lane's `potrf_lower` / `cho_solve` directly and keep its own `DeviceBuffer`s
 is the one-shot form, which is what the gates and the card use.
 """
 
+# DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from bindings.hostptr import copy_f32
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -507,8 +509,7 @@ def _upload(
     var n = len(values)
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
+    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^
@@ -671,19 +672,7 @@ def gpr_fit_host(
     # --- K = kernel(X, X), on the device ---------------------------------
     var ctx = DeviceContext()
     var dx = _upload(ctx, x)
-    # **DEVIATION 1771.** `X` is uploaded TWICE for the self-kernel. Mojo
-    # cannot pass one `DeviceBuffer` as two `mut` arguments of one call, and
-    # `gp_kernel_matrix` needs both operands mutable because
-    # `DeviceBuffer.unsafe_ptr()` is how every kernel in this repository
-    # receives a buffer. This is `ENGINEERING_RULES` rule 4's shape: it changes
-    # HOW the call is spelled and not WHAT is computed -- the two buffers
-    # hold identical bytes, so every cell of `K` is the same number it
-    # would be -- and it costs `n_train * d` floats of device memory,
-    # which is negligible beside the `n_train^2` matrix it produces. The
-    # alternative, an `is_self` flag that makes the kernels read one
-    # pointer twice, would put a branch on an aliasing question inside
-    # every distance loop.
-    var dx2 = _upload(ctx, x)
+    # DEVIATION 2487: self-kernel borrows dx twice; one upload.
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](n_train * n_train)
     var dstack = ctx.enqueue_create_buffer[DType.float32](
@@ -694,7 +683,7 @@ def gpr_fit_host(
         ctx,
         dk,
         dx,
-        dx2,
+        dx,
         dls,
         dstack,
         n_train,
@@ -709,7 +698,6 @@ def gpr_fit_host(
     )
     var k_host = _download(ctx, dk, n_train * n_train)
     _ = dx^
-    _ = dx2^
     _ = dls^
     _ = dk^
     _ = dstack^

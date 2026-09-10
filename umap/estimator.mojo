@@ -2,6 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """End-to-end host-list UMAP surface for the supported 2D/3D slice."""
 
+# DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from neighbors.estimator import knn_search
@@ -25,8 +27,7 @@ def fuzzy_graph_from_data(
         if not isfinite(x_rowmajor[i]):
             raise Error("UMAP input coordinates must be finite")
     var hx = ctx.enqueue_create_host_buffer[DType.float32](len(x_rowmajor))
-    for i in range(len(x_rowmajor)):
-        hx.unsafe_ptr().unsafe_store(i, x_rowmajor[i])
+    copy_f32(x_rowmajor.unsafe_ptr(), hx.unsafe_ptr(), len(x_rowmajor))
     var hd = ctx.enqueue_create_host_buffer[DType.float32](
         n_samples * params.n_neighbors
     )

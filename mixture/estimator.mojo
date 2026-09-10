@@ -55,6 +55,8 @@ directly and keep its own `DeviceBuffer`s. This entry is the one-shot form,
 which is what the gates and the card use.
 """
 
+# DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from bindings.hostptr import copy_f32
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -529,8 +531,7 @@ def gmm_initial_resp(
         )
         var hl = ctx.enqueue_create_host_buffer[DType.uint32](n_samples)
         ctx.synchronize()
-        for i in range(n_samples * n_features):
-            hx.unsafe_ptr().unsafe_store(i, x[i])
+        copy_f32(x.unsafe_ptr(), hx.unsafe_ptr(), n_samples * n_features)
         var res = kmeans_fit(
             ctx,
             hx.unsafe_ptr(),
@@ -608,8 +609,7 @@ def _upload(
     var n = len(values)
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
+    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^
@@ -1015,7 +1015,6 @@ def gaussian_mixture_score_samples(
     # `linv` is only read by GMM_SAB_VENDOR_MATMUL, which no scoring path
     # drives, so the precision buffer stands in for it rather than a second
     # allocation. Stated because a reader will check.
-    var dlinv = _upload(ctx, model.precisions_cholesky)
 
     var mahal = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
     var wlp = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
@@ -1034,7 +1033,7 @@ def gaussian_mixture_score_samples(
     ctx.synchronize()
 
     gmm_e_step(
-        ctx, dx, dmeans, dprec, dlinv, dlogdet, dlw, escratch, gws,
+        ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
     )
@@ -1044,7 +1043,6 @@ def gaussian_mixture_score_samples(
     _ = dprec^
     _ = dlogdet^
     _ = dlw^
-    _ = dlinv^
     _ = mahal^
     _ = wlp^
     _ = rowmax^
@@ -1099,7 +1097,6 @@ def gaussian_mixture_predict_proba(
     for k in range(ncomp):
         lw.append(_safe_log(model.weights[k]))
     var dlw = _upload(ctx, lw)
-    var dlinv = _upload(ctx, model.precisions_cholesky)
 
     var mahal = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
     var wlp = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
@@ -1119,7 +1116,7 @@ def gaussian_mixture_predict_proba(
     ctx.synchronize()
 
     gmm_e_step(
-        ctx, dx, dmeans, dprec, dlinv, dlogdet, dlw, escratch, gws,
+        ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
     )
@@ -1132,7 +1129,6 @@ def gaussian_mixture_predict_proba(
     _ = dprec^
     _ = dlogdet^
     _ = dlw^
-    _ = dlinv^
     _ = mahal^
     _ = wlp^
     _ = rowmax^
@@ -1200,7 +1196,6 @@ def gaussian_mixture_predict(
     for k in range(ncomp):
         lw.append(_safe_log(model.weights[k]))
     var dlw = _upload(ctx, lw)
-    var dlinv = _upload(ctx, model.precisions_cholesky)
 
     var mahal = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
     var wlp = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
@@ -1220,7 +1215,7 @@ def gaussian_mixture_predict(
     ctx.synchronize()
 
     gmm_e_step(
-        ctx, dx, dmeans, dprec, dlinv, dlogdet, dlw, escratch, gws,
+        ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
     )
@@ -1239,7 +1234,6 @@ def gaussian_mixture_predict(
     _ = dprec^
     _ = dlogdet^
     _ = dlw^
-    _ = dlinv^
     _ = mahal^
     _ = wlp^
     _ = rowmax^

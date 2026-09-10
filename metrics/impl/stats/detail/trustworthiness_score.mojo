@@ -62,6 +62,8 @@ host in Int64 (DEVIATION 652's reason: no 64-bit atomic on Apple).
 holds the k+1 neighbor distances).
 """
 
+# DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from bindings.hostptr import copy_f32
 from std.atomic import Atomic
 from std.gpu import thread_idx
 from std.math import ceildiv
@@ -199,8 +201,7 @@ def trustworthiness_rank_sum(
     var h_dist = ctx.enqueue_create_host_buffer[DType.float32](n * k1)
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](n * k1)
     ctx.synchronize()
-    for i in range(n * d):
-        h_emb.unsafe_ptr().unsafe_store(i, x_embedded_host[i])
+    copy_f32(x_embedded_host.unsafe_ptr(), h_emb.unsafe_ptr(), n * d)
     _ = knn_search_traced(
         ctx,
         trace,

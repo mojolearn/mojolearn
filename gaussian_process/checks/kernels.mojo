@@ -1065,8 +1065,8 @@ def gp_kernel_stack_floats(m: Int, n: Int) -> Int:
 def gp_kernel_matrix(
     ctx: DeviceContext,
     mut out: DeviceBuffer[DType.float32],
-    mut x: DeviceBuffer[DType.float32],
-    mut y: DeviceBuffer[DType.float32],
+    x_input: DeviceBuffer[DType.float32],
+    y_input: DeviceBuffer[DType.float32],
     mut dls: DeviceBuffer[DType.float32],
     mut stack: DeviceBuffer[DType.float32],
     m: Int,
@@ -1104,6 +1104,10 @@ def gp_kernel_matrix(
     OWED, with the fix (a per-node tag derived from the node index, the way
     `chol_panel_tag` derives one from the panel index).
     """
+    # DEVIATION 2487: borrowed inputs may share the same allocation.
+    # Sub-buffers are views; kernels only read these two operands.
+    var x = x_input.create_sub_buffer[DType.float32](0, len(x_input))
+    var y = y_input.create_sub_buffer[DType.float32](0, len(y_input))
     if m <= 0 or n <= 0 or d <= 0:
         raise Error(
             "gp_kernel_matrix: m, n and d must all be positive, got "
