@@ -54,7 +54,7 @@ calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
-from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for, knn_distance_hardware_flush_for
+from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for, knn_distance_hardware_flush_for, knn_distance_rows_for
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
 
 from checks.numerics import (
@@ -145,7 +145,7 @@ def pinned_distance_tile_kernel(
 # and skip the store; the clamped chains are discarded, never written.
 # ---------------------------------------------------------------------------
 
-comptime RT_ROWS = 4
+comptime RT_ROWS = knn_distance_rows_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]()
 comptime RT_COLS = 4
 comptime RT_TPB = 128
 comptime RT_TILE_COLS = RT_TPB * RT_COLS
