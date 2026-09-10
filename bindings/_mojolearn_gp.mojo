@@ -83,6 +83,7 @@ THE GIL is released around every device call, and nothing inside a
 """
 
 from std.os import abort
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -113,21 +114,15 @@ from gaussian_process.estimator import (
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float32 buffer address")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f32_ptr(addr)
 
 
 def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int32 buffer address")
-    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return i32_ptr(addr)
 
 
 def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float64 buffer address")
-    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f64_ptr(addr)
 
 
 def gp_numeric_mode_binding() raises -> PythonObject:
@@ -301,10 +296,8 @@ def _gpr_fit_run(
     function because `GPRegressor` has no default constructor to
     pre-declare across a `with` block, and an `Int` does."""
     var model = gpr_fit_host(x, n_train, n_features, y, spec, alpha)
-    for i in range(n_train * n_train):
-        lp.unsafe_store(i, model.l[i])
-    for i in range(n_train):
-        dp.unsafe_store(i, model.dual_coef[i])
+    copy_f32(model.l.unsafe_ptr(), lp, n_train * n_train)
+    copy_f32(model.dual_coef.unsafe_ptr(), dp, n_train)
     # info, nb, logdet, ydotalpha, lml -- in that order, the same five
     # words as `_gp_impl.py::fit`'s `scalars` comment. Each float32 widens
     # to float64 exactly.
@@ -410,12 +403,8 @@ def gpr_fit_binding(
         n_ls,
         String("gpr_fit"),
     )
-    var x = List[Float32]()
-    var y = List[Float32]()
-    for i in range(n_train * n_features):
-        x.append(xp.unsafe_load(i))
-    for i in range(n_train):
-        y.append(yp.unsafe_load(i))
+    var x = read_f32(Int(xp), n_train * n_features)
+    var y = read_f32(Int(yp), n_train)
     var info = 0
     with GILReleased(Python()):
         info = _gpr_fit_run(
@@ -492,8 +481,8 @@ def gpr_predict_binding(
         6  info            LAPACK's info from the fit, PASSED THROUGH
 
     Slot 6 is the trap in this list, and it is a deliberate one. The
-    `GPRegressor` is reconstructed below with `y_train`, `alpha`,
-    `logdet`, `ydotalpha`, `lml` and `nb` ZERO-FILLED -- `gpr_predict_host`
+    `GPRegressor` is reconstructed below with an empty `y_train` and
+    zero `alpha`, `logdet`, `ydotalpha`, `lml` and `nb` -- `gpr_predict_host`
     reads none of them -- but `info` goes down AS THE FIT REPORTED IT, so
     that `gpr_predict_host`'s refusal to solve against a partial factor
     (DEVIATION 1634) fires from Python exactly as it fires from Mojo. A
@@ -547,24 +536,15 @@ def gpr_predict_binding(
         n_ls,
         String("gpr_predict"),
     )
-    var xt = List[Float32]()
-    for i in range(n_train * n_features):
-        xt.append(xtp.unsafe_load(i))
-    var l = List[Float32]()
-    for i in range(n_train * n_train):
-        l.append(lp.unsafe_load(i))
-    var dual = List[Float32]()
-    for i in range(n_train):
-        dual.append(dp.unsafe_load(i))
-    var x_star = List[Float32]()
-    for i in range(n_star * n_features):
-        x_star.append(xsp.unsafe_load(i))
-    # The reconstructed model. `y_train` and every fit-only scalar are
-    # ZERO-FILLED (gpr_predict_host reads none of them); `info` is the
-    # caller's, passed through -- the docstring above says why.
+    # DEVIATION 2486: bulk copies, including the quadratic Cholesky factor.
+    # Caller-owned buffers remain live throughout these integer-address reads.
+    var xt = read_f32(Int(xtp), n_train * n_features)
+    var l = read_f32(Int(lp), n_train * n_train)
+    var dual = read_f32(Int(dp), n_train)
+    var x_star = read_f32(Int(xsp), max(0, n_star * n_features))
+    # Prediction never reads y_train; retain no unused n_train-element fill.
+    # Fit-only scalars remain zero and the caller's info is preserved.
     var yzero = List[Float32]()
-    for _i in range(n_train):
-        yzero.append(Float32(0.0))
     var model = GPRegressor(
         xt^,
         yzero^,
