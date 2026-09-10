@@ -2,6 +2,7 @@
 """Validate the complete coalesced-column A/B artifact and emit raw-backed JSON.
 
 Usage: python tools/knn_coalesced_columns_summary.py /path/to/probe > summary.json
+Use --candidate batch512 for the query-batching probe (coalesced is default).
 No GPU execution. Requires both passes/all five shapes, exact full dumps, all
 five request/device samples, and passing component/public gates. The reported
 ratios are ours/candidate A/B only; this tool does not invent opponent prices.
@@ -14,7 +15,6 @@ import statistics
 
 SHAPES = ((400000, 4000, 32, 10), (400000, 4000, 32, 15),
           (400000, 1000, 8, 10), (10000, 32, 32, 15), (65537, 129, 17, 10))
-ARMS = ("baseline", "coalesced")
 
 
 def require(condition, message):
@@ -50,39 +50,41 @@ def read_arm(root, tag, arm, shape):
             "reported_result": result}, blob
 
 
-def summarize(root):
-    for arm in ARMS:
+def summarize(root, candidate="coalesced"):
+    arms_order = ("baseline", candidate)
+    gate_marker = "QUERY BATCH PASS" if candidate == "batch512" else "COALESCED DISTANCE PASS"
+    for arm in arms_order:
         gate = (root / f"{arm}-gate.log").read_text()
-        require("COALESCED DISTANCE PASS" in gate, f"component gate missing: {arm}")
+        require(gate_marker in gate, f"component gate missing: {arm}")
         public_log = (root / f"{arm}-public-gate.log").read_text()
         require("KNN LAYOUT PUBLIC DISPATCH PASS" in public_log, f"public gate incomplete: {arm}")
         cells = (root / f"{arm}-public.cells").read_bytes()
         require(bool(cells), f"public gate cells empty: {arm}")
-    require((root / "baseline-public.cells").read_bytes() == (root / "coalesced-public.cells").read_bytes(),
+    require((root / "baseline-public.cells").read_bytes() == (root / f"{candidate}-public.cells").read_bytes(),
             "public cell outputs differ")
-    report = {"comparison": "same-device baseline versus opt-in coalesced columns",
+    report = {"comparison": f"same-device baseline versus opt-in {candidate}",
               "compiler": (root / "compiler.txt").read_text().strip(),
               "source": (root / "source.txt").read_text().strip(), "shapes": []}
     for shape in SHAPES:
         n, q, d, k = shape
         entry = {"index": n, "queries": q, "features": d, "k": k, "passes": []}
-        combined = {arm: {phase: [] for phase in ("request", "device")} for arm in ARMS}
+        combined = {arm: {phase: [] for phase in ("request", "device")} for arm in arms_order}
         previous = None
         for trial in range(2):
             tag = f"n{n}-q{q}-d{d}-k{k}-p{trial}"
             arms, blobs = {}, {}
-            for arm in ARMS:
+            for arm in arms_order:
                 arms[arm], blobs[arm] = read_arm(root, tag, arm, shape)
                 for phase, samples in arms[arm]["samples_ms"].items():
                     combined[arm][phase].extend(samples)
-            require(blobs["baseline"] == blobs["coalesced"], f"A/B full-word mismatch: {tag}")
+            require(blobs["baseline"] == blobs[candidate], f"A/B full-word mismatch: {tag}")
             require(previous is None or previous == blobs["baseline"], f"output moved between passes: {tag}")
             previous = blobs["baseline"]
-            entry["passes"].append({"order": list(ARMS if trial == 0 else reversed(ARMS)), "arms": arms})
+            entry["passes"].append({"order": list(arms_order if trial == 0 else reversed(arms_order)), "arms": arms})
         entry["pooled_median_ms"] = {arm: {phase: statistics.median(values) for phase, values in phases.items()}
                                       for arm, phases in combined.items()}
         entry["candidate_over_baseline"] = {
-            phase: entry["pooled_median_ms"]["coalesced"][phase] / entry["pooled_median_ms"]["baseline"][phase]
+            phase: entry["pooled_median_ms"][candidate][phase] / entry["pooled_median_ms"]["baseline"][phase]
             for phase in ("request", "device")}
         report["shapes"].append(entry)
     return report
@@ -91,5 +93,6 @@ def summarize(root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
+    parser.add_argument("--candidate", choices=("coalesced", "batch512"), default="coalesced")
     args = parser.parse_args()
-    print(json.dumps(summarize(args.directory), indent=2))
+    print(json.dumps(summarize(args.directory, args.candidate), indent=2))
