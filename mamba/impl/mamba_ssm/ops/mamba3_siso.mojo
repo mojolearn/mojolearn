@@ -810,6 +810,109 @@ def m3_resume_kernel(
 # ===========================================================================
 
 
+# Execution-only factorization of S20: exponentials depend on (b,h,c,j),
+# not on either state axis. qk_s is scratch until m3_qk_s_kernel overwrites
+# it below. Every increment still owns its full ascending Q-term fold;
+# the state recurrence still walks chunks serially. No arithmetic reassociation.
+comptime M3_LEGACY_STATEPASS = is_defined["MOJOLEARN_MAMBA3_LEGACY_STATEPASS"]()
+
+
+def m3_state_decay_kernel(
+    decay: MutPointer[Float32, MutAnyOrigin],
+    dacs: MutPointer[Float32, MutAnyOrigin],
+    count_in: Int32,
+    q_in: Int32,
+):
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var qv = Int(q_in)
+    if cell >= Int(count_in) * (qv + 1):
+        return
+    var chunk = cell // (qv + 1)
+    var j = cell % (qv + 1)
+    var dl = ftz(dacs.unsafe_load(chunk * qv + qv - 1))
+    var arg = dl
+    if j < qv:
+        arg = ftz(dl - ftz(dacs.unsafe_load(chunk * qv + j)))
+    decay.unsafe_store(cell, ftz(identical_exp(arg)))
+
+
+def m3_state_increment_kernel(
+    increments: MutPointer[Float32, MutAnyOrigin],
+    kscale_work: MutPointer[Float32, MutAnyOrigin],
+    v_work: MutPointer[Float32, MutAnyOrigin],
+    decay: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    t_in: Int32,
+    nh_in: Int32,
+    nc_in: Int32,
+    q_in: Int32,
+):
+    comptime n_state = M3_D_STATE
+    comptime p_dim = M3_HEADDIM
+    comptime pn = p_dim * n_state
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var t_work = Int(t_in)
+    if cell >= Int(b_in) * nc * nh * pn:
+        return
+    var bb = cell // (nc * nh * pn)
+    var c = (cell // (nh * pn)) % nc
+    var hh = (cell // pn) % nh
+    var p = (cell // n_state) % p_dim
+    var n = cell % n_state
+    var c0 = c * qv
+    var dbase = ((bb * nh + hh) * nc + c) * (qv + 1)
+    var acc = Float32(0.0)
+    for j in range(qv):
+        var vsv = Float32(0.0)
+        var ksv = Float32(0.0)
+        if c0 + j < t_work:
+            var e = decay.unsafe_load(dbase + j)
+            vsv = ftz(pinned_mul(
+                ftz(v_work.unsafe_load(((bb * t_work + c0 + j) * nh + hh) * p_dim + p)), e,
+            ))
+            ksv = ftz(kscale_work.unsafe_load(((bb * t_work + c0 + j) * nh + hh) * n_state + n))
+        # Include all padded +0.0 terms, exactly as in the serial kernel.
+        acc = ftz(identical_mul_add(vsv, ksv, acc))
+    increments.unsafe_store(cell, acc)
+
+
+def m3_state_scan_kernel(
+    pass_states: MutPointer[Float32, MutAnyOrigin],
+    h_last: MutPointer[Float32, MutAnyOrigin],
+    h_state: MutPointer[Float32, MutAnyOrigin],
+    decay: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    nh_in: Int32,
+    nc_in: Int32,
+    q_in: Int32,
+):
+    comptime pn = M3_HEADDIM * M3_D_STATE
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    if cell >= Int(b_in) * nh * pn:
+        return
+    var bb = cell // (nh * pn)
+    var hh = (cell // pn) % nh
+    var i = cell % pn
+    var h = ftz(h_state.unsafe_load(cell))
+    var sealed = h
+    for c in range(nc):
+        var ix = ((bb * nc + c) * nh + hh) * pn + i
+        var acc = pass_states.unsafe_load(ix)
+        pass_states.unsafe_store(ix, h)
+        if c == nc - 1:
+            sealed = h
+        var scale_c = decay.unsafe_load(((bb * nh + hh) * nc + c) * (qv + 1) + qv)
+        h = ftz(identical_mul_add(scale_c, ftz(h), ftz(acc)))
+    h_last.unsafe_store(cell, h)
+    h_state.unsafe_store(cell, sealed)
+
+
 def m3_statepass_kernel(
     pass_states: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, P, N]
     h_last: MutPointer[Float32, MutAnyOrigin],  # [B, H, P, N]
@@ -1424,21 +1527,43 @@ def m3_siso_forward(
             grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
-    ctx.enqueue_function[m3_statepass_kernel](
-        pass_states.unsafe_ptr(),
-        h_last.unsafe_ptr(),
-        h_state.unsafe_ptr(),
-        kscale_work.unsafe_ptr(),
-        v_work.unsafe_ptr(),
-        dacs.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(nh),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
+    comptime if M3_LEGACY_STATEPASS:
+        ctx.enqueue_function[m3_statepass_kernel](
+            pass_states.unsafe_ptr(),
+            h_last.unsafe_ptr(),
+            h_state.unsafe_ptr(),
+            kscale_work.unsafe_ptr(),
+            v_work.unsafe_ptr(),
+            dacs.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
+    else:
+        # qk_s has B*C*H*Q*Q cells; Q>=32, so Q+1 decay entries fit.
+        # Its lifetime as decay scratch ends before the QK kernel below.
+        ctx.enqueue_function[m3_state_decay_kernel](
+            qk_s.unsafe_ptr(), dacs.unsafe_ptr(), Int32(b * nh * nc), Int32(qv),
+            grid_dim=(_grid(b * nh * nc * (qv + 1)), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
+        ctx.enqueue_function[m3_state_increment_kernel](
+            pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
+            v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
+            Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+            grid_dim=(_grid(b * nc * nh * p_dim * n_state), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
+        ctx.enqueue_function[m3_state_scan_kernel](
+            pass_states.unsafe_ptr(), h_last.unsafe_ptr(), h_state.unsafe_ptr(),
+            qk_s.unsafe_ptr(), Int32(b), Int32(nh), Int32(nc), Int32(qv),
+            grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
     ctx.enqueue_function[m3_qk_s_kernel](
         qk_s.unsafe_ptr(),
         rotq_work.unsafe_ptr(),
