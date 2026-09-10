@@ -1,0 +1,41 @@
+4586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x318700000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu-stream1 mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+4586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x318740000000, nodemask=1)
+4586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x318780000000, nodemask=1)
+FSPEED-WARMUP lane=rf arm=ours shape=higgs-1000000x28 ms=6440.063
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 ms=8539.895
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu-stream1 shape=higgs-1000000x28 ms=4386.193
+FSPEED-ORDER lane=rf round=1 arms=ours,cuml-rf-gpu,cuml-rf-gpu-stream1
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=5833.002 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=1 ms=3519.783 hash=a372de7ab27df595
+FSPEED lane=rf arm=cuml-rf-gpu-stream1 shape=higgs-1000000x28 round=1 ms=4369.533 hash=a372de7ab27df595
+FSPEED-ORDER lane=rf round=2 arms=cuml-rf-gpu,cuml-rf-gpu-stream1,ours
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=2 ms=3415.411 hash=a372de7ab27df595
+FSPEED lane=rf arm=cuml-rf-gpu-stream1 shape=higgs-1000000x28 round=2 ms=4149.185 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=2 ms=5955.618 hash=3ffa2951595422d4
+FSPEED-ORDER lane=rf round=3 arms=cuml-rf-gpu-stream1,ours,cuml-rf-gpu
+FSPEED lane=rf arm=cuml-rf-gpu-stream1 shape=higgs-1000000x28 round=3 ms=4527.822 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=3 ms=6077.462 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=3 ms=3531.518 hash=a372de7ab27df595
+FSPEED-ORDER lane=rf round=4 arms=ours,cuml-rf-gpu,cuml-rf-gpu-stream1
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=4 ms=5838.652 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=4 ms=3583.974 hash=a372de7ab27df595
+FSPEED lane=rf arm=cuml-rf-gpu-stream1 shape=higgs-1000000x28 round=4 ms=4205.749 hash=a372de7ab27df595
+FSPEED-ORDER lane=rf round=5 arms=cuml-rf-gpu,cuml-rf-gpu-stream1,ours
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=5 ms=3372.444 hash=a372de7ab27df595
+FSPEED lane=rf arm=cuml-rf-gpu-stream1 shape=higgs-1000000x28 round=5 ms=4254.789 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=5 ms=5799.320 hash=3ffa2951595422d4
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538850
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.538814
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.809834
+FSPEED-ACC lane=rf arm=cuml-rf-gpu-stream1 metric=logloss value=0.538814
+FSPEED-ACC lane=rf arm=cuml-rf-gpu-stream1 metric=auc value=0.809834
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+BASELINE_RESULT /root/trees_out/tuning/rf-cuml-higgs-1m.json complete= True repeatable= True

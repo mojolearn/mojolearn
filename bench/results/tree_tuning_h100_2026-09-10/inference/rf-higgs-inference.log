@@ -1,0 +1,26 @@
+FSPEED-SCALE stage=inference-before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=inference-before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+6718 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x129180000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+6718 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1291c0000000, nodemask=1)
+{"arm": "sequential", "round": 0, "warmup": true, "ms": 26018.692206591368, "hash": "7e1ec17806a54e0a10e770652b2becc990ffbc5584af048262b002ba7bcaeee7"}
+{"arm": "parallel_groves", "round": 0, "warmup": true, "ms": 138.35264183580875, "hash": "3842d8c579bbbc82df01542177047cc8bc4839648b97dea8f0cac5bde26868a7"}
+{"arm": "cuml_gpu", "round": 0, "warmup": true, "ms": 36.425065249204636, "hash": "d0df6de450d61043b91bc2631a7af173e5f727e91ea89706e4cce68ee118a9e0"}
+{"arm": "sequential", "round": 1, "warmup": false, "ms": 25830.089803785086, "hash": "7e1ec17806a54e0a10e770652b2becc990ffbc5584af048262b002ba7bcaeee7"}
+{"arm": "parallel_groves", "round": 1, "warmup": false, "ms": 127.13190726935863, "hash": "3842d8c579bbbc82df01542177047cc8bc4839648b97dea8f0cac5bde26868a7"}
+{"arm": "cuml_gpu", "round": 1, "warmup": false, "ms": 13.202708214521408, "hash": "d0df6de450d61043b91bc2631a7af173e5f727e91ea89706e4cce68ee118a9e0"}
+{"arm": "parallel_groves", "round": 2, "warmup": false, "ms": 122.06140719354153, "hash": "3842d8c579bbbc82df01542177047cc8bc4839648b97dea8f0cac5bde26868a7"}
+{"arm": "cuml_gpu", "round": 2, "warmup": false, "ms": 12.740563601255417, "hash": "d0df6de450d61043b91bc2631a7af173e5f727e91ea89706e4cce68ee118a9e0"}
+{"arm": "sequential", "round": 2, "warmup": false, "ms": 26087.110301479697, "hash": "7e1ec17806a54e0a10e770652b2becc990ffbc5584af048262b002ba7bcaeee7"}
+{"arm": "cuml_gpu", "round": 3, "warmup": false, "ms": 12.640785425901413, "hash": "d0df6de450d61043b91bc2631a7af173e5f727e91ea89706e4cce68ee118a9e0"}
+{"arm": "sequential", "round": 3, "warmup": false, "ms": 25599.128862842917, "hash": "7e1ec17806a54e0a10e770652b2becc990ffbc5584af048262b002ba7bcaeee7"}
+{"arm": "parallel_groves", "round": 3, "warmup": false, "ms": 134.43266414105892, "hash": "3842d8c579bbbc82df01542177047cc8bc4839648b97dea8f0cac5bde26868a7"}
+{"arm": "sequential", "round": 4, "warmup": false, "ms": 26045.363679528236, "hash": "7e1ec17806a54e0a10e770652b2becc990ffbc5584af048262b002ba7bcaeee7"}
+{"arm": "parallel_groves", "round": 4, "warmup": false, "ms": 139.6776493638754, "hash": "3842d8c579bbbc82df01542177047cc8bc4839648b97dea8f0cac5bde26868a7"}
+{"arm": "cuml_gpu", "round": 4, "warmup": false, "ms": 13.35819810628891, "hash": "d0df6de450d61043b91bc2631a7af173e5f727e91ea89706e4cce68ee118a9e0"}
+{"arm": "parallel_groves", "round": 5, "warmup": false, "ms": 112.11529560387135, "hash": "3842d8c579bbbc82df01542177047cc8bc4839648b97dea8f0cac5bde26868a7"}
+{"arm": "cuml_gpu", "round": 5, "warmup": false, "ms": 12.713449075818062, "hash": "d0df6de450d61043b91bc2631a7af173e5f727e91ea89706e4cce68ee118a9e0"}
+{"arm": "sequential", "round": 5, "warmup": false, "ms": 25828.68191599846, "hash": "7e1ec17806a54e0a10e770652b2becc990ffbc5584af048262b002ba7bcaeee7"}
+FSPEED-SCALE stage=inference-after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=inference-after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+PASS large RF inference comparison

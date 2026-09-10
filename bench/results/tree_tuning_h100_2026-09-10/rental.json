@@ -1,0 +1,13 @@
+{
+  "pod_id": "8w0hv6x2l2ps0e",
+  "created_utc": "2026-09-10T13:13:59.316Z",
+  "deleted_utc": "2026-09-10T14:13:43Z",
+  "verified_absent_utc": "2026-09-10T14:13:44Z",
+  "delete_http": 204,
+  "verification_http": 404,
+  "rate_usd_per_hour": 3.49,
+  "approx_compute_usd": 3.48,
+  "other_charges": "storage excluded; estimate not invoice",
+  "guard": "60-minute API teardown armed before work; manually reaped first",
+  "protected_training_pod": "untouched"
+}

@@ -1,0 +1,2 @@
+higgs already present: /root/datasets/gbm-bench/higgs/HIGGS.csv.gz (2816.4 MB)
+higgs decoded to /root/datasets/gbm-bench/higgs/higgs_speed.npz (train 10500000 x 28, test 500000)

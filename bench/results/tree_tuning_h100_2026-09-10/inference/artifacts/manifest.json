@@ -1,0 +1,74 @@
+[
+  {
+    "source": "core/forest_inference.mojo",
+    "packed": "core__forest_inference.mojo.gz",
+    "sha256": "3ac337e53729e34b6c6395654bca63874a71c2e60a44df53edf6ca19de53ed25",
+    "packed_sha256": "91dbb1e78037acafb4f63ef4b90606770a989b5f1617c3ace1c06e4e4f21a93e"
+  },
+  {
+    "source": "checks/forest_inference_gpu.mojo",
+    "packed": "checks__forest_inference_gpu.mojo.gz",
+    "sha256": "ce52233ee02244dc75a13ee6aa995eb472fcf2d1fedfed5b5e0de2e1e75e82eb",
+    "packed_sha256": "7b5fbe601ee2b899937d0c0432263d3fd14cadd18a362429989f500ced2a29b1"
+  },
+  {
+    "source": "checks/forest_inference_public.py",
+    "packed": "checks__forest_inference_public.py.gz",
+    "sha256": "1cf58a4e7d65bac3e4e4fbadb6c7ba8c71c45a05e8327c63e3493175eff6c30e",
+    "packed_sha256": "befd5e4ccc93a73412371f57355714c296e281d619e8904e38f646432cf33de6"
+  },
+  {
+    "source": "bindings/_mojolearn_rf.mojo",
+    "packed": "bindings___mojolearn_rf.mojo.gz",
+    "sha256": "2282c7dcbe51bb4a8aeaf3e1e32e06dade8ac7e7db402121648c0bfaa1dec1cc",
+    "packed_sha256": "16c95565bbc35c34810ec8ea25055e9746d5aac46153d80ad2d3134895cc95ca"
+  },
+  {
+    "source": "bindings/_mojolearn_trees.mojo",
+    "packed": "bindings___mojolearn_trees.mojo.gz",
+    "sha256": "ebc75bd487ffbb4f5de98e9d333ef906031122fd5996ead4cd3fd6669d2afd25",
+    "packed_sha256": "f1593eed705f6c52a5a9339a45d7802cc5d8926d698ddea9b389ca4b566a3e17"
+  },
+  {
+    "source": "python/mojolearn/_forest_protocol.py",
+    "packed": "python__mojolearn___forest_protocol.py.gz",
+    "sha256": "625ddaae7f3103c404a2e0da09ce49d5233907484937da000e6942b669508e15",
+    "packed_sha256": "8fef71039049bc57ce05bafc330227548ed08e627f263a933c12081cd924bb21"
+  },
+  {
+    "source": "python/mojolearn/_serialize.py",
+    "packed": "python__mojolearn___serialize.py.gz",
+    "sha256": "6d18a0225054285bc974b05a7f1b77e098edfbfc8d74ddc55e12ac8b97cea804",
+    "packed_sha256": "c6d03c743709032c9eced266da8bbfe6d85a3ac45fc420ee3e34f63110577ae7"
+  },
+  {
+    "source": "python/mojolearn/randomforest.py",
+    "packed": "python__mojolearn__randomforest.py.gz",
+    "sha256": "7cb3bac769462b1f556ecd7ab249e386497aeefee9992b022ddda1834811dd50",
+    "packed_sha256": "6c9ffebbc6c0115a3d1a34175c5f6e13205666593ff0b0310048682367e8c73b"
+  },
+  {
+    "source": "python/mojolearn/extratrees.py",
+    "packed": "python__mojolearn__extratrees.py.gz",
+    "sha256": "8e41c9c3319888680b44c19b9e40cbad55e5310fa8f65de26e42f3dd5331f063",
+    "packed_sha256": "9e182b2e3a07ca02b71df0d34a38a0c4380bb4334ddb2ad26de94af7d7a6326d"
+  },
+  {
+    "source": "bench/speed/forest_inference_ab.py",
+    "packed": "bench__speed__forest_inference_ab.py.gz",
+    "sha256": "ac0ae23a20800d4da64075d485e5b771e00f7ef71cf5221d7a57b6394c23dcf8",
+    "packed_sha256": "00fff9de511e13996adde8be891b4f9a4e50fcee514a847bd66ab6d291b8bbe6"
+  },
+  {
+    "source": "python/mojolearn/identical/_mojolearn_rf.so",
+    "packed": "python__mojolearn__identical___mojolearn_rf.so.gz",
+    "sha256": "4d9f335fa3f217c9c2e2fe62ca1a4f63333a944f76e254f3b50733e0f0904441",
+    "packed_sha256": "11d576e677cf4588bbadf74563388a703365fdd4b5ba4d919f691ca010cf2485"
+  },
+  {
+    "source": "python/mojolearn/identical/_mojolearn_trees.so",
+    "packed": "python__mojolearn__identical___mojolearn_trees.so.gz",
+    "sha256": "89a687ed394bf167cb4a6888011dc729dc4afe4b5a5a900a56192114e179ea0a",
+    "packed_sha256": "ad3af320bcedd6b129e1660f913f6c4d10798d55c42187fda74ef7f93228197e"
+  }
+]

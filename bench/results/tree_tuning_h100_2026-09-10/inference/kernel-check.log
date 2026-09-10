@@ -1,0 +1,30 @@
+6211 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a7f80000000, nodemask=2)
+/root/mojolearn/checks/forest_inference_gpu.mojo:173:5: error: function instantiation failed
+def main() raises:
+    ^
+/root/mojolearn/checks/forest_inference_gpu.mojo:183:17: note: call expansion failed
+    cancellation(ctx)
+                ^
+/root/mojolearn/checks/forest_inference_gpu.mojo:117:5: note: function instantiation failed
+def cancellation(ctx: DeviceContext) raises:
+    ^
+/root/mojolearn/checks/forest_inference_gpu.mojo:138:46: note: call expansion failed with parameter value(s): ("RF_INPUT": False, "GROVE": True)
+    var zero = forest_predict_gpu[False,True](ctx,offsets,cols,thresholds,children,leaves,empty,0,1,1)
+                                             ^
+Included from /root/mojolearn/checks/forest_inference_gpu.mojo:18:
+/root/mojolearn/core/forest_inference.mojo:159:5: note: function instantiation failed
+def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
+    ^
+Included from /root/mojolearn/checks/forest_inference_gpu.mojo:18:
+/root/mojolearn/core/forest_inference.mojo:184:62: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., ..., "_ptxas_info_verbose": False)
+        ctx.enqueue_function[forest_grove32_kernel[RF_INPUT]](
+                                                             ^
+max/mojo/max/gpu/host/_device_context_extras.mojo:282:9: note: function instantiation failed
+max/mojo/max/gpu/host/_device_context_extras.mojo:396:43: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ...)
+max/mojo/max/gpu/host/device_context.mojo:3194:9: note: function instantiation failed
+max/mojo/max/gpu/host/device_context.mojo:3344:44: note: call expansion failed with parameter value(s): (..., "_1": 1, ..., ...)
+<unknown>:0:0: note: function instantiation failed
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:419:8: note: call expansion failed with parameter value(s): (..., "length": 1, ...)
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:606:9: note: function instantiation failed
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:612:9: note: constraint failed: Int and UInt do not conform to DevicePassable; use a fixed-width type such as Int32 or Int64 instead
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
