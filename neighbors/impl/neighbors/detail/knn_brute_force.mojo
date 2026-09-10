@@ -1234,7 +1234,9 @@ def brute_force_knn_impl(
     # died with `fusedL2kNN: the FAISS warp queue is a 32-lane bitonic
     # network and this target column's lane width is 64`.
     #
-    # That refusal is CORRECT (row 23) and it was being reached through the
+    # HISTORICAL refusal (row23), now retained outside IDENTICAL. The
+    # IDENTICAL CDNA path uses explicit logical32 queue collectives.
+    # Before that closure the refusal was reached through the
     # DEFAULT. `fused_l2_knn` is refused wherever the lane width is not 32,
     # but AUTO's geometry test does not know that, so on a 64-wide wavefront
     # every `k <= 64` row-major query whose launch computation returns
@@ -1245,7 +1247,7 @@ def brute_force_knn_impl(
     # already moved AUTO off the fused arm; this is the same hole in FAST,
     # and it is a correctness bug rather than an identity one.
     #
-    # The refusal stays exactly where it is for an EXPLICIT
+    # Outside IDENTICAL the refusal stays for an EXPLICIT
     # `KNN_METHOD_FUSED`: asking for an arm this column cannot express
     # should say so rather than silently substituting another one with a
     # different tie rule. AUTO, which by definition did not ask, takes the
