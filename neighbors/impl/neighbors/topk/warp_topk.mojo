@@ -86,9 +86,7 @@ candidate the caller adds may sort after it. A candidate with key `+inf`
 would violate that and could be displaced by a sentinel.
 """
 
-from std.gpu.primitives.id import lane_id
-from std.gpu.primitives.warp import max as warp_max
-from std.gpu.primitives.warp import shuffle_idx
+from neighbors.impl.neighbors.topk.logical_warp32 import queue_lane_id, queue_any, queue_broadcast
 
 from neighbors.impl.neighbors.topk.bitonic import (
     bitonic_merge_two_warp,
@@ -233,7 +231,7 @@ struct WarpSelect[num_warp_q: Int, num_thread_q: Int, dir: Bool](
         var full = Int32(0)
         if self.num_vals >= Self.num_thread_q:
             full = Int32(1)
-        if warp_max(full) != Int32(0):
+        if queue_any(full) != Int32(0):
             self.merge_warp_q()
 
     @always_inline
@@ -294,7 +292,7 @@ struct WarpSelect[num_warp_q: Int, num_thread_q: Int, dir: Bool](
         # The worst slot is index `num_warp_q - 1`, which under
         # `i = r * 32 + lane` is register `R - 1` of LANE 31. Broadcast it
         # so every lane admits and rejects identically.
-        self.warp_k_top = shuffle_idx(self.warp_k[Self.R - 1], UInt32(31))
+        self.warp_k_top = queue_broadcast(self.warp_k[Self.R - 1], UInt32(31))
 
     @always_inline
     def add(mut self, key: Float32, val: UInt32):
@@ -337,7 +335,7 @@ struct WarpSelect[num_warp_q: Int, num_thread_q: Int, dir: Bool](
         Slots at or above `num_warp_q` are NOT written. A caller that asks
         for `k > num_warp_q` owns filling the remainder.
         """
-        var lane = Int(lane_id())
+        var lane = Int(queue_lane_id())
 
         comptime for r in range(Self.R):
             var idx = r * 32 + lane

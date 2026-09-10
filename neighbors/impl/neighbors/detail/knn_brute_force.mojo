@@ -1203,7 +1203,7 @@ def brute_force_knn_impl(
             # `KNN_METHOD_FUSED` is untouched: it restores their dispatch
             # exactly, keeps 502's `grid_x = 1` pin so its tie set stays a
             # pure function of `(m, n, k)`, and keeps refusing on a column
-            # whose lane width is not 32.
+            # whose lane width is neither32 nor64 (IDENTICAL logical32 groups).
             want_fused = False
         else:
             comptime if knn_auto_follows_their_dispatch_for[
@@ -1250,7 +1250,7 @@ def brute_force_knn_impl(
     # should say so rather than silently substituting another one with a
     # different tie rule. AUTO, which by definition did not ask, takes the
     # tiled arm.
-    comptime fused_arm_exists = lib_lane_width_for[TARGET_COLUMN]() == 32
+    comptime fused_arm_exists = lib_lane_width_for[TARGET_COLUMN]() == 32 or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_lane_width_for[TARGET_COLUMN]() == 64)
     comptime if not fused_arm_exists:
         if knn_method == KNN_METHOD_AUTO:
             want_fused = False
