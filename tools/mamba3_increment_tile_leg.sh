@@ -9,6 +9,7 @@ if [ "${M3_INCREMENT_ENV_ACTIVE:-0}" != 1 ]; then
   exec "${MOJOLEARN_PIXI:-pixi}" run --manifest-path "$repo/pixi.toml" bash "$0"
 fi
 cd "$repo"
+python=${MOJOLEARN_MAMBA3_PYTHON:-python3}
 mkdir -p "$out"
 # The rental archive intentionally omits the corpus; stage its generator and
 # the three surface smoke cases before starting this leg.
@@ -17,7 +18,7 @@ test -d mamba/corpus/base_b2_l4_d8
 test -d mamba/corpus/mamba2/m2_base_b2_l4_d32
 test -d mamba/corpus/mamba3/m3_base_b2_l4_d32
 mojo --version > "$out/compiler.txt" 2>&1
-python3 -c 'import sys,numpy; print(sys.version,numpy.__version__,sys.executable)' > "$out/python.txt"
+"$python" -c 'import sys,numpy; print(sys.version,numpy.__version__,sys.executable)' > "$out/python.txt"
 sha256sum mamba/impl/mamba_ssm/ops/mamba3_siso.mojo gemm/checks/gemm_identical.mojo bindings/_mojolearn_mamba.mojo python/mojolearn/_mamba_impl.py > "$out/source-sha256.txt"
 mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba3_increment_tile_check.mojo -o "$out/increment-check" > "$out/build-increment.log" 2>&1
 "$out/increment-check" > "$out/increment.log" 2>&1
@@ -40,13 +41,13 @@ for arm in baseline tiled; do
   for gate in decode-cross continuation refusal; do "$out/native-$arm" "$gate" > "$out/native-$gate-$arm.log" 2>&1; done
   mojo build --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 "${extra[@]}" -I . -I bindings bindings/_mojolearn_mamba.mojo -o "$out/$arm.so" > "$out/build-binding-$arm.log" 2>&1
   cp "$out/$arm.so" python/mojolearn/identical/_mojolearn_mamba.so
-  MOJOLEARN_MAMBA3_FRESH_LARGE=1 python3 tools/mamba3_fresh_prefill_check.py > "$out/fresh-$arm.log" 2>&1
-  python3 python/mojolearn/tests/test_mamba_surface.py > "$out/surface-$arm.log" 2>&1
-  MOJOLEARN_SPEED_DUMP_DIR="$out/dump-$arm" python3 bench/speed/seq_py_speed_arm.py --lane mamba3 --rounds 5 > "$out/price-$arm.log" 2>&1
+  MOJOLEARN_MAMBA3_FRESH_LARGE=1 "$python" tools/mamba3_fresh_prefill_check.py > "$out/fresh-$arm.log" 2>&1
+  "$python" python/mojolearn/tests/test_mamba_surface.py > "$out/surface-$arm.log" 2>&1
+  MOJOLEARN_SPEED_DUMP_DIR="$out/dump-$arm" "$python" bench/speed/seq_py_speed_arm.py --lane mamba3 --rounds 5 > "$out/price-$arm.log" 2>&1
 done
 cmp "$out/default-baseline.trace" "$out/default-tiled.trace"
 cmp "$out/long-baseline.trace" "$out/long-tiled.trace"
-python3 - "$out" <<'PY'
+"$python" - "$out" <<'PY'
 from pathlib import Path
 import hashlib,json,re,statistics,sys
 out=Path(sys.argv[1]); rows=[]; timings={}
