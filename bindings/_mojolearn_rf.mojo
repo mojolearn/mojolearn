@@ -38,6 +38,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from ensemble.decisiontree.batched_levelalgo.bins import (
     BinScales,
     ClassificationBin,
+    WeightedClassificationBin,
     RegressionBin,
 )
 from checks.fixed_point import choose_scale
@@ -70,6 +71,9 @@ comptime DT = DType.float32
 comptime CLT = DType.int32
 comptime RLT = DType.float32
 comptime ClsObj = ClassificationObjectiveFunction[DT, CLT, ClassificationBin]
+comptime WeightedClsObj = ClassificationObjectiveFunction[
+    DT, CLT, WeightedClassificationBin
+]
 comptime RegObj = RegressionObjectiveFunction[DT, RLT, RegressionBin]
 
 
@@ -308,6 +312,7 @@ def _rf_classifier_fit(
     var rf_params = _rf_params_from(params, crit)
 
     var weights = List[Float32]()
+    var weight_total = Float64(0)
     if weights_addr != 0:
         var wp = _f32_ptr(weights_addr)
         var total = Float64(0)
@@ -319,6 +324,7 @@ def _rf_classifier_fit(
             weights.append(w)
             total += Float64(w)
             all_unit = all_unit and w == Float32(1)
+        weight_total = total
         if total <= 0:
             raise Error("class weights must have positive total")
         if all_unit:
@@ -343,10 +349,22 @@ def _rf_classifier_fit(
         ctx.synchronize()
         if len(weights) > 0:
             ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
-        forest = fit_forest[ClsObj](
-            ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-            sample_weight_host=weights,
-        )
+        # cuML randomforest.cuh dispatches weighted objectives only when
+        # bootstrap is disabled: sampling already applies bootstrap weights.
+        if len(weights) > 0 and not rf_params.bootstrap:
+            var scale = choose_scale(weight_total, n_rows)
+            if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
+                raise Error("class weights exceed Float32 fixed-point scale range")
+            var scales = BinScales(Float32(1), Float32(scale))
+            forest = fit_forest[WeightedClsObj](
+                ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
+                scales, sample_weight_host=weights,
+            )
+        else:
+            forest = fit_forest[ClsObj](
+                ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
+                sample_weight_host=weights,
+            )
         ctx.synchronize()
         _ = dx^
         _ = dy^

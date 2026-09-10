@@ -44,12 +44,23 @@ def main():
             repeated, pr = fit(weights)
             assert fingerprint(model) == fingerprint(repeated)
             np.testing.assert_array_equal(p, pr)
-            assert fingerprint(model) != fingerprint(plain), 'weighted path did not affect model'
+            print('WEIGHT_CASE', bootstrap, weights, 'plain=', fingerprint(plain),
+                  'weighted=', fingerprint(model), 'max_probability_change=', float(np.max(np.abs(p - p0))), flush=True)
+            assert fingerprint(model) != fingerprint(plain), (bootstrap, weights, 'weighted path did not affect model')
             clipped = np.clip(p[np.arange(len(y)), y].astype(np.float64), 1e-15, 1)
             loss = float(-np.log(clipped).mean())  # Independent benchmark oracle only.
             results.append(dict(bootstrap=bootstrap, weights=weights,
                 model_sha256=fingerprint(model), logloss=loss,
                 accuracy=float(np.mean(np.argmax(p, axis=1) == y))))
+    # Independent weighted stump oracle: a unit-scale integer bin would
+    # erase the 0.25 minority weight; an unweighted bin gives 0.5 instead.
+    stump_x = np.arange(8, dtype=np.float32).reshape(-1, 1)
+    stump_y = np.array([0, 0, 0, 0, 1, 1, 1, 1], dtype=np.int32)
+    stump = RandomForestClassifier(n_estimators=1, max_depth=1,
+        min_samples_split=100, bootstrap=False, class_weight={0: 0.25, 1: 1.5},
+        random_state=7, n_streams=1, numeric_mode=mode).fit(stump_x, stump_y)
+    np.testing.assert_allclose(stump.predict_proba(stump_x),
+        np.tile(np.array([1/7, 6/7]), (8, 1)), rtol=2e-6, atol=2e-7)
     print(json.dumps(dict(mode=mode, vendor='cuda', cases=results), indent=2))
     print('RF_CLASS_WEIGHT_PASS')
 

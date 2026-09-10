@@ -11,7 +11,9 @@ original unweighted binding, preserving its sampling and model behavior.
 This is cuML-style weighted sampling, **not sklearn-equivalent weighting**:
 with `bootstrap=True`, weights determine row sampling probability and are not
 applied again to impurity. With `bootstrap=False`, zero-weight rows are excluded
-and weights enter the native histogram objectives. The existing GPU tree engine
+and weights enter `WeightedClassificationBin` histogram objectives. The binding
+chooses a power-of-two fixed-point weight scale from the total row weights;
+non-bootstrap inputs requiring a scale outside normal finite Float32 are refused. The existing GPU tree engine
 is reused. Its weighted sampler currently computes the cumulative weights,
 random draws, and binary searches on the host; no separate CPU learner was added.
 Its arithmetic/order and pinned RNG geometry do not promise identical models to
@@ -49,3 +51,15 @@ built binding; local compile checks alone do not provide it.
 Local validation on 2026-09-10: 19 host tests passed, and the IDENTICAL
 Mojo shared-library compilation passed. No GPU execution was performed for
 this implementation commit.
+
+The first NVIDIA gate exposed a binding dispatch defect: non-bootstrap fits
+still selected unweighted bins. The follow-up selects weighted bins and a
+weight-dependent scale, and adds a fractional-weight stump oracle with expected
+probabilities `[1/7, 6/7]`. GPU qualification must use the corrected binding;
+the initial gate is a failure, not accepted evidence.
+
+The corrected binding subsequently compiled and passed the bounded NVIDIA H100
+IDENTICAL gate: all six weighted/bootstrap combinations repeated exactly,
+None/unit models matched, and the fractional stump oracle passed. This is
+CUDA correctness evidence for these fixtures, not all-vendor qualification or
+a weighted performance claim. The original failed gate remains distinct.
