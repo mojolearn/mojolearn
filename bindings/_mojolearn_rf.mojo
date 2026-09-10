@@ -277,11 +277,12 @@ def _forest_out_i32(
     return out
 
 
-def rf_classifier_fit_binding(
+def _rf_classifier_fit(
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
     criterion: PythonObject,
+    weights_addr: Int = 0,
 ) raises -> PythonObject:
     """Fit the cuML-port RandomForest classifier. `x` is COLUMN-major
     float32 (n_rows * n_cols, the layout `fit_forest`'s default expects);
@@ -306,6 +307,22 @@ def rf_classifier_fit_binding(
     _check_criterion("rf_classifier_fit", crit, _cls_criteria())
     var rf_params = _rf_params_from(params, crit)
 
+    var weights = List[Float32]()
+    if weights_addr != 0:
+        var wp = _f32_ptr(weights_addr)
+        var total = Float64(0)
+        var all_unit = True
+        for i in range(n_rows):
+            var w = wp[i]
+            if not (w >= 0 and w <= Float32(3.4028234663852886e38)):
+                raise Error("class weights must be finite and nonnegative")
+            weights.append(w)
+            total += Float64(w)
+            all_unit = all_unit and w == Float32(1)
+        if total <= 0:
+            raise Error("class weights must have positive total")
+        if all_unit:
+            weights = List[Float32]()
     var forest: RandomForestMetaData[DT, CLT]
     with GILReleased(Python()):
         var ctx = DeviceContext()
@@ -320,13 +337,15 @@ def rf_classifier_fit_binding(
         ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
         var dy = ctx.enqueue_create_buffer[CLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
-        # unweighted: `fit_forest` reads sample weights only through
-        # `sample_weight_host`, which stays empty; the device buffer is the
-        # 1-element placeholder `rf_bench.mojo` also passes.
-        var dsw = ctx.enqueue_create_buffer[DT](1)
+        # The host weights drive sampling; non-bootstrap objectives read the
+        # device weights at original row IDs. Keep both alive through fitting.
+        var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
         ctx.synchronize()
+        if len(weights) > 0:
+            ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
         forest = fit_forest[ClsObj](
-            ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params
+            ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
+            sample_weight_host=weights,
         )
         ctx.synchronize()
         _ = dx^
@@ -345,7 +364,25 @@ def rf_classifier_fit_binding(
         # `rf_ctx_probe.mojo::one_fit` takes `ctx` as a BORROWED argument, so
         # the caller's frame keeps it alive past every release.
         _ = ctx^
+    _ = weights^
     return _forest_out_i32(forest)
+
+
+def rf_classifier_fit_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject,
+) raises -> PythonObject:
+    return _rf_classifier_fit(x_addr, y_addr, params, criterion)
+
+
+def rf_classifier_fit_weighted_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+) raises -> PythonObject:
+    var address = Int(py=weights_addr)
+    if address == 0:
+        raise Error("weighted RF requires a nonzero Float32 weight pointer")
+    return _rf_classifier_fit(x_addr, y_addr, params, criterion, address)
 
 
 def rf_regressor_fit_binding(
@@ -630,6 +667,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_vendor_binding]("rf_vendor")
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
         m.def_function[rf_classifier_fit_binding]("rf_classifier_fit")
+        m.def_function[rf_classifier_fit_weighted_binding]("rf_classifier_fit_weighted")
         m.def_function[rf_regressor_fit_binding]("rf_regressor_fit")
         m.def_function[rf_predict_proba_binding]("rf_predict_proba")
         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
