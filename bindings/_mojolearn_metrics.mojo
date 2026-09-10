@@ -65,6 +65,8 @@ from metrics.estimator import (
     mutual_info_score_host,
     r2_score_host,
     regression_error_host,
+    confusion_matrix_host,
+    precision_recall_fscore_host,
     rand_score_host,
     silhouette_host,
     trustworthiness_host,
@@ -356,6 +358,61 @@ def regression_error_binding[absolute: Bool = False, root: Bool = False](
         result = regression_error_host[absolute, root](y, prediction, n)
     return PythonObject(Float64(result))
 
+
+
+
+def confusion_matrix_binding(
+    true_addr: PythonObject, pred_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    # params=[n,n_classes,normalization]; norm0:Int64,1true/2pred/3all:Float32.
+    _want(String("confusion_matrix"),params,3)
+    var n = Int(py=params[0])
+    var k = Int(py=params[1])
+    var normalization = Int(py=params[2])
+    var address = Int(py=out_addr)
+    if address == 0:
+        raise Error("confusion_matrix: null output")
+    var y = _load_i32(Int(py=true_addr),n)
+    var p = _load_i32(Int(py=pred_addr),n)
+    if normalization == 0:
+        var output = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
+        with GILReleased(Python()):
+            var values = confusion_matrix_host[DType.int64](y,p,n,k,normalization)
+            for i in range(len(values)):
+                output.unsafe_store(i,values[i])
+    else:
+        var output = _f32_ptr(address)
+        with GILReleased(Python()):
+            var values = confusion_matrix_host[DType.float32](y,p,n,k,normalization)
+            for i in range(len(values)):
+                output.unsafe_store(i,values[i])
+    return PythonObject(k*k)
+
+
+def precision_recall_fscore_binding(
+    true_addr: PythonObject, pred_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    # params=[n,k,average,pos_idx,zero_division,n_selected]. The selected
+    # classes are first in the encoding; all remaining labels STILL count.
+    # avg0None/1binary/2micro/3macro/4weighted. Output3*w+3 Float32:
+    # precision,recall,F1 rows; three trailing undefined flags.
+    _want(String("precision_recall_fscore"),params,6)
+    var n = Int(py=params[0])
+    var k = Int(py=params[1])
+    var average = Int(py=params[2])
+    var positive = Int(py=params[3])
+    var zero = Int(py=params[4])
+    var selected = Int(py=params[5])
+    var y = _load_i32(Int(py=true_addr),n)
+    var p = _load_i32(Int(py=pred_addr),n)
+    var output = _f32_ptr(Int(py=out_addr))
+    var written = 0
+    with GILReleased(Python()):
+        var values = precision_recall_fscore_host(y,p,n,k,average,positive,zero,selected)
+        for i in range(len(values)):
+            output.unsafe_store(i,values[i])
+        written = len(values)
+    return PythonObject(written)
 
 
 def kl_divergence_binding(
@@ -745,6 +802,8 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         m.def_function[completeness_score_binding]("completeness_score")
         m.def_function[v_measure_score_binding]("v_measure_score")
         m.def_function[r2_score_binding]("r2_score")
+        m.def_function[confusion_matrix_binding]("confusion_matrix")
+        m.def_function[precision_recall_fscore_binding]("precision_recall_fscore")
         m.def_function[regression_error_binding[False, False]]("mean_squared_error")
         m.def_function[regression_error_binding[True, False]]("mean_absolute_error")
         m.def_function[regression_error_binding[False, True]]("root_mean_squared_error")

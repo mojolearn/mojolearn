@@ -42,6 +42,7 @@ arithmetic: nothing here computes, it only moves bytes and forwards.
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from metrics.impl.metrics.regression_errors import regression_error
+from metrics.impl.metrics.classification import confusion_matrix, precision_recall_fscore, MAX_CONFUSION_CLASSES, MAX_PRF_CLASSES
 
 from metrics.checks.device_io import download_f32, upload_f32, upload_i32
 from metrics.impl.metrics.accuracy_score import accuracy_score_py
@@ -452,3 +453,51 @@ def regression_error_host[absolute: Bool = False, root: Bool = False](
     _ = prediction^
     _ = ctx^
     return result
+
+
+def _check_classification[matrix: Bool](y: List[Int32], p: List[Int32], n: Int, k: Int) raises:
+    _check_pair(y,p,n)
+    comptime cap = MAX_CONFUSION_CLASSES if matrix else MAX_PRF_CLASSES
+    if n > 2147483647 or k <= 0 or k > cap:
+        raise Error("classification metrics: count or class allocation bound exceeded")
+    comptime minimum = -1 if matrix else 0
+    for i in range(n):
+        if Int(y[i]) < minimum or Int(y[i]) >= k or Int(p[i]) < minimum or Int(p[i]) >= k:
+            raise Error("classification metrics: encoded label out of range")
+
+
+def confusion_matrix_host[dtype: DType](
+    y: List[Int32], p: List[Int32], n: Int, k: Int, normalization: Int,
+) raises -> List[Scalar[dtype]]:
+    _check_classification[True](y,p,n,k)
+    var ctx = DeviceContext()
+    var dy = upload_i32(ctx,y)
+    var dp = upload_i32(ctx,p)
+    var result = confusion_matrix[dtype](ctx,dy,dp,n,k,normalization)
+    var host = List[Scalar[dtype]]()
+    with result.map_to_host() as h:
+        for i in range(k*k):
+            host.append(h[i])
+    _ = result^
+    _ = dy^
+    _ = dp^
+    _ = ctx^
+    return host^
+
+
+def precision_recall_fscore_host(
+    y: List[Int32], p: List[Int32], n: Int, k: Int, average: Int,
+    positive: Int, zero: Int, selected: Int,
+) raises -> List[Float32]:
+    _check_classification[False](y,p,n,k)
+    var ctx = DeviceContext()
+    var dy = upload_i32(ctx,y)
+    var dp = upload_i32(ctx,p)
+    var result = precision_recall_fscore(ctx,dy,dp,n,k,average,positive,zero,selected)
+    var width = selected if average == 0 else 1
+    var host = download_f32(ctx,result,3*width+3)
+    _ = result^
+    _ = dy^
+    _ = dp^
+    _ = ctx^
+    return host^

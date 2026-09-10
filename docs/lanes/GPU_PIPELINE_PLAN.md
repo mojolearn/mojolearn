@@ -6,8 +6,11 @@ Decision and source audit: 2026-09-10, on
 The bounded A1 regression-error APIs and B1 RF/ET sklearn protocol are now
 implemented; see [regression metrics](GPU_REGRESSION_METRICS.md) and
 [forest compatibility](FOREST_SKLEARN_PROTOCOL.md) for contracts and qualification.
-The remaining phases are planned. A complete cross-vendor pipeline has not
-been qualified. Metrics and estimator compatibility take priority over
+A2 unweighted confusion counts and precision/recall/F1 are implemented;
+[the classification contract](GPU_CLASSIFICATION_METRICS.md) records its bounded
+label, averaging and device qualification scope. Log loss remains next,
+followed by ranking curves and the remaining phases. A complete cross-vendor
+pipeline has not been qualified. Metrics and estimator compatibility take priority over
 the longer-tail tree features.
 
 ## Decision: keep DETERMINISTIC for now
@@ -84,6 +87,26 @@ and fit/transform (with fit_transform delegation where appropriate), so
 Pipeline can clone and tune every step, not only the final estimator.
 Run device/build qualification serially on each shared device.
 
+## Next probability-metric slice
+
+After integer classification counts and precision/recall/F1, implement log loss
+as a separate bounded GPU API. Follow the
+[scikit-learn 1.8 mathematical contract](https://scikit-learn.org/1.8/modules/generated/sklearn.metrics.log_loss.html)
+while documenting the Float32 result policy. Start with unweighted single-label
+binary and multiclass targets, explicit probability-column label ordering,
+finite Float32 probabilities, and mean or sum output. Validate probability
+shape/range and row sums; state the row-sum tolerance and any normalization
+policy explicitly rather than silently repairing malformed probabilities.
+
+Encode labels on the host, then compute clipping, selected-class negative log,
+and the complete reduction on the GPU. Reuse `identical_log` and the A1 pinned
+256-slot reduction/final-fold schedule. Define Float32 epsilon clipping and
+binary positive-class interpretation before exposing the API. Test probabilities
+at 0/1 and their neighboring representable values, absent classes, permuted
+columns, ragged lengths and repeated/interleaved modes against an independent
+high-precision oracle. Keep log loss separate from ROC-AUC/PR curves: those
+require an ordered score/count primitive, not a logarithm or sum alone.
+
 ## Why sklearn compatibility is not just three methods
 
 `NumericModeMixin` currently injects `numeric_mode` through a wrapped
@@ -128,6 +151,14 @@ parameters and final refit. Record source, wheel hashes, compiler, driver,
 device and dataset hash. Run independent numerical references alongside bit
 comparisons: equal bits alone do not establish correct statistics.
 
+After correctness qualification, benchmark the classification metric count pass
+and host encoding separately. PRF's linear TP/true/predicted histograms avoid
+quadratic confusion storage. Candidate throughput work includes block-private
+integer counts for small class sets, reducing contention in all-normalized
+confusion totals, parallel per-class ratio evaluation, and reusable device
+inputs/results. Preserve exact counts and the specified final class-fold
+order; establish workload timings before choosing dispatch thresholds.
+
 The current metric boundary uploads host arrays and creates a context per
 call. Explicit reusable device buffers are a later performance slice; initial
 GPU metrics must not be described as a fully resident pipeline.
@@ -141,5 +172,5 @@ qualify that entire pipeline as cross-vendor IDENTICAL.
 Do not claim arbitrary sklearn pipelines are identical, or that no competitor
 can offer a similar guarantee. Publish the precise certified workflow and
 its intermediate evidence instead. This plan remains the implementation and qualification queue. A1 unweighted
-Float32 errors and B1 forest compatibility are the first implemented slices;
+Float32 errors, A2 unweighted confusion/PRF and B1 forest compatibility are implemented slices;
 weights, multiple outputs and broader protocol support remain pending.

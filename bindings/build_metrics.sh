@@ -305,6 +305,17 @@ b = np.zeros(4, dtype=np.float32)
 assert M.mean_squared_error(a, b) == 7.5
 assert M.mean_absolute_error(a, b) == 2.5
 assert abs(M.root_mean_squared_error(a, b) - np.sqrt(7.5)) < 1e-6
+# A2 counts plus each derived score and the normalized-matrix kernel.
+ct = np.array([0, 0, 1, 1, 1], dtype=np.int32)
+cp = np.array([0, 0, 0, 1, 1], dtype=np.int32)
+np.testing.assert_array_equal(M.confusion_matrix(ct, cp), [[2, 0], [1, 2]])
+np.testing.assert_allclose(M.confusion_matrix(ct, cp, normalize="true"),
+                           [[1.0, 0.0], [1 / 3, 2 / 3]], rtol=1e-6)
+for score, expected in ((M.precision_score, 1.0), (M.recall_score, 2 / 3),
+                        (M.f1_score, 0.8)):
+    assert abs(score(ct, cp) - expected) < 1e-6
+# Selected labels retain false negatives/positives against omitted classes.
+assert abs(M.recall_score(ct, cp, labels=[1], average="macro") - 2 / 3) < 1e-6
 
 M.kl_divergence(np.abs(y) + 1e-3, np.abs(yhat) + 1e-3)   # group B
 M.silhouette_score(X, lt)                      # group C, the batched path

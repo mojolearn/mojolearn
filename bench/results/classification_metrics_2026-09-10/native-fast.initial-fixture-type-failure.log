@@ -1,0 +1,19 @@
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/classification_metrics_check.mojo:48:58: error: invalid call to '__eq__': value passed to 'rhs' cannot be converted from 'Int' to 'Int32'
+                        true_count += Int64(1 if y[i] == c else 0)
+                                                 ~~~~~~~~^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:1380:1: note: function declared here
+def __eq__(self, rhs: Self) -> Bool    # note - synthetic signature
+^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/classification_metrics_check.mojo:49:58: error: invalid call to '__eq__': value passed to 'rhs' cannot be converted from 'Int' to 'Int32'
+                        pred_count += Int64(1 if p[i] == c else 0)
+                                                 ~~~~~~~~^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:1380:1: note: function declared here
+def __eq__(self, rhs: Self) -> Bool    # note - synthetic signature
+^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/metrics/checks/classification_metrics_check.mojo:50:50: error: invalid call to '__eq__': value passed to 'rhs' cannot be converted from 'Int' to 'Int32'
+                        tp += Int64(1 if y[i] == c and p[i] == c else 0)
+                                         ~~~~~~~~^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:1380:1: note: function declared here
+def __eq__(self, rhs: Self) -> Bool    # note - synthetic signature
+^
+/Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

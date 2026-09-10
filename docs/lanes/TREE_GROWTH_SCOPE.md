@@ -2,8 +2,8 @@
 
 Pipeline and mode decision (2026-09-10): [GPU_PIPELINE_PLAN.md](GPU_PIPELINE_PLAN.md).
 Keep DETERMINISTIC for now; prioritize metrics and estimator interoperability.
-A1 unweighted Float32 error metrics and B1 RF/ET sklearn compatibility are
-implemented on the tree lane; contracts and remaining work are tracked in the pipeline plan.
+A1 unweighted Float32 errors, A2 unweighted GPU confusion/precision/recall/F1,
+and B1 RF/ET sklearn compatibility are implemented on the tree lane; contracts and remaining work are tracked in the pipeline plan.
 
 Consolidated implementation sequence and backlog: [DECISION_TREE_ROADMAP.md](DECISION_TREE_ROADMAP.md).
 

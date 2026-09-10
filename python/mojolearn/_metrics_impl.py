@@ -21,7 +21,7 @@ the function. Three of those differences matter:
   * `kl_divergence` does NOT normalize `P` and `Q`, exactly as cuML's
     `cuml.metrics.kl_divergence` does not.
 
-HISTORICAL QUALIFICATION (excludes the new MSE/MAE/RMSE kernels).
+HISTORICAL QUALIFICATION (excludes new regression-error and A2 classification kernels).
 The original metrics kernels are bit-identical
 across Apple M4, NVIDIA H100 and AMD MI325X, measured at leg 11
 (`archive/evidence/E3_RESULTS.md` round 11, commit 144aa5b, `tools/e3_round_judge.sh`
@@ -65,6 +65,10 @@ from ._arrays import _addr, _addr_ro, as_f32_c
 
 __all__ = [
     "accuracy_score",
+    "confusion_matrix",
+    "precision_score",
+    "recall_score",
+    "f1_score",
     "adjusted_rand_score",
     "completeness_score",
     "entropy",
@@ -865,6 +869,171 @@ def trustworthiness(
     )
 
 
+# ---------------------------------------------------------------------------
+# Unweighted single-label classification. Labels are encoded on the host;
+# confusion counts, ratios and averaging are computed by the GPU binding.
+# ---------------------------------------------------------------------------
+def _classification_labels(values, name, *, allow_empty=False):
+    array = np.asarray(values, dtype=object)
+    if array.ndim != 1:
+        raise ValueError(f"{name} must be one-dimensional single-label data")
+    if not allow_empty and array.size == 0:
+        raise ValueError(f"{name} must contain at least one label")
+    labels = array.tolist()
+    if all(isinstance(v, (str, np.str_)) for v in labels):
+        return [str(v) for v in labels], "string"
+    if all(isinstance(v, (int, np.integer, bool, np.bool_)) for v in labels):
+        return [int(v) for v in labels], "integer"
+    raise TypeError(f"{name} must contain only strings or only integers; "
+                    "floating labels, missing labels and mixed types are unsupported")
+
+
+def _classification_pair(y_true, y_pred, sample_weight):
+    if sample_weight is not None:
+        raise NotImplementedError("classification metrics do not yet support sample_weight")
+    true, kind = _classification_labels(y_true, "y_true")
+    pred, pred_kind = _classification_labels(y_pred, "y_pred")
+    if len(true) != len(pred):
+        raise ValueError("y_true and y_pred lengths differ")
+    if kind != pred_kind:
+        raise TypeError("y_true and y_pred must use the same label type")
+    if len(true) > np.iinfo(np.int32).max:
+        raise ValueError("classification counts require at most INT32_MAX rows")
+    return true, pred, kind, sorted(set(true) | set(pred))
+
+
+def _selected_labels(labels, kind, observed):
+    if labels is None:
+        return observed.copy()
+    selected, selected_kind = _classification_labels(labels, "labels")
+    if selected_kind != kind:
+        raise TypeError("labels must use the same type as the targets")
+    if len(set(selected)) != len(selected):
+        raise ValueError("labels must be unique")
+    return selected
+
+
+def _encode_classification(true, pred, labels):
+    mapping = {label: i for i, label in enumerate(labels)}
+    return (np.asarray([mapping.get(v, -1) for v in true], dtype=np.int32),
+            np.asarray([mapping.get(v, -1) for v in pred], dtype=np.int32))
+
+
+def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
+                     normalize=None, numeric_mode=None):
+    """GPU confusion counts for unweighted strings/integer single labels.
+
+    Rows are true labels; columns are predictions. The default order is the
+    sorted observed union. Explicit unique labels preserve caller order and
+    exclude rows whose true or predicted label is outside that set.
+    Counts are Int64 (at most INT32_MAX input rows); normalized results are
+    Float32. Normalization accepts None, 'true', 'pred', or 'all'; zero-mass
+    rows/columns return zeros. At most 4096 output labels are supported.
+    Empty inputs and float labels are refused.
+    """
+    if normalize is not None and (not isinstance(normalize, str) or
+                                  normalize not in ("true", "pred", "all")):
+        raise ValueError("normalize must be None, 'true', 'pred' or 'all'")
+    true, pred, kind, observed = _classification_pair(y_true, y_pred, sample_weight)
+    selected = _selected_labels(labels, kind, observed)
+    if not set(selected).intersection(true):
+        raise ValueError("At least one label specified must be in y_true")
+    if len(selected) > 4096:
+        raise ValueError("confusion_matrix supports at most 4096 output labels")
+    yt, yp = _encode_classification(true, pred, selected)
+    norm = {None: 0, "true": 1, "pred": 2, "all": 3}[normalize]
+    result = np.empty((len(selected), len(selected)),
+                      dtype=np.int64 if norm == 0 else np.float32)
+    _get_binding(numeric_mode).confusion_matrix(
+        _addr_ro(yt), _addr_ro(yp), _addr(result), [len(true), len(selected), norm])
+    return result
+
+
+def _precision_recall_fscore(y_true, y_pred, *, labels, pos_label, average,
+                            sample_weight, zero_division, numeric_mode, metric):
+    averages = {None: 0, "binary": 1, "micro": 2, "macro": 3, "weighted": 4}
+    if average is not None and (not isinstance(average, str) or average not in averages):
+        raise ValueError("average must be 'binary', 'micro', 'macro', 'weighted' or None")
+    warn = isinstance(zero_division, str) and zero_division == "warn"
+    if not warn and (isinstance(zero_division, (bool, np.bool_)) or
+                     not isinstance(zero_division, (int, float, np.integer, np.floating)) or
+                     zero_division not in (0, 1)):
+        raise ValueError("zero_division must be 'warn', 0 or 1")
+    true, pred, kind, observed = _classification_pair(y_true, y_pred, sample_weight)
+    positive = 0
+    if average == "binary":
+        if len(observed) > 2:
+            raise ValueError("average='binary' requires at most two observed classes")
+        positive_labels, positive_kind = _classification_labels([pos_label], "pos_label")
+        if positive_kind != kind:
+            raise ValueError("pos_label must use the same type as the targets")
+        positive_label = positive_labels[0]
+        if positive_label not in observed and len(observed) == 2:
+            raise ValueError("pos_label is not a valid observed label")
+        selected = observed.copy()
+        if positive_label not in selected:
+            selected.append(positive_label)
+        positive = selected.index(positive_label)
+    else:
+        selected = _selected_labels(labels, kind, observed)
+    selected_count = len(selected)
+    # Keep classes outside the requested output set for false-positive and
+    # false-negative accounting. Truncating confusion first would be wrong.
+    selected_set = set(selected)
+    all_labels = selected + [v for v in observed if v not in selected_set]
+    if len(all_labels) > 715827882:
+        raise ValueError("classification metrics exceed the native class-index bound")
+    yt, yp = _encode_classification(true, pred, all_labels)
+    width = selected_count if average is None else 1
+    output = np.empty(3 * width + 3, dtype=np.float32)
+    _get_binding(numeric_mode).precision_recall_fscore(
+        _addr_ro(yt), _addr_ro(yp), _addr(output),
+        [len(true), len(all_labels), averages[average], positive,
+         0 if warn else int(zero_division), selected_count])
+    if warn and output[3 * width + metric] != 0:
+        import warnings
+        try:
+            from sklearn.exceptions import UndefinedMetricWarning
+        except ImportError:
+            UndefinedMetricWarning = RuntimeWarning
+        name = ("Precision", "Recall", "F-score")[metric]
+        warnings.warn(f"{name} is ill-defined and being set to 0.0 due to zero "
+                      "denominator; use zero_division to control this behavior.",
+                      UndefinedMetricWarning, stacklevel=3)
+    values = output[metric * width:(metric + 1) * width]
+    return values.copy() if average is None else float(values[0])
+
+
+def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
+                    sample_weight=None, zero_division="warn", numeric_mode=None):
+    """GPU precision; unweighted strings/integers, Float32 ratios/averages.
+
+    Supported average values are binary, micro, macro, weighted and None.
+    Explicit labels preserve order and retain errors against excluded labels;
+    binary averaging uses pos_label and ignores labels. zero_division accepts
+    'warn' (zero with a warning), 0 or 1. Empty/multilabel inputs are refused.
+    """
+    return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
+        average=average, sample_weight=sample_weight, zero_division=zero_division,
+        numeric_mode=numeric_mode, metric=0)
+
+
+def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
+                 sample_weight=None, zero_division="warn", numeric_mode=None):
+    """GPU recall with the label/average/zero-division contract of precision_score."""
+    return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
+        average=average, sample_weight=sample_weight, zero_division=zero_division,
+        numeric_mode=numeric_mode, metric=1)
+
+
+def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
+             sample_weight=None, zero_division="warn", numeric_mode=None):
+    """GPU F1 with the label/average/zero-division contract of precision_score."""
+    return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
+        average=average, sample_weight=sample_weight, zero_division=zero_division,
+        numeric_mode=numeric_mode, metric=2)
+
+
 # ===========================================================================
 # NAMED ABSENCES. Everything a caller might reasonably reach for in
 # `sklearn.metrics` or `cuml.metrics` that this module does NOT have, with
@@ -883,16 +1052,12 @@ _NOT_PORTED = {
         "(neighbors/checks/pinned_distance_tile.mojo), and it is not a "
         "metric of a model (metrics/NOT_IMPLEMENTED.tsv)"
     ),
-    "confusion_matrix": "planned GPU API; existing contingency primitives need label/output contracts",
     "normalized_mutual_info_score": "normalization conventions and public validation are not implemented",
     "adjusted_mutual_info_score": "expected mutual information and its public contract are not implemented",
     "fowlkes_mallows_score": "public score and normalization checks are not implemented",
     "roc_auc_score": "planned stable score ordering, tie grouping and GPU prefix counts",
     "log_loss": "planned clipped-probability GPU reduction and label validation",
     "precision_recall_curve": "planned shared ordered-count primitive and curve endpoint contract",
-    "precision_score": "planned confusion counts and averaging/zero-division contract",
-    "recall_score": "planned confusion counts and averaging/zero-division contract",
-    "f1_score": "planned confusion counts and averaging/zero-division contract",
     "hinge_loss": "GPU margin reduction and its public label contract are not implemented",
 }
 
