@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host-only byte gate for WP6; no GPU, numeric mode, or timing claim."""
 from std.memory import bitcast
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr, copy_f32, read_f32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr, copy_f32, read_f32, read_i32
 
 
 def pattern(i: Int) -> UInt32:
@@ -36,6 +36,11 @@ def main() raises:
             for i in range(n):
                 if bitcast[DType.uint32](result[i]) != pattern(i + offset):
                     raise Error("memcpy read changed bytes")
+                cells += 1
+            var labels = read_i32(Int(src + offset), n)
+            for i in range(n):
+                if bitcast[DType.uint32](labels[i]) != pattern(i + offset):
+                    raise Error("int32 memcpy changed label bits")
                 cells += 1
             copy_f32(dst + offset, dst + offset, n)
             for i in range(n):
