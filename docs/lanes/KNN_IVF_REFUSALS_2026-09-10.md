@@ -16,8 +16,9 @@ The new public IVF gate plants1057 points into four lists, probes all lists,
 and checks k257 and1024 over two distinct queries against a stable integer
 squared-distance sort. Repeated points force ties across original indices.
 All2562 returned indices and raw distance words must match; k1025 must reach
-the rank-capacity refusal. Apple gate passed. Existing IVF regression gates
-remain part of root's final validation.
+the rank-capacity refusal. Apple gate passed. An added257-probe public gate covers the coarse selector on257 tied
+centroids and requires all1057 candidates plus the lowest257 original
+indices. Existing IVF regression gates remain part of root's final validation.
 
 The fused queue keeps its32-lane sorting topology. IDENTICAL CDNA64 uses two
 aligned logical groups per wave: lane IDs modulo32, XOR offsets below32 with
@@ -33,7 +34,10 @@ queries in neighboring logical groups, duplicate vectors and independent
 integer-distance ordering. It also checks all2048 mappings from64 virtual
 lanes to their32 logical broadcast sources. Apple declared-AMD64 gate passes
 all twelve cases. This is real Metal execution of the scoped implementation
-plus address emulation, not physical CDNA wave64 execution. Actual CDNA
+plus address emulation, not physical CDNA wave64 execution. For the full identity driver under a simulated64 declaration, the separate
+AUTO/tiled small-k selector is forced to its shared integer tree using
+MOJOLEARN_KNN_IDENTICAL_TREE_SELECT; its physical64 shuffle cannot run on
+a32-lane device. The new explicit fused arm remains active. Actual CDNA
 compilation is recorded separately when available; physical device validation
 remains RUN OWED. A strict compilation flag rejects a simulated target.
 
