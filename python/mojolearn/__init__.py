@@ -62,7 +62,7 @@ from .density import DBSCAN, KernelDensity
 from .ensemble import ExperimentalTwoLevelFeatureFreq, GradientBoosting, OrderedRMSE
 from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
 from . import preprocessing
-from .preprocessing import MinMaxScaler
+from .preprocessing import MinMaxScaler, StandardScaler
 from .linear_model import LinearRegression, LogisticRegression, Ridge
 from .neighbors import (
     KNeighborsClassifier,
@@ -205,6 +205,7 @@ from ._samba_impl import SambaConfig, SambaStack
 __all__ = [
     "preprocessing",
     "MinMaxScaler",
+    "StandardScaler",
     "SGD",
     "Adam",
     "AdamW",

@@ -5,10 +5,63 @@ import numpy as np
 from . import _backend
 from ._arrays import _addr, _addr_ro
 
-__all__ = ['MinMaxScaler']
+__all__ = ['MinMaxScaler', 'StandardScaler']
 
 
-class MinMaxScaler:
+class _ScalerProtocol:
+    @staticmethod
+    def _input(X):
+        values = np.asarray(X)
+        if values.dtype != np.dtype('float32'):
+            raise TypeError('Scaler input must have dtype float32')
+        if values.ndim != 2 or min(values.shape) == 0:
+            raise ValueError('Scaler requires a nonempty two-dimensional input')
+        if values.size > np.iinfo(np.int32).max:
+            raise ValueError('Scaler exceeds the native Int32 indexing bound')
+        if not np.all(np.isfinite(values)):
+            raise ValueError('Scaler input must be finite; NaN/inf are unsupported')
+        return np.ascontiguousarray(values)
+
+    @staticmethod
+    def _binding(mode):
+        binding = _backend.binding('_mojolearn_preprocessing', mode)
+        expected = {'fast': 0, 'identical': 1, 'deterministic': 2}[mode]
+        if binding.preprocessing_numeric_mode() != expected:
+            raise RuntimeError('Scaler native numeric mode disagrees with requested mode')
+        return binding
+
+    def fit_transform(self, X, y=None, **fit_params):
+        return self.fit(X, y, **fit_params).transform(X)
+
+    def partial_fit(self, X, y=None):
+        raise NotImplementedError(f'{type(self).__name__} partial_fit is not implemented')
+
+    def get_params(self, deep=True):
+        return {name: getattr(self, name) for name in self._parameters}
+
+    def set_params(self, **params):
+        values = self.get_params()
+        if not params:
+            return self
+        unknown = sorted(set(params) - values.keys())
+        if unknown:
+            raise ValueError(f'Invalid {type(self).__name__} parameters: {unknown}')
+        values.update(params)
+        replacement = type(self)(**values)
+        self.__dict__.clear()
+        self.__dict__.update(replacement.__dict__)
+        return self
+
+    def __sklearn_is_fitted__(self):
+        return hasattr(self, 'scale_') and hasattr(self, 'numeric_mode_')
+
+    def __sklearn_tags__(self):
+        from sklearn.utils import Tags, TargetTags, TransformerTags
+        return Tags(estimator_type=None, target_tags=TargetTags(required=False),
+                    transformer_tags=TransformerTags(preserves_dtype=['float32']))
+
+
+class MinMaxScaler(_ScalerProtocol):
     """GPU feature scaling for dense, finite, two-dimensional Float32 inputs.
 
     feature_range endpoints are evaluated in Float32 and must remain finite
@@ -60,26 +113,6 @@ class MinMaxScaler:
             raise ValueError('feature_range must have lower < upper after Float32 conversion')
         return lower, upper
 
-    @staticmethod
-    def _input(X):
-        values = np.asarray(X)
-        if values.dtype != np.dtype('float32'):
-            raise TypeError('MinMaxScaler input must have dtype float32')
-        if values.ndim != 2 or min(values.shape) == 0:
-            raise ValueError('MinMaxScaler requires a nonempty two-dimensional input')
-        if values.size > np.iinfo(np.int32).max:
-            raise ValueError('MinMaxScaler exceeds the native Int32 indexing bound')
-        if not np.all(np.isfinite(values)):
-            raise ValueError('MinMaxScaler input must be finite; NaN/inf are unsupported')
-        return np.ascontiguousarray(values)
-
-    @staticmethod
-    def _binding(mode):
-        binding = _backend.binding('_mojolearn_preprocessing', mode)
-        expected = {'fast': 0, 'identical': 1, 'deterministic': 2}[mode]
-        if binding.preprocessing_numeric_mode() != expected:
-            raise RuntimeError('MinMaxScaler native numeric mode disagrees with requested mode')
-        return binding
 
     def fit(self, X, y=None, sample_weight=None):
         lower, upper = self._configuration()
@@ -141,32 +174,99 @@ class MinMaxScaler:
     def inverse_transform(self, X):
         return self._transform(X, True)
 
-    def fit_transform(self, X, y=None, **fit_params):
-        return self.fit(X, y, **fit_params).transform(X)
 
-    def partial_fit(self, X, y=None):
-        raise NotImplementedError('MinMaxScaler partial_fit is not implemented')
+class StandardScaler(_ScalerProtocol):
+    """GPU population standardization of dense finite Float32 matrices.
 
-    def get_params(self, deep=True):
-        return {name: getattr(self, name) for name in self._parameters}
+    copy=True is required. with_mean and with_std control the forward/inverse
+    operations. Statistics are Float32; this is not sklearn Float64 arithmetic.
+    Variance is a centered population Float32 fold about the Float32 mean.
+    Exactly constant columns have variance zero; zero variance uses scale one.
+    This follows the bounded cuML exact-zero convention, not sklearn's
+    Float64 near-constant error bound. Numeric mode and flags are captured by
+    fit and retained through pickling. Weights, sparse inputs, NaNs and
+    partial_fit are not implemented.
+    """
+    _parameters = ('copy', 'with_mean', 'with_std', 'numeric_mode')
 
-    def set_params(self, **params):
-        values = self.get_params()
-        if not params:
-            return self
-        unknown = sorted(set(params) - values.keys())
-        if unknown:
-            raise ValueError(f'Invalid MinMaxScaler parameters: {unknown}')
-        values.update(params)
-        replacement = type(self)(**values)
-        self.__dict__.clear()
-        self.__dict__.update(replacement.__dict__)
+    def __init__(self, *, copy=True, with_mean=True, with_std=True, numeric_mode=None):
+        self.copy = copy
+        self.with_mean = with_mean
+        self.with_std = with_std
+        self.numeric_mode = numeric_mode
+        self._configuration()
+
+    def _configuration(self):
+        if not isinstance(self.copy, (bool, np.bool_)) or not self.copy:
+            raise NotImplementedError('StandardScaler currently requires copy=True')
+        if not isinstance(self.with_mean, (bool, np.bool_)) or not isinstance(self.with_std, (bool, np.bool_)):
+            raise ValueError('with_mean and with_std must be bools')
+        if self.numeric_mode is not None and (
+                not isinstance(self.numeric_mode, str) or
+                self.numeric_mode.strip().lower() not in ('fast', 'deterministic', 'identical')):
+            raise ValueError('numeric_mode must be fast, deterministic, identical or None')
+
+    def fit(self, X, y=None, sample_weight=None):
+        self._configuration()
+        for name in list(self.__dict__):
+            if name.endswith('_'):
+                del self.__dict__[name]
+        if sample_weight is not None:
+            raise NotImplementedError('StandardScaler does not support sample_weight')
+        values = self._input(X)
+        n, d = values.shape
+        mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
+        output = np.empty((3, d), dtype=np.float32)
+        self._binding(mode).standard_fit(_addr_ro(values), _addr(output),
+            [n, d, int(self.with_mean), int(self.with_std)])
+        if not np.all(np.isfinite(output)) or np.any(output[1] < 0) or np.any(output[2] <= 0):
+            raise ValueError('StandardScaler statistics are nonfinite, variance negative, or scale nonpositive in Float32')
+        self.mean_ = output[0].copy() if self.with_mean or self.with_std else None
+        self.var_ = output[1].copy() if self.with_std else None
+        self.scale_ = output[2].copy() if self.with_std else None
+        self.n_features_in_ = d
+        self.n_samples_seen_ = n
+        self.numeric_mode_ = mode
+        self.with_mean_ = bool(self.with_mean)
+        self.with_std_ = bool(self.with_std)
         return self
 
-    def __sklearn_is_fitted__(self):
-        return hasattr(self, 'scale_') and hasattr(self, 'numeric_mode_')
+    def _transform(self, X, inverse, copy):
+        if copy is not None and (not isinstance(copy, (bool, np.bool_)) or not copy):
+            raise NotImplementedError('StandardScaler transform currently requires copy=True or None')
+        if not self.__sklearn_is_fitted__():
+            try:
+                from sklearn.exceptions import NotFittedError
+            except ImportError:
+                NotFittedError = RuntimeError
+            raise NotFittedError('StandardScaler is not fitted')
+        values = self._input(X)
+        n, d = values.shape
+        if d != self.n_features_in_:
+            raise ValueError('StandardScaler input feature count differs from fit')
+        if self.with_mean_ and self.mean_ is None:
+            raise ValueError('StandardScaler mean_ is missing for a centered transform')
+        if self.with_std_ and self.scale_ is None:
+            raise ValueError('StandardScaler scale_ is missing for a scaled transform')
+        mean = self.mean_ if self.mean_ is not None else np.zeros(d, dtype=np.float32)
+        scale = self.scale_ if self.scale_ is not None else np.ones(d, dtype=np.float32)
+        for name, statistic in (('mean_', mean), ('scale_', scale)):
+            if (not isinstance(statistic, np.ndarray) or statistic.dtype != np.dtype('float32')
+                    or statistic.shape != (d,) or not statistic.flags.c_contiguous
+                    or not np.all(np.isfinite(statistic))):
+                raise ValueError(f'StandardScaler {name} must remain a finite contiguous Float32 feature vector')
+        if np.any(scale <= 0):
+            raise ValueError('StandardScaler scale_ must remain positive')
+        output = np.empty(values.shape, dtype=np.float32)
+        self._binding(self.numeric_mode_).standard_transform(
+            _addr_ro(values), _addr_ro(mean), _addr_ro(scale), _addr(output),
+            [n, d, int(inverse), int(self.with_mean_), int(self.with_std_)])
+        if not np.all(np.isfinite(output)):
+            raise ValueError('StandardScaler transform overflowed in Float32')
+        return output
 
-    def __sklearn_tags__(self):
-        from sklearn.utils import Tags, TargetTags, TransformerTags
-        return Tags(estimator_type=None, target_tags=TargetTags(required=False),
-                    transformer_tags=TransformerTags(preserves_dtype=['float32']))
+    def transform(self, X, copy=None):
+        return self._transform(X, False, copy)
+
+    def inverse_transform(self, X, copy=None):
+        return self._transform(X, True, copy)

@@ -13,7 +13,9 @@ is now implemented with build/smoke validation only; broader numerical
 qualification remains pending. Bounded [binary ROC-AUC and precision-recall
 curves](GPU_RANKING_METRICS.md) are the implemented A3 scoring slice, with
 local build/smoke validation only. C1 now adds bounded
-[GPU MinMaxScaler](GPU_MINMAX_SCALER.md); StandardScaler is next. The
+[GPU MinMaxScaler](GPU_MINMAX_SCALER.md) and
+[GPU StandardScaler](GPU_STANDARD_SCALER.md); the
+[B2 GBDT adapter audit](GBDT_SKLEARN_ADAPTER_PLAN.md) is next. The
 remaining phases follow. A complete cross-vendor
 pipeline has not been qualified. Metrics and estimator compatibility take priority over
 the longer-tail tree features.
@@ -142,13 +144,19 @@ learned attributes, response methods and metadata routing matter. Qualify an
 explicit sklearn version range. Start with serial search; GPU process/thread
 concurrency and per-worker context ownership are separate work.
 
-## GPU scalers: MinMaxScaler implemented, StandardScaler next
+## GPU scalers: bounded MinMaxScaler and StandardScaler
 
 C1 starts with the implemented dense finite Float32
 [MinMaxScaler](GPU_MINMAX_SCALER.md), with copied transforms/inverse transforms
-and a bounded transformer protocol. Local build/smoke checks are the scope
-of this turn; broader numerical/cross-device qualification remains pending.
-StandardScaler is next.
+and a bounded transformer protocol. Its local build/smoke evidence does not
+provide broad numerical or cross-device qualification.
+[StandardScaler](GPU_STANDARD_SCALER.md) adds bounded centered population
+variance and independent centering/scaling flags. Its
+[local M4 build/smoke evidence](../../bench/results/standard_scaler_2026-09-10/RESULTS.md)
+passes in all modes; unresolved CoreAnalytics diagnostics and broader
+qualification remain documented limits. Next, audit
+[GBDT classifier/regressor adapters](GBDT_SKLEARN_ADAPTER_PLAN.md) before
+broadening estimator protocol claims.
 Use sklearn `preprocessing/_data.py` (`partial_fit`, `transform`,
 `inverse_transform`, `_handle_zeros_in_scale`, `_is_constant_feature`) and
 `utils/extmath.py::_incremental_mean_and_var` as behavior references; inspect
@@ -157,11 +165,11 @@ cuML's `python/cuml/cuml/_thirdparty/sklearn/preprocessing/_data.py` GPU path.
 Reuse `core/pinned_reduce.mojo` min/max/sum primitives and the metric
 chunk/finalize structure for scalable column statistics. Existing
 `core/column_stats.mojo` mean/shift kernels and `solver/impl/stats/mean.mojo`
-are candidates after checking their row/column layouts. StandardScaler needs
-population variance with a centered reduction, not PCA sample covariance or
-the cancellation-prone difference of squared moments. sklearn's Float64
-accumulation and near-constant detection need an explicit documented
-counterpart; a Float32 exact-zero shortcut is not equivalent.
+are candidates after checking their row/column layouts. StandardScaler uses
+centered Float32 population variance, not PCA sample covariance or the
+difference of squared moments. Its exact-zero constant handling differs from
+sklearn's Float64 error-bound rule; its feature contract documents the
+accumulation and constant-feature deviations.
 
 The MinMaxScaler contract owns learned statistics, returns copied transforms,
 preserves numeric mode and supports inverse transforms plus a bounded
@@ -219,7 +227,7 @@ Do not claim arbitrary sklearn pipelines are identical, or that no competitor
 can offer a similar guarantee. Publish the precise certified workflow and
 its intermediate evidence instead. This plan remains the implementation and qualification queue. A1 unweighted
 Float32 errors, A2 unweighted confusion/PRF, bounded log loss, A3 binary
-ROC-AUC/PR curves, B1 forest compatibility and bounded C1 MinMaxScaler
-are implemented slices; log
-loss and A3 have only build/smoke validation;
+ROC-AUC/PR curves, B1 forest compatibility and bounded C1 MinMaxScaler and
+StandardScaler are implemented slices; log
+loss, A3 and C1 have only build/smoke validation;
 weights, multiple outputs and broader protocol support remain pending.

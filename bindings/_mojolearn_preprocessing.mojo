@@ -7,7 +7,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host
+from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host, validate_standard, standard_fit_host, standard_transform_host
 
 
 def ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -67,6 +67,48 @@ def transform_binding(
     return PythonObject(n*d)
 
 
+def standard_fit_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    # params=[n,d,with_mean,with_std]; output rows=mean,var,scale.
+    if len(params) != 4:
+        raise Error("standard_fit: requires 4 parameters")
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var with_mean = Int(py=params[2])
+    var with_std = Int(py=params[3])
+    validate_standard(n,d,with_mean,with_std)
+    var x = load(Int(py=x_addr),n*d)
+    var output = ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        var result = standard_fit_host(x,n,d,with_mean,with_std)
+        for i in range(3*d):
+            output.unsafe_store(i,result[i])
+    return PythonObject(3*d)
+
+
+def standard_transform_binding(
+    x_addr: PythonObject, mean_addr: PythonObject, scale_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    # params=[n,d,inverse,with_mean,with_std]; output n*d row-major.
+    if len(params) != 5:
+        raise Error("standard_transform: requires 5 parameters")
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var inverse = Int(py=params[2])
+    var with_mean = Int(py=params[3])
+    var with_std = Int(py=params[4])
+    validate_standard(n,d,with_mean,with_std)
+    var x = load(Int(py=x_addr),n*d)
+    var mean = load(Int(py=mean_addr),d)
+    var scale = load(Int(py=scale_addr),d)
+    var output = ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        var result = standard_transform_host(x,mean,scale,n,d,inverse,with_mean,with_std)
+        for i in range(n*d):
+            output.unsafe_store(i,result[i])
+    return PythonObject(n*d)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -79,6 +121,8 @@ def vendor_binding() raises -> PythonObject:
 def PyInit__mojolearn_preprocessing() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_preprocessing")
+        m.def_function[standard_fit_binding]("standard_fit")
+        m.def_function[standard_transform_binding]("standard_transform")
         m.def_function[fit_binding]("minmax_fit")
         m.def_function[transform_binding]("minmax_transform")
         m.def_function[numeric_mode_binding]("preprocessing_numeric_mode")
