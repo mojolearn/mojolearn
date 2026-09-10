@@ -683,14 +683,17 @@ def arm_criteria(rep, fitted, n_obs):
         P, D, Q, s = m.seasonal_order
         N = p + q + P + Q + m.k_ + 1
         T = n_obs - (d + s * D)
-        want_aic = 2.0 * N - 2.0 * m.llf_
-        want_bic = math.log(T) * N - 2.0 * m.llf_
-        rep.check(arm, np.allclose(m.aic_, want_aic, rtol=0, atol=1e-9),
+        # DEVIATION 2460: the per-series criteria are mojolearn.Array (no
+        # arithmetic); np.asarray views them zero-copy, same values, same bound.
+        llf, aic, bic = np.asarray(m.llf_), np.asarray(m.aic_), np.asarray(m.bic_)
+        want_aic = 2.0 * N - 2.0 * llf
+        want_bic = math.log(T) * N - 2.0 * llf
+        rep.check(arm, np.allclose(aic, want_aic, rtol=0, atol=1e-9),
                   "%s: aic_ == 2N - 2 llf with N = %d" % (name, N))
-        rep.check(arm, np.allclose(m.bic_, want_bic, rtol=0, atol=1e-9),
+        rep.check(arm, np.allclose(bic, want_bic, rtol=0, atol=1e-9),
                   "%s: bic_ == log(T) N - 2 llf with T = %d, the count AFTER "
                   "differencing" % (name, T))
-        rep.check(arm, np.all(m.bic_ - m.aic_ > 0.0),
+        rep.check(arm, np.all(bic - aic > 0.0),
                   "%s: the BIC penalty exceeds the AIC penalty at n = %d, "
                   "since log(T) > 2" % (name, T))
 
@@ -860,12 +863,14 @@ def arm_batch(rep, n_obs):
     pick = [0, 2, 4]
     y3 = np.ascontiguousarray(y6[pick])
     m3 = ARIMA(order=case["order"], trend="n").fit(y3)
-    rep.bits_equal(arm, m3.params_, m6.params_[pick],
+    # DEVIATION 2460: fitted arrays are mojolearn.Array (no fancy indexing);
+    # the row pick goes through the zero-copy NumPy view.
+    rep.bits_equal(arm, m3.params_, np.asarray(m6.params_)[pick],
                    "three series drawn from six fit to the same bits")
-    rep.check(arm, bool(np.array_equal(m3.n_iter_, m6.n_iter_[pick])),
+    rep.check(arm, bool(np.array_equal(m3.n_iter_, np.asarray(m6.n_iter_)[pick])),
               "and to the same ITERATION COUNTS, which is the stage that "
               "catches a per-series branch reading another series' state")
-    rep.check(arm, bool(np.array_equal(m3.retcode_, m6.retcode_[pick])),
+    rep.check(arm, bool(np.array_equal(m3.retcode_, np.asarray(m6.retcode_)[pick])),
               "and the same retcodes")
 
     y1 = np.ascontiguousarray(y6[2:3])

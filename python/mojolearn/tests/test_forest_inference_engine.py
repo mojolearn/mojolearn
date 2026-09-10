@@ -98,9 +98,9 @@ def test_resident_model_reuse_invalidation_and_lifetime(cls, monkeypatch):
     first = call(X)
     np.testing.assert_array_equal(call(X), first)
     assert predicted == [1, 1] and len(prepared) == 1
-    assert not model._leaves.flags.writeable
+    assert not model._leaves.flags["WRITEABLE"]
     with pytest.raises(ValueError):
-        model._leaves.setflags(write=True)
+        np.asarray(model._leaves).setflags(write=True)
     original[:] = 99
     assert model._leaves[0] == 1
 

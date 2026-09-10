@@ -193,6 +193,16 @@ def _reorder(src_mv, shape, src_order, dst_mv):
             idx[k] = 0
 
 
+def _restore_array(raw, shape, dtype, order, readonly):
+    """Pickle restores values and layout, never a borrowed pointer or GPU handle."""
+    if readonly:
+        flat = Array.from_buffer(memoryview(raw).cast(_CODE[dtype]))
+        return Array._view_of(flat, shape, order)
+    store = array.array(_CODE[dtype])
+    store.frombytes(raw)
+    return Array._owned(store, shape, dtype, order)
+
+
 class Array:
     """A typed, shaped, contiguous block of memory. See the module docstring.
 
@@ -218,6 +228,8 @@ class Array:
         self._base = None
         self._pin = None
         self._mv = memoryview(store)
+        if self._mv.format != _CODE[dtype]:
+            self._mv = self._mv.cast("B").cast(_CODE[dtype])
         self._addr = store.buffer_info()[0]
         self._readonly = False
         self._set_meta(shape, dtype, order)
@@ -398,6 +410,10 @@ class Array:
         return Array._view_of(self, (self.size,), "C")
 
     # ------------------------------------------------------------- basic ops
+    def __reduce__(self):
+        return (_restore_array, (self.tobytes(), self.shape, self.dtype,
+                                 self.order, self._readonly))
+
     def tobytes(self):
         """The bytes of the storage, in storage order (C for a C-order
         Array, column-major for an F-order one)."""

@@ -70,9 +70,9 @@ import importlib.util
 import os
 import sys
 
-import numpy as np
-
-from ._arrays import _addr, _addr_ro
+from ._array import Array
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty
+from ._bufcheck import nelems, probe, strided_rows
 
 # The numeric-mode selector (`_backend.select()`, called from
 # `mojolearn/__init__.py`) installs the identical build of each extension
@@ -121,28 +121,44 @@ def _series_major(y, name):
     `y` arrives as cuML's `(n_obs, batch_size)` -- each time series in a
     COLUMN, which is what `stationarity.pyx`'s `check_array(y, order="F")`
     produces. The kernels index series `b` at `[b * n_obs, (b+1) * n_obs)`,
-    so the transpose happens here. It COPIES, always, and that is named
-    rather than hidden: on a long batch it is the dominant cost of the
-    call, and a caller who already holds `(batch_size, n_obs)` can avoid
-    it by handing that in transposed.
+    which is exactly the flat memory of the COLUMN-MAJOR float32 form of
+    `y`, so DEVIATION 2418 takes `_buffer.as_f32_colmajor` (the DEVIATION
+    1887 argument: one materialization, the f64 -> f32 cast is the same
+    elementwise cast either way). It COPIES for anything that is not
+    already float32 F-contiguous, and that is named rather than hidden:
+    on a long batch it is the dominant cost of the call, and a caller who
+    holds `(n_obs, batch_size)` float32 in Fortran order pays nothing.
+    A 1-D `y` is one series and its C-order float32 form is already
+    series-major.
 
     Returns `(array, n_obs, batch_size)`. The caller MUST keep `array`
     alive across the Mojo call; the Mojo side borrows the address and
-    holds nothing after it returns (`_arrays.py`).
+    holds nothing after it returns (`_buffer.py`).
     """
-    a = np.asarray(y)
-    if a.ndim == 1:
-        a = a.reshape(-1, 1)
-    if a.ndim != 2:
+    try:
+        pb = probe(y)
+    except TypeError:
+        try:
+            y = Array.from_list(y, "<f4")
+        except Exception:
+            raise ValueError(
+                f"mojolearn {name}: y must be 1-D or 2-D (n_obs, n_series) "
+                f"-- an array or a nested list of numbers -- got "
+                f"{type(y).__name__}"
+            ) from None
+        pb = probe(y)
+    if pb.ndim not in (1, 2):
         raise ValueError(
             f"mojolearn {name}: y must be 1-D or 2-D (n_obs, n_series), got "
-            f"{a.ndim}-D shape {a.shape}"
+            f"{pb.ndim}-D shape {pb.shape}"
         )
-    if a.size == 0:
-        raise ValueError(f"mojolearn {name}: y is empty, shape {a.shape}")
-    n_obs, batch_size = a.shape
-    flat = np.ascontiguousarray(a.T, dtype=np.float32)
-    return flat, int(n_obs), int(batch_size)
+    if nelems(pb.shape) == 0:
+        raise ValueError(f"mojolearn {name}: y is empty, shape {pb.shape}")
+    if pb.ndim == 1:
+        arr, _copied = as_f32_c(y, ndim=1, name="y")
+        return arr, int(arr.shape[0]), 1
+    arr, _copied = as_f32_colmajor(y, name="y")
+    return arr, int(arr.shape[0]), int(arr.shape[1])
 
 
 def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
@@ -181,22 +197,24 @@ def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
     `d + D > 2` is refused by name (`prepare_data`; cuML enforces the same
     bound one layer up at `arima.pyx:313`).
 
-    Returns a bool array of length `n_series`, True where the series is
-    judged stationary after differencing. With `return_statistic=True`,
-    returns `(stationary, statistic)` where `statistic` is float32. A
-    constant series has statistic `0.0` rather than a computed NaN
-    (DEVIATION 672) and is judged stationary, which is the decision cuML's
-    NaN also falls through to.
+    Returns a `mojolearn.Array` of length `n_series` and dtype `'<u1'`
+    (1 where the series is judged stationary after differencing, 0
+    otherwise -- the closest the Array contract has to NumPy's bool
+    array; DEVIATION 2419). With `return_statistic=True`, returns
+    `(stationary, statistic)` where `statistic` is float32. A constant
+    series has statistic `0.0` rather than a computed NaN (DEVIATION 672)
+    and is judged stationary, which is the decision cuML's NaN also falls
+    through to.
 
     Cross-vendor status: see this module's docstring. One Apple M4.
     """
     flat, n_obs, batch_size = _series_major(y, "kpss_test")
-    flags = np.empty(batch_size, dtype=np.int32)
-    stat = np.empty(batch_size, dtype=np.float32)
+    flags = empty((batch_size,), "<i4")
+    stat = empty((batch_size,), "<f4")
     _mojolearn_tsa.kpss_test(
-        _addr_ro(flat),
-        _addr(flags),
-        _addr(stat),
+        addr_ro(flat, name="y"),
+        addr(flags, name="flags"),
+        addr(stat, name="stat"),
         # ORDER MATCHES bindings/_mojolearn_tsa.mojo::kpss_test_binding.
         #   0 batch_size, 1 n_obs, 2 d, 3 D, 4 s, 5 pval_threshold
         [
@@ -208,7 +226,8 @@ def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
             float(pval_threshold),
         ],
     )
-    stationary = flags.astype(bool)
+    # O(n_series) on the host, the permitted per-label kind of loop.
+    stationary = Array.from_list([1 if v else 0 for v in flags], "<u1")
     if return_statistic:
         return stationary, stat
     return stationary
@@ -246,7 +265,7 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
                                   the SEARCH only. There is no `AutoARIMA`
                                   class.
 
-    Returns an int32 array of length `n_series`.
+    Returns an int32 `mojolearn.Array` of length `n_series`.
 
     A DIFFERENCE FROM cuML THAT CHANGES NO ANSWER. cuML physically splits
     the batch after each round (`_divide_by_mask`) so the next test runs on
@@ -261,10 +280,10 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
     if d_max is None:
         d_max = 2 - int(D)
     flat, n_obs, batch_size = _series_major(y, "select_d")
-    out = np.empty(batch_size, dtype=np.int32)
+    out = empty((batch_size,), "<i4")
     _mojolearn_tsa.select_d(
-        _addr_ro(flat),
-        _addr(out),
+        addr_ro(flat, name="y"),
+        addr(out, name="out"),
         # ORDER MATCHES bindings/_mojolearn_tsa.mojo::select_d_binding.
         #   0 batch_size, 1 n_obs, 2 D, 3 s, 4 d_max, 5 pval_threshold
         [
@@ -313,7 +332,8 @@ class ExponentialSmoothing:
         verbose          REFUSED   cuML's logging plumbing; there is no
                                    logger here.
         output_type      REFUSED   cuML's cudf/cupy output selector. This
-                                   returns numpy float32 and nothing else.
+                                   returns float32 `mojolearn.Array` and
+                                   nothing else.
         float64 input    CONVERTED to float32, and the conversion
                                    COPIES. Named rather than hidden. cuML
                                    fits on `double` too and picks the arm
@@ -416,29 +436,43 @@ class ExponentialSmoothing:
         A 2-D array is `(ts_num, n)`: their `d1 = shape[1]` is `n` and
         their `d2 = shape[0]` is the series count, and they `ravel()` in C
         order, so each series is contiguous. A 1-D array is one series and
-        `ts_num` must be 1.
+        `ts_num` must be 1. DEVIATION 2420: read through the buffer
+        protocol (a nested list is materialized once as float32, as
+        `np.asarray` did) and converted by `_buffer.as_f32_c`.
         """
-        a = np.asarray(ts_input)
+        try:
+            pb = probe(ts_input)
+        except TypeError:
+            try:
+                ts_input = Array.from_list(ts_input, "<f4")
+            except Exception:
+                raise ValueError(
+                    "mojolearn ExponentialSmoothing: data input must be a "
+                    "1-D or 2-D array or a nested list of numbers, got "
+                    f"{type(ts_input).__name__}"
+                ) from None
+            pb = probe(ts_input)
         err = (
             "mojolearn ExponentialSmoothing: initialized with "
             f"{self.ts_num} time series, but data has dimension "
         )
-        if a.ndim == 1:
-            n = int(a.shape[0])
+        if pb.ndim == 1:
+            n = int(pb.shape[0])
             if self.ts_num != 1:
                 raise ValueError(err + "1.")
-            d2 = 1
-        elif a.ndim == 2:
-            n = int(a.shape[1])
-            d2 = int(a.shape[0])
+            arr, _copied = as_f32_c(ts_input, ndim=1, name="endog")
+            flat = arr.reshape((1, n))
+        elif pb.ndim == 2:
+            n = int(pb.shape[1])
+            d2 = int(pb.shape[0])
             if self.ts_num != d2:
                 raise ValueError(err + str(d2) + ".")
+            flat, _copied = as_f32_c(ts_input, ndim=2, name="endog")
         else:
             raise ValueError(
                 "mojolearn ExponentialSmoothing: data input must have 1 or 2 "
-                f"dimensions, got {a.ndim}"
+                f"dimensions, got {pb.ndim}"
             )
-        flat = np.ascontiguousarray(a.reshape(d2, n), dtype=np.float32)
         return flat, n
 
     def fit(self):
@@ -451,7 +485,7 @@ class ExponentialSmoothing:
         are not restated here, so there is one place they can drift from.
         """
         data, n = self._check_dims(self.endog)
-        self._data = data  # kept alive across the call (_arrays.py)
+        self._data = data  # kept alive across the call (_buffer.py)
         components_len = (n - self.seasonal_periods) * self.ts_num
         if components_len <= 0:
             # This layer has to size the output buffers BEFORE the Mojo
@@ -464,14 +498,14 @@ class ExponentialSmoothing:
                 "mojolearn ExponentialSmoothing: n "
                 f"({n}) must exceed seasonal_periods ({self.seasonal_periods})"
             )
-        comps = np.empty(3 * components_len, dtype=np.float32)
-        stats = np.empty(4 * self.ts_num, dtype=np.float32)
-        flags = np.empty(2 * self.ts_num, dtype=np.int32)
+        comps = empty((3 * components_len,), "<f4")
+        stats = empty((4 * self.ts_num,), "<f4")
+        flags = empty((2 * self.ts_num,), "<i4")
         _mojolearn_tsa.holtwinters_fit(
-            _addr_ro(data),
-            _addr(comps),
-            _addr(stats),
-            _addr(flags),
+            addr_ro(data, name="endog"),
+            addr(comps, name="components"),
+            addr(stats, name="stats"),
+            addr(flags, name="flags"),
             # ORDER MATCHES bindings/_mojolearn_tsa.mojo::holtwinters_fit_binding.
             #   0 n, 1 batch_size, 2 frequency, 3 start_periods, 4 eps
             [
@@ -493,29 +527,44 @@ class ExponentialSmoothing:
         #   [2 * components_len, 3 * components_len)   season
         # Each block is TIME-MAJOR: series s at step i is [s + i * ts_num].
         # `.reshape((ts_num, num_rows), order="F")` is cuML's own line
-        # (holtwinters.pyx:341-344) and undoes exactly that.
+        # (holtwinters.pyx:341-344) and undoes exactly that. DEVIATION
+        # 2421: the `Array` contract has C order only, so the un-interleave
+        # is done ONCE here, into a C-contiguous `(ts_num, num_rows)`
+        # Array per component, by `ts_num` strided memoryview slice
+        # copies (`_bufcheck.strided_rows`; C-level loops, no Python
+        # element loop). The same bytes land at the same [s, i]. The
+        # time-major blocks are ALSO kept, as C-order `(num_rows,
+        # ts_num)` views, because that shape IS cuML's `get_level()`
+        # transpose and costs nothing to hand back.
         num_rows = components_len // self.ts_num
         cl = components_len
-        self.level_ = comps[0:cl].reshape((self.ts_num, num_rows), order="F")
-        self.trend_ = comps[cl : 2 * cl].reshape((self.ts_num, num_rows), order="F")
-        self.season_ = comps[2 * cl : 3 * cl].reshape(
-            (self.ts_num, num_rows), order="F"
-        )
+        b = self.ts_num
+        self.level_ = strided_rows(comps, 0, cl, b, num_rows,
+                                   empty((b, num_rows), "<f4"))
+        self.trend_ = strided_rows(comps, cl, cl, b, num_rows,
+                                   empty((b, num_rows), "<f4"))
+        self.season_ = strided_rows(comps, 2 * cl, cl, b, num_rows,
+                                    empty((b, num_rows), "<f4"))
+        self._time_major = {
+            "level": comps[0:cl].reshape((num_rows, b)),
+            "trend": comps[cl:2 * cl].reshape((num_rows, b)),
+            "season": comps[2 * cl:3 * cl].reshape((num_rows, b)),
+        }
         # stats LAYOUT -- the same words as in the other two files:
         #   [0 * ts_num, 1 * ts_num)   sse
         #   [1 * ts_num, 2 * ts_num)   alpha
         #   [2 * ts_num, 3 * ts_num)   beta
         #   [3 * ts_num, 4 * ts_num)   gamma
-        b = self.ts_num
+        # (Array slices copy; each attribute owns its `(ts_num,)` block.)
         self.sse_ = stats[0:b]
-        self.alpha_ = stats[b : 2 * b]
-        self.beta_ = stats[2 * b : 3 * b]
-        self.gamma_ = stats[3 * b : 4 * b]
+        self.alpha_ = stats[b:2 * b]
+        self.beta_ = stats[2 * b:3 * b]
+        self.gamma_ = stats[3 * b:4 * b]
         # flags LAYOUT -- the same words as in the other two files:
         #   [0 * ts_num, 1 * ts_num)   niter
         #   [1 * ts_num, 2 * ts_num)   criterion
         self.n_iter_ = flags[0:b]
-        self.criterion_ = flags[b : 2 * b]
+        self.criterion_ = flags[b:2 * b]
         self.fit_executed_flag = True
         return self
 
@@ -551,10 +600,10 @@ class ExponentialSmoothing:
                 f"mojolearn ExponentialSmoothing: index input: {index} outside "
                 f"of range [0, {self.ts_num})"
             )
-        out = np.empty(h * self.ts_num, dtype=np.float32)
+        out = empty((h * self.ts_num,), "<f4")
         _mojolearn_tsa.holtwinters_forecast(
-            _addr_ro(self._comps),
-            _addr(out),
+            addr_ro(self._comps, name="components"),
+            addr(out, name="out"),
             # ORDER MATCHES bindings/_mojolearn_tsa.mojo::holtwinters_forecast_binding.
             #   0 n, 1 batch_size, 2 frequency, 3 h
             [
@@ -566,13 +615,18 @@ class ExponentialSmoothing:
             self.seasonal,
         )
         # out is TIME-MAJOR: series s at step i is [s + i * ts_num], which
-        # is cuML's `(ts_num, h)` array with order="F".
-        points = out.reshape((self.ts_num, h), order="F")
+        # is cuML's `(ts_num, h)` array with order="F". DEVIATION 2422:
+        # the three cuML return shapes, each from that flat buffer with
+        # no NumPy: one series is its strided slice, un-interleaved by
+        # `strided_rows`; a single series IS the flat buffer; and
+        # `points.T` -- `(h, ts_num)` -- IS the time-major buffer read
+        # in C order.
         if index is not None:
-            return points[index]
+            return strided_rows(out, 0, h * self.ts_num, self.ts_num, h,
+                                empty((self.ts_num, h), "<f4"))[index]
         if self.ts_num == 1:
-            return points.ravel(order="F")
-        return points.T
+            return out
+        return out.reshape((h, self.ts_num))
 
     def score(self, index=None):
         """The SSE of the fitted model, which is what cuML's `score`
@@ -607,8 +661,10 @@ class ExponentialSmoothing:
             )
         if index is None:
             if self.ts_num == 1:
-                return comp.ravel(order="F")
-            return comp.T
+                return comp.ravel()
+            # cuML's transpose `(num_rows, ts_num)` is the time-major
+            # block itself, read in C order (DEVIATION 2422).
+            return self._time_major[who]
         if index < 0 or index >= self.ts_num:
             raise IndexError(
                 f"mojolearn ExponentialSmoothing: index input: {index} outside "

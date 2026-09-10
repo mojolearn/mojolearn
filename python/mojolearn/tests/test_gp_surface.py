@@ -219,6 +219,9 @@ def main(out=sys.stdout):
     rep.check(arm, model.L_.shape == (N, N) and model.alpha_.shape == (N,),
               "L_ is (n, n) and alpha_ (the dual vector) is (n,)")
     mean, std = model.predict(x, return_std=True)
+    # DEVIATION 2460: predict returns mojolearn.Array (no arithmetic); the
+    # NumPy view is zero-copy and the bound is unchanged.
+    mean, std = np.asarray(mean), np.asarray(std)
     worst = float(np.max(np.abs(mean - y)))
     rep.check(arm, worst <= BOUND,
               "the posterior mean recovers the training targets",

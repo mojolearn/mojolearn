@@ -8,7 +8,9 @@ sklearn Pipeline does not automatically transform a supplied eval_set.
 """
 import inspect
 
-import numpy as np
+from ._array import Array
+from ._buffer import _materialize, all_finite, empty, as_f32_c
+from ._labels import decode_labels
 
 from . import _backend, _metrics_impl as metrics
 from ._arrays import _addr, _addr_ro
@@ -132,7 +134,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
         if len(classes) != 2:
             raise ValueError('GradientBoostingClassifier requires exactly two training classes')
         vocabulary = {label: i for i, label in enumerate(classes)}
-        encoded = np.asarray([vocabulary[label] for label in target], dtype=np.float32)
+        encoded = Array.from_list([vocabulary[label] for label in target], '<f4')
         if eval_set is not None:
             if isinstance(eval_set, list):
                 if len(eval_set) != 1:
@@ -144,16 +146,9 @@ class GradientBoostingClassifier(_GBDTAdapter):
             eval_labels, eval_kind = metrics._classification_labels(eval_y, 'eval_set y')
             if eval_kind != kind or any(label not in vocabulary for label in eval_labels):
                 raise ValueError('eval_set contains labels outside the training vocabulary')
-            eval_set = (eval_X, np.asarray([vocabulary[label] for label in eval_labels], dtype=np.float32))
+            eval_set = (eval_X, Array.from_list([vocabulary[label] for label in eval_labels], '<f4'))
         self._fit_native(X, encoded, sample_weight, eval_set)
-        if kind == 'string':
-            self.classes_ = np.asarray(classes)
-        elif min(classes) >= np.iinfo(np.int64).min and max(classes) <= np.iinfo(np.int64).max:
-            self.classes_ = np.asarray(classes, dtype=np.int64)
-        elif min(classes) >= 0 and max(classes) <= np.iinfo(np.uint64).max:
-            self.classes_ = np.asarray(classes, dtype=np.uint64)
-        else:
-            self.classes_ = np.asarray(classes, dtype=object)
+        self.classes_ = classes
         self.n_classes_ = 2
         self._label_kind_ = kind
         return self
@@ -163,16 +158,16 @@ class GradientBoostingClassifier(_GBDTAdapter):
         return self._learner_.predict(X)
 
     def _binary_output(self, X, probabilities):
-        margins = np.ascontiguousarray(self.decision_function(X), dtype=np.float32)
-        if margins.ndim != 1 or not np.all(np.isfinite(margins)):
+        margins = as_f32_c(self.decision_function(X), ndim=1, name="margins")[0]
+        if margins.ndim != 1 or not all_finite(margins):
             raise ValueError('Classifier margins must be finite scalar Float32 values')
         n = len(margins)
         binding = _backend.binding('_mojolearn_gbdt', self.numeric_mode_)
         if probabilities:
-            output = np.empty((n, 2), dtype=np.float32)
+            output = empty((n, 2), '<f4')
             wrote = binding.gbdt_binary_probabilities(_addr_ro(margins), _addr(output), [n])
         else:
-            output = np.empty(n, dtype=np.int32)
+            output = empty(n, '<i4')
             wrote = binding.gbdt_binary_classes(_addr_ro(margins), _addr(output), [n])
         if wrote != (2 * n if probabilities else n):
             raise RuntimeError('GBDT binary output returned an unexpected row count')
@@ -183,7 +178,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
 
     def predict(self, X):
         self._check_fitted()
-        return self.classes_[self._binary_output(X, False)]
+        return decode_labels(self.classes_, self._binary_output(X, False))
 
     def score(self, X, y, sample_weight=None):
         self._check_fitted()
@@ -192,8 +187,8 @@ class GradientBoostingClassifier(_GBDTAdapter):
         target, kind = metrics._classification_labels(y, 'y')
         if kind != self._label_kind_:
             raise TypeError('score labels must have the training label type')
-        vocabulary = {label: i for i, label in enumerate(self.classes_.tolist())}
-        encoded = np.asarray([vocabulary.get(label, -1) for label in target], dtype=np.int32)
+        vocabulary = {label: i for i, label in enumerate(self.classes_)}
+        encoded = Array.from_list([vocabulary.get(label, -1) for label in target], '<i4')
         return metrics.accuracy_score(encoded, self._binary_output(X, False),
                                       numeric_mode=self.numeric_mode_)
 
@@ -205,7 +200,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
 
     def fit(self, X, y, sample_weight=None, eval_set=None):
         self._clear_fit()
-        target = np.asarray(y)
+        target = _materialize(y, "input")[0]
         self._regression_target(target, 'y')
         if eval_set is not None:
             if isinstance(eval_set, list):
@@ -215,7 +210,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
             if not isinstance(eval_set, tuple) or len(eval_set) != 2:
                 raise ValueError('eval_set must be (X_eval, y_eval) or a one-pair list')
             eval_X, eval_y = eval_set
-            eval_target = np.asarray(eval_y)
+            eval_target = _materialize(eval_y, "input")[0]
             self._regression_target(eval_target, 'eval_set y')
             eval_set = (eval_X, eval_target)
         return self._fit_native(X, target, sample_weight, eval_set)
@@ -224,9 +219,9 @@ class GradientBoostingRegressor(_GBDTAdapter):
     def _regression_target(target, name):
         if target.ndim != 1 or target.size == 0:
             raise ValueError(f'{name} must be nonempty one-dimensional targets')
-        if target.dtype != np.dtype('float32'):
+        if target.dtype != "<f4":
             raise TypeError(f'{name} must have dtype float32')
-        if not np.all(np.isfinite(target)):
+        if not all_finite(target):
             raise ValueError(f'{name} must be finite')
 
     def predict(self, X):
@@ -237,7 +232,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
         self._check_fitted()
         if sample_weight is not None:
             raise NotImplementedError('GBDT adapter score does not support sample_weight')
-        target = np.asarray(y)
+        target = _materialize(y, "input")[0]
         self._regression_target(target, 'y')
         return metrics.r2_score(target, self.predict(X),
                                 numeric_mode=self.numeric_mode_)

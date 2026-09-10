@@ -9,7 +9,9 @@ import functools
 import inspect
 import weakref
 
-import numpy as np
+from ._array import Array
+from ._buffer import _materialize, full, as_f32_c
+from ._labels import flatten_labels
 from ._arrays import _addr, _addr_ro
 
 
@@ -94,9 +96,13 @@ class ForestProtocol:
 
     def _refresh_config(self):
         replacement = type(self)(**self.get_params())
+        # sklearn owns this transient context while Pipeline.fit is active.
+        context = self.__dict__.get("_parent_callback_ctx")
         # Once a new fit begins, old nodes/classes must not survive a failure.
         self.__dict__.clear()
         self.__dict__.update(replacement.__dict__)
+        if context is not None:
+            self._parent_callback_ctx = context
 
     @staticmethod
     def _validated_mode(mode):
@@ -177,9 +183,10 @@ class ForestProtocol:
             # A bytes owner cannot be made writable again via setflags(). A
             # caller retaining an old mutable private-array alias cannot alter
             # the device snapshot or the host model used by save/sequential.
-            dtypes = (np.int32, np.int32, np.float32, np.int32, np.float32)
+            dtypes = ("<i4", "<i4", "<f4", "<i4", "<f4")
+            arrays = tuple(_materialize(a, "forest model")[0] for a in arrays)
             for a, dtype in zip(arrays, dtypes):
-                if not isinstance(a, np.ndarray) or a.dtype != dtype or a.ndim != 1:
+                if not isinstance(a, Array) or a.dtype != dtype or a.ndim != 1:
                     raise ValueError("forest model arrays must have their original flat dtypes")
             nodes = arrays[1].size
             if (arrays[0].size != dimensions[1] + 1 or nodes < 1
@@ -187,7 +194,7 @@ class ForestProtocol:
                     or arrays[4].size != nodes * dimensions[2]
                     or int(arrays[0][-1]) != nodes):
                 raise ValueError("forest model array shapes do not match metadata")
-            frozen = tuple(np.frombuffer(a.tobytes(), dtype=a.dtype) for a in arrays)
+            frozen = tuple(Array.from_buffer(memoryview(a.tobytes()).cast("i" if a.dtype == "<i4" else "f")) for a in arrays)
             resident = _ResidentForest(native, frozen, dimensions, mode)
             for name, a in zip(_FOREST_ARRAYS, frozen):
                 setattr(self, name, a)
@@ -203,8 +210,8 @@ class ForestProtocol:
 
     def _archive_inference_metadata(self, arrays, sequential_format):
         if self._prediction_engine() == "parallel_groves":
-            arrays["format"] = np.asarray(sequential_format + "-parallel-groves-1")
-            arrays["numeric_mode"] = np.asarray(self._effective_mode())
+            arrays["format"] = sequential_format + "-parallel-groves-1"
+            arrays["numeric_mode"] = self._effective_mode()
 
     def _restore_inference_metadata(self, arrays, sequential_format):
         from . import _serialize
@@ -237,17 +244,16 @@ class ForestProtocol:
         from . import _metrics_impl as metrics
         if sample_weight is not None:
             raise NotImplementedError("Forest score does not yet support sample_weight")
-        target = np.asarray(y)
-        if target.ndim != 1:
+        if getattr(y, "ndim", 1) != 1:
             raise ValueError("score requires one-dimensional targets")
-        prediction = np.asarray(self.predict(X))
-        if prediction.shape != target.shape:
+        target = flatten_labels(y)
+        prediction = self.predict(X)
+        if len(prediction) != len(target):
             raise ValueError("score target and prediction lengths differ")
         mode = self._effective_mode()
         if self._estimator_type == "classifier":
-            equal = np.asarray(target == prediction, dtype=np.int32)
-            return metrics.accuracy_score(np.ones(equal.shape, dtype=np.int32),
-                                          equal, numeric_mode=mode)
-        return metrics.r2_score(np.asarray(target, dtype=np.float32),
-                                np.asarray(prediction, dtype=np.float32),
+            equal = Array.from_list([int(a == b) for a, b in zip(target, prediction)], "<i4")
+            return metrics.accuracy_score(full(equal.shape, 1, "<i4"), equal, numeric_mode=mode)
+        return metrics.r2_score(as_f32_c(y, ndim=1, name="y")[0],
+                                as_f32_c(prediction, ndim=1, name="prediction")[0],
                                 numeric_mode=mode)

@@ -23,10 +23,12 @@ The binding lives in `bindings/_mojolearn_metrics.mojo` alongside the
 metrics functions and is loaded through `_metrics_impl._get_binding`.
 """
 
-import numpy as np
-
-from ._arrays import _addr, _addr_ro, as_f32_c
+from ._array import Array
+from ._buffer import (
+    addr, addr_ro, all_finite, as_f32_c, as_f64_c, as_i32_c, empty,
+)
 from ._metrics_impl import _get_binding
+from .linear_model import _shape_of
 
 __all__ = ["SpectralClustering"]
 
@@ -61,22 +63,36 @@ def _coo_triples(A):
                 "mojolearn SpectralClustering: a precomputed affinity matrix "
                 f"must be square, got shape {coo.shape}"
             )
-        rows = np.ascontiguousarray(coo.row, dtype=np.int32)
-        cols = np.ascontiguousarray(coo.col, dtype=np.int32)
-        vals = np.ascontiguousarray(coo.data, dtype=np.float32)
+        rows, _ = as_i32_c(coo.row, ndim=1, name="rows")
+        cols, _ = as_i32_c(coo.col, ndim=1, name="cols")
+        vals, _ = as_f32_c(coo.data, ndim=1, name="vals")
         return rows, cols, vals, int(n)
-    dense = np.asarray(A)
-    if dense.ndim != 2 or dense.shape[0] != dense.shape[1]:
+    shape = _shape_of(A)
+    if len(shape) != 2 or shape[0] != shape[1]:
         raise ValueError(
             "mojolearn SpectralClustering: with affinity='precomputed', X "
             "must be a square affinity matrix or a scipy sparse matrix, got "
-            f"shape {dense.shape}"
+            f"shape {shape}"
         )
-    nz = np.nonzero(dense)
-    rows = np.ascontiguousarray(nz[0], dtype=np.int32)
-    cols = np.ascontiguousarray(nz[1], dtype=np.int32)
-    vals = np.ascontiguousarray(dense[nz], dtype=np.float32)
-    return rows, cols, vals, int(dense.shape[0])
+    # DEVIATION 2373 -- the `np.nonzero` scan is a PYTHON LOOP over the
+    # dense n x n matrix, FLAGGED AS A DEFECT: proportionate to an input
+    # that is itself O(n^2), but slow. The test is made in float64, the
+    # widest dtype the boundary carries, so an entry that is nonzero in a
+    # float64 input and rounds to 0.0f is KEPT as an explicit zero, exactly
+    # as `np.nonzero` on the source dtype kept it; the values are narrowed
+    # to float32 afterwards, one rounding each, as before.
+    dense, _ = as_f64_c(A, ndim=2, name="X")
+    r_idx, c_idx, values = [], [], []
+    for r, row in enumerate(dense.tolist()):
+        for c, v in enumerate(row):
+            if v != 0.0:
+                r_idx.append(r)
+                c_idx.append(c)
+                values.append(v)
+    rows = Array.from_list(r_idx, "<i4")
+    cols = Array.from_list(c_idx, "<i4")
+    vals = Array.from_list(values, "<f4")
+    return rows, cols, vals, int(shape[0])
 
 
 class SpectralClustering:
@@ -256,9 +272,9 @@ class SpectralClustering:
 
     Attributes
     ----------
-    labels_ : ndarray (n_samples,) int32
+    labels_ : Array (n_samples,) int32
         Cluster ids in `[0, n_clusters)`, k-means's numbering.
-    embedding_ : ndarray (n_samples, n_components) float32
+    embedding_ : Array (n_samples, n_components) float32
         The row-major spectral embedding k-means was run on. Exposed
         because the lane's gates read it and because it is the thing every
         clause above is about.
@@ -402,33 +418,33 @@ class SpectralClustering:
                     "mojolearn SpectralClustering: the precomputed affinity "
                     "matrix has no nonzero entries"
                 )
-            if not np.isfinite(vals).all():
+            if not all_finite(vals):
                 raise ValueError(
                     "mojolearn SpectralClustering: the precomputed affinity "
                     "matrix has a non-finite entry (the implemented path refuses "
                     "it by name, because sqrt of a non-finite degree is a "
                     "NaN and no NaN may reach a recorded value)"
                 )
-            if (vals < 0).any():
+            if vals.min() < 0:
                 raise ValueError(
                     "mojolearn SpectralClustering: the precomputed affinity "
                     "matrix has a negative entry (refused by name: sqrt of a "
                     "negative degree is a NaN in cuVS too)"
                 )
             self._check_shape(n, k)
-            labels = np.empty(n, dtype=np.int32)
-            embedding = np.empty((n, k), dtype=np.float32)
+            labels = empty((n,), "<i4")
+            embedding = empty((n, k), "<f4")
             # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
             # spectral_fit_predict_graph_binding.
             # n_samples, nnz, n_clusters, n_components, n_init, n_neighbors,
             # eigen_tol, seed
             n_out = int(
                 _get_binding().spectral_fit_predict_graph(
-                    _addr_ro(rows),
-                    _addr_ro(cols),
-                    _addr_ro(vals),
-                    _addr(labels),
-                    _addr(embedding),
+                    addr_ro(rows, name="rows"),
+                    addr_ro(cols, name="cols"),
+                    addr_ro(vals, name="vals"),
+                    addr(labels, name="labels"),
+                    addr(embedding, name="embedding"),
                     [
                         n,
                         int(vals.shape[0]),
@@ -443,8 +459,8 @@ class SpectralClustering:
             )
             labels_out = labels
         else:
-            x, self.input_copied_ = as_f32_c(X, "X")
-            if not np.isfinite(x).all():
+            x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+            if not all_finite(x):
                 raise ValueError(
                     "mojolearn SpectralClustering: X contains NaN or "
                     "infinity (the implemented path refuses it by name before any "
@@ -457,17 +473,17 @@ class SpectralClustering:
                     f"mojolearn SpectralClustering: n_neighbors="
                     f"{self.n_neighbors} exceeds n_samples={n}"
                 )
-            labels = np.empty(n, dtype=np.int32)
-            embedding = np.empty((n, k), dtype=np.float32)
+            labels = empty((n,), "<i4")
+            embedding = empty((n, k), "<f4")
             # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
             # spectral_fit_predict_dataset_binding.
             # n_samples, n_features, n_clusters, n_components, n_init,
             # n_neighbors, eigen_tol, seed
             n_out = int(
                 _get_binding().spectral_fit_predict_dataset(
-                    _addr_ro(x),
-                    _addr(labels),
-                    _addr(embedding),
+                    addr_ro(x, name="x"),
+                    addr(labels, name="labels"),
+                    addr(embedding, name="embedding"),
                     [
                         n,
                         int(x.shape[1]),

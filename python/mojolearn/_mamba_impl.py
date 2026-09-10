@@ -22,14 +22,15 @@ because `def_function` stops elaborating above roughly nine arguments
 (measured 2026-09-01 on the gp binding's first spelling) and
 `mamba1_forward` carries fourteen addresses. EVERY ARRAY WHOSE ADDRESS
 GOES INTO `addrs` IS BOUND TO A LOCAL for the duration of the call: an
-address inside a list keeps nothing alive (`_arrays.py`).
+address inside a list keeps nothing alive (`_buffer.py`).
 
 WHAT A BLOCK IS HERE. ONE Mamba block -- norm, mixer, residual -- taking
 `(B, L, d_model)` float32 in and handing `(B, L, d_model)` float32 back,
 with the recurrent state EXPLICIT and CALLER-OWNED (DEVIATION 792): a
 `Mamba1State` is the contract's two pieces (conv window, h), a
 `Mamba2State` its three (conv window, boundary h, the open-chunk buffer
-pair plus `buffered_tokens`), all plain NumPy arrays a consumer can
+pair plus `buffered_tokens`), all plain float32 buffers (`mojolearn.Array`
+as allocated, or any writable buffer you allocate) a consumer can
 serialize, inspect and round-trip byte for byte -- which is the
 exact-state-handoff requirement, and why there is no hidden cache object.
 Prefill, chunked-prefill continuation, `initial_states` (a nonzero h in a
@@ -53,6 +54,16 @@ are refused BY NAME and by flat index on the device path
 `mamba3_refuse_bad_inputs`, contract section 6), and a Python-side copy
 would make those refusals unreachable.
 
+THE ARRAYS ARE BUFFERS, NOT NUMPY (numpy-free-0.7, DEVIATIONS 2407-2410).
+`x`, every weight and every state piece is read through the buffer
+protocol (`_buffer.view`): a NumPy array, an `array.array('f')`, a
+`mojolearn.Array` or any other float32 exporter is accepted and NumPy is
+not imported. What this module ALLOCATES -- `allocate_state`'s pieces,
+the block output, the backward's gradients, the report stages -- is a
+`mojolearn.Array`, on which `numpy.asarray` is zero-copy. The state
+pieces are updated IN PLACE through their own addresses, exactly as
+before, whatever object the caller allocated them as.
+
 THE NUMERIC TIER IS THE LOADED BINARY'S, SELECTED AT BUILD TIME.
 `numeric_mode=` selects fast, deterministic (repeatability on one device),
 or identical (cross-vendor identity within the certified profile and
@@ -73,12 +84,14 @@ prefill backward. Current scope and packaging boundaries are documented in
 `mamba/PUBLIC_ALPHA_SURFACE.md`; older comments are not release certificates.
 """
 
+from . import _buffer as _buffers, _bufcheck as _checks
+from ._array import Array as _Array
+from ._arrays import _addr, _addr_ro
 import math
 
-import numpy as np
-
 from . import _backend
-from ._arrays import _addr, _addr_ro
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
+from ._bufcheck import dtype_name, is_native_f32, memcopy, probe
 from ._mode import NumericModeMixin
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
@@ -112,15 +125,26 @@ _M3_NUM_ROPE_ANGLES = 32
 
 
 def _f32_strict(a, what, name):
-    """`a` as a C-contiguous float32 ndarray, REFUSING every other dtype
+    """`a` as a C-contiguous float32 `Array`, REFUSING every other dtype
     BY NAME (module header: this surface certifies bits, so there is no
     convenience downcast). Layout may be fixed silently -- a copy to C
     order moves bytes untouched, so no output bit can move -- but the
-    dtype may not."""
-    a = np.asarray(a)
-    if a.dtype != np.float32:
+    dtype may not. DEVIATION 2407: the dtype is the buffer's FORMAT,
+    read through `_buffer.view`; `as_f32_c` is reached only by a float32
+    buffer, where its one job is the layout (a zero-copy borrow when the
+    buffer is already C-contiguous)."""
+    try:
+        pb = probe(a)
+    except TypeError:
         raise TypeError(
-            f"mojolearn {what}: {name} has dtype {a.dtype.name}; this "
+            f"mojolearn {what}: {name} is a {type(a).__name__}, which does "
+            "not support the buffer protocol; this surface is float32 ONLY "
+            "and takes a float32 array (a numpy array, an array.array('f') "
+            "or a mojolearn.Array). Convert yourself and pass float32."
+        ) from None
+    if not is_native_f32(pb.format):
+        raise TypeError(
+            f"mojolearn {what}: {name} has dtype {dtype_name(a, pb)}; this "
             "surface is float32 ONLY (the fp32 profiles, "
             "mamba/IDENTICAL_MAMBA_CONTRACT.md section 3 / "
             "IDENTICAL_MAMBA2_CONTRACT.md section 3). bfloat16 and "
@@ -132,7 +156,8 @@ def _f32_strict(a, what, name):
             "rather than downcast so the bits that ran are bits you "
             "made. Convert yourself and pass float32."
         )
-    return np.ascontiguousarray(a)
+    arr, _copied = as_f32_c(a, ndim=pb.ndim, name=name)
+    return arr
 
 
 def _want_shape(a, what, name, shape, alt=None):
@@ -152,24 +177,32 @@ def _state_buf(a, what, name, shape):
     No silent fixups at all -- the state is read AND written in place
     (DEVIATION 792), so a copy here would update the copy and the
     caller's next call would carry a stale state, which is a wrong
-    answer with no diagnostic."""
-    if not isinstance(a, np.ndarray):
+    answer with no diagnostic. DEVIATION 2408: "a buffer" is ANY object
+    supporting the buffer protocol -- the `mojolearn.Array` that
+    `allocate_state` hands out, a NumPy array, an `array.array('f')` --
+    judged through `_buffer.view`; the object itself is returned and its
+    address taken with `_buffer.addr` (writable required), so the
+    caller's own memory is what the kernel updates."""
+    try:
+        pb = probe(a)
+    except TypeError:
         raise TypeError(
             f"mojolearn {what}: state buffer {name} must be a numpy "
-            f"ndarray (it is read and written in place), got {type(a)!r}"
-        )
-    if a.dtype != np.float32:
+            "ndarray or a mojolearn Array -- any writable float32 buffer "
+            f"-- (it is read and written in place), got {type(a)!r}"
+        ) from None
+    if not is_native_f32(pb.format):
         raise TypeError(
             f"mojolearn {what}: state buffer {name} has dtype "
-            f"{a.dtype.name}, want float32 (the state is part of the "
+            f"{dtype_name(a, pb)}, want float32 (the state is part of the "
             "fp32 profile and round-trips byte for byte)"
         )
-    if a.shape != shape:
+    if pb.shape != shape:
         raise ValueError(
-            f"mojolearn {what}: state buffer {name} has shape {a.shape},"
+            f"mojolearn {what}: state buffer {name} has shape {pb.shape},"
             f" want {shape}"
         )
-    if not a.flags["C_CONTIGUOUS"] or not a.flags["WRITEABLE"]:
+    if not pb.c_contiguous or pb.readonly:
         raise ValueError(
             f"mojolearn {what}: state buffer {name} must be C-contiguous"
             " and writable; it is updated IN PLACE so the caller's array"
@@ -184,7 +217,7 @@ def _batch_tokens(x, what, d_model, step):
     (B, d_model) -- their `hidden_states.squeeze(1)`, same bytes."""
     x = _f32_strict(x, what, "x")
     if step and x.ndim == 2:
-        x = x.reshape(x.shape[0], 1, x.shape[1])
+        x = x.reshape((x.shape[0], 1, x.shape[1]))
     if x.ndim != 3:
         raise ValueError(
             f"mojolearn {what}: x must be (B, L, d_model)"
@@ -210,8 +243,9 @@ def _take(weights, what, names):
     unknown names so a typo cannot become a silently-untrained weight."""
     if not hasattr(weights, "keys"):
         raise TypeError(
-            f"mojolearn {what}: weights must be a dict of numpy arrays "
-            f"keyed by the upstream parameter names {names}"
+            f"mojolearn {what}: weights must be a dict of float32 arrays "
+            "(numpy arrays or mojolearn Arrays) keyed by the upstream "
+            f"parameter names {names}"
         )
     missing = [n for n in names if n not in weights]
     extra = [n for n in weights if n not in names]
@@ -236,7 +270,9 @@ class Mamba1State:
 
     Zeros before the first token (`allocate_inference_cache`). Both
     arrays are updated IN PLACE by `forward` and `step`; serialize them
-    however you like, the bytes round-trip exactly."""
+    however you like, the bytes round-trip exactly. They are
+    `mojolearn.Array` when `allocate_state` made them and may be ANY
+    writable float32 buffer (a NumPy array included) when you did."""
 
     def __init__(self, conv_window, h):
         self.conv_window = conv_window
@@ -313,7 +349,7 @@ class _MambaBase(NumericModeMixin):
             raise ValueError(f"mojolearn {what}: B and L must be positive")
         dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
                          what, "grad_output", x.shape)
-        if not np.isfinite(dy).all():
+        if not all_finite(dy):
             raise ValueError(f"mojolearn {what}: grad_output must be finite")
         kwargs = {"dt_limit": self.dt_limit} if entry == "mamba2_backward" else {}
         checked = type(self)(dict(zip(self._W_NAMES, self._w)),
@@ -329,9 +365,13 @@ class _MambaBase(NumericModeMixin):
                 f"mojolearn {what}: loaded Mamba extension lacks {entry}; "
                 "rebuild bindings/build_mamba.sh in IDENTICAL mode"
             )
-        gradients = [np.empty_like(x)] + [np.empty_like(w) for w in weights]
-        addresses = ([_addr_ro(x)] + [_addr_ro(w) for w in weights]
-                     + [_addr_ro(dy)] + [_addr(g) for g in gradients])
+        # DEVIATION 2409: the gradients are fresh `mojolearn.Array`s.
+        gradients = ([empty(x.shape, "<f4")]
+                     + [empty(w.shape, "<f4") for w in weights])
+        addresses = ([addr_ro(x, name="x")]
+                     + [addr_ro(w, name="weight") for w in weights]
+                     + [addr_ro(dy, name="grad_output")]
+                     + [addr(g, name="gradient") for g in gradients])
         params = [b, l, self.d_model]
         if entry == "mamba2_backward":
             params.extend(checked.dt_limit)
@@ -451,8 +491,8 @@ class Mamba1Block(_MambaBase):
                 f"got {batch_size!r}"
             )
         return Mamba1State(
-            np.zeros((b, self.d_inner, _M1_D_CONV), dtype=np.float32),
-            np.zeros((b, self.d_inner, _M1_D_STATE), dtype=np.float32),
+            zeros((b, self.d_inner, _M1_D_CONV), "<f4"),
+            zeros((b, self.d_inner, _M1_D_STATE), "<f4"),
         )
 
     def _call(self, x, state, step):
@@ -465,11 +505,12 @@ class Mamba1Block(_MambaBase):
                          (b, self.d_inner, _M1_D_CONV))
         h = _state_buf(state.h, what, "h",
                        (b, self.d_inner, _M1_D_STATE))
-        y = np.empty((b, l, self.d_model), dtype=np.float32)
+        y = empty((b, l, self.d_model), "<f4")
         # TWO LISTS, NOT FOURTEEN ARGUMENTS (DEVIATION 791). Every array
         # addressed below is bound in this frame -- x, the ten entries of
         # self._w (alive on self), win, h, y -- which is what keeps the
-        # addresses alive (_arrays.py).
+        # addresses alive (_buffer.py). `addr` (writable) for the state
+        # pieces and the output, `addr_ro` for x and the weights.
         w = self._w
         ext = self._extension()
         addrs = (
@@ -478,9 +519,10 @@ class Mamba1Block(_MambaBase):
             # conv1d.weight, conv1d.bias, x_proj.weight, dt_proj.weight,
             # dt_proj.bias, A_log, D, out_proj.weight, conv_window, h,
             # y_out
-            [_addr_ro(x)]
-            + [_addr_ro(a) for a in w]
-            + [_addr(win), _addr(h), _addr(y)]
+            [addr_ro(x, name="x")]
+            + [addr_ro(a, name="weight") for a in w]
+            + [addr(win, name="conv_window"), addr(h, name="h"),
+               addr(y, name="y")]
         )
         if step:
             # B, d_model -- the L = 1 shape is the entry's own contract.
@@ -524,7 +566,7 @@ class Mamba1Block(_MambaBase):
             raise ValueError(f"mojolearn {what}: B and L must be positive")
         dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
                          what, "grad_output", x.shape)
-        if not np.isfinite(dy).all():
+        if not all_finite(dy):
             raise ValueError(f"mojolearn {what}: grad_output must be finite")
         # Revalidate current weight layouts before exposing raw addresses.
         # In-place value changes are intentional; dtype/shape mutation is not.
@@ -541,9 +583,13 @@ class Mamba1Block(_MambaBase):
                 "install a current alpha wheel with IDENTICAL Mamba backward support "
                 "or rebuild bindings/build_mamba.sh in IDENTICAL mode"
             )
-        gradients = [np.empty_like(x)] + [np.empty_like(w) for w in weights]
-        addresses = ([_addr_ro(x)] + [_addr_ro(w) for w in weights]
-                     + [_addr_ro(dy)] + [_addr(g) for g in gradients])
+        # DEVIATION 2409: the gradients are fresh `mojolearn.Array`s.
+        gradients = ([empty(x.shape, "<f4")]
+                     + [empty(w.shape, "<f4") for w in weights])
+        addresses = ([addr_ro(x, name="x")]
+                     + [addr_ro(w, name="weight") for w in weights]
+                     + [addr_ro(dy, name="grad_output")]
+                     + [addr(g, name="gradient") for g in gradients])
         native(addresses, [b, l, self.d_model])
         return dict(zip(("x",) + self._W_NAMES, gradients))
 
@@ -706,11 +752,10 @@ class Mamba2Block(_MambaBase):
                 f"got {batch_size!r}"
             )
         return Mamba2State(
-            np.zeros((b, self.conv_dim, _M2_D_CONV), dtype=np.float32),
-            np.zeros((b, self.nheads, _M2_HEADDIM, _M2_D_STATE),
-                     dtype=np.float32),
-            np.zeros((b, _M2_CHUNK_SIZE, self.conv_dim), dtype=np.float32),
-            np.zeros((b, _M2_CHUNK_SIZE, self.nheads), dtype=np.float32),
+            zeros((b, self.conv_dim, _M2_D_CONV), "<f4"),
+            zeros((b, self.nheads, _M2_HEADDIM, _M2_D_STATE), "<f4"),
+            zeros((b, _M2_CHUNK_SIZE, self.conv_dim), "<f4"),
+            zeros((b, _M2_CHUNK_SIZE, self.nheads), "<f4"),
             0,
         )
 
@@ -731,10 +776,8 @@ class Mamba2Block(_MambaBase):
         q0 = int(state.buffered_tokens)
         # buffered_tokens outside [0, 256) is a boundary disagreement the
         # binding refuses by name; it goes down unjudged.
-        y = np.empty((b, l, self.d_model), dtype=np.float32)
-        h_last = np.empty(
-            (b, self.nheads, _M2_HEADDIM, _M2_D_STATE), dtype=np.float32
-        )
+        y = empty((b, l, self.d_model), "<f4")
+        h_last = empty((b, self.nheads, _M2_HEADDIM, _M2_D_STATE), "<f4")
         # TWO LISTS, NOT SIXTEEN ARGUMENTS (DEVIATION 791). Every array
         # addressed below is bound in this frame -- x, the nine entries
         # of self._w (alive on self), win, h, bx, bd, y, h_last.
@@ -746,10 +789,11 @@ class Mamba2Block(_MambaBase):
             # in_proj.weight, conv1d.weight, conv1d.bias, dt_bias, A_log,
             # D, gated norm.weight, out_proj.weight, conv_window, h,
             # buffer_xbc, buffer_dtraw, y_out, h_last_out
-            [_addr_ro(x)]
-            + [_addr_ro(a) for a in w]
-            + [_addr(win), _addr(h), _addr(bx), _addr(bd),
-               _addr(y), _addr(h_last)]
+            [addr_ro(x, name="x")]
+            + [addr_ro(a, name="weight") for a in w]
+            + [addr(win, name="conv_window"), addr(h, name="h"),
+               addr(bx, name="buffer_xbc"), addr(bd, name="buffer_dtraw"),
+               addr(y, name="y"), addr(h_last, name="h_last")]
         )
         lo, hi = self.dt_limit
         if step:
@@ -872,12 +916,19 @@ class Mamba3State:
                                ("k", self.pending_k, k),
                                ("v", self.pending_v, v)):
             arr = _f32_strict(src, what, name)
-            if arr.shape != dst.shape:
+            dp = probe(dst)
+            if arr.shape != dp.shape:
                 raise ValueError(
                     f"mojolearn {what}: {name} has shape {arr.shape}, "
-                    f"want {dst.shape}"
+                    f"want {dp.shape}"
                 )
-            np.copyto(dst, arr, casting="no")
+            # The destination is judged like every other state piece
+            # (float32, C-contiguous, writable), then DEVIATION 2410:
+            # `np.copyto(dst, arr, casting="no")` is one `memmove` of the
+            # same bytes into the state piece's own memory.
+            _state_buf(dst, what, name, arr.shape)
+            memcopy(addr(dst, name=name), addr_ro(arr, name=name),
+                    arr.nbytes)
         self.pending = True
 
 
@@ -1022,16 +1073,16 @@ class Mamba3Block(_MambaBase):
             )
         nh, q = self.nheads, _M3_CHUNK_SIZE
         return Mamba3State(
-            np.zeros((b, nh, _M3_NUM_ROPE_ANGLES), dtype=np.float32),
-            np.zeros((b, nh, _M3_HEADDIM, _M3_D_STATE), dtype=np.float32),
-            np.zeros((b, q, nh, _M3_D_STATE), dtype=np.float32),
-            np.zeros((b, q, nh, _M3_D_STATE), dtype=np.float32),
-            np.zeros((b, q, nh, _M3_HEADDIM), dtype=np.float32),
-            np.zeros((b, q, nh), dtype=np.float32),
-            np.zeros((b, q, nh), dtype=np.float32),
-            np.zeros((b, q, nh), dtype=np.float32),
-            np.zeros((b, nh, _M3_D_STATE), dtype=np.float32),
-            np.zeros((b, nh, _M3_HEADDIM), dtype=np.float32),
+            zeros((b, nh, _M3_NUM_ROPE_ANGLES), "<f4"),
+            zeros((b, nh, _M3_HEADDIM, _M3_D_STATE), "<f4"),
+            zeros((b, q, nh, _M3_D_STATE), "<f4"),
+            zeros((b, q, nh, _M3_D_STATE), "<f4"),
+            zeros((b, q, nh, _M3_HEADDIM), "<f4"),
+            zeros((b, q, nh), "<f4"),
+            zeros((b, q, nh), "<f4"),
+            zeros((b, q, nh), "<f4"),
+            zeros((b, nh, _M3_D_STATE), "<f4"),
+            zeros((b, nh, _M3_HEADDIM), "<f4"),
             0,
             False,
         )
@@ -1040,11 +1091,11 @@ class Mamba3Block(_MambaBase):
         """Discard-only prefill: return all reports without a host cache."""
         b, l = int(x.shape[0]), int(x.shape[1])
         nh = self.nheads
-        y = np.empty((b, l, self.d_model), dtype=np.float32)
-        h_last = np.empty((b, nh, _M3_HEADDIM, _M3_D_STATE), dtype=np.float32)
-        k_last = np.empty((b, nh, _M3_D_STATE), dtype=np.float32)
-        v_last = np.empty((b, nh, _M3_HEADDIM), dtype=np.float32)
-        theta_last = np.empty((b, nh, _M3_NUM_ROPE_ANGLES), dtype=np.float32)
+        y = _buffers.empty((b, l, self.d_model), '<f4')
+        h_last = _buffers.empty((b, nh, _M3_HEADDIM, _M3_D_STATE), '<f4')
+        k_last = _buffers.empty((b, nh, _M3_D_STATE), '<f4')
+        v_last = _buffers.empty((b, nh, _M3_HEADDIM), '<f4')
+        theta_last = _buffers.empty((b, nh, _M3_NUM_ROPE_ANGLES), '<f4')
         addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w]
                  + [_addr(y), _addr(h_last), _addr(k_last), _addr(v_last),
                     _addr(theta_last)])
@@ -1088,15 +1139,11 @@ class Mamba3Block(_MambaBase):
         pend = 1 if state.pending else 0
         # buffered_tokens outside [0, 64] is a boundary disagreement the
         # binding refuses by name (DEVIATION 794); it goes down unjudged.
-        y = np.empty((b, l, self.d_model), dtype=np.float32)
-        h_last = np.empty(
-            (b, nh, _M3_HEADDIM, _M3_D_STATE), dtype=np.float32
-        )
-        k_last = np.empty((b, nh, _M3_D_STATE), dtype=np.float32)
-        v_last = np.empty((b, nh, _M3_HEADDIM), dtype=np.float32)
-        theta_last = np.empty(
-            (b, nh, _M3_NUM_ROPE_ANGLES), dtype=np.float32
-        )
+        y = empty((b, l, self.d_model), "<f4")
+        h_last = empty((b, nh, _M3_HEADDIM, _M3_D_STATE), "<f4")
+        k_last = empty((b, nh, _M3_D_STATE), "<f4")
+        v_last = empty((b, nh, _M3_HEADDIM), "<f4")
+        theta_last = empty((b, nh, _M3_NUM_ROPE_ANGLES), "<f4")
         # TWO LISTS, NOT TWENTY-FIVE ARGUMENTS (DEVIATION 791). Every
         # array addressed below is bound in this frame -- x, the nine
         # entries of self._w (alive on self), the ten state pieces, y and
@@ -1111,12 +1158,16 @@ class Mamba3Block(_MambaBase):
             # buffer_krot, buffer_v, buffer_dt, buffer_sig, buffer_adt,
             # pending_k, pending_v, y_out, h_last_out, k_last_out,
             # v_last_out, theta_last_out
-            [_addr_ro(x)]
-            + [_addr_ro(a) for a in w]
-            + [_addr(theta), _addr(h), _addr(bq), _addr(bk), _addr(bv),
-               _addr(bd), _addr(bs), _addr(ba), _addr(pk), _addr(pv),
-               _addr(y), _addr(h_last), _addr(k_last), _addr(v_last),
-               _addr(theta_last)]
+            [addr_ro(x, name="x")]
+            + [addr_ro(a, name="weight") for a in w]
+            + [addr(theta, name="theta"), addr(h, name="h"),
+               addr(bq, name="buffer_qrot"), addr(bk, name="buffer_krot"),
+               addr(bv, name="buffer_v"), addr(bd, name="buffer_dt"),
+               addr(bs, name="buffer_sig"), addr(ba, name="buffer_adt"),
+               addr(pk, name="pending_k"), addr(pv, name="pending_v"),
+               addr(y, name="y"), addr(h_last, name="h_last"),
+               addr(k_last, name="k_last"), addr(v_last, name="v_last"),
+               addr(theta_last, name="theta_last")]
         )
         if step:
             # B, d_model, buf_len, pending.

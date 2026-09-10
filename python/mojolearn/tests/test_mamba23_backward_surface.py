@@ -76,12 +76,15 @@ class Mamba23BackwardHostSurface(unittest.TestCase):
                 self.assertEqual(tuple(got), ("x",) + block._W_NAMES)
                 buffers = expected_inputs + list(again.values())
                 for index, (name, value) in enumerate(got.items()):
+                    # DEVIATION 2460: gradients are mojolearn.Array; the
+                    # zero-copy NumPy view carries dtype, flags and memory.
+                    value = np.asarray(value)
                     self.assertEqual(value.shape, output_templates[index].shape)
                     self.assertEqual(value.dtype, np.float32)
-                    self.assertTrue(value.flags.c_contiguous)
+                    self.assertTrue(value.flags['C_CONTIGUOUS'])
                     self.assertTrue(np.all(value == index + 0.25))
                     for other in buffers:
-                        self.assertFalse(np.shares_memory(value, other), name)
+                        self.assertFalse(np.shares_memory(value, np.asarray(other)), name)
                     buffers.append(value)
 
     def test_refusals_precede_loading_native_extension(self):
@@ -174,7 +177,8 @@ class Mamba23BackwardNVIDIA(unittest.TestCase):
                 for (name, value), expected in zip(got.items(), grads):
                     np.testing.assert_allclose(value, expected.detach().cpu().numpy(), rtol=1e-5, atol=1e-6,
                                                err_msg=f"mamba{family}.{name}")
-                    np.testing.assert_array_equal(value.view(np.uint32), again[name].view(np.uint32))
+                    np.testing.assert_array_equal(np.asarray(value).view(np.uint32),
+                                                  np.asarray(again[name]).view(np.uint32))  # DEVIATION 2460
                 zero = block.backward(x, np.zeros_like(x))
                 for name, value in zero.items():
                     self.assertTrue(np.all(value == 0), f"mamba{family}.{name}")
@@ -190,7 +194,7 @@ class Mamba23BackwardNVIDIA(unittest.TestCase):
             got = block.backward(x, cotangent(x, fixture_objective=True))
             for name, value in got.items():
                 expected = np.fromfile(Path(directory) / f"grad.{name}.f32", dtype="<f4")
-                np.testing.assert_array_equal(value.reshape(-1).view(np.uint32), expected.view(np.uint32),
+                np.testing.assert_array_equal(np.asarray(value).reshape(-1).view(np.uint32), expected.view(np.uint32),
                                               err_msg=f"mamba{family}.{name}")
 
 

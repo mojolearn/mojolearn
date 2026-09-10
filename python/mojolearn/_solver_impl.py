@@ -12,10 +12,9 @@ These classes are not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
-import numpy as np
-
 from . import _mojolearn_solver
-from ._arrays import _addr, _addr_ro, as_f32_c
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros
+from .linear_model import _r2_host, _shape_of
 
 # cuML's `loss_funct` / DistanceType style codes this surface uses.
 _SELECTION_SHUFFLE = {"cyclic": 0, "random": 1}
@@ -120,7 +119,7 @@ class ElasticNet:
                                   `postProcessData`. NOTE this is unlike
                                   `mojolearn.LinearRegression` and
                                   `mojolearn.Ridge`, whose centering is a
-                                  host reimplementation in numpy; here the
+                                  host reimplementation; here the
                                   centering is cuML's own kernels and is on
                                   the identity card (`cd.mu_input`,
                                   `cd.mu_labels`).
@@ -172,13 +171,17 @@ class ElasticNet:
                                   to 'qn' and raises for `solver='cd'`
                                   (`elastic_net.py:265-269`)
 
-    THE DESIGN MATRIX IS COPIED TWICE, AND THE SECOND COPY IS NAMED.
-    `cdFit` wants cuML's `F` (column-major) order and `_arrays.as_f32_c`
-    hands out C order, so `fit` and `predict` build a Fortran-ordered copy
-    with `np.asfortranarray`. On a large X that copy is the dominant cost of
-    the call. `input_copied_` reports the dtype/contiguity copy and
-    `fortran_copied_` this one; pass a float32 array that is already
-    Fortran-ordered and both are False.
+    THE DESIGN MATRIX IS COPIED AT MOST ONCE (DEVIATION 2367). `cdFit`
+    wants cuML's `F` (column-major) order, and `_buffer.as_f32_colmajor`
+    converts dtype and layout in ONE pass straight from the caller's buffer
+    (the DEVIATION 1887 argument: a C-order or float64 input costs one
+    copy, a float32 Fortran-ordered input is a zero-copy borrow). It used
+    to be two copies -- `as_f32_c` to C order, then `np.asfortranarray`
+    back -- and `input_copied_` / `fortran_copied_` named them separately.
+    Both attributes are kept and now report the SAME flag, the one copy
+    that can happen; pass a float32 array that is already Fortran-ordered
+    and both are False. Element values and flat order are unchanged, so
+    no output bit moves.
 
     Attributes
     ----------
@@ -285,27 +288,27 @@ class ElasticNet:
         self.random_state = None
 
     def _as_fortran(self, X, name):
-        """A float32 column-major view of X, and the two copies it may cost.
+        """A float32 column-major Array over X, and whether that cost the
+        one copy it may cost (DEVIATION 2367).
 
         `cdFit` reads the design in cuML's `F` order (element (i, j) at
-        `j * n_rows + i`). Returned alongside the flags so the caller can
-        keep the array alive across the Mojo call, which `_arrays.py`'s
-        contract requires.
+        `j * n_rows + i`). Returned alongside the flag so the caller can
+        keep the Array alive across the Mojo call, which `_buffer.py`'s
+        borrow contract requires.
         """
-        a, copied = as_f32_c(X, name)
-        f = np.asfortranarray(a)
+        f, copied = as_f32_colmajor(X, name=name)
         # THE ONE THING A SHAPE CHECK CANNOT CATCH LATER. `cd_fit` takes a
         # bare address plus n_rows and n_cols, and a C-order buffer of the
         # same size is a VALID transposed design: the fit would run and
-        # return plausible coefficients for the wrong matrix. Two floats of
-        # flag reading here is the only place that can be caught.
-        if not f.flags["F_CONTIGUOUS"] or f.dtype != np.float32:
+        # return plausible coefficients for the wrong matrix. Two flags of
+        # reading here is the only place that can be caught.
+        if not f.flags["F_CONTIGUOUS"] or f.dtype != "<f4":
             raise AssertionError(
                 "mojolearn: internal -- the design handed to cd_fit must be "
                 f"float32 and Fortran-ordered, got {f.dtype} "
                 f"F_CONTIGUOUS={f.flags['F_CONTIGUOUS']}"
             )
-        return a, f, copied, f is not a
+        return f, copied
 
     def fit(self, X, y, sample_weight=None):
         if sample_weight is not None:
@@ -323,22 +326,22 @@ class ElasticNet:
                 "for solver='cd' (elastic_net.py:265-269), and 'qn' is not "
                 "implemented"
             )
-        _keep, work_x, self.input_copied_, self.fortran_copied_ = (
-            self._as_fortran(X, "X"))
+        work_x, copied = self._as_fortran(X, "X")
+        self.input_copied_ = copied
+        self.fortran_copied_ = copied
         n_rows, n_cols = work_x.shape
-        target = np.asarray(y)
-        if target.ndim != 1:
+        if len(_shape_of(y)) != 1:
             raise ValueError(
                 "mojolearn ElasticNet currently requires one target")
+        target, _ = as_f32_c(y, ndim=1, name="y")
         if target.shape[0] != n_rows:
             raise ValueError("mojolearn ElasticNet X and y lengths differ")
-        target = np.ascontiguousarray(target, dtype=np.float32)
 
-        self.coef_ = np.zeros(n_cols, dtype=np.float32)
-        info = np.zeros(1, dtype=np.float32)
+        self.coef_ = zeros((n_cols,), "<f4")
+        info = zeros((1,), "<f4")
         n_iter = _mojolearn_solver.cd_fit(
-            _addr_ro(work_x), _addr_ro(target), _addr(self.coef_),
-            _addr(info),
+            addr_ro(work_x, name="X"), addr_ro(target, name="y"),
+            addr(self.coef_, name="coef_"), addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_solver.mojo::cd_fit_binding.
             # n_rows, n_cols, fit_intercept, max_iter, alpha, l1_ratio, tol,
             # shuffle, has_sample_weight
@@ -351,33 +354,31 @@ class ElasticNet:
         self.intercept_ = float(info[0])
         self.n_iter_ = int(n_iter)
         self.n_features_in_ = n_cols
-        # `_keep` held the C-order array alive across the call; naming it
-        # here is what stops a reader from deleting the binding above.
-        del _keep
+        # `work_x` is the object the address above belongs to; it lives in
+        # this frame for the whole call, which is the borrow contract.
         return self
 
     def predict(self, X):
         if not hasattr(self, "coef_"):
             raise ValueError("mojolearn ElasticNet: call fit before predict")
-        _keep, work_x, _, _ = self._as_fortran(X, "X")
+        work_x, _ = self._as_fortran(X, "X")
         if work_x.shape[1] != self.n_features_in_:
             raise ValueError(
                 "mojolearn ElasticNet feature count differs from fit")
-        out = np.empty(work_x.shape[0], dtype=np.float32)
+        out = empty((work_x.shape[0],), "<f4")
         _mojolearn_solver.cd_predict(
-            _addr_ro(work_x), _addr_ro(self.coef_), _addr(out),
+            addr_ro(work_x, name="X"), addr_ro(self.coef_, name="coef_"),
+            addr(out, name="predictions"),
             # ORDER MATCHES bindings/_mojolearn_solver.mojo::cd_predict_binding.
             # n_rows, n_cols, intercept
             [work_x.shape[0], work_x.shape[1], float(self.intercept_)],
         )
-        del _keep
         return out
 
     def score(self, X, y):
-        target = np.asarray(y, dtype=np.float64)
-        residual = target - self.predict(X)
-        denom = np.sum((target - target.mean()) ** 2)
-        return 1.0 - float(np.sum(residual ** 2) / denom) if denom else 0.0
+        """R^2, a sequential float64 host reduction outside the identity
+        claim (`linear_model._r2_host`, DEVIATION 2365)."""
+        return _r2_host(self.predict(X), y)
 
 
 class Lasso(ElasticNet):

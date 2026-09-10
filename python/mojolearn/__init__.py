@@ -56,6 +56,18 @@ vendor = _backend.vendor
 gpu_arch = _backend.gpu_arch
 gpu_arch_how = _backend.gpu_arch_how
 
+#: THE ARRAY TYPE EVERY ESTIMATOR RETURNS (numpy-free-0.7, DEVIATION 2434).
+#: NumPy is no longer a dependency of this package: inputs are read
+#: through the buffer protocol (a NumPy array, an `array.array`, a
+#: `mojolearn.Array`, a nested list where a surface says so) and every
+#: array an estimator hands back is a `mojolearn.Array` -- owning its
+#: memory, exporting `__array_interface__` and the buffer protocol, so
+#: `numpy.asarray(result)` is ZERO-COPY for a caller who has NumPy
+#: (`python/mojolearn/NUMPY_FREE_CONTRACT.md`).
+from ._array import Array
+from . import model_selection
+from .model_selection import cross_val_score
+
 from .cluster import KMeans
 from .decomposition import PCA, TruncatedSVD
 from .density import DBSCAN, KernelDensity
@@ -205,9 +217,12 @@ from ._transformer_impl import TransformerBlock, TransformerState
 from ._samba_impl import SambaConfig, SambaStack
 
 __all__ = [
+    "model_selection",
+    "cross_val_score",
     "preprocessing",
     "MinMaxScaler",
     "StandardScaler",
+    "Array",
     "SGD",
     "Adam",
     "AdamW",

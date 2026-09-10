@@ -72,10 +72,13 @@ km = mojolearn.KMeans(
 for c in range(4):
     block = km.labels_[c * 100 : (c + 1) * 100]
     assert len(set(block.tolist())) == 1, f"cluster {c} split across labels"
-assert len({tuple(r) for r in km.cluster_centers_.round(0)}) == 4, "centroids merged"
+# DEVIATION 2462: estimator outputs are mojolearn.Array (no arithmetic, no
+# ufuncs); np.asarray views them zero-copy so every check below is unchanged.
+assert len({tuple(r) for r in np.asarray(km.cluster_centers_).round(0)}) == 4, "centroids merged"
 
 nn = mojolearn.NearestNeighbors(n_neighbors=3).fit(X)
 d, i = nn.kneighbors(X[:50])
+d, i = np.asarray(d), np.asarray(i)
 assert (i[:, 0] == np.arange(50)).all(), "a point is not its own nearest neighbour"
 assert (d[:, 0] < 1e-3).all(), "self-distance is not ~0"
 
@@ -98,7 +101,7 @@ assert np.corrcoef(pg, yr)[0, 1] > 0.5, "GBDT learned nothing"
 rf = RandomForestClassifier(n_estimators=4, max_depth=6, random_state=7).fit(Xt, yc)
 pr = rf.predict(Xt)
 assert pr.shape == (512,), pr.shape
-assert (pr == yc).mean() > 0.7, "RF learned nothing"
+assert (np.asarray(pr) == yc).mean() > 0.7, "RF learned nothing"
 
 et = ExtraTreesRegressor(n_estimators=3, max_depth=6, random_state=7).fit(Xt, yr)
 pe = et.predict(Xt)
@@ -116,7 +119,7 @@ clouds = np.vstack([
     rng.normal((4, 4), 0.08, (40, 2)),
     [[-10, 8], [10, -8], [0, 10], [10, 0]],
 ]).astype(np.float32)
-labels = DBSCAN(eps=0.35, min_samples=5).fit_predict(clouds)
+labels = np.asarray(DBSCAN(eps=0.35, min_samples=5).fit_predict(clouds))
 assert len(set(labels[:40].tolist())) == 1 and len(set(labels[40:80].tolist())) == 1
 assert labels[0] != labels[40] and (labels[-4:] == -1).all(), "DBSCAN wrong"
 

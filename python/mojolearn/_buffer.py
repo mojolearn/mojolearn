@@ -40,8 +40,7 @@ from __future__ import annotations
 import array
 import ctypes
 import math
-import mmap
-import sys
+from functools import lru_cache
 
 from ._array import Array, _CODE, normalize_dtype
 
@@ -357,6 +356,23 @@ def _materialize(obj, name):
                 )
         return Array._from_flat(flat, shape, "<i8"), True
     with Buf(obj, name=name) as b:
+        if b.format[:1] in (">", "!") and b.itemsize > 1:
+            # A copy may normalize endian; a zero-copy Array.from_buffer
+            # still refuses non-native storage. array.byteswap runs in C.
+            original_format = b.format
+            b.format = "=" + b.format[1:]
+            ts = typestr_of(b)
+            b.format = original_format
+            code = _CODE.get(ts, _iter_format(ts))
+            if code is None:
+                raise TypeError(f"mojolearn: {name} has unsupported buffer format {b.format!r}")
+            store = array.array(code)
+            store.frombytes(memoryview(obj).tobytes())
+            store.byteswap()
+            target = _NATURAL.get(ts, ts)
+            if target != ts:
+                store = array.array(_CODE[target], store)
+            return Array._owned(store, b.shape if b.ndim else (1,), target, "C"), True
         ts = typestr_of(b)
         if b.ndim >= 1 and (ts in _CODE) and (b.c_contiguous or b.f_contiguous):
             pass  # zero-copy path below
@@ -457,59 +473,69 @@ def _native_to_f32(a, order):
     return Array._owned(store, a.shape, "<f4", a.order)._as_order(order)
 
 
-class _AnonStore(mmap.mmap):
-    """An owned block the native converters write into, backed by an
-    ANONYMOUS MAPPING instead of an `array.array`.
+# DEVIATION 2473: native conversion destinations use CPython's raw allocator.
+# An anonymous mmap paid fresh-page costs on each conversion; on 40M elements
+# the flat f64->f32 conversion took 13.10 ms versus 6.11 ms for NumPy.
+# Raw allocation brought it to 5.92 ms in the same interleaved process. This
+# changes ownership/allocation only: the native converter still writes every
+# element before an Array is returned. See the retained conversion benchmark.
+_RAW_MALLOC = ctypes.pythonapi.PyMem_RawMalloc
+_RAW_MALLOC.argtypes = [ctypes.c_size_t]
+_RAW_MALLOC.restype = ctypes.c_void_p
+_RAW_FREE = ctypes.pythonapi.PyMem_RawFree
+_RAW_FREE.argtypes = [ctypes.c_void_p]
+_RAW_FREE.restype = None
 
-    Every way of allocating an `array.array` from Python writes every byte
-    once (a zero fill or a copy), and at 2,000,000 x 20 that pass costs
-    about as much as the cast itself: 9.8 ms of a 16 ms total on the M4,
-    against NumPy's 11.6 ms, which allocates uninitialized memory and
-    touches each page for the first time inside its own copy loop. An
-    anonymous mapping gets the same treatment from the kernel: the pages
-    are zero by construction and materialize on the converter's first
-    write, so there is no separate fill pass. Measured at 40,000,000
-    elements: 13.0 ms end to end against NumPy's 12.8 ms.
 
-    It quacks like the `array.array` the `Array` class expects: a typed
-    buffer (`__buffer__`, Python 3.12+) and `buffer_info()`. Only the
-    native converters build one; nothing else needs to know.
-    """
+class _RawAllocation:
+    __slots__ = ("addr", "_free", "__weakref__")
 
-    __slots__ = ("_code", "_n")
+    def __init__(self, nbytes):
+        self.addr = None
+        self._free = _RAW_FREE  # retain the matching deallocator through shutdown
+        self.addr = _RAW_MALLOC(max(1, nbytes))
+        if not self.addr:
+            raise MemoryError("mojolearn: cannot allocate native conversion output")
 
-    def __new__(cls, code, n):
-        return super().__new__(cls, -1, max(1, n * array.array(code).itemsize))
+    def __del__(self):
+        if self.addr:
+            self._free(self.addr)
+            self.addr = None
 
-    def __init__(self, code, n):
-        self._code = code
-        self._n = n
 
-    def __buffer__(self, flags):
-        return mmap.mmap.__buffer__(self, flags).cast(self._code)
+@lru_cache(maxsize=128)
+def _raw_store_type(code, n):
+    # The ctypes buffer pins its allocation owner. Array views and NumPy views
+    # in turn pin that buffer, so the allocation outlives every borrowed view.
+    scalar = {"f": ctypes.c_float, "d": ctypes.c_double,
+              "i": ctypes.c_int32, "q": ctypes.c_int64,
+              "I": ctypes.c_uint32, "H": ctypes.c_uint16,
+              "B": ctypes.c_uint8}[code]
 
-    def buffer_info(self):
-        return _AnonStore._address(self), self._n
+    class Store(ctypes.Array):
+        _type_ = scalar
+        _length_ = n
 
-    @staticmethod
-    def _address(m):
-        raw = mmap.mmap.__buffer__(m, 0)
-        try:
-            return ctypes.addressof(ctypes.c_char.from_buffer(raw))
-        finally:
-            raw.release()
+        def buffer_info(self):
+            return ctypes.addressof(self), n
+
+    return Store
 
 
 def _output_store(code, n):
-    """Fresh storage for `n` elements of `code` for a native converter to
-    fill: an `_AnonStore` where the interpreter lets a Python class export
-    a buffer (3.12+), else the zero-filled `array.array` every other Array
-    uses. The bytes written are identical either way; only the cost of
-    getting the block differs."""
-    if sys.version_info >= (3, 12):
-        return _AnonStore(code, n)
-    from ._array import _new_store
-    return _new_store(code, n)
+    """Uninitialized storage, private to native helpers that fill every byte.
+
+    Unlike Array's public zero-filled constructor, this must never escape
+    before the native call completes. Works with the buffer protocol on all
+    supported CPython versions, including 3.10 and 3.11.
+    """
+    if n < 0:
+        raise ValueError("mojolearn: negative native output size")
+    store_type = _raw_store_type(code, n)
+    owner = _RawAllocation(ctypes.sizeof(store_type))
+    store = store_type.from_address(owner.addr)
+    store._allocation = owner
+    return store
 
 
 def _as_typed(obj, dtype, order, ndim, name):

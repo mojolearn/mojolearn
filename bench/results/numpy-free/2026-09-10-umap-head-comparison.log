@@ -1,0 +1,8 @@
+BINDING mojolearn._mojolearn_metrics /Users/andrewhendel/CascadeProjects/mojolearn-trees-gpu/python/mojolearn/identical/_mojolearn_metrics.so MODE 1
+PARAMETERS_EQUAL True
+OUTPUT_BITS_EQUAL True
+HEAD_SHA256 938709dc39952894fe7a4db5854176fd693deff833676e09b541e712b0415c4a
+MERGED_SHA256 938709dc39952894fe7a4db5854176fd693deff833676e09b541e712b0415c4a
+HEAD_PINNED_BITS_EQUAL False
+2D_OUTPUT_BITS_EQUAL True
+2D_HEAD_PINNED_BITS_EQUAL False

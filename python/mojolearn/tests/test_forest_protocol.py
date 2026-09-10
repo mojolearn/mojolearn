@@ -83,13 +83,15 @@ def test_pipeline_serial_search_and_score_mode(monkeypatch, cls):
         values = (X[:, 0] > 0).astype(np.int32)
         if self._cfg['max_depth'] == 1:
             values[:] = 0
-        return self.classes_[values] if classifier else values.astype(np.float32)
+        return np.asarray(self.classes_)[values] if classifier else values.astype(np.float32)
     monkeypatch.setattr(cls, 'predict', predict)
     def accuracy(yt, yp, *, numeric_mode):
+        yt, yp = np.asarray(yt), np.asarray(yp)
         modes.append(numeric_mode)
         assert yt.dtype == yp.dtype == np.int32
         return float(np.mean(yt == yp))
     def r2(yt, yp, *, numeric_mode):
+        yt, yp = np.asarray(yt), np.asarray(yp)
         modes.append(numeric_mode)
         assert yt.dtype == yp.dtype == np.float32
         return float(1 - np.sum((yt-yp)**2)/np.sum((yt-yt.mean())**2))

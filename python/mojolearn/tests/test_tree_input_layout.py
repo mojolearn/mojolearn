@@ -18,6 +18,7 @@ def test_large_row_major_conversion_matches_numpy_bits(dtype):
     source.flags.writeable = False
     expected = np.asfortranarray(source, dtype=np.float32)
     actual, flat, copied = as_f32_colmajor(source, "X")
+    actual, flat = np.asarray(actual), np.asarray(flat)
     assert copied and actual.flags.f_contiguous
     assert np.shares_memory(actual, flat)
     assert not np.shares_memory(actual, source)
@@ -31,7 +32,8 @@ def test_fortran_float32_is_borrowed():
     source = np.ones((80003, 28), dtype=np.float32, order="F")
     source.flags.writeable = False
     actual, flat, copied = as_f32_colmajor(source, "X")
-    assert actual is source and not copied
+    assert np.shares_memory(actual, source) and not copied
+    assert not np.asarray(actual).flags.writeable
     assert np.shares_memory(source, flat)
 
 
@@ -43,6 +45,7 @@ def test_fallback_layouts_match_numpy(variant):
               "bigendian": source.astype(">f4"), "narrow": source[:, :1]}[variant]
     actual, flat, _ = as_f32_colmajor(source, "X")
     expected = np.asfortranarray(source, dtype=np.float32)
+    actual, flat = np.asarray(actual), np.asarray(flat)
     assert actual.flags.f_contiguous
     np.testing.assert_array_equal(actual, expected)
     np.testing.assert_array_equal(flat, expected.ravel(order="F"))

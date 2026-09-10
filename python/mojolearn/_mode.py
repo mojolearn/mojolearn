@@ -96,7 +96,21 @@ class NumericModeMixin:
     def numeric_mode_used(self):
         """The tier THIS estimator will run on, resolved and read back from
         the binary it actually holds -- not the string that was passed in."""
-        return self._bind().__name__.split(".")[-2]
+        module = self._bind()
+        name = module.__name__.rsplit(".", 1)[-1]
+        getter_name = _backend._vendor_fn(name).removesuffix("_vendor") + "_numeric_mode"
+        getter = getattr(module, getter_name, None)
+        # Older metrics modules expose the same compile-time constant under
+        # UMAP's original name. A DSO's __name__ need not retain its tier path.
+        if getter is None and name == "_mojolearn_metrics":
+            getter = getattr(module, "umap_numeric_mode", None)
+        if getter is not None:
+            code = getter()
+            if code not in _backend._CODE_MODE:
+                raise RuntimeError(f"mojolearn: {name} returned unknown numeric mode {code!r}")
+            return _backend._CODE_MODE[code]
+        # Legacy artifacts without readback retain the historical path hint.
+        return module.__name__.split(".")[-2]
 
     def vendor_used(self):
         """'metal', 'cuda' or 'hip': the accelerator API of the binary THIS

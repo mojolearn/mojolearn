@@ -20,6 +20,22 @@ All optimizer classes, both small trainers, `cross_entropy` and
 `clip_grad_norm_` are also available directly from `mojolearn`. Native extension
 lookup remains lazy; a missing component raises when used.
 
+## Arrays: NumPy is optional
+
+NumPy is not a dependency of this package (0.7). Every input is read through
+the buffer protocol, so a NumPy array, an `array.array`, a `mojolearn.Array`
+or any other object exporting a buffer is accepted; the surfaces that certify
+bits (GEMM, Mamba, Transformer, the training primitives) refuse a non-float32
+buffer by name rather than casting it. Every array an operation returns is a
+`mojolearn.Array`: it owns its memory, exposes `shape`, `dtype`, `tobytes()`,
+`tolist()`, indexing and the buffer protocol, and exports
+`__array_interface__`, so `numpy.asarray(result)` is a zero-copy view for a
+caller who has NumPy. Buffers a surface updates in place (optimizer
+parameters, recurrent states, `matmul(out=...)`) must be writable and
+C-contiguous. The examples below use NumPy for the caller's inputs; install
+it with `pip install mojolearn[test]`, which is also what the test suite and
+`mojolearn verify` need.
+
 ## Numeric mode and GEMM
 
 Select IDENTICAL before importing the package for these examples:
@@ -84,8 +100,9 @@ optimizer.step(parameter_gradients)
 ```
 
 `logits` is FP32 `(N, classes)` and `targets` contains integer class indices.
-The optimizer mutates supplied parameter arrays. `clip_grad_norm_` mutates
-gradient arrays and returns the pre-clip L2 norm. These primitives do not
+The optimizer mutates supplied parameter arrays in place, which is why they
+must be writable, C-contiguous float32 buffers. `clip_grad_norm_` mutates
+gradient arrays the same way and returns the pre-clip L2 norm. These primitives do not
 provide automatic differentiation or a failure-rollback contract. Their
 docstrings describe reductions, ignore indices, smoothing, optimizer settings
 and refusals.

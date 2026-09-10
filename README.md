@@ -19,6 +19,13 @@ RF/ET offer `inference_engine="sequential"` (existing host prediction) and
 experimental `inference_engine="parallel_groves"` (shared GPU prediction).
 Both retain GPU training; see the [inference algorithms and numerical contract](docs/FOREST_INFERENCE_ENGINES.md).
 
+The unreleased 0.8.0 source removes the NumPy runtime dependency and returns
+`mojolearn.Array` objects. Existing NumPy inputs remain supported; callers can
+use `numpy.asarray(result)` for a zero-copy view. See the
+[NumPy-free contract](python/mojolearn/NUMPY_FREE_CONTRACT.md) and
+[qualification roadmap](docs/lanes/NUMPY_FREE_RESIDUAL_2026-09-10.md).
+The published version below retains its existing API.
+
 ## Training performance priority
 
 Optimize GPU training for **large real datasets**. Training-speed claims and

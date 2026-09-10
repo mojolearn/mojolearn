@@ -84,7 +84,7 @@ def test_confusion_order_subset_normalize_and_mode(binding, mode, normalize):
     expected = reference.confusion_matrix(yt, yp, labels=['b', 'a', 'absent'],
                                           normalize=normalize)
     np.testing.assert_allclose(result, expected, atol=1e-7)
-    assert result.dtype == (np.int64 if normalize is None else np.float32)
+    assert np.asarray(result).dtype == (np.int64 if normalize is None else np.float32)
     assert len(binding[mode].calls) == 1
     np.testing.assert_array_equal(yt, before)
     assert -1 in binding[mode].calls[0][2]
@@ -100,7 +100,7 @@ def test_prf_retains_errors_against_excluded_labels(binding, name, average, zero
     expected = getattr(reference, name)(yt, yp, **options)
     np.testing.assert_allclose(result, expected, atol=1e-7)
     if average is None:
-        assert result.dtype == np.float32 and result.shape == (3,)
+        assert np.asarray(result).dtype == np.float32 and result.shape == (3,)
     else:
         assert isinstance(result, float)
     params = binding['identical'].calls[0][1]

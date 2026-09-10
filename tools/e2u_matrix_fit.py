@@ -601,8 +601,11 @@ def run_cell(name, out_dir):
             entry["predictions"] = sha256_of(m.predict(Xq))
             os.environ.pop("MOJOLEARN_IDENTITY_TRACE", None)
             entry["proba"] = sha256_of(m.predict_proba(Xq))
-            entry["classes"] = sha256_of(m.classes_)
-            entry["n_classes"] = int(m.classes_.shape[0])
+            # DEVIATION 2465: classes_ is a Python list (numpy-free contract);
+            # hashed through np.asarray, so the hash keys on the list's inferred
+            # dtype (int64 for int labels) rather than the old np.unique dtype.
+            entry["classes"] = sha256_of(np.asarray(m.classes_))
+            entry["n_classes"] = len(m.classes_)
             entry["used_query_tile"] = int(m.used_query_tile_)
         elif kind == "knn_reg":
             m = mojolearn.KNeighborsRegressor(**spec).fit(X, y)

@@ -15,10 +15,8 @@ This class is not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
-import numpy as np
-
 from . import _mojolearn_solver
-from ._arrays import _addr, _addr_ro, as_f32_c
+from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 
 # `cuml/common/distance_type.hpp`, the codes cuML's Python layer passes
 # (`agglomerative.pyx:36-43`).
@@ -262,7 +260,7 @@ class AgglomerativeClustering:
                 "pairwise connectivity arm builds its dense m x m graph from "
                 "a dense float32 matrix"
             )
-        x, self.input_copied_ = as_f32_c(X, "X")
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         if n_rows < 2:
             raise ValueError(
@@ -284,11 +282,13 @@ class AgglomerativeClustering:
                 f"n_clusters={k}"
             )
 
-        children = np.empty((n_rows - 1, 2), dtype=np.int32)
-        labels = np.empty(n_rows, dtype=np.int32)
-        info = np.zeros(2, dtype=np.int32)
+        # Outputs are `_array.Array`s (DEVIATION 2371; they were ndarrays).
+        children = empty((n_rows - 1, 2), "<i4")
+        labels = empty((n_rows,), "<i4")
+        info = zeros((2,), "<i4")
         _mojolearn_solver.linkage_fit(
-            _addr_ro(x), _addr(children), _addr(labels), _addr(info),
+            addr_ro(x, name="X"), addr(children, name="children_"),
+            addr(labels, name="labels_"), addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_solver.mojo::linkage_fit_binding.
             # n_rows, n_cols, n_clusters, metric, use_knn
             [

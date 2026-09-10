@@ -51,11 +51,33 @@ def test_full_missing_export_refuses_without_covariance_fallback(monkeypatch):
 
 
 def test_full_wide_matrix_refuses_before_native_call(monkeypatch):
+    monkeypatch.setattr(PCA, "numeric_mode_used", lambda self: "fast")
     def forbidden(*args):
         raise AssertionError('wide matrix reached native full fit')
     monkeypatch.setattr(PCA, '_bind', lambda self, name: SimpleNamespace(pca_fit_full=forbidden))
     with pytest.raises(NotImplementedError, match='at least as many samples'):
         PCA(2, svd_solver='full').fit(np.ones((3, 8), dtype=np.float32))
+
+
+def test_full_wide_identical_dispatch_and_component_bound(monkeypatch):
+    monkeypatch.setattr(PCA, "numeric_mode_used", lambda self: "identical")
+    calls = []
+    def full(x, components, mean, explained, ratio, singular, params):
+        calls.append(list(params))
+        rows, features, count = params
+        write(components, [0] * (count * features))
+        write(mean, [0] * features)
+        for address in (explained, ratio, singular):
+            write(address, [1] * count)
+        return 0.0
+    monkeypatch.setattr(PCA, "_bind", lambda self, name: SimpleNamespace(pca_fit_full=full))
+    x = np.ones((3, 8), dtype=np.float32)
+    model = PCA(3, svd_solver="full").fit(x)
+    assert calls == [[3, 8, 3]]
+    assert model.components_.shape == (3, 8)
+    with pytest.raises(ValueError, match="cannot exceed min"):
+        PCA(4, svd_solver="full").fit(x)
+    assert calls == [[3, 8, 3]]
 
 
 @pytest.mark.skipif(

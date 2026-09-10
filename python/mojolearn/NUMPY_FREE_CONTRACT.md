@@ -1,18 +1,18 @@
 # NumPy-free Python layer: the contract every module codes against
 
-**STATUS on main, 2026-09-10.** The four modules this file specifies
-(`_array.py`, `_buffer.py`, `_bufcheck.py`, `_labels.py`) have landed and are
-self-contained, importing only the standard library and each other. NOTHING
-ON MAIN USES THEM YET. `_arrays.py` is still the live converter and `numpy`
-is still a hard dependency of 27 shipped modules. Read the "replaces" and
-"was" wordings below as the DESTINATION, not the current state. The
-conversions land next; the residual is tracked in
-docs/lanes/NUMPY_FREE_RESIDUAL_2026-09-10.md.
+The 0.8.0 source uses the shared Array/buffer layer across estimators,
+metrics, preprocessing, model selection and neural training. NumPy is absent
+from runtime dependencies; it remains an optional test/diagnostic oracle.
+Existing NumPy inputs still work through the buffer protocol. Outputs are
+`mojolearn.Array`; use `numpy.asarray(result)` for a zero-copy NumPy view.
+This is an API change from published 0.7.0 and requires new native builds.
 
-Branch numpy-free-0.7. Goal: `numpy` leaves `dependencies` in python/pyproject.toml
-(it stays under an optional `test` extra). The native `.so` files are untouched
-except for three new helpers named below. No bit of any IDENTICAL-mode result may
-move except where this file says a re-baseline is owed.
+GPU learners remain the product. Compiled host casting, layout conversion,
+validation, checkpoint packing and row gathering are supporting operations,
+not CPU implementations of learners. See
+[the integration and performance roadmap](../../docs/lanes/NUMPY_FREE_RESIDUAL_2026-09-10.md)
+for qualification still owed; removal of a dependency does not certify new
+cross-vendor training results.
 
 ## `_buffer.py` (replaces `_arrays.py`; DEVIATION 2300)
 
@@ -40,12 +40,13 @@ Errors keep the exact wording of the messages they replace wherever a test asser
 
 ## `_array.py`: `class Array` (DEVIATION 2301)
 
-Backing store: `array.array` (typecodes f d i q I H B) or `ctypes` buffer; always
-owns its memory. Public surface, and nothing else:
+Backing store: owned `array.array` or raw-allocated `ctypes` buffer, or a
+borrowed buffer pinned for the lifetime of its views. Native converters fill
+uninitialized owned storage before exposing an Array. Public surface, and nothing else:
 
 - attributes: `shape` (tuple), `dtype` (str typestr `'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'<u4'`, `'<u1'`, `'<f2'`), `ndim`, `size`, `nbytes`, `itemsize`, `strides`, `order` ('C' or 'F'), `flags` (dict with C_CONTIGUOUS, F_CONTIGUOUS, WRITEABLE)
-- `__array_interface__` (version 3: shape, typestr, data=(addr, False), strides, version) so `numpy.asarray(a)` is ZERO-COPY when a caller has NumPy
-- `__buffer__(flags)` returning a memoryview (Python 3.12+) and `memoryview(a)` working on every supported Python (delegate to the backing `array.array`)
+- `__array_interface__` (version 3: shape, typestr, data=(addr, readonly), strides, version) so `numpy.asarray(a)` is ZERO-COPY when a caller has NumPy
+- `__buffer__(flags)` returning a memoryview (Python 3.12+) on Python 3.12+ where the requested layout can be represented; older Python uses `_buffer.view` explicitly
 - `tobytes()`, `tolist()` (nested lists by shape), `copy()`, `astype(dtype)` (round-to-nearest-even for f64->f32; exact for widening), `reshape(shape)` (C order view over the same buffer), `ravel()`, `__len__`, `__iter__` (rows for ndim 2, scalars for ndim 1), `__getitem__` with int / slice / tuple of them (returns Python scalar for full indexing, Array otherwise, copying), `__eq__` elementwise -> Array of '<u1'
 - `min()`, `max()`, `sum()` (Python float accumulation, DOCUMENTED as host reductions that are NOT part of any identity claim), `argmax()` first-max-wins
 - `__repr__` like `Array(shape=(3, 2), dtype='<f4')`

@@ -128,6 +128,10 @@ def initialize(registry):
 def array_bytes(value, integer=False):
     import numpy as np
     dtype = np.dtype('int32' if integer else 'float32')
+    # DEVIATION 2464: trainer buffers are mojolearn.Array; the zero-copy NumPy
+    # view keeps the dtype test exact (no conversion happens in asarray).
+    if hasattr(value, '__array_interface__') and not isinstance(value, np.ndarray):
+        value = np.asarray(value)
     if not isinstance(value, np.ndarray) or value.dtype != dtype:
         raise TypeError('capture requires actual int32/float32 arrays; no silent dtype conversion')
     if not integer and not np.isfinite(value).all():
@@ -139,6 +143,8 @@ def state_signature(state):
     import numpy as np
     for key in ('parameters', 'm', 'v', 'flags'):
         expected_shape = (20,) if key == 'flags' else (34944,)
+        if hasattr(state[key], '__array_interface__'):  # DEVIATION 2464
+            state[key] = np.asarray(state[key])
         if not isinstance(state[key], np.ndarray) or state[key].shape != expected_shape:
             raise ValueError('state array shape differs from fixed profile')
     arrays = {key: sha(array_bytes(state[key], key == 'flags'))
@@ -165,6 +171,8 @@ def retain_step(directory, before, after, result, ids, previous, registry, vendo
     if not isinstance(ids, np.ndarray) or ids.shape != (2, 33) or ids.dtype != np.int32:
         raise ValueError('step capture requires actual int32[2,33] IDs')
     gradient = result['flat_gradients']
+    if hasattr(gradient, '__array_interface__'):  # DEVIATION 2464: zero-copy view
+        gradient = np.asarray(gradient)
     if not isinstance(gradient, np.ndarray) or gradient.shape != (34944,) or gradient.dtype != np.float32:
         raise ValueError('step capture requires actual float32[34944] gradients')
     if not math.isfinite(result['loss']) or float(np.float32(result['loss'])) != result['loss']:
@@ -365,7 +373,7 @@ def main():
         # mutation. No weight, flag, counter or schedule field is changed.
         legitimate = state_signature(state)
         retain_initial(args.output / 'legitimate-head64', state)
-        if not np.any(state['m'] != 0) or not np.any(state['v'] != 0):
+        if not np.any(np.asarray(state['m']) != 0) or not np.any(np.asarray(state['v']) != 0):  # DEVIATION 2464
             raise ValueError('zero-moments control requires nonzero incoming m AND v')
         altered = trainer.state_dict()
         altered['m'] = np.zeros_like(altered['m'])
@@ -375,7 +383,7 @@ def main():
         changed = state_signature(state)
         if (changed['metadata_sha256'] != legitimate['metadata_sha256']
             or any(changed['arrays'][key] != legitimate['arrays'][key] for key in ('parameters', 'flags'))
-            or np.any(state['m'] != 0) or np.any(state['v'] != 0)):
+            or np.any(np.asarray(state['m']) != 0) or np.any(np.asarray(state['v']) != 0)):
             raise ValueError('control changed something besides zeroing moments')
         control = dict(name='zero-moments65', legitimate_state=legitimate,
             altered_state=changed, legitimate_state_directory='legitimate-head64',

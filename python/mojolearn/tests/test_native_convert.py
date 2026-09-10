@@ -367,16 +367,15 @@ def test_native_result_owns_fresh_storage(monkeypatch):
     assert isinstance(a, Array) and a._base is None
 
 
-def test_anon_store_behaves_like_an_array_store(monkeypatch):
-    """On 3.12+ the native converters write into an anonymous mapping. The
+def test_native_store_behaves_like_an_array_store(monkeypatch):
+    """The native converters write into an owned raw allocation. The
     resulting Array must do everything an array.array-backed one does."""
     import sys
     _forced_present(monkeypatch)
     x = _matrix((300, 7), seed=2471)
     a, copied = _buffer.as_f32_colmajor(x, name="X")
     assert copied
-    if sys.version_info >= (3, 12):
-        assert isinstance(a._store, _buffer._AnonStore)
+    assert isinstance(a._store._allocation, _buffer._RawAllocation)
     want = np.asfortranarray(x, dtype=np.float32)
     assert a.tobytes() == want.tobytes(order="F")
     assert np.array_equal(np.asarray(a), want, equal_nan=True)
@@ -396,3 +395,26 @@ def test_anon_store_behaves_like_an_array_store(monkeypatch):
     assert a[2, 3] == float(want[2, 3]) or (math.isnan(a[2, 3]) and math.isnan(want[2, 3]))
     finite = want[np.isfinite(want)]
     assert _buffer.all_finite(a) is False  # the edge values include inf/nan
+
+
+def test_native_allocation_lives_until_last_view(monkeypatch):
+    import gc
+    import weakref
+    _forced_present(monkeypatch)
+    a, copied = _buffer.as_f32_colmajor(_matrix((300, 7), seed=2473), name="X")
+    owner = weakref.ref(a._store._allocation)
+    borrowed = np.asarray(a)
+    expected = borrowed.copy()
+    del a
+    gc.collect()
+    assert owner() is not None
+    np.testing.assert_array_equal(borrowed, expected)
+    del borrowed
+    gc.collect()
+    assert owner() is None
+
+
+def test_native_allocation_failure(monkeypatch):
+    monkeypatch.setattr(_buffer, "_RAW_MALLOC", lambda n: None)
+    with pytest.raises(MemoryError, match="native conversion output"):
+        _buffer._output_store("f", 64)

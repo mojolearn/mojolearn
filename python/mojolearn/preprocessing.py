@@ -1,6 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """GPU preprocessing with explicit Float32 and numeric-mode contracts."""
-import numpy as np
+import struct
+import math
+import numbers
+from ._array import Array
+from ._buffer import _materialize, all_finite, empty, zeros, full, as_f32_c
+from ._labels import is_bool
 
 from . import _backend
 from ._arrays import _addr, _addr_ro
@@ -11,16 +16,16 @@ __all__ = ['MinMaxScaler', 'StandardScaler']
 class _ScalerProtocol:
     @staticmethod
     def _input(X):
-        values = np.asarray(X)
-        if values.dtype != np.dtype('float32'):
+        values = _materialize(X, "input")[0]
+        if values.dtype != "<f4":
             raise TypeError('Scaler input must have dtype float32')
         if values.ndim != 2 or min(values.shape) == 0:
             raise ValueError('Scaler requires a nonempty two-dimensional input')
-        if values.size > np.iinfo(np.int32).max:
+        if values.size > 2147483647:
             raise ValueError('Scaler exceeds the native Int32 indexing bound')
-        if not np.all(np.isfinite(values)):
+        if not all_finite(values):
             raise ValueError('Scaler input must be finite; NaN/inf are unsupported')
-        return np.ascontiguousarray(values)
+        return as_f32_c(values, ndim=values.ndim, name="values")[0]
 
     @staticmethod
     def _binding(mode):
@@ -82,33 +87,33 @@ class MinMaxScaler(_ScalerProtocol):
         self._configuration()
 
     def _configuration(self):
-        if not isinstance(self.copy, (bool, np.bool_)) or not self.copy:
+        if not is_bool(self.copy) or not self.copy:
             raise NotImplementedError('MinMaxScaler currently requires copy=True')
-        if not isinstance(self.clip, (bool, np.bool_)):
+        if not is_bool(self.clip):
             raise ValueError('clip must be a bool')
         if self.numeric_mode is not None and (
                 not isinstance(self.numeric_mode, str) or
                 self.numeric_mode.strip().lower() not in ('fast', 'deterministic', 'identical')):
             raise ValueError('numeric_mode must be fast, deterministic, identical or None')
-        if not isinstance(self.feature_range, (tuple, list, np.ndarray)):
+        if not isinstance(self.feature_range, (tuple, list, Array)) and not hasattr(self.feature_range, "__array_interface__"):
             raise ValueError("feature_range must be a reusable tuple, list or 1D array")
-        if isinstance(self.feature_range, np.ndarray) and self.feature_range.ndim != 1:
+        if getattr(self.feature_range, "ndim", 1) != 1:
             raise ValueError("feature_range must be one-dimensional")
         try:
             endpoints = tuple(self.feature_range)
         except TypeError:
             raise ValueError('feature_range must contain two numeric endpoints') from None
         if len(endpoints) != 2 or any(
-                isinstance(x, (bool, np.bool_)) or
-                not isinstance(x, (int, float, np.integer, np.floating)) for x in endpoints):
+                is_bool(x) or
+                not isinstance(x, numbers.Real) for x in endpoints):
             raise ValueError('feature_range must contain two numeric endpoints')
         try:
             values = [float(x) for x in endpoints]
         except (OverflowError, ValueError):
             raise ValueError('feature_range endpoints must be finite Float32 values') from None
-        if any(not np.isfinite(x) or abs(x) > float(np.finfo(np.float32).max) for x in values):
+        if any(not math.isfinite(x) or abs(x) > 3.4028234663852886e+38 for x in values):
             raise ValueError('feature_range endpoints must be finite Float32 values')
-        lower, upper = (np.float32(x) for x in values)
+        lower, upper = (struct.unpack("<f", struct.pack("<f", x))[0] for x in values)
         if not lower < upper:
             raise ValueError('feature_range must have lower < upper after Float32 conversion')
         return lower, upper
@@ -126,10 +131,10 @@ class MinMaxScaler(_ScalerProtocol):
         n, d = values.shape
         mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
         binding = self._binding(mode)
-        output = np.empty((5, d), dtype=np.float32)
+        output = empty((5, d), '<f4')
         binding.minmax_fit(_addr_ro(values), _addr(output),
                            [n, d, float(lower), float(upper)])
-        if not np.all(np.isfinite(output)) or np.any(output[3] <= 0):
+        if not all_finite(output) or output[3].min() <= 0:
             raise ValueError('MinMaxScaler fitted statistics overflowed or scale is not positive in Float32')
         for i, name in enumerate(('data_min_', 'data_max_', 'data_range_', 'scale_', 'min_')):
             setattr(self, name, output[i].copy())
@@ -153,18 +158,18 @@ class MinMaxScaler(_ScalerProtocol):
             raise ValueError('MinMaxScaler input feature count differs from fit')
         for name in ("scale_", "min_"):
             statistic = getattr(self, name)
-            if (not isinstance(statistic, np.ndarray) or statistic.dtype != np.dtype("float32")
-                    or statistic.shape != (d,) or not statistic.flags.c_contiguous
-                    or not np.all(np.isfinite(statistic))):
+            if (not isinstance(statistic, Array) or statistic.dtype != "<f4"
+                    or statistic.shape != (d,) or not statistic.flags["C_CONTIGUOUS"]
+                    or not all_finite(statistic)):
                 raise ValueError(f"MinMaxScaler {name} must remain a finite contiguous Float32 feature vector")
-        if np.any(self.scale_ <= 0):
+        if self.scale_.min() <= 0:
             raise ValueError("MinMaxScaler scale_ must remain positive")
-        output = np.empty(values.shape, dtype=np.float32)
+        output = empty(values.shape, '<f4')
         self._binding(self.numeric_mode_).minmax_transform(
             _addr_ro(values), _addr_ro(self.scale_), _addr_ro(self.min_), _addr(output),
             [n, d, int(inverse), int(self.clip_),
              float(self.feature_range_[0]), float(self.feature_range_[1])])
-        if not np.all(np.isfinite(output)):
+        if not all_finite(output):
             raise ValueError('MinMaxScaler transform overflowed in Float32')
         return output
 
@@ -197,9 +202,9 @@ class StandardScaler(_ScalerProtocol):
         self._configuration()
 
     def _configuration(self):
-        if not isinstance(self.copy, (bool, np.bool_)) or not self.copy:
+        if not is_bool(self.copy) or not self.copy:
             raise NotImplementedError('StandardScaler currently requires copy=True')
-        if not isinstance(self.with_mean, (bool, np.bool_)) or not isinstance(self.with_std, (bool, np.bool_)):
+        if not is_bool(self.with_mean) or not is_bool(self.with_std):
             raise ValueError('with_mean and with_std must be bools')
         if self.numeric_mode is not None and (
                 not isinstance(self.numeric_mode, str) or
@@ -216,10 +221,10 @@ class StandardScaler(_ScalerProtocol):
         values = self._input(X)
         n, d = values.shape
         mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
-        output = np.empty((3, d), dtype=np.float32)
+        output = empty((3, d), '<f4')
         self._binding(mode).standard_fit(_addr_ro(values), _addr(output),
             [n, d, int(self.with_mean), int(self.with_std)])
-        if not np.all(np.isfinite(output)) or np.any(output[1] < 0) or np.any(output[2] <= 0):
+        if not all_finite(output) or output[1].min() < 0 or output[2].min() <= 0:
             raise ValueError('StandardScaler statistics are nonfinite, variance negative, or scale nonpositive in Float32')
         self.mean_ = output[0].copy() if self.with_mean or self.with_std else None
         self.var_ = output[1].copy() if self.with_std else None
@@ -232,7 +237,7 @@ class StandardScaler(_ScalerProtocol):
         return self
 
     def _transform(self, X, inverse, copy):
-        if copy is not None and (not isinstance(copy, (bool, np.bool_)) or not copy):
+        if copy is not None and (not is_bool(copy) or not copy):
             raise NotImplementedError('StandardScaler transform currently requires copy=True or None')
         if not self.__sklearn_is_fitted__():
             try:
@@ -248,20 +253,20 @@ class StandardScaler(_ScalerProtocol):
             raise ValueError('StandardScaler mean_ is missing for a centered transform')
         if self.with_std_ and self.scale_ is None:
             raise ValueError('StandardScaler scale_ is missing for a scaled transform')
-        mean = self.mean_ if self.mean_ is not None else np.zeros(d, dtype=np.float32)
-        scale = self.scale_ if self.scale_ is not None else np.ones(d, dtype=np.float32)
+        mean = self.mean_ if self.mean_ is not None else zeros((d,), "<f4")
+        scale = self.scale_ if self.scale_ is not None else full((d,), 1, "<f4")
         for name, statistic in (('mean_', mean), ('scale_', scale)):
-            if (not isinstance(statistic, np.ndarray) or statistic.dtype != np.dtype('float32')
-                    or statistic.shape != (d,) or not statistic.flags.c_contiguous
-                    or not np.all(np.isfinite(statistic))):
+            if (not isinstance(statistic, Array) or statistic.dtype != "<f4"
+                    or statistic.shape != (d,) or not statistic.flags["C_CONTIGUOUS"]
+                    or not all_finite(statistic)):
                 raise ValueError(f'StandardScaler {name} must remain a finite contiguous Float32 feature vector')
-        if np.any(scale <= 0):
+        if scale.min() <= 0:
             raise ValueError('StandardScaler scale_ must remain positive')
-        output = np.empty(values.shape, dtype=np.float32)
+        output = empty(values.shape, '<f4')
         self._binding(self.numeric_mode_).standard_transform(
             _addr_ro(values), _addr_ro(mean), _addr_ro(scale), _addr(output),
             [n, d, int(inverse), int(self.with_mean_), int(self.with_std_)])
-        if not np.all(np.isfinite(output)):
+        if not all_finite(output):
             raise ValueError('StandardScaler transform overflowed in Float32')
         return output
 

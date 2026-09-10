@@ -4,20 +4,34 @@
 This module contains no forward/backward/update arithmetic. All numerical
 work belongs to _mojolearn_byte_lm. No learning, performance, mathematical
 correctness or cross-vendor identity claim follows from this source alone.
+
+NUMPY-FREE (numpy-free-0.7, DEVIATIONS 2428-2432). Inputs are read through
+the buffer protocol (`_buffer.view`): a NumPy array, an `array.array`, a
+`mojolearn.Array`. Every array this class hands back -- parameters,
+gradients, the state snapshot -- is a `mojolearn.Array` (`numpy.asarray`
+on it is zero-copy). THE CHECKPOINT BYTES ARE UNCHANGED: the JSON/hex
+envelope, its canonical serialization and its SHA-256 are produced from
+the same little-endian `<f4` / `<i4` bytes the NumPy spelling emitted
+(`_bufcheck.le_bytes`), so a file written by 0.6.x loads here and a file
+written here loads there, byte for byte, and the resume/compare tooling
+under tools/ reads the same file (see `save_checkpoint`).
 """
+from . import _buffer as _buffers, _bufcheck as _checks
+from ._array import Array as _Array
 import hashlib
 import json
 import math
 import operator
 import os
 from pathlib import Path
+import struct
 import tempfile
 import threading
 
-import numpy as np
-
 from . import _backend
 from ._arrays import _addr, _addr_ro
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes, full, zeros
+from ._bufcheck import flat_view, is_int32, is_native_f32, le_bytes, memcopy, probe
 from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
 
 PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
@@ -30,6 +44,8 @@ _EXTENSION = '_mojolearn_byte_lm'
 _SCHEMA = 'mojolearn.small-byte-lm-state.v1'
 _CHECKPOINT_SCHEMA = 'mojolearn.small-byte-lm-json-checkpoint.v1'
 _CHECKPOINT_LIMIT = 2 * 1024 * 1024
+#: `numpy.finfo(numpy.float32).max`, as a Python float.
+_F32_MAX = 3.4028234663852886e+38
 
 
 def _canonical(value):
@@ -73,16 +89,28 @@ def _schedule(value):
     return json.loads(encoded)
 
 
+def _is_bool(value):
+    # `bool` and NumPy's `bool_` (not a `bool` subclass), judged by name so
+    # that numpy need not be importable here.
+    return isinstance(value, bool) or type(value).__name__ == 'bool_'
+
+
+def _round_f32(value):
+    # DEVIATION 2428: `float(np.float32(value))` is one round-to-nearest-even
+    # to binary32 and back, which is exactly what `struct` does.
+    return struct.unpack('<f', struct.pack('<f', value))[0]
+
+
 def _float32(value, name):
-    if isinstance(value, (bool, np.bool_)):
+    if _is_bool(value):
         raise ValueError('Byte-LM ' + name + ' must be a finite float32 scalar')
     try:
         result = float(value)
     except (ValueError, TypeError, OverflowError) as exc:
         raise ValueError('Byte-LM ' + name + ' must be a scalar') from exc
-    if not math.isfinite(result) or abs(result) > float(np.finfo(np.float32).max):
+    if not math.isfinite(result) or abs(result) > _F32_MAX:
         raise ValueError('Byte-LM ' + name + ' must be finite float32')
-    return float(np.float32(result))
+    return _round_f32(result)
 
 
 def _configuration(lr, betas, eps, weight_decay):
@@ -100,12 +128,32 @@ def _configuration(lr, betas, eps, weight_decay):
     return dict(values, kind=2, momentum=0.0, dampening=0.0, nesterov=False, max_norm=0.0)
 
 
-def _array(value, shape, name, dtype=np.float32):
-    if not isinstance(value, np.ndarray) or value.dtype != dtype:
-        raise TypeError('Byte-LM ' + name + ' must be a NumPy ' + np.dtype(dtype).name + ' array')
-    if value.shape != shape or not np.isfinite(value).all():
+def _array(value, shape, name, dtype='<f4'):
+    """An OWNED, C-contiguous, exactly-shaped, finite copy of `value` as a
+    `mojolearn.Array` (DEVIATION 2429). The dtype is judged from the
+    buffer's format and REFUSED rather than converted, as the NumPy
+    spelling refused a dtype mismatch; `_buffer.as_f32_c` / `as_i32_c`
+    then supply the layout, and a borrowed buffer is copied so that the
+    trainer never aliases caller memory."""
+    kind = 'float32' if dtype == '<f4' else 'int32'
+    try:
+        pb = probe(value)
+    except TypeError:
+        raise TypeError('Byte-LM ' + name + ' must be a ' + kind
+                        + ' array (a NumPy array, an array.array or a mojolearn Array)') from None
+    ok = is_native_f32(pb.format) if dtype == '<f4' else is_int32(pb.format, pb.itemsize)
+    if not ok:
+        raise TypeError('Byte-LM ' + name + ' must be a ' + kind
+                        + ' array (a NumPy array, an array.array or a mojolearn Array)')
+    if pb.shape != shape:
         raise ValueError('Byte-LM ' + name + ' requires finite shape ' + repr(shape))
-    return np.array(value, dtype=dtype, order='C', copy=True)
+    convert = as_f32_c if dtype == '<f4' else as_i32_c
+    arr, copied = convert(value, ndim=len(shape), name=name)
+    if not copied:
+        arr = arr.copy()
+    if dtype == '<f4' and not all_finite(arr):
+        raise ValueError('Byte-LM ' + name + ' requires finite shape ' + repr(shape))
+    return arr
 
 
 def _parameters(value, shape=None):
@@ -114,12 +162,17 @@ def _parameters(value, shape=None):
         if set(value) != set(shape.parameter_names):
             raise ValueError('Byte-LM named parameters must contain the exact configured tensor registry')
         arrays = [_array(value[name], shape, name) for name, shape in zip(shape.parameter_names, shape.parameter_shapes)]
-        return np.concatenate([array.reshape(-1) for array in arrays])
+        flat = empty((shape.n_total,), '<f4')
+        at = 0
+        for value in arrays:
+            memcopy(addr(flat, name='parameters') + at, addr_ro(value, name='tensor'), value.nbytes)
+            at += value.nbytes
+        return flat
     return _array(value, (shape.n_total,), 'parameters')
 
 
 def _step(value):
-    if isinstance(value, (bool, np.bool_)):
+    if _is_bool(value):
         raise ValueError('Byte-LM completed_steps must be an integer')
     try:
         value = operator.index(value)
@@ -193,8 +246,8 @@ def _validate_state(value):
     parameters = _array(value['parameters'], (shape.n_total,), 'parameters')
     m = _array(value['m'], (shape.n_total,), 'm')
     v = _array(value['v'], (shape.n_total,), 'v')
-    flags = _array(value['flags'], (shape.n_tensors,), 'flags', np.int32)
-    if np.any(v < 0) or np.any((flags != 0) & (flags != 1)):
+    flags = _array(value['flags'], (shape.n_tensors,), 'flags', '<i4')
+    if any(x < 0 for x in flat_view(v, 'f')) or any(x not in (0, 1) for x in flat_view(flags, 'i')):
         raise ValueError('Byte-LM requires nonnegative second moments and binary flags')
     value = dict(value)
     if 'model_shape' in value:
@@ -281,8 +334,8 @@ class SmallByteLanguageModelTrainer:
                            parameter_names=list(shape.parameter_names),
                            parameter_shapes=[list(shape) for shape in shape.parameter_shapes],
                            parameter_offsets=list(shape.offsets), parameters=flat,
-                           m=np.zeros(shape.n_total, np.float32), v=np.zeros(shape.n_total, np.float32),
-                           flags=np.zeros(shape.n_tensors, np.int32), completed_steps=0, next_batch_index=0,
+                           m=_buffers.zeros(shape.n_total, '<f4'), v=_buffers.zeros(shape.n_total, '<f4'),
+                           flags=_buffers.zeros(shape.n_tensors, '<i4'), completed_steps=0, next_batch_index=0,
                            config=config, data_schedule=descriptor)
         if shape.profile != PROFILE:
             self._state['model_shape'] = shape.to_dict()
@@ -365,8 +418,8 @@ class SmallByteLanguageModelTrainer:
 
     def _run_impl(self, ids, train):
         shape = state_shape(self._state)
-        tokens = _array(ids, (shape.batch, shape.length + 1), 'ids', np.int32)
-        if np.any(tokens < 0) or np.any(tokens >= shape.vocab_size):
+        tokens = _array(ids, (shape.batch, shape.length + 1), 'ids', '<i4')
+        if any(x < 0 or x >= shape.vocab_size for x in flat_view(tokens, 'i')):
             raise ValueError(f'Byte-LM IDs must be in [0, {shape.vocab_size})')
         working = _validate_state(self._state)
         if train and working['completed_steps'] >= 999999:
@@ -374,15 +427,18 @@ class SmallByteLanguageModelTrainer:
         binding = self._binding()
         inputs = [working['parameters'], working['m'], working['v'], working['flags'], tokens]
         before = tuple(array.tobytes() for array in inputs)
-        out_p = np.full(shape.n_total, np.nan, np.float32)
-        out_m = np.full(shape.n_total, np.nan, np.float32)
-        out_v = np.full(shape.n_total, np.nan, np.float32)
-        out_flags = np.full(shape.n_tensors, -1, np.int32)
-        out_loss = np.full(1, np.nan, np.float32)
-        out_grad = np.full(shape.n_total, np.nan, np.float32) if train else None
+        out_p = _buffers.full(shape.n_total, float("nan"), '<f4')
+        out_m = _buffers.full(shape.n_total, float("nan"), '<f4')
+        out_v = _buffers.full(shape.n_total, float("nan"), '<f4')
+        out_flags = _buffers.full(shape.n_tensors, -1, '<i4')
+        out_loss = _buffers.full(1, float("nan"), '<f4')
+        out_grad = _buffers.full(shape.n_total, float("nan"), '<f4') if train else None
         cfg = working['config']
-        addresses = [*(_addr_ro(value) for value in inputs), _addr(out_p), _addr(out_m),
-                     _addr(out_v), _addr(out_grad) if train else 0, _addr(out_flags), _addr(out_loss)]
+        addresses = [*(addr_ro(value, name='input') for value in inputs),
+                     addr(out_p, name='out_p'), addr(out_m, name='out_m'),
+                     addr(out_v, name='out_v'),
+                     addr(out_grad, name='out_grad') if train else 0,
+                     addr(out_flags, name='out_flags'), addr(out_loss, name='out_loss')]
         parameters = [int(train), working['completed_steps'], cfg['kind'], cfg['lr'],
                       cfg['beta1'], cfg['beta2'], cfg['eps'], cfg['weight_decay'],
                       cfg['momentum'], cfg['dampening'], int(cfg['nesterov']), cfg['max_norm']]
@@ -400,13 +456,13 @@ class SmallByteLanguageModelTrainer:
         else:
             completed = binding.byte_lm_run_configured(addresses, parameters, list(shape.native_shape))
         expected = working['completed_steps'] + int(train)
-        if isinstance(completed, (bool, np.bool_)) or not isinstance(completed, (int, np.integer)) or completed != expected:
+        if _is_bool(completed) or not isinstance(completed, int) or completed != expected:
             raise RuntimeError('Byte-LM returned an invalid completed-step counter')
         # Compare one snapshot at a time: constructing a second tuple keeps
         # all three parameter-sized byte copies alive simultaneously.
         if any(saved != array.tobytes() for saved, array in zip(before, inputs)):
             raise RuntimeError('Byte-LM native call changed an input state/token buffer')
-        if not np.isfinite(out_loss).all():
+        if not all_finite(out_loss):
             raise RuntimeError('Byte-LM returned a nonfinite/unwritten loss')
         candidate = _validate_state(dict(working, parameters=out_p, m=out_m, v=out_v, flags=out_flags,
                                          completed_steps=expected, next_batch_index=expected))
@@ -443,9 +499,10 @@ class SmallByteLanguageModelTrainer:
             payload = self.state_dict()
         for key in ('parameters', 'm', 'v', 'flags'):
             value = payload[key]
-            dtype = '<i4' if key == 'flags' else '<f4'
+            integer = key == 'flags'
+            dtype = '<i4' if integer else '<f4'
             payload[key] = dict(dtype=dtype, shape=list(value.shape),
-                                hex=np.asarray(value, dtype=dtype, order='C').tobytes().hex())
+                                hex=le_bytes(value, 'i' if integer else 'f').hex())
         envelope = dict(schema=_CHECKPOINT_SCHEMA, payload=payload,
                         payload_sha256=hashlib.sha256(_canonical(payload)).hexdigest())
         encoded = _canonical(envelope) + b'\n'
@@ -512,7 +569,10 @@ class SmallByteLanguageModelTrainer:
                 raise ValueError('Byte-LM checkpoint tensor is not hexadecimal') from exc
             if len(raw) != cells * 4:
                 raise ValueError('Byte-LM checkpoint tensor byte count mismatch')
-            payload[key] = np.frombuffer(raw, dtype=dtype).astype(np.int32 if key == 'flags' else np.float32, copy=True)
+            # `np.frombuffer(raw, dtype).astype(native, copy=True)`:
+            # `_buffer.frombytes` reads the little-endian bytes into a
+            # fresh native Array (DEVIATION 2432).
+            payload[key] = frombytes(raw, dtype, (cells,))
         state = _validate_state(payload)
         cfg = state['config']
         result = cls(state['parameters'], data_schedule=state['data_schedule'], lr=cfg['lr'],

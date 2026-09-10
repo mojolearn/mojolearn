@@ -66,9 +66,23 @@ that would block every other Python thread for the whole fit for no reason:
 nothing inside touches a Python object, and the caller's arrays are kept alive
 by the wrapper on the Python side. The pattern matches mojotrees'
 `buffer_has_infinite`.
+
+FIVE HOST HELPERS WITH NO DEVICE CONTEXT (DEVIATION 2303 + 2440, 2026-09-07)
+-----------------------------------------------------------------------------
+`all_finite_f32`, `all_finite_f64`, `column_mean_f64` (DEVIATION 2303) and
+`center_columns_f32`, `scale_rows_f32` (DEVIATION 2440) at the bottom of
+this file run on the CPU over the caller's buffer and never construct a
+`DeviceContext`. They exist so the NumPy-free Python layer
+(`python/mojolearn/NUMPY_FREE_CONTRACT.md`) has somewhere other than a
+Python loop to put a per-element pass. `column_mean_f64` is the DEFINITION
+of the centering order OLS/ridge now use, and its docstring states that
+order because callers rely on it; the two elementwise helpers reproduce
+`linear_model.py`'s `_center` / `_scale_rows` operation for operation.
 """
 
 from std.os import abort
+from std.math import isfinite
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -775,6 +789,306 @@ def transpose_f32_binding(
     return PythonObject(0)
 
 
+# ===========================================================================
+# HOST HELPERS FOR THE NUMPY-FREE PYTHON LAYER (DEVIATION 2303).
+#
+# DEVIATION 2320: these three take their scalars POSITIONALLY rather than
+# in a `params` list. The list convention above exists because
+# `def_function` cannot infer an arity past roughly nine; two and four
+# arguments are well inside that, and a positional `Int(py=...)` is the
+# shape `bindings/_mojolearn_gbdt.mojo::gbdt_sigmoid_binding` already uses
+# for exactly this kind of host loop.
+#
+# None of them constructs a `DeviceContext`: the work is a single pass over
+# a host buffer. The GIL is still released around the pass (the
+# `var result: Int` / `with GILReleased(Python())` shape of
+# `knn_search_binding`) because nothing inside touches a Python object and
+# a caller scanning a million rows should not stall its other threads.
+# ===========================================================================
+
+
+def all_finite_f32_binding(
+    addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """1 if every one of the `n` float32 values at `addr` is finite, else 0
+    (DEVIATION 2322). `n == 0` is 1: an empty buffer has no non-finite
+    element. A negative `n` is refused rather than read.
+
+    NaN, +inf and -inf all fail; subnormals PASS, because they are finite
+    numbers and `isfinite` says so. This is the test
+    `bindings/_mojolearn_estimators.mojo::_pca_whiten_finite` applies,
+    one element at a time, with no SIMD width and no early-exit trick a
+    different backend could reorder: the FIRST non-finite element ends the
+    scan and the answer is the same whichever element it was.
+    """
+    var p = _f32_ptr(Int(py=addr))
+    var count = Int(py=n)
+    if count < 0:
+        raise Error(
+            "all_finite_f32: n must be non-negative, got " + String(count)
+        )
+    var ok: Int = 1
+    with GILReleased(Python()):
+        for i in range(count):
+            if not isfinite(p.unsafe_load(i)):
+                ok = 0
+                break
+    return PythonObject(ok)
+
+
+def all_finite_f64_binding(
+    addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """`all_finite_f32_binding` over float64 values (DEVIATION 2323); the
+    same rules, including subnormals passing and `n == 0` answering 1."""
+    var p = _f64_ptr(Int(py=addr))
+    var count = Int(py=n)
+    if count < 0:
+        raise Error(
+            "all_finite_f64: n must be non-negative, got " + String(count)
+        )
+    var ok: Int = 1
+    with GILReleased(Python()):
+        for i in range(count):
+            if not isfinite(p.unsafe_load(i)):
+                ok = 0
+                break
+    return PythonObject(ok)
+
+
+def column_mean_f64_binding(
+    x_addr: PythonObject,
+    rows: PythonObject,
+    cols: PythonObject,
+    out_addr: PythonObject,
+) raises -> PythonObject:
+    """Per-column mean of a C-contiguous float32 `[rows, cols]` matrix,
+    accumulated in float64 IN THIS EXACT ORDER, written to the caller's
+    float64 `out[cols]` (DEVIATION 2324). Returns 0.
+
+    THE ORDER IS THE DEFINITION. `python/mojolearn/linear_model.py` centers
+    OLS/ridge with this helper where it used NumPy's `mean(axis=0,
+    dtype=float64)`, whose blocked pairwise reduction has no defined order
+    a second implementation could reproduce. This one does, and a caller
+    checking a centering bit-for-bit reproduces it with:
+
+        acc = [0.0] * cols                      # float64 zeros
+        for r in range(rows):                   # row-major, row by row
+            for c in range(cols):               # column by column
+                acc[c] = acc[c] + float64(x[r * cols + c])
+        for c in range(cols):
+            out[c] = acc[c] / float64(rows)
+
+    Every `+` is one IEEE-754 binary64 round-to-nearest-even addition of
+    the widened float32 element onto the running column total, in row
+    order. There is NO pairwise tree, NO SIMD lane split, NO Kahan term and
+    NO fused multiply-add (there is no multiply to fuse). The float32 to
+    float64 widening is exact. A `math.fsum`-style correctly rounded sum is
+    a DIFFERENT number and is deliberately not what this computes:
+    `python/mojolearn/tests/test_native_helpers.py` plants a column whose
+    sequential total and correctly rounded total disagree, to keep anyone
+    from "fixing" this into fsum and moving every IDENTICAL OLS bit.
+
+    `rows` must be positive (a mean over zero rows is not a number this
+    helper will invent) and `cols` must be positive.
+    """
+    var xp = _f32_ptr(Int(py=x_addr))
+    var op = _f64_ptr(Int(py=out_addr))
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    if nr <= 0:
+        raise Error(
+            "column_mean_f64: rows must be positive, got " + String(nr)
+        )
+    if nc <= 0:
+        raise Error(
+            "column_mean_f64: cols must be positive, got " + String(nc)
+        )
+    with GILReleased(Python()):
+        var acc = List[Float64](length=nc, fill=Float64(0.0))
+        for r in range(nr):
+            for c in range(nc):
+                acc[c] += Float64(xp.unsafe_load(r * nc + c))
+        for c in range(nc):
+            op.unsafe_store(c, acc[c] / Float64(nr))
+    return PythonObject(0)
+
+
+# ---------------------------------------------------------------------------
+# The two elementwise helpers of DEVIATION 2440, replacing the Python loops
+# `python/mojolearn/linear_model.py` flagged as DEFECTS under DEVIATION
+# 2362 (`_center`, `_scale_rows`). Each reproduces its Python loop
+# OPERATION FOR OPERATION: widen both float32 operands to float64, one
+# binary64 operation, ONE narrowing to float32 through `Float32(...)`, which
+# is the same round-to-nearest-even the Python's `array.array('f')` item
+# setter (a C `(float)` cast) performs. That is the definition; it is not
+# "the float32 op" and it is not an approximation of it (for `-` and `*` on
+# two float32 values the two coincide, but the helper is written as the
+# Python is written so the equality is by construction, not by theorem).
+# ---------------------------------------------------------------------------
+
+
+def center_columns_f32_binding(
+    x_addr: PythonObject,
+    rows: PythonObject,
+    cols: PythonObject,
+    mean_addr: PythonObject,
+    out_addr: PythonObject,
+) raises -> PythonObject:
+    """`out[r, c] = fl32(float64(x[r, c]) - mean[c])` over a C-contiguous
+    float32 `[rows, cols]` matrix, `mean` a float64 `[cols]` buffer, `out`
+    float32 `[rows, cols]` (DEVIATION 2441). Returns 0.
+
+    THIS IS `linear_model.py::_center` (DEVIATION 2362) IN THE SAME ORDER:
+    row by row, column by column, the element widened to binary64 (exact),
+    the float64 `mean[c]` subtracted in binary64 (one round-to-nearest-even),
+    the difference narrowed to binary32 (one more). The caller passes the
+    means it already narrowed to float32 values (`_column_means` ends in
+    `_round_f32`), stored in a float64 buffer; this helper does NOT narrow
+    the mean itself, because the Python does not. Nothing here depends on
+    any other element, so `out` may alias `x`.
+
+    `rows == 0` or `cols == 0` writes nothing; negatives are refused.
+    """
+    var xp = _f32_ptr(Int(py=x_addr))
+    var mp = _f64_ptr(Int(py=mean_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    if nr < 0 or nc < 0:
+        raise Error(
+            "center_columns_f32: rows and cols must be non-negative, got "
+            + String(nr) + " x " + String(nc)
+        )
+    with GILReleased(Python()):
+        for r in range(nr):
+            for c in range(nc):
+                var d = Float64(xp.unsafe_load(r * nc + c)) - mp.unsafe_load(c)
+                op.unsafe_store(r * nc + c, Float32(d))
+    return PythonObject(0)
+
+
+def scale_rows_f32_binding(
+    x_addr: PythonObject,
+    rows: PythonObject,
+    cols: PythonObject,
+    w_addr: PythonObject,
+    out_addr: PythonObject,
+) raises -> PythonObject:
+    """`out[r, c] = fl32(float64(x[r, c]) * float64(w[r]))` over a
+    C-contiguous float32 `[rows, cols]` matrix, `w` a float32 `[rows]`
+    buffer, `out` float32 `[rows, cols]` (DEVIATION 2442). Returns 0.
+
+    THIS IS `linear_model.py::_scale_rows` (DEVIATION 2362) IN THE SAME
+    ORDER: both float32 operands widened to binary64 (exact), one binary64
+    multiply (exact too, since two 24-bit significands fit in 53), and ONE
+    narrowing to binary32. The caller's `w` is `fl32(sqrt(sample_weight))`,
+    already a float32 value; this helper takes no root and applies no
+    weight semantics, it multiplies. No FMA is possible: there is no add.
+    Nothing here depends on any other element, so `out` may alias `x`.
+
+    `rows == 0` or `cols == 0` writes nothing; negatives are refused.
+    """
+    var xp = _f32_ptr(Int(py=x_addr))
+    var wp = _f32_ptr(Int(py=w_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    if nr < 0 or nc < 0:
+        raise Error(
+            "scale_rows_f32: rows and cols must be non-negative, got "
+            + String(nr) + " x " + String(nc)
+        )
+    with GILReleased(Python()):
+        for r in range(nr):
+            var w = Float64(wp.unsafe_load(r))
+            for c in range(nc):
+                var p = Float64(xp.unsafe_load(r * nc + c)) * w
+                op.unsafe_store(r * nc + c, Float32(p))
+    return PythonObject(0)
+
+
+# NumPy-free host input validation and byte gathering. These do no learning:
+# metric arithmetic and estimator work remain in the GPU bindings.
+def probability_rows_f32_binding(
+    src_addr: PythonObject, dst_addr: PythonObject, rows: PythonObject,
+    cols: PythonObject, binary: PythonObject,
+) raises -> PythonObject:
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    var bin = Int(py=binary)
+    if nr < 0 or nc <= 0 or (bin != 0 and bin != 1):
+        raise Error("probability_rows_f32: invalid dimensions or binary flag")
+    if bin == 1 and nc != 1:
+        raise Error("probability_rows_f32: binary input must have one column")
+    if nr == 0:
+        return PythonObject(0)
+    var src = _f32_ptr(Int(py=src_addr))
+    # Multiclass validation never reads or writes dst.
+    var dst = src
+    if bin == 1:
+        dst = _f32_ptr(Int(py=dst_addr))
+    var nonfinite = False
+    var outside = False
+    var bad_sum = False
+    with GILReleased(Python()):
+        for r in range(nr):
+            var total = Float64(0)
+            for c in range(nc):
+                var p = src.unsafe_load(r * nc + c)
+                nonfinite = nonfinite or not isfinite(p)
+                outside = outside or p < 0 or p > 1
+                total += Float64(p)
+                if bin == 1:
+                    dst.unsafe_store(2 * r, Float32(1) - p)
+                    dst.unsafe_store(2 * r + 1, p)
+            # Existing NumPy validation used sqrt(Float32 epsilon), itself
+            # rounded to Float32, then widened for the Float64 comparison.
+            if bin == 0:
+                var error = total - Float64(1)
+                bad_sum = bad_sum or abs(error) > Float64(0.00034526697709225118)
+    if nonfinite:
+        return PythonObject(1)
+    if outside:
+        return PythonObject(2)
+    if bad_sum:
+        return PythonObject(3)
+    return PythonObject(0)
+
+
+def gather_rows_bytes_binding(
+    src_addr: PythonObject, dst_addr: PythonObject, indices_addr: PythonObject,
+    source_rows: PythonObject, output_rows: PythonObject, row_bytes: PythonObject,
+) raises -> PythonObject:
+    var ns = Int(py=source_rows)
+    var no = Int(py=output_rows)
+    var width = Int(py=row_bytes)
+    if ns < 0 or no < 0 or width < 0:
+        raise Error("gather_rows_bytes: dimensions must be non-negative")
+    if no == 0 or width == 0:
+        return PythonObject(0)
+    if Int(py=src_addr) == 0 or Int(py=dst_addr) == 0 or Int(py=indices_addr) == 0:
+        raise Error("gather_rows_bytes: null buffer address")
+    var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
+    var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=dst_addr))
+    var idx = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=indices_addr))
+    var invalid = False
+    with GILReleased(Python()):
+        # Validate all indices before any output mutation.
+        for r in range(no):
+            var index = Int(idx.unsafe_load(r))
+            if index < 0 or index >= ns:
+                invalid = True
+                break
+        if not invalid:
+            for r in range(no):
+                var index = Int(idx.unsafe_load(r))
+                memcpy(dest=dst + r * width, src=src + index * width, count=width)
+    if invalid:
+        raise Error("gather_rows_bytes: row index out of bounds")
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
@@ -795,6 +1109,15 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
             "cast_colmajor_f64_to_f32"
         )
         m.def_function[transpose_f32_binding]("transpose_f32")
+        # DEVIATION 2325: the three host helpers of DEVIATION 2303.
+        m.def_function[all_finite_f32_binding]("all_finite_f32")
+        m.def_function[all_finite_f64_binding]("all_finite_f64")
+        m.def_function[column_mean_f64_binding]("column_mean_f64")
+        # DEVIATION 2443: the two elementwise helpers of DEVIATION 2440.
+        m.def_function[center_columns_f32_binding]("center_columns_f32")
+        m.def_function[scale_rows_f32_binding]("scale_rows_f32")
+        m.def_function[probability_rows_f32_binding]("probability_rows_f32")
+        m.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

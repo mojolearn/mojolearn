@@ -58,11 +58,18 @@ reachable from Python. They are gated where they live, in
 """
 
 import math
-
-import numpy as np
+import numbers
+from ._buffer import _materialize, _native
+from ._labels import is_bool, flatten_labels
+from ._arrays import _addr, _addr_ro
 
 from . import _backend
-from ._arrays import _addr, _addr_ro, as_f32_c
+from ._array import Array
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i64_c, empty
+from ._labels import sorted_classes
+from .linear_model import (
+    _buffer_format, _dtype_name, _flatten, _is_integer_labels, _shape_of,
+)
 
 __all__ = [
     "accuracy_score",
@@ -119,50 +126,65 @@ def _get_binding(numeric_mode=None):
 
 
 # ---------------------------------------------------------------------------
-# Array handling. `_arrays.py` owns the 2-D float32 contract and is used for
-# X; these are its 1-D siblings, under the same rule: the returned array MUST
+# Array handling. `_buffer.py` owns the 2-D float32 contract and is used for
+# X; these are its 1-D siblings, under the same rule: the returned Array MUST
 # be kept alive in a local across the Mojo call, because the Mojo side takes
 # a raw address, borrows it, and holds nothing after the call returns.
+# NumPy-free since DEVIATION 2377: the shape and dtype questions are asked
+# of the caller's object through `_shape_of` / the buffer protocol BEFORE
+# it is converted, so every message below keeps its wording.
 # ---------------------------------------------------------------------------
 
 
-def _as_i32_1d(x, name):
-    a = np.asarray(x)
-    if a.ndim == 2 and a.shape[1] == 1:
-        a = a.ravel()
-    if a.ndim != 1:
+def _vector_shape(x, name):
+    """`(n, column)`: the length of a 1-D input, or of an `(n, 1)` column,
+    which is accepted and flattened as before; every other shape refused."""
+    shape = _shape_of(x)
+    column = len(shape) == 2 and shape[1] == 1
+    if len(shape) != 1 and not column:
         raise ValueError(
-            f"mojolearn metrics: {name} must be 1-D, got shape {a.shape}"
+            f"mojolearn metrics: {name} must be 1-D, got shape {shape}"
         )
-    if a.size == 0:
+    if shape[0] == 0:
         raise ValueError(f"mojolearn metrics: {name} is empty")
-    if not np.issubdtype(a.dtype, np.integer):
+    return shape, column
+
+
+def _is_float64(x):
+    """`numpy.asarray(x).dtype == numpy.float64`: a buffer of format 'd', or a
+    list/tuple with a Python float among its leaves (NumPy made float64 of
+    that too)."""
+    fmt = _buffer_format(x)
+    if fmt is not None:
+        return fmt == "d"
+    return any(type(v) is float for v in _flatten(x))
+
+
+def _as_i32_1d(x, name):
+    shape, column = _vector_shape(x, name)
+    if not _is_integer_labels(x):
         raise ValueError(
             f"mojolearn metrics: {name} must be an integer label array, got "
-            f"dtype {a.dtype}; the implemented kernels take int32 labels"
+            f"{_dtype_name(x)}; the ported kernels take int32 labels"
         )
-    out = np.ascontiguousarray(a, dtype=np.int32)
-    if not np.array_equal(out.astype(a.dtype, copy=False), a):
+    a, _ = as_i64_c(x, ndim=len(shape), name=name)
+    if column:
+        a = a.reshape((shape[0],))
+    if a.min() < -(1 << 31) or a.max() > (1 << 31) - 1:
         raise ValueError(
             f"mojolearn metrics: {name} does not fit in int32; the implemented "
             "kernels are the int32 instantiation (the int64 overload of "
             "adjusted_rand_index is the same code at a wider type and is "
             "not instantiated, metrics/NOT_IMPLEMENTED.tsv)"
         )
-    return out
+    # int64 -> int32 is `array.array`'s C item loop (`Array.astype`), exact
+    # after the range check above; no Python loop.
+    return a.astype("<i4")
 
 
 def _as_f32_1d(x, name, *, require_finite=True):
-    a = np.asarray(x)
-    if a.ndim == 2 and a.shape[1] == 1:
-        a = a.ravel()
-    if a.ndim != 1:
-        raise ValueError(
-            f"mojolearn metrics: {name} must be 1-D, got shape {a.shape}"
-        )
-    if a.size == 0:
-        raise ValueError(f"mojolearn metrics: {name} is empty")
-    if a.dtype == np.float64:
+    shape, column = _vector_shape(x, name)
+    if _is_float64(x):
         # Named rather than silent: cuML has a float64 overload of r2_score,
         # kl_divergence and silhouette_score and this implementation does not, because
         # Apple's GPU has no float64 (mojolearn-hardware-limits). The cast is
@@ -174,8 +196,10 @@ def _as_f32_1d(x, name, *, require_finite=True):
             "(no float64 on this GPU). Cast to float32 yourself so the "
             "precision you run at is the one you chose."
         )
-    out = np.ascontiguousarray(a, dtype=np.float32)
-    if require_finite and not np.isfinite(out).all():
+    out, _ = as_f32_c(x, ndim=len(shape), name=name)
+    if column:
+        out = out.reshape((shape[0],))
+    if require_finite and not all_finite(out):
         raise ValueError(
             f"mojolearn metrics: {name} contains NaN or infinity; refused "
             "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
@@ -217,10 +241,16 @@ def _prepare_cluster_labels(labels_true, labels_pred):
             f"mojolearn metrics: labels_true has {yt.shape[0]} entries and "
             f"labels_pred has {yp.shape[0]}; they must be the same length"
         )
-    classes = np.unique(np.concatenate([np.unique(yt), np.unique(yp)]))
-    yt = np.ascontiguousarray(np.searchsorted(classes, yt), dtype=np.int32)
-    yp = np.ascontiguousarray(np.searchsorted(classes, yp), dtype=np.int32)
-    return yt, yp, int(yt.shape[0]), 0, int(len(classes) - 1)
+    # `np.unique` of the union, then `np.searchsorted`: the package-wide
+    # order rule (`_labels.sorted_classes`, DEVIATION 2340) over the
+    # concatenation and a dict lookup, O(rows) label loops (DEVIATION 2377).
+    tl = yt.tolist()
+    pl = yp.tolist()
+    classes, _ = sorted_classes(tl + pl)
+    index = {c: i for i, c in enumerate(classes)}
+    yt = Array.from_list([index[v] for v in tl], "<i4")
+    yp = Array.from_list([index[v] for v in pl], "<i4")
+    return yt, yp, len(tl), 0, len(classes) - 1
 
 
 # ===========================================================================
@@ -301,7 +331,7 @@ def rand_score(labels_true, labels_pred):
     # n
     return float(
         _get_binding().rand_score(
-            _addr_ro(yt), _addr_ro(yp), [int(yt.shape[0])]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [int(yt.shape[0])]
         )
     )
 
@@ -329,7 +359,7 @@ def adjusted_rand_score(labels_true, labels_pred):
     # n
     return float(
         _get_binding().adjusted_rand_score(
-            _addr_ro(yt), _addr_ro(yp), [int(yt.shape[0])]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [int(yt.shape[0])]
         )
     )
 
@@ -368,7 +398,7 @@ def entropy(clustering, *, base=None):
     # n, lower_class_range, upper_class_range
     value = float(
         _get_binding().entropy(
-            _addr_ro(lab), [int(lab.shape[0]), lower, upper]
+            addr_ro(lab, name="lab"), [int(lab.shape[0]), lower, upper]
         )
     )
     if base is not None:
@@ -408,7 +438,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
     # n, lower_class_range, upper_class_range
     return float(
         _get_binding().mutual_info_score(
-            _addr_ro(yt), _addr_ro(yp), [n, lower, upper]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
         )
     )
 
@@ -426,7 +456,7 @@ def homogeneity_score(labels_true, labels_pred):
     # n, lower_class_range, upper_class_range
     return float(
         _get_binding().homogeneity_score(
-            _addr_ro(yt), _addr_ro(yp), [n, lower, upper]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
         )
     )
 
@@ -450,7 +480,7 @@ def completeness_score(labels_true, labels_pred):
     # n, lower_class_range, upper_class_range
     return float(
         _get_binding().completeness_score(
-            _addr_ro(yt), _addr_ro(yp), [n, lower, upper]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
         )
     )
 
@@ -471,7 +501,7 @@ def v_measure_score(labels_true, labels_pred, *, beta=1.0):
     # n, lower_class_range, upper_class_range, beta
     return float(
         _get_binding().v_measure_score(
-            _addr_ro(yt), _addr_ro(yp), [n, lower, upper, float(beta)]
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper, float(beta)]
         )
     )
 
@@ -567,8 +597,10 @@ def r2_score(
 
 
 def _as_regression_f32_1d(x, name):
-    a = np.asarray(x)
-    if a.dtype != np.dtype("float32"):
+    if _buffer_format(x) != "f":
+        raise TypeError(f"mojolearn regression metrics: {name} must have dtype float32; cast explicitly before scoring")
+    a = _materialize(x, "input")[0]
+    if a.dtype != "<f4":
         raise TypeError(
             f"mojolearn regression metrics: {name} must have dtype float32, "
             f"got {a.dtype}; cast explicitly before scoring"
@@ -658,7 +690,7 @@ def kl_divergence(P, Q):
     """
     p, q = _pair_1d(P, Q, "P", "Q", _as_f32_1d)
     for name, arr in (("P", p), ("Q", q)):
-        if (arr < 0).any():
+        if arr.min() < 0:
             raise ValueError(
                 f"mojolearn kl_divergence: {name} has a negative entry; "
                 "refused here (metrics/README.md HAND-OFF ask 3) rather "
@@ -668,7 +700,7 @@ def kl_divergence(P, Q):
     # n
     return float(
         _get_binding().kl_divergence(
-            _addr_ro(p), _addr_ro(q), [int(p.shape[0])]
+            addr_ro(p, name="p"), addr_ro(q, name="q"), [int(p.shape[0])]
         )
     )
 
@@ -690,8 +722,8 @@ def _silhouette(X, labels, metric, chunksize, caller):
             "'cosine', 'l1', 'manhattan' and 'sqeuclidean' are other "
             "distance kernels and are not in metrics/ (NOT_IMPLEMENTED.tsv)"
         )
-    x, _copied = as_f32_c(X, "X")
-    if not np.isfinite(x).all():
+    x, _copied = as_f32_c(X, ndim=2, name="X")
+    if not all_finite(x):
         raise ValueError(
             f"mojolearn {caller}: X contains NaN or infinity; refused here "
             "(metrics/README.md HAND-OFF ask 3), because a NaN distance "
@@ -705,23 +737,24 @@ def _silhouette(X, labels, metric, chunksize, caller):
         )
     # cuML's silhouette_score.pyx:99-101, mirrored: monotonic labels via
     # cp.unique(..., return_inverse=True), and n_labels is how many distinct
-    # labels there are.
-    unique_labels, inverse = np.unique(lab, return_inverse=True)
-    mapped = np.ascontiguousarray(inverse, dtype=np.int32)
-    n_labels = int(unique_labels.shape[0])
+    # labels there are. `_labels.sorted_classes` (DEVIATION 2340) gives
+    # both in one O(rows) pass (DEVIATION 2377).
+    unique_labels, codes = sorted_classes(lab.tolist())
+    mapped = Array.from_list(codes, "<i4")
+    n_labels = len(unique_labels)
     chunk = 40000 if chunksize is None else int(chunksize)
     if chunk < 1:
         raise ValueError(
             f"mojolearn {caller}: chunksize must be at least 1, got {chunk}"
         )
-    scores = np.empty(x.shape[0], dtype=np.float32)
+    scores = empty((x.shape[0],), "<f4")
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::silhouette_binding.
     # n_rows, n_cols, n_labels, chunksize
     mean = float(
         _get_binding().silhouette(
-            _addr_ro(x),
-            _addr_ro(mapped),
-            _addr(scores),
+            addr_ro(x, name="x"),
+            addr_ro(mapped, name="mapped"),
+            addr(scores, name="scores"),
             [int(x.shape[0]), int(x.shape[1]), n_labels, chunk],
         )
     )
@@ -744,7 +777,7 @@ def silhouette_score(
         X          honored   2-D float32 row-major, finite. float64 is
                              refused by name (no float64 on this GPU).
         labels     honored   any integer labels; they are mapped onto
-                             [0, n_labels - 1] with np.unique here, exactly
+                             [0, n_labels - 1] by a host sort here, exactly
                              as cuML's silhouette_score.pyx does. The kernel
                              asserts 2 <= n_labels <= n_rows - 1 and refuses
                              otherwise by name.
@@ -838,15 +871,15 @@ def trustworthiness(
             "'euclidean' is implemented, and cuML's trustworthiness.pyx:86 "
             "refuses every other name too"
         )
-    x, _cx = as_f32_c(X, "X")
-    emb, _ce = as_f32_c(X_embedded, "X_embedded")
+    x, _cx = as_f32_c(X, ndim=2, name="X")
+    emb, _ce = as_f32_c(X_embedded, ndim=2, name="X_embedded")
     if x.shape[0] != emb.shape[0]:
         raise ValueError(
             f"mojolearn trustworthiness: X has {x.shape[0]} rows and "
             f"X_embedded has {emb.shape[0]}"
         )
     for name, arr in (("X", x), ("X_embedded", emb)):
-        if not np.isfinite(arr).all():
+        if not all_finite(arr):
             raise ValueError(
                 f"mojolearn trustworthiness: {name} contains NaN or "
                 "infinity; refused here (metrics/README.md HAND-OFF ask 3)"
@@ -860,8 +893,8 @@ def trustworthiness(
     # n, m, d, n_neighbors, batch_size
     return float(
         _get_binding().trustworthiness(
-            _addr_ro(x),
-            _addr_ro(emb),
+            addr_ro(x, name="x"),
+            addr_ro(emb, name="emb"),
             [
                 int(x.shape[0]),
                 int(x.shape[1]),
@@ -878,15 +911,15 @@ def trustworthiness(
 # confusion counts, ratios and averaging are computed by the GPU binding.
 # ---------------------------------------------------------------------------
 def _classification_labels(values, name, *, allow_empty=False):
-    array = np.asarray(values, dtype=object)
-    if array.ndim != 1:
+    shape = _shape_of(values)
+    if len(shape) != 1:
         raise ValueError(f"{name} must be one-dimensional single-label data")
-    if not allow_empty and array.size == 0:
+    labels = flatten_labels(values)
+    if not allow_empty and not labels:
         raise ValueError(f"{name} must contain at least one label")
-    labels = array.tolist()
-    if all(isinstance(v, (str, np.str_)) for v in labels):
+    if all(isinstance(v, str) for v in labels):
         return [str(v) for v in labels], "string"
-    if all(isinstance(v, (int, np.integer, bool, np.bool_)) for v in labels):
+    if all(isinstance(v, numbers.Integral) or is_bool(v) for v in labels):
         return [int(v) for v in labels], "integer"
     raise TypeError(f"{name} must contain only strings or only integers; "
                     "floating labels, missing labels and mixed types are unsupported")
@@ -901,7 +934,7 @@ def _classification_pair(y_true, y_pred, sample_weight):
         raise ValueError("y_true and y_pred lengths differ")
     if kind != pred_kind:
         raise TypeError("y_true and y_pred must use the same label type")
-    if len(true) > np.iinfo(np.int32).max:
+    if len(true) > 2147483647:
         raise ValueError("classification counts require at most INT32_MAX rows")
     return true, pred, kind, sorted(set(true) | set(pred))
 
@@ -922,7 +955,7 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     """
     if sample_weight is not None:
         raise NotImplementedError("log_loss does not yet support sample_weight")
-    if not isinstance(normalize, (bool, np.bool_)):
+    if not is_bool(normalize):
         raise ValueError("normalize must be a bool")
     true, kind = _classification_labels(y_true, "y_true")
     selected = _selected_labels(labels, kind, sorted(set(true)))
@@ -931,34 +964,37 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     mapping = {label: i for i, label in enumerate(selected)}
     if any(label not in mapping for label in true):
         raise ValueError("y_true contains a label missing from labels")
-    probabilities = np.asarray(y_pred)
-    if probabilities.dtype != np.dtype("float32"):
+    probabilities = _materialize(y_pred, "input")[0]
+    if probabilities.dtype != "<f4":
         raise TypeError("log_loss probabilities must have dtype float32")
     if probabilities.ndim not in (1, 2):
         raise ValueError("log_loss probabilities must have shape (n,), (n,1) or (n,k)")
     if probabilities.shape[0] != len(true):
         raise ValueError("y_true and probability row counts differ")
-    if not np.all(np.isfinite(probabilities)):
-        raise ValueError("log_loss probabilities must be finite")
-    if np.any(probabilities < 0) or np.any(probabilities > 1):
-        raise ValueError("log_loss probabilities must lie in [0,1]")
     binary = probabilities.ndim == 1 or probabilities.shape[1] == 1
     if binary:
         if len(selected) != 2:
             raise ValueError("one-column probabilities require exactly two labels")
-        positive = probabilities.reshape(-1)
-        probabilities = np.column_stack((np.float32(1) - positive, positive))
     elif probabilities.shape[1] < 2 or probabilities.shape[1] != len(selected):
         raise ValueError("probability columns must match the label count (at least two)")
-    if len(true) > np.iinfo(np.int32).max or probabilities.size > np.iinfo(np.int32).max:
+    if len(true) > 2147483647 or probabilities.size > 2147483647 or (binary and 2 * len(true) > 2147483647):
         raise ValueError("log_loss exceeds the native Int32 indexing bound")
-    # Host Float64 sums are validation only, not the metric's reduction.
-    tolerance = float(np.sqrt(np.finfo(np.float32).eps))
-    if np.any(np.abs(np.sum(probabilities, axis=1, dtype=np.float64) - 1) > tolerance):
-        raise ValueError("log_loss probability rows must sum to one within sqrt(float32 eps)")
-    encoded = np.asarray([mapping[label] for label in true], dtype=np.int32)
-    probabilities = np.ascontiguousarray(probabilities)
-    result = np.empty(1, dtype=np.float32)
+    probabilities = as_f32_c(probabilities, ndim=probabilities.ndim, name="probabilities")[0]
+    packed = empty((len(true), 2), "<f4") if binary else None
+    validate = _native("probability_rows_f32")
+    if validate is None:
+        raise RuntimeError("rebuild the base binding for NumPy-free probability validation")
+    code = int(validate(_addr_ro(probabilities), _addr(packed) if binary else 0,
+                        len(true), 1 if binary else len(selected), int(binary)))
+    if code:
+        reasons = {1: "must be finite", 2: "must lie in [0,1]",
+                   3: "rows must sum to one within sqrt(float32 eps)"}
+        raise ValueError("log_loss probabilities " + reasons.get(code, "failed native validation"))
+    if binary:
+        probabilities = packed
+    encoded = Array.from_list([mapping[label] for label in true], '<i4')
+    probabilities = as_f32_c(probabilities, ndim=probabilities.ndim, name="probabilities")[0]
+    result = empty(1, '<f4')
     _get_binding(numeric_mode).log_loss(
         _addr_ro(encoded), _addr_ro(probabilities), _addr(result),
         [len(true), len(selected), int(normalize)])
@@ -973,16 +1009,16 @@ def _binary_ranking_inputs(y_true, y_score, sample_weight):
     classes = sorted(set(true))
     if len(classes) > 2:
         raise ValueError("binary ranking metrics support at most two observed classes")
-    scores = np.asarray(y_score)
-    if scores.dtype != np.dtype("float32"):
+    scores = _materialize(y_score, "input")[0]
+    if scores.dtype != "<f4":
         raise TypeError("binary ranking scores must have dtype float32")
     if scores.ndim != 1 or len(scores) != len(true):
         raise ValueError("binary ranking scores must be one-dimensional with the same length as y_true")
-    if not np.all(np.isfinite(scores)):
+    if not all_finite(scores):
         raise ValueError("binary ranking scores must be finite")
-    if len(true) > np.iinfo(np.int32).max:
+    if len(true) > 2147483647:
         raise ValueError("binary ranking metrics exceed the native Int32 indexing bound")
-    return true, kind, classes, np.ascontiguousarray(scores)
+    return true, kind, classes, as_f32_c(scores, ndim=scores.ndim, name="scores")[0]
 
 
 def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
@@ -999,14 +1035,14 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     if average != "macro" or multi_class != "raise" or labels is not None:
         raise NotImplementedError("roc_auc_score currently supports binary defaults "
                                   "average='macro', multi_class='raise', labels=None only")
-    if max_fpr is not None and (isinstance(max_fpr, (bool, np.bool_)) or
-            not isinstance(max_fpr, (int, float, np.integer, np.floating)) or max_fpr != 1):
+    if max_fpr is not None and (is_bool(max_fpr) or
+            not isinstance(max_fpr, numbers.Real) or max_fpr != 1):
         raise NotImplementedError("roc_auc_score supports only full AUC (max_fpr=None or 1)")
     true, _, classes, scores = _binary_ranking_inputs(y_true, y_score, sample_weight)
     if len(classes) != 2:
         raise ValueError("roc_auc_score requires both positive and negative classes")
-    encoded = np.asarray([int(v == classes[1]) for v in true], dtype=np.int32)
-    result = np.empty(1, dtype=np.float32)
+    encoded = Array.from_list([int(v == classes[1]) for v in true], '<i4')
+    result = empty(1, '<f4')
     _get_binding(numeric_mode).roc_auc_score(
         _addr_ro(encoded), _addr_ro(scores), _addr(result), [len(true)])
     return float(result[0])
@@ -1025,7 +1061,7 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
     All three output arrays are Float32. Scores must be finite, not necessarily
     probabilities; no CPU sorting or metric reduction is used.
     """
-    if not isinstance(drop_intermediate, (bool, np.bool_)):
+    if not is_bool(drop_intermediate):
         raise ValueError("drop_intermediate must be a bool")
     if drop_intermediate:
         raise NotImplementedError("precision_recall_curve does not yet support drop_intermediate=True")
@@ -1039,11 +1075,11 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
         if kind != positive_kind:
             raise ValueError("pos_label must use the same type as y_true")
         positive = values[0]
-    encoded = np.asarray([int(v == positive) for v in true], dtype=np.int32)
+    encoded = Array.from_list([int(v == positive) for v in true], '<i4')
     n = len(true)
-    precision = np.empty(n + 1, dtype=np.float32)
-    recall = np.empty(n + 1, dtype=np.float32)
-    thresholds = np.empty(n, dtype=np.float32)
+    precision = empty(n + 1, '<f4')
+    recall = empty(n + 1, '<f4')
+    thresholds = empty(n, '<f4')
     size = int(_get_binding(numeric_mode).precision_recall_curve(
         _addr_ro(encoded), _addr_ro(scores), _addr(precision), _addr(recall),
         _addr(thresholds), [n]))
@@ -1069,8 +1105,8 @@ def _selected_labels(labels, kind, observed):
 
 def _encode_classification(true, pred, labels):
     mapping = {label: i for i, label in enumerate(labels)}
-    return (np.asarray([mapping.get(v, -1) for v in true], dtype=np.int32),
-            np.asarray([mapping.get(v, -1) for v in pred], dtype=np.int32))
+    return (Array.from_list([mapping.get(v, -1) for v in true], '<i4'),
+            Array.from_list([mapping.get(v, -1) for v in pred], '<i4'))
 
 
 def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
@@ -1096,8 +1132,7 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
         raise ValueError("confusion_matrix supports at most 4096 output labels")
     yt, yp = _encode_classification(true, pred, selected)
     norm = {None: 0, "true": 1, "pred": 2, "all": 3}[normalize]
-    result = np.empty((len(selected), len(selected)),
-                      dtype=np.int64 if norm == 0 else np.float32)
+    result = empty((len(selected), len(selected)), "<i8" if norm == 0 else "<f4")
     _get_binding(numeric_mode).confusion_matrix(
         _addr_ro(yt), _addr_ro(yp), _addr(result), [len(true), len(selected), norm])
     return result
@@ -1109,8 +1144,8 @@ def _precision_recall_fscore(y_true, y_pred, *, labels, pos_label, average,
     if average is not None and (not isinstance(average, str) or average not in averages):
         raise ValueError("average must be 'binary', 'micro', 'macro', 'weighted' or None")
     warn = isinstance(zero_division, str) and zero_division == "warn"
-    if not warn and (isinstance(zero_division, (bool, np.bool_)) or
-                     not isinstance(zero_division, (int, float, np.integer, np.floating)) or
+    if not warn and (is_bool(zero_division) or
+                     not isinstance(zero_division, numbers.Real) or
                      zero_division not in (0, 1)):
         raise ValueError("zero_division must be 'warn', 0 or 1")
     true, pred, kind, observed = _classification_pair(y_true, y_pred, sample_weight)
@@ -1139,7 +1174,7 @@ def _precision_recall_fscore(y_true, y_pred, *, labels, pos_label, average,
         raise ValueError("classification metrics exceed the native class-index bound")
     yt, yp = _encode_classification(true, pred, all_labels)
     width = selected_count if average is None else 1
-    output = np.empty(3 * width + 3, dtype=np.float32)
+    output = empty(3 * width + 3, '<f4')
     _get_binding(numeric_mode).precision_recall_fscore(
         _addr_ro(yt), _addr_ro(yp), _addr(output),
         [len(true), len(all_labels), averages[average], positive,

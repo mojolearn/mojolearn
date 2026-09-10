@@ -39,8 +39,11 @@ def trainer():
 def state_digest(model):
     state = model.state_dict()
     for key in ('parameters', 'm', 'v', 'flags'):
-        state[key] = {'dtype': state[key].dtype.str, 'shape': state[key].shape,
-                      'hex': state[key].tobytes().hex()}
+        # DEVIATION 2460: state buffers are mojolearn.Array; the typestr read
+        # through np.asarray is the same '<f4' / '<u1' string as before.
+        value = np.asarray(state[key])
+        state[key] = {'dtype': value.dtype.str, 'shape': value.shape,
+                      'hex': value.tobytes().hex()}
     return hashlib.sha256(impl._canonical(state)).hexdigest()
 
 
@@ -162,8 +165,10 @@ def test_train_copies_inputs_and_returns_all_preupdate_gradients(host):
     assert model.step_ == 1
     np.testing.assert_array_equal(model.parameters_, np.ones(34944, np.float32))
     assert tokens.tobytes() == before
-    result['flat_gradients'][:] = 900
-    result['gradients']['embed'][:] = 800
+    # DEVIATION 2460: returned gradients are mojolearn.Array; np.asarray is
+    # a zero-copy writable view, so the isolation check is the same as before.
+    np.asarray(result['flat_gradients'])[:] = 900
+    np.asarray(result['gradients']['embed'])[:] = 800
     np.testing.assert_array_equal(model.parameters_, np.ones(34944, np.float32))
 
 
@@ -209,10 +214,10 @@ def test_state_load_snapshot_isolation_and_cursor_validation(host):
     state = model.state_dict()
     clone = trainer().load_state_dict(state)
     assert state_digest(model) == state_digest(clone)
-    state['parameters'][:] = 7
-    state['m'][:] = 8
-    state['v'][:] = 9
-    state['flags'][:] = 0
+    np.asarray(state['parameters'])[:] = 7  # DEVIATION 2460: zero-copy views
+    np.asarray(state['m'])[:] = 8
+    np.asarray(state['v'])[:] = 9
+    np.asarray(state['flags'])[:] = 0
     state['data_schedule']['batch_offsets'][0] = 99
     assert state_digest(model) == state_digest(clone)
     invalid = clone.state_dict()
@@ -334,8 +339,8 @@ def test_configuration_refuses_before_gpu(host, options):
 def test_bad_state_refuses_transactionally_before_gpu(host):
     model = trainer()
     before = state_digest(model)
-    for mutate in (lambda state: state['v'].__setitem__(0, -1),
-                   lambda state: state['flags'].__setitem__(0, 2),
+    for mutate in (lambda state: np.asarray(state['v']).__setitem__(0, -1),  # DEVIATION 2460
+                   lambda state: np.asarray(state['flags']).__setitem__(0, 2),
                    lambda state: state['config'].__setitem__('max_norm', 1),
                    lambda state: state.__setitem__('m', np.zeros(1, np.float32)),
                    lambda state: state.__setitem__('completed_steps', True)):

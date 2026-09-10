@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""CatBoost-compatible tree inspection using authoritative archive bits."""
+"""CatBoost-compatible tree inspection using authoritative archive bits.
+
+DEVIATION 2460: inspection returns `mojolearn.Array`; the bit and dtype
+checks go through `np.asarray` (zero-copy) and are otherwise unchanged.
+"""
 import numpy as np
 import pytest
 
@@ -20,11 +24,11 @@ def test_tree_values_recover_bits_and_preserve_leaf_dimension_order(record):
                 "leaf 0 0 ignored/80000000\nleaf 0 1 ignored/00000001\n"
                 "leaf 0 2 ignored/3f800001\nleaf 0 3 ignored/bf800001\n")
     counts = obj.get_tree_leaf_counts()
-    assert counts.dtype == np.uint32
+    assert np.asarray(counts).dtype == np.uint32
     np.testing.assert_array_equal(counts, [2])
     values = obj.get_leaf_values()
-    assert values.dtype == np.float64
-    np.testing.assert_array_equal(values.astype(np.float32).view(np.uint32),
+    assert np.asarray(values).dtype == np.float64
+    np.testing.assert_array_equal(np.asarray(values).astype(np.float32).view(np.uint32),
                                   [0x80000000, 1, 0x3f800001, 0xbf800001])
 
 

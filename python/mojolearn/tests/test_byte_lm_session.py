@@ -73,7 +73,7 @@ def test_invalid_restore_preserves_live_session(host):
     trainer = model()
     trainer.train_step(ids())
     state = trainer.state_dict()
-    state['v'][0] = -1
+    np.asarray(state['v'])[0] = -1
     with pytest.raises(ValueError):
         trainer.load_state_dict(state)
     assert closed == []

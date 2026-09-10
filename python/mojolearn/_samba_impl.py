@@ -23,13 +23,16 @@ The tensor registry, in order, is the clip's cross-tensor summation order:
     lm_head.weight            only when tie_embeddings is False
 """
 
+from . import _buffer as _buffers, _bufcheck as _checks
+from ._array import Array as _Array
 import hashlib
 import json
 import os
 from pathlib import Path
 import tempfile
 
-import numpy as np
+import math
+from ._training_impl import _round_f32
 
 from . import _backend
 from . import _training_impl as T
@@ -75,8 +78,8 @@ class SambaConfig(object):
         self.head_dim = None if head_dim is None else int(head_dim)
         self.intermediate = None if intermediate is None else int(intermediate)
         self.tie_embeddings = bool(tie_embeddings)
-        self.norm_eps = float(np.float32(norm_eps))
-        self.dropout = float(np.float32(dropout))
+        self.norm_eps = float(_round_f32(norm_eps))
+        self.dropout = float(_round_f32(dropout))
         if self.vocab < 2 or self.d_model < 1 or not self.layers:
             raise ValueError("mojolearn.SambaConfig: vocab >= 2, d_model >= 1 "
                              "and at least one layer are required")
@@ -172,7 +175,7 @@ def _init_tensor(gen, name, shape):
         return gen.kaiming_uniform(shape, fan_in=shape[1])
     if last == "dt_bias":
         return gen.uniform(shape, -4.0, -2.0)
-    return np.ones(shape, dtype=np.float32)
+    return _buffers.full(shape, 1.0, '<f4')
 
 
 class SambaStack(object):
@@ -209,18 +212,18 @@ class SambaStack(object):
         self.shapes = {n: tuple(s) for n, s in config.registry()}
         self.offsets = [0]
         for n in self.names:
-            self.offsets.append(self.offsets[-1] + int(np.prod(self.shapes[n])))
+            self.offsets.append(self.offsets[-1] + int(math.prod(self.shapes[n])))
         self.n_total = self.offsets[-1]
-        self.flat = np.zeros(self.n_total, dtype=np.float32)
+        self.flat = _buffers.zeros(self.n_total, '<f4')
         self.arrays = {}
         for j, n in enumerate(self.names):
-            self.arrays[n] = self.flat[self.offsets[j]:self.offsets[j + 1]].reshape(self.shapes[n])
+            self.arrays[n] = _Array.from_buffer(_checks.flat_view(self.flat, 'f')[self.offsets[j]:self.offsets[j + 1]]).reshape(self.shapes[n])
         self.generator = generator if generator is not None else T.Generator(0, numeric_mode)
         if weights is not None:
             self.load_weights(weights)
         else:
             for n in self.names:
-                self.arrays[n][...] = _init_tensor(self.generator, n, self.shapes[n])
+                _checks.flat_view(self.arrays[n], 'f')[:] = _checks.flat_view(_init_tensor(self.generator, n, self.shapes[n]), 'f')
         self.max_norm = None if max_norm is None else float(max_norm)
         self.optimizer = T.AdamW([self.arrays[n] for n in self.names], lr=lr,
                                  betas=betas, eps=eps, weight_decay=weight_decay,
@@ -239,16 +242,18 @@ class SambaStack(object):
             raise ValueError("mojolearn.SambaStack: weight dict mismatch; "
                              "missing %r, unknown %r" % (missing, extra))
         for n in self.names:
-            a = np.asarray(weights[n])
-            if a.dtype != np.float32:
+            a = weights[n]
+            pb = _checks.probe(a)
+            if not _checks.is_native_f32(pb.format):
                 raise TypeError("mojolearn.SambaStack: %s has dtype %s; float32 only"
-                                % (n, a.dtype))
-            if a.shape != self.shapes[n]:
+                                % (n, pb.format))
+            if pb.shape != self.shapes[n]:
                 raise ValueError("mojolearn.SambaStack: %s has shape %r, want %r"
-                                 % (n, a.shape, self.shapes[n]))
-            if not np.isfinite(a).all():
+                                 % (n, pb.shape, self.shapes[n]))
+            a = _buffers.as_f32_c(a, ndim=None, name=n)[0]
+            if not _buffers.all_finite(a):
                 raise ValueError("mojolearn.SambaStack: %s is not finite" % n)
-            self.arrays[n][...] = a
+            _checks.flat_view(self.arrays[n], 'f')[:] = _checks.flat_view(a, 'f')
 
     def parameters(self):
         """The registry as `{name: array}` (views of the flat buffer)."""
@@ -271,10 +276,10 @@ class SambaStack(object):
     # -- forward ------------------------------------------------------------
     @staticmethod
     def _ids(x, what):
-        x = np.asarray(x)
-        if x.ndim != 2 or x.dtype.kind not in "iu":
+        pb = _checks.probe(x)
+        if len(pb.shape) != 2 or not _checks.is_integer(pb.format):
             raise ValueError("mojolearn.SambaStack: %s must be (B, L) integer ids" % what)
-        return np.ascontiguousarray(x, dtype=np.int32)
+        return _buffers.as_i32_c(x, ndim=2, name=what)[0]
 
     def _forward(self, inputs, dropout_stream=None, token_offset=0):
         """The forward with every block input kept for the backward."""
@@ -284,7 +289,7 @@ class SambaStack(object):
         if ids.min() < 0 or ids.max() >= c.vocab:
             raise ValueError("mojolearn.SambaStack: inputs must be in [0, vocab)")
         x = T.embedding_forward(self.arrays["embed.weight"], ids.reshape(-1),
-                                self.numeric_mode).reshape(b, l, c.d_model)
+                                self.numeric_mode).reshape((b, l, c.d_model))
         key = None
         if c.dropout > 0.0 and dropout_stream is not None:
             x, key = self.generator.dropout(x, c.dropout,
@@ -296,7 +301,7 @@ class SambaStack(object):
             x = self._block(i).forward(x)
         hn = T.rms_norm_forward(x, self.arrays["norm_f.weight"], c.norm_eps,
                                 self.numeric_mode)
-        logits = T.linear_forward(hn.reshape(b * l, c.d_model),
+        logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
                                   self._head_weight(), self.numeric_mode)
         return {"ids": ids, "key": key, "xs": xs, "h": x, "hn": hn,
                 "logits": logits}
@@ -305,7 +310,7 @@ class SambaStack(object):
         """`(B, L)` ids in, `(B, L, vocab)` float32 logits out, no dropout."""
         acts = self._forward(inputs)
         b, l = acts["ids"].shape
-        return acts["logits"].reshape(b, l, self.config.vocab)
+        return acts["logits"].reshape((b, l, self.config.vocab))
 
     def loss(self, inputs, targets):
         """Mean cross-entropy over the targets (no dropout, no gradient)."""
@@ -340,17 +345,17 @@ class SambaStack(object):
         if y.shape != ids.shape:
             raise ValueError("mojolearn.SambaStack: targets must match inputs' shape")
         y = y.reshape(-1)
-        count = int(np.count_nonzero(y != T._IGNORE_INDEX_DEFAULT))
+        count = sum(v != T._IGNORE_INDEX_DEFAULT for v in _checks.flat_view(y, 'i'))
         items = count if num_items is None else int(num_items)
         loss, dlogits = T.cross_entropy(acts["logits"], y, reduction="sum",
                                         num_items=items, return_grad=True,
                                         numeric_mode=self.numeric_mode)
         grads = {}
         dhn, dw_head = T.linear_backward(
-            dlogits, acts["hn"].reshape(b * l, c.d_model), self._head_weight(),
+            dlogits, acts["hn"].reshape((b * l, c.d_model)), self._head_weight(),
             self.numeric_mode)
         dh, grads["norm_f.weight"] = T.rms_norm_backward(
-            dhn.reshape(b, l, c.d_model), acts["h"], self.arrays["norm_f.weight"],
+            dhn.reshape((b, l, c.d_model)), acts["h"], self.arrays["norm_f.weight"],
             c.norm_eps, self.numeric_mode)
         for i in reversed(range(len(c.layers))):
             g = self._block(i).backward(acts["xs"][i], dh)
@@ -359,7 +364,7 @@ class SambaStack(object):
                 grads["layers.%d.%s" % (i, n)] = v
         if acts["key"] is not None:
             dh = self.generator.dropout_backward(dh, acts["key"])
-        d_emb = T.embedding_backward(dh.reshape(b * l, c.d_model), ids.reshape(-1),
+        d_emb = T.embedding_backward(dh.reshape((b * l, c.d_model)), ids.reshape(-1),
                                      c.vocab, self.numeric_mode)
         if c.tie_embeddings:
             # The tied gradient is ONE pair add, embedding first, no
@@ -394,7 +399,7 @@ class SambaStack(object):
                 "clause 9.2 (leaf size, T mod L, A divides P, A a power of "
                 "two); refused before any gradient is computed "
                 "(python/mojolearn/_samba_impl.py)" % (tokens, a))
-        count = int(np.count_nonzero(y.reshape(-1) != T._IGNORE_INDEX_DEFAULT))
+        count = sum(v != T._IGNORE_INDEX_DEFAULT for v in _checks.flat_view(y, 'i'))
         stream = (self.generator.next_stream()
                   if self.config.dropout > 0.0 else None)
         rows = b // a
@@ -404,7 +409,7 @@ class SambaStack(object):
             loss_k, g_k = self.loss_and_grads(ids[sl], y[sl], num_items=count,
                                               dropout_stream=stream,
                                               token_offset=k * rows * l)
-            losses.append(np.array([loss_k], dtype=np.float32))
+            losses.append(_Array.from_list([loss_k], '<f4'))
             parts.append(g_k)
         if a == 1:
             loss = float(losses[0][0])
@@ -448,11 +453,11 @@ class SambaStack(object):
             raise ValueError("mojolearn.SambaStack: state schema/profile mismatch")
         if state["config"] != self.config.to_dict():
             raise ValueError("mojolearn.SambaStack: state config differs from this stack's")
-        p = np.ascontiguousarray(state["parameters"], dtype=np.float32)
+        p = _buffers.as_f32_c(state['parameters'], ndim=1, name='parameters')[0]
         if p.shape != (self.n_total,):
             raise ValueError("mojolearn.SambaStack: parameters hold %d floats, "
                              "the registry is %d" % (p.size, self.n_total))
-        self.flat[...] = p
+        _checks.flat_view(self.flat, 'f')[:] = _checks.flat_view(p, 'f')
         self.optimizer.load_state_dict({
             "t": state["t"], "exp_avg": state["exp_avg"],
             "exp_avg_sq": state["exp_avg_sq"],
@@ -481,9 +486,9 @@ class SambaStack(object):
         a sha256 over the canonical payload, written atomically."""
         payload = self.state_dict()
         for key, dtype in self._ARRAYS:
-            v = np.asarray(payload[key], dtype=dtype, order="C")
+            v = payload[key]
             payload[key] = {"dtype": dtype, "shape": list(v.shape),
-                            "hex": v.tobytes().hex()}
+                            "hex": _checks.le_bytes(v, 'i' if dtype == '<i4' else 'f').hex()}
         envelope = {"schema": _CHECKPOINT_SCHEMA, "payload": payload,
                     "payload_sha256": hashlib.sha256(_canonical(payload)).hexdigest()}
         encoded = _canonical(envelope) + b"\n"
@@ -524,8 +529,7 @@ class SambaStack(object):
             if d["dtype"] != dtype:
                 raise ValueError("mojolearn.SambaStack: checkpoint tensor dtype mismatch")
             raw = bytes.fromhex(d["hex"])
-            payload[key] = np.frombuffer(raw, dtype=dtype).astype(
-                np.int32 if dtype == "<i4" else np.float32, copy=True).reshape(d["shape"])
+            payload[key] = _buffers.frombytes(raw, dtype, d["shape"])
         config = SambaConfig.from_dict(payload["config"])
         oc = payload["optimizer"]
         sched = (None if payload["schedule"] is None

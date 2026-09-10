@@ -1,119 +1,47 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Buffer handling at the boundary, and the contract it has to honor.
+"""DEPRECATED compatibility shim over `_buffer.py` (DEVIATION 2309).
 
-The Mojo side takes RAW ADDRESSES. It borrows, never owns, and it holds
-nothing after a call returns. That is only sound if the Python object owning
-the memory is alive for the whole call, so every function here returns the
-array alongside its address and every caller keeps that array in a local for
-the duration. `_addr` exists so there is one place where an address is taken
-and one place to look when that contract is broken.
+This module was the NumPy-era boundary. Its job moved to `_buffer.py`
+(addresses, conversions) and `_array.py` (the `Array` container) on branch
+numpy-free-0.7; the old names are kept here, with their old positional
+signatures and their old messages, so every `_*_impl.py` keeps importing
+`from ._arrays import _addr, _addr_ro, as_f32_c, as_f32_colmajor` during the
+migration. New code imports `_buffer` directly. Delete this file when the
+last importer is gone (`grep -n '_arrays' python/mojolearn/*.py`).
 
-FLOAT32, NOT FLOAT64, AND THAT IS NOT NEGOTIABLE HERE. Metal has no float64
-and neither does the Mojo side; every kernel in this library is float32. A
-float64 array is converted, which COPIES. That copy is reported by
-`as_f32_c` returning `copied=True` rather than being hidden, because on a
-4,000,000 x 32 matrix it is 512 MB the caller did not ask for.
+Differences a migrating caller sees:
+- `as_f32_c` / `as_f32_colmajor` return `Array`s, not ndarrays; `np.asarray`
+  over one is zero-copy for a caller that has NumPy.
+- `as_f32_colmajor` still returns the 3-tuple `(array, flat, copied)`;
+  `flat` is the 1-D storage-order view `_buffer.as_f32_colmajor` no longer
+  hands out separately (it is `array._flat()`).
 """
 
-import numpy as np
+from . import _buffer
+from ._array import Array  # noqa: F401  (re-exported for migrating callers)
 
 
 def _addr(a):
-    """The address of an array's first byte.
-
-    `__array_interface__` rather than `ctypes.data` because it also carries
-    the read-only flag, and handing a read-only buffer to a function that
-    writes it is a segfault rather than an exception.
-    """
-    iface = a.__array_interface__
-    ptr, read_only = iface["data"]
-    if read_only:
-        raise ValueError(
-            "mojolearn: output buffer is read-only, refusing to write to it"
-        )
-    return ptr
+    """The address of a buffer about to be WRITTEN; a read-only buffer is
+    refused with the message the old module used."""
+    return _buffer.addr(a, name="output buffer")
 
 
 def _addr_ro(a):
-    """The address of an array that will only be read."""
-    return a.__array_interface__["data"][0]
+    """The address of a buffer that will only be read."""
+    return _buffer.addr_ro(a, name="input buffer")
 
 
 def as_f32_c(x, name):
-    """A C-contiguous float32 view of `x`, and whether that cost a copy.
-
-    Returns `(array, copied)`. The caller MUST keep `array` alive across the
-    Mojo call; that is the whole reason this returns the array rather than
-    just an address.
-    """
-    a = np.asarray(x)
-    if a.ndim != 2:
-        raise ValueError(
-            f"mojolearn: {name} must be 2-D, got {a.ndim}-D shape {a.shape}"
-        )
-    if a.size == 0:
-        raise ValueError(f"mojolearn: {name} is empty, shape {a.shape}")
-    copied = False
-    if a.dtype != np.float32 or not a.flags["C_CONTIGUOUS"]:
-        # Named rather than silent: on a large matrix this is the dominant
-        # cost of the call and the caller can avoid it by passing float32
-        # C-order in the first place.
-        a = np.ascontiguousarray(a, dtype=np.float32)
-        copied = True
-    return a, copied
+    """`(Array, copied)`: a C-contiguous float32 2-D Array of `x`."""
+    return _buffer.as_f32_c(x, ndim=2, name=name)
 
 
 def as_f32_colmajor(x, name):
-    """A COLUMN-MAJOR float32 flat buffer over `x`, at most one copy.
-
-    Returns `(array, flat, copied)`: `array` is 2-D F-contiguous float32,
-    `flat` its flat column-major view (`flat[f * n_rows + r] ==
-    array[r, f]`), and the two share ONE buffer -- `flat.base` keeps it
-    alive, so holding either in a local satisfies the borrow contract at
-    the top of this module.
-
-    DEVIATION 1887 -- ONE HOST MATERIALIZATION OF X, NOT TWO. The fit
-    path used to run `as_f32_c` (a copy to C order for anything not
-    already float32 C-contiguous) and then `ascontiguousarray(Xa.T)` (a
-    second, always-taken copy back to column-major). `asfortranarray`
-    converts dtype and layout in one pass straight from the caller's
-    buffer, so a C-order or float64 input costs ONE copy -- the floor,
-    since the quantizer walks columns -- and a float32 F-contiguous
-    input is a ZERO-COPY borrow, which is what `ensemble.py`'s module
-    docstring had promised all along ("pass `X` already in Fortran order
-    to avoid it") while the old pair still copied it twice. Same element
-    values, same flat order: the float64 -> float32 cast is the same
-    elementwise cast either way, so no output bit can move. Large contiguous
-    row-major native-float inputs now use row tiles for cache locality, still
-    writing directly into one final allocation with that same cast.
-    """
-    a = np.asarray(x)
-    if a.ndim != 2:
-        raise ValueError(
-            f"mojolearn: {name} must be 2-D, got {a.ndim}-D shape {a.shape}"
-        )
-    if a.size == 0:
-        raise ValueError(f"mojolearn: {name} is empty, shape {a.shape}")
-    copied = False
-    if a.dtype != np.float32 or not a.flags["F_CONTIGUOUS"]:
-        # Large row-major matrices otherwise get scanned once per column,
-        # repeatedly fetching the same cache lines. Copy row tiles into one
-        # final F-order allocation so a tile's source rows stay cache-local.
-        # Restrict to native floats: other dtypes/strides retain NumPy's
-        # conversion semantics. Small/narrow matrices do not amortize the
-        # Python loop. Both paths use NumPy's same elementwise float32 cast.
-        if (a.flags["C_CONTIGUOUS"] and not a.flags["F_CONTIGUOUS"]
-                and a.dtype in (np.dtype("float32"), np.dtype("float64"))
-                and a.nbytes >= 8 * 1024 * 1024 and a.shape[1] >= 8):
-            converted = np.empty(a.shape, dtype=np.float32, order="F")
-            tile_rows = max(1, (256 * 1024) // (a.shape[1] * a.itemsize))
-            for start in range(0, a.shape[0], tile_rows):
-                converted[start:start + tile_rows] = a[start:start + tile_rows]
-            a = converted
-        else:
-            a = np.asfortranarray(a, dtype=np.float32)
-        copied = True
-    # `a.T` of an F-contiguous array is C-contiguous, so this reshape is
-    # a VIEW; nothing after this line copies.
-    return a, a.T.reshape(-1), copied
+    """`(Array, flat, copied)`: an F-order float32 2-D Array of `x`, its
+    flat column-major view over the SAME buffer (`flat[f * n_rows + r] ==
+    array[r, f]`), and whether a copy was taken. Holding either keeps the
+    buffer alive."""
+    a, copied = _buffer.as_f32_colmajor(x, name=name)
+    return a, a._flat(), copied

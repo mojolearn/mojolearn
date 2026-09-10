@@ -43,7 +43,9 @@ class NeighborsWeightedLargeK(unittest.TestCase):
         got = reg.predict(q)
         np.testing.assert_array_equal(got, [[4, -2]])
         if self.mode == "identical":
-            np.testing.assert_array_equal(got.view(np.uint32), reg.predict(q).view(np.uint32))
+            # DEVIATION 2460: predictions are mojolearn.Array; bits via np.asarray
+            np.testing.assert_array_equal(np.asarray(got).view(np.uint32),
+                                          np.asarray(reg.predict(q)).view(np.uint32))
 
     def test_inverse_distance_changes_the_uniform_winner(self):
         x = np.array([[1], [2], [4]], dtype=np.float32)
@@ -79,6 +81,7 @@ class NeighborsWeightedLargeK(unittest.TestCase):
                 np.testing.assert_array_equal(d, np.take_along_axis(distance64, expected[:, :k], axis=1).astype(np.float32))
                 np.testing.assert_array_equal(i, ir)
                 np.testing.assert_array_equal(i, it)
+                d, dr, dt = np.asarray(d), np.asarray(dr), np.asarray(dt)  # DEVIATION 2460
                 np.testing.assert_array_equal(d.view(np.uint32), dr.view(np.uint32))
                 np.testing.assert_array_equal(d.view(np.uint32), dt.view(np.uint32))
         with self.assertRaisesRegex(Exception, "1024"):

@@ -76,10 +76,10 @@ selected explicitly, makes no cross-vendor claim of any kind.
 
 import math
 
-import numpy as np
-
 from . import _backend
-from ._arrays import _addr, _addr_ro
+from ._array import Array
+from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._bufcheck import nelems, probe
 from ._mode import NumericModeMixin
 
 # The log-likelihood method, as `arima/estimator.mojo` numbers it. Only MLE
@@ -99,7 +99,12 @@ def _series_major(y, name):
 
     Returns `(array, batch_size, n_obs, copied)`. The caller MUST keep
     `array` alive across the Mojo call; the Mojo side borrows the address
-    and holds nothing after it returns (`_arrays.py`).
+    and holds nothing after it returns (`_buffer.py`).
+
+    DEVIATION 2415: `y` is read through the buffer protocol -- a NumPy
+    array, an `array.array`, a `mojolearn.Array`; a plain nested list is
+    materialized once as float32 the way `np.asarray` used to materialize
+    it -- and `_buffer.as_f32_c` does the conversion, reporting the copy.
 
     NO FINITENESS CHECK HAPPENS HERE, deliberately. A NaN or an infinity is
     refused BY NAME, with the flat index of the offender, in
@@ -107,26 +112,34 @@ def _series_major(y, name):
     here as well would make that refusal unreachable from Python and would
     silently take over a decision the implemented code owns.
     """
-    a = np.asarray(y)
-    if a.ndim == 1:
-        a = a.reshape(1, -1)
-    if a.ndim != 2:
+    try:
+        pb = probe(y)
+    except TypeError:
+        try:
+            y = Array.from_list(y, "<f4")
+        except Exception:
+            raise ValueError(
+                f"mojolearn ARIMA: {name} must be 1-D (one series) or 2-D "
+                f"(batch_size, n_obs) -- an array or a nested list of "
+                f"numbers -- got {type(y).__name__}"
+            ) from None
+        pb = probe(y)
+    if pb.ndim not in (1, 2):
         raise ValueError(
             f"mojolearn ARIMA: {name} must be 1-D (one series) or 2-D "
-            f"(batch_size, n_obs), got {a.ndim}-D shape {a.shape}"
+            f"(batch_size, n_obs), got {pb.ndim}-D shape {pb.shape}"
         )
-    if a.size == 0:
-        raise ValueError(f"mojolearn ARIMA: {name} is empty, shape {a.shape}")
-    copied = False
-    if a.dtype != np.float32 or not a.flags["C_CONTIGUOUS"]:
-        # Named rather than silent. On a long batch this is the dominant
-        # cost of the call and a caller can avoid it by passing float32 in C
-        # order. float64 in particular is CONVERTED, not run: Metal exposes
-        # no float64 on the device and every kernel in this lane is float32
-        # (DEVIATION 670). cuML's ARIMA is float64 ONLY, so these are
-        # float32 answers to a float32 problem, never cuML's numbers.
-        a = np.ascontiguousarray(a, dtype=np.float32)
-        copied = True
+    if nelems(pb.shape) == 0:
+        raise ValueError(f"mojolearn ARIMA: {name} is empty, shape {pb.shape}")
+    # Named rather than silent. On a long batch the copy is the dominant
+    # cost of the call and a caller can avoid it by passing float32 in C
+    # order. float64 in particular is CONVERTED, not run: Metal exposes no
+    # float64 on the device and every kernel in this lane is float32
+    # (DEVIATION 670). cuML's ARIMA is float64 ONLY, so these are float32
+    # answers to a float32 problem, never cuML's numbers.
+    a, copied = as_f32_c(y, ndim=pb.ndim, name=name)
+    if pb.ndim == 1:
+        a = a.reshape((1, a.shape[0]))
     return a, int(a.shape[0]), int(a.shape[1]), copied
 
 
@@ -147,9 +160,14 @@ def _n_exog(exog):
     """
     if exog is None:
         return 0
-    a = np.asarray(exog)
-    if a.ndim >= 2 and a.shape[-1] >= 1:
-        return int(a.shape[-1])
+    try:
+        pb = probe(exog)
+    except TypeError:
+        # A list or anything else: at least one regressor, which is what
+        # the Mojo validator refuses (DEVIATION 2417).
+        return 1
+    if pb.ndim >= 2 and pb.shape[-1] >= 1:
+        return int(pb.shape[-1])
     return 1
 
 
@@ -226,7 +244,8 @@ class ARIMA(NumericModeMixin):
                                     accepting-and-ignoring
         output_type       refused   `_arima_impl.py`. A cuML-internal
                                     array-type selector; this package
-                                    returns NumPy
+                                    returns `mojolearn.Array` (zero-copy
+                                    under `numpy.asarray`)
         float64 y         CONVERTED to float32, and the conversion COPIES.
                                     Named rather than hidden. cuML's ARIMA
                                     is instantiated on `double` ONLY and
@@ -324,9 +343,10 @@ class ARIMA(NumericModeMixin):
     `arima/estimator.mojo::_loglike_at`, and it is what cuML's own
     `information_criterion` does.
 
-    Attributes
+    Attributes (every array below is a `mojolearn.Array`; `numpy.asarray`
+    on it is zero-copy -- DEVIATION 2416)
     ----------
-    params_ : ndarray (batch_size, N) float32
+    params_ : Array (batch_size, N) float32
         The fitted model, forward transformed, packed per series in
         `ARIMAParams::pack`'s order: `mu` (only when `k == 1`), then `ar`
         (p), `ma` (q), `sar` (P), `sma` (Q), then `sigma2`. `N = p + q + P +
@@ -442,7 +462,8 @@ class ARIMA(NumericModeMixin):
         if output_type is not None:
             raise NotImplementedError(
                 "mojolearn ARIMA: output_type is a cuML-internal array-type "
-                "selector; this package returns NumPy"
+                "selector; this package returns mojolearn.Array (zero-copy "
+                "under numpy.asarray)"
             )
         self.output_type = None
         self.complexity_ = p + q + P + Q + k + 1
@@ -495,23 +516,23 @@ class ARIMA(NumericModeMixin):
         P, D, Q, s = self.seasonal_order
         N = self.complexity_
 
-        params = np.empty(batch_size * N, dtype=np.float32)
-        x = np.empty(batch_size * N, dtype=np.float32)
-        x0 = np.empty(batch_size * N, dtype=np.float32)
-        stats = np.empty(2 * batch_size, dtype=np.float32)
-        flags = np.empty(2 * batch_size, dtype=np.int32)
+        params = empty((batch_size * N,), "<f4")
+        x = empty((batch_size * N,), "<f4")
+        x0 = empty((batch_size * N,), "<f4")
+        stats = empty((2 * batch_size,), "<f4")
+        flags = empty((2 * batch_size,), "<i4")
         # EVERY ONE OF THOSE SIZES IS A FUNCTION OF (batch_size, n_obs,
         # order) ALONE, which is why this side can allocate before it calls.
         # There is no quantity in an ARIMA fit that is only known once the
         # solve finishes, so nothing here is a worst-case buffer the way
         # `SVR.fit`'s support-vector arrays are (DEVIATION 873).
         written = self._extension().arima_fit(
-            _addr_ro(arr),
-            _addr(params),
-            _addr(x),
-            _addr(x0),
-            _addr(stats),
-            _addr(flags),
+            addr_ro(arr, name="y"),
+            addr(params, name="params"),
+            addr(x, name="x"),
+            addr(x0, name="x0"),
+            addr(stats, name="stats"),
+            addr(flags, name="flags"),
             # ORDER MATCHES bindings/_mojolearn_arima.mojo::arima_fit_binding.
             # batch_size, n_obs, p, d, q, P, D, Q, s, k, n_exog, method,
             # max_iterations
@@ -529,22 +550,32 @@ class ARIMA(NumericModeMixin):
         self.batch_size_ = batch_size
         self.n_obs_ = n_obs
         self._y = arr
-        self.params_ = np.ascontiguousarray(params.reshape(batch_size, N))
-        self.x_ = np.ascontiguousarray(x.reshape(batch_size, N))
-        self.x0_ = np.ascontiguousarray(x0.reshape(batch_size, N))
-        self.n_iter_ = np.ascontiguousarray(flags[:batch_size])
-        self.retcode_ = np.ascontiguousarray(flags[batch_size:])
+        # DEVIATION 2416: every attribute is a `mojolearn.Array`. `reshape`
+        # is a C-order view over the flat buffer the kernel wrote; a slice
+        # copies (the Array contract), which is what `ascontiguousarray`
+        # of a slice did.
+        self.params_ = params.reshape((batch_size, N))
+        self.x_ = x.reshape((batch_size, N))
+        self.x0_ = x0.reshape((batch_size, N))
+        self.n_iter_ = flags[:batch_size]
+        self.retcode_ = flags[batch_size:]
 
-        llf = np.asarray(stats[:batch_size], dtype=np.float64)
+        llf = stats[:batch_size].astype("<f8")
         self.llf_ = llf
-        self.fx_ = np.ascontiguousarray(stats[batch_size:])
+        self.fx_ = stats[batch_size:]
         # DEVIATION 991: the host half of cuML's information_criterion.
         # `T` is n_samples AFTER differencing, which is the number their
-        # caller passes (`n_obs - order.n_diff()`).
+        # caller passes (`n_obs - order.n_diff()`). Two float64 host
+        # expressions per series, written out in Python over the
+        # batch (O(batch_size), no part of any identity claim).
         T = n_obs - (d + s * D)
         n_par = float(N)
-        self.aic_ = 2.0 * n_par - 2.0 * llf
-        self.bic_ = (math.log(T) if T > 0 else 0.0) * n_par - 2.0 * llf
+        log_t = math.log(T) if T > 0 else 0.0
+        llf_list = llf.tolist()
+        self.aic_ = Array.from_list(
+            [2.0 * n_par - 2.0 * v for v in llf_list], "<f8")
+        self.bic_ = Array.from_list(
+            [log_t * n_par - 2.0 * v for v in llf_list], "<f8")
         return self
 
     # -- the named views into params_ ---------------------------------------
@@ -552,7 +583,10 @@ class ARIMA(NumericModeMixin):
     def _block(self, name, offset, width):
         if not hasattr(self, "params_"):
             raise AttributeError(f"mojolearn ARIMA: call fit() before {name}")
-        return np.ascontiguousarray(self.params_[:, offset:offset + width])
+        # A tuple-of-slices index COPIES into a fresh C-contiguous Array
+        # (DEVIATION 2417), exactly what `ascontiguousarray` of the NumPy
+        # column slice produced.
+        return self.params_[:, offset:offset + width]
 
     @property
     def mu_(self):
@@ -562,7 +596,7 @@ class ARIMA(NumericModeMixin):
                 "intercept (trend resolved to 'n', k = 0). Construct it with "
                 "trend='c' to fit one"
             )
-        return self._block("mu_", 0, 1).reshape(-1)
+        return self._block("mu_", 0, 1).ravel()
 
     @property
     def ar_(self):
@@ -585,7 +619,7 @@ class ARIMA(NumericModeMixin):
 
     @property
     def sigma2_(self):
-        return self._block("sigma2_", self.complexity_ - 1, 1).reshape(-1)
+        return self._block("sigma2_", self.complexity_ - 1, 1).ravel()
 
     # -- predict and forecast -----------------------------------------------
 
@@ -630,20 +664,20 @@ class ARIMA(NumericModeMixin):
                 f"end={end}. `end` is EXCLUDED here, as it is in cuML; "
                 "statsmodels' end is the last index returned"
             )
-        out = np.empty(self.batch_size_ * width, dtype=np.float32)
+        out = empty((self.batch_size_ * width,), "<f4")
         y = self._y
         pr = self.params_
         self._extension().arima_predict(
-            _addr_ro(y),
-            _addr_ro(pr),
-            _addr(out),
+            addr_ro(y, name="y"),
+            addr_ro(pr, name="params"),
+            addr(out, name="out"),
             # ORDER MATCHES
             # bindings/_mojolearn_arima.mojo::arima_predict_binding.
             # batch_size, n_obs, start, end, p, d, q, P, D, Q, s, k, n_exog
             [self.batch_size_, self.n_obs_, start, end, p, d, q, P, D, Q, s,
              self.k_, _n_exog(exog)],
         )
-        return out.reshape(self.batch_size_, width)
+        return out.reshape((self.batch_size_, width))
 
     def forecast(self, steps, exog=None):
         """`(batch_size, steps)` out-of-sample forecasts, continuing each
@@ -662,13 +696,13 @@ class ARIMA(NumericModeMixin):
             )
         p, d, q = self.order
         P, D, Q, s = self.seasonal_order
-        out = np.empty(self.batch_size_ * steps, dtype=np.float32)
+        out = empty((self.batch_size_ * steps,), "<f4")
         y = self._y
         pr = self.params_
         self._extension().arima_forecast(
-            _addr_ro(y),
-            _addr_ro(pr),
-            _addr(out),
+            addr_ro(y, name="y"),
+            addr_ro(pr, name="params"),
+            addr(out, name="out"),
             # ORDER MATCHES
             # bindings/_mojolearn_arima.mojo::arima_forecast_binding.
             # batch_size, n_obs, n_steps, p, d, q, P, D, Q, s, k, n_exog,
@@ -677,7 +711,7 @@ class ARIMA(NumericModeMixin):
             [self.batch_size_, self.n_obs_, steps, p, d, q, P, D, Q, s,
              self.k_, _n_exog(exog), 0],
         )
-        return out.reshape(self.batch_size_, steps)
+        return out.reshape((self.batch_size_, steps))
 
     def __repr__(self):
         return (

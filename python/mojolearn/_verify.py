@@ -91,6 +91,8 @@ DEVIATIONS RECORDED BY THIS FILE
 portable conformance bundle; docs/CONFORMANCE.md is its document.
 """
 
+from . import _buffer as _buffers, _bufcheck as _checks
+from ._array import Array as _Array
 import hashlib
 import importlib
 import importlib.util
@@ -222,26 +224,27 @@ def build_fixture():
     The centroids are ROWS OF X, which is what `INIT_ARRAY` means upstream
     and what makes the start of the fit exact rather than sampled. Row
     `c * 37` for cluster c, exactly as the E1U driver picks them.
-    """
-    import numpy as np
 
-    x = np.empty((KM_N, KM_D), dtype=np.float32)
+    DEVIATION 2433: fixture values are written directly to Float32 buffers;
+    the published byte-hash gate is unchanged and NumPy is not required.
+    """
+    x = _buffers.empty((KM_N, KM_D), '<f4')
+    xv = _checks.flat_view(x, 'f')
     for i in range(KM_N):
-        row = x[i]
         for f in range(KM_D):
-            row[f] = _coord(i, f, KM_SALT)
-    c = np.empty((KM_K, KM_D), dtype=np.float32)
+            xv[i*KM_D+f] = _coord(i, f, KM_SALT)
+    c = _buffers.empty((KM_K, KM_D), '<f4')
+    cv = _checks.flat_view(c, 'f')
     for k in range(KM_K):
-        row = c[k]
         for f in range(KM_D):
-            row[f] = _coord(k * KM_CENTROID_STRIDE, f, KM_SALT)
+            cv[k*KM_D+f] = _coord(k * KM_CENTROID_STRIDE, f, KM_SALT)
     return x, c
 
 
 def _le_bytes(arr):
     """Raw little-endian bytes, in index order. The card's hash is over
     exactly these, so the comparison must be over exactly these."""
-    return arr.astype("<f4", copy=False).tobytes()
+    return _checks.le_bytes(arr, 'f')
 
 
 # --------------------------------------------------------------------------
@@ -555,8 +558,8 @@ def environment(mode=None):
     except Exception:                    # pragma: no cover
         version = "unknown"
     try:
-        import numpy
-        numpy_version = numpy.__version__
+        from importlib.metadata import version as distribution_version
+        numpy_version = distribution_version("numpy")
     except Exception:                    # pragma: no cover
         numpy_version = "unavailable"
     return {

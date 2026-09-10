@@ -1,108 +1,97 @@
-# Landing numpy-free-0.7, and what each stage still owes
+# NumPy-free integration and remaining work
 
-2026-09-10. `numpy-free-0.7` was cut at `fcdcabb3` on 2026-09-07 and then sat
-behind `main` while the identical fan-out landed, reaching 91 commits behind
-`origin/main` by 2026-09-10. It cannot land as one merge, because `main`
-moves through the same Python files faster than the branch can be rebased
-onto it. This file records the staged landing instead.
+User direction, September 10: remove NumPy from the shipped runtime and
+optimize native operations that lag it. Keep NumPy as an optional benchmark
+and correctness oracle. GPU learners only; compiled host buffer operations
+are part of the GPU product. Publication of 0.8.0 remains paused pending
+installed-wheel qualification.
 
-## The split
+## Integrated source
 
-Of the 61 files the branch touches, measured against `origin/main`:
+The preserved `numpy-free-0.7` work is merged with current main, resolving
+conflicts while retaining parallel_groves, class weights, GBDT adapters,
+metrics/scalers/CV, wide IDENTICAL PCA, kNN batching, generalized byte LM,
+resident training, schedules/accumulation, Samba and transformer ring caches.
+All estimators use the shared Array/buffer layer. Runtime metadata no longer
+requires NumPy. Built-in CV cloning and fold metadata use the standard
+library; sklearn pipelines and splitters remain optional interoperability. Optional verification references may still require the test
+extra. This changes array returns from ndarray to Array; classes are Python
+lists. NumPy callers can obtain zero-copy views through `np.asarray`.
 
-| set | count | what it is |
-|---|---|---|
-| new modules | 5 | files `main` does not have at all |
-| converted, uncontested | 34 | `main` has them and has not touched them since the cut |
-| contested | 20 | both sides changed them |
+Shared native helpers perform casts, transposes, finite validation, column
+means, centering, row scaling, probability validation/packing and byte row
+gathering. Raw allocation replaces anonymous mmap destinations for native
+conversions. Views pin the allocation; pickle retains data, shape, layout
+and read-only state, never borrowed addresses or GPU handles.
 
-## Stage 1, landed by this commit
+## Measured host conversions
 
-The four new modules (`_array.py`, `_buffer.py`, `_bufcheck.py`,
-`_labels.py`) and this contract. They import only the standard library and
-each other, and nothing on `main` imports THEM, so landing them changes no
-behavior and cannot move a bit of any IDENTICAL result. They exist here so
-they stop drifting while the rest is staged.
+`tools/bench_numpy_free_conversion.py` runs alternating arms in one process,
+two warmups and ten measured samples. Inputs are 2,000,000 × 20, read-only;
+the NumPy baseline includes the former tiled C-to-F path. The native base
+extension was built at the release's apple-m1 CPU baseline. Full output
+bytes match. These are host conversion measurements on one Mac, not GPU
+training speedups or NVIDIA performance evidence.
 
-Gate: exercised standalone against NumPy as the oracle, 15 checks green.
-Bit-exact conversions (`as_f32_colmajor` and `as_f32_c` byte-equal to
-`numpy.asfortranarray` / `ascontiguousarray` at float32), the zero-copy
-borrow for float32 inputs already in the target order, `memcopy`, slicing,
-reshape, `all_finite`, and both refusals by name.
+| Conversion | NumPy median ms | Native median ms |
+|---|---:|---:|
+| float64 C → float32 C | 5.69 | 5.73 |
+| float64 C → float32 F | 21.21 | 16.51 |
+| float32 C → float32 F | 22.13 | 11.59 |
+| float64 F → float32 C | 13.77 | 11.94 |
+| float32 F → float32 C | 12.49 | 11.82 |
 
-The branch's own `test_numpy_free_core.py` and `test_native_helpers.py` are
-NOT here. They import `_arrays` and `_serialize` in their branch form, which
-are contested files, so on `main` they would fail. They land with stage 3.
+The flat cast is approximately parity; layout conversions improve in this
+run. The allocator comparison that motivated the change measured the old
+mmap flat cast at 13.10 ms and raw allocation at 5.92 ms, with NumPy at
+6.11 ms. Do not attribute these gains to IDENTICAL arithmetic.
 
-## Stage 2, the 34 uncontested conversions
+Retained integrated samples, path names, output hashes and binary hash:
+[conversion evidence](../../bench/results/numpy-free/2026-09-10-host-conversion.json).
 
-Behavioral. Each one changes a module's returns from `numpy.ndarray` to
-`mojolearn.Array`, so each needs its surface test run before it lands.
-RUN OWED.
+## Remaining priorities and release gates
 
-Stage 2 was gated on the converter tax and THAT GATE IS CLEARED
-(2026-09-10, e9f40d69, 313ce4a1, 485caa24). The pure-Python converter cost
-1,235 ms for a float64 cast NumPy does in 5.7 ms at 2M x 20; the native
-host converters of DEVIATION 2470-2472 in `bindings/_mojolearn.mojo`,
-selected by `_buffer._convert` whenever the base binding is built, bring
-it to NumPy's number on the flat cast and 2.5x to 5.2x FASTER than NumPy
-on every layout flip. Numbers in
-`bench/results/native_convert_2026-09-10/run5_m4_warmup.txt`; the brief
-that produced them is `docs/lanes/BRIEF_native_convert_2026-09-10.md`.
-Without the binding the pure-Python path still runs and produces the same
-bytes (119 tests, both arms).
+1. Build and qualify installed wheels on CUDA and HIP, plus supported macOS
+   Python versions, in environments without NumPy. Run real fit/predict,
+   metrics, scaler, checkpoint and resident training paths; import-only
+   checks do not establish end-to-end independence.
+2. Requalify changed numeric boundaries: OLS/ridge centering now uses defined
+   sequential Float64 column sums rather than NumPy's blocked reduction.
+   FAST/DETERMINISTIC GBDT sigmoid uses the existing native helper. Existing
+   certification does not automatically cover these changes. Preserve
+   IDENTICAL GPU reduction schedules and verify cross-vendor output bytes.
+3. Measure whole-fit and repeated-fit costs on representative large NVIDIA
+   datasets in IDENTICAL mode, and decision-tree FAST on Apple. Compare
+   competitors there; these host timings do not establish learner parity.
+4. Profile remaining integer widening/casting, label encoding, weighting,
+   array gathers and checkpoint packing. Move expensive elementwise host
+   loops to shared native helpers; reuse output/storage where lifetime and
+   concurrency allow it. Avoid creating per-estimator converters.
+5. Extend large conversion cases to wide, strided, non-native-endian and
+   integer buffers, testing exact dtype/range/ownership semantics. Big-endian
+   inputs are normalized by compiled `array.byteswap`; zero-copy views
+   continue to require native endian.
+6. Retire the superseded release candidate tag deliberately after source and
+   artifacts are frozen. Rebuild native files; do not overlay new Python
+   calls onto binaries missing the helpers. Publish only the qualified set.
 
-## Stage 3, the 20 contested files
+## Local validation and known artifact issue
 
-These need a per-file merge against a `main` that keeps moving, so they
-should land last and in small batches. A trial merge on 2026-09-10 resolved
-all of them against `b3279609` in 20 hunks; that resolution is on branch
-`numpy-free-onto-main-20260910` and is worth reading, but it is already
-stale against `origin/main` and must be redone, not replayed.
+The merged source suite ran 930 passing tests, 88 passing subtests and
+53 skips (including optional PyTorch reference checks). Two UMAP pinned
+fixture checks fail against the existing local metrics binary. Running the
+pre-merge NumPy wrapper and merged wrapper against that same IDENTICAL
+binary gives identical output bits for both fixtures; the discrepancy is
+pre-existing. Expected fixture bits were not changed. See
+[the comparison](../../bench/results/numpy-free/2026-09-10-umap-head-comparison.log).
+This still needs artifact/source qualification before publication.
 
-Two resolutions from that trial are worth carrying forward.
-`_transformer_impl.py` needs `main`'s sliding-window ring cache expressed
-without the `ring[:, :, positions % w, :]` gather; the ring layout makes the
-held positions at most two contiguous runs per (batch, kv head), so two
-`memcopy`s do it. `_training_impl.py` keeps the branch's numpy-free
-optimizer, clip and loss while inheriting `main`'s `lr_schedule` and
-`accumulation_steps` validation.
-
-## The three that are not a merge problem
-
-These are shipped modules that will still import NumPy after every stage
-above, because they are code `main` added or redesigned AFTER the branch was
-cut. They need converting on their own terms.
-
-**`_byte_lm_impl.py`** is a DESIGN conflict. The branch hard-codes
-`_N = 34944` and a fixed `_OFFSETS` tuple for the fixed
-B2/L32/DM32/H4/KV2/FF64/V256 model. `main` generalized the same file to
-configurable shapes through `_byte_lm_config.ByteLanguageModelConfig`. The
-generalization is the better design; the NumPy removal has to be rewritten
-on top of it and the branch's version of this file must not be replayed.
-This is the largest single owed item.
-
-**`_training_impl.py`** gained four NumPy-based sections after the cut: the
-LR schedules, gradient accumulation, the `Generator` RNG, and the
-embedding/rms_norm/linear layer helpers.
-
-**`_samba_impl.py`** did not exist when the branch was cut.
-
-`_verify.py` and `transformer.py` import NumPy lazily behind a guard with an
-install hint. That is the intended optional-diagnostic shape and is not an
-owed conversion.
-
-## The DEVIATION 1887 measurement, CLOSED
-
-DEVIATION 1887 has a row-tile arm on `main` that the branch does not carry.
-`_arrays.as_f32_colmajor` copies large C-order inputs in 256 KB row tiles for
-cache locality; the pure-Python `_buffer.as_f32_colmajor` does not tile.
-RESOLVED 2026-09-10 by moving the tiling into compiled code: the native
-`cast_colmajor_f64_to_f32` and `transpose_f32` walk 128 x 64 tiles (64 KB
-in, 32 KB out) and measure 24.5 ms against NumPy's 128 ms for the float64
-case and 20.0 vs 53.7 ms for float32, at 2M x 20 on the M4, minimum of 9
-interleaved pairs. The untiled Python path remains only as the fallback for
-an unbuilt checkout. What is still owed is the estimator-level number: no
-estimator on `main` calls `_buffer` yet, so the fit-time effect appears
-only once stage 2 lands, and each converted estimator's surface run will
-show it.
+`tools/check_numpy_free_runtime.py` blocks NumPy imports while running real
+GPU RF/ET fit/predict, scoring and both scalers. The local source-tree check
+passed. Run it from an installed-wheel environment without PYTHONPATH for
+release qualification; the source run is not a substitute. Base native
+helpers were rebuilt in all three modes; each mode passed 139 host helper
+and conversion checks (32 inapplicable no-conversion combinations skipped).
+Additional NumPy-free CV tests pass with both NumPy and sklearn imports
+blocked. The real GPU runtime smoke, including CV, passed on local CPython
+3.10, 3.11, 3.12, 3.13 and 3.14; these are source-tree checks.

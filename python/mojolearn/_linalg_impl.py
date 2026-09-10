@@ -86,10 +86,9 @@ import importlib.util
 import os
 import sys
 
-import numpy as np
-
 from . import _backend
-from ._arrays import _addr, _addr_ro
+from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._bufcheck import dtype_name, is_native_f32, nelems, probe
 
 #: The profile family and the version, kept apart because the VERSION is the
 #: part the contract makes load-bearing: "a bit-identity claim with no version
@@ -298,49 +297,67 @@ _OPS = {
 
 
 def _operand(x, name):
-    """A float32, C-contiguous, 2-D view of `x`, and the array to keep alive.
+    """A float32, C-contiguous, 2-D `Array` over `x`, to keep alive across
+    the call. DEVIATION 2400: the operand is read through the BUFFER
+    PROTOCOL (`_buffer.view`), so a NumPy array, an `array.array('f')`, a
+    `mojolearn.Array` or anything else exporting a float32 buffer is an
+    operand; there is no NumPy on this path.
 
-    **A non-float32 array is REFUSED BY NAME, never cast.** `_arrays.as_f32_c`
+    **A non-float32 buffer is REFUSED BY NAME, never cast.** `_buffer.as_f32_c`
     converts float64 silently-but-reported, which is the right trade for an
     estimator whose answer is approximate anyway. It is the wrong trade here:
     this module's entire product is the caller's control over which bits go
     in, and a float64 input downcast on the way through has already lost 29
     mantissa bits before the profile sees it. The caller does the cast, and
-    then it is in their source where they can see it.
+    then it is in their source where they can see it. So the FORMAT is
+    checked here first and `as_f32_c` is reached only by a float32 buffer,
+    where its one remaining job is the layout.
 
     Non-contiguous IS accepted with a copy, because reordering float32 values
-    changes no bit. The contract requires contiguity (section 2) and numpy
-    can supply it without touching a value.
+    changes no bit. The contract requires contiguity (section 2) and a
+    layout copy supplies it without touching a value; a float32 buffer
+    already in C order is borrowed with no copy at all.
     """
-    a = np.asarray(x)
-    if a.dtype != np.float32:
+    try:
+        pb = probe(x)
+    except TypeError:
         raise TypeError(
-            f"mojolearn.linalg: {name} has dtype {a.dtype}, and only float32 "
-            f"is in this profile ({PROFILE}; contract section 1 makes FP32 a "
-            "hard requirement, and section 0.5 excludes FP16, BF16, TF32 and "
-            "float64). Refused rather than cast, because a cast from float64 "
-            "drops mantissa bits you may care about. Convert it yourself with "
+            f"mojolearn.linalg: {name} is a {type(x).__name__}, which does "
+            "not support the buffer protocol, and only a float32 buffer is "
+            f"in this profile ({PROFILE}; contract section 1 makes FP32 a "
+            "hard requirement). Pass a float32 array -- a NumPy array, an "
+            "array.array('f') or a mojolearn.Array; convert with "
             f"np.asarray({name}, dtype=np.float32) if that is what you want."
+        ) from None
+    if not is_native_f32(pb.format):
+        raise TypeError(
+            f"mojolearn.linalg: {name} has dtype {dtype_name(x, pb)}, and "
+            f"only float32 is in this profile ({PROFILE}; contract section 1 "
+            "makes FP32 a hard requirement, and section 0.5 excludes FP16, "
+            "BF16, TF32 and float64). Refused rather than cast, because a "
+            "cast from float64 drops mantissa bits you may care about. "
+            f"Convert it yourself with np.asarray({name}, dtype=np.float32) "
+            "if that is what you want."
         )
-    if a.ndim != 2:
+    if pb.ndim != 2:
         raise ValueError(
-            f"mojolearn.linalg: {name} must be 2-D, got {a.ndim}-D shape "
-            f"{a.shape}. A vector product is OP_NT at n == 1 (contract 0.1); "
+            f"mojolearn.linalg: {name} must be 2-D, got {pb.ndim}-D shape "
+            f"{pb.shape}. A vector product is OP_NT at n == 1 (contract 0.1); "
             f"pass it as a 2-D array of shape (n, k) or (k, 1)."
         )
-    if a.size == 0:
+    if nelems(pb.shape) == 0:
         raise ValueError(
-            f"mojolearn.linalg: {name} has shape {a.shape} and no elements. "
+            f"mojolearn.linalg: {name} has shape {pb.shape} and no elements. "
             "Contract section 8 does specify the degenerate shapes (k == 0 "
             "writes +0.0 into every cell; m == 0 or n == 0 writes nothing), "
             "but no gate in this tree has run them through the Python "
             "surface, so they are refused here rather than answered "
             "unchecked."
         )
-    if not a.flags["C_CONTIGUOUS"]:
-        # A copy, not a cast: contiguity is a layout and reordering float32
-        # values moves no bit. Contract section 2 requires it.
-        a = np.ascontiguousarray(a)
+    # A layout copy at most, never a cast (the format was checked above):
+    # contiguity is a layout and reordering float32 values moves no bit.
+    # Contract section 2 requires it.
+    a, _copied = as_f32_c(x, ndim=2, name=name)
     return a
 
 
@@ -351,10 +368,13 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
 
     Parameters
     ----------
-    a, b : numpy.ndarray
-        2-D, dtype float32. Any other dtype is refused by name rather than
-        cast (see `_operand`). Non-contiguous input is copied, which moves no
-        bit.
+    a, b : any float32 buffer
+        2-D, dtype float32, read through the buffer protocol: a NumPy
+        array, an `array.array('f')`, a `mojolearn.Array`, or any other
+        object exporting a float32 buffer (DEVIATION 2400; NumPy is not
+        required). Any other dtype is refused by name rather than cast
+        (see `_operand`). Non-contiguous input is copied, which moves no
+        bit; a C-contiguous float32 buffer is borrowed with no copy.
     transpose_a, transpose_b : bool
         Which of the contract's three operations to run. The flags describe
         the ARRAYS you pass, so `transpose_a=True` means `a` is stored `k x m`
@@ -372,9 +392,13 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
         identity that gets you there through an operation the contract DOES
         cover, as your own expression rather than as a transpose this function
         materialized behind your back. DEVIATION 913.
-    out : numpy.ndarray, optional
-        Where to write. Float32, C-contiguous, writable, shape `(m, n)`. A
-        fresh array is allocated when this is None.
+    out : any writable float32 buffer, optional
+        Where to write. Float32, C-contiguous, writable, shape `(m, n)`:
+        a NumPy array, a `mojolearn.Array`, or any other object exporting
+        such a buffer (DEVIATION 2401 widened this from `numpy.ndarray`
+        to the buffer protocol; the checks are the same four, read off
+        `_buffer.view`). A fresh `mojolearn.Array` is allocated when this
+        is None.
     identical : bool, default True
         Whether you are asking for the profile's guarantee. True requires that
         this process loaded the IDENTICAL build and raises if it did not; see
@@ -384,8 +408,10 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
 
     Returns
     -------
-    numpy.ndarray
-        `(m, n)`, float32, C-contiguous. `out` itself when `out` was given.
+    mojolearn.Array
+        `(m, n)`, float32, C-contiguous; `numpy.asarray` on it is
+        zero-copy through `__array_interface__`. `out` itself -- the very
+        object you passed, whatever its type -- when `out` was given.
 
     What you are getting, stated once
     ---------------------------------
@@ -430,7 +456,7 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
             "section 0.1: OP_NN, OP_NT, OP_TN) and a.T @ b.T is not one of "
             "them. This function will not materialize a transpose to fake a "
             "fourth. If you want it, write the identity yourself:\n"
-            "    np.ascontiguousarray(matmul(b, a).T)\n"
+            "    np.ascontiguousarray(np.asarray(matmul(b, a)).T)\n"
             "which is (b @ a).T == a.T @ b.T, runs as OP_NN, and leaves the "
             "extra step visible in your source where you can price it."
         )
@@ -460,32 +486,48 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
         )
 
     if out is None:
-        out_arr = np.empty((m, n), dtype=np.float32)
+        out_arr = empty((m, n), "<f4")
     else:
+        # DEVIATION 2401: `out` is ANY writable buffer with the right shape
+        # and a float32 format, judged through `_buffer.view` -- the four
+        # checks are the ones the `isinstance(out, np.ndarray)` spelling
+        # made, in the same order and the same words, minus the type name.
         out_arr = out
-        if not isinstance(out_arr, np.ndarray):
+        try:
+            pb = probe(out_arr)
+        except TypeError:
             raise TypeError(
-                "mojolearn.linalg.matmul: out must be a numpy array, got "
+                "mojolearn.linalg.matmul: out must be a numpy array, a "
+                "mojolearn.Array or any other writable float32 buffer "
+                f"(anything supporting the buffer protocol), got "
                 f"{type(out_arr).__name__}"
-            )
-        if out_arr.dtype != np.float32:
+            ) from None
+        if not is_native_f32(pb.format):
             raise TypeError(
-                f"mojolearn.linalg.matmul: out has dtype {out_arr.dtype}, "
-                "and the profile's output is float32 (contract section 1). "
-                "Refused rather than cast on the way out."
+                "mojolearn.linalg.matmul: out has dtype "
+                f"{dtype_name(out_arr, pb)}, and the profile's output is "
+                "float32 (contract section 1). Refused rather than cast on "
+                "the way out."
             )
-        if out_arr.shape != (m, n):
+        if pb.shape != (m, n):
             raise ValueError(
-                f"mojolearn.linalg.matmul: out has shape {out_arr.shape}, "
+                f"mojolearn.linalg.matmul: out has shape {pb.shape}, "
                 f"want ({m}, {n})"
             )
-        if not out_arr.flags["C_CONTIGUOUS"]:
+        if not pb.c_contiguous:
             raise ValueError(
                 "mojolearn.linalg.matmul: out must be C-contiguous; the "
                 "device writes it directly (contract section 2). A "
                 "non-contiguous out cannot be written in place, and copying "
                 "into it afterwards would make `out` a lie about where the "
                 "result was produced."
+            )
+        if pb.readonly:
+            raise ValueError(
+                "mojolearn.linalg.matmul: out is read-only, refusing to "
+                "write to it; the device writes `out` directly (contract "
+                "section 2) and a read-only buffer handed to it is memory "
+                "corruption, not an exception."
             )
 
     # `params` is, in this exact order (mirrored word for word in
@@ -505,10 +547,12 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
     binding = _load()
     # `a_arr`, `b_arr` and `out_arr` are held in locals across the call. The
     # Mojo side takes raw addresses, borrows and retains nothing, which is
-    # only sound while the owning objects are alive (`_arrays.py`).
+    # only sound while the owning objects are alive (`_buffer.py`).
     #
     # THE OUTPUT ADDRESS COMES FIRST, mirroring `identical_gemm(ctx, c, a, b,
     # ...)`. Swapping it with `a` writes the device's output over the caller's
     # input matrix, which is memory corruption and not an exception.
-    binding.gemm(_addr(out_arr), _addr_ro(a_arr), _addr_ro(b_arr), params)
+    # `addr` (writable) for the output, `addr_ro` for the operands.
+    binding.gemm(addr(out_arr, name="out"), addr_ro(a_arr, name="a"),
+                 addr_ro(b_arr, name="b"), params)
     return out_arr

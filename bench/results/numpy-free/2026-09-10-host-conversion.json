@@ -1,0 +1,224 @@
+{
+  "scope": "host input conversion only; not GPU or whole-fit performance",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "numpy_version": "2.5.3",
+  "native_artifact": "_mojolearn.so",
+  "native_sha256": "f810203cc479f8c3118d95c1b1a8b35ab6423295debbb5f071df74a586fce448",
+  "results": [
+    {
+      "dtype": "float64",
+      "source_order": "C",
+      "target_order": "C",
+      "shape": [
+        2000000,
+        20
+      ],
+      "samples_ms": {
+        "numpy": [
+          5.68925,
+          5.723375,
+          5.653292,
+          5.633292,
+          5.7405,
+          5.700333,
+          5.782958,
+          5.753333,
+          5.639542,
+          5.635292
+        ],
+        "native": [
+          5.733084,
+          5.763208,
+          5.716459,
+          5.712167,
+          5.788042,
+          5.7315,
+          5.735708,
+          5.754417,
+          5.853584,
+          5.6955
+        ]
+      },
+      "median_ms": {
+        "numpy": 5.6947915,
+        "native": 5.734396
+      },
+      "native_over_numpy": 1.0069545127332582,
+      "output_sha256": "40959bc6c56a783164a5bb454e4e248a2802331d0870367b5709245f8429f58e",
+      "native_path": "cast_f64_to_f32",
+      "allocation": "PyMem_RawMalloc, released after each call"
+    },
+    {
+      "dtype": "float64",
+      "source_order": "C",
+      "target_order": "F",
+      "shape": [
+        2000000,
+        20
+      ],
+      "samples_ms": {
+        "numpy": [
+          21.240625,
+          21.07275,
+          21.161083,
+          21.280416,
+          21.246542,
+          21.185042,
+          21.265833,
+          20.785541,
+          21.600208,
+          20.971083
+        ],
+        "native": [
+          16.47625,
+          16.473917,
+          17.175084,
+          16.206542,
+          16.503292,
+          16.448834,
+          16.512959,
+          16.509,
+          16.669667,
+          16.517875
+        ]
+      },
+      "median_ms": {
+        "numpy": 21.212833500000002,
+        "native": 16.506146
+      },
+      "native_over_numpy": 0.7781207541180201,
+      "output_sha256": "434a315d863ff6e11449fef471a672c1f31e331fa0b370375a8b53ffef83ee92",
+      "native_path": "cast_colmajor_f64_to_f32",
+      "allocation": "PyMem_RawMalloc, released after each call"
+    },
+    {
+      "dtype": "float32",
+      "source_order": "C",
+      "target_order": "F",
+      "shape": [
+        2000000,
+        20
+      ],
+      "samples_ms": {
+        "numpy": [
+          22.001792,
+          21.973625,
+          21.778208,
+          22.35125,
+          22.948875,
+          21.856541,
+          21.265458,
+          22.527958,
+          22.835792,
+          22.248875
+        ],
+        "native": [
+          11.679083,
+          11.401625,
+          11.615958,
+          11.509,
+          11.605083,
+          11.112375,
+          11.724459,
+          11.221667,
+          11.691542,
+          11.575
+        ]
+      },
+      "median_ms": {
+        "numpy": 22.1253335,
+        "native": 11.5900415
+      },
+      "native_over_numpy": 0.5238357876051902,
+      "output_sha256": "fc04e5d69eb4b4e1aa6e50acb49ba391d08e3c4bd40d84e67fed60abddc9da16",
+      "native_path": "transpose_f32",
+      "allocation": "PyMem_RawMalloc, released after each call"
+    },
+    {
+      "dtype": "float64",
+      "source_order": "F",
+      "target_order": "C",
+      "shape": [
+        2000000,
+        20
+      ],
+      "samples_ms": {
+        "numpy": [
+          13.669125,
+          13.524792,
+          13.560292,
+          13.827,
+          13.7585,
+          13.926459,
+          13.697833,
+          13.822875,
+          13.782875,
+          13.8445
+        ],
+        "native": [
+          11.448,
+          11.232042,
+          11.984375,
+          11.680416,
+          11.898333,
+          12.099,
+          12.06,
+          11.973333,
+          12.070541,
+          11.345791
+        ]
+      },
+      "median_ms": {
+        "numpy": 13.770687500000001,
+        "native": 11.935832999999999
+      },
+      "native_over_numpy": 0.8667565072549934,
+      "output_sha256": "40959bc6c56a783164a5bb454e4e248a2802331d0870367b5709245f8429f58e",
+      "native_path": "cast_colmajor_f64_to_f32",
+      "allocation": "PyMem_RawMalloc, released after each call"
+    },
+    {
+      "dtype": "float32",
+      "source_order": "F",
+      "target_order": "C",
+      "shape": [
+        2000000,
+        20
+      ],
+      "samples_ms": {
+        "numpy": [
+          13.046667,
+          12.210459,
+          12.354333,
+          12.985541,
+          12.968084,
+          12.646792,
+          12.501208,
+          12.440375,
+          12.461875,
+          12.475625
+        ],
+        "native": [
+          11.785625,
+          11.8335,
+          11.647041,
+          11.815292,
+          11.747667,
+          11.7335,
+          11.818667,
+          11.862125,
+          11.892833,
+          11.821583
+        ]
+      },
+      "median_ms": {
+        "numpy": 12.4884165,
+        "native": 11.816979499999999
+      },
+      "native_over_numpy": 0.9462352172511221,
+      "output_sha256": "6e71156f7476c0fee9f60e0e362c9a8aa56b8c9e3396bb1d3f2e63b75c21c46d",
+      "native_path": "transpose_f32",
+      "allocation": "PyMem_RawMalloc, released after each call"
+    }
+  ]
+}

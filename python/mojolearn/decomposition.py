@@ -2,11 +2,23 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """GPU dimensionality reduction."""
 
-import numpy as np
-
 from . import _mojolearn_estimators
+from ._array import Array
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
 from ._mode import NumericModeMixin
-from ._arrays import _addr, _addr_ro, as_f32_c
+
+
+def _as_array_view(value):
+    """`value` as an `Array` WITHOUT copying: itself when it already is
+    one, a zero-copy `Array.from_buffer` view over any other buffer-protocol
+    object (a NumPy array a caller assigned to a model attribute), None
+    when it is neither. DEVIATION 2368."""
+    if isinstance(value, Array):
+        return value
+    try:
+        return Array.from_buffer(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _component_count(n_components, shape):
@@ -188,17 +200,24 @@ class PCA(NumericModeMixin):
         return binding
 
     def _validate_whiten_state(self):
+        """DEVIATION 2368: the four model arrays are inspected through the
+        buffer protocol, so the `Array` fit stores and any other float32
+        C-contiguous buffer a caller assigned (the surface tests assign
+        NumPy arrays) both pass; anything else is refused by name. The
+        finiteness scan is `_buffer.all_finite` (native when the helper is
+        loadable), the sign test is `Array.min()`."""
+        views = {}
         for name, shape in (("components_", (self.n_components_, self.n_features_in_)),
                             ("mean_", (self.n_features_in_,)),
                             ("singular_values_", (self.n_components_,)),
                             ("explained_variance_", (self.n_components_,))):
-            value = getattr(self, name, None)
-            if (not isinstance(value, np.ndarray) or value.dtype != np.float32
-                    or value.shape != shape or not value.flags.c_contiguous
-                    or not np.isfinite(value).all()):
+            a = _as_array_view(getattr(self, name, None))
+            if (a is None or a.dtype != "<f4" or tuple(a.shape) != shape
+                    or not a.flags["C_CONTIGUOUS"] or not all_finite(a)):
                 raise ValueError(f"mojolearn PCA whitening requires finite C-order float32 {name} with shape {shape}")
-        if (self.n_samples_ < 2 or np.any(self.singular_values_ < 0)
-                or np.any(self.explained_variance_ < 0)):
+            views[name] = a
+        if (self.n_samples_ < 2 or views["singular_values_"].min() < 0
+                or views["explained_variance_"].min() < 0):
             raise ValueError("mojolearn PCA whitening requires fit rows >=2 and nonnegative singular values/variance")
 
     def _dense_binding(self):
@@ -250,8 +269,8 @@ class PCA(NumericModeMixin):
             binding = self._dense_binding()
         else:
             binding = self._bind("_mojolearn_estimators")
-        x, self.input_copied_ = as_f32_c(X, "X")
-        if self.whiten and not np.isfinite(x).all():
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        if self.whiten and not all_finite(x):
             raise ValueError("mojolearn PCA whitening requires finite X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn PCA requires at least 2 rows and 2 features")
@@ -273,16 +292,16 @@ class PCA(NumericModeMixin):
         nc = _component_count(self.n_components, x.shape)
         if dense and nc > min(x.shape):
             raise ValueError("full SVD n_components cannot exceed min(n_samples, n_features)")
-        self.components_ = np.empty((nc, x.shape[1]), dtype=np.float32)
-        self.mean_ = np.empty(x.shape[1], dtype=np.float32)
-        self.explained_variance_ = np.empty(nc, dtype=np.float32)
-        self.explained_variance_ratio_ = np.empty(nc, dtype=np.float32)
-        self.singular_values_ = np.empty(nc, dtype=np.float32)
+        self.components_ = empty((nc, x.shape[1]), "<f4")
+        self.mean_ = empty((x.shape[1],), "<f4")
+        self.explained_variance_ = empty((nc,), "<f4")
+        self.explained_variance_ratio_ = empty((nc,), "<f4")
+        self.singular_values_ = empty((nc,), "<f4")
         fit_fn = binding.pca_fit_full if dense else binding.pca_fit
         self.noise_variance_ = float(fit_fn(
-            _addr_ro(x), _addr(self.components_), _addr(self.mean_),
-            _addr(self.explained_variance_), _addr(self.explained_variance_ratio_),
-            _addr(self.singular_values_), [x.shape[0], x.shape[1], nc],
+            addr_ro(x, name="x"), addr(self.components_, name="components_"), addr(self.mean_, name="mean_"),
+            addr(self.explained_variance_, name="explained_variance_"), addr(self.explained_variance_ratio_, name="explained_variance_ratio_"),
+            addr(self.singular_values_, name="singular_values_"), [x.shape[0], x.shape[1], nc],
         ))
         self.n_components_ = nc
         self.n_features_in_ = x.shape[1]
@@ -294,13 +313,13 @@ class PCA(NumericModeMixin):
     def transform(self, X):
         if not hasattr(self, "components_"):
             raise ValueError("mojolearn PCA: call fit before transform")
-        x, _ = as_f32_c(X, "X")
+        x, _ = as_f32_c(X, ndim=2, name="X")
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn PCA feature count differs from fit")
-        out = np.empty((x.shape[0], self.n_components_), dtype=np.float32)
+        out = empty((x.shape[0], self.n_components_), "<f4")
         if self.whiten:
             self._validate_whiten_state()
-            if not np.isfinite(x).all():
+            if not all_finite(x):
                 raise ValueError("mojolearn PCA whitening requires finite X")
             # `n_samples_` and NOT `x.shape[0]`. DEVIATION 580: cuML's dense
             # path scales by the row count of THIS CALL (pca.pyx:770), so
@@ -308,16 +327,16 @@ class PCA(NumericModeMixin):
             # Their own sparse path uses the fit's count and so does
             # scikit-learn, and so does this.
             self._whiten_binding().pca_whiten_transform(
-                _addr_ro(x), _addr_ro(self.mean_), _addr_ro(self.components_),
-                _addr_ro(self.singular_values_), _addr(out),
+                addr_ro(x, name="x"), addr_ro(self.mean_, name="mean_"), addr_ro(self.components_, name="components_"),
+                addr_ro(self.singular_values_, name="singular_values_"), addr(out, name="out"),
                 [x.shape[0], x.shape[1], self.n_components_, self.n_samples_],
             )
-            if not np.isfinite(out).all():
+            if not all_finite(out):
                 raise ValueError("mojolearn PCA whitening produced nonfinite output")
             return out
         self._bind("_mojolearn_estimators").pca_transform(
-            _addr_ro(x), _addr_ro(self.mean_), _addr_ro(self.components_),
-            _addr(out), [x.shape[0], x.shape[1], self.n_components_],
+            addr_ro(x, name="x"), addr_ro(self.mean_, name="mean_"), addr_ro(self.components_, name="components_"),
+            addr(out, name="out"), [x.shape[0], x.shape[1], self.n_components_],
         )
         return out
 
@@ -327,27 +346,27 @@ class PCA(NumericModeMixin):
     def inverse_transform(self, X):
         if self.whiten and not hasattr(self, "components_"):
             raise ValueError("mojolearn PCA: call fit before inverse_transform")
-        z, _ = as_f32_c(X, "X")
+        z, _ = as_f32_c(X, ndim=2, name="X")
         if z.shape[1] != self.n_components_:
             raise ValueError("mojolearn PCA component count differs from fit")
-        out = np.empty((z.shape[0], self.n_features_in_), dtype=np.float32)
+        out = empty((z.shape[0], self.n_features_in_), "<f4")
         if self.whiten:
             self._validate_whiten_state()
-            if not np.isfinite(z).all():
+            if not all_finite(z):
                 raise ValueError("mojolearn PCA whitening requires finite scores")
             self._whiten_binding().pca_whiten_inverse_transform(
-                _addr_ro(z), _addr_ro(self.components_),
-                _addr_ro(self.singular_values_), _addr_ro(self.mean_),
-                _addr(out),
+                addr_ro(z, name="z"), addr_ro(self.components_, name="components_"),
+                addr_ro(self.singular_values_, name="singular_values_"), addr_ro(self.mean_, name="mean_"),
+                addr(out, name="out"),
                 [z.shape[0], self.n_features_in_, self.n_components_,
                  self.n_samples_],
             )
-            if not np.isfinite(out).all():
+            if not all_finite(out):
                 raise ValueError("mojolearn PCA whitening produced nonfinite output")
             return out
         self._bind("_mojolearn_estimators").inverse_transform(
-            _addr_ro(z), _addr_ro(self.components_), _addr_ro(self.mean_),
-            _addr(out), [z.shape[0], self.n_features_in_, self.n_components_, 1],
+            addr_ro(z, name="z"), addr_ro(self.components_, name="components_"), addr_ro(self.mean_, name="mean_"),
+            addr(out, name="out"), [z.shape[0], self.n_features_in_, self.n_components_, 1],
         )
         return out
 
@@ -422,14 +441,14 @@ class TruncatedSVD(NumericModeMixin):
                 "surface. Accepting the name and running this arm would be a "
                 "silent substitution, which is why this raises instead"
             )
-        x, self.input_copied_ = as_f32_c(X, "X")
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn TruncatedSVD requires at least 2 rows and 2 features")
         nc = _component_count(self.n_components, x.shape)
-        self.components_ = np.empty((nc, x.shape[1]), dtype=np.float32)
-        self.singular_values_ = np.empty(nc, dtype=np.float32)
+        self.components_ = empty((nc, x.shape[1]), "<f4")
+        self.singular_values_ = empty((nc,), "<f4")
         self._bind("_mojolearn_estimators").tsvd_fit(
-            _addr_ro(x), _addr(self.components_), _addr(self.singular_values_),
+            addr_ro(x, name="x"), addr(self.components_, name="components_"), addr(self.singular_values_, name="singular_values_"),
             [x.shape[0], x.shape[1], nc],
         )
         self.n_components_ = nc
@@ -439,12 +458,12 @@ class TruncatedSVD(NumericModeMixin):
     def transform(self, X):
         if not hasattr(self, "components_"):
             raise ValueError("mojolearn TruncatedSVD: call fit before transform")
-        x, _ = as_f32_c(X, "X")
+        x, _ = as_f32_c(X, ndim=2, name="X")
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn TruncatedSVD feature count differs from fit")
-        out = np.empty((x.shape[0], self.n_components_), dtype=np.float32)
+        out = empty((x.shape[0], self.n_components_), "<f4")
         self._bind("_mojolearn_estimators").tsvd_transform(
-            _addr_ro(x), _addr_ro(self.components_), _addr(out),
+            addr_ro(x, name="x"), addr_ro(self.components_, name="components_"), addr(out, name="out"),
             [x.shape[0], x.shape[1], self.n_components_],
         )
         return out
@@ -453,14 +472,14 @@ class TruncatedSVD(NumericModeMixin):
         return self.fit(X, y=y).transform(X)
 
     def inverse_transform(self, X):
-        z, _ = as_f32_c(X, "X")
+        z, _ = as_f32_c(X, ndim=2, name="X")
         if z.shape[1] != self.n_components_:
             raise ValueError("mojolearn TruncatedSVD component count differs from fit")
-        out = np.empty((z.shape[0], self.n_features_in_), dtype=np.float32)
+        out = empty((z.shape[0], self.n_features_in_), "<f4")
         # The mean pointer is unused when add_mean is false; components is a
         # valid non-null float32 address for the boundary contract.
         self._bind("_mojolearn_estimators").inverse_transform(
-            _addr_ro(z), _addr_ro(self.components_), _addr_ro(self.components_),
-            _addr(out), [z.shape[0], self.n_features_in_, self.n_components_, 0],
+            addr_ro(z, name="z"), addr_ro(self.components_, name="components_"), addr_ro(self.components_, name="components_"),
+            addr(out, name="out"), [z.shape[0], self.n_features_in_, self.n_components_, 0],
         )
         return out

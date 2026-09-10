@@ -8,6 +8,11 @@ contain the detailed investigation record.
 New native builds are required. This entry describes source changes; publication
 and installed-wheel support will be recorded after the artifacts are uploaded.
 
+- Removed the runtime NumPy dependency. Estimators return `mojolearn.Array`
+  and accept supported buffer inputs; `numpy.asarray(result)` provides a
+  zero-copy view. Shared native conversion, validation and row-gather helpers
+  support the GPU paths. New builds and qualification are required; this
+  changes the array return API from 0.7.0.
 - Added optional GPU `parallel_groves` prediction for Random Forest and Extra
   Trees, sharing resident forest storage, vector-leaf traversal and reusable
   prediction buffers. The default remains `sequential`; the two engines use
