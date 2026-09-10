@@ -1,0 +1,39 @@
+{
+  "schema": "mojolearn.lm-capacity.v2",
+  "attention_allocation": "materialized fallback",
+  "qualification": "host arithmetic only; not measured memory or throughput",
+  "model_shape": {
+    "batch": 1,
+    "length": 1024,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "profile": "mojolearn.byte-lm.b1-l1024-d768-h12-kv12-hd64-ff2048-v50257-blocks12.fp32.v3",
+  "parameters": 162147840,
+  "tokens_per_microbatch": 1024,
+  "allocation_subset_bytes": {
+    "parameters_gradient_adam_m_v": 2594365440,
+    "eight_attention_buffers_per_layer": 4831838208,
+    "five_token_vocabulary_matrices": 1029263360
+  },
+  "allocation_subset_total_gib": 7.874767303466797,
+  "omissions": [
+    "GEMM/optimizer/loss workspaces",
+    "linear activations",
+    "duplicate weights and gradients",
+    "host state and captures",
+    "allocator/runtime overhead"
+  ],
+  "fit_admitted": false,
+  "source_sha256": {
+    "python/mojolearn/_byte_lm_config.py": "440ca11e33cfed741c8a812a8dac74ad4e938ab8e16f84ed2af5b61d3fbe56b8",
+    "training/byte_lm.mojo": "af54927711047fa4525c361a7838d879f033ff5e996de666da841075ea7cd7f4",
+    "transformer/impl/transformers/models/llama/modeling_llama.mojo": "2985aafa8743b773b393ee04c85f61ce17dd1deea601e42210c8a98c7d99e1fa",
+    "transformer/checks/transformer_backward.mojo": "2118619927dbc19f4d794e6df7af22bae81a51bf6cd817c1b111b075100e1177"
+  }
+}

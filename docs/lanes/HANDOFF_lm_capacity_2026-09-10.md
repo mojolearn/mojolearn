@@ -20,13 +20,14 @@ Sources and exact scope: PERFORMANCE_STATUS_2026-09-10.md and
 bench/OPPONENT_REFERENCE.md. No cached opponent rerun; no new opponent row.
 kNN and Mamba improvements do not directly accelerate the present decoder LM.
 
-## A live large-training allocation blocker
+## Allocation blocker identified at 6154aeac (now addressed for fused execution)
 
-ByteTrainer allocates LlamaDeviceStages and LlamaBackwardStages for every layer
-without their existing `lean=True` argument. Forward owns four full
+At 6154aeac, ByteTrainer allocated LlamaDeviceStages and LlamaBackwardStages
+for every layer without their existing `lean=True` argument. The follow-up
+HANDOFF_lm_lean_attention_2026-09-10.md wires lazy allocation and records checks. Forward owns four full
 `B*H*L*L` FP32 arrays (scores, masked, aexp, weights); backward owns another
 four (d_attn_weights, d_attn_masked, d_attn_scores, d_qk_cell). Fused attention
-is integrated; the trainer's allocation policy has not caught up with it.
+was already integrated at that revision.
 
 ByteBuffers separately allocates five `B*L*V` FP32 arrays: logits, ce_shift,
 ce_expo, ce_weights, ce_dlogits. Keeping parameters on device does not remove
@@ -47,14 +48,14 @@ was plumbing underestimated the remaining memory and numerical work.
 These are disjoint allocation **subtotals**, not measured peaks or fit
 admission. They omit linear activations, duplicate weights/gradients,
 workspaces, host snapshots and runtime overhead. B8/L2048 cannot fit an
-80-GB device with the current allocations. The smaller rows are candidates
+80-GB device with those materialized allocations. The smaller rows are candidates
 for measurement, not proven fits. Do not reduce context/batch and present
 that as an improvement on the original workload.
 
 Reproduce without loading a GPU backend:
 
 ```sh
-python3 tools/lm_training_capacity.py --shape 8 2048 768 12 12 64 2048 12 50257
+python3 tools/lm_training_capacity.py --shape 8 2048 768 12 12 64 2048 12 50257 --materialized-attention
 ```
 
 Reports for all three rows, with source hashes, live in
@@ -77,9 +78,9 @@ No current BF16 opponent estimate is justified by these captures.
 
 Priority order:
 
-1. Wire and qualify lean attention stage allocation in the generalized
-   trainer. Exercise fused and eager fallback paths, full output comparisons,
-   and large peak memory/full-step timing before claiming gains.
+1. Lean attention allocation is now wired and checked on small native
+   training fixtures in both explicit paths; see the follow-up handoff.
+   Large peak memory/full-step timing is still required before claiming gains.
 2. Own model, optimizer and context across Python calls with explicit close,
    failure poisoning, state export and restore semantics. Provide a lean
    step result; current calls return full gradients and host state snapshots.

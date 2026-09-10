@@ -1,0 +1,16 @@
+{
+  "base_commit": "6154aeacb70ee77946b443fe250794374e49f6f1",
+  "qualification": "small native correctness and host allocation inventory; no timing, peak-memory, or large-fit admission",
+  "requested_attention_paths": [
+    "fused",
+    "eager"
+  ],
+  "numeric_mode": "identical",
+  "native_vendor": "metal",
+  "host_tests": "76 passed",
+  "binary_sha256": "029fa9f2333b72d601725b982c4988076cb101f7b399155f6089267ef5a425e1",
+  "source_sha256": {
+    "training/byte_lm.mojo": "af54927711047fa4525c361a7838d879f033ff5e996de666da841075ea7cd7f4",
+    "tools/lm_training_capacity.py": "210df1d8369800bfe052a919733773a470d9e0d6c82a1204be68229a60a8ba93"
+  }
+}

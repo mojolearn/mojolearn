@@ -425,8 +425,11 @@ struct ByteTrainer(Movable):
         self.rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
         for layer in range(config.n_layers):
             self.weights.append(_block_weights(ctx, initial_params, layer, config))
-            self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config)))
-            self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config)))
+            # The trace-disabled trainer uses the existing fused attention path.
+            # Allocate its quadratic stages lazily; eager/diagnostic fallback
+            # still grows them through ensure_*_attention_capacity.
+            self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
+            self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
         ctx.synchronize()
 
 

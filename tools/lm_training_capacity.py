@@ -29,21 +29,23 @@ SOURCES = (
 )
 
 
-def report(shape):
+def report(shape, *, materialized_attention=False):
     tokens = shape.batch * shape.length
     attention = 4 * shape.batch * shape.n_heads * shape.length ** 2
     vocabulary = 4 * tokens * shape.vocab_size
-    # ByteTrainer constructs both stage types with lean=False. Forward:
+    # ByteTrainer constructs both stage types with lean=True. Forward:
     # scores, masked, aexp, weights. Backward: d_attn_weights,
-    # d_attn_masked, d_attn_scores, d_qk_cell. All layers own these at once.
+    # d_attn_masked, d_attn_scores, d_qk_cell. Fused execution retains one
+    # element each; eager/diagnostic fallback may materialize all matrices.
     allocations = {
         "parameters_gradient_adam_m_v": 4 * 4 * shape.n_total,
-        "eight_attention_matrices_per_layer": 8 * shape.n_layers * attention,
+        "eight_attention_buffers_per_layer": 8 * shape.n_layers * (attention if materialized_attention else 4),
         # ByteBuffers: logits, ce_shift, ce_expo, ce_weights, ce_dlogits.
         "five_token_vocabulary_matrices": 5 * vocabulary,
     }
     return {
-        "schema": "mojolearn.lm-capacity.v1",
+        "schema": "mojolearn.lm-capacity.v2",
+        "attention_allocation": "materialized fallback" if materialized_attention else "lean fused",
         "qualification": "host arithmetic only; not measured memory or throughput",
         "model_shape": shape.to_dict(),
         "profile": shape.profile,
@@ -64,8 +66,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--shape", type=int, nargs=9, required=True,
                         metavar=("B", "L", "DM", "H", "KV", "HD", "FF", "LAYERS", "VOCAB"))
+    parser.add_argument("--materialized-attention", action="store_true",
+                        help="Count eager/diagnostic fallback quadratic buffers")
     args = parser.parse_args()
-    print(json.dumps(report(_config.ByteLanguageModelConfig(*args.shape)), indent=2))
+    print(json.dumps(report(_config.ByteLanguageModelConfig(*args.shape),
+                            materialized_attention=args.materialized_attention), indent=2))
 
 
 if __name__ == "__main__":
