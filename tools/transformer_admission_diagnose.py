@@ -27,10 +27,15 @@ def report(label, ours, ref):
     diff = np.abs(ours.astype(np.float64) - ref.astype(np.float64))
     allowed = 1e-5 + 5e-4 * np.abs(ref.astype(np.float64))
     where = np.unravel_index(np.argmax(diff), diff.shape)
+    worst = np.unravel_index(np.argmax(diff / allowed), diff.shape)
     out = {'variant': label, 'passed': bool(np.all(diff <= allowed)),
            'outside': int(np.count_nonzero(diff > allowed)), 'total': int(diff.size),
            'rtol': 5e-4, 'atol': 1e-5,
            'max_tolerance_multiple': float(np.max(diff / allowed)),
+           'worst_tolerance_index': list(map(int, worst)),
+           'ours_at_worst_tolerance': float(ours[worst]),
+           'ref_at_worst_tolerance': float(ref[worst]),
+           'allowed_at_worst_tolerance': float(allowed[worst]),
            'max_abs': float(diff.max()), 'rms_abs': float(np.sqrt(np.mean(diff * diff))),
            'max_index': list(map(int, where)), 'ours_at_max': float(ours[where]),
            'ref_at_max': float(ref[where]),
@@ -45,7 +50,9 @@ def main():
     ap.add_argument('--spec', required=True)
     ap.add_argument('--shape', choices=['narrow', 'wide'], required=True)
     ap.add_argument('--arm', choices=['ours', 'reference'], required=True)
-    ap.add_argument('--output', required=True)
+    ap.add_argument('--output', help='own full output .npy; required unless --reference-only')
+    ap.add_argument('--reference-only', action='store_true',
+                    help='attribute Torch FP32 versus FP64 without an own-output artifact; no admission claim')
     ap.add_argument('--rope-log', help='production inverse-frequency bit export')
     ap.add_argument('--reference64', action='store_true')
     ap.add_argument('--full-rope-log', help='production full-table export for positions0..L-1')
@@ -54,6 +61,10 @@ def main():
     args = ap.parse_args()
     if args.stage_errors and (args.arm != 'reference' or not args.reference64):
         ap.error('--stage-errors requires --arm reference --reference64')
+    if args.reference_only and (args.arm != 'reference' or not args.reference64):
+        ap.error('--reference-only requires --arm reference --reference64')
+    if not args.reference_only and not args.output:
+        ap.error('--output is required unless --reference-only')
     spec = load_spec(args.spec)
     row = next(r for r in spec.py_rows('llama') if r['name'].startswith(args.shape + '.'))
     b, l, dm = row['b'], row['l'], row['d_model']
@@ -85,13 +96,18 @@ def main():
                       'cudnn_tf32': torch.backends.cudnn.allow_tf32,
                       'deterministic_algorithms': torch.are_deterministic_algorithms_enabled(),
                       'float32_matmul_precision': torch.get_float32_matmul_precision()}), flush=True)
-    ours = np.load(args.output)
+    ours = None if args.reference_only else np.load(args.output)
+    print(json.dumps({'scope': 'numerical diagnosis only; no timing or admission change',
+                      'reference_only': args.reference_only,
+                      'full_rope_sha256': hashlib.sha256(Path(args.full_rope_log).read_bytes()).hexdigest() if args.full_rope_log else None,
+                      'rope_sha256': hashlib.sha256(Path(args.rope_log).read_bytes()).hexdigest() if args.rope_log else None}), flush=True)
     W = {k: torch.from_numpy(v).to(dev) for k, v in weights.items()}
     xt = torch.from_numpy(x.reshape(b*l, dm)).to(dev)
     with torch.inference_mode():
         model = spec.LlamaEager(torch, dev, row, W, torch.float32)
         original = model.block(xt, None, b, l)[0].reshape(b, l, dm).cpu().numpy()
-        report('original_fp32', ours, original)
+        if ours is not None:
+            report('original_fp32', ours, original)
         if args.rope_log:
             inv_words = {}
             for line in Path(args.rope_log).read_text().splitlines():
@@ -106,7 +122,8 @@ def main():
                 t = torch.from_numpy(fn(angle)).to(dev)
                 setattr(model, name, torch.cat((t, t), dim=-1))
             aligned = model.block(xt, None, b, l)[0].reshape(b, l, dm).cpu().numpy()
-            report('production_inv_fp32', ours, aligned)
+            if ours is not None:
+                report('production_inv_fp32', ours, aligned)
             report('inverse_change_vs_original', aligned, original)
         if args.full_rope_log:
             table = np.empty((l, row['head_dim']//2, 2), dtype=np.uint32)
@@ -123,13 +140,15 @@ def main():
                 t = torch.from_numpy(floats[:, :, i].copy()).to(dev)
                 setattr(model, name, torch.cat((t, t), dim=-1))
             aligned = model.block(xt, None, b, l)[0].reshape(b, l, dm).cpu().numpy()
-            report('production_tables_fp32', ours, aligned)
+            if ours is not None:
+                report('production_tables_fp32', ours, aligned)
         if args.reference64:
             model64 = spec.LlamaEager(torch, dev, row, W, torch.float64)
             if args.rope_log or args.full_rope_log:
                 model64.cos, model64.sin = model.cos.double(), model.sin.double()
             ref64 = model64.block(xt.double(), None, b, l)[0].reshape(b, l, dm).cpu().numpy()
-            report('matched_constants_fp64', ours, ref64)
+            if ours is not None:
+                report('matched_constants_fp64', ours, ref64)
             report('torch_fp32_vs_matched_fp64', aligned if args.rope_log or args.full_rope_log else original, ref64)
             if args.stage_errors:
                 from transformer_admission_stages import stage_errors

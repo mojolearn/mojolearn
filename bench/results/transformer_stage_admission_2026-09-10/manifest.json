@@ -1,0 +1,18 @@
+{
+  "base_commit": "b69e8344",
+  "scope": "numerical only, original full shapes; no new opponent timing",
+  "device": "NVIDIA H100 80GB HBM3",
+  "driver": "580.126.09",
+  "gpu_uuid": "GPU-1ba08457-69e7-4035-d268-d7898ff2c362",
+  "numpy": "1.26.3",
+  "original_spec_sha256": "090c22b8be330863af8d9fcd8d7a7f88b38a255b5e36f13720ce0cd1d053252f",
+  "sha256": {
+    "tools/transformer_admission_diagnose.py": "1a251e95f0aad317f18a1a57175ba2d2f20bb748f18b23a6929667b3294e6df5",
+    "tools/transformer_admission_stages.py": "6aa65012b9a39bf0e64b4ae2164ddd873ce188f5a527a27b586e274286f067d9",
+    "tools/tests/test_transformer_admission_report.py": "2759806b78f6e1063e69ea0bb87f5cc069dfdb40837abd534694fc4f1b63a86a",
+    "bench/results/transformer_admission_2026-09-10/h100/rope_full.log.gz": "bb94661a465eb280ce13eb592319cb15e4a27d842c927b90722aabcd71df157d",
+    "bench/results/transformer_stage_admission_2026-09-10/narrow.stage.log": "460993782237a51a070639d9254b0102bfe5e33ac1a6f5cce5fe0dc0e4cf4190",
+    "bench/results/transformer_stage_admission_2026-09-10/wide.stage.log": "a8d7131f4385686c0686e66f803539af33f152b9f6cc9bf2adccb349ca22a6ff"
+  },
+  "prior_final_statistics_exactly_reproduced": true
+}

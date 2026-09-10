@@ -11,3 +11,25 @@ The Python frame holds x, nine weight owners and y until the native call returns
 Root-owned Apple reproduction: `/tmp/mojolearn-transformer-fresh-apple.sh`. Isolated NVIDIA reproduction: `tools/transformer_fresh_prefill_leg.sh`; set checkout/results variables and choose image `/usr/bin/python3` consistently across arms. It activates Pixi for Mojo, preflights both fixture generators, and installs the matched archived original public harness. Both original large output files must match complete SHA256; all raw timing rounds are retained. No opponent is timed; original transformer Torch admission remains unqualified and no ratio should be claimed.
 
 Apple and NVIDIA identity gates passed, including 82 maps and complete large output SHA witnesses. First H100 seven-round baseline/fresh medians: 211.354129/204.134570 ms narrow and 212.392121/187.488862 ms wide. Final default and reverse-order validation passed: narrow baseline/default 210.893420/204.793565 ms, wide 214.515634/188.905248 ms (2.9%/11.9% less). The final 82-array maps and original large output hashes remain identical. [Lane evidence](../../bench/results/transformer_fresh_2026-09-10/README.md) links the parent final-performance artifact containing all samples and source manifests. Root owns all local builds, GPU allocation and timing serialization.
+
+## Full original-grid numerical attribution continuation
+
+The original B8/L4096/D512 and B8/L1024/D2048 H100 diagnostics now run
+through 20 local/cumulative stage comparisons, with shared production RoPE
+constants. Prior final Torch FP32-versus-FP64 statistics reproduce exactly.
+Attention-core rounding and amplification of Q/K/V projection/RoPE error
+both contribute; o_proj, same-input norm2, and residual additions have zero
+violations. The wide MLP has additional local error, but propagated error
+dominates. Full counts, hashes, scope, and reproduction are in
+[stage admission evidence](../../bench/results/transformer_stage_admission_2026-09-10/README.md).
+No tolerance or production algorithm changed, no new opponent timing was
+measured, and the original Torch opponent ratio remains unqualified.
+
+`tools/transformer_admission_diagnose.py --reference-only --reference64`
+can diagnose the original comparator without rebuilding the native Mojo
+binding or requiring an own-output NPY. Ordinary own-output comparison still
+requires `--output`. Reports now distinguish the worst tolerance witness
+from the largest absolute-error witness. Six host tests pass, alongside both
+complete full-grid CUDA diagnostic runs. Next numerical attribution: split
+projection versus RoPE, then attention logits/softmax; this evidence alone
+does not warrant changing IDENTICAL arithmetic to match Torch.
