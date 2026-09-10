@@ -42,6 +42,8 @@ Neither of those sentences may be softened in this file or in the Python
 wrappers without a leg to point at.
 """
 
+# DEVIATION 2486: shared byte-preserving host copies.
+from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -81,31 +83,19 @@ from spectral.estimator import (
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float32 buffer address")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return f32_ptr(addr)
 
 
 def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int32 buffer address")
-    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
+    return i32_ptr(addr)
 
 
 def _load_i32(addr: Int, n: Int) raises -> List[Int32]:
-    var p = _i32_ptr(addr)
-    var out = List[Int32]()
-    for i in range(n):
-        out.append(p.unsafe_load(i))
-    return out^
+    return read_i32(addr, max(0, n))
 
 
 def _load_f32(addr: Int, n: Int) raises -> List[Float32]:
-    var p = _f32_ptr(addr)
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(p.unsafe_load(i))
-    return out^
+    return read_f32(addr, max(0, n))
 
 
 def _want(name: String, params: PythonObject, k: Int) raises:
