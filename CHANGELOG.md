@@ -3,10 +3,14 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.0 (unreleased 2026-09-10)
+## 0.8.0 (published 2026-09-10)
 
-New native builds are required. This entry describes source changes; publication
-and installed-wheel support will be recorded after the artifacts are uploaded.
+Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) from commit 9392320e,
+tag alpha-api-0.8.0-20260910; macOS arm64 wheel from tag v0.8.0 at 4a3c22c3.
+Both on PyPI 2026-09-11 02:46Z and 02:52Z. Installed-wheel qualification on
+the Linux architectures was not run (release policy of 2026-09-09: build,
+retag, publish; test what changed). DEVIATION 2500 (labels in the base
+binding) landed on main during the build and is not in these wheels.
 
 - Only the three tree families (GBDT, Random Forest, Extra Trees) ship the
   `fast` and `deterministic` tiers. Every other binding, including SVC, SVR,

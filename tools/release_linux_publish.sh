@@ -18,9 +18,13 @@
 #
 # <tag> is created at HEAD if it does not exist. The workflow checks out that
 # tag, so HEAD must be the commit the wheel was built from or one whose
-# native inventory is unchanged (docs, tools/*.sh and packaging/*.py outside
-# packaging/linux do not count; .mojo, python/mojolearn, packaging/linux/*.py
-# and tools/*.py do).
+# native inventory is unchanged. The inventory (native_inventory in
+# tools/check_linux_release_qualification.py) is every .mojo file, the .py
+# and .sh files under bindings/, packaging/linux/ and python/mojolearn/,
+# pixi.toml, pixi.lock and tools/linux_surface_qualification.sh. Docs,
+# other tools/*.sh and tools/*.py do not count; tools/*.py join the
+# qualification-sources set only when installed qualification is attached.
+# Create the tag explicitly at the build commit when main has moved on.
 set -euo pipefail
 WHL=$(cd "$(dirname "${1:?final wheel}")" && pwd)/$(basename "$1")
 TAG="${2:?tag, e.g. alpha-api-0.7.0-20260909}"

@@ -308,8 +308,18 @@ export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 MOJOLEARN_EXPECT_VENDOR="$VENDOR" M
 cd "$DEST"
 for mode in fast deterministic identical; do
     export MOJOLEARN_NUMERIC_MODE="$mode"
-    surfaces=(smoke umap umap-transform umap-quality ordered-rmse mamba transformer arima)
-    if [[ "$ACTION" = qualify-release-linux3 && "$mode" = identical ]]; then surfaces+=(byte-lm); fi  # DEVIATION 2290
+    # DEVIATION 2490: the job set per tier comes from the verifier's
+    # expected_jobs so the on-box loop and the admission side cannot drift.
+    read -r -a surfaces <<< "$("$PY" - "$mode" "$ACTION" <<'PYJOBS'
+import os, sys
+sys.path.insert(0, os.environ['MOJOLEARN_REPO'] + '/tools')
+from verify_linux_surface_qualification import RELEASE_PROFILE, expected_jobs
+mode, action = sys.argv[1:3]
+audit = {'assembly_profile': RELEASE_PROFILE} if action == 'qualify-release-linux3' else {}
+order = ('smoke', 'umap', 'umap-transform', 'umap-quality', 'ordered-rmse', 'mamba', 'transformer', 'arima', 'byte-lm')
+print(' '.join(s for s in order if (s, mode) in expected_jobs(audit)))
+PYJOBS
+)"
     for surface in "${surfaces[@]}"; do
         export MOJOLEARN_INSTALLED_RECORD="$DEST/$surface-$mode.installed.json"
         args=()
