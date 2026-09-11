@@ -1,0 +1,7 @@
+numpy 2.4.6
+torch 2.4.1+cu124 cuda 12.4 hip None available True device NVIDIA H100 80GB HBM3
+cuml 26.08.00
+cupy 14.2.0 cuda_runtime 12090 driver_api 12080
+sklearn 1.9.1
+scipy 1.17.1
+pyarrow 23.0.1

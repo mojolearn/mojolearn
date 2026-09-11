@@ -1645,8 +1645,19 @@ def _kde_score_samples_fused(
 comptime KDE_TILED_FEAT = 64
 comptime KDE_TILED_CELL = 64
 comptime KDE_TILED_TILE_FLOATS = KDE_TILED_FEAT * KDE_TILED_CELL
-comptime KDE_TILED_Q_TPB = 256
-comptime KDE_TILED_CHUNK_ROWS = 1024
+# DEVIATION 2626 also sets the tiled pass's DEFAULT SCHEDULE from the sweep
+# in `kde/checks/kde_stage_profile.mojo` (H100, pod ur95zh3h9qbx2p, 3
+# repetitions after a warm-up, 100,000 fit rows x 2,000 queries). Chunks of
+# 256 train rows beat 1,024 on both shapes (d = 220: 36.5 against 41.1 ms;
+# d = 11: 26.7 against 27.3 ms) and 4,096 loses on both; a 128-thread query
+# block beats 256 at d = 220 (36.5 against 38.9 ms) and ties it at d = 11.
+# More, shorter chunks give the 2D grid more blocks to fill the GPU with and
+# keep each thread's `logk` writes closer together. A block width and a chunk
+# length are SCHEDULING: the gate asserts the same bits across schedules
+# (`check_kde_tiled_equals_staged` runs q_tpb 32 with 100-row chunks beside
+# the defaults) and the profile hashed nine of them equal on both shapes.
+comptime KDE_TILED_Q_TPB = 128
+comptime KDE_TILED_CHUNK_ROWS = 256
 
 
 def kde_identical_tiled_applies(metric: Int, trace_enabled: Bool) -> Bool:
