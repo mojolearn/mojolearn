@@ -50,6 +50,14 @@ from training.byte_lm import (
     byte_validate_state, byte_validate_optimizer,
     byte_validate_tokens, byte_lm_fault_inject_available,
 )
+from training.byte_lm_logits import (
+    BYTE_LOGITS_MAX_BATCH,
+    BYTE_LOGITS_MAX_CELLS,
+    byte_logits_from_params,
+    byte_logits_resident,
+    byte_logits_validate,
+    byte_logits_validate_params,
+)
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_DEFAULT,
     ATTN_ARM_TRIAL,
@@ -1056,6 +1064,127 @@ def byte_lm_session_run_binding(session: PythonObject, addresses: PythonObject,
     return _byte_lm_run(addresses, params, cfg, owner[], retain=True)
 
 
+# ---------------------------------------------------------------------------
+# DEVIATION 2660: forward-only logits (training/byte_lm_logits.mojo).
+# ---------------------------------------------------------------------------
+
+
+def _logits_dims(dims: PythonObject, shape: ByteConfig) raises -> List[Int]:
+    """[batch, length] as integers (never booleans), in bounds, before any
+    address is read."""
+    if len(dims) != 2:
+        raise Error("byte LM logits: expected dims [batch, length]")
+    var operator_module = Python.import_module("operator")
+    var out = List[Int]()
+    for i in range(2):
+        var type_name = String(py=dims[i].__class__.__name__)
+        if type_name == "bool" or type_name == "bool_":
+            raise Error("byte LM logits: dims must be integers, not booleans")
+        out.append(Int(py=operator_module.index(dims[i])))
+    if out[0] < 1 or out[0] > BYTE_LOGITS_MAX_BATCH or out[1] < 1 or out[1] > shape.length:
+        raise Error("byte LM logits: batch in [1, " + String(BYTE_LOGITS_MAX_BATCH)
+                    + "] and length in [1, " + String(shape.length) + "]")
+    if out[0] * out[1] > BYTE_LOGITS_MAX_CELLS // shape.vocab_size:
+        raise Error("byte LM logits: batch * length * vocab exceeds the admitted span")
+    return out^
+
+
+def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
+                           shape: PythonObject) raises -> PythonObject:
+    """Stateless forward-only logits. addresses[3] = [in_param_f32
+    (n_total), in_ids_i32 (batch * length), out_logits_f32 (batch * length *
+    vocab)]; dims = [batch, length]. Every input is read and admitted before
+    any device work; the context is created, used, drained of its pending
+    frees (DEVIATION 2520) and destroyed before anything is published.
+    Returns the number of logits written."""
+    _require_binding_profile()
+    var cfg = _byte_config(shape)
+    var bl = _logits_dims(dims, cfg)
+    var m = bl[0] * bl[1]
+    var cells_out = m * cfg.vocab_size
+    var n = cfg.n_total()
+    var addr = _read_addresses(addresses, 3)
+    var cells: List[Int] = [n, m, cells_out]
+    _validate_slot_table(addr, cells, 2)
+    var params = _read_f32(addr[0], n)
+    var ids = _read_ids(addr[1], m)
+    byte_logits_validate(ids, bl[0], bl[1], cfg)
+    byte_logits_validate_params(params, cfg)
+    var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
+    var logits = List[Float32]()
+    var session = ByteLMSession()
+    session.busy = True
+    try:
+        with GILReleased(Python()):
+            if keep_context:
+                # DEVIATION 2513: the same keeper the other per-call path uses.
+                BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
+            session.ctx = DeviceContext()
+            logits = byte_logits_from_params(session.ctx.value(), params, ids, bl[0], bl[1], cfg)
+            session.ctx.value().synchronize()
+            session.ctx = None
+    except error:
+        session.busy = False
+        raise error
+    session.busy = False
+    session.usable = False
+    if len(logits) != cells_out:
+        raise Error("byte LM logits: wrong logits length")
+    copy_f32(logits.unsafe_ptr(), f32_ptr(addr[2]), cells_out)
+    return PythonObject(cells_out)
+
+
+def byte_lm_session_logits_binding(session: PythonObject, addresses: PythonObject,
+                                   dims: PythonObject, shape: PythonObject,
+                                   completed: PythonObject) raises -> PythonObject:
+    """Forward-only logits on an open resident session. addresses[2] =
+    [in_ids_i32 (batch * length), out_logits_f32 (batch * length * vocab)];
+    dims = [batch, length]; `completed` is the caller's committed step, which
+    must equal the session's, the scalar half of the admission
+    `byte_lm_session_eval` performs (a read-only call that silently used a
+    different state than the caller believes is a wrong provenance, not a
+    convenience). Writes no parameter, moment, flag or step. Returns the
+    number of logits written."""
+    _require_binding_profile()
+    var cfg_shape = _byte_config(shape)
+    var owner = session.downcast_value_ptr[ByteLMSession]()
+    var bl = _logits_dims(dims, cfg_shape)
+    var claimed = Int(py=Python.import_module("operator").index(completed))
+    if claimed < 0 or claimed >= 1000000:
+        raise Error("byte LM: completed step outside admitted bound")
+    var m = bl[0] * bl[1]
+    var cells_out = m * cfg_shape.vocab_size
+    var addr = _read_addresses(addresses, 2)
+    var cells: List[Int] = [m, cells_out]
+    _validate_slot_table(addr, cells, 1)
+    var ids = _read_ids(addr[0], m)
+    byte_logits_validate(ids, bl[0], bl[1], cfg_shape)
+    _require_open(owner[])
+    if owner[].trainer.value().config.profile() != cfg_shape.profile():
+        raise Error("byte LM: resident model shape mismatch")
+    if owner[].trainer.value().completed_steps != claimed:
+        raise Error("byte LM: resident completed-step mismatch")
+    var step_before = owner[].trainer.value().completed_steps
+    var logits = List[Float32]()
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            ref ctx = owner[].ctx.value()
+            logits = byte_logits_resident(ctx, owner[].trainer.value(), ids, bl[0], bl[1])
+            if owner[].trainer.value().completed_steps != step_before:
+                raise Error("byte LM logits changed the completed step")
+            ctx.synchronize()
+    except error:
+        owner[].busy = False
+        _mark_if_lost(owner[])
+        raise error
+    owner[].busy = False
+    if len(logits) != cells_out:
+        raise Error("byte LM logits: wrong logits length")
+    copy_f32(logits.unsafe_ptr(), f32_ptr(addr[1]), cells_out)
+    return PythonObject(cells_out)
+
+
 @export
 def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
     try:
@@ -1077,6 +1206,9 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_session_eval_binding]("byte_lm_session_eval")
         module.def_function[byte_lm_session_export_state_binding]("byte_lm_session_export_state")
         module.def_function[byte_lm_session_export_gradients_binding]("byte_lm_session_export_gradients")
+        # DEVIATION 2660: forward-only logits.
+        module.def_function[byte_lm_logits_binding]("byte_lm_logits")
+        module.def_function[byte_lm_session_logits_binding]("byte_lm_session_logits")
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")

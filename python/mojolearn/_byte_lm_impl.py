@@ -27,6 +27,13 @@ upload), at export (`export_state`, `export_gradients`, `export_checkpoint`,
 `close`) and never per step; a step moves the ids in and the loss and the
 flags out. The stateless path (`resident=False`) is unchanged: mirror in,
 mirror out, validated candidate committed or nothing.
+
+GPU LOGITS (DEVIATION 2660). `logits(ids)` and `next_bytes(ids)` run the
+forward alone, through the native `byte_lm_logits` (stateless) and
+`byte_lm_session_logits` (resident) entries, and return the numbers the
+trainer's loss is computed from. They write no state on either path.
+tools/byte_lm_gpu_logits_sweep.py compares them byte for byte with the CPU
+reference path of DEVIATION 2610, `LanguageModelInference(threaded=False)`.
 """
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
@@ -46,6 +53,7 @@ from ._arrays import _addr, _addr_ro
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes, full, zeros
 from ._bufcheck import flat_view, is_int32, is_native_f32, le_bytes, memcopy, probe
 from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
+from ._byte_lm_host import _greedy_next_bytes, _logits_ids
 
 PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 # Compatibility constants describe only the original regression fixture.
@@ -67,6 +75,12 @@ _SESSION_ENTRIES = ('byte_lm_session_create', 'byte_lm_session_close',
                     'byte_lm_session_eval', 'byte_lm_session_export_state',
                     'byte_lm_session_export_gradients', 'byte_lm_session_rollback',
                     'byte_lm_session_info')
+#: DEVIATION 2660 names the native logits entries and the limits they
+#: admit; `logits` refuses anything outside the limits here first.
+_LOGITS_ENTRY = 'byte_lm_logits'
+_SESSION_LOGITS_ENTRY = 'byte_lm_session_logits'
+_LOGITS_MAX_BATCH = 1024
+_LOGITS_MAX_CELLS = 268435456
 
 
 def _canonical(value):
@@ -340,6 +354,31 @@ def _binding_metadata(binding):
                 source_scope='available direct source files; binding SHA identifies the compiled artifact')
 
 
+def _gpu_logits_ids(ids, shape):
+    """`(tokens, batch, length)` for `logits` (DEVIATION 2660). The CPU
+    class's admission (`_byte_lm_host._logits_ids`) plus the native batch
+    and cell limits, returned as an owned copy so the trainer never aliases
+    caller memory. An empty 2-D buffer is refused by its reported shape
+    before any conversion."""
+    try:
+        pb = probe(ids)
+    except TypeError:
+        pb = None
+    if pb is not None and pb.ndim == 2 and 0 in pb.shape:
+        raise ValueError(f'ids must be [batch, 1..{shape.length}]')
+    tokens, copied = _logits_ids(ids, shape)
+    batch, length = tokens.shape
+    if batch > _LOGITS_MAX_BATCH or batch * length * shape.vocab_size > _LOGITS_MAX_CELLS:
+        raise ValueError(f'Byte-LM logits require batch <= {_LOGITS_MAX_BATCH} and '
+                         f'batch * length * vocab <= {_LOGITS_MAX_CELLS}')
+    return (tokens if copied else tokens.copy()), batch, length
+
+
+def _require_written(written, expected):
+    if _is_bool(written) or not isinstance(written, int) or written != expected:
+        raise RuntimeError('Byte-LM native logits wrote an unexpected number of logits')
+
+
 class SmallByteLanguageModelTrainer:
     """FP32 decoder language-model trainer with runtime dimensions.
 
@@ -348,6 +387,11 @@ class SmallByteLanguageModelTrainer:
     no biases/dropout/final norm, untied embedding/head. Supply a flat FP32
     array or the configured named tensors exposed by parameter_registry(shape). There
     is no hidden initialization, tokenizer, padding, truncation or RNG.
+
+    logits(ids)/next_bytes(ids) (DEVIATION 2660) run the same device forward
+    alone on int32[batch, length] IDs and change no state; the logits are the
+    numbers the loss is computed from, and next_bytes picks greedily with
+    ties going to the lowest byte value.
 
     train_step/evaluate require actual int32[B,L+1] IDs in [0, shape.vocab_size).
     The first L positions predict the next L; loss averages B*L targets. All arithmetic runs in the native CUDA/HIP/Metal IDENTICAL
@@ -829,6 +873,107 @@ class SmallByteLanguageModelTrainer:
         changes no state by construction (native gate G1)."""
         with self._lock:
             return self._run(ids, False)
+
+    def logits(self, ids):
+        """Float32 logits `[batch, length, vocab]` for int32 ids `[batch,
+        length]` (DEVIATION 2660), for positions 0 to length - 1 of each row,
+        prefilled from absolute position 0. `batch` must be in [1, 1024],
+        `length` in [1, shape.length], `batch * length * vocab` at most
+        268435456 and every id in [0, shape.vocab_size); anything else is
+        refused with ValueError before any native call.
+
+        The arithmetic is the IDENTICAL device forward the trainer's loss
+        uses, on Metal, CUDA or HIP, and these are the numbers it computes
+        before the loss. tools/byte_lm_gpu_logits_sweep.py compares them
+        byte for byte with the CPU reference path,
+        `LanguageModelInference(threaded=False)`. The native entries refuse
+        a non-finite logit with an error, because NaN payloads are shaped by
+        the vendor and cannot be part of an identity claim; the CPU class
+        returns them.
+
+        No state changes on either path. A resident trainer runs on its
+        session (opening it first if needed, as `train_step` does) and the
+        parameters, moments, flags and step counter do not move. A failed
+        call has nothing to roll back; the last gradient is no longer
+        exportable, as after any failure, and a session that no longer
+        reports itself usable is lost. A stateless trainer validates its
+        state as `evaluate` does, builds and destroys one device context,
+        and requires the parameter and id bytes it handed over unchanged
+        afterward."""
+        with self._lock:
+            shape = state_shape(self._state)
+            tokens, batch, length = _gpu_logits_ids(ids, shape)
+            if self._resident:
+                return self._logits_resident(tokens, batch, length, shape)
+            return self._logits_stateless(tokens, batch, length, shape)
+
+    def next_bytes(self, ids):
+        """The greedy next byte after each row of ids `[batch, length]`, ties
+        to the lowest byte value, picked from `logits(ids)` by the helper
+        `LanguageModelInference.next_bytes` uses (DEVIATION 2660)."""
+        return _greedy_next_bytes(self.logits(ids))
+
+    def _logits_stateless(self, tokens, batch, length, shape):
+        working = _validate_state(self._state)
+        binding = self._binding()
+        entry = getattr(binding, _LOGITS_ENTRY, None)
+        if not callable(entry):
+            raise ImportError('Byte-LM binding lacks GPU logits (%s); rebuild bindings/build_byte_lm.sh'
+                              % _LOGITS_ENTRY)
+        parameters = working['parameters']
+        saved_parameters = parameters.tobytes()
+        saved_tokens = tokens.tobytes()
+        out = zeros((batch, length, shape.vocab_size), '<f4')
+        written = entry([addr_ro(parameters, name='parameters'), addr_ro(tokens, name='ids'),
+                         addr(out, name='logits')], [batch, length], list(shape.native_shape))
+        _require_written(written, batch * length * shape.vocab_size)
+        if saved_parameters != parameters.tobytes() or saved_tokens != tokens.tobytes():
+            raise RuntimeError('Byte-LM native logits changed an input parameter/token buffer')
+        _mode()
+        return out
+
+    def _logits_resident(self, tokens, batch, length, shape):
+        self._require_not_lost()
+        binding = self._binding()
+        missing = [name for name in _SESSION_ENTRIES + (_SESSION_LOGITS_ENTRY,)
+                   if not callable(getattr(binding, name, None))]
+        if missing:
+            raise ImportError('Byte-LM binding lacks resident GPU logits (%s); rebuild bindings/build_byte_lm.sh'
+                              % ', '.join(missing))
+        if not self._session_open:
+            # Admission: `_validate_state` once, one upload (3n floats).
+            self._open_session(binding, shape)
+        out = zeros((batch, length, shape.vocab_size), '<f4')
+        try:
+            written = binding.byte_lm_session_logits(
+                self._native_session, [addr_ro(tokens, name='ids'), addr(out, name='logits')],
+                [batch, length], list(shape.native_shape), self._state['completed_steps'])
+            _require_written(written, batch * length * shape.vocab_size)
+        except BaseException:
+            try:
+                self._logits_failed()
+            except Exception:
+                pass  # Preserve the original failure.
+            raise
+        _mode()
+        return out
+
+    def _logits_failed(self):
+        """The failure path of a resident `logits` call. Logits write no
+        state, so nothing is rolled back (a rollback would restore the shadow
+        of the last step, which is already committed). The gradient is no
+        longer exportable, as after any failure, and a session that does not
+        report itself usable at the committed step is lost."""
+        if not self._session_open or self._lost_at is not None:
+            return
+        self._grad_step = -1
+        try:
+            info = self._session_binding.byte_lm_session_info(self._native_session)
+            usable = bool(info[2]) and info[0] == self._state['completed_steps']
+        except Exception:
+            usable = False
+        if not usable:
+            self._mark_lost()
 
     def save_checkpoint(self, path):
         """`export_checkpoint(path)`."""
