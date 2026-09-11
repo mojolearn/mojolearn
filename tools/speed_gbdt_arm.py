@@ -751,16 +751,157 @@ def _find_file(folder, name):
     return None
 
 
-#: Which dataset each lane runs by default, and what it falls back to.
-#: `year` for the boosting lanes because it is the regression dataset the
-#: existing M4 GBDT tables were taken on; `covtype` for the forest lanes
-#: because the RF and ET tables were taken on it.
+TAXI_MONTHS = ("2024-01", "2024-02")
+TAXI_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_%s.parquet"
+TAXI_N_TEST = 500000
+#: The 16 tree features, in column order. Categorical ids stay as their
+#: integer codes (the same code for every arm; CatBoost is NOT told they are
+#: categorical, per "same everything except GPU"). A missing value is -1.
+TAXI_FEATURES = ("vendor", "passengers", "distance_mi", "ratecode",
+                 "store_fwd", "pu_zone", "do_zone", "pickup_hour",
+                 "pickup_weekday", "pickup_day", "duration_min", "extra",
+                 "mta_tax", "tolls", "congestion", "airport_fee")
+#: The columns a classical (kNN, k-means, PCA, OLS) lane takes: the numeric
+#: ones, no ids.
+TAXI_NUMERIC = ("passengers", "distance_mi", "pickup_hour", "pickup_weekday",
+                "pickup_day", "duration_min", "extra", "mta_tax", "tolls",
+                "congestion", "airport_fee")
+
+
+def _decode_taxi_month(path):
+    """One TLC yellow-taxi parquet month to (features float32 [rows, 16],
+    fare float32, tip float32, card bool). Needs pyarrow; only the untimed
+    `--download taxi` step calls it."""
+    import pyarrow.parquet as pq
+    cols = ["VendorID", "tpep_pickup_datetime", "tpep_dropoff_datetime",
+            "passenger_count", "trip_distance", "RatecodeID",
+            "store_and_fwd_flag", "PULocationID", "DOLocationID",
+            "payment_type", "fare_amount", "extra", "mta_tax", "tip_amount",
+            "tolls_amount", "congestion_surcharge", "Airport_fee"]
+    t = pq.read_table(path, columns=cols)
+
+    def col(name, fill=-1.0):
+        a = t.column(name).to_numpy(zero_copy_only=False)
+        if a.dtype.kind in "OU":
+            return a
+        a = a.astype(np.float64)
+        a[~np.isfinite(a)] = fill
+        return a
+
+    pu = t.column("tpep_pickup_datetime").to_numpy(zero_copy_only=False)
+    do = t.column("tpep_dropoff_datetime").to_numpy(zero_copy_only=False)
+    pu_us = pu.astype("datetime64[us]").astype(np.int64)
+    do_us = do.astype("datetime64[us]").astype(np.int64)
+    duration_min = (do_us - pu_us) / 60e6
+    pu_min = pu_us // 60_000_000
+    pickup_hour = (pu_min // 60) % 24
+    pu_day = pu_min // (60 * 24)
+    pickup_weekday = (pu_day + 3) % 7          # 1970-01-01 was a Thursday
+    pickup_day = (pu.astype("datetime64[D]").astype(np.int64)
+                  - pu.astype("datetime64[M]").astype("datetime64[D]").astype(np.int64)) + 1
+    flag = t.column("store_and_fwd_flag").to_numpy(zero_copy_only=False)
+    store_fwd = np.full(len(flag), -1.0)
+    store_fwd[flag == "N"] = 0.0
+    store_fwd[flag == "Y"] = 1.0
+    fare = col("fare_amount")
+    tip = col("tip_amount")
+    distance = col("trip_distance")
+    payment = col("payment_type")
+    feats = np.stack([
+        col("VendorID"), col("passenger_count"), distance, col("RatecodeID"),
+        store_fwd, col("PULocationID"), col("DOLocationID"),
+        pickup_hour.astype(np.float64), pickup_weekday.astype(np.float64),
+        pickup_day.astype(np.float64), duration_min, col("extra"),
+        col("mta_tax"), col("tolls_amount"), col("congestion_surcharge"),
+        col("Airport_fee")], axis=1)
+    # Plausible trips only: a positive fare under $500, a positive distance
+    # under 100 miles, one minute to three hours. Same filter for every arm.
+    keep = ((fare > 0) & (fare <= 500) & (distance > 0) & (distance <= 100)
+            & (duration_min >= 1) & (duration_min <= 180))
+    return (feats[keep].astype(np.float32), fare[keep].astype(np.float32),
+            tip[keep].astype(np.float32), payment[keep] == 1)
+
+
+def load_taxi(size, rows_cap=None, regression=False):
+    """NYC TLC yellow taxi trips, January and February 2024, THE MIXED-TYPE
+    LARGE DATASET (ENGINEERING_RULES.md section 9, the second kind beside
+    Istella-S).
+
+    About 5.8M plausible trips after the filter in `_decode_taxi_month`,
+    16 features of the kind a business table has: categorical ids (vendor,
+    rate code, pickup and dropoff zone), small integers (passengers, hour,
+    weekday, day), skewed positives (distance, duration, tolls), columns
+    that are mostly missing (congestion surcharge, airport fee; -1 marks a
+    missing value for every arm). `taxi` is the classification task: on
+    card-paid trips (cash tips are not recorded), did the rider tip 20% of
+    the fare or more. `taxireg` is fare_amount on every trip. The test rows
+    are the LAST TAXI_N_TEST rows (late February) at every rung, the train
+    rows the first `rows_cap`, so rungs are comparable and the split is
+    the temporal one a real deployment has.
+
+    THE DOWNLOAD IS ABOUT 100 MB of parquet and is a SEPARATE, EXPLICITLY
+    NAMED STEP (`--download taxi`, needs pyarrow); timed runs load the
+    NumPy cache only."""
+    folder = os.path.join(data_root(), "taxi")
+    npz_path = os.path.join(folder, "taxi_speed.npz")
+    cached = None
+    if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
+        try:
+            cached = np.load(npz_path)
+        except Exception as exc:                   # noqa: BLE001
+            sys.stderr.write(
+                "speed_gbdt_arm: %s is unreadable (%s); re-decoding from "
+                "the parquet files beside it\n" % (npz_path, exc))
+            cached = None
+    if cached is not None:
+        x, fare, tip, card = (cached["x"], cached["fare"], cached["tip"],
+                              cached["card"])
+    else:
+        paths = [os.path.join(folder, "yellow_tripdata_%s.parquet" % m)
+                 for m in TAXI_MONTHS]
+        if not all(os.path.isfile(q) for q in paths):
+            raise RuntimeError(
+                "taxi is not downloaded: %s missing. Run `python "
+                "tools/speed_gbdt_arm.py --download taxi` first (about "
+                "100 MB, needs pyarrow), OUTSIDE the timed run." % folder)
+        parts = [_decode_taxi_month(q) for q in paths]
+        x = np.ascontiguousarray(np.concatenate([p[0] for p in parts]))
+        fare = np.concatenate([p[1] for p in parts])
+        tip = np.concatenate([p[2] for p in parts])
+        card = np.concatenate([p[3] for p in parts])
+        np.savez(npz_path, x=x, fare=fare, tip=tip, card=card)
+    if regression:
+        y = fare
+        name = "taxireg"
+    else:
+        x, fare, tip = x[card], fare[card], tip[card]
+        y = (tip >= 0.2 * fare).astype(np.float32)
+        name = "taxi"
+    n_test = TAXI_N_TEST
+    n_train = x.shape[0] - n_test
+    if size == "smoke":
+        rows_cap = min(rows_cap or 50000, 50000)
+    if rows_cap:
+        n_train = min(n_train, rows_cap)
+    x_train = np.ascontiguousarray(x[:n_train])
+    y_train = np.ascontiguousarray(y[:n_train])
+    x_test = np.ascontiguousarray(x[-n_test:])
+    y_test = np.ascontiguousarray(y[-n_test:])
+    if regression:
+        return Data(name, x_train, x_test, y_train, y_test, "regression", 0)
+    return Data(name, x_train, x_test, y_train, y_test, "binary", 2)
+
+
+#: Which dataset each lane runs by default. Since 2026-09-11 every tree
+#: lane defaults to `taxi` (ENGINEERING_RULES.md section 9); a leg runs
+#: `taxi` and `istella` both, and HIGGS is retired (its loader stays so old
+#: evidence can be re-read). `year` and `covtype` remain as small fixtures.
 LANE_DEFAULT_DATASET = {
-    "gbdt-symmetric": "year",
-    "gbdt-depthwise": "year",
-    "gbdt-lossguide": "year",
-    "rf": "covtype",
-    "et": "covtype",
+    "gbdt-symmetric": "taxi",
+    "gbdt-depthwise": "taxi",
+    "gbdt-lossguide": "taxi",
+    "rf": "taxi",
+    "et": "taxi",
     "iforest": "anomaly",
 }
 
@@ -781,6 +922,10 @@ def load_dataset(name, size, rows_cap=None):
         return load_istella(size, rows_cap)
     if name == "istellareg":
         return load_istella(size, rows_cap, regression=True)
+    if name == "taxi":
+        return load_taxi(size, rows_cap)
+    if name == "taxireg":
+        return load_taxi(size, rows_cap, regression=True)
     if name == "year":
         return load_year(size, rows_cap)
     if name == "covtype":
@@ -809,10 +954,11 @@ def load_with_fallback(name, size, rows_cap=None):
             "the synthetic fixture. Every line will say so in shape=.\n"
             % (name, exc)
         )
-        if name in ("covtype", "covtype2", "synthclf", "higgs", "istella"):
+        if name in ("covtype", "covtype2", "synthclf", "higgs", "istella",
+                    "taxi"):
             return load_dataset("synthclf", size, rows_cap)
-        if name == "higgsreg":
-            return load_dataset("synthclf", size, rows_cap)
+        if name in ("higgsreg", "istellareg", "taxireg"):
+            return load_dataset("synth", size, rows_cap)
         if name == "anomaly":
             return load_dataset("anomaly", size, rows_cap)
         return load_dataset("synth", size, rows_cap)
@@ -841,6 +987,25 @@ def download(name):
         print("higgs decoded to %s (train %d x %d, test %d)"
               % (os.path.join(folder, "higgs_speed.npz"),
                  d.X_train.shape[0], d.X_train.shape[1], d.X_test.shape[0]))
+        return
+    if name == "taxi":
+        import urllib.request
+        folder = os.path.join(data_root(), "taxi")
+        os.makedirs(folder, exist_ok=True)
+        for m in TAXI_MONTHS:
+            dest = os.path.join(folder, "yellow_tripdata_%s.parquet" % m)
+            if os.path.isfile(dest):
+                print("taxi %s already present (%.1f MB)"
+                      % (m, os.path.getsize(dest) / 1e6))
+                continue
+            print("downloading %s -> %s" % (TAXI_URL % m, dest))
+            urllib.request.urlretrieve(TAXI_URL % m, dest)
+            print("taxi %s: %.1f MB" % (m, os.path.getsize(dest) / 1e6))
+        d = load_taxi("shipped")
+        print("taxi decoded to %s (train %d x %d, test %d, positives %.3f)"
+              % (os.path.join(folder, "taxi_speed.npz"), d.X_train.shape[0],
+                 d.X_train.shape[1], d.X_test.shape[0],
+                 float(d.y_train.mean())))
         return
     if name == "istella":
         import tarfile
@@ -1654,7 +1819,7 @@ def emit_scale_reminder(data, stage):
              if scale['large_candidate'] else
              "SMALL WORKLOAD: useful for correctness/smoke diagnostics; do not use this "
              "run alone for training-speed claims or optimization/default decisions. "
-             "Also test representative large datasets (for example HIGGS 1M rows)."))
+             "Also test representative large datasets (taxi and istella at 1M rows or more)."))
 
 
 def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False, fit_context=None):
@@ -1817,7 +1982,7 @@ def build_parser(prog=None):
                    help="which lane to run; ONE lane per process, because a "
                         "lane that segfaults must not take the others down")
     p.add_argument("--dataset", default=None,
-                   help="higgs, istella, year, covtype, covtype2, synth, synthclf, "
+                   help="taxi, taxireg, istella, istellareg, higgs (retired), year, covtype, covtype2, synth, synthclf, "
                         "anomaly; the lane's own default if unset. `higgs` "
                         "is the LARGE-LOAD dataset (11M x 28) and is what "
                         "--rows climbs.")

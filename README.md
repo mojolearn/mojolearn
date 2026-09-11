@@ -34,7 +34,8 @@ Array buffers, avoiding per-node Python objects; see the
 
 Optimize GPU training for **large real datasets**. Training-speed claims and
 performance-driven default changes require measurements on representative large
-workloads, such as HIGGS with 1 million rows, with held-out quality and memory
+workloads, the two real datasets of ENGINEERING_RULES.md section 9 (NYC taxi
+and Istella-S LETOR) at 1 million rows or more, with held-out quality and memory
 pressure recorded. Size is not a universal row cutoff: feature count, classes,
 bins, tree depth and device memory also determine the workload. Small synthetic
 fixtures remain useful for correctness, smoke tests and isolated diagnostics;

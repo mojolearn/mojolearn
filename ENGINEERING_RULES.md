@@ -229,17 +229,43 @@ binary target make many tiny pure leaves, DEVIATION 2502) will read
 differently on data of another shape, and a board that never shows the other
 shape cannot tell an optimization from a fit to the fixture.
 
-**Trees (gbdt, rf, trees): every speed or quality claim runs on TWO large
-datasets that differ in KIND, one low-feature and one high-feature, both at
-or above 1,000,000 rows.** Today those are HIGGS (28 features, binary; the
-low-feature set) and a high-feature set at or above 1,000,000 rows to be
-fixed in `bench/OPPONENT_REFERENCE.md` when its opponent rows are first
-measured (Bosch, 1.18M x 968, is the real candidate in the gbm-bench family;
-the harness's `synthclf` at 800k x 100 is a fallback, not the rule). Two
-datasets, not more: several sizes of one dataset are one dataset (the 1M/2M/5M
-rungs of HIGGS are the SAME kind), and a third kind buys less than it costs.
-A win that shows on one of the two and not the other is reported as exactly
-that, and is not flipped as a default until it is understood.
+**Trees (gbdt, rf, trees) AND non-tree classical (kNN, kmeans, ols, pca,
+iforest and the rest): every speed or quality claim runs on THE SAME TWO
+real datasets, which differ in structure and look like ordinary data, not
+like a physics corner case.** Andrew, 2026-09-11: "get rid of HIGGS
+altogether for trees and classical ML and use 2 datasets that are different
+in structure but look more normal, like the general case." The two are:
+
+- **NYC TLC yellow taxi trips, January and February 2024** (`taxi`,
+  `taxireg` in `tools/speed_gbdt_arm.py::load_taxi`): about 5.8M plausible
+  trips, 16 mixed-type features (categorical zone and rate ids, small
+  integers, skewed positive amounts, three columns that are mostly missing,
+  -1 marks missing for every arm). Classification: on card-paid trips, did
+  the rider tip 20% or more (about 76% positive). Regression: fare_amount.
+  Temporal split, test = the last 500,000 trips. The narrow, dirty,
+  mixed-type business table. Classical lanes take its numeric columns
+  (`TAXI_NUMERIC`).
+- **Istella-S LETOR** (`istella`, `istellareg` in `load_istella`): 3.4M
+  query-document rows, 220 dense numeric features whose scales span seven
+  orders of magnitude, 45 near-constant columns, a float64-max sentinel for
+  missing (clamped to float32 max), graded relevance 0..4 (binary: relevance
+  above 0, about 11% positive). The wide, numeric, imbalanced table.
+
+Both download directly with no credentials (`--download taxi`, `--download
+istella`, untimed, decoded once to a NumPy cache). Trees run both at or
+above 1,000,000 rows (the 2026-09-01 floor); classical lanes take each at
+the lane's kernel-bound shape (below). Two datasets, not more: several
+sizes of one dataset are one dataset, and a third kind buys less than it
+costs. A win that shows on one of the two and not the other is reported as
+exactly that, and is not flipped as a default until it is understood.
+
+**HIGGS is RETIRED (2026-09-11)** as a benchmark dataset for trees and
+classical lanes: 28 dense continuous physics features, balanced classes, no
+missing values, no categoricals, and noise so heavy that depth-16 leaves
+are tiny and pure. Nothing about it resembles the tables this library is
+for, and DEVIATION 2502 was tuned to it. Its opponent rows in
+`bench/OPPONENT_REFERENCE.md` are history: never quote a HIGGS ratio as a
+result again. Its loader stays so old evidence can be re-read.
 
 **Neural (byte-LM, Mamba, transformer): every training or inference claim
 runs on TWO different kinds of data**, two corpora or two generating
@@ -258,21 +284,21 @@ The 1,000,000-row floor for tree timing (2026-09-01) stands underneath this
 rule; this one adds the second kind, and removes the size sweep as a
 substitute for it.
 
-**Non-tree classical (kNN, kmeans, ols, pca, iforest and the rest): the same
-rule at the lane's large shape.** Andrew, 2026-09-11, on the kNN selection
-default: "use 2 different reasonably large datasets since the large case is
-the one we should be optimizing for, but not too large because I don't want
-to waste that much time, and 2 of them that are different so they
+**Classical shapes.** Andrew, 2026-09-11, on the kNN selection default:
+"use 2 different reasonably large datasets since the large case is the one
+we should be optimizing for, but not too large because I don't want to
+waste that much time, and 2 of them that are different so they
 generalize." Reasonably large means the shape at which the kernel, not the
-launch or the transfer, is the cost (kNN today: 400,000 x 32 index with
-4,000 queries; kmeans, ols and pca: 4,000,000 x 32), and no larger: a bigger
-shape buys rental time, not evidence. Different in kind means one real
-dataset beside one generator, or two real sets of different structure. Two
-generators of the same shape are ONE kind: the kNN gate's `dyadic` and
-`large` fixtures are both 400,000 x 32 synthetic blocks, so a selection win
-timed on both has been timed on one kind. A win timed on one kind is
-provisional; it may stay flipped for the vendor it was measured on while
-the second kind is owed, and the brief says so.
+launch or the transfer, is the cost (kNN today: 400,000-row index with
+4,000 queries; kmeans, ols and pca: 4,000,000 rows), and no larger: a
+bigger shape buys rental time, not evidence. Each classical lane takes the
+two datasets above at that shape: taxi's 11 numeric columns and Istella's
+220 features, so a lane sees a narrow, skewed table and a wide one.
+Generators (the kNN gate's `dyadic`, `large`, `ties`) stay as correctness
+fixtures; a timing or a default flip quotes the two real datasets only.
+Two generators of one shape are ONE kind and count for nothing here. A win
+timed on one kind is provisional; it may stay flipped for the vendor it was
+measured on while the second kind is owed, and the brief says so.
 
 **Opponents under this rule.** An opponent row is measured ONCE per (GPU,
 driver, opponent version, dataset) and cached in `bench/OPPONENT_REFERENCE.md`;
