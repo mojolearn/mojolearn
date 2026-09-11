@@ -35,6 +35,9 @@ ROOT=/root/mojolearn
 G=/root/gemm_leg_out/gpr
 BINS=/root/gpr_bins
 DATA="${GBM_BENCH_DATA:-/root/datasets/gbm-bench}"
+GBM_BENCH_DATA="$DATA"
+export GBM_BENCH_DATA
+export DEBIAN_FRONTEND=noninteractive
 PY=/usr/bin/python3
 mkdir -p "$G/logs" "$G/speed" "$G/ib" "$G/checks" "$BINS"
 cd "$ROOT" || exit 9
@@ -60,9 +63,12 @@ status() { printf '%s\t%s\t%s\tleft=%s\n' "$1" "$2" "$(date -u +%H:%M:%S)" "$(le
 status body_start 0
 
 # ---------------------------------------------------------------- deps
-if ! $PY -m pip --version > /dev/null 2>&1; then
-    DEBIAN_FRONTEND=noninteractive timeout -k 10 180 apt-get update > "$G/logs/apt.log" 2>&1
-    DEBIAN_FRONTEND=noninteractive timeout -k 10 240 apt-get install -y --no-install-recommends python3-pip >> "$G/logs/apt.log" 2>&1
+# A fresh droplet's unattended upgrade holds the dpkg lock at boot; wait on it
+# (tools/trees_amd_remote.sh, 92b4bf9b) rather than fail the install.
+if ! $PY -c 'import pip' > /dev/null 2>&1; then
+    timeout -k 10 600 sh -c 'apt-get -o DPkg::Lock::Timeout=180 update -qq; apt-get -o DPkg::Lock::Timeout=180 install -y --no-install-recommends python3-pip' \
+        > "$G/logs/apt.log" 2>&1
+    status apt_pip $?
 fi
 timeout -k 10 600 $PY -m pip install --break-system-packages --disable-pip-version-check \
     --no-input numpy pyarrow pandas > "$G/logs/pip.log" 2>&1
