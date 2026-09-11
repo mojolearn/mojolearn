@@ -1,0 +1,14 @@
+total 507892
+drwxr-xr-x 2 root root      4096 Sep 11 17:17 .
+drwxr-xr-x 3 root root      4096 Sep 11 17:16 ..
+-rw-r--r-- 1 root root 419757252 Sep 11 17:17 taxi_speed.npz
+-rw-r--r-- 1 root root  49961641 Sep 11 17:16 yellow_tripdata_2024-01.parquet
+-rw-r--r-- 1 root root  50349284 Sep 11 17:16 yellow_tripdata_2024-02.parquet
+total 2656684
+drwxr-xr-x 3 root root       4096 Sep 11 17:36 .
+drwxr-xr-x 4 root root       4096 Sep 11 17:17 ..
+-r--r--r-- 1  500  500       2537 May 13  2016 README
+-r--r--r-- 1  500  500       6108 May  9  2016 istella-letor-LA.txt
+-rw-r--r-- 1 root root  472129615 Sep 11 17:32 istella-s-letor.tar.gz
+-rw-r--r-- 1 root root 2248281826 Sep 11 17:36 istella_speed.npz
+dr-xr-xr-x 2  500  500       4096 Mar 31  2016 sample

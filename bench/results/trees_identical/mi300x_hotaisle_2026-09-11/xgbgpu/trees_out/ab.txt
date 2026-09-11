@@ -1,0 +1,12 @@
+arms: cells=xgb xgboost=xgboost-gpu lightgbm=lightgbm-cpu lightgbm_params=min_child_weight=1e-3 python=/root/venv-gpu/bin/python
+cell gbdt-depthwise taxi 1000000 17:36:44 load 1.01 0.66 0.60
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.full.xgbgpu=0 17:37:07
+cell gbdt-lossguide taxi 1000000 17:37:07 load 1.20 0.73 0.63
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.full.xgbgpu=0 17:37:51
+PHASE_XGB_taxi_DONE 17:37:51
+cell gbdt-depthwise istella 1000000 17:37:51 load 2.18 1.12 0.77
+speed_exit baseline.gbdt-depthwise.istella.r1000000.full.xgbgpu=0 17:38:50
+cell gbdt-lossguide istella 1000000 17:38:50 load 4.05 1.94 1.08
+speed_exit baseline.gbdt-lossguide.istella.r1000000.full.xgbgpu=0 17:39:56
+PHASE_XGB_istella_DONE 17:39:56
+body end 17:39:56

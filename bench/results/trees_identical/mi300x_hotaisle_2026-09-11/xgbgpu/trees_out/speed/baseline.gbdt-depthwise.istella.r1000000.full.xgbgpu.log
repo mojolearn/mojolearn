@@ -1,0 +1,31 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=cpu,gpu,opencl metric=devices delta=3.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (ENGINEERING_RULES.md section 10); every arm name carries its device
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=3.000000 reason=devices=cpu,gpu,opencl (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+FSPEED-IMPORT-ORDER lane=gbdt-depthwise first=opponents
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-gpu mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=istella-1000000x220 ms=4627.925
+FSPEED-WARMUP lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 ms=3045.055
+FSPEED-ORDER lane=gbdt-depthwise round=1 arms=ours,xgboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=1 ms=3501.295 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=1 ms=2827.423 hash=4d80a2001a82f486
+FSPEED-ORDER lane=gbdt-depthwise round=2 arms=ours,xgboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=2 ms=3331.787 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=2 ms=2863.713 hash=4d80a2001a82f486
+FSPEED-ORDER lane=gbdt-depthwise round=3 arms=ours,xgboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=3 ms=3406.348 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=3 ms=2850.523 hash=4d80a2001a82f486
+FSPEED-ORDER lane=gbdt-depthwise round=4 arms=ours,xgboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=4 ms=3376.413 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=4 ms=2854.825 hash=4d80a2001a82f486
+FSPEED-ORDER lane=gbdt-depthwise round=5 arms=ours,xgboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=5 ms=3358.151 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=5 ms=2839.392 hash=4d80a2001a82f486
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.126517
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.971896
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=logloss value=0.124822
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=auc value=0.973880
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

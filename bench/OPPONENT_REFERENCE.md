@@ -1162,8 +1162,9 @@ over 100 KB stay outside the repository).
 Two opponents with an AMD GPU path did not run on the GPU here, and each row
 says so. XGBoost is the PyPI 3.4.1 build on the CPU, because AMD ships
 `amd_xgboost` only as manylinux_2_39 wheels and this container has glibc 2.35,
-so pip found no distribution. The amd_xgboost GPU row is owed on an Ubuntu
-24.04 image. LightGBM 4.7.0 ran on the CPU with `min_child_weight=1e-3`
+so pip found no distribution. The amd_xgboost GPU rows at the end of the
+table were measured on a second VM with `rocm/dev-ubuntu-24.04:6.4.1-complete`
+(glibc 2.39). LightGBM 4.7.0 ran on the CPU with `min_child_weight=1e-3`
 (`MOJOLEARN_SPEED_LGBM_PARAMS`), the one retry after the harness's 0.0 was
 refused on the MI325X. Its OpenCL build compiled and still failed its probe
 with "Check failed: (best_split_info.right_count) > (0)" under
@@ -1189,7 +1190,24 @@ Taxi, 1,000,000 training rows (2,000,000 for RF 2M), VM 9b86604d:
 | lossguide 1M | CatBoost Lossguide | 1.2.10 | CPU, 13 threads | task_type CPU | 6943 (6868..6986) | 0.526113 / 0.619758 | 1774 (1741..1779) | 0.525504 / 0.619386 | 0.26x | 1837 (1821..1859) | 0.26x |
 | lossguide 1M | XGBoost (PyPI) | 3.4.1 | CPU, 13 threads (same reason) | grow_policy lossguide; hash 98e44c1ffb4f3ad5, equal to its depthwise row | 1034 (982..1491) | 0.525332 / 0.620103 | 1774 (1741..1779) | 0.525504 / 0.619386 | 1.72x | 1837 (1821..1859) | 1.78x |
 | lossguide 1M | LightGBM | 4.7.0 | CPU, 13 threads | min_child_weight=1e-3 (retry); OpenCL build failed its probe | 952 (930..988) | 0.525029 / 0.620694 | 1774 (1741..1779) | 0.525504 / 0.619386 | 1.86x | 1837 (1821..1859) | 1.93x |
-| depthwise, lossguide 1M | XGBoost `amd_xgboost` | - | GPU | - | owed (needs a glibc 2.39 image) | - | - | - | - | - | - |
+| depthwise 1M | XGBoost `amd_xgboost` (pypi.amd.com rocm-6.4.4) | 3.1.1 | GPU (USE_HIP, config device cuda:0, rocm-smi peak 43 percent) | tree_method hist, device cuda; VM 96560ef4 on `rocm/dev-ubuntu-24.04:6.4.1-complete` (glibc 2.39) | 594 (561..612) | 0.525221 / 0.620149 | 1030 (1020..1046) | 0.525086 / 0.621421 | 1.73x | 1097 (1086..1129), VM 9b86604d | 1.85x |
+| lossguide 1M | XGBoost `amd_xgboost` | 3.1.1 | GPU (rocm-smi peak 99 percent) | grow_policy lossguide; hash 348bf22bf60a14bc, equal to its depthwise row and to the MI325X amd_xgboost row | 792 (756..797) | 0.525221 / 0.620149 | 1727 (1717..1783) | 0.525504 / 0.619386 | 2.18x | 1837 (1821..1859), VM 9b86604d | 2.32x |
+
+The two amd_xgboost rows come from a second VM of the same 13-core spec
+(96560ef4, verified gone), ours IDENTICAL interleaved with amd_xgboost only,
+rocm-smi sampled beside each cell. Our hashes there equal the taxi VM's. Their
+FAST column is the taxi VM's FAST cell. Evidence is in
+`bench/results/trees_identical/mi300x_hotaisle_2026-09-11/xgbgpu/`.
+
+Istella-S against amd_xgboost on the same VM 96560ef4. No Istella-S FAST cell
+ran on Hot Aisle; the Istella-S FAST cells below belong to the RunPod pod and
+are not set against these rows. Our hashes here equal the RunPod pod's, and the
+amd_xgboost hash and logloss equal the MI325X Istella-S row's.
+
+| lane | opponent | version | device | config | opponent ms | opponent logloss / AUC | ours IDENTICAL ms | ours logloss / AUC | IDENTICAL / opponent | ours FAST ms | FAST / opponent |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| depthwise 1M | XGBoost `amd_xgboost` | 3.1.1 | GPU (rocm-smi peak 99 percent) | tree_method hist, device cuda | 2851 (2827..2864) | 0.124822 / 0.973880 | 3376 (3332..3501) | 0.126517 / 0.971896 | 1.18x | not run on this box | - |
+| lossguide 1M | XGBoost `amd_xgboost` | 3.1.1 | GPU (rocm-smi peak 100 percent) | grow_policy lossguide; hash 4d80a2001a82f486, equal to its depthwise row | 3297 (3285..3327) | 0.124822 / 0.973880 | 4172 (4126..4311) | 0.122045 / 0.975037 | 1.27x | not run on this box | - |
 
 ### AMD Instinct MI300X on RunPod
 
@@ -1235,7 +1253,7 @@ Istella-S, 1,000,000 training rows (2,000,000 for RF 2M), pod mdv9clyq6r73bz:
 | lossguide 1M | CatBoost Lossguide | 1.2.10 | CPU, default threads | task_type CPU | 16190 (16047..16764) | 0.127841 / 0.972012 | 4304 (4262..4380) | 0.122045 / 0.975037 | 0.27x | 4371 (4116..4430) | 0.27x |
 | lossguide 1M | XGBoost (PyPI) | 3.4.1 | CPU (same reason) | grow_policy lossguide; hash 0d844a0ee7f63cb5, equal to its depthwise row | 6133 (5530..6731) | 0.125270 / 0.973728 | 4304 (4262..4380) | 0.122045 / 0.975037 | 0.70x | 4371 (4116..4430) | 0.71x |
 | lossguide 1M | LightGBM | 4.7.0 | CPU, default threads | min_child_weight=1e-3 (retry) | 4687 (4318..4776) | 0.125178 / 0.973695 | 4304 (4262..4380) | 0.122045 / 0.975037 | 0.92x | 4371 (4116..4430) | 0.93x |
-| depthwise, lossguide 1M | XGBoost `amd_xgboost` | - | GPU | - | owed on this pod (glibc 2.35 image) | - | - | - | - | - | - |
+| depthwise, lossguide 1M | XGBoost `amd_xgboost` | - | GPU | - | not on this pod (glibc 2.35 image); measured on Hot Aisle VM 96560ef4 above, a different box whose ratios are not set against this pod's | - | - | - | - | - | - |
 
 ## AMD Instinct MI300X on RunPod, amdgpu 6.10.5, ROCm 6.4.1 userland, torch 2.6.0+rocm6.4.1
 
