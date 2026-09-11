@@ -83,6 +83,23 @@ from gbdt.gpu_util.kernel.bootstrap import (
 #: and MVS does not reach their GPU oblivious searcher.
 comptime DEFAULT_SUBSAMPLE = Float32(0.66)
 
+comptime CTR_TARGET_PREP_NEEDS_CAT_2634 = not is_defined[
+    "MOJOLEARN_2634_CTR_PREP_OFF"
+]()
+"""DEVIATION 2634 (2026-09-11, gbdt-speed lane), ours, host bookkeeping only.
+`train()` built the CTR target prep whenever the default `simple_ctr`
+carried a permutation-dependent config, which is always: the MinEntropy
+target borders (a sort of a copy of y plus the DP), the binarized target
+(one binarize per row) and one CTR estimation order per permutation. Their
+only readers are `compute_simple_ctrs_gpu` and `build_ctr_tables`, both
+inside the categorical-feature branch, so a fit with no `cat_features`
+paid them for nothing on every call. CatBoost builds the binarized target
+only when its feature manager holds CTR features. Under the switch the
+prep runs only when some column is declared categorical; nothing a
+numeric fit reads changes, so model bits cannot move. `-D
+MOJOLEARN_2634_CTR_PREP_OFF=1` restores the unconditional build (the A/B
+arm)."""
+
 comptime BORROW_X_COLUMNS = not is_defined["MOJOLEARN_2550_HOST_COPY"]()
 """DEVIATION 2550 (2026-09-11), DEFAULT ON in both tiers since 2026-09-11
 (flipped on Andrew's order on one dataset, Istella-S on the MI325X; taxi
@@ -1001,7 +1018,20 @@ def train(
     var binarized_target = List[UInt8]()
     var ctr_orders = List[List[UInt32]]()
     var target_classes_count = 0
-    if len(dependent_configs) > 0:
+    # DEVIATION 2634 (see `CTR_TARGET_PREP_NEEDS_CAT_2634`): the binarized
+    # target, its borders and the CTR orders are read only inside the
+    # categorical-feature branch below, so a fit with no `cat_features`
+    # skips building them. `-D MOJOLEARN_2634_CTR_PREP_OFF=1` restores the
+    # unconditional build.
+    var ctr_prep_wanted = True
+    comptime if CTR_TARGET_PREP_NEEDS_CAT_2634:
+        ctr_prep_wanted = False
+        if len(cat_features) == n_features:
+            for f in range(n_features):
+                if cat_features[f]:
+                    ctr_prep_wanted = True
+                    break
+    if len(dependent_configs) > 0 and ctr_prep_wanted:
         var target_borders = build_target_borders(
             y, cat_params.target_binarization
         )

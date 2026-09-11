@@ -43,8 +43,15 @@ The border between two bins is the MIDPOINT of the values either side
 """
 
 from std.math import log
+from std.sys.compile import is_defined
 
 from checks.numerics import portable_log64
+
+comptime LINEAR_BOUNDS_2635 = is_defined["MOJOLEARN_2635_LINEAR_BOUNDS"]()
+"""DEVIATION 2635: `-D MOJOLEARN_2635_LINEAR_BOUNDS=1` restores the linear
+LowerBound/UpperBound walks in `_update_best_split`; unset (the default) takes
+the binary searches, which return the same indices. RUN OWED; see
+`_update_best_split`."""
 
 
 def _penalty_max_sum_log(weight: Float64) -> Float64:
@@ -95,19 +102,50 @@ def _update_best_split(mut b: TFeatureBin, values: List[Float32]):
 
     Two candidates only, both derived from the value at the MIDPOINT: the
     first index holding it and the first index past it. Their `LowerBound`
-    and `UpperBound`, done linearly here because the ranges shrink fast and a
-    binary search would be the only clever thing in this file.
+    and `UpperBound`.
+
+    DEVIATION 2635 (2026-09-11, gbdt-speed lane; RUN OWED, see below): both
+    are BINARY searches now, as theirs are (`std::lower_bound` /
+    `std::upper_bound`). The linear walks assumed "the ranges shrink fast",
+    which is false on a column with a long run of one value (taxi's
+    mostly-missing and low-cardinality columns): the bin holding the run is
+    re-created and walked again at every split, up to rows x borders
+    compares per column. `values` is sorted ascending and NaN-free, so
+    `v < mid_value` and `v <= mid_value` are each true on a prefix of any
+    range, and the binary search returns the same `lb` and `ub` the walks
+    did; the scores, the heap order and the borders follow unchanged.
+    `-D MOJOLEARN_2635_LINEAR_BOUNDS=1` restores the walks (the A/B arm).
+    RUN OWED on a GPU box: `pixi run check-greedylogsum`,
+    `pixi run check-binarization`, the gbdt identity checks, and the
+    interleaved taxi and Istella-S timing against the walks.
     """
     var mid = b.bin_start + (b.bin_end - b.bin_start) // 2
     var mid_value = values[mid]
 
     var lb = b.bin_start
-    while lb < mid and values[lb] < mid_value:
-        lb += 1
-
     var ub = mid
-    while ub < b.bin_end and values[ub] <= mid_value:
-        ub += 1
+    comptime if LINEAR_BOUNDS_2635:
+        while lb < mid and values[lb] < mid_value:
+            lb += 1
+        while ub < b.bin_end and values[ub] <= mid_value:
+            ub += 1
+    else:
+        # first index in [bin_start, mid) with values[i] >= mid_value, else mid
+        var hi = mid
+        while lb < hi:
+            var m = lb + (hi - lb) // 2
+            if values[m] < mid_value:
+                lb = m + 1
+            else:
+                hi = m
+        # first index in [mid, bin_end) with values[i] > mid_value, else bin_end
+        var hi2 = b.bin_end
+        while ub < hi2:
+            var m2 = ub + (hi2 - ub) // 2
+            if values[m2] <= mid_value:
+                ub = m2 + 1
+            else:
+                hi2 = m2
 
     var score_left = _calc_split_score(b.bin_start, b.bin_end, lb)
     var score_right = _calc_split_score(b.bin_start, b.bin_end, ub)
