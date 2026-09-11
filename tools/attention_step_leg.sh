@@ -78,8 +78,9 @@
 #                 first call writes the last layer's q, k, v, dctx and meta.txt
 #                 under operands-<corpus>/ (real activations of the real
 #                 training path).
-#   price-<arm>   the harness on file:operands-shakespeare and
-#                 file:operands-cpython, candidate <arm> against baseline:
+#   price-<arm>   the harness on file:operands-enwik8 and
+#                 file:operands-pilegithub, candidate <arm> against
+#                 MOJOLEARN_ATTN_BASELINE (default baseline):
 #                 eager oracle (first arm only), bit equality, reach by
 #                 sabotage, then 2 warmups and 7 alternated rounds; PRICE and
 #                 TABLE lines in the log. THESE are the timing inputs.
