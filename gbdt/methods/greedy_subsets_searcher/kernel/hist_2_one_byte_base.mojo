@@ -693,8 +693,15 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
     var tail_len = body_size % ALIGN_SIZE
     var tail_start = p_offset + head_len + (body_size - tail_len)
 
+    # DEVIATION 2600: theirs runs `tid` to `alignSize`, so a thread at or
+    # past it makes no trip and skips the `turn_sync` inside the 5- and 6-bit
+    # `AddPoint` (a threadgroup `barrier()` off 32-lane hardware). The bound
+    # rounded up to the block gives every thread the same trips; a trip at
+    # or past ALIGN_SIZE fails both load guards and adds a zero point.
+    # Argument in `lane_sync.mojo`.
+    comptime PEEL_END = ((ALIGN_SIZE + BLOCK - 1) // BLOCK) * BLOCK
     var pe = tid
-    while pe < ALIGN_SIZE:
+    while pe < PEEL_END:
         var hb = InlineArray[UInt32, 1](fill=UInt32(0))
         var hs1 = InlineArray[Float32, 1](fill=Float32(0.0))
         var hs2 = InlineArray[Float32, 1](fill=Float32(0.0))
@@ -967,8 +974,10 @@ def hist2_one_byte_gather_kernel[
     var tail_len = body_size % ALIGN_SIZE
     var tail_start = p_offset + head_len + (body_size - tail_len)
 
+    # DEVIATION 2600: the block-rounded bound, as in the direct kernel.
+    comptime PEEL_END = ((ALIGN_SIZE + BLOCK - 1) // BLOCK) * BLOCK
     var pe = tid
-    while pe < ALIGN_SIZE:
+    while pe < PEEL_END:
         var hb = InlineArray[UInt32, 1](fill=UInt32(0))
         var hs1 = InlineArray[Float32, 1](fill=Float32(0.0))
         var hs2 = InlineArray[Float32, 1](fill=Float32(0.0))

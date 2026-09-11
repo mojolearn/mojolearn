@@ -119,6 +119,13 @@ def fixture(kind, n=N, d=D, seed=0):
         X = (-np.abs(rng.standard_normal((n, d))) - 2.0).astype(np.float32)
     else:
         raise ValueError(kind)
+    return (X,) + labels_for(X, seed)
+
+
+def labels_for(X, seed=0):
+    """The fixture targets for any X (shared with
+    `checks/gbdt_sub_byte_identity_check.py`, so its integer-grid fixtures
+    carry labels by the same rule, byte for byte)."""
     # targets: a signed rule on two columns, and a linear regression target
     # Labels come from columns 3 and 4, which NO fixture perturbs (denormal
     # rewrites columns 0-2), so `denormal` and `denormal_ftz` hand every lane
@@ -137,7 +144,7 @@ def fixture(kind, n=N, d=D, seed=0):
     y_reg = np.zeros(X.shape[0], dtype=np.float32)
     for j in range(X.shape[1]):
         y_reg = (y_reg + X[:, j] * w[j]).astype(np.float32)
-    return X, y_clf, y_reg
+    return y_clf, y_reg
 
 
 FIXTURES = ["base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes", "odd", "negative"]
