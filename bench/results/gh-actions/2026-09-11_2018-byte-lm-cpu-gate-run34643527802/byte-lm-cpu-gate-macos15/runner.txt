@@ -1,0 +1,4 @@
+Darwin sjc22-bm212-822c87b6-6960-436a-8a01-bb5b20347910-B2F8A53777EA.local 24.6.0 Darwin Kernel Version 24.6.0: Tue Jul 21 20:51:34 PDT 2026; root:xnu-11417.140.69.711.44~1/RELEASE_ARM64_VMAPPLE arm64
+Python 3.12.10
+Apple M1 (Virtual)
+15.7.9
