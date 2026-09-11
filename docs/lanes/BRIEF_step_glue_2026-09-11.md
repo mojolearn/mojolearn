@@ -1,14 +1,9 @@
 # Step glue lane: the byte LM step outside GEMM and attention (DEVIATIONS 2645 to 2648)
 
-Source-only lane, September 11, 2026, IDENTICAL only. STATUS: WOUND DOWN
-HALF WRITTEN on Andrew's order, NOT BUILT, NOT RUN. Written: this brief,
-`core/step_glue.mojo`, `adam_update_oop_kernel`, the unregistered
-`byte_lm_step_glue_arm_binding`, the Python and probe `mode` fields, the leg.
-NOT written: the rows launch branches in `llama_rms_norm` and `bwd_rms_norm`
-(imports only), `_byte_glue_update` and the step body branch in
-`training/byte_lm.mojo` (imports only), the binding registration, the
-probe's `result.json` fields, and `training/checks/step_glue_check.mojo`.
-No arm changes any behavior yet; the leg cannot run. Nothing here was compiled or run on the Mac or on a GPU. The
+Source-only lane, September 11, 2026, IDENTICAL only. STATUS: WRITTEN
+(every file in section 10), NOT BUILT, NOT RUN. The lane was wound down half
+written and resumed the same day on Andrew's order; main was merged in at
+4dc4346a (the attention `_estash` work) with no conflict. Nothing here was compiled or run on the Mac or on a GPU. The
 orchestrator's M4 build is the first compile (section 8), then one NVIDIA
 H100 leg (section 7). DEVIATIONS 2645 to 2648 are this lane's; 2649 is
 reserved and unused.
@@ -316,7 +311,7 @@ Built WITH the trial define (without it `main` fails at once, naming the
 define). Clauses, each printing PASS or FAIL, then one summary line.
 
 - (a) NAMES, host only: `step_glue_arm_parse` and `step_glue_arm_name` are
-  inverses on all 24 valid spellings; eight invalid spellings raise.
+  inverses on all 16 valid words; eight invalid spellings raise.
 - (b) RMSNorm FORWARD: `llama_rms_norm` under `shipped` and under rows16,
   rows8, rows4 on (m, dm) = (45, 24), (300, 64), (2048, 768) with hashed
   operands including +0, -0, subnormals and large magnitudes: `sumsq` and
@@ -332,18 +327,25 @@ define). Clauses, each printing PASS or FAIL, then one summary line.
   operands, some gradients near 1e20 so `v` overflows to infinity in the
   output: shipped `identical_optimizer_step` against the arm's in-place
   launch (`optskip`) and the out-of-place launch (`noshadow`), param, m, v
-  bit-equal including the infinities and NaNs. REACH: under sabotage the
-  out-of-place launch covers floor(n / 256) blocks, so the first moved
-  element is exactly 768.
+  bit-equal including the infinities, and the out-of-place launch leaves its
+  input param untouched. VACUOUS unless the shipped output holds an
+  infinite moment. REACH: under sabotage the out-of-place launch covers
+  floor(n / 256) blocks, so the first moved element is exactly 768; the
+  in-place launch (shipped kernel and geometry) under the same variable
+  must move nothing.
 - (e) STEP, end to end, at the default ByteConfig (B2 L32 DM32 H4 KV2 FF64
   V256, 2 layers, 34,944 parameters): the same state and the same three
   batches under `shipped` and every arm in section 7's list; loss bits and
   the downloaded gradient, param, m and v after every step equal. VACUOUS if
   param did not move.
-- (f) REFUSAL, end to end: `lr = 3e38` (finite, admitted), one step under
-  each arm must raise the SAME message as shipped, and afterwards param, m,
-  v, flags and `completed_steps` equal the pre-step values, and a second
-  `byte_rollback` returns False in every arm.
+- (f) REFUSAL, end to end, two admitted configurations. Case 0, `lr =
+  3.4e38`, `beta1 = beta2 = 0`, `weight_decay = 1`: decoupled decay takes a
+  norm weight near 1 to about -3.4e38 and the step overflows it, so
+  `validate_after` refuses and the rollback runs AFTER noshadow's swap.
+  Case 1, `lr = 3e38`: the step size overflows. The shipped outcome must be
+  a clean refusal (raised, state restored, `completed_steps` 0, healthy, a
+  second `byte_rollback` False), and every arm must match it field by
+  field, message included.
 - (g) ROLLBACK after success: one good step then `byte_rollback` returns
   True and restores the pre-step bits, in every arm.
 
@@ -417,6 +419,14 @@ GPU box only (tools/macos_serial_guard.py admits tiny jobs only).
   (the attention launchers do the same).
 - The check's end-to-end clauses run the eager attention path at head_dim 8;
   the H100 leg is the only run at head_dim 64 with the fused kernels.
+- Check spellings not yet compiled in this tree: `String(Bool)`, a
+  `@fieldwise_init` struct with a `String` field returned by value,
+  `bwd_rms_norm(...)` called without its comptime `which` (the samba ops
+  spelling), `_grid_for as _opt_grid_for` imported from the optimizer, and
+  a `ByteTrainer` built and returned from a helper.
+- Case 1 of clause (f) may be refused by the host scalars (a nonfinite step
+  size) rather than by `validate_after`; either way every arm must match
+  shipped, and case 0 is the one that must reach the post-swap rollback.
 - On the H100 the new launches add no blocks per SM for the update (the
   out-of-place kernel keeps 256 threads per block), but they do write to
   the shadow allocations instead of the state allocations; whether page
