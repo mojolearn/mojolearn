@@ -23,6 +23,16 @@
 # gpu_before.txt / gpu_after.txt come from nvidia-smi or rocm-smi.
 # MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1 skips the standalone timer harness.
 #
+# DEVIATION 2528 (second round, brief section 12) is priced against the
+# shipped default. MOJOLEARN_ATTN_BASELINE (default baseline) is the
+# harness's baseline arm for every smoke, price and timer run, and the
+# lm-<arm>-<corpus> run that lm_summary.tsv compares witnesses with (so it
+# belongs in MOJOLEARN_ATTN_LEG_LM_ARMS too). New arm names:
+# stash_tiled_ztiled (rows per block from the kernel-matrix row),
+# stash_tiled_ztiled_r64 and stash_tiled_ztiled_r32 (forced geometry):
+#
+#   MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_ATTN_BASELINE=stash_tiled MOJOLEARN_ATTN_LEG_ARMS=stash_tiled_ztiled_r64,stash_tiled_ztiled_r32 MOJOLEARN_ATTN_LEG_LM_ARMS=stash_tiled,stash_tiled_ztiled_r64,stash_tiled_ztiled_r32 MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1"
+#
 # NVIDIA confirmation:
 #
 #   MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
@@ -109,6 +119,7 @@ ROOT=${MOJOLEARN_ATTN_ROOT:-/root/mojolearn}
 OUT=${MOJOLEARN_ATTN_LEG_OUT:-/root/gemm_leg_out/attention-step}
 ARMS=${MOJOLEARN_ATTN_LEG_ARMS:-bwd_stash,fwd_sstash,bwd_stash_tiled,stash_tiled}
 LM_ARMS=${MOJOLEARN_ATTN_LEG_LM_ARMS:-baseline,stash_tiled}
+BASE=${MOJOLEARN_ATTN_BASELINE:-baseline}
 ROUNDS=${MOJOLEARN_ATTN_LEG_ROUNDS:-7}
 WARMUPS=${MOJOLEARN_ATTN_LEG_WARMUPS:-2}
 JOBS=${MOJOLEARN_COMPILE_JOBS:-2}
@@ -197,6 +208,7 @@ run() {
     echo "root=$ROOT"
     echo "arms=$ARMS"
     echo "lm_arms=$LM_ARMS"
+    echo "baseline_arm=$BASE deviations_second_round=2528"
     echo "rounds=$ROUNDS warmups=$WARMUPS deadline=$DEADLINE"
     echo "vendor=$VENDOR gpu_archs=$MOJOLEARN_GPU_ARCHS column=$MOJOLEARN_TARGET_COLUMN jobs=$JOBS"
     echo "skip_timers=${MOJOLEARN_ATTN_LEG_SKIP_TIMERS:-0} skip_lm=${MOJOLEARN_ATTN_LEG_SKIP_LM:-0}"
@@ -239,6 +251,7 @@ for arm in $(echo "$ARMS" | tr ',' ' '); do
     [ "$first" = 1 ] && oracle=1
     first=0
     MOJOLEARN_ATTN_ARM="$arm" MOJOLEARN_ATTN_KINDS=hashed,heavytail MOJOLEARN_ATTN_TIMING=0 \
+    MOJOLEARN_ATTN_BASELINE="$BASE" \
     MOJOLEARN_ATTN_ORACLE="$oracle" MOJOLEARN_ATTN_REACH=1 \
     run "smoke-$arm" timeout "$DEADLINE" "$OUT/bin/attn-price"
 done
@@ -308,14 +321,16 @@ if [ -n "$FILE_KINDS" ]; then
         [ "$first" = 1 ] && oracle=1
         first=0
         MOJOLEARN_ATTN_ARM="$arm" MOJOLEARN_ATTN_KINDS="$FILE_KINDS" \
+        MOJOLEARN_ATTN_BASELINE="$BASE" \
         MOJOLEARN_ATTN_ORACLE="$oracle" MOJOLEARN_ATTN_REACH=1 \
         MOJOLEARN_ATTN_ROUNDS="$ROUNDS" MOJOLEARN_ATTN_WARMUPS="$WARMUPS" \
         run "price-$arm" timeout "$DEADLINE" "$OUT/bin/attn-price"
     done
     # ---- the per-kernel breakdown (serialized; never a price) --------------
-    for arm in baseline $(echo "$ARMS" | tr ',' ' '); do
+    for arm in "$BASE" $(echo "$ARMS" | tr ',' ' '); do
         [ -x "$OUT/bin/attn-timers" ] || break
         MOJOLEARN_ATTN_ARM="$arm" MOJOLEARN_ATTN_KINDS="$FILE_KINDS" \
+        MOJOLEARN_ATTN_BASELINE="$BASE" \
         MOJOLEARN_ATTN_ORACLE=0 MOJOLEARN_ATTN_REACH=0 \
         MOJOLEARN_ATTN_ROUNDS=1 MOJOLEARN_ATTN_WARMUPS=1 MOJOLEARN_TRANSFORMER_TIMING=1 \
         run "timers-$arm" timeout "$DEADLINE" "$OUT/bin/attn-timers"
@@ -358,9 +373,11 @@ if [ "$LM_OK" = 1 ]; then
     # The lean step medians and the per-step witnesses, one line each: the
     # baseline arm's witnesses on a corpus are the reference every other arm
     # on that corpus must equal (compared here and again at home).
-    pixi run python - "$OUT" <<'PY' > "$OUT/lm_summary.tsv" 2>> "$OUT/lm_summary.err"
+    pixi run python - "$OUT" "$BASE" <<'PY' > "$OUT/lm_summary.tsv" 2>> "$OUT/lm_summary.err"
 import json, sys, pathlib
 out = pathlib.Path(sys.argv[1])
+# The reference arm: MOJOLEARN_ATTN_BASELINE (default baseline).
+ref_arm = sys.argv[2] if len(sys.argv) > 2 else 'baseline'
 rows = {}
 for d in sorted(out.glob('lm-*')):
     r = d / 'result.json'
@@ -379,9 +396,9 @@ for name, hashes in rows.items():
     parts = name.split('-')
     if len(parts) < 3:
         continue
-    base = 'lm-baseline-' + '-'.join(parts[2:])
+    base = 'lm-' + ref_arm + '-' + '-'.join(parts[2:])
     if base in rows and base != name:
-        print(f"{name}\twitnesses_equal_baseline={hashes == rows[base] and len(hashes) > 0}")
+        print(f"{name}\twitnesses_equal_baseline={hashes == rows[base] and len(hashes) > 0}\treference={base}")
 for d in sorted(out.glob('lmtiming-*')):
     r = d / 'result.json'
     if not r.exists():
