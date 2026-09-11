@@ -174,10 +174,11 @@ threads the value through.
 
 from checks.kernel_matrix import (
     TARGET_COLUMN,
+    pointwise_doc_split_for,
     pointwise_one_byte_fixed_for,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE as HIST_BUILD_MODE
-from checks.numerics import NUMERIC_IDENTICAL
+from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
@@ -251,6 +252,44 @@ def is_grid_empty(x: Int, y: Int, z: Int) -> Bool:
     zero-extent launch; a Metal queue does not have to.
     """
     return x == 0 or y == 0 or z == 0
+
+
+@always_inline
+def pw_block_multiplier(
+    nx: Int, ny: Int, nz: Int, size: Int, sm_count: Int
+) -> Int:
+    """`min(EstimateBlockPerFeatureMultiplier(numBlocks, size), 64)`, the
+    expression all three launchers share, behind the NUMERIC row
+    `pointwise_doc_split_for`.
+
+    DEVIATION 2624. At a multiplier above 1 every document block of a
+    feature writes its partial histogram into the SAME `binSums` cell with a
+    float `atomicAdd` (the `m > 1` writebacks in `pointwise_hist2_binary`,
+    `pointwise_hist2_half_byte` and `pointwise_hist2_one_byte_templ`). Float
+    addition is not associative, so the cell depends on the order in which
+    the device finishes the blocks, and the multiplier itself follows
+    `sm_count`, which differs by vendor. Measured on an NVIDIA H100,
+    2026-09-11: three in-process repeats of one IDENTICAL pointwise fit gave
+    three different `tree001.depth00.hist.BinaryFeatures` hashes, and
+    Istella-S 1M moved its model hash between rounds. Tree 0 held only
+    because its Logloss gradients are dyadic, so every partial sum was exact.
+    `checks/pointwise_dispatch_check.mojo` could not see it for the same
+    reason: its planted stats are integers under 2^24.
+
+    So the ordered tiers keep the document axis whole: one block per
+    feature group per part, a plain store, one summation order on every
+    vendor. FAST keeps CatBoost's split.
+    """
+    comptime if not pointwise_doc_split_for[
+        TARGET_COLUMN, HIST_BUILD_MODE != NUMERIC_FAST
+    ]():
+        return 1
+    var multiplier = estimate_block_per_feature_multiplier(
+        nx, ny, nz, size, sm_count
+    )
+    if multiplier > PW_MAX_MULTIPLIER:
+        multiplier = PW_MAX_MULTIPLIER
+    return multiplier
 
 
 # ---------------------------------------------------------------------------
@@ -863,11 +902,7 @@ def compute_hist2_non_binary[
     var nx = (
         feature_count_for_bits + PW_NB_FEATURES_PER_BLOCK - 1
     ) // PW_NB_FEATURES_PER_BLOCK
-    var multiplier = estimate_block_per_feature_multiplier(
-        nx, ny, nz, size, sm_count
-    )
-    if multiplier > PW_MAX_MULTIPLIER:
-        multiplier = PW_MAX_MULTIPLIER
+    var multiplier = pw_block_multiplier(nx, ny, nz, size, sm_count)
 
     # `:242` -- sizes the LAUNCH, over EVERY one-byte feature
     nx = (
@@ -1052,11 +1087,7 @@ def compute_hist2_binary[
     var ny = hist_count
     var nz = fold_count
 
-    var multiplier = estimate_block_per_feature_multiplier(
-        nx, ny, nz, size, sm_count
-    )
-    if multiplier > PW_MAX_MULTIPLIER:
-        multiplier = PW_MAX_MULTIPLIER
+    var multiplier = pw_block_multiplier(nx, ny, nz, size, sm_count)
     nx *= multiplier
     if is_grid_empty(nx, ny, nz):
         return
@@ -1234,11 +1265,7 @@ def compute_hist2_half_byte[
     var ny = hist_count
     var nz = fold_count
 
-    var multiplier = estimate_block_per_feature_multiplier(
-        nx, ny, nz, size, sm_count
-    )
-    if multiplier > PW_MAX_MULTIPLIER:
-        multiplier = PW_MAX_MULTIPLIER
+    var multiplier = pw_block_multiplier(nx, ny, nz, size, sm_count)
     nx *= multiplier
     if is_grid_empty(nx, ny, nz):
         return
