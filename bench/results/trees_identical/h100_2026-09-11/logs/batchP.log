@@ -1,0 +1,153 @@
+batchP start 04:10:13
+started=2026-09-11T04:00:48Z commit=352d9781834d0d2ec8afc45f506f13ab5d33781f
+lightgbm_cuda_build=SKIPPED requested focused competitor session
+pixi_install=0 04:00:53
+pip_base=0 04:01:08
+build_base=0 04:01:48
+pip_cuml=0 04:02:50
+build_gbdt=0 04:03:23
+build_rf=0 04:03:52
+build_trees=0 04:04:20
+import_identical=0 04:04:21
+higgs_zip=0 04:08:20
+higgs_unzip=0 04:08:25
+download_higgs=0 04:10:04
+finished=2026-09-11T04:10:04Z
+ede5592fbaec09220b6390a14e3091a839b40e62ededced46f904b5543da5f14  /root/bins/baseline/_mojolearn.so
+79284946e80f59683e31c006b574ffb32c37d1a0b9bbe3ec51b7fed6b8cc044f  /root/bins/baseline/_mojolearn_gbdt.so
+a1052460053a3b81ad37f87edc57405779455b74acf1f4aea2e756a8db74e5c9  /root/bins/baseline/_mojolearn_rf.so
+7d64b467271edb0522b0a8a45c4ed7b25ea45efd331063c39481fa43bd848dc0  /root/bins/baseline/_mojolearn_trees.so
+build baseline/base defines='' 04:10:13
+build_exit baseline.base=0 04:10:34
+ede5592fbaec09220b6390a14e3091a839b40e62ededced46f904b5543da5f14  /root/bins/baseline/_mojolearn.so
+build baseline/gbdt defines='' 04:10:34
+build_exit baseline.gbdt=0 04:10:55
+79284946e80f59683e31c006b574ffb32c37d1a0b9bbe3ec51b7fed6b8cc044f  /root/bins/baseline/_mojolearn_gbdt.so
+build baseline/rf defines='' 04:10:55
+build_exit baseline.rf=0 04:11:02
+a1052460053a3b81ad37f87edc57405779455b74acf1f4aea2e756a8db74e5c9  /root/bins/baseline/_mojolearn_rf.so
+build baseline/trees defines='' 04:11:02
+build_exit baseline.trees=0 04:11:09
+7d64b467271edb0522b0a8a45c4ed7b25ea45efd331063c39481fa43bd848dc0  /root/bins/baseline/_mojolearn_trees.so
+ede5592fbaec09220b6390a14e3091a839b40e62ededced46f904b5543da5f14  /root/bins/baseline/_mojolearn.so
+79284946e80f59683e31c006b574ffb32c37d1a0b9bbe3ec51b7fed6b8cc044f  /root/bins/baseline/_mojolearn_gbdt.so
+a1052460053a3b81ad37f87edc57405779455b74acf1f4aea2e756a8db74e5c9  /root/bins/baseline/_mojolearn_rf.so
+7d64b467271edb0522b0a8a45c4ed7b25ea45efd331063c39481fa43bd848dc0  /root/bins/baseline/_mojolearn_trees.so
+PHASE_A_DONE 04:11:09
+identity_break baseline lanes=rf-clf,rf-reg,et-clf,et-reg,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse,kmeans 04:11:09
+ib_exit baseline=0 04:11:19
+
+cells=81 stable=81 moved=0 refused=0
+wrote /root/trees_out/ib/baseline.json
+ib_diff sep10b_baseline vs baseline exit=1 04:11:19
+73
+| rf-clf/base                  | DIVERGENT  | parts differ: predict,proba; agree: - | 21178dc5457bf5dc |
+| rf-clf/denormal              | DIVERGENT  | parts differ: predict,proba; agree: - | 9ee018b4ad7d8c6c |
+| rf-clf/denormal_ftz          | DIVERGENT  | parts differ: predict,proba; agree: - | 9ee018b4ad7d8c6c |
+| rf-clf/dupes                 | DIVERGENT  | parts differ: predict,proba; agree: - | 941ea7485b906b92 |
+| rf-clf/hashed                | DIVERGENT  | parts differ: predict,proba; agree: - | 30000a54b1ebf87f |
+| rf-clf/negative              | DIVERGENT  | parts differ: predict,proba; agree: - | 5c321c2a1e99f705 |
+| rf-clf/odd                   | DIVERGENT  | parts differ: predict,proba; agree: - | 8eadf0d0c523cf9a |
+| rf-clf/ties                  | DIVERGENT  | parts differ: predict,proba; agree: - | 578c313bdad14449 |
+| rf-clf/wide                  | DIVERGENT  | parts differ: predict,proba; agree: - | e57dc48ebb4fda48 |
+summary: DIVERGENT=9, IDENTICAL=72
+ib_diff apple_rf2502 vs baseline exit=0 04:11:19
+19
+PHASE_B_DONE 04:11:19
+speed baseline rf higgs 1000000 rounds=5 mode=ours 04:11:19
+speed_exit baseline.rf.higgs.r1000000.ours=0 04:14:25
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=1108.179 hash=efd14ab2c09ff57c
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=2 ms=1073.600 hash=efd14ab2c09ff57c
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=3 ms=1071.444 hash=efd14ab2c09ff57c
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=4 ms=1104.611 hash=efd14ab2c09ff57c
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=5 ms=1087.831 hash=efd14ab2c09ff57c
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538817
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809830
+speed baseline gbdt-symmetric higgs 1000000 rounds=7 mode=ours 04:14:25
+speed_exit baseline.gbdt-symmetric.higgs.r1000000.ours=0 04:14:42
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=575.593 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=2 ms=527.078 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=3 ms=522.692 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=4 ms=464.295 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=5 ms=463.458 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=6 ms=601.777 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=7 ms=547.714 hash=dac2cf366e219cec
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542067
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800716
+speed baseline rf higgs 2000000 rounds=5 mode=ours 04:14:42
+speed_exit baseline.rf.higgs.r2000000.ours=0 04:18:00
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=1 ms=1791.500 hash=7fd9fda29a4fa81d
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=2 ms=1759.864 hash=7fd9fda29a4fa81d
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=3 ms=1769.068 hash=7fd9fda29a4fa81d
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=4 ms=1716.020 hash=7fd9fda29a4fa81d
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=5 ms=1738.661 hash=7fd9fda29a4fa81d
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.536959
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.811575
+speed baseline gbdt-symmetric higgs 1000000 rounds=7 mode=ours 04:18:00
+speed_exit baseline.gbdt-symmetric.higgs.r1000000.ours=0 04:18:16
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=577.609 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=2 ms=493.211 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=3 ms=505.928 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=4 ms=556.277 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=5 ms=472.023 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=6 ms=485.797 hash=dac2cf366e219cec
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=7 ms=471.842 hash=dac2cf366e219cec
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542067
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800716
+speed baseline gbdt-depthwise higgs 1000000 rounds=7 mode=ours 04:18:16
+speed_exit baseline.gbdt-depthwise.higgs.r1000000.ours=0 04:18:37
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=1 ms=1082.650 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=2 ms=1016.450 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=3 ms=989.150 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=4 ms=1021.610 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=5 ms=985.646 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=6 ms=997.799 hash=592afa74b0d96982
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=7 ms=1054.439 hash=592afa74b0d96982
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.525450
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.813518
+speed baseline gbdt-lossguide higgs 1000000 rounds=7 mode=ours 04:18:37
+speed_exit baseline.gbdt-lossguide.higgs.r1000000.ours=0 04:19:02
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=1 ms=1649.228 hash=4f02e5cb8088b281
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=2 ms=1601.830 hash=4f02e5cb8088b281
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=3 ms=1607.237 hash=4f02e5cb8088b281
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=4 ms=1610.765 hash=4f02e5cb8088b281
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=5 ms=1609.595 hash=4f02e5cb8088b281
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=6 ms=1605.654 hash=4f02e5cb8088b281
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=7 ms=1611.138 hash=4f02e5cb8088b281
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.525348
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.813238
+speed baseline et higgs 1000000 rounds=5 mode=ours 04:19:02
+speed_exit baseline.et.higgs.r1000000.ours=0 04:21:07
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=1 ms=2585.290 hash=2c192f6b12dbb6c5
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=2 ms=2503.427 hash=2c192f6b12dbb6c5
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=3 ms=2510.611 hash=2c192f6b12dbb6c5
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=4 ms=2504.160 hash=2c192f6b12dbb6c5
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=5 ms=2475.953 hash=2c192f6b12dbb6c5
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.622379
+FSPEED-ACC lane=et arm=ours metric=auc value=0.762400
+speed baseline rf higgs 1000000 rounds=5 mode=ours 04:21:07
+speed_exit baseline.rf.higgs.r1000000.ours=0 04:24:06
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=1098.614 hash=efd14ab2c09ff57c
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=2 ms=1080.669 hash=efd14ab2c09ff57c
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=3 ms=1080.087 hash=efd14ab2c09ff57c
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=4 ms=1050.936 hash=efd14ab2c09ff57c
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=5 ms=1087.006 hash=efd14ab2c09ff57c
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538817
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809830
+PHASE_C_DONE 04:24:06
+speed baseline rf higgs 1000000 rounds=1 mode=stage 04:24:07
+speed_exit baseline.rf.higgs.r1000000.stage=0 04:25:12
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=1139.190 hash=efd14ab2c09ff57c
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538817
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809830
+PHASE_D_DONE 04:25:12
+batchP end 04:25:12

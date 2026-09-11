@@ -1,0 +1,14 @@
+started=2026-09-11T04:00:48Z commit=352d9781834d0d2ec8afc45f506f13ab5d33781f
+lightgbm_cuda_build=SKIPPED requested focused competitor session
+pixi_install=0 04:00:53
+pip_base=0 04:01:08
+build_base=0 04:01:48
+pip_cuml=0 04:02:50
+build_gbdt=0 04:03:23
+build_rf=0 04:03:52
+build_trees=0 04:04:20
+import_identical=0 04:04:21
+higgs_zip=0 04:08:20
+higgs_unzip=0 04:08:25
+download_higgs=0 04:10:04
+finished=2026-09-11T04:10:04Z
