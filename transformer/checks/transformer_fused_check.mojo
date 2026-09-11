@@ -62,6 +62,16 @@ check reaches the shipped 2597 dk/dv branch on a Mac.
 The forward wrapper (`eager_attention_forward`, trace off, path auto) is
 what the surface calls, so its output is compared too: it must equal the
 eager core whatever status it took.
+
+THE KEPT EXP STASH (DEVIATIONS 2650 to 2652, brief section 20). The direct
+launches go through `fused_forward_launch_estash_ran` and
+`fused_backward_launch_estash_ran` with a kept buffer of this check's own,
+so an `_estash` arm named by MOJOLEARN_ATTN_ARM on a trial build runs its
+backward on the kept stash and reports the estash bits in `ran`; every
+other arm, and every shipped build, takes the plain launchers through them
+unchanged. A `WRAPPER` line prints the wrapper's kept cell count
+(`stages.attn_estash_cells`): 0 on a shipped build and for every arm
+without `_estash`.
 """
 
 from std.memory import bitcast
@@ -98,8 +108,8 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_from_env,
     fused_attention_arm_name,
     fused_attention_arm_parse,
-    fused_backward_launch_ran,
-    fused_forward_launch_ran,
+    fused_backward_launch_estash_ran,
+    fused_forward_launch_estash_ran,
     fused_supported_head_dim,
     fused_forward_supported_head_dim,
 )
@@ -324,13 +334,17 @@ def run_case(
     var e_den = _download(ctx, stages.denom, b * c.nh * l)
 
     var moved = 0
+    # DEVIATION 2652: this check's own kept exp stash for the direct launches
+    # (grown by the forward launcher under an `_estash` arm).
+    var kept = _upload(ctx, List[Float32](length=1, fill=Float32(0.0)))
+    var kept_cells = 0
     # ---- the fused forward, directly, with the arm it ran ------------------
     stages.ctxv = _upload(ctx, List[Float32](length=qn, fill=Float32(0.0)))
     var ran_f = -1
-    var st = fused_forward_launch_ran(
+    var st = fused_forward_launch_estash_ran(
         ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
-        stages.k_cache, stages.v_cache, b, l, c.nh, c.nkv, c.hd, s, pos0,
-        key_lo, window, scale, arm, ran_f,
+        stages.k_cache, stages.v_cache, kept, b, l, c.nh, c.nkv, c.hd, s, pos0,
+        key_lo, window, scale, arm, ran_f, kept_cells,
     )
     print("    fused forward status: " + status_name(st) + "  ran " + fused_attention_arm_name(ran_f))
     if c.expect_fwd != EXPECT_ANY and st != c.expect_fwd:
@@ -353,6 +367,7 @@ def run_case(
         empty_i, empty_b, off2, String(""), False,
     )
     print("    wrapper status: " + status_name(wst))
+    print("    WRAPPER status=" + status_name(wst) + " estash_cells=" + String(stages.attn_estash_cells) + " cells=" + String(b * c.nh * l * s))
     moved += compare(c.name, "fwd ctx (wrapper)", e_ctx, _download(ctx, stages.ctxv, qn))
     moved += compare(c.name, "fwd amax (wrapper)", e_max, _download(ctx, stages.amax, b * c.nh * l))
     moved += compare(c.name, "fwd denom (wrapper)", e_den, _download(ctx, stages.denom, b * c.nh * l))
@@ -377,11 +392,11 @@ def run_case(
     bst.d_k_cache = _upload(ctx, List[Float32](length=kn, fill=Float32(0.0)))
     bst.d_v_cache = _upload(ctx, List[Float32](length=kn, fill=Float32(0.0)))
     var ran_b = -1
-    var bs = fused_backward_launch_ran(
+    var bs = fused_backward_launch_estash_ran(
         ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
         stages.q_rope, bst.d_attn_ctx, stages.k_cache, stages.v_cache,
-        stages.amax, stages.denom, b, l, c.nh, c.nkv, c.hd, s, pos0, key_lo,
-        window, scale, arm, ran_b,
+        stages.amax, stages.denom, kept, kept_cells, b, l, c.nh, c.nkv, c.hd,
+        s, pos0, key_lo, window, scale, arm, ran_b,
     )
     print("    fused backward status: " + status_name(bs) + "  ran " + fused_attention_arm_name(ran_b))
     if c.expect_bwd != EXPECT_ANY and bs != c.expect_bwd:
@@ -400,6 +415,7 @@ def run_case(
         moved += compare(c.name, "bwd dq", e_dq, _download(ctx, bst.d_q_rope, qn))
         moved += compare(c.name, "bwd dk", e_dk, _download(ctx, bst.d_k_cache, kn))
         moved += compare(c.name, "bwd dv", e_dv, _download(ctx, bst.d_v_cache, kn))
+    _ = kept^
     _ = bst^
     _ = stages^
     return moved

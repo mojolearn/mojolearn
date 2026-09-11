@@ -2841,19 +2841,19 @@ the 300 ms native call to GEMM (48%) and 116 ms to attention kernels (39%);
 nothing else exceeds 7 ms. The next NVIDIA target is GEMM
 (`docs/lanes/BRIEF_gemm_kernel_2026-09-11.md`), not attention.
 
-## 20. The final attention pass on the H100: the backward reads the forward's exp stash (2026-09-11, worktree lane `lane/attention-final-h100`, DESIGN ONLY, NO CODE WRITTEN): DEVIATIONS 2650, 2651 and 2652
+## 20. The final attention pass on the H100: the backward reads the forward's exp stash (2026-09-11, worktree lane `lane/attention-final-h100`, then built by the neural session on `merge/attention-final`): DEVIATIONS 2650, 2651 and 2652
 
-STATUS, WOUND DOWN BY ANDREW BEFORE ANY CODE. 20.1 and 20.2 read filed
-evidence; 20.3 to 20.5 are the mechanism, the arithmetic and the identity
-argument, written before the code as the rule asks. NOTHING FROM 20.6 ON
-EXISTS: no kernel, launcher, glue, check change, harness change or leg body
-was written. 20.6 to 20.10 are the plan a later lane would build, and the M4
-commands and leg command there have nothing to run yet. Nothing was compiled
-or run (no build on the Mac, by rule). A build without
-`-D MOJOLEARN_ATTN_ARM_TRIAL=1` compiles none of the kernels or launches
-below, reads no new environment, and dispatches exactly as before. Andrew
-called this the last optimization pass, so 20.2 first asks whether any arm
-can save 1 percent of the step (2.9 ms of 290 ms) at all.
+STATUS. The lane wound down on Andrew's call after 20.1 to 20.5 (the
+reading, the mechanism, the arithmetic and the identity argument, written
+before any code). The neural session (mojolearn-d1, about 21:15Z the same
+day) then built 20.6 as written, with the differences 20.6 notes at its end,
+and ran 20.8 on the Apple M4; the results are in 20.11, the H100 leg's in
+20.12. A build without `-D MOJOLEARN_ATTN_ARM_TRIAL=1` compiles none of the
+kernels or launches below, reads no new environment, and dispatches exactly
+as before (the `attn_estash_cells` host field exists on every build and
+reads 0 there). Andrew called this the last optimization pass, so 20.2
+first asks whether any arm can save 1 percent of the step (2.9 ms of 290
+ms) at all.
 
 ### 20.1 The ranking, ms per step on the current NVIDIA default
 
@@ -3178,6 +3178,30 @@ bits are in `ATTN_ARM_NEW_BITS` and `ATTN_ARM_DEFAULT_REFUSED_BITS`.
 A trial build instantiates four more kernel pipelines (DRES times SABN); the
 forward and the dq and dk/dv instantiations are ones a trial build already
 compiles.
+
+As built (differences from the list above, none of them numeric). The
+launcher is `_launch_bwd_estash[HD, DRES, SABN]` with the dk/dv keys and the
+sabotage_kv choice as runtime arguments (`_estash_dkdv_launch[HD, BJ]`
+launches the joint 2597 fold, clean or sabotage_kv). The two entry points
+`fused_forward_launch_estash_ran` and `fused_backward_launch_estash_ran` take
+the caller's kept buffer and count; the forward one resets the count on entry
+and sets it after its kernel ran to the end (FUSED_RAN or FUSED_CORNER; on
+the corner the wrapper takes the eager path, which clears it), the backward
+one runs the estash path only when the count equals this call's cells and
+otherwise returns the plain launcher's result. `fused_attention_arm_estash_runs`
+is the build-and-arm test both use (trial build, the bit, the forward
+resolving to 32 rows with `_qres` and `_pf`, a dk/dv keys count, the page
+fits); `fused_attention_arm_backward_resolved` adds the estash bits to the
+word under the same test. `eager_attention_forward` resets the field on
+every build and keeps the stash only when no eager stage is needed;
+`attention_eager_core` clears it. The arms check launches EVERY arm through
+the two entry points (a kept buffer per case) and adds a fourth pass for the
+estash arms (`+poisoned_estash`, the REACH_E line); the fused check does the
+same and prints `WRAPPER status=... estash_cells=... cells=...`. The harness
+`Case` carries the kept buffer, `poison_kept`, the `REACH_ES` and `REACH_E`
+runs, `PATH ... estash=`, and the `zdot_estash_pf` / `zdot_estash_dres_pf`
+RESOURCES rows (trial builds only). `tools/attention_step_leg.sh` is not
+edited.
 
 ### 20.7 The flip rule for this leg
 
