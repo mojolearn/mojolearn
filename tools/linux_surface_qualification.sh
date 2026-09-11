@@ -56,11 +56,15 @@ if [[ "$ACTION" = build || "$ACTION" = build-tier ]]; then
     [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'Full source commit SHA required'; exit 2; }
     {
         echo "source_commit=$commit"
-        if [[ ${MOJOLEARN_PACKAGE_BYTE_LM:-0} = 1 ]]; then
-            echo 'expected_bindings_fast=15 expected_bindings_deterministic=15 expected_bindings_identical=16'
-        else
-            echo 'expected_bindings_per_tier=15'
-        fi
+        # DEVIATION 2490: trees only below identical; the counts come from the verifier.
+        "$PY" - <<'PYCOUNTS'
+import sys
+sys.path.insert(0, 'tools')
+from verify_linux_surface_qualification import MODES, expected_bindings
+import os
+byte_lm = os.environ.get('MOJOLEARN_PACKAGE_BYTE_LM', '0') == '1'
+print(' '.join(f'expected_bindings_{m}={len(expected_bindings(m, byte_lm))}' for m in MODES))
+PYCOUNTS
         echo "expected_tiers=${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
         echo 'build_jobs=1 cpu_affinity_max=2 compiler_jobs=2 blas_threads=1'
         echo "cpu_affinity=$cores"

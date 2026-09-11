@@ -32,7 +32,8 @@ def verify(wheel, results, source_root, expected_version):
         if sources.get(relative) != sha(Path(source_root) / relative):
             raise ValueError('Qualification source changed: ' + relative)
     modes = {'fast': 0, 'deterministic': 2, 'identical': 1}
-    expected_jobs = {'create-venv', 'install-wheel', 'check-dependencies', 'installed-packages'}
+    expected_jobs = {'create-venv', 'install-wheel', 'check-dependencies',
+                     'install-test-dependencies', 'installed-packages'}
     expected_jobs.update(f'{surface}-{mode}' for mode in modes
                          for surface in ('fit', 'transform', 'quality'))
     jobs = record.get('jobs', [])
@@ -52,6 +53,22 @@ def verify(wheel, results, source_root, expected_version):
         for mode, code in modes.items():
             member = ('mojolearn/' + (mode + '/' if mode != 'fast' else '') +
                       '_mojolearn_metrics.so')
+            if mode != 'identical':
+                # DEVIATION 2490: UMAP ships IDENTICAL only. The wheel must not
+                # carry a lower-tier metrics binding, and each lower-tier job
+                # must have been refused by name by the installed package.
+                if member in names:
+                    raise ValueError('Wheel carries an identical-only binding in a lower tier: ' + member)
+                for surface in ('fit', 'transform', 'quality'):
+                    name = f'{surface}-{mode}'
+                    installed = next(job for job in jobs if job['name'] == name).get('installed', {})
+                    if (installed.get('version') != expected_version or
+                            installed.get('mode') != mode or
+                            installed.get('refused') is not True or
+                            '_mojolearn_metrics' not in installed.get('refusal', '') or
+                            installed.get('wrapper_sha256') != wrapper_sha):
+                        raise ValueError('Lower tier was not refused by the installed wheel: ' + name)
+                continue
             binding_sha = hashlib.sha256(archive.read(member)).hexdigest()
             for surface in ('fit', 'transform', 'quality'):
                 name = f'{surface}-{mode}'

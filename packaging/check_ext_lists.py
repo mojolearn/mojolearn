@@ -57,6 +57,15 @@ def from_python_tuple(path, varname):
     return set(re.findall(r'"(_mojolearn[a-z_]*)"', m.group(1)))
 
 
+def from_python_frozenset(path, varname):
+    """Names inside `VARNAME = frozenset({ ... })`, quoted, single line or not."""
+    text = (ROOT / path).read_text()
+    m = re.search(varname + r"\s*=\s*frozenset\(\{(.*?)\}\)", text, re.S)
+    if not m:
+        return None
+    return set(re.findall(r"'(_mojolearn[a-z_]*)'", m.group(1)))
+
+
 def from_shell_string(path, varname):
     """Names inside `VARNAME="a b c"` on one line."""
     text = (ROOT / path).read_text()
@@ -79,6 +88,13 @@ SOURCES = [
     ("packaging/linux/build_sets.sh", from_shell_string, "EXT_NAMES", "IDENTICAL_ONLY_NAMES"),
     ("packaging/macos/build_release_wheel.sh", from_shell_string, "EXT_NAMES", "IDENTICAL_ONLY_NAMES"),
 ]
+#: The Linux admission side (tools/verify_linux_surface_qualification.py)
+#: spells the every-tier set on its own because it never imports the package;
+#: it must equal `_backend._TIERED` too, or the release legs refuse a correct
+#: build as "Incomplete build outputs" (2026-09-10, first 0.8.0 AMD leg).
+TIERED_MIRRORS = [
+    ("tools/verify_linux_surface_qualification.py", from_python_frozenset, "TIERED"),
+]
 
 
 def main():
@@ -94,6 +110,16 @@ def main():
           f"({len(want)} extensions)")
     bad = 0
     tiered = set(_backend_tiered())
+    for path, how, var in TIERED_MIRRORS:
+        got = how(path, var)
+        if got is None:
+            print(f"  UNREADABLE {path}: no {var} found")
+            bad += 1
+        elif got != tiered:
+            print(f"  MISMATCH  {path} {var} ({len(got)}) is not _backend._TIERED")
+            bad += 1
+        else:
+            print(f"  OK        {path} {var} ({len(got)}) == _backend._TIERED")
     for path, how, var, ident_var in SOURCES:
         got = how(path, var)
         if got is None:

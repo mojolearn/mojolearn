@@ -33,20 +33,32 @@ class QualificationArtifactTests(unittest.TestCase):
             path.write_text('fixture ' + relative)
             sources[relative] = sha(path)
         jobs = [{'name': name, 'exit_code': 0, 'timed_out': False} for name in
-                ('create-venv', 'install-wheel', 'check-dependencies', 'installed-packages')]
+                ('create-venv', 'install-wheel', 'check-dependencies',
+                 'install-test-dependencies', 'installed-packages')]
+        # DEVIATION 2490: UMAP (the metrics binding) ships IDENTICAL only. The
+        # fixture wheel carries the identical binding and, as the tree lanes
+        # do, a lower-tier binding of some OTHER name; the lower-tier UMAP jobs
+        # are refusal records, not runs.
+        wrapper_sha = sources['python/mojolearn/_umap_impl.py']
         with zipfile.ZipFile(self.wheel, 'w') as archive:
             archive.write(self.root / 'python/mojolearn/_umap_impl.py', 'mojolearn/_umap_impl.py')
+            archive.writestr('mojolearn/_mojolearn_gbdt.so', b'fixture binary fast trees')
+            archive.writestr('mojolearn/deterministic/_mojolearn_gbdt.so', b'fixture binary deterministic trees')
+            binary = b'fixture binary identical'
+            archive.writestr('mojolearn/identical/_mojolearn_metrics.so', binary)
             for mode, code in {'fast': 0, 'deterministic': 2, 'identical': 1}.items():
-                binary = ('fixture binary ' + mode).encode()
-                member = ('mojolearn/' + (mode + '/' if mode != 'fast' else '') +
-                          '_mojolearn_metrics.so')
-                archive.writestr(member, binary)
                 for surface in ('fit', 'transform', 'quality'):
+                    if mode == 'identical':
+                        installed = {'version': '0.6.0', 'mode': mode, 'binding_mode_code': code,
+                                     'wrapper_sha256': wrapper_sha,
+                                     'binding_sha256': hashlib.sha256(binary).hexdigest()}
+                    else:
+                        installed = {'version': '0.6.0', 'mode': mode, 'refused': True,
+                                     'wrapper_sha256': wrapper_sha,
+                                     'refusal': "mojolearn: _mojolearn_metrics has no '" + mode
+                                                + "' tier. ... IDENTICAL only (DEVIATION 2490)."}
                     jobs.append({'name': f'{surface}-{mode}', 'exit_code': 0,
-                                 'timed_out': False, 'installed': {
-                                     'version': '0.6.0', 'mode': mode, 'binding_mode_code': code,
-                                     'wrapper_sha256': sources['python/mojolearn/_umap_impl.py'],
-                                     'binding_sha256': hashlib.sha256(binary).hexdigest()}})
+                                 'timed_out': False, 'installed': installed})
         self.record = {'status': 'PASSED', 'wheel_sha256': sha(self.wheel),
                        'expected_version': '0.6.0', 'source_files': sources, 'jobs': jobs}
 
@@ -102,6 +114,24 @@ class QualificationArtifactTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'artifact evidence differs'):
                     self.check()
             installed[field] = original
+
+    def test_lower_tier_umap_binding_or_unrefused_run_is_refused(self):
+        # DEVIATION 2490: a metrics binding outside identical/ is a packing defect.
+        with zipfile.ZipFile(self.wheel, 'a') as archive:
+            archive.writestr('mojolearn/_mojolearn_metrics.so', b'stray fast metrics')
+        self.record['wheel_sha256'] = sha(self.wheel)
+        with self.assertRaisesRegex(ValueError, 'identical-only binding in a lower tier'):
+            self.check()
+        self.setUp()
+        fast_fit = next(job for job in self.record['jobs'] if job['name'] == 'fit-fast')['installed']
+        for field, value in (('refused', False), ('refusal', 'some other error'),
+                             ('wrapper_sha256', 'wrong'), ('version', '0.5.0')):
+            original = fast_fit[field]
+            with self.subTest(field=field):
+                fast_fit[field] = value
+                with self.assertRaisesRegex(ValueError, 'not refused by the installed wheel'):
+                    self.check()
+            fast_fit[field] = original
 
     def test_wrong_release_version_is_refused(self):
         self.record['expected_version'] = '0.5.0'

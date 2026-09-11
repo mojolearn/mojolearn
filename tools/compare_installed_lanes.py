@@ -17,7 +17,7 @@ import re
 import zipfile
 
 from compare_ordered_python import ARRAYS, PREFIX, check_record
-from verify_linux_surface_qualification import BINDINGS, FIXTURES, MODES, SURFACES, check_quality, require
+from verify_linux_surface_qualification import BINDINGS, FIXTURES, MODES, SURFACES, check_quality, expected_bindings, require
 
 TARGETS = {'umap', 'umap-transform', 'umap-quality', 'ordered-rmse'}
 EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so')
@@ -94,7 +94,7 @@ def audit_wheel(candidate, qualification):
     require(sorted({v for v, _, _ in sets}) == audit['advertised_vendors'], 'Advertised vendors differ')
     for v, arch in {(v, arch) for v, arch, _ in sets}:
         for mode in MODES:
-            require(sets.get((v, arch, mode)) == BINDINGS, 'Incomplete wheel vendor/tier set')
+            require(sets.get((v, arch, mode)) == expected_bindings(mode), 'Incomplete wheel vendor/tier set')
     own = {'mojolearn/' + name: hashed for name, hashed in extensions.items()
            if name.startswith(vendor + '/')}
     require(own == proof['extensions'], 'Wheel/proof vendor extension inventory differs')
@@ -119,7 +119,7 @@ def installed(qualification, name, mode, audit):
     require(package.name == 'mojolearn' and 'site-packages' in package.parts
             and 'venv' in package.parts, 'Installed package path is not isolated')
     bindings = record['installed_bindings']
-    require(set(bindings) == BINDINGS, 'Incomplete installed binding readback')
+    require(set(bindings) == expected_bindings(mode), 'Incomplete installed binding readback')
     for name, row in bindings.items():
         member = str(Path(row['path']).relative_to(package))
         require(row['sha256'] == audit['extension_hashes'].get(member), 'Installed binding hash differs')

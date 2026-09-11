@@ -39,6 +39,23 @@ assert mojolearn.__version__ == os.environ['UMAP_EXPECT_VERSION'], mojolearn.__v
 wrapper_sha = hashlib.sha256(wrapper.read_bytes()).hexdigest()
 assert wrapper_sha == os.environ['UMAP_EXPECT_WRAPPER_SHA'], 'Installed wrapper differs from frozen source'
 mode = os.environ['MOJOLEARN_NUMERIC_MODE']
+if mode != 'identical':
+    # DEVIATION 2490: UMAP is IDENTICAL only. The installed wheel must refuse
+    # the lower tiers BY NAME before touching the disk; the refusal is the
+    # evidence for this arm and the target never runs.
+    try:
+        mojolearn.UMAP(numeric_mode=mode)._bind()
+    except ValueError as exc:
+        refusal = str(exc)
+    else:
+        raise AssertionError('UMAP accepted numeric_mode=' + mode + '; it is IDENTICAL only (DEVIATION 2490)')
+    assert '_mojolearn_metrics' in refusal and 'IDENTICAL only' in refusal, refusal
+    record = {'package': str(package), 'version': mojolearn.__version__,
+              'wrapper': str(wrapper), 'wrapper_sha256': wrapper_sha,
+              'mode': mode, 'refused': True, 'refusal': refusal, 'python': sys.version}
+    pathlib.Path(os.environ['UMAP_GUARD_OUTPUT']).write_text(json.dumps(record, indent=2) + '\n')
+    print(json.dumps(record), flush=True)
+    raise SystemExit(0)
 binding = mojolearn.UMAP(numeric_mode=mode)._bind()
 binary = pathlib.Path(binding.__file__).resolve()
 assert binary.is_relative_to(prefix) and 'site-packages' in binary.parts, binary
@@ -157,6 +174,12 @@ def main():
                 raise RuntimeError('Exact wheel installation failed')
             if not run('check-dependencies', [python, '-m', 'pip', 'check'], work):
                 raise RuntimeError('Installed wheel dependencies are inconsistent')
+            # The wheel's runtime is dependency-free; NumPy belongs to the
+            # test harness (the three targets import it), not to the wheel.
+            if not run('install-test-dependencies', [python, '-m', 'pip', 'install',
+                       '--disable-pip-version-check', '--no-input', '--only-binary=:all:',
+                       *install_options, 'numpy>=1.24'], work):
+                raise RuntimeError('Test dependency installation failed')
             if not run('installed-packages', [python, '-m', 'pip', 'list', '--format=json',
                        '--disable-pip-version-check'], work):
                 raise RuntimeError('Could not retain installed dependency versions')
@@ -177,7 +200,10 @@ def main():
                     if job_passed:
                         installed_record = json.loads(Path(extra['UMAP_GUARD_OUTPUT']).read_text())
                         manifest['jobs'][-1]['installed'] = installed_record
-                        if surface == 'quality':
+                        if mode != 'identical':
+                            if installed_record.get('refused') is not True:
+                                raise RuntimeError('Lower tier did not refuse UMAP: ' + name)
+                        elif surface == 'quality':
                             quality = json.loads((output / (name + '.json')).read_text())
                             if quality.get('status') != 'PASS' or not quality.get('results'):
                                 raise RuntimeError('Quality job returned without complete passing evidence')

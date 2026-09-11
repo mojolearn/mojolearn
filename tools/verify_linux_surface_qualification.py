@@ -100,8 +100,19 @@ def expected_jobs(audit):
     return jobs
 
 
+# DEVIATION 2490 (2026-09-10): only the three tree bindings ship every tier.
+# Every other binding is IDENTICAL only, so a fast or deterministic set holds
+# exactly TIERED and the identical set holds all of BINDINGS (plus the byte LM
+# when packaged). packaging/check_ext_lists.py holds this set to
+# mojolearn._backend._TIERED; it is spelled here because this module is the
+# read-only admission side and never imports the package.
+TIERED = frozenset({'_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees'})
+
+
 def expected_bindings(mode, byte_lm=False):
-    return BINDINGS | ({'_mojolearn_byte_lm'} if byte_lm and mode == 'identical' else set())
+    if mode == 'identical':
+        return BINDINGS | ({'_mojolearn_byte_lm'} if byte_lm else set())
+    return set(TIERED)
 
 
 def check_byte_lm(out, installed):
