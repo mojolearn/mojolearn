@@ -74,13 +74,8 @@ wait_for_turn() {
             sleep 60
             continue
         fi
-        if [ "$seen_extra" = 1 ]; then
-            :
-        elif [ -z "$free_since" ]; then
-            free_since=$(date +%s); log "lock free; waiting 300 s for a taker"; sleep 30; continue
-        elif [ $(( $(date +%s) - free_since )) -lt 300 ]; then
-            sleep 30; continue
-        fi
+        # Coordinator, 2026-09-11 13:30Z: the neural session left the DO
+        # queue, so the lock is taken the moment it is free.
         if mkdir "$LOCK" 2>/dev/null; then
             echo "gbdt-symmetric-arms $(date -u +%FT%TZ)" > "$LOCK/owner"
             HAVE_LOCK=1
