@@ -14,26 +14,32 @@
 # <MOJOLEARN_GEMM_LEG_OUT>/remote/ksplit-classical-amd. Binaries, datasets
 # and blocks stay outside that tree.
 #
-# Two legs under the 60-minute cap (brief 12.6), the callers the rule can
-# take first:
+# One leg, all six callers in priority order (brief 12.6):
 #
 #   MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_ksplit_classical_amd_leg.sh \
-#   MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-gemm-ksplit-classical-kde-svc \
-#   MOJOLEARN_HOTAISLE_EXTRA_ENV=MOJOLEARN_CLASSICAL_AB_LANES=kde,svc \
+#   MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-gemm-ksplit-classical \
 #   bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
 #
-#   (leg 2: MOJOLEARN_CLASSICAL_AB_LANES=gp,ols,pca and the -gp-ols-pca suffix)
+# A caller the deadline cut is rerun alone in a second leg, for example
+#   MOJOLEARN_HOTAISLE_EXTRA_ENV=MOJOLEARN_CLASSICAL_AB_LANES=gp,ols
 #
 # WHY A SECOND BODY, NOT tools/gemm_ksplit_classical_leg.sh. That file is the
 # H100 leg, and RunPod passes a body no environment, so its defaults ARE that
-# leg (gp, ols and pca on the trees loader). This leg adds the kde and svc
-# callers on the classical lane's own blocks (tools/classical_two_datasets.py
-# prep, which needs the SVM binding and a prep step), orders the callers by
+# leg (gp, ols and pca on the trees loader). This leg adds the svc, kmeans and
+# kde callers on the classical lane's own blocks (tools/classical_two_datasets.py
+# prep, which needs the SVM binding and a prep step), orders the cells by
 # priority, ends inside the Hot Aisle runner's work bound, and pre-fetches
 # Istella-S with a resumable curl. Folding that into the H100 body behind
 # vendor branches would change the file the H100 leg ships while its run is
 # still owed. The Python driver, tools/gemm_ksplit_classical_ab.py, is shared:
 # this body calls it with --source ctd, the H100 body with its defaults.
+#
+# THE ORDER (brief 12.2). First the caller whose GEMMs reach
+# identical_gemm_into at shapes the rule takes (svc, Istella-S first); then
+# the Istella-S controls kmeans (fused distance kernel, never the entry) and
+# pca (the entry, below the floors); then kde (pinned distance tile, never the
+# entry); then the taxi halves; then gp and ols. Every control must read HOLDS
+# at a ratio near 1.
 #
 # WHAT RUNS, each step with its own exit code in status.tsv. A red step is a
 # finding, never an abort: later steps still run (set -u, not set -e).
@@ -42,37 +48,42 @@
 #                  sha256-checked, untarred) and the two taxi months (sha256-checked)
 #   numpy, pyarrow the pixi python's prerequisites; a uv Python 3.12 venv decodes
 #                  and preps instead when pyarrow will not import there
+#   shapes         tools/gemm_ksplit_classical_ab.py shapes: FSPEED-GEMM lines at the
+#                  declared shapes of every lane, so dispatch.txt holds every caller's
+#                  line even when its timed cells are cut
 #   download-*,    in the background, per dataset once its fetch is done: the trees
 #   prep-*         harness's decode (tools/speed_gbdt_arm.py --download) and the
 #                  classical blocks (tools/classical_two_datasets.py prep) for the
 #                  lanes that have one; then <dataset>.ready
 #   build-price    bench/gemm_step_price_main.mojo, IDENTICAL + trial, label mode
 #                  only: plans.tsv, the DEFAULT line, and dispatch.txt at the end
-#   build-binding-*  the IDENTICAL bindings the lanes import (build.sh; build_svm.sh
-#                  for svc; build_estimators.sh for kde, ols, pca; build_gp.sh for
-#                  gp), each with -D MOJOLEARN_GEMM_ARM_TRIAL=1 through
-#                  MOJOLEARN_BUILD_EXTRA_DEFINES
+#   build-binding-*  the IDENTICAL bindings the lanes import (build.sh, which carries
+#                  kmeans; build_svm.sh for svc; build_estimators.sh for kde, ols,
+#                  pca; build_gp.sh for gp), each with -D MOJOLEARN_GEMM_ARM_TRIAL=1
+#                  through MOJOLEARN_BUILD_EXTRA_DEFINES
 #   smoke          tools/gemm_ksplit_classical_ab.py smoke --lanes <lanes>
 #   wait-data      until every dataset is ready, or until only
 #                  MOJOLEARN_CLASSICAL_AB_TIMING_FLOOR seconds are left, so no
 #                  decode runs beside a timed process unless the lease forces it
 #                  (then each such log carries FSPEED-NOTE context=bg=data_work_running)
 #   <lane>.<dataset>.<arm>.<block>
-#                  one timed process each, blocks in ABBA order (tuned128 then
-#                  default, then default then tuned128). Group FIRST
-#                  (default kde,svc) runs before every other lane; inside a group
-#                  taxi runs before Istella-S. An item that cannot start with
+#                  one timed process each, cells in MOJOLEARN_CLASSICAL_AB_ORDER,
+#                  blocks in ABBA order (tuned128 then default, then default then
+#                  tuned128). An item that cannot start with
 #                  MOJOLEARN_CLASSICAL_AB_MIN_ITEM seconds left before the tail is
 #                  SKIPPED_DEADLINE; one whose dataset failed is SKIPPED_NODATA.
 #                  Either leaves that caller UNMEASURED, never guessed.
-#   dispatch       every FSPEED-GEMM caller shape through the label mode, shipped
-#                  and tuned128, on this box's build (the AMD row, not Apple's)
+#   dispatch       every FSPEED-GEMM caller shape (declared and timed) through the
+#                  label mode, shipped and tuned128, on this box's build (the AMD
+#                  row, not Apple's)
 #   verdicts       tools/gemm_ksplit_classical_ab.py verdict: flip_verdict per
 #                  caller, then `caller=<lane> verdict=HOLDS|REGRESSES|UNMEASURED|IDENTITY-BREAK`
 #
 # KNOBS (defaults in parentheses):
-#   MOJOLEARN_CLASSICAL_AB_LANES (kde,svc,gp,ols,pca)   the callers
-#   MOJOLEARN_CLASSICAL_AB_FIRST (kde,svc)              the priority group
+#   MOJOLEARN_CLASSICAL_AB_LANES (svc,kmeans,pca,kde,gp,ols)   the callers
+#   MOJOLEARN_CLASSICAL_AB_ORDER (svc:istella,svc:taxi,kmeans:istella,pca:istella,
+#       kde:istella,kmeans:taxi,pca:taxi,kde:taxi,gp:taxi,gp:istella,ols:taxi,ols:istella)
+#       <lane>:<dataset> cells; a cell of LANES x DATASETS left out runs after them
 #   MOJOLEARN_CLASSICAL_AB_DATASETS (taxi,istella)
 #   MOJOLEARN_CLASSICAL_AB_ROUNDS (3)          timed rounds per block, plus one warm-up
 #   MOJOLEARN_CLASSICAL_AB_BLOCKS (2)          blocks per arm; 2 measures the noise band
@@ -96,8 +107,8 @@ HOME=${HOME:-/root}
 export HOME
 ROOT=${MOJOLEARN_GEMM_STEP_ROOT:-/root/mojolearn}
 OUT=${MOJOLEARN_CLASSICAL_AB_OUT:-/root/gemm_leg_out/ksplit-classical-amd}
-LANES=${MOJOLEARN_CLASSICAL_AB_LANES:-kde,svc,gp,ols,pca}
-FIRST=${MOJOLEARN_CLASSICAL_AB_FIRST:-kde,svc}
+LANES=${MOJOLEARN_CLASSICAL_AB_LANES:-svc,kmeans,pca,kde,gp,ols}
+ORDER=${MOJOLEARN_CLASSICAL_AB_ORDER:-svc:istella,svc:taxi,kmeans:istella,pca:istella,kde:istella,kmeans:taxi,pca:taxi,kde:taxi,gp:taxi,gp:istella,ols:taxi,ols:istella}
 DATASETS=${MOJOLEARN_CLASSICAL_AB_DATASETS:-taxi,istella}
 ROUNDS=${MOJOLEARN_CLASSICAL_AB_ROUNDS:-3}
 BLOCKS=${MOJOLEARN_CLASSICAL_AB_BLOCKS:-2}
@@ -136,22 +147,28 @@ gate_fail() {  # <message>: nothing run
     echo "$1; nothing run" >> "$OUT/gate.txt"
     exit 9
 }
-for _list in "$LANES" "$FIRST"; do
-    case "$_list" in
-        *[!a-z,]*) gate_fail "MOJOLEARN_CLASSICAL_AB_LANES / _FIRST=$_list: letters and commas only" ;;
+case "$LANES" in
+    ''|*[!a-z,]*) gate_fail "MOJOLEARN_CLASSICAL_AB_LANES=$LANES: letters and commas only, not empty" ;;
+esac
+for _l in $(echo "$LANES" | tr ',' ' '); do
+    case "$_l" in
+        svc|kmeans|pca|kde|gp|ols) ;;
+        *) gate_fail "lane $_l is not svc, kmeans, pca, kde, gp or ols" ;;
     esac
-    for _l in $(echo "$_list" | tr ',' ' '); do
-        case "$_l" in
-            kde|svc|gp|ols|pca) ;;
-            *) gate_fail "lane $_l is not kde, svc, gp, ols or pca" ;;
-        esac
-    done
 done
-[ -n "$LANES" ] || gate_fail "MOJOLEARN_CLASSICAL_AB_LANES is empty"
 for _d in $(echo "$DATASETS" | tr ',' ' '); do
     case "$_d" in
         taxi|istella) ;;
         *) gate_fail "dataset $_d is not taxi or istella" ;;
+    esac
+done
+case "$ORDER" in
+    *[!a-z:,]*) gate_fail "MOJOLEARN_CLASSICAL_AB_ORDER=$ORDER: <lane>:<dataset> cells and commas only" ;;
+esac
+for _c in $(echo "$ORDER" | tr ',' ' '); do
+    case "$_c" in
+        svc:taxi|svc:istella|kmeans:taxi|kmeans:istella|pca:taxi|pca:istella|kde:taxi|kde:istella|gp:taxi|gp:istella|ols:taxi|ols:istella) ;;
+        *) gate_fail "MOJOLEARN_CLASSICAL_AB_ORDER cell $_c is not <lane>:<dataset>" ;;
     esac
 done
 case "$ROUNDS$BLOCKS$GP_TRAIN$GP_TEST$DEADLINE$BODY_SECONDS$TIMING_FLOOR$MIN_ITEM$TAIL$JOBS$SMOKE_ROWS" in
@@ -174,17 +191,26 @@ wants() {  # <lane>...: true when any is in LANES
     done
     return 1
 }
-# The lanes with a classical block (prep writes theirs), and the two groups
-# in LANES order.
+# The lanes with a classical block (prep writes theirs).
 CTD_LANES=""
-FIRST_GROUP=""
-REST_GROUP=""
 for _l in $(echo "$LANES" | tr ',' ' '); do
-    case "$_l" in ols|pca|kde|svc) CTD_LANES="${CTD_LANES:+$CTD_LANES,}$_l" ;; esac
-    case ",$FIRST," in
-        *,"$_l",*) FIRST_GROUP="${FIRST_GROUP:+$FIRST_GROUP,}$_l" ;;
-        *) REST_GROUP="${REST_GROUP:+$REST_GROUP,}$_l" ;;
-    esac
+    case "$_l" in kmeans|ols|pca|kde|svc) CTD_LANES="${CTD_LANES:+$CTD_LANES,}$_l" ;; esac
+done
+# The timed cells: ORDER's cells that are in LANES x DATASETS, then any cell
+# of LANES x DATASETS ORDER left out, in LANES order.
+CELLS=""
+for _c in $(echo "$ORDER" | tr ',' ' '); do
+    _l=${_c%%:*}
+    _d=${_c#*:}
+    case ",$LANES," in *,"$_l",*) ;; *) continue ;; esac
+    case ",$DATASETS," in *,"$_d",*) ;; *) continue ;; esac
+    case ",$CELLS," in *,"$_c",*) continue ;; esac
+    CELLS="${CELLS:+$CELLS,}$_c"
+done
+for _l in $(echo "$LANES" | tr ',' ' '); do
+    for _d in $(echo "$DATASETS" | tr ',' ' '); do
+        case ",$CELLS," in *,"$_l:$_d",*) ;; *) CELLS="${CELLS:+$CELLS,}$_l:$_d" ;; esac
+    done
 done
 
 # ---- the vendor and the arch (one mojo build is one GPU arch) ----------------
@@ -270,7 +296,8 @@ record() {  # <name> <status> <detail>
     echo "brief=docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 12"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT"
-    echo "lanes=$LANES first_group=${FIRST_GROUP:-none} rest_group=${REST_GROUP:-none} ctd_lanes=${CTD_LANES:-none} datasets=$DATASETS"
+    echo "lanes=$LANES ctd_lanes=${CTD_LANES:-none} datasets=$DATASETS"
+    echo "cells=$CELLS"
     echo "rounds=$ROUNDS blocks=$BLOCKS order=ABBA gp_train=$GP_TRAIN gp_test=$GP_TEST gp_prep=$PREP deadline=$DEADLINE"
     echo "body_seconds=$BODY_SECONDS runner_work_seconds=${_work:-unread} runner_started=${_started:-unread} timing_floor=$TIMING_FLOOR min_item=$MIN_ITEM tail=$TAIL"
     echo "vendor=$VENDOR gpu=$GPU_NAME gpu_archs=$MOJOLEARN_GPU_ARCHS column=$MOJOLEARN_TARGET_COLUMN jobs=$JOBS nproc=$(nproc 2>/dev/null)"
@@ -354,6 +381,11 @@ if ! $PY -c 'import numpy, pyarrow' >> "$OUT/pyarrow.log" 2>&1; then
     DPY="$VENV/bin/python"
 fi
 echo "timed_python=$PY decode_python=$DPY" >> "$OUT/gate.txt"
+# Every caller's shapes at the declared section 9 shapes, before anything can
+# be cut, so dispatch.txt carries each caller's line whatever runs later.
+# shellcheck disable=SC2086
+run shapes timeout -k 10 300 $PY tools/gemm_ksplit_classical_ab.py shapes \
+    --lanes "$LANES" --datasets "$DATASETS" --gp-train "$GP_TRAIN" --gp-test "$GP_TEST"
 
 # ---- the decodes and the classical blocks, in the background ---------------------
 data_chain() {  # <dataset>: writes <dataset>.ready, or <dataset>.failed
@@ -466,35 +498,34 @@ timed() {  # <lane> <dataset> <arm name> <block>
 }
 
 gpu_snapshot "$OUT/gpu_before_timing.txt"
-for group in "$FIRST_GROUP" "$REST_GROUP"; do
-    [ -n "$group" ] || continue
-    for ds in $(echo "$DATASETS" | tr ',' ' '); do
-        ds_ready=0
-        dataset_ok "$ds" && ds_ready=1
-        for lane in $(echo "$group" | tr ',' ' '); do
-            b=1
-            while [ "$b" -le "$BLOCKS" ]; do
-                if [ $((b % 2)) -eq 1 ]; then
-                    order="tuned128 default"
-                else
-                    order="default tuned128"
-                fi
-                for arm in $order; do
-                    if [ "$ds_ready" = 1 ]; then
-                        timed "$lane" "$ds" "$arm" "$b"
-                    else
-                        record "$lane.$ds.$arm.$b" SKIPPED_NODATA "0s"
-                    fi
-                done
-                b=$((b + 1))
-            done
+for cell in $(echo "$CELLS" | tr ',' ' '); do
+    lane=${cell%%:*}
+    ds=${cell#*:}
+    ds_ready=0
+    dataset_ok "$ds" && ds_ready=1
+    b=1
+    while [ "$b" -le "$BLOCKS" ]; do
+        if [ $((b % 2)) -eq 1 ]; then
+            order="tuned128 default"
+        else
+            order="default tuned128"
+        fi
+        for arm in $order; do
+            if [ "$ds_ready" = 1 ]; then
+                timed "$lane" "$ds" "$arm" "$b"
+            else
+                record "$lane.$ds.$arm.$b" SKIPPED_NODATA "0s"
+            fi
         done
+        b=$((b + 1))
     done
 done
 gpu_snapshot "$OUT/gpu_after.txt"
 [ -f "$OUT/data.done" ] || echo "data_chain=still_running_at_the_end_of_timing" >> "$OUT/gate.txt"
 
-# ---- which plan each caller GEMM ran (the Mojo dispatch on this box) -------------
+# ---- which plan each caller GEMM runs (the Mojo dispatch on this box) ------------
+# Declared shapes (shapes.log) and the shapes the timed logs printed; a
+# reach=not_called line is recorded for the rule's answer only.
 grep -h '^FSPEED-GEMM ' "$OUT"/*.log 2>/dev/null \
     | sed -n 's/.* caller=\([^ ]*\) op=\([A-Z]*\) m=\([0-9]*\) n=\([0-9]*\) k=\([0-9]*\).*/\1 \2 \3 \4 \5/p' \
     | sort -u > "$OUT/gemm_shapes.txt"

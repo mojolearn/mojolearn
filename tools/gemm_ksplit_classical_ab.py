@@ -21,6 +21,7 @@ H100 and `tools/gemm_ksplit_classical_amd_leg.sh` on the Hot Aisle MI300X.
         [--gp-train 4000] [--gp-test 1000] [--prep standardize] [--device NAME]
     python tools/gemm_ksplit_classical_ab.py time --lane svc --dataset istella \\
         --arm-name default --block 2 --source ctd [--data /root/ctd-data]
+    python tools/gemm_ksplit_classical_ab.py shapes [--lanes svc,kmeans] [--datasets taxi,istella]
     python tools/gemm_ksplit_classical_ab.py verdict --out DIR [--lanes gp,ols,pca]
 
 WHY NOT bench/speed/classical_speed_main.mojo. That driver is the classical
@@ -58,22 +59,24 @@ blocks, written once per box by `tools/classical_two_datasets.py prep` under
 `--data`, and the classical lane's own `ours` runners
 (`classical_two_datasets.BUILDERS[(lane, "ours")]`), so the timed region, the
 rows, the cleaning and the quality function are the classical lane's rows
-exactly: `ols` and `pca` on the `big` block (taxi 4,000,000 x 11, Istella-S
-2,043,304 x 220, raw columns with the sentinel cleaned), `kde` on the `kde`
-block (100,000 fit rows, 2,000 queries, standardized; `score_samples` timed,
-the fit before the clock) and `svc` on the `svc` block (10,000 fit rows,
-standardized; the fit timed). Quality is that harness's `quality()`: OLS r2
-and rmse on the eval rows, PCA `explained_variance_ratio_sum`, KDE
-`mean_log_likelihood`, SVC `accuracy`. The hash is that harness's `_digest`
-(sha256 over the sorted outputs, 16 hex). `gp` has no classical block, so
-under `--source ctd` it takes the trees source above at the same rung.
-`kde` and `svc` exist only under `--source ctd`.
+exactly: `kmeans`, `ols` and `pca` on the `big` block (taxi 4,000,000 x 11,
+Istella-S 2,043,304 x 220, raw columns with the sentinel cleaned; kmeans k 64,
+20 iterations from the block's shared init), `kde` on the `kde` block
+(100,000 fit rows, 2,000 queries, standardized; `score_samples` timed, the fit
+before the clock) and `svc` on the `svc` block (10,000 fit rows,
+standardized; the fit timed). Quality is that harness's `quality()`: kmeans
+`inertia`, OLS r2 and rmse on the eval rows, PCA
+`explained_variance_ratio_sum`, KDE `mean_log_likelihood`, SVC `accuracy`.
+The hash is that harness's `_digest` (sha256 over the sorted outputs, 16
+hex). `gp` has no classical block, so under `--source ctd` it takes the trees
+source above at the same rung. `kde`, `svc` and `kmeans` exist only under
+`--source ctd`.
 
 THE RECORD (one process = one lane, one dataset, one arm, one block):
 
     FSPEED-HEADER family=classical lane=<l> arm=ours mode=IDENTICAL device=<d> rounds=<n> size=section9
     FSPEED-NOTE lane=<l> arm=ours gemm_arm=<tuned128|default> gemm_plan=<label> block=<b> ...
-    FSPEED-GEMM lane=<l> caller=<name.dataset> op=<NN|NT|TN> m=<m> n=<n> k=<k>
+    FSPEED-GEMM lane=<l> caller=<name.dataset> op=<NN|NT|TN> m=<m> n=<n> k=<k> [reach=entry|not_called]
     FSPEED-WARMUP lane=<l> arm=ours shape=<tag> ms=<float>
     FSPEED lane=<l> arm=ours shape=<tag> round=<i> ms=<float> hash=<16 hex>
     FSPEED-ACC lane=<l> arm=ours metric=<name> value=<float>
@@ -86,12 +89,17 @@ explained_variance_, GP predictive means). IDENTICAL promises the same bits
 under both plans (brief section 5), so every hash of a caller and dataset
 must agree across arms and blocks; the verdict calls a disagreement an
 IDENTITY-BREAK. `FSPEED-GEMM` names each GEMM the caller issues through
-`identical_gemm_into` at this shape; the leg turns each into a DISPATCH line
-with the Mojo dispatch itself (`bench/gemm_step_price_main.mojo` label mode,
-built and run ON THE BOX, so the answer is that column's kernel matrix row),
-which says whether the ksplit default takes it. No rule is re-spelled here.
-A caller that issues no GEMM through the entry prints
-`FSPEED-NOTE ... gemm_entry=none` instead (KDE under IDENTICAL).
+`identical_gemm_into` at this shape (`reach=entry` under ctd); the leg turns
+each into a DISPATCH line with the Mojo dispatch itself
+(`bench/gemm_step_price_main.mojo` label mode, built and run ON THE BOX, so
+the answer is that column's kernel matrix row), which says whether the ksplit
+default takes it. No rule is re-spelled here. A caller that issues no GEMM
+through the entry prints `FSPEED-NOTE ... gemm_entry=none`; where a
+GEMM-shaped product exists on an arm it does NOT take (kmeans's unfused
+distance tile), its shape is still printed with `reach=not_called`, so the
+box records what the rule would answer there. `shapes` prints the same lines
+at the declared section 9 shapes without timing anything, so the leg records
+every caller's DISPATCH line even when its timed cells were cut.
 
 THE VERDICT, per caller: flip_verdict's own output (both ratios, the geomean,
 the quality lines, FLIP or NO FLIP, where FLIP means the default is faster),
@@ -118,13 +126,13 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-LANES = ("gp", "ols", "pca", "kde", "svc")
+LANES = ("gp", "ols", "pca", "kde", "svc", "kmeans")
 #: The H100 leg's callers, the default of `smoke` and `verdict`.
 H100_LANES = ("gp", "ols", "pca")
 #: Lanes `tools/classical_two_datasets.py` has an `ours` runner and a block for.
-CTD_LANES = ("ols", "pca", "kde", "svc")
+CTD_LANES = ("ols", "pca", "kde", "svc", "kmeans")
 #: Lanes that exist only under `--source ctd`.
-CTD_ONLY_LANES = ("kde", "svc")
+CTD_ONLY_LANES = ("kde", "svc", "kmeans")
 SOURCES = ("trees", "ctd")
 DATASETS = ("taxi", "istella")
 ARM_NAMES = ("tuned128", "default")
@@ -136,12 +144,25 @@ CHOL_NB_PINNED = 32
 #: `svm/impl/workingset.mojo`: `n_ws = min(1024, n_train)` for C-SVC.
 #: Transcribed for the FSPEED-GEMM record only, like CHOL_NB_PINNED.
 SMO_WS_SIZE = 1024
+#: `cluster/impl/kmeans_params.mojo`: `batch_samples = 1 << 15`, the data
+#: batch of the UNFUSED distance arm (which the fused L2Expanded dispatch
+#: does not take). Transcribed for the `reach=not_called` record only.
+KMEANS_BATCH_SAMPLES = 1 << 15
 PCA_COMPONENTS = 8
 GP_ALPHA = 0.1
+#: `shapes` reads these from tools/classical_two_datasets.py; the values here
+#: are used only when that file cannot be imported, and `shapes` says so.
+DECLARED_FALLBACK = {"BIG_ROWS": 4_000_000, "KDE_TRAIN": 100_000, "KDE_QUERY": 2_000,
+                     "SVC_TRAIN": 10_000, "KMEANS_K": 64}
+#: Data facts of the cached splits (the classical lane's block records): the
+#: Istella-S train split rows, and each dataset's feature count.
+ISTELLA_TRAIN_ROWS = 2_043_304
+FEATURES = {"taxi": 11, "istella": 220}
 #: Quality metrics of the classical harness that tools/flip_verdict.py has no
 #: built-in direction for.
 QUALITY_DIRECTIONS = (("mean_log_likelihood", "higher"),
-                      ("explained_variance_ratio_sum", "higher"))
+                      ("explained_variance_ratio_sum", "higher"),
+                      ("inertia", "lower"))
 
 EXIT_OK, EXIT_VERDICT, EXIT_REFUSED = 0, 1, 3
 
@@ -213,6 +234,61 @@ def standardize(x_train, x_test):
     del x64
     out_test = np.ascontiguousarray(((x_test.astype(np.float64) - mean) / dev).astype(np.float32))
     return out_train, out_test
+
+
+# ------------------------------------------------------------ caller shapes
+
+def gp_gemm_shapes(n, n_star):
+    """(caller, op, m, n, k, reach) of GP at `n` training and `n_star` test rows.
+
+    gaussian_process/estimator.mojo: the posterior mean is
+    identical_gemm_into(n_star, 1, n_train, OP_TN); the Cholesky
+    (cholesky/checks/potrf.mojo) issues identical_gemm_into(n_trail, n_trail,
+    w, OP_NT) per panel, largest at n_trail = n - w. The Gram and the cross
+    covariance are elementwise kernels, not GEMM."""
+    trail = max(n - CHOL_NB_PINNED, 0)
+    return [("gp.mean", "TN", n_star, 1, n, "entry"),
+            ("gp.chol_trailing", "NT", trail, trail, CHOL_NB_PINNED, "entry")]
+
+
+def ctd_gemm_shapes(lane, rows, d, k_clusters):
+    """(caller, op, m, n, k, reach) of a classical-block lane, read from source.
+
+    ols   glm/estimator.mojo::ols_fit_host -> lstsq_eig -> core/gemm.mojo::gemm_tn
+          -> gemm_tn_identical_v1 -> identical_gemm_into(d, d, rows, OP_TN).
+    pca   decomposition/estimator.mojo::pca_fit_host -> pca_fit -> gemm_tn, the
+          same OP_TN Gram.
+    svc   svm/impl/kernelcache.mojo -> svm/impl/distance/kernel_matrices.mojo::
+          kernel_op -> identical_gemm_into(m, n, k = d, OP_NT) under IDENTICAL:
+          the square tile n_ws x n_ws once per outer SMO iteration, and the
+          batch tile nnz_da x n_rows (nnz_da data-dependent, 1..n_ws; the
+          1 GiB tile limit does not split 10,000 rows). The two batch lines
+          bracket nnz_da: 128 (the one value where m reaches the 128x128 tuned
+          floor with a single tile row) and n_ws (the largest).
+    kde   kde/impl/distance/distance.mojo: under IDENTICAL the L2Expanded arm
+          is `pinned_distance_tile_kernel` (IDENTITY_PATHS row 24), and
+          core/gemm.mojo::gemm_nt is the pinned NT kernel; nothing under kde/
+          calls identical_gemm_into. No shape.
+    kmeans cluster/impl/detail/min_cluster_distance_compute.mojo: the Lloyd
+          assignment is the FUSED SIMT distance kernel, which writes no
+          distance tile; nothing under cluster/ calls identical_gemm_into, and
+          the one gemm_nt (k-means++ candidates, the pinned kernel under
+          IDENTICAL) is not run with init='array'. The unfused arm's tile,
+          min(batch_samples, rows) x k x d, is printed `reach=not_called`
+          only so the box records the rule's answer at that shape."""
+    if lane == "ols":
+        return [("ols.gram", "TN", d, d, rows, "entry")]
+    if lane == "pca":
+        return [("pca.cov", "TN", d, d, rows, "entry")]
+    if lane == "svc":
+        ws = min(SMO_WS_SIZE, rows)
+        return [("svc.square_tile", "NT", ws, ws, d, "entry"),
+                ("svc.batch_tile_nnz128", "NT", min(128, ws), rows, d, "entry"),
+                ("svc.batch_tile_nnzws", "NT", ws, rows, d, "entry")]
+    if lane == "kmeans":
+        return [("kmeans.lloyd_unfused_tile_not_called", "NT",
+                 min(KMEANS_BATCH_SAMPLES, rows), k_clusters, d, "not_called")]
+    return []
 
 
 # ------------------------------------------------------------------ lanes
@@ -292,14 +368,7 @@ def lane_gp(mojolearn, np, x, y, xq, yq, dataset):
         pred = np.asarray(result[1], dtype=np.float64) * y_dev + y_mean
         return "rmse", float(np.sqrt(np.mean((pred - yq.astype(np.float64)) ** 2)))
 
-    # gaussian_process/estimator.mojo: the posterior mean is
-    # identical_gemm_into(n_star, 1, n_train, OP_TN); the Cholesky
-    # (cholesky/checks/potrf.mojo) issues identical_gemm_into(n_trail, n_trail,
-    # w, OP_NT) per panel, largest at n_trail = n - w. The Gram and the cross
-    # covariance are elementwise kernels, not GEMM.
-    trail = max(n - CHOL_NB_PINNED, 0)
-    shapes = [("gp.mean", "TN", n_star, 1, n),
-              ("gp.chol_trailing", "NT", trail, trail, CHOL_NB_PINNED)]
+    shapes = [s[:5] for s in gp_gemm_shapes(n, n_star)]
     return fit, digest, quality, "%s-%dx%ds%d" % (dataset, n, d, n_star), shapes
 
 
@@ -323,6 +392,7 @@ def ctd_lane(np, lane, dataset, data_dir):
     runner = ctd.BUILDERS[(lane, "ours")](data, rec)
     x = data["X"]
     rows, d = x.shape
+    k_clusters = data["init"].shape[0] if "init" in data else 0
     memo = {}
 
     def fit():
@@ -340,32 +410,16 @@ def ctd_lane(np, lane, dataset, data_dir):
         return sorted(q.items())
 
     if lane == "ols":
-        # The same entry as the trees source: TN d x d x rows.
         shape = "%s-%dx%d-ctd" % (dataset, rows, d)
-        shapes = [("ols.gram", "TN", d, d, rows)]
     elif lane == "pca":
         shape = "%s-%dx%dc%d-ctd" % (dataset, rows, d, ctd.PCA_COMPONENTS)
-        shapes = [("pca.cov", "TN", d, d, rows)]
+    elif lane == "kmeans":
+        shape = "%s-%dx%dk%d-ctd" % (dataset, rows, d, k_clusters)
     elif lane == "kde":
-        # kde/impl/distance/distance.mojo: under IDENTICAL the L2Expanded arm
-        # is `pinned_distance_tile_kernel` (IDENTITY_PATHS row 24), and
-        # core/gemm.mojo::gemm_nt is the pinned NT kernel; no call reaches
-        # `identical_gemm_into`, so there is no caller shape to dispatch.
         shape = "%s-%dx%dq%d-ctd" % (dataset, rows, d, data["Xq"].shape[0])
-        shapes = []
     else:
-        # svm/impl/kernelcache.mojo -> svm/impl/distance/kernel_matrices.mojo::
-        # kernel_op -> identical_gemm_into(m, n, k = d, OP_NT) under IDENTICAL:
-        # the square tile n_ws x n_ws once per outer SMO iteration, and the
-        # batch tile nnz_da x n_rows (nnz_da data-dependent, 1..n_ws; the
-        # 1 GiB tile limit does not split 10,000 rows). The two batch lines
-        # bracket nnz_da: 128 (the one value where m reaches the 128x128
-        # tuned floor with a single tile row) and n_ws (the largest).
-        ws = min(SMO_WS_SIZE, rows)
         shape = "%s-%dx%d-ctd" % (dataset, rows, d)
-        shapes = [("svc.square_tile", "NT", ws, ws, d),
-                  ("svc.batch_tile_nnz128", "NT", min(128, ws), rows, d),
-                  ("svc.batch_tile_nnzws", "NT", ws, rows, d)]
+    shapes = ctd_gemm_shapes(lane, rows, d, k_clusters)
     arrays = rec.get("arrays", {})
     note = ("rows=%d features=%d test_rows=%d x_sha256=%s block=%s numeric_mode_used=%s "
             "vendor_used=%s smoke_max_rows=%s"
@@ -376,6 +430,22 @@ def ctd_lane(np, lane, dataset, data_dir):
                _no_spaces(runner.info.get("vendor_used", "-")),
                rec.get("smoke_max_rows")))
     return fit, digest, quality, shape, shapes, note
+
+
+def _say_gemm(lane, dataset, shp, with_reach):
+    caller, op, m, n, k = shp[:5]
+    if with_reach:
+        _say("FSPEED-GEMM lane=%s caller=%s.%s op=%s m=%d n=%d k=%d reach=%s"
+             % (lane, caller, dataset, op, m, n, k, shp[5]))
+    else:
+        _say("FSPEED-GEMM lane=%s caller=%s.%s op=%s m=%d n=%d k=%d"
+             % (lane, caller, dataset, op, m, n, k))
+
+
+def _say_no_entry(lane):
+    _say("FSPEED-NOTE lane=%s arm=ours gemm_entry=none (no call of this caller reaches "
+         "identical_gemm_into under IDENTICAL; both arms run the same launches; a "
+         "reach=not_called FSPEED-GEMM line is recorded only for its DISPATCH line)" % lane)
 
 
 # ------------------------------------------------------------------- time
@@ -430,12 +500,10 @@ def cmd_time(args):
     context = os.environ.get("MOJOLEARN_CLASSICAL_AB_CONTEXT", "")
     if context:
         _say("FSPEED-NOTE lane=%s arm=ours context=%s" % (lane, _no_spaces(context)))
-    for caller, op, m, n, k in shapes:
-        _say("FSPEED-GEMM lane=%s caller=%s.%s op=%s m=%d n=%d k=%d"
-             % (lane, caller, dataset, op, m, n, k))
-    if not shapes:
-        _say("FSPEED-NOTE lane=%s arm=ours gemm_entry=none (no call of this caller reaches "
-             "identical_gemm_into under IDENTICAL; both arms run the same launches)" % lane)
+    for shp in shapes:
+        _say_gemm(lane, dataset, shp, source == "ctd")
+    if source == "ctd" and not any(s[5] == "entry" for s in shapes):
+        _say_no_entry(lane)
     hashes = []
     last = None
     for r in range(args.rounds + 1):
@@ -469,7 +537,9 @@ def cmd_time(args):
         return EXIT_OK
     pairs = got if isinstance(got, list) else [got]
     for metric, value in pairs:
-        if not isinstance(value, float):
+        if not isinstance(value, float) or metric.endswith("_over_ours"):
+            # Counts, flags and ratios against ours itself are context, not
+            # a quality gate.
             _say("FSPEED-NOTE lane=%s arm=ours quality_extra %s=%s"
                  % (lane, metric, _no_spaces(value)))
         elif math.isfinite(value):
@@ -479,6 +549,48 @@ def cmd_time(args):
             # still carry the equality of the outputs.
             _say("FSPEED-NOTE lane=%s arm=ours quality %s=%r is not finite, no FSPEED-ACC line"
                  % (lane, metric, value))
+    return EXIT_OK
+
+
+# ----------------------------------------------------------------- shapes
+
+def cmd_shapes(args):
+    """FSPEED-GEMM lines at the declared section 9 shapes of each lane and
+    dataset, with no timing and no device work. The leg feeds them to its
+    DISPATCH pass beside the lines the timed logs print, so every caller's
+    dispatch is recorded on the box even when its timed cells were cut."""
+    lanes = [l for l in args.lanes.split(",") if l]
+    datasets = [d for d in args.datasets.split(",") if d]
+    bad = [l for l in lanes if l not in LANES] + [d for d in datasets if d not in DATASETS]
+    if bad:
+        raise SystemExit("shapes: unknown lane or dataset: %s" % ", ".join(bad))
+    try:
+        ctd = _load_module("classical_two_datasets",
+                           os.path.join(HERE, "classical_two_datasets.py"))
+        const = {name: int(getattr(ctd, name)) for name in DECLARED_FALLBACK}
+        origin = "tools/classical_two_datasets.py"
+    except Exception as exc:  # noqa: BLE001
+        const = dict(DECLARED_FALLBACK)
+        origin = "transcribed_fallback(%s)" % _no_spaces(exc)
+    _say("FSPEED-NOTE shapes=declared constants=%s istella_train_rows=%d gp_train=%d gp_test=%d "
+         "(the timed logs' own FSPEED-GEMM lines are the measurement)"
+         % (origin, ISTELLA_TRAIN_ROWS, args.gp_train, args.gp_test))
+    for lane in lanes:
+        for ds in datasets:
+            d = FEATURES[ds]
+            if lane == "gp":
+                shapes = gp_gemm_shapes(args.gp_train, args.gp_test)
+            elif lane in ("ols", "pca", "kmeans"):
+                rows = const["BIG_ROWS"] if ds == "taxi" else min(const["BIG_ROWS"], ISTELLA_TRAIN_ROWS)
+                shapes = ctd_gemm_shapes(lane, rows, d, const["KMEANS_K"])
+            elif lane == "kde":
+                shapes = ctd_gemm_shapes(lane, const["KDE_TRAIN"], d, 0)
+            else:
+                shapes = ctd_gemm_shapes(lane, const["SVC_TRAIN"], d, 0)
+            for shp in shapes:
+                _say_gemm(lane, ds, shp, True)
+            if not any(s[5] == "entry" for s in shapes):
+                _say_no_entry(lane)
     return EXIT_OK
 
 
@@ -521,6 +633,12 @@ def cmd_smoke(args):
         svc.fit(x, labels)
         print("svc n_support=%r pred0=%r" % (getattr(svc, "n_support_", None),
                                              float(np.asarray(svc.predict(x[:2]))[0])), flush=True)
+    if "kmeans" in lanes:
+        km = mojolearn.KMeans(n_clusters=2, init="array", n_init=1, max_iter=5, tol=1e-7,
+                              init_centroids=np.ascontiguousarray(x[:2]))
+        km.fit(x)
+        print("kmeans inertia=%r mode=%s" % (getattr(km, "inertia_", None),
+                                             km.numeric_mode_used()), flush=True)
     return EXIT_OK
 
 
@@ -652,10 +770,15 @@ def build_parser():
     t.add_argument("--prep", choices=("standardize", "raw"), default="standardize")
     t.add_argument("--device", default="unknown")
     t.add_argument("--source", choices=SOURCES, default="trees",
-                   help="trees: the H100 leg's loader (default); ctd: the classical "
-                        "lane's blocks and runners (ols, pca, kde, svc; gp keeps trees)")
+                   help="trees: the H100 leg's loader (default); ctd: the classical lane's "
+                        "blocks and runners (kmeans, ols, pca, kde, svc; gp keeps trees)")
     t.add_argument("--data", default="/root/ctd-data",
                    help="tools/classical_two_datasets.py prep --data directory (--source ctd)")
+    h = sub.add_parser("shapes", help="FSPEED-GEMM lines at the declared shapes, no timing")
+    h.add_argument("--lanes", default=",".join(LANES))
+    h.add_argument("--datasets", default=",".join(DATASETS))
+    h.add_argument("--gp-train", type=int, default=4000)
+    h.add_argument("--gp-test", type=int, default=1000)
     s = sub.add_parser("smoke", help="import the IDENTICAL package and fit each estimator once, tiny")
     s.add_argument("--lanes", default=",".join(H100_LANES))
     v = sub.add_parser("verdict", help="per-caller verdict from the logs in --out")
@@ -670,6 +793,8 @@ def main(argv=None):
         if args.rounds < 1:
             raise SystemExit("--rounds must be at least 1")
         return cmd_time(args)
+    if args.cmd == "shapes":
+        return cmd_shapes(args)
     if args.cmd == "smoke":
         return cmd_smoke(args)
     return cmd_verdict(args)
