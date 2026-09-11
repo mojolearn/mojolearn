@@ -943,9 +943,10 @@ median (min..max). Configs are the H100 Istella-S rows' (boosting 100
 estimators, depth 6, lr 0.1, l2 1, 254 borders or max_bin 255, no bagging,
 Plain, seed 7, max_leaves 64 for lossguide; forests 100 trees, depth 16,
 sqrt features, bootstrap for RF only, seed 7). Accuracy is logloss / AUC on
-the fixed test tail. LightGBM 4.7.0 refused the taxi lossguide cell in both
-the PyPI wheel and a USE_GPU (OpenCL) build ("Check failed:
-(best_split_info.left_count) > (0)"), so no LightGBM row exists here yet.
+the fixed test tail. LightGBM 4.7.0 refused the lossguide cell on both
+datasets (the PyPI wheel on both, and a USE_GPU (OpenCL) build on taxi) with
+"Check failed: (best_split_info.left_count) > (0)" at warm-up under the
+harness's LightGBM params, so no LightGBM row exists on this box.
 Evidence: `bench/results/trees_identical/mi325x_2026-09-11_taxi_istella/`.
 
 Identity caveat for this box. Our IDENTICAL GBDT arms (symmetric, depthwise,
@@ -955,7 +956,14 @@ on all four gbdt lanes (77 of 81 cells stable; the H100 set is 81 of 81).
 RF and ET held one hash (RF once gave a second hash in 30 taxi rounds). The
 GBDT times are real fits, but the IDENTICAL contract does not hold for them
 on AMD until that is fixed, and their accuracy column is the last round's
-model.
+model. Istella-S says the same and more. The GBDT hashes move every round
+there too, and the models are not the H100's: logloss 0.147018 against the
+H100's 0.138653 (symmetric), 0.133018 against 0.126517 (depthwise), 0.126223
+against 0.122045 (lossguide) at the same config. The symmetric
+`use_pointwise_searcher=True` arm on this box reproduces the H100 default
+arm's 0.138653 / 0.966990 exactly (still two hashes across five rounds), which
+points at the greedy searcher path on AMD. RF and ET hashes equal the H100
+hashes at 1M and 2M (574b24d0d7af51d0, cc25cb08f8b5a813, 40b1c5b03ba40420).
 
 Taxi, 1,000,000 training rows (2,000,000 for RF 2M), leg 1 (droplet
 599636038):
@@ -985,5 +993,36 @@ opponent rows above, FAST is 0.49x of CatBoost symmetric, 0.40x of CatBoost
 and 2.62x of XGBoost depthwise, 0.45x of CatBoost and 2.91x of XGBoost
 lossguide, 0.29x of scikit-learn RF and 1.53x of scikit-learn ET.
 
-Istella-S 1M and 2M on this box: owed to the next leg (the setup's fetch of
-the tar was truncated on leg 1; the decoded cache is now on the tor1 volume).
+Istella-S, 1,000,000 training rows (2,000,000 for RF 2M), leg 2 (droplet
+599649142; the XGBoost venv was rebuilt after apt fetched stale packages and
+its GPU probe re-run, config device cuda:0, rocm-smi 20 percent):
+
+| lane | opponent | version | device | config | opponent ms | opponent logloss / AUC | ours IDENTICAL ms | ours logloss / AUC | ours / opponent | log |
+|---|---|---|---|---|---|---|---|---|---|---|
+| RF 1M | scikit-learn RandomForestClassifier | 1.9.1 | CPU, 20 cores (n_jobs=-1) | exact thresholds (no bins) | 13698 (13642..13802) | 0.146188 / 0.964092 | 1937 (1929..1946) | 0.145560 / 0.964538 | 0.14x | baseline.rf.istella.r1000000.full.log |
+| RF 2M | scikit-learn RandomForestClassifier | 1.9.1 | CPU, 20 cores | same | 29436 (29159..29783) | 0.145257 / 0.964663 | 3109 (3102..3115) | 0.144845 / 0.964998 | 0.11x | baseline.rf.istella.r2000000.full.log |
+| ET 1M | scikit-learn ExtraTreesClassifier | 1.9.1 | CPU, 20 cores | no bootstrap | 8944 (8863..8983) | 0.187901 / 0.939528 | 14538 (14532..14563) | 0.188191 / 0.938768 | 1.63x | baseline.et.istella.r1000000.full.log |
+| symmetric 1M | CatBoost SymmetricTree | 1.2.10 | CPU, 20 threads | task_type CPU | 4373 (4342..4400) | 0.138897 / 0.966996 | 1312 (1284..1464) | 0.147018 / 0.962675 | 0.30x | baseline.gbdt-symmetric.istella.r1000000.full.log |
+| depthwise 1M | CatBoost Depthwise | 1.2.10 | CPU, 20 threads | task_type CPU | 6671 (6645..6740) | 0.128097 / 0.971895 | 1987 (1979..2007) | 0.133018 / 0.969407 | 0.30x | baseline.gbdt-depthwise.istella.r1000000.full.log |
+| depthwise 1M | XGBoost `amd_xgboost` | 3.1.1 | GPU | tree_method hist, device cuda | 1575 (1569..1597) | 0.124822 / 0.973880 | 1987 (1979..2007) | 0.133018 / 0.969407 | 1.26x | same |
+| lossguide 1M | CatBoost Lossguide | 1.2.10 | CPU, 20 threads | task_type CPU | 9045 (9021..9095) | 0.127841 / 0.972012 | 2607 (2582..2790) | 0.126223 / 0.973382 | 0.29x | baseline.gbdt-lossguide.istella.r1000000.full.log |
+| lossguide 1M | XGBoost `amd_xgboost` | 3.1.1 | GPU | grow_policy lossguide; hash 4d80a2001a82f486, equal to its depthwise row | 1880 (1866..1941) | 0.124822 / 0.973880 | 2607 (2582..2790) | 0.126223 / 0.973382 | 1.39x | same |
+| lossguide 1M | LightGBM | 4.7.0 | CPU | refused (above) | refused | - | - | - | - | same |
+
+Our FAST tier beside IDENTICAL on Istella-S, ours only, same box, interleaved
+in one process (`*.istella.r1000000.ours.fastab.log`), FAST then IDENTICAL:
+symmetric 1042 (1024..1045) and 1146 (1127..1169); depthwise 1783
+(1772..1791) and 1861 (1854..1893); lossguide 2702 (2687..2756) and 2635
+(2601..2647); RF 1951 (1947..1957) and 1928 (1922..1937); ET 14545
+(14534..14555) and 14552 (14538..14573). Against the Istella-S opponent rows,
+FAST is 0.24x of CatBoost symmetric, 0.27x of CatBoost and 1.13x of XGBoost
+depthwise, 0.30x of CatBoost and 1.44x of XGBoost lossguide, 0.14x of
+scikit-learn RF and 1.63x of scikit-learn ET. FAST ET returns the IDENTICAL
+hash; FAST RF holds one hash of its own; FAST GBDT hashes move every round.
+
+Verdicts on this box (tools/flip_verdict.py, both datasets): symmetric
+`use_pointwise_searcher=True` NO FLIP geomean=1.816 taxi=2.342
+istella=1.408 reason=time (quality better on both); DEVIATION 2512 on
+against off, RF NO FLIP geomean=1.001 taxi=0.999 istella=1.004 (bits equal),
+symmetric NO FLIP geomean=1.011 taxi=0.999 istella=1.023 (its quality delta
+is inside the round-to-round movement above), so 2512 is neutral on AMD.

@@ -8,6 +8,8 @@ print("| set | lane | dataset | rows | mode | arm | rounds | median ms | min..ma
 print("|---|---|---|---|---|---|---|---|---|---|---|---|")
 for p in sorted(glob.glob(os.path.join(root, "*.log"))):
     b = os.path.basename(p)[:-4]
+    if len(b.split(".")) < 5:
+        continue   # derived logs (e.g. ab_pointwise.taxi.before), not a cell
     st, lane, ds, r, mode = b.split(".")[:5]
     if mode == "stage":
         continue

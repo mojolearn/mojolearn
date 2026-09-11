@@ -1,0 +1,169 @@
+batchD start 14:08:47 load 4.67 8.88 6.47 1/406 17336
+build_fast_gbdt=0 14:09:34
+build_fast_rf=0 14:09:48
+build_fast_trees=0 14:10:02
+speed baseline gbdt-symmetric istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:10:02
+speed_exit baseline.gbdt-symmetric.istella.r1000000.ours.fastab=0 14:10:26
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1146.432 hash=55a3bbc091b2f5f6
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=1 ms=1034.593 hash=928a4af633fab440
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=1135.516 hash=e518f22a4bc7cbd4
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=2 ms=1042.144 hash=97539b9c8bc9cc6d
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=1168.944 hash=d8d14e0649c9b845
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=3 ms=1044.836 hash=2cb65b84b04a459f
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=1127.385 hash=4fc6c506b2b9cb82
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=4 ms=1043.940 hash=a986810af73dd3fd
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=1159.188 hash=a4d414a09b7677bf
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=5 ms=1023.668 hash=198709d0fd08a1e7
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.147577
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.962225
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=logloss value=0.145942
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=auc value=0.962971
+speed baseline gbdt-depthwise istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:10:26
+speed_exit baseline.gbdt-depthwise.istella.r1000000.ours.fastab=0 14:10:59
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=1 ms=1892.538 hash=4c94fa863fb47e4a
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=istella-1000000x220 round=1 ms=1772.213 hash=ae189643baade103
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=2 ms=1860.512 hash=a617861df4305664
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=istella-1000000x220 round=2 ms=1781.552 hash=9b1aacb48b4a3a2c
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=3 ms=1863.722 hash=daf121b179c1f221
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=istella-1000000x220 round=3 ms=1791.471 hash=58b96cd8f015c742
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=4 ms=1855.799 hash=a769146f5989ac63
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=istella-1000000x220 round=4 ms=1785.625 hash=a709842095eb012c
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=5 ms=1854.230 hash=25a5725f57c2ba18
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=istella-1000000x220 round=5 ms=1782.649 hash=6a887e765ea29cec
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.132549
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.969756
+FSPEED-ACC lane=gbdt-depthwise arm=ours-ab metric=logloss value=0.133015
+FSPEED-ACC lane=gbdt-depthwise arm=ours-ab metric=auc value=0.969452
+speed baseline gbdt-lossguide istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:10:59
+speed_exit baseline.gbdt-lossguide.istella.r1000000.ours.fastab=0 14:11:42
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=1 ms=2621.983 hash=7d63a6c8e841d921
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 round=1 ms=2687.124 hash=2d1269e673556c4c
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=2 ms=2601.425 hash=f30a2518cca02195
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 round=2 ms=2701.796 hash=70a722505acf6f8b
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=3 ms=2635.062 hash=80c9b7339140e085
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 round=3 ms=2701.161 hash=4482f5893e33a113
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=4 ms=2647.214 hash=15a308cc7f6e0e3c
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 round=4 ms=2742.564 hash=66895c13b95d469f
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=5 ms=2642.766 hash=3ed405fd6589db39
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 round=5 ms=2755.896 hash=30d19cc7e69b01f6
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.126710
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.973161
+FSPEED-ACC lane=gbdt-lossguide arm=ours-ab metric=logloss value=0.126243
+FSPEED-ACC lane=gbdt-lossguide arm=ours-ab metric=auc value=0.973379
+speed baseline rf istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:11:42
+speed_exit baseline.rf.istella.r1000000.ours.fastab=0 14:14:13
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=1937.171 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours-ab shape=istella-1000000x220 round=1 ms=1956.779 hash=fb659d3a82056bb6
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=1928.424 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours-ab shape=istella-1000000x220 round=2 ms=1951.164 hash=fb659d3a82056bb6
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=1927.839 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours-ab shape=istella-1000000x220 round=3 ms=1947.039 hash=fb659d3a82056bb6
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=4 ms=1922.031 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours-ab shape=istella-1000000x220 round=4 ms=1951.760 hash=fb659d3a82056bb6
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=5 ms=1926.228 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours-ab shape=istella-1000000x220 round=5 ms=1950.582 hash=fb659d3a82056bb6
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+FSPEED-ACC lane=rf arm=ours-ab metric=logloss value=0.145536
+FSPEED-ACC lane=rf arm=ours-ab metric=auc value=0.964539
+speed baseline et istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:14:13
+speed_exit baseline.et.istella.r1000000.ours.fastab=0 14:18:21
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=14564.949 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours-ab shape=istella-1000000x220 round=1 ms=14555.321 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=14573.163 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours-ab shape=istella-1000000x220 round=2 ms=14553.115 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=14538.148 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours-ab shape=istella-1000000x220 round=3 ms=14537.701 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=4 ms=14546.987 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours-ab shape=istella-1000000x220 round=4 ms=14545.213 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=5 ms=14552.370 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours-ab shape=istella-1000000x220 round=5 ms=14533.772 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+FSPEED-ACC lane=et arm=ours-ab metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours-ab metric=auc value=0.938768
+PHASE_D1_DONE 14:18:21
+patch_2512_rf=0 14:18:21
+patch_2512_gbdt=0 14:18:21
+build no2512/rf defines='' 14:18:21
+build_exit no2512.rf=0 14:18:37
+2184213b63e42f45993c468aef1af18160d64ea42ebff39d3101adc06d7288cf  /root/bins/no2512/_mojolearn_rf.so
+build no2512/gbdt defines='' 14:18:37
+build_exit no2512.gbdt=0 14:19:25
+7d95c6b07eeb27c61d04b36a7897c5e75bd2f177385514ff3d5298c2281b78d7  /root/bins/no2512/_mojolearn_gbdt.so
+speed baseline rf istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:19:25
+speed_exit baseline.rf.istella.r1000000.ours=0 14:20:48
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=1945.492 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=1940.497 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=1933.772 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=4 ms=1929.030 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=5 ms=1926.584 hash=574b24d0d7af51d0
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+speed no2512 rf istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:20:48
+speed_exit no2512.rf.istella.r1000000.ours=0 14:22:10
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=1935.867 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=1928.610 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=1926.155 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=4 ms=1919.241 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=5 ms=1926.933 hash=574b24d0d7af51d0
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+speed baseline rf istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:22:10
+speed_exit baseline.rf.istella.r1000000.ours.pass2=0 14:23:31
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=1935.227 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=1934.512 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=1936.017 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=4 ms=1915.070 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=5 ms=1927.797 hash=574b24d0d7af51d0
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+speed baseline gbdt-symmetric istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:23:31
+speed_exit baseline.gbdt-symmetric.istella.r1000000.ours=0 14:23:45
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1476.794 hash=9ea267d793cf6df6
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=1153.908 hash=53086e4a1d4490ef
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=1161.817 hash=a37a4b2d38dbc256
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=1179.651 hash=f784d003999324e4
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=1180.305 hash=8ed1bbbad963cf23
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.146391
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.963075
+speed no2512 gbdt-symmetric istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:23:45
+speed_exit no2512.gbdt-symmetric.istella.r1000000.ours=0 14:23:58
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1446.388 hash=6d54998f2c4d2865
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=1134.468 hash=99e9a85d7a1896db
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=1137.033 hash=8f9396301ebbd967
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=1135.571 hash=d8dd260f90f1ec04
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=1145.326 hash=3bb9e65832f868b3
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.145965
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.963318
+speed baseline gbdt-symmetric istella 1000000 rounds=5 mode=ours extra='--devices auto' 14:23:58
+speed_exit baseline.gbdt-symmetric.istella.r1000000.ours.pass2=0 14:24:12
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1467.956 hash=05edd42736edb797
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=1161.979 hash=3b5ef6eb9c579027
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=1135.243 hash=1381ceca78a2ced8
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=1164.539 hash=aabcc27c8ffdf297
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=1154.490 hash=e41ede1aa542847f
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.146295
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.963146
+PHASE_D2_DONE 14:24:12
+flip_verdict_2512_rf=1 14:24:12
+NO FLIP geomean=1.001 taxi=0.999 istella=1.004 reason=time
+flip_verdict_2512_gbdt-symmetric=1 14:24:12
+NO FLIP geomean=1.011 taxi=0.999 istella=1.023 reason=quality:taxi
+batchD end 14:24:12
