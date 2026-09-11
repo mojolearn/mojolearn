@@ -93,7 +93,9 @@ valid NVIDIA opponent row. Fingerprints 81/81 IDENTICAL against the Sep 10
 set. Detail: `docs/lanes/HANDOFF_trees.md`, "2026-09-10 night H100 leg".
 
 Our identical arm, 2026-09-11 confirmation leg, same GPU model and image,
-driver 580.126.09, source 352d9781 (DEVIATION 2502 pure-node leaf, 2512
+driver 580.126.09, source 352d9781 (DEVIATION 2502 pure-node leaf, which is OPT-IN since
+2026-09-11 and was ON in this leg, so its RF cells are the opt-in arm; the
+shipped default is the 7cebeecf-class RF forest, 1516/2283 ms below; 2512
 kernel zero), ours alone in the process, no opponent re-measured
 (`bench/results/trees_identical/h100_2026-09-11/speed/`, ms median with
 min..max, 5 rounds RF/ET, 7 rounds the gbdt cells; RF 1M and symmetric 1M

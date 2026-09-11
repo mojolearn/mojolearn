@@ -99,8 +99,9 @@ IDENTICAL, `identity_break --lanes rf-clf,rf-reg` is stable x2 on 18 of
 `bench/results/identity_break/apple-m4.identical.rf-2502-2026-09-10.json`):
 rf-reg equals the retained Apple set 9 of 9 (regression never marks a
 node); rf-clf moved on 9 of 9 fixtures, `predict` and `proba`, as this
-deviation predicts. `-D MOJOLEARN_2502_RETRY_PURE=1` restores the previous
-forests exactly (hash 3ffa2951595422d4). `rf_perf_candidates_check` ALL
+deviation predicts. Since 2026-09-11 this deviation is OFF by default
+(one-dataset decision); `-D MOJOLEARN_2502_PURE_LEAF=1` opts in; the
+default forest is hash 3ffa2951595422d4. `rf_perf_candidates_check` ALL
 ARMS GREEN under the IDENTICAL define (`logs/rf_perf_candidates_check.identical.log`).
 
 A first cut stored the flag through `splits[nid].pure = x`, which lowers

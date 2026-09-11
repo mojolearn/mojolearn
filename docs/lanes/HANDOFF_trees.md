@@ -200,11 +200,11 @@ The forest differs because the skipped splits shift later nodes' tree
 indices, which seed the column sampler. rf-reg fingerprints are unchanged
 (regression never marks a node); rf-clf moved on 9 of 9 fixtures
 (`bench/results/identity_break/apple-m4.identical.rf-2502-2026-09-10.json`).
-`-D MOJOLEARN_2502_RETRY_PURE=1` restores the previous forests exactly.
-`rf_perf_candidates_check` ALL ARMS GREEN under the IDENTICAL define.
-ANDREW DECIDES whether the default stays: it is a behavior change to the
-classifier's forest, shipped ON here because it removes 75% of the
-histogram rounds on every vendor.
+OFF BY DEFAULT since 2026-09-11 (Andrew: a decision made on one dataset
+is not a default); opt in with `-D MOJOLEARN_2502_PURE_LEAF=1`. Default
+forest hash 3ffa2951595422d4 restored. `rf_perf_candidates_check` ALL
+ARMS GREEN under the IDENTICAL define. Reconsider only after the
+high-feature set (ENGINEERING_RULES.md section 9) has run beside HIGGS.
 
 ### DEVIATION 2512 in gbdt (`bench/results/gbdt_fast_mac_2026-09-10/`)
 

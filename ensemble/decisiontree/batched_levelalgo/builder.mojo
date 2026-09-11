@@ -461,8 +461,19 @@ struct SplitSummary[dtype: DType](TrivialRegisterPassable):
     retry it with fresh columns."""
 
 
-comptime RETRY_PURE_NODES = is_defined["MOJOLEARN_2502_RETRY_PURE"]()
-"""DEVIATION 2502 (2026-09-10): A PURE NODE IS A LEAF. Their `doSplit`
+comptime RETRY_PURE_NODES = not is_defined["MOJOLEARN_2502_PURE_LEAF"]()
+"""DEVIATION 2502 (2026-09-10), OFF BY DEFAULT since 2026-09-11: opt in with
+`-D MOJOLEARN_2502_PURE_LEAF=1`. Andrew, 2026-09-11: the win below was
+measured on ONE kind of data (HIGGS, 28 features, depth 16, where three
+quarters of the histogram rounds were pure-node retries) and a change to
+the forest a classifier ships is not flipped on one kind
+(ENGINEERING_RULES.md section 9). It stays off until it has run on the
+high-feature set at or above 1M rows beside HIGGS, on the H100 and the M4,
+and Andrew has ratified it. The shipped forest is the previous one (HIGGS
+1M hash 3ffa2951595422d4; the rf-clf fingerprints in the retained sets).
+The text below describes the opt-in arm.
+
+A PURE NODE IS A LEAF. Their `doSplit`
 retries every node whose sampled columns found no valid split, up to
 `max_sampling_rounds` times with fresh columns, and never asks whether the
 node CAN split. Counted on HIGGS 1M, 100 trees, depth 16, on the M4: round
@@ -486,10 +497,10 @@ stream: HIGGS 1M logloss 0.538850 -> 0.538817, AUC 0.809906 -> 0.809830,
 histogram rounds 14,640 -> 3,627 per fit, M4 FAST fit 12.4 s -> 9.1 s
 (hash efd14ab2c09ff57c, 8 of 8 fits equal). Cross-vendor and run-to-run
 identity hold as before (the flag is a function of the class totals); the
-rf-clf fingerprints move once and are regenerated with this flip. The
-define restores the retries and the previous forests exactly. Regression
-never marks a node (one histogram plane shows no purity), so rf-reg
-forests are unchanged."""
+rf-clf fingerprints move under the opt-in
+(`bench/results/identity_break/apple-m4.identical.rf-2502-2026-09-10.json`).
+Regression never marks a node (one histogram plane shows no purity), so
+rf-reg forests are unchanged either way."""
 
 def update_workload_info[
     o: MutOrigin, //, sabotage: Int = 0
