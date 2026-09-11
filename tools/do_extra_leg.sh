@@ -86,7 +86,7 @@
 # break every lane's teardown at once). DigitalOcean bills until DESTROY, so:
 #   * the uplink is probed three times before the create;
 #   * ONE GPU DROPLET AT A TIME: the create is refused while any gpu-* droplet,
-#     any droplet tagged e2/speed/rel061/extra, or any mojolearn-* droplet
+#     or any droplet named exactly as this leg (CPU droplets do not count)
 #     exists, and the refusal names them;
 #   * a DETACHED LOCAL DEAD-MAN is armed BEFORE the create, keyed by tag AND
 #     name, capped at one hour;
@@ -813,8 +813,8 @@ if [ "$DRY" = 1 ]; then
   echo
   echo "== what a real leg would do, in order =="
   echo "   1. refuse a dirty tree, a bad token file, a broken script or an oversized bundle"
-  echo "   2. GET $API/droplets: refuse while any gpu-* droplet, any droplet tagged"
-  echo "      $LEG_TAGS, or any mojolearn-* droplet exists, naming each"
+  echo "   2. GET $API/droplets: refuse while any gpu-* droplet, or a droplet named $NAME,"
+  echo "      exists, naming each (CPU droplets do not count against the GPU quota)"
   echo "   3. three uplink probes against neutral hosts; any failure refuses"
   echo "   4. ARM THE LOCAL DEAD-MAN (tag $TAG + name $NAME, ${MINUTES}m) and read it back"
   echo "   5. POST the create body above   [THE BILL STARTS HERE]; adopt by name if unreadable"
