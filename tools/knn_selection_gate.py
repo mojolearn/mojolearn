@@ -64,7 +64,14 @@ THE SWITCHES (runtime, read by the native side per request)
                                     `voteguard` (DEVIATION 2522: the
                                     uniform arm with the K-chain behind a
                                     warp-uniform `vote` guard, output
-                                    valid, bit-identical by construction).
+                                    valid, bit-identical by construction),
+                                    `warpbound_guard` (DEVIATION 2523:
+                                    C2's warp bound composed with the vote
+                                    guard, admission `pending <
+                                    min(threshold, bound)` inside the
+                                    ballot branch; output valid) or
+                                    `warpbound_guard1` (the same with the
+                                    bound refreshed every batch).
                                     Unset = the build's default.
                                     Unknown names RAISE on the native side,
                                     never fall back.
@@ -88,7 +95,14 @@ THE SWITCHES (runtime, read by the native side per request)
                                     with a k-deep list); voteguard carries
                                     the uniform flip INSIDE its guarded
                                     and admitted path, so a flip proves
-                                    the guarded body ran.
+                                    the guarded body ran; warpbound_guard
+                                    and warpbound_guard1 carry C2's bit-63
+                                    clear of the bound inside the refresh
+                                    and nothing else (on those forms the
+                                    bound's only consumer is the guard's
+                                    predicate, so the flip proves the
+                                    refresh's result reached the guarded
+                                    path).
 
 Both are honored only by a binding built with
 `-D MOJOLEARN_KNN_SELECT_TRIAL=1` (the hook the brief specifies; not on any
@@ -117,7 +131,10 @@ equal the reference.
 `votecount` (DEVIATION 2522) is listed under `--timing-only-arms` too but
 its OUTPUT IS VALID (it is `voteguard` plus a per-block admission counter
 whose launcher synchronizes and reads back every launch, so its time is
-not a price): for the arms in TIMING_ONLY_VALID_OUTPUT the assertion is
+not a price), and so is `warpbound_count` (DEVIATION 2523: `warpbound_guard`
+plus the same counter, so its `admit_rate` is the fraction of warp-steps
+with an admission UNDER THE BOUND, the check of C2's event model against
+votecount's 0.90 / 0.96): for the arms in TIMING_ONLY_VALID_OUTPUT the assertion is
 the opposite one, equality with the reference, and the row says
 `output_valid` True for both arms. Under the phase-timer build the
 binding prints `KNN_ADMIT_RATE warp_steps N any_admit M` once per launch;
@@ -428,7 +445,9 @@ PHASE_KEYS = ("distance_ms", "select_ms", "merge_ms", "admit_warp_steps", "admit
 # `--timing-only-arms` entries whose output is VALID (equality with the
 # reference is asserted instead of difference): counter arms whose time is
 # not a price because their launcher synchronizes per launch.
-TIMING_ONLY_VALID_OUTPUT = ("votecount",)
+# `warpbound_count` (DEVIATION 2523) is `votecount`'s counter under C2's
+# warp bound; its admit line carries `warpbound 1`.
+TIMING_ONLY_VALID_OUTPUT = ("votecount", "warpbound_count")
 
 
 class PhaseCapture:
@@ -675,7 +694,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True, help="output directory (JSON, summary)")
     ap.add_argument("--arms", default="baseline,headbound", help="explicit arms, comma separated; every later arm is timed as a pair against the first")
-    ap.add_argument("--timing-only-arms", default="", help="comma separated arms whose OUTPUT IS INVALID by construction (skiprank, skipscan, scanonly1, noshift), plus the counter arm votecount (valid output, time not a price); excluded from correctness, oracle and reach; each is timed against the first --arms arm and reported under `timing_only`")
+    ap.add_argument("--timing-only-arms", default="", help="comma separated arms whose OUTPUT IS INVALID by construction (skiprank, skipscan, scanonly1, noshift), plus the counter arms votecount and warpbound_count (valid output, time not a price); excluded from correctness, oracle and reach; each is timed against the first --arms arm and reported under `timing_only`")
     ap.add_argument("--phase-timers", choices=("auto", "require", "off"), default="auto", help="read the binding's KNN_PHASE_TIMERS line per request (needs a build with -D MOJOLEARN_KNN_PHASE_TIMERS=1): auto records it when present, require fails without it, off never redirects fd 1")
     ap.add_argument("--ks", default="10,15")
     ap.add_argument("--pairs", type=int, default=3, help="timed pairs per order (3 = the protocol's initial count; 5 where affordable)")
@@ -1112,8 +1131,8 @@ def selftest_backend(log):
         def kneighbors(self, q):
             arm = os.environ.get(arm_env)
             timing_only = ("skiprank", "skipscan", "scanonly1", "noshift")
-            counter_arms = ("votecount",)
-            if arm not in (None, "baseline", "uniform", "headbound", "warpbound", "deferred", "capk", "capk_selp", "voteguard") + timing_only + counter_arms:
+            counter_arms = ("votecount", "warpbound_count")
+            if arm not in (None, "baseline", "uniform", "headbound", "warpbound", "deferred", "capk", "capk_selp", "voteguard", "warpbound_guard", "warpbound_guard1") + timing_only + counter_arms:
                 raise ValueError(f"unknown arm {arm!r}")
             if arm in timing_only + counter_arms and os.environ.get(sab_env) == "1":
                 raise ValueError("timing-only arms carry no sabotage")
@@ -1143,8 +1162,9 @@ def selftest_backend(log):
                 # The counter arm's launcher prints one line per launch;
                 # two here so the harness's per-request sum is exercised
                 # (3 of 8 warp-steps admit: admit_rate 0.375).
-                os.write(1, b"KNN_ADMIT_RATE warp_steps 5 any_admit 2 rows 4 length 100 k 3\n")
-                os.write(1, b"KNN_ADMIT_RATE warp_steps 3 any_admit 1 rows 4 length 100 k 3\n")
+                wb = 1 if arm == "warpbound_count" else 0
+                os.write(1, f"KNN_ADMIT_RATE warp_steps 5 any_admit 2 rows 4 length 100 k 3 warpbound {wb}\n".encode())
+                os.write(1, f"KNN_ADMIT_RATE warp_steps 3 any_admit 1 rows 4 length 100 k 3 warpbound {wb}\n".encode())
             os.write(1, (f"KNN_PHASE_TIMERS distance_ms 1.5 select_ms {select} merge_ms 0.05 "
                          f"distance_launches 1 select_launches 1 merge_launches 0 k {self.k}\n").encode())
             return dist, idx

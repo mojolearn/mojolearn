@@ -49,7 +49,14 @@ seventh pass (DEVIATION 2522) measures the chain itself: `noshift`
 (timing-only: the admission compare and the list without the K-chain),
 `voteguard` (a real warp-uniform branch around the chain, output valid) and
 `votecount` (the admission rate per warp-step, read back through a device
-counter). See the comment above `_smallk_overwrite_last`.
+counter). See the comment above `_smallk_overwrite_last`. That measurement
+priced the chain at 6.7 ms (k10) and 10.8 ms (k15) of the launch, issued on
+90 to 96 percent of warp-steps; the eighth pass (DEVIATION 2523) composes
+the two levers, C2's warp bound (fewer admitting lanes per step) inside
+`voteguard`'s ballot branch (a step with no admitting lane skips the
+chain): `warpbound_guard`, `warpbound_guard1` (refresh every batch) and
+`warpbound_count` (the admit rate under the bound). See the comment above
+`_smallk_warpbound_refresh_due`.
 """
 from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
@@ -323,6 +330,30 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 #                                    its time is not a price (the launcher
 #                                    synchronizes per launch); the gate
 #                                    lists it as timing-only
+#   MOJOLEARN_KNN_SELECT=warpbound_guard
+#                                    C4 + C2 + the vote guard (DEVIATION
+#                                    2523): the warp bound refresh exactly
+#                                    as `warpbound` does it (every
+#                                    SMALLK_WARPBOUND_EVERY batches once
+#                                    the lists are full), and the
+#                                    admission test `pending < min(
+#                                    threshold, bound)` inside the ballot
+#                                    branch, so a warp-step where no lane
+#                                    admits skips the chain; bit-identical
+#                                    (C2's union argument plus voteguard's
+#                                    same-lanes-same-keys); output VALID,
+#                                    a normal trial arm
+#   MOJOLEARN_KNN_SELECT=warpbound_guard1
+#                                    `warpbound_guard` with the bound
+#                                    refreshed EVERY batch (WB_EVERY = 1)
+#   MOJOLEARN_KNN_SELECT=warpbound_count
+#                                    `warpbound_guard` plus `votecount`'s
+#                                    admission counter: the admit rate
+#                                    UNDER THE BOUND, against votecount's
+#                                    0.90 / 0.96 (C2's event model says
+#                                    0.45 / 0.54); output VALID, time not
+#                                    a price; the gate lists it as
+#                                    timing-only
 #   unset or empty                   the build default, SMALLK_ARM_DEFAULT
 #   anything else                    RAISES; the gate harness relies on it
 #   MOJOLEARN_KNN_SELECT_SABOTAGE=1  the chosen arm's SABOTAGE instantiation
@@ -373,17 +404,18 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 # returns SMALLK_ARM_DEFAULT without touching the environment, the launch
 # refuses any other arm, and the only instantiations in the binary are
 # `smallk_bucket_kernel[CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT,
-# SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT,
-# SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT, SMALLK_SELP_DEFAULT,
-# SMALLK_CHAIN_INSERT]` with
+# SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT or
+# SMALLK_WARPBOUND_GUARD_DEFAULT, SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT,
+# SMALLK_SELP_DEFAULT, SMALLK_CHAIN_VOTEGUARD if
+# SMALLK_WARPBOUND_GUARD_DEFAULT else SMALLK_CHAIN_INSERT]` with
 # CAP the bucket capacity (16 / 32 / 64) unless SMALLK_CAPK_DEFAULT is on,
 # in which case the K-specialized buckets take CAP = K. With the two bound
-# defaults, the deferred default, the capk default and the selp default
-# False (the state until a gate passes) that is the [CAP, K] kernel of
-# 2026-09-09 under C4's trip count: the `comptime if` arms below fold away
-# and the non-trial code path is the one that shipped.
+# defaults, the deferred default, the capk default, the selp default and
+# the warpbound-guard default False (the state until a gate passes) that is
+# the [CAP, K] kernel of 2026-09-09 under C4's trip count: the `comptime if`
+# arms below fold away and the non-trial code path is the one that shipped.
 #
-# THE DEFAULTS. Six comptime switches here rather than kernel-matrix rows,
+# THE DEFAULTS. Seven comptime switches here rather than kernel-matrix rows,
 # because this lane may not edit `checks/kernel_matrix.mojo`; the flip that
 # promotes an arm moves them into a SCHEDULING row
 # (`knn_selector_head_bound_for[column, identical]`, brief section 4) in
@@ -393,15 +425,18 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 # uniform,<arm>, equality plus the request-level price). Every candidate
 # arm requires UNIFORM; HEAD_BOUND, WARPBOUND and DEFERRED exclude each
 # other; CAPK and SELP (DEVIATION 2521) are the uniform arm's scan with a
-# shorter list and exclude the three of them; SELP requires CAPK.
+# shorter list and exclude the three of them; SELP requires CAPK;
+# WARPBOUND_GUARD (DEVIATION 2523) is WARPBOUND composed with the VOTEGUARD
+# chain form and excludes every other candidate default.
 # ---------------------------------------------------------------------------
 comptime SMALLK_SELECT_TRIAL = is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 comptime SMALLK_UNIFORM_TRIP_DEFAULT = True  # DEVIATION 2497: flipped 2026-09-11 on the H100 and M4 gates
 comptime SMALLK_HEAD_BOUND_DEFAULT = False  # DEVIATION 2498: NEGATIVE on the H100 2026-09-11, stays off
 comptime SMALLK_WARPBOUND_DEFAULT = False  # DEVIATION 2515: NEGATIVE on the H100 2026-09-11, stays off
 comptime SMALLK_DEFERRED_DEFAULT = False  # DEVIATION 2517: NEGATIVE on the H100 2026-09-11, stays off
-comptime SMALLK_CAPK_DEFAULT = False  # DEVIATION 2521: RUN OWED (brief, "Implementation pass, CAP = K")
-comptime SMALLK_SELP_DEFAULT = False  # DEVIATION 2521: RUN OWED; requires SMALLK_CAPK_DEFAULT
+comptime SMALLK_CAPK_DEFAULT = False  # DEVIATION 2521: NEUTRAL on the H100 2026-09-11, stays off
+comptime SMALLK_SELP_DEFAULT = False  # DEVIATION 2521: NEUTRAL on the H100 2026-09-11; requires SMALLK_CAPK_DEFAULT
+comptime SMALLK_WARPBOUND_GUARD_DEFAULT = False  # DEVIATION 2523: RUN OWED (brief, "Implementation pass, warpbound_guard")
 
 comptime SMALLK_ARM_BASELINE = 0
 comptime SMALLK_ARM_UNIFORM = 1
@@ -423,7 +458,17 @@ comptime SMALLK_ARM_CAPK_SELP = 9
 comptime SMALLK_ARM_NOSHIFT = 10
 comptime SMALLK_ARM_VOTEGUARD = 11
 comptime SMALLK_ARM_VOTECOUNT = 12
-# OR'd into the arm value; the launch strips it.
+# The warp bound composed with the vote guard (DEVIATION 2523); see the
+# comment above `_smallk_warpbound_refresh_due`. `warpbound_guard` and
+# `warpbound_guard1` are normal arms (output valid); `warpbound_count` is
+# the counter form (output valid, time not a price). Never a default until
+# SMALLK_WARPBOUND_GUARD_DEFAULT flips.
+comptime SMALLK_ARM_WARPBOUND_GUARD = 13
+comptime SMALLK_ARM_WARPBOUND_COUNT = 14
+comptime SMALLK_ARM_WARPBOUND_GUARD1 = 15
+# OR'd into the arm value; the launch strips it. The arm space below it is
+# now FULL (0 .. 15): the next arm moves this bit to 32 and the mask in
+# `_smallk_launch_bucket` with it.
 comptime SMALLK_ARM_SABOTAGE = 16
 
 # The kernel's PHASE parameter: which phases of `smallk_bucket_kernel` run.
@@ -447,10 +492,12 @@ comptime SMALLK_CHAIN_VOTECOUNT = 3
 comptime SMALLK_PHASE_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
 comptime SMALLK_ARM_DEFAULT = SMALLK_ARM_HEADBOUND if SMALLK_HEAD_BOUND_DEFAULT else (
     SMALLK_ARM_WARPBOUND if SMALLK_WARPBOUND_DEFAULT else (
-        SMALLK_ARM_DEFERRED if SMALLK_DEFERRED_DEFAULT else (
-            SMALLK_ARM_CAPK_SELP if (SMALLK_CAPK_DEFAULT and SMALLK_SELP_DEFAULT) else (
-                SMALLK_ARM_CAPK if SMALLK_CAPK_DEFAULT else (
-                    SMALLK_ARM_UNIFORM if SMALLK_UNIFORM_TRIP_DEFAULT else SMALLK_ARM_BASELINE
+        SMALLK_ARM_WARPBOUND_GUARD if SMALLK_WARPBOUND_GUARD_DEFAULT else (
+            SMALLK_ARM_DEFERRED if SMALLK_DEFERRED_DEFAULT else (
+                SMALLK_ARM_CAPK_SELP if (SMALLK_CAPK_DEFAULT and SMALLK_SELP_DEFAULT) else (
+                    SMALLK_ARM_CAPK if SMALLK_CAPK_DEFAULT else (
+                        SMALLK_ARM_UNIFORM if SMALLK_UNIFORM_TRIP_DEFAULT else SMALLK_ARM_BASELINE
+                    )
                 )
             )
         )
@@ -462,9 +509,10 @@ def smallk_select_arm_from_env() raises -> Int:
     """The selector arm for THIS request, read once on the host.
 
     Trial builds read `MOJOLEARN_KNN_SELECT` (baseline / uniform / headbound /
-    warpbound / deferred / capk / capk_selp / voteguard / votecount, the
-    timing-only skiprank / skipscan / scanonly1 / noshift, unset = the build
-    default, anything else raises) and
+    warpbound / deferred / capk / capk_selp / voteguard / votecount /
+    warpbound_guard / warpbound_guard1 / warpbound_count, the timing-only
+    skiprank / skipscan / scanonly1 / noshift, unset = the build default,
+    anything else raises) and
     `MOJOLEARN_KNN_SELECT_SABOTAGE` (exactly "1" sets the SMALLK_ARM_SABOTAGE
     bit). Every other build returns SMALLK_ARM_DEFAULT without reading the
     environment at all.
@@ -501,11 +549,18 @@ def smallk_select_arm_from_env() raises -> Int:
         arm = SMALLK_ARM_VOTEGUARD
     elif name == "votecount":
         arm = SMALLK_ARM_VOTECOUNT
+    elif name == "warpbound_guard":
+        arm = SMALLK_ARM_WARPBOUND_GUARD
+    elif name == "warpbound_guard1":
+        arm = SMALLK_ARM_WARPBOUND_GUARD1
+    elif name == "warpbound_count":
+        arm = SMALLK_ARM_WARPBOUND_COUNT
     else:
         raise Error(
             "MOJOLEARN_KNN_SELECT='" + name
             + "' is not a selector arm (baseline, uniform, headbound, warpbound,"
-            + " deferred, capk, capk_selp, voteguard, votecount, the timing-only"
+            + " deferred, capk, capk_selp, voteguard, votecount, warpbound_guard,"
+            + " warpbound_guard1, warpbound_count, the timing-only"
             + " skiprank, skipscan, scanonly1, noshift, or unset)"
         )
     if String(getenv("MOJOLEARN_KNN_SELECT_SABOTAGE")) == "1":
@@ -794,9 +849,88 @@ def _smallk_warp_group_bound[LANES: Int](published: UInt64, group: Int) -> UInt6
     return v
 
 
+# ---------------------------------------------------------------------------
+# THE WARP BOUND INSIDE THE VOTE GUARD (DEVIATION 2523): `warpbound_guard`,
+# `warpbound_guard1`, `warpbound_count`.
+#
+# WHAT STEP 8 SAID (brief, "Step 8 result"). The chain is 6.7 ms of the
+# k10 launch and 10.8 ms of the k15 launch, the whole K cost; it issues on
+# every warp-step where any of the 32 lanes admits; and under the shipped
+# per-lane threshold that is 90 to 96 percent of warp-steps (votecount), so
+# the ballot branch alone (`voteguard`) could skip only 4 to 10 percent of
+# chains and saved 3 percent. C2's warp bound halves the admitting steps
+# (its event model: 231 to 116 per 256 at k10, 246 to 138 at k15) but was
+# measured with the chain if-converted, so the skipped admissions saved no
+# chain and the arm paid its refreshes for nothing. The two levers compose:
+#
+#   the bound lowers the admission predicate  (pending < min(threshold, bound))
+#   the ballot turns a step with no admitting lane into a skipped chain
+#
+# THE MECHANISM, and why the two features do not interfere. The refresh is
+# C2's, textually: after `done += 1` at the bottom of a batch, when
+# `_smallk_warpbound_refresh_due[WB_EVERY](done, wb_fill)`, every lane
+# publishes its head, the warp folds the group bound with five xor shuffles
+# and sets `gate = min(threshold, bound)`. That point is OUTSIDE the ballot
+# branch (the unrolled `u` loop is closed) and block-uniform under C4, so
+# every lane of every warp reaches the shuffles whatever the ballots inside
+# the batch did. Inside the batch, the per-element step is `voteguard`'s
+# with one change: `admit = pending < gate` instead of `pending < threshold`;
+# then `any = ballot(admit) != 0; if any: if admit: _smallk_insert(...);
+# gate = min(threshold, bound)`. The ballot is convergent for the same reason
+# as in `voteguard` (nothing above it diverges; the trip count has no `tid`
+# in it). The bound only LOWERS the predicate; it never adds an insertion
+# path, and the chain inside the branch is the unchanged `_smallk_insert`.
+# The tail loop (per-lane trip count, no ballot) keeps C2's plain
+# `pending < gate` form on at most eight elements per lane. WB_EVERY is the
+# refresh cadence: SMALLK_WARPBOUND_EVERY (2, C2's) for `warpbound_guard`,
+# 1 for `warpbound_guard1`, since with the branch the bound's benefit is
+# now realized per skipped step and a tighter bound may pay.
+#
+# WHY THE OUTPUT BITS ARE UNCHANGED. C2's argument (above
+# `_smallk_warp_group_bound`): at least k keys of the warp's union, hence
+# of the block's, are at or below the bound, that count never drops, so a
+# pending key at or above min(threshold, bound) is not among the row's k
+# smallest and dropping it is the baseline's own act; the union still holds
+# the true top-k after the scan. Plus `voteguard`'s (above
+# `_smallk_overwrite_last`): `admit` is the same test on the same gate as
+# C2's, a lane that admits inserts the same key at the same step through
+# the same `_smallk_insert`, a lane that does not admit does nothing in
+# both forms, and the list is a function of the inserted keys and their
+# order. The rank phase is untouched (no shared memory, no barrier,
+# `rounds` stays 0). Neither argument depends on the other: the bound
+# decides WHAT is admitted, the ballot decides WHEN the warp executes the
+# chain, and the composition is both statements at once.
+#
+# SABOTAGE (reach): C2's, unchanged: bit 63 of the reduced bound is cleared
+# inside the refresh, so from the first refresh on the gate sits below
+# every non-negative-distance key and the output is the top-k of the first
+# wb_fill batches (4,096 columns at k in 9..16), which flips every row with
+# a true neighbor beyond them (certain on the arms check: the planted +0.0
+# at length / 2 and length - 1). WHY IT STILL PROVES THE GUARDED PATH RAN:
+# on this chain form the sabotaged bound has exactly one consumer, the
+# `admit = pending < gate` that the ballot reads inside the guard, so the
+# flip exists only if the bound reached the guard's predicate (on plain
+# `voteguard` the same sabotage would flip nothing: its predicate reads
+# `threshold`, and the refresh is not compiled in); and the cells that
+# survive the flip (the top-k of the first 4,096 columns) were inserted by
+# the guarded chain, the only insertion path in this loop form. The uniform
+# and voteguard index flips are compiled out under WARPBOUND so a flip is
+# never attributable to them. `warpbound_count` refuses the sabotage bit
+# like `votecount`.
+#
+# `warpbound_count`: `warpbound_guard` with `votecount`'s counters, so the
+# printed `KNN_ADMIT_RATE` line is the fraction of warp-steps on which some
+# lane admits UNDER THE BOUND. Against votecount's 0.903 / 0.960 that is the
+# check of C2's event model (116 / 256 = 0.45 at k10, 138 / 256 = 0.54 at
+# k15); the same launcher, with `warpbound 1` on the line.
+# ---------------------------------------------------------------------------
 @always_inline
-def _smallk_warpbound_refresh_due(done: Int, fill: Int) -> Bool:
-    return done >= fill and (done - fill) % SMALLK_WARPBOUND_EVERY == 0
+def _smallk_warpbound_refresh_due[EVERY: Int = SMALLK_WARPBOUND_EVERY](done: Int, fill: Int) -> Bool:
+    """C2's cadence: every EVERY completed batches from `fill` on. EVERY is
+    SMALLK_WARPBOUND_EVERY on every instantiation but `warpbound_guard1`
+    (DEVIATION 2523), which refreshes every batch."""
+    comptime assert EVERY >= 1, "the warp bound refresh cadence is at least one batch"
+    return done >= fill and (done - fill) % EVERY == 0
 
 
 # ---------------------------------------------------------------------------
@@ -936,7 +1070,7 @@ def _smallk_append(mut queue: SIMD[DType.uint64, SMALLK_DEFER_Q], mut qcount: In
 def smallk_bucket_kernel[
     CAP: Int, K: Int = 0, UNIFORM: Bool = False, BOUND: Bool = False, SABOTAGE: Bool = False,
     WARPBOUND: Bool = False, PHASE: Int = SMALLK_PHASE_FULL, DEFERRED: Bool = False,
-    SELP: Bool = False, CHAIN: Int = SMALLK_CHAIN_INSERT,
+    SELP: Bool = False, CHAIN: Int = SMALLK_CHAIN_INSERT, WB_EVERY: Int = SMALLK_WARPBOUND_EVERY,
 ](
     values: MutPointer[Float32, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
@@ -995,9 +1129,16 @@ def smallk_bucket_kernel[
     invalid) overwrites the threshold slot instead; VOTEGUARD wraps the
     chain in a warp-uniform `vote` guard (output valid); VOTECOUNT is
     VOTEGUARD plus the per-block admission counter in `counters`. All
-    three are the uniform scan form only, trial builds only, no bound, no
-    deferral, no timing-only phase. See the comment above
+    three are the uniform scan form only, trial builds only, no C1 bound,
+    no deferral, no timing-only phase. See the comment above
     `_smallk_overwrite_last`.
+    WARPBOUND with CHAIN = VOTEGUARD or VOTECOUNT (DEVIATION 2523, arms
+    `warpbound_guard`, `warpbound_guard1`, `warpbound_count`): C2's refresh
+    at the batch boundary and the admission `pending < min(threshold,
+    bound)` inside the ballot branch. WB_EVERY is the refresh cadence in
+    completed batches (SMALLK_WARPBOUND_EVERY on every instantiation but
+    `warpbound_guard1`, which takes 1); it is read only under WARPBOUND.
+    See the comment above `_smallk_warpbound_refresh_due`.
     """
     comptime assert CAP >= 1 and CAP <= SMALLK_MAX_K, "the list depth is 1 .. SMALLK_MAX_K"
     comptime assert K == 0 or K <= CAP, "a K-specialized list must hold K keys"
@@ -1011,8 +1152,12 @@ def smallk_bucket_kernel[
     comptime assert PHASE == SMALLK_PHASE_FULL or (UNIFORM and not BOUND and not WARPBOUND and not SABOTAGE), "a timing-only phase measures the uniform default: no bound, no sabotage"
     comptime assert not SELP or (K > 0 and CAP == K), "the branch-free chain has no slot guard: it needs CAP == K"
     comptime assert not SELP or (UNIFORM and not BOUND and not WARPBOUND and not DEFERRED and PHASE == SMALLK_PHASE_FULL), "the branch-free chain is the uniform scan form only"
-    comptime assert CHAIN == SMALLK_CHAIN_INSERT or SMALLK_SELECT_TRIAL, "the chain measurement arms exist on trial builds only"
-    comptime assert CHAIN == SMALLK_CHAIN_INSERT or (UNIFORM and not BOUND and not WARPBOUND and not DEFERRED and PHASE == SMALLK_PHASE_FULL), "the chain measurement arms are the uniform scan form only"
+    comptime assert CHAIN == SMALLK_CHAIN_INSERT or SMALLK_SELECT_TRIAL or (CHAIN == SMALLK_CHAIN_VOTEGUARD and WARPBOUND and SMALLK_WARPBOUND_GUARD_DEFAULT), "the chain measurement arms exist on trial builds only (or as the flipped warpbound_guard default)"
+    comptime assert CHAIN == SMALLK_CHAIN_INSERT or (UNIFORM and not BOUND and not DEFERRED and PHASE == SMALLK_PHASE_FULL), "the chain measurement arms are the uniform scan form only"
+    # DEVIATION 2523: the warp bound composes with the ballot forms only.
+    comptime assert not WARPBOUND or CHAIN == SMALLK_CHAIN_INSERT or CHAIN == SMALLK_CHAIN_VOTEGUARD or CHAIN == SMALLK_CHAIN_VOTECOUNT, "the warp bound composes with the vote guard (noshift has no chain to guard)"
+    comptime assert WB_EVERY >= 1, "the warp bound refresh cadence is at least one batch"
+    comptime assert WB_EVERY == SMALLK_WARPBOUND_EVERY or (WARPBOUND and SMALLK_SELECT_TRIAL), "a non-default refresh cadence is a warpbound trial arm"
     comptime assert not (CHAIN == SMALLK_CHAIN_NOSHIFT and SABOTAGE), "noshift is timing-only and carries no sabotage"
     comptime assert not (CHAIN == SMALLK_CHAIN_VOTECOUNT and SABOTAGE), "votecount is a counter arm and carries no sabotage"
     comptime assert not (CHAIN == SMALLK_CHAIN_NOSHIFT and SELP), "noshift has no chain to make branch-free"
@@ -1151,7 +1296,11 @@ def smallk_bucket_kernel[
                     # (`voteguard` carries the same flip inside its guard
                     # below, so its reach proves the guarded body.)
                     pending = pending ^ UInt64(1)
-                comptime if BOUND or WARPBOUND:
+                comptime if BOUND or (WARPBOUND and CHAIN == SMALLK_CHAIN_INSERT):
+                    # C1 and C2 (`headbound`, `warpbound`): the gate as the
+                    # predicate, the chain as the uniform arm runs it. The
+                    # C2 + vote guard composition (DEVIATION 2523) takes
+                    # the ballot branch below instead.
                     if pending < gate:
                         _smallk_insert[CAP=CAP](local_keys, threshold, pending, k)
                         gate = threshold if threshold < bound else bound
@@ -1181,7 +1330,18 @@ def smallk_bucket_kernel[
                     # warp with no admitting lane skips the chain by a
                     # real branch; a lane that admits inserts the same
                     # key at the same step as the uniform arm.
+                    #
+                    # Under WARPBOUND (DEVIATION 2523, `warpbound_guard`):
+                    # the predicate is C2's gate, min(threshold, bound),
+                    # refreshed at the batch boundary below, outside this
+                    # branch; the bound only lowers the predicate, the
+                    # ballot and the chain are the voteguard form's. See
+                    # the comment above `_smallk_warpbound_refresh_due`.
                     var admit = Bool(pending < threshold)
+                    comptime if WARPBOUND:
+                        # The compare above is dead on this instantiation
+                        # (the gate is at most the threshold) and folds out.
+                        admit = Bool(pending < gate)
                     var any_admit = _smallk_warp_any(admit)
                     comptime if CHAIN == SMALLK_CHAIN_VOTECOUNT:
                         warp_steps += 1
@@ -1189,12 +1349,17 @@ def smallk_bucket_kernel[
                             admit_steps += 1
                     if any_admit:
                         if admit:
-                            comptime if SABOTAGE and u == 0:
+                            comptime if SABOTAGE and u == 0 and not WARPBOUND:
                                 # `voteguard` reach: the uniform flip, but
                                 # inside the guarded and admitted path, so
-                                # a flip proves this body ran.
+                                # a flip proves this body ran. Under
+                                # WARPBOUND the reach is the bound's own
+                                # sabotage in the refresh (bit 63), so this
+                                # flip is compiled out there.
                                 pending = pending ^ UInt64(1)
                             _smallk_insert[CAP=CAP, SELP=SELP](local_keys, threshold, pending, k)
+                            comptime if WARPBOUND:
+                                gate = threshold if threshold < bound else bound
                 else:
                     if pending < threshold:
                         _smallk_insert[CAP=CAP, SELP=SELP](local_keys, threshold, pending, k)
@@ -1205,10 +1370,13 @@ def smallk_bucket_kernel[
             batch_base += SMALLK_SCAN_SPAN
             done += 1
             comptime if WARPBOUND and SMALLK_SHUFFLE:
-                if _smallk_warpbound_refresh_due(done, wb_fill):
+                if _smallk_warpbound_refresh_due[WB_EVERY](done, wb_fill):
                     # C2 REFRESH. `done` is block-uniform (C4), so every
                     # lane of every warp is here, and the butterfly is
-                    # convergent. Every lane publishes its wb_depth-th
+                    # convergent; under the vote guard forms (DEVIATION
+                    # 2523) this point is outside the ballot branch (the
+                    # `u` loop above is closed), so the ballots inside the
+                    # batch cannot keep a lane from it. Every lane publishes its wb_depth-th
                     # smallest key (a real key: the lists are full), the
                     # warp folds them into the group bound, and the gate
                     # becomes min(threshold, bound). No barrier, no shared
@@ -1240,7 +1408,10 @@ def smallk_bucket_kernel[
                             published = local_keys[slot]
                     var found = _smallk_warp_group_bound[SMALLK_LANES](published, wb_group)
                     comptime if SABOTAGE:
-                        # `warpbound` arm reach: bit 63 of the reduced bound
+                        # `warpbound` arm reach (and `warpbound_guard` /
+                        # `warpbound_guard1`, DEVIATION 2523, whose only
+                        # consumer of the bound is the guard's predicate):
+                        # bit 63 of the reduced bound
                         # is cleared. `twiddle_in` sets bit 31 of every
                         # non-negative float's bits, so every composite key
                         # with a non-negative distance has bit 63 set and
@@ -1373,6 +1544,9 @@ def smallk_bucket_kernel[
     while col < scan_length:
         var pending = composite_key(values.unsafe_load(base + col), UInt32(col), select_min)
         comptime if BOUND or WARPBOUND:
+            # The bound arms' tail, the vote guard compositions included
+            # (DEVIATION 2523): the gate as the predicate, no ballot (the
+            # trip count is per lane), at most eight elements per lane.
             if pending < gate:
                 _smallk_insert[CAP=CAP](local_keys, threshold, pending, k)
                 gate = threshold if threshold < bound else bound
@@ -1521,7 +1695,7 @@ def smallk_bucket_kernel[
 def _smallk_enqueue[
     CAP: Int, K: Int, UNIFORM: Bool, BOUND: Bool, SABOTAGE: Bool, WARPBOUND: Bool = False,
     PHASE: Int = SMALLK_PHASE_FULL, DEFERRED: Bool = False, SELP: Bool = False,
-    CHAIN: Int = SMALLK_CHAIN_INSERT,
+    CHAIN: Int = SMALLK_CHAIN_INSERT, WB_EVERY: Int = SMALLK_WARPBOUND_EVERY,
 ](
     ctx: DeviceContext,
     values: MutPointer[Float32, MutAnyOrigin],
@@ -1535,7 +1709,7 @@ def _smallk_enqueue[
     through `_smallk_launch_votecount` instead, which owns the counter."""
     comptime assert CHAIN != SMALLK_CHAIN_VOTECOUNT, "votecount launches carry a real counter: use _smallk_launch_votecount"
     var placeholder = MutPointer[UInt32, MutAnyOrigin](unsafe_from_address=Int(out_indices))
-    ctx.enqueue_function[smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE, WARPBOUND, PHASE, DEFERRED, SELP, CHAIN]](
+    ctx.enqueue_function[smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE, WARPBOUND, PHASE, DEFERRED, SELP, CHAIN, WB_EVERY]](
         values, out_values, out_indices,
         Int32(length), Int32(k), Int32(select_min), placeholder,
         grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
@@ -1543,7 +1717,7 @@ def _smallk_enqueue[
 
 
 @always_inline
-def _smallk_launch_votecount[CAP: Int, K: Int](
+def _smallk_launch_votecount[CAP: Int, K: Int, WARPBOUND: Bool = False](
     ctx: DeviceContext,
     values: MutPointer[Float32, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
@@ -1557,7 +1731,10 @@ def _smallk_launch_votecount[CAP: Int, K: Int](
     not a price: only the printed counts are the measurement. Under the
     phase-timer build the line `KNN_ADMIT_RATE warp_steps N any_admit M`
     goes to fd 1, one per launch; the gate harness sums the lines of a
-    request. Without that define the counts are gathered and dropped."""
+    request. Without that define the counts are gathered and dropped.
+    WARPBOUND (DEVIATION 2523, `warpbound_count`): the same counter on the
+    WARPBOUND + VOTECOUNT instantiation at C2's cadence, so the line is the
+    admit rate UNDER THE BOUND; the line carries `warpbound 1` then."""
     var counters = ctx.enqueue_create_buffer[DType.uint32](2)
     var host = ctx.enqueue_create_host_buffer[DType.uint32](2)
     ctx.synchronize()
@@ -1565,7 +1742,7 @@ def _smallk_launch_votecount[CAP: Int, K: Int](
     host.unsafe_ptr().unsafe_store(1, UInt32(0))
     ctx.enqueue_copy(dst_buf=counters, src_ptr=host.unsafe_ptr())
     ctx.enqueue_function[smallk_bucket_kernel[
-        CAP, K, True, False, False, False, SMALLK_PHASE_FULL, False, False, SMALLK_CHAIN_VOTECOUNT
+        CAP, K, True, False, False, WARPBOUND, SMALLK_PHASE_FULL, False, False, SMALLK_CHAIN_VOTECOUNT
     ]](
         values, out_values, out_indices,
         Int32(length), Int32(k), Int32(select_min), counters.unsafe_ptr(),
@@ -1576,7 +1753,10 @@ def _smallk_launch_votecount[CAP: Int, K: Int](
     var warp_steps = host.unsafe_ptr().unsafe_load(0)
     var any_admit = host.unsafe_ptr().unsafe_load(1)
     comptime if SMALLK_PHASE_TIMERS:
-        print("KNN_ADMIT_RATE", "warp_steps", warp_steps, "any_admit", any_admit, "rows", rows, "length", length, "k", k)
+        print(
+            "KNN_ADMIT_RATE", "warp_steps", warp_steps, "any_admit", any_admit,
+            "rows", rows, "length", length, "k", k, "warpbound", Int(WARPBOUND),
+        )
     # Both buffers outlive the synchronization above (buffer-freed-at-last-use).
     _ = counters^
     _ = host^
@@ -1606,10 +1786,18 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
     comptime assert not (SMALLK_CAPK_DEFAULT and (SMALLK_HEAD_BOUND_DEFAULT or SMALLK_WARPBOUND_DEFAULT or SMALLK_DEFERRED_DEFAULT)), "the CAP = K default is the uniform arm's scan: no bound, no deferral"
     comptime assert not SMALLK_SELP_DEFAULT or SMALLK_CAPK_DEFAULT, "the branch-free chain default requires the CAP = K default"
     comptime assert not SMALLK_CAPK_DEFAULT or SMALLK_UNIFORM_TRIP_DEFAULT, "the CAP = K default is the uniform scan form"
+    comptime assert not SMALLK_WARPBOUND_GUARD_DEFAULT or (SMALLK_UNIFORM_TRIP_DEFAULT and SMALLK_SHUFFLE), "the warpbound_guard default needs C4 and a fixed-lane-width column (DEVIATION 2523)"
+    comptime assert not (SMALLK_WARPBOUND_GUARD_DEFAULT and (SMALLK_HEAD_BOUND_DEFAULT or SMALLK_WARPBOUND_DEFAULT or SMALLK_DEFERRED_DEFAULT or SMALLK_CAPK_DEFAULT or SMALLK_SELP_DEFAULT)), "the warpbound_guard default excludes every other candidate default"
     # The default path's list depth: CAP = K on the K-specialized buckets
     # once the capk gate flips SMALLK_CAPK_DEFAULT, the bucket capacity
     # otherwise (today). K == 0 (the generic bucket) always keeps CAP.
     comptime DEFAULT_CAP = K if (SMALLK_CAPK_DEFAULT and K > 0) else CAP
+    # The default path's bound and chain form (DEVIATION 2523): C2's bound
+    # with the vote guard once SMALLK_WARPBOUND_GUARD_DEFAULT flips; today
+    # both fold to the shipped values (no bound, the INSERT chain), so the
+    # non-trial instantiation below is the one that shipped.
+    comptime DEFAULT_WARPBOUND = SMALLK_WARPBOUND_DEFAULT or SMALLK_WARPBOUND_GUARD_DEFAULT
+    comptime DEFAULT_CHAIN = SMALLK_CHAIN_VOTEGUARD if SMALLK_WARPBOUND_GUARD_DEFAULT else SMALLK_CHAIN_INSERT
     comptime if SMALLK_SELECT_TRIAL:
         var sabotage = (arm & SMALLK_ARM_SABOTAGE) != 0
         var which = arm & (SMALLK_ARM_SABOTAGE - 1)
@@ -1708,6 +1896,47 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
                 if sabotage:
                     raise Error("small-k selector: the votecount arm carries no sabotage (a counter arm; the gate lists it as timing-only)")
                 _smallk_launch_votecount[CAP, K](ctx, values, out_values, out_indices, rows, length, k, select_min)
+        elif which == SMALLK_ARM_WARPBOUND_GUARD or which == SMALLK_ARM_WARPBOUND_GUARD1:
+            # C2's warp bound inside the vote guard (DEVIATION 2523): the
+            # WARPBOUND + VOTEGUARD instantiation, at C2's cadence
+            # (`warpbound_guard`) or refreshed every batch
+            # (`warpbound_guard1`). Output valid; reach through C2's
+            # bit-63 sabotage in the refresh (see the comment above
+            # `_smallk_warpbound_refresh_due`).
+            comptime if not SMALLK_SHUFFLE:
+                # Both the refresh (shuffles) and the guard (a ballot)
+                # need a convergent warp of fixed width. Refuse rather
+                # than run the uniform arm under this name.
+                raise Error("small-k selector: the warpbound_guard arms need a fixed-lane-width column")
+            else:
+                if which == SMALLK_ARM_WARPBOUND_GUARD1:
+                    if sabotage:
+                        _smallk_enqueue[CAP, K, True, False, True, True, SMALLK_PHASE_FULL, False, False, SMALLK_CHAIN_VOTEGUARD, 1](
+                            ctx, values, out_values, out_indices, rows, length, k, select_min
+                        )
+                    else:
+                        _smallk_enqueue[CAP, K, True, False, False, True, SMALLK_PHASE_FULL, False, False, SMALLK_CHAIN_VOTEGUARD, 1](
+                            ctx, values, out_values, out_indices, rows, length, k, select_min
+                        )
+                else:
+                    if sabotage:
+                        _smallk_enqueue[CAP, K, True, False, True, True, SMALLK_PHASE_FULL, False, False, SMALLK_CHAIN_VOTEGUARD](
+                            ctx, values, out_values, out_indices, rows, length, k, select_min
+                        )
+                    else:
+                        _smallk_enqueue[CAP, K, True, False, False, True, SMALLK_PHASE_FULL, False, False, SMALLK_CHAIN_VOTEGUARD](
+                            ctx, values, out_values, out_indices, rows, length, k, select_min
+                        )
+        elif which == SMALLK_ARM_WARPBOUND_COUNT:
+            # The admission counter under the bound (DEVIATION 2523):
+            # `warpbound_guard` plus `votecount`'s counter, C2's cadence.
+            # Output valid, time not a price, no sabotage.
+            comptime if not SMALLK_SHUFFLE:
+                raise Error("small-k selector: the warpbound_count arm needs a fixed-lane-width column")
+            else:
+                if sabotage:
+                    raise Error("small-k selector: the warpbound_count arm carries no sabotage (a counter arm; the gate lists it as timing-only)")
+                _smallk_launch_votecount[CAP, K, True](ctx, values, out_values, out_indices, rows, length, k, select_min)
         elif which == SMALLK_ARM_SKIPRANK or which == SMALLK_ARM_SKIPSCAN or which == SMALLK_ARM_SCANONLY1 or which == SMALLK_ARM_NOSHIFT:
             # TIMING-ONLY arms (DEVIATION 2516, and `noshift` of DEVIATION
             # 2522): the uniform default's scan form, no bound, and never a
@@ -1744,8 +1973,8 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
                 + " needs a build with -D MOJOLEARN_KNN_SELECT_TRIAL=1"
             )
         _smallk_enqueue[
-            DEFAULT_CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT,
-            SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT, SMALLK_SELP_DEFAULT,
+            DEFAULT_CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False, DEFAULT_WARPBOUND,
+            SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT, SMALLK_SELP_DEFAULT, DEFAULT_CHAIN,
         ](ctx, values, out_values, out_indices, rows, length, k, select_min)
 
 
