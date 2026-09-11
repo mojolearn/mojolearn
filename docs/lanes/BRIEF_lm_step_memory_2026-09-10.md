@@ -574,3 +574,46 @@ is the effective rate of each transfer phase against the H100's PCIe
 The control and target `result.json` (untimed steps) must reproduce run 1's
 step times and sha256 witnesses: the timers are off there, and a change
 in either is a defect in this instrumentation.
+
+## Run 2 results: the target step itemized (H100 sm_90a, main b3d4f3e0, 2026-09-11 03:35Z to 03:40Z, `bench/results/e1g/2026-09-10_233303-nvidia/remote/lm-step-memory`)
+
+Untimed steps reproduce run 1 within pod variance: control 4.82 s (425
+tokens/s), target 38.93 s (52.6 tokens/s). The timed target step was 38.34 s
+with 98.2 percent covered by the phase timers (37.67 s). Sorted:
+
+| phase | ms | bytes | where |
+|---|---:|---:|---|
+| step.py_validate_state | 6,775 | 1.95 GB | Python: copies param/m/v and scans them |
+| step.py_candidate_state | 5,924 | 1.95 GB | Python: validates the returned state |
+| step.py_gradients_dict | 5,501 | 0.65 GB | Python: per-tensor slice copies |
+| step.opt_refuse_download | 3,122 | 2.59 GB | native: param/grad/m/v to host Lists and scans |
+| step.bind_resident_admission | 2,256 | 1.95 GB | native: downloads and compares resident state |
+| step.py_input_unchanged | 1,732 | 1.95 GB | Python: second tobytes and compare |
+| step.py_alloc_outputs | 1,352 | 2.59 GB | Python: NaN-filled output arrays |
+| step.mirror_download_after | 1,312 | 1.95 GB | native |
+| step.mirror_download_before | 1,256 | 1.95 GB | native |
+| step.py_before_bytes | 1,068 | 1.95 GB | Python: tobytes of inputs |
+| step.bind_read_inputs | 1,010 | 1.95 GB | native: host Lists from the buffers |
+| step.bind_publish | 879 | 2.59 GB | native: host to host outputs |
+| step.validate_after / validate_outputs / validate_before / validate_inputs | 776 / 767 / 699 / 584 | | host scans |
+| step.capture_copy | 756 | 1.95 GB | native: .copy() of before state |
+| step.mirror_download_grads | 459 | 0.65 GB | native |
+| step.py_gradients_array | 419 | 0.65 GB | Python |
+| envelope.blocks_backward + blocks_forward | 372 + 127 | | DEVICE (all twelve layers) |
+| step.ce_refuse_download | 264 | 0.41 GB | native: full logits to host |
+| step.validate_grads | 181 | | host scan |
+| head, CE, optimizer, embedding, pack/unpack, upload | under 100 each | | device |
+
+Totals: Python-side host work about 22.8 s (59 percent), native host-side
+copies and scans about 14.3 s (37 percent), device compute about 0.6 s
+(1.6 percent). Every large item is a whole-state copy or scan of the same
+1.95 GB (param, m, v) or 0.65 GB (grad) done again by a different layer:
+the Python layer validates the state it received, the binding reads it
+into Lists and validates it again, the trainer downloads its mirror and
+validates it, the optimizer refusal downloads it once more, and after the
+update the mirror comes down, is validated, published, wrapped, validated
+and sliced. None of it is arithmetic. The device-owned step API the
+handoff's step 1 calls for (state validated once at admission and at
+export, no per-step whole-state round trips) is where the step goes from
+38 s to about 1 s at this shape; the memory candidates in this brief
+(2.4 GiB, 1.3 GiB, 1.1 GiB) come after that.
