@@ -1,0 +1,123 @@
+3033 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a45c0000000, nodemask=2)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+baseline=stash_tiled candidate=stash_tiled_fgrid_r64 rounds=7 warmups=2
+PATH baseline arm=stash_tiled zdot_rows=- fwd_rows=- preflush=False reach_bit=sabotage
+PATH candidate arm=stash_tiled_fgrid_r64 zdot_rows=- fwd_rows=64 preflush=False reach_bit=sabotage_new
+--- kind file:operands-enwik8
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST file:operands-enwik8 stash_tiled ctx 5f01fc3a9bcec9c9 amax d89905a2e4307303 denom 195b4567d81c06fc zdot 8300ce7d2f4755d5 dq e0625e227bed3164 dk 27853f72872d8fc9 dv 95007640dca74d09
+DIGEST file:operands-enwik8 stash_tiled_fgrid_r64 ctx 5f01fc3a9bcec9c9 amax d89905a2e4307303 denom 195b4567d81c06fc zdot 8300ce7d2f4755d5 dq e0625e227bed3164 dk 27853f72872d8fc9 dv 95007640dca74d09
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_vs_stash_tiled zdot MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_vs_stash_tiled dq MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_vs_stash_tiled dk MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_vs_stash_tiled dv MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled ctx MOVED 803095 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled zdot MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled dq MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled dk MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled dv MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_restored_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_restored_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_restored_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_restored_vs_stash_tiled zdot MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_restored_vs_stash_tiled dq MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_restored_vs_stash_tiled dk MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r64_restored_vs_stash_tiled dv MATCH 0 of 1572864
+REACH file:operands-enwik8 stash_tiled_fgrid_r64 sabotage_flipped_cells=803095 clean_restored=True reach_bit=stash_tiled_fgrid_r64+sabotage_new forward_moved=803095 backward_moved=0 amax_denom_moved=0 ctx_moved_columns_16_up=603972 zdot_moved=0 dv_moved=0
+PRICE attention stash_tiled fwd file:operands-enwik8 3.164519 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 13.625016 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-enwik8 3.168371 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-enwik8 13.54594 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-enwik8 3.162474 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-enwik8 13.582274 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 3.170932 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 13.615974 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 3.171133 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 13.547142 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-enwik8 3.14896 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-enwik8 13.645175 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-enwik8 3.173692 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-enwik8 13.710924 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 3.178525 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 13.563437 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 3.157141 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 13.636868 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-enwik8 3.173663 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-enwik8 13.697649 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-enwik8 3.164086 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-enwik8 13.671175 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 3.15735 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 13.65563 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 3.152509 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 13.639498 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-enwik8 3.159187 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-enwik8 13.577848 ms
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE stash_tiled | 3.164519 | 2.0368329822004543 | 13.625016 | 10.460497 | 1.5404613834313992 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r64 | 3.164086 | 2.037111719466538 | 13.645175 | 10.481089 | 1.5374348676936147 | 1.000136848366321 | 0.9985226279618986
+--- kind file:operands-pilegithub
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST file:operands-pilegithub stash_tiled ctx 2a3a48d476868ddf amax c87795424c4ce74a denom 3b946f3ab306552a zdot 18417cee822a4690 dq dce688e9f43ba511 dk b7bdacf0394a4c64 dv 36950bfa379abbf6
+DIGEST file:operands-pilegithub stash_tiled_fgrid_r64 ctx 2a3a48d476868ddf amax c87795424c4ce74a denom 3b946f3ab306552a zdot 18417cee822a4690 dq dce688e9f43ba511 dk b7bdacf0394a4c64 dv 36950bfa379abbf6
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_vs_stash_tiled zdot MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_vs_stash_tiled dq MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_vs_stash_tiled dk MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_vs_stash_tiled dv MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled ctx MOVED 806955 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled zdot MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled dq MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled dk MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64+sabotage_new_vs_stash_tiled dv MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_restored_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_restored_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_restored_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_restored_vs_stash_tiled zdot MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_restored_vs_stash_tiled dq MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_restored_vs_stash_tiled dk MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r64_restored_vs_stash_tiled dv MATCH 0 of 1572864
+REACH file:operands-pilegithub stash_tiled_fgrid_r64 sabotage_flipped_cells=806955 clean_restored=True reach_bit=stash_tiled_fgrid_r64+sabotage_new forward_moved=806955 backward_moved=0 amax_denom_moved=0 ctx_moved_columns_16_up=604988 zdot_moved=0 dv_moved=0
+PRICE attention stash_tiled fwd file:operands-pilegithub 3.157903 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 13.580133 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-pilegithub 3.162174 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-pilegithub 13.57675 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-pilegithub 3.180925 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-pilegithub 13.601922 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 3.143044 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 13.560613 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 3.142762 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 13.557846 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-pilegithub 3.172137 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-pilegithub 13.523757 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-pilegithub 3.166983 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-pilegithub 13.541666 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 3.14675 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 13.656953 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 3.161961 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 13.620177 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-pilegithub 3.14184 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-pilegithub 13.534859 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-pilegithub 3.163547 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-pilegithub 13.602938 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 3.147812 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 13.646119 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 3.149089 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 13.654575 ms
+PRICE attention stash_tiled_fgrid_r64 fwd file:operands-pilegithub 3.155398 ms
+PRICE attention stash_tiled_fgrid_r64 fwdbwd file:operands-pilegithub 13.624349 ms
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE stash_tiled | 3.147812 | 2.0476434653657845 | 13.620177 | 10.472365 | 1.5387156272723497 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r64 | 3.163547 | 2.037458799252864 | 13.57675 | 10.413203000000001 | 1.5474577495512185 | 0.9950261526065521 | 1.0031986300108642
+attention_step_price: PASS (stash_tiled_fgrid_r64 vs stash_tiled)

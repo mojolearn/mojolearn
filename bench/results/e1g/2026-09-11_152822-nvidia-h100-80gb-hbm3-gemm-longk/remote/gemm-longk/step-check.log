@@ -1,0 +1,71 @@
+1353 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x734180000000, nodemask=1)
+== gemm/checks/gemm_step_arms_check.mojo [IDENTICAL] trial=True sabotage: none ==
+   DEVIATIONS 2540 to 2543; docs/lanes/BRIEF_gemm_step_2026-09-11.md sections 6 and 10
+   DEVIATIONS 2590 to 2592; docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 4, 5 and 9
+check_group_fold_is_the_contract_tree: 98024 folds (2 kinds, P 1..1100, every power-of-two group up to 2P, 4 cells), 0 disagree
+RULE proj_fwd NT 2048x768x768 ksplit(S=132)=1 ksplit_leaf=1
+RULE proj_dA NN 2048x768x768 ksplit(S=132)=1 ksplit_leaf=1
+RULE proj_dB TN 768x768x2048 ksplit(S=132)=1 ksplit_leaf=1
+RULE gateup_fwd NT 2048x2048x768 ksplit(S=132)=0 ksplit_leaf=1
+RULE gateup_dA NN 2048x768x2048 ksplit(S=132)=2 ksplit_leaf=1
+RULE gateup_dB TN 2048x768x2048 ksplit(S=132)=2 ksplit_leaf=1
+RULE down_fwd NT 2048x768x2048 ksplit(S=132)=2 ksplit_leaf=1
+RULE down_dA NN 2048x2048x768 ksplit(S=132)=0 ksplit_leaf=1
+RULE down_dB TN 768x2048x2048 ksplit(S=132)=2 ksplit_leaf=1
+RULE head_fwd NT 2048x50257x768 ksplit(S=132)=0 ksplit_leaf=0
+RULE head_dA NN 2048x768x50257 ksplit(S=132)=64 ksplit_leaf=16
+RULE head_dB TN 50257x768x2048 ksplit(S=132)=0 ksplit_leaf=0
+check_group_rule_hand_counts: 0 failures
+selector: 9 names round-trip, unknown raises from the parser=True and from identical_gemm_into=True
+1353 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a6f00000000, nodemask=2)
+REACH ragged [lfold 128x128 reg8x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True] 117/117 launches moved exactly the geometry's reach
+REACH ragged [half 64x128 reg4x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True] 117/117 launches moved exactly the geometry's reach
+REACH ragged [half_ks16 64x128 reg4x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True] 117/117 launches moved exactly the geometry's reach
+REACH ragged [quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True] 117/117 launches moved exactly the geometry's reach
+REACH ragged [head_n 32x256 reg4x8 TC=32 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True] 117/117 launches moved exactly the geometry's reach
+REACH ragged [head_m 256x32 reg8x4 TC=8 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True] 117/117 launches moved exactly the geometry's reach
+REACH ragged [ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=132 slack=4] 117/117 launches moved exactly the geometry's reach
+REACH ragged [ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] 117/117 launches moved exactly the geometry's reach
+REACH ragged [ksplit group=1] 117/117 launches moved exactly the group launch's reach
+REACH ragged [ksplit group=2] 117/117 launches moved exactly the group launch's reach
+REACH ragged [ksplit group=4] 117/117 launches moved exactly the group launch's reach
+REACH ragged [ksplit group=16] 117/117 launches moved exactly the group launch's reach
+REACH ragged [ksplit group=64] 117/117 launches moved exactly the group launch's reach
+ragged controls: 117 cases x 8 geometries and 5 explicit group sizes, 3 (m n k) over the 400000000 budget skipped, 0 failures
+LM proj_fwd NT 2048x768x768 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=96 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM proj_fwd NT 2048x768x768 arm=ksplit geometry=[ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=132 slack=4] group_leaves=1 launched_blocks=576 reach=576 clean_moved=0 sabotage_moved=576 OK
+LM proj_fwd NT 2048x768x768 arm=ksplit_leaf geometry=[ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] group_leaves=1 launched_blocks=576 reach=576 clean_moved=0 sabotage_moved=576 OK
+LM proj_dA NN 2048x768x768 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=96 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM proj_dA NN 2048x768x768 arm=ksplit geometry=[ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=132 slack=4] group_leaves=1 launched_blocks=576 reach=576 clean_moved=0 sabotage_moved=576 OK
+LM proj_dA NN 2048x768x768 arm=ksplit_leaf geometry=[ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] group_leaves=1 launched_blocks=576 reach=576 clean_moved=0 sabotage_moved=576 OK
+LM proj_dB TN 768x768x2048 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=36 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM proj_dB TN 768x768x2048 arm=ksplit geometry=[ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=132 slack=4] group_leaves=1 launched_blocks=576 reach=576 clean_moved=0 sabotage_moved=576 OK
+LM proj_dB TN 768x768x2048 arm=ksplit_leaf geometry=[ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] group_leaves=1 launched_blocks=576 reach=576 clean_moved=0 sabotage_moved=576 OK
+LM gateup_fwd NT 2048x2048x768 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=256 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM gateup_fwd NT 2048x2048x768 arm=ksplit geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=256 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM gateup_fwd NT 2048x2048x768 arm=ksplit_leaf geometry=[ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] group_leaves=1 launched_blocks=1536 reach=1536 clean_moved=0 sabotage_moved=1536 OK
+LM gateup_dA NN 2048x768x2048 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=96 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM gateup_dA NN 2048x768x2048 arm=ksplit geometry=[ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=132 slack=4] group_leaves=2 launched_blocks=768 reach=768 clean_moved=0 sabotage_moved=768 OK
+LM gateup_dA NN 2048x768x2048 arm=ksplit_leaf geometry=[ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] group_leaves=1 launched_blocks=1536 reach=1536 clean_moved=0 sabotage_moved=1536 OK
+LM gateup_dB TN 2048x768x2048 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=96 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM gateup_dB TN 2048x768x2048 arm=ksplit geometry=[ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=132 slack=4] group_leaves=2 launched_blocks=768 reach=768 clean_moved=0 sabotage_moved=768 OK
+LM gateup_dB TN 2048x768x2048 arm=ksplit_leaf geometry=[ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] group_leaves=1 launched_blocks=1536 reach=1536 clean_moved=0 sabotage_moved=1536 OK
+LM down_fwd NT 2048x768x2048 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=96 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM down_fwd NT 2048x768x2048 arm=ksplit geometry=[ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=132 slack=4] group_leaves=2 launched_blocks=768 reach=768 clean_moved=0 sabotage_moved=768 OK
+LM down_fwd NT 2048x768x2048 arm=ksplit_leaf geometry=[ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] group_leaves=1 launched_blocks=1536 reach=1536 clean_moved=0 sabotage_moved=1536 OK
+LM down_dA NN 2048x2048x768 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=256 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM down_dA NN 2048x2048x768 arm=ksplit geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=256 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM down_dA NN 2048x2048x768 arm=ksplit_leaf geometry=[ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] group_leaves=1 launched_blocks=1536 reach=1536 clean_moved=0 sabotage_moved=1536 OK
+LM down_dB TN 768x2048x2048 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=96 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM down_dB TN 768x2048x2048 arm=ksplit geometry=[ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=132 slack=4] group_leaves=2 launched_blocks=768 reach=768 clean_moved=0 sabotage_moved=768 OK
+LM down_dB TN 768x2048x2048 arm=ksplit_leaf geometry=[ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] group_leaves=1 launched_blocks=1536 reach=1536 clean_moved=0 sabotage_moved=1536 OK
+LM head_fwd NT 2048x50257x768 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=6288 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM head_fwd NT 2048x50257x768 arm=ksplit geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=6288 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM head_fwd NT 2048x50257x768 arm=ksplit_leaf geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=6288 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM head_dA NN 2048x768x50257 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=96 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM head_dA NN 2048x768x50257 arm=ksplit geometry=[ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=132 slack=4] group_leaves=64 launched_blocks=672 reach=672 clean_moved=0 sabotage_moved=672 OK
+LM head_dA NN 2048x768x50257 arm=ksplit_leaf geometry=[ksplit_leaf 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule finest under the cap] group_leaves=16 launched_blocks=2400 reach=2400 clean_moved=0 sabotage_moved=2400 OK
+LM head_dB TN 50257x768x2048 arm=shipped geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=2358 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM head_dB TN 50257x768x2048 arm=ksplit geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=2358 reach=0 clean_moved=0 sabotage_moved=0 OK
+LM head_dB TN 50257x768x2048 arm=ksplit_leaf geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] group_leaves=0 launched_blocks=2358 reach=0 clean_moved=0 sabotage_moved=0 OK
+PASS gemm step arms: the group fold is the contract tree on the host, the group rule matches the hand counts, every geometry and every explicit group size bit-equal to the shipped 128x128 plan and to FLAT, reach proven per geometry, and per LM call through identical_gemm_into

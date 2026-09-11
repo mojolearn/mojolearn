@@ -202,7 +202,38 @@ No AMD timing of this step exists at the target shape.
      fails naming the define, gemm_device_check green, price and resources
      compile). Its H100 leg (`tools/gemm_longk_leg.sh`) launched from a
      detached worktree at 3612e17d.
-   - Attention round 3 (2533, 2531, 2530) is building in a worktree lane.
+   - Attention round 3 (2533, 2531, 2530) MERGED 5bcfa71d, trial only, after
+     M4 gates; its H100 leg (`tools/attention_round3_leg.sh`) is running.
+   - **FIRST NEW SPEED WIN: GEMM `ksplit` FLIP on the H100**
+     (bench/results/e1g/2026-09-11_152822-nvidia-h100-80gb-hbm3-gemm-longk,
+     1980 MHz pod, commit 3612e17d, pod terminated and verified). Lean LM step
+     shipped 0.3833 / 0.3836 s against ksplit 0.3423 / 0.3450 s on enwik8 /
+     Pile GitHub (0.892 / 0.899, geomean 0.895; `ksplit_leaf` 0.906), every
+     step witness equal. GEMM sum per step 183.6 -> 142.6 ms (0.777); proj_dB
+     0.746 -> 0.265 ms; every PHASEBITS and BITS line EQUAL; the step arms
+     check passed on the H100 including all 24 ksplit LM call lines. CONTROL
+     pairs: 768x768 outputs at 0.35 to 0.42 of shipped, 1536x1408 and
+     1664x1408 at 1.00, 1024x1024x2048 at 0.56. A flip lane (DEVIATION 2595)
+     is making ksplit the shipped plan where `lib_gemm_block_parallelism_for`
+     is above 0 (NVIDIA 132; AMD 0 until the MI300X leg on Hot Aisle, which
+     takes the next free slot).
+   - **SECOND NEW WIN: attention round 3 FLIP on the H100**
+     (bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3,
+     1980 MHz pod, commit 5bcfa71d, pod terminated and verified; operand dumps
+     outside the repo). Lean step against the shipped `stash_tiled`
+     (0.3845 / 0.3819 s), every step witness equal:
+     `stash_tiled_fgrid_r32` 0.3718 / 0.3716 s (geomean 0.970),
+     `stash_tiled_pf` 0.3488 / 0.3473 s (0.908),
+     `stash_tiled_fgrid_r32_qres_pf` 0.3346 / 0.3340 s (0.872, the winner).
+     Price fwd+bwd on real activations: fgrid_r32 1.07x, fgrid_r32_qres 1.08x,
+     pf 1.27x, fgrid_r32_qres_pf 1.41x, fgrid_r64 1.00x. Winner's timers: bwd
+     zdot stash 89.9 -> 66.2 ms, forward kernel 37.0 -> 20.9 ms, dq 15.5 ->
+     12.5 ms, dk/dv 18.5 -> 12.4 ms. On NVIDIA the 32-row forward grid pays,
+     unlike 2528's 32-row backward. A flip lane (DEVIATION 2534, branch
+     lane/attention-flip-r3) makes it the shipped default where a kernel
+     matrix row enables it (NVIDIA; AMD stays on stash_tiled until the MI300X
+     leg). The GEMM and attention wins touch different kernels; their
+     combined step is owed as one confirmation leg after both flips.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows

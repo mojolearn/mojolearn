@@ -520,11 +520,15 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
     #     if (unalignedTail) { if (blockId == 0) { ...tail... } }
     #     partSize -= unalignedTail;
     #
-    # Their head and tail loops run to a FIXED `alignSize` bound, so every
-    # thread of block 0 makes the same number of trips and the threadgroup
-    # barriers inside `AddPoint` stay uniform. Blocks other than 0 must still
-    # make those trips, because the barriers are threadgroup-wide and Mojo
-    # has no warp-local form; they contribute zeros.
+    # Their head and tail loops run from `tid` to a FIXED `alignSize` bound,
+    # so a thread at or past `alignSize` makes no trip: uniform across the
+    # block only when the block does not exceed `alignSize` (the IDENTICAL
+    # shared-Int32 block, 512, equals it; a 384- or 256-thread float block
+    # does not). DEVIATION 2600 runs the loop to `PEEL_END`, the bound
+    # rounded up to the block, so every thread makes the same trips through
+    # the threadgroup barriers inside `AddPoint` (argument in
+    # `lane_sync.mojo`). Blocks other than 0 make the trips too and
+    # contribute zeros.
     comptime ALIGN_SIZE = LOAD_SIZE * LANE_WIDTH * UNROLL
 
     var head_len = p_size
@@ -540,8 +544,12 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
     var tail_len = body_size % ALIGN_SIZE
     var tail_start = p_offset + head_len + (body_size - tail_len)
 
+    # DEVIATION 2600: every thread (tid < BLOCK) makes the same trips; a
+    # trip at or past ALIGN_SIZE fails both load guards and adds a zero
+    # point.
+    comptime PEEL_END = ((ALIGN_SIZE + BLOCK - 1) // BLOCK) * BLOCK
     var pe = tid
-    while pe < ALIGN_SIZE:
+    while pe < PEEL_END:
         var hb = UInt32(0)
         var hs = Float32(0.0)
         var hq = Int32(0)
@@ -994,8 +1002,10 @@ def one_byte_hist_gather_kernel[
     var tail_len = body_size % ALIGN_SIZE
     var tail_start = p_offset + head_len + (body_size - tail_len)
 
+    # DEVIATION 2600: the block-rounded bound, as in the direct kernel.
+    comptime PEEL_END = ((ALIGN_SIZE + BLOCK - 1) // BLOCK) * BLOCK
     var pe = tid
-    while pe < ALIGN_SIZE:
+    while pe < PEEL_END:
         var hb = UInt32(0)
         var hs = Float32(0.0)
         var hq = Int32(0)

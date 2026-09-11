@@ -324,7 +324,13 @@ OUR IDENTICAL arm on the SAME pod: the shipped `stash_tiled` lean step from
 | ours IDENTICAL (`stash_tiled`, bits equal on every vendor) | 0.3835 | 0.3833 | 1 |
 
 Not measured, so their true fast column may be faster still: compile with
-TF32, and mixed precision (bf16 autocast). Our number is the step time for
+TF32, and mixed precision (bf16 autocast). The harness now has those columns
+(`compile_tf32`; `eager_bf16` and `compile_bf16`, which wrap forward and loss
+in `torch.autocast` bfloat16 with float32 parameters and AdamW state, leave
+the SDPA pick to torch under `auto`, and record the SDPA kernel that ran). They
+are owed on this H100 and on the AMD MI300X (Hot Aisle, ROCm torch). The
+MI300X rows are a new tuple and are never mixed with the H100 rows above.
+Our number is the step time for
 bitwise identical results across Apple, NVIDIA and AMD; theirs carries no
 such property (`nondeterministic_label` true on every column).
 
@@ -538,8 +544,10 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
    below 1M).
 5. (closed 2026-09-11 on the H100: the "torch byte-LM training step" table
    in the H100 section, eager fp32, eager TF32 and compile fp32 on enwik8 and
-   Pile GitHub. Still owed: the same row on the AMD MI325X with ROCm torch,
-   and compile TF32 and bf16 autocast columns on the H100.)
+   Pile GitHub. Still owed: the same row on AMD with ROCm torch (the leg now
+   targets the Hot Aisle MI300X, a new tuple), and the harness's
+   `compile_tf32`, `eager_bf16` and `compile_bf16` columns on the H100 and on
+   the MI300X.)
 6. cuML brute-force kNN on the taxi and Istella-S prefixes (DEVIATION 2524
    moved the kNN tooling off HIGGS, which is retired; the "kNN second kind
    (HIGGS rows)" table above is history), H100, k 10 and 15, measured once
@@ -996,6 +1004,26 @@ against 0.122045 (lossguide) at the same config. The symmetric
 arm's 0.138653 / 0.966990 exactly (still two hashes across five rounds), which
 points at the greedy searcher path on AMD. RF and ET hashes equal the H100
 hashes at 1M and 2M (574b24d0d7af51d0, cc25cb08f8b5a813, 40b1c5b03ba40420).
+
+Cause found and fixed 2026-09-11 (DEVIATION 2600, lane/amd-gbdt-identity-fix).
+The greedy searcher's binary, half-byte and hist_2 5-/6-bit histogram kernels
+peeled a partition's head and tail with a loop that gave threads at or past
+128 or 256 of a 512-thread block no trip, so part of the block skipped a
+threadgroup barrier that only the 64-lane AMD column issues
+(`gbdt/methods/greedy_subsets_searcher/kernel/lane_sync.mojo`). Taxi and
+Istella-S have low-cardinality columns that land in those kernels; the
+128-border float fixtures do not. Verified on a Hot Aisle MI300X (VF, gfx942,
+8 cores, ROCm 6.4.1 userland on a 7.2.4 host) with the same source built with
+and without the fix: identity_break 36/36 gbdt cells equal to the H100 with it
+(32/36, `ties` MOVED, without); `checks/gbdt_sub_byte_identity_check.py` 16/16
+with it (0/16 without, and restoring one kernel file at a time failed exactly
+that file's fixtures); taxi 1M symmetric hash 90c3558501933f47 in 10 of 10
+rounds with logloss 0.525735 / AUC 0.619460, equal to the H100 cell of the same
+source (without it five hashes in five rounds, twice). On the H100 both builds
+gave the same bits. The GBDT rows and accuracy above were measured BEFORE the
+fix and are not re-run; they are not IDENTICAL results. The shipped 0.8.1 wheel
+moves on `ties` on the MI300X (it carries the defect). The pointwise arm's
+second hash is not explained by this fix and was not re-measured.
 
 Taxi, 1,000,000 training rows (2,000,000 for RF 2M), leg 1 (droplet
 599636038):
