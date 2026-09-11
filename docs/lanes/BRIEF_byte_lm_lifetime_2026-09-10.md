@@ -852,3 +852,38 @@ summary rows), `tools/byte_lm_lifetime_diag.sh` (library build,
 -Wextra` (into the scratchpad, Linux-only parts guarded), the harness with
 `py_compile` and a stdlib-only smoke of its helpers, the wrapper with
 `sh -n` and `dash -n`. The Mojo edit is unbuilt; the RUN OWED builds it.
+
+## Run 6: the native stack, and the cause (RTX 4090, 2026-09-11 05:14Z to 05:22Z, `bench/results/e1g/2026-09-11_010801-nvidia/remote/byte-lm-lifetime`)
+
+The preloaded handler produced four samples of the hung main thread of
+`stateless_x2`, all identical:
+
+```
+pthread_mutex_lock
+libKGENCompilerRTShared.so (+0x8a1cc, +0x8a0ad, +0x75fc8, +0x5d7f3, +0x73ebc, +0x8a4a6, +0x94650)
+M::Driver::DeviceContext::enqueueCreateBuffer
+AsyncRT_DeviceContext_createBuffer_async
+_mojolearn_byte_lm.so (the trainer's first buffer on the new context)
+```
+
+The second trainer's FIRST buffer creation waits on a mutex inside the MAX
+runtime's driver layer that is never released. `/proc` says the thread is in
+a futex wait with no wchan, GPU idle. The variants: `stateless_x2_sync_teardown`
+PASSED (release the trainer, then synchronize, then release the context);
+`stateless_x2_teardown_with_gil` HUNG (same two releases with the GIL held).
+So: releasing the trainer enqueues about 250 stream-ordered buffer frees on
+the context; destroying the context with those frees still in flight leaves
+the runtime allocator's lock held on this box; the next context's first
+allocation blocks on it forever. The GIL is irrelevant. The base and trees
+bindings pass because their teardown has few buffers and synchronizes at
+every operation. The L40S never showed it because its driver or kernel
+drains faster than the release, which is a race, not a fix.
+
+Fix (DEVIATION 2520, on main): both byte LM teardown paths, the stateless
+release and the resident close(), now synchronize AFTER the trainer is
+released and BEFORE the context is destroyed; the struct's deinit does the
+same. The switch-guarded variants stay for the harness. This is a MAX
+runtime defect (a context destroyed with pending stream-ordered frees
+should not leave a global lock held); the drain is our contract until it is
+fixed upstream. Confirmation run: the full 17-case set on the 4090 with the
+switches off.

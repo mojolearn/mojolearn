@@ -1,0 +1,36 @@
+05:10:53 byte-lm-lifetime: start, root=/root/mojolearn out=/root/gemm_leg_out/byte-lm-lifetime deadline=120s
+05:10:54 byte-lm-lifetime: GPU arch sm_89
+05:13:53 byte-lm-lifetime: build exit 0 after 179s
+numeric_mode 1
+vendor cuda
+profile mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1
+file /root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so
+keeper_readback True
+keeper_active_at_import False
+05:14:41 byte-lm-lifetime: native stack preload built with /usr/bin/cc
+05:19:01 byte-lm-lifetime: harness exit 1 after 260s
+== stateless_x1 (deadline 120s)
+   passed exit=0 wall=3.5s
+== stateless_x2 (deadline 120s)
+   timeout exit=-9 wall=127.0s
+== stateless_x2_sync_teardown (deadline 120s)
+   passed exit=0 wall=2.5s
+== stateless_x2_teardown_with_gil (deadline 120s)
+   timeout exit=-9 wall=127.0s
+{"failed": [], "hung": ["stateless_x2", "stateless_x2_teardown_with_gil"], "passed": ["stateless_x1", "stateless_x2_sync_teardown"]}
+stateless_x1                     passed   exit=0 wall=3.5s
+stateless_x2                     timeout  exit=-9 wall=127.0s
+stateless_x2_sync_teardown       passed   exit=0 wall=2.5s
+stateless_x2_teardown_with_gil   timeout  exit=-9 wall=127.0s
+first_step_equality cases: ['stateless_x1', 'stateless_x2', 'stateless_x2_sync_teardown', 'stateless_x2_teardown_with_gil'] NOT bit-equal fields: none
+second_step_equality cases: ['stateless_x2_sync_teardown'] NOT bit-equal fields: none
+control_extratrees_x2 fit1 == fit2: not compared
+control_kmeans_x2 fit1 == fit2: not compared
+resident_close_reopen_keep_context keeper_active: None env: None
+stateless_x2_keep_context keeper_active: None env: None
+stateless_x2_sync_teardown variant reached: True env: 1
+stateless_x2_teardown_with_gil variant reached: True env: 1
+stateless_x2 native stack: handler True watchdog True signals 3 samples 4
+stateless_x2_teardown_with_gil native stack: handler True watchdog True signals 3 samples 4
+hung: ['stateless_x2', 'stateless_x2_teardown_with_gil'] failed: []
+05:19:01 byte-lm-lifetime: done, total 488s

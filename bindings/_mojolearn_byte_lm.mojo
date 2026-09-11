@@ -70,8 +70,14 @@ struct ByteLMSession(Movable, Writable):
         writer.write("ByteLMSession")
 
     def __deinit__(deinit self):
-        # Every operation synchronizes. Buffers must die before their context.
+        # Buffers must die before their context, and the frees they enqueue
+        # must drain before the context goes (DEVIATION 2520, below).
         _ = self.trainer^
+        if self.ctx:
+            try:
+                self.ctx.value().synchronize()
+            except:
+                pass
         _ = self.ctx^
 
     def close(mut self) raises:
@@ -81,6 +87,14 @@ struct ByteLMSession(Movable, Writable):
         if self.ctx:
             self.ctx.value().synchronize()
         self.trainer = None
+        # DEVIATION 2520: releasing the trainer enqueues its buffer frees on
+        # the context's stream; destroying the context with those frees in
+        # flight left the MAX runtime's allocator lock held on an RTX 4090
+        # pod, and the next context's first enqueueCreateBuffer blocked in
+        # pthread_mutex_lock forever (native backtrace, run 6, 2026-09-11).
+        # Draining here is what the passing variant did.
+        if self.ctx:
+            self.ctx.value().synchronize()
         self.ctx = None
 
 
@@ -404,20 +418,18 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
             ctx.synchronize()
             _btick(ton, tk, "step.bind_final_sync")
             if not retain and not teardown_with_gil:
-                # Already synchronized: preserve the stateless teardown without
-                # adding close()'s second drain to the comparison baseline.
+                # DEVIATION 2520 (was 2518 variant (a), measured on the RTX
+                # 4090 run 6: this order PASSES where the bare release hung):
+                # release the trainer, then DRAIN the frees it enqueued before
+                # the context is destroyed. The native backtrace of the hang
+                # was the next context's first enqueueCreateBuffer blocked in
+                # pthread_mutex_lock inside libKGENCompilerRTShared, the
+                # runtime allocator's lock the dying context never returned.
                 if sync_before_teardown:
-                    # DEVIATION 2518 variant (a): drain before the trainer's
-                    # buffers are released, and drain the frees they enqueue
-                    # before the context goes.
                     print("byte LM teardown variant: sync_before_teardown")
-                    session.ctx.value().synchronize()
-                    session.trainer = None
-                    session.ctx.value().synchronize()
-                    session.ctx = None
-                else:
-                    session.trainer = None
-                    session.ctx = None
+                session.trainer = None
+                session.ctx.value().synchronize()
+                session.ctx = None
     except error:
         session.busy = False
         raise error
@@ -430,6 +442,9 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
         # teardown above ran and both Optionals are already empty.
         print("byte LM teardown variant: teardown_with_gil")
         session.trainer = None
+        # DEVIATION 2520: drain the enqueued frees before the context goes.
+        if session.ctx:
+            session.ctx.value().synchronize()
         session.ctx = None
     # Publication starts after the synchronized GPU scope succeeds. The
     # Python wrapper commits these fresh arrays atomically to its state object.

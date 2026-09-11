@@ -1,0 +1,9 @@
+== stateless_x1 (deadline 120s)
+   passed exit=0 wall=3.5s
+== stateless_x2 (deadline 120s)
+   timeout exit=-9 wall=127.0s
+== stateless_x2_sync_teardown (deadline 120s)
+   passed exit=0 wall=2.5s
+== stateless_x2_teardown_with_gil (deadline 120s)
+   timeout exit=-9 wall=127.0s
+{"failed": [], "hung": ["stateless_x2", "stateless_x2_teardown_with_gil"], "passed": ["stateless_x1", "stateless_x2_sync_teardown"]}

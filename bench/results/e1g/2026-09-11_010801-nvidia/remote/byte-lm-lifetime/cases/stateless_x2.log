@@ -1,0 +1,9 @@
+[stateless_x2]   0.100s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[stateless_x2]   0.318s binding {"sha256": "6f56c4c70709", "vendor": "cuda"}
+[stateless_x2]   0.325s native_call_begin {"completed_steps": 0, "label": "step1", "resident": false}
+[stateless_x2]   1.682s native_call_end {"keep_context_env": null, "keeper_active": false, "label": "step1"}
+[stateless_x2]   1.692s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}
+[stateless_x2]   1.698s native_call_begin {"completed_steps": 1, "label": "step2", "resident": false}
+[stateless_x2] 110.000s native_stack_signal {"sample": 1, "sender": "child_watchdog", "target": "main_thread", "unix_time": 1789103794.945151}
+[stateless_x2] 112.018s native_stack_signal {"sample": 2, "sender": "child_watchdog", "target": "main_thread", "unix_time": 1789103796.963721}
+[stateless_x2] 114.027s native_stack_signal {"sample": 3, "sender": "child_watchdog", "target": "main_thread", "unix_time": 1789103798.972448}
