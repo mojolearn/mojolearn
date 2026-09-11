@@ -53,6 +53,7 @@ from decomposition.checks.jacobi_eigh import jacobi_eigh
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_TPB,
     jacobi_eigh_kernel,
+    jacobi_eigh_kernel_four_phase,
 )
 from checks.kernel_matrix import (
     COLUMN_AMD,
@@ -1824,8 +1825,135 @@ def _spread_fixture(n: Int, seed: Int) -> List[Float32]:
     return a^
 
 
+def _run_device_f32_four_phase(
+    ctx: DeviceContext,
+    a: List[Float32],
+    n: Int,
+    max_sweeps: Int,
+    tol: Float32,
+    mut a_out: List[Float32],
+    mut v_out: List[Float32],
+) raises -> List[Float32]:
+    """`_run_device_f32` for `jacobi_eigh_kernel_four_phase`, the kernel DEVIATION 2671 replaced."""
+    var a_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var v_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var i_buf = ctx.enqueue_create_buffer[DType.float32](3)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+    ctx.synchronize()
+    for i in range(n * n):
+        h.unsafe_ptr().unsafe_store(i, a[i])
+    ctx.enqueue_copy(dst_buf=a_buf, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[jacobi_eigh_kernel_four_phase](
+        a_buf.unsafe_ptr(),
+        v_buf.unsafe_ptr(),
+        i_buf.unsafe_ptr(),
+        Int32(n),
+        Int32(max_sweeps),
+        tol,
+        grid_dim=(1, 1, 1),
+        block_dim=(JACOBI_TPB, 1, 1),
+    )
+    ctx.synchronize()
+
+    var ha = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+    var hv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+    var hi = ctx.enqueue_create_host_buffer[DType.float32](3)
+    ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=a_buf)
+    ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=v_buf)
+    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=i_buf)
+    ctx.synchronize()
+
+    a_out.clear()
+    v_out.clear()
+    for i in range(n * n):
+        a_out.append(ha.unsafe_ptr().unsafe_load(i))
+        v_out.append(hv.unsafe_ptr().unsafe_load(i))
+    var info = List[Float32]()
+    for i in range(3):
+        info.append(hi.unsafe_ptr().unsafe_load(i))
+    _ = h^
+    return info^
+
+
+def check_jacobi_merged_phases_equal_four_phase() raises:
+    """DEVIATION 2671. The two-barrier kernel equals the four-barrier kernel it replaced, BIT FOR BIT, at every output cell.
+
+    The merge claims only a change of phase boundaries: every store reads
+    the same inputs through the same pinned spelling. So under IDENTICAL the
+    two kernels must agree on the matrix, the eigenvectors and all three
+    info slots (sweep count included) at every size, including n = 2 and
+    n = 3 (where the 2 x 2 block is most of the matrix), n = 33 (unequal
+    strides over 32 lanes), n = 129 (past the GEMM v1 cut) and n = 220
+    (Istella-S). Under FAST both kernels' naive chains may contract
+    differently per loop, so FAST only reports.
+    """
+    var ctx = DeviceContext()
+    var sizes: List[Int] = [2, 3, 11, 33, 64, 129, 220]
+    var differ_total = 0
+    for si in range(len(sizes)):
+        var n = sizes[si]
+        var a64 = _make_symmetric(n, 23 + n, n // 2, 1.0e3)
+        var a = List[Float32]()
+        for i in range(n * n):
+            a.append(Float32(a64[i]))
+        var na = List[Float32]()
+        var nv = List[Float32]()
+        var ni = _run_device_f32(ctx, a, n, 15, Float32(1.0e-7), na, nv)
+        var oa = List[Float32]()
+        var ov = List[Float32]()
+        var oi = _run_device_f32_four_phase(
+            ctx, a, n, 15, Float32(1.0e-7), oa, ov
+        )
+        var differ = 0
+        for i in range(3):
+            if _f32_bits(ni[i]) != _f32_bits(oi[i]):
+                differ += 1
+        for i in range(n * n):
+            if _f32_bits(na[i]) != _f32_bits(oa[i]):
+                differ += 1
+            if _f32_bits(nv[i]) != _f32_bits(ov[i]):
+                differ += 1
+        differ_total += differ
+        print(
+            "  check_jacobi_merged_phases_equal_four_phase n =",
+            n,
+            "sweeps merged",
+            Int(ni[2]),
+            "four-phase",
+            Int(oi[2]),
+            "cells differing",
+            differ,
+            "of",
+            2 * n * n + 3,
+        )
+        comptime if IDENTICAL_BUILD:
+            if differ != 0:
+                raise Error(
+                    "check_jacobi_merged_phases_equal_four_phase (IDENTICAL):"
+                    " at n = "
+                    + String(n)
+                    + " the two-barrier kernel differs from the four-barrier"
+                    " kernel at "
+                    + String(differ)
+                    + " of "
+                    + String(2 * n * n + 3)
+                    + " output cells. DEVIATION 2671 claims a change of"
+                    " phase boundaries only; some store now reads a cell"
+                    " another lane of the same phase writes."
+                )
+    print(
+        "check_jacobi_merged_phases_equal_four_phase OK ("
+        + _mode_name()
+        + "): cells differing over all sizes "
+        + String(differ_total)
+    )
+
+
 def main() raises:
     print("jacobi_check -- build mode: " + _mode_name())
+    check_jacobi_merged_phases_equal_four_phase()
     check_jacobi_fold_width_is_pinned()
     check_jacobi_fold_shape()
     check_jacobi_device_sizes()

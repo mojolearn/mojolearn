@@ -1722,3 +1722,61 @@ byte-equal between the sets for C-order and F-order input alike.
 
 The iforest proxy AUC is an anomaly score against the minority class; neither
 dataset has planted anomalies, so it is a sanity column and not a benchmark.
+
+### Classical OLS, PCA, k-means and DBSCAN on both datasets (September 11, pod 1yxsotvvcbxtuu, lane linear-cluster-istella)
+
+RunPod H100 80GB HBM3, driver 570.195.03, cuML 26.08 (cuml-cu12 26.8.0) in the
+image's Python 3.11; ours IDENTICAL built on the pod (sm_90a) from this lane and
+from origin/main 8dc33f00 (which carries DEVIATIONS 2632 and 2633), both trees on
+the SAME pod, raced interleaved. A driver below 580 cannot take Mojo's own PTX
+path, so every run here exports `MODULAR_NVPTX_COMPILER_PATH` at a CUDA 12.8
+`ptxas` (`nvidia-cuda-nvcc-cu12`); the image's own 12.4 ptxas refuses Mojo's PTX
+8.5. `tools/classical_two_datasets.py race`, 1 warm-up plus 5 interleaved rounds,
+ms median. Taxi 4,000,000 x 11 and Istella-S 2,043,304 x 220; k-means k 64, 20
+iterations, shared init, tol 1e-7 on both arms; cuML PCA `svd_solver='full'`,
+ours `covariance_eigh`; cuML OLS `algorithm='eig'`.
+
+| lane | dataset | opponent | opponent ms | opponent quality | ours before (8dc33f00) ms | ours after (2671, 2672) ms | after / before | ours after / opponent | ours quality, digest before = after |
+|---|---|---|---|---|---|---|---|---|---|
+| ols | taxi | cuML LinearRegression eig | 21.67 | R2 0.90883616 | 139.65 | 135.76 | 0.972 | 6.26x | R2 0.90883698, `fb86358654367fa0` |
+| ols | Istella-S | cuML LinearRegression eig | 84.85 | R2 -6473.68 | 2529.06 | 2402.44 | 0.950 | 28.31x | R2 0.33194438, one digest, equal |
+| pca | taxi | cuML PCA full | 19.54 | EVR sum 0.99786046 | 28.46 | 26.32 | 0.925 | 1.35x | EVR sum 0.99786071, `c790338770a4c120` |
+| pca | Istella-S | cuML PCA full | 81.91 | EVR sum 1.0000000156 | 713.09 | 686.27 | 0.962 | 8.38x | EVR sum 1.0000000146, one digest, equal |
+| kmeans | taxi | cuML KMeans | 129.28 | inertia 1.2019161e8, 20 iter, digest different every round | 216.59 | 211.99 | 0.979 | 1.64x | inertia 1.2062766e8, 21 iter, `89520efe99a08d5f` |
+| kmeans | Istella-S | cuML KMeans | 171.81 | inertia 1.2855462e17, 20 iter, digest different every round | see the lane README (instance spread exceeds the effect) | | | 7.56x | inertia 1.3128483e17, 21 iter, `7f720b0b76896308` |
+
+OLS and PCA reach the device Jacobi and k-means does not, so those rows isolate
+DEVIATION 2671 (two barriers per rotation instead of four, same bits) and the
+k-means row isolates DEVIATION 2672 (host staging removed from the k-means fit).
+Flip verdicts under ENGINEERING_RULES section 9: OLS geomean 0.9610 and PCA
+geomean 0.9435, both below 1 with quality equal and bits equal on both datasets,
+so 2671 is the default. The k-means A/B swung 1.066 then 0.950 between race
+instances against an effect the stage probe puts at about 5 ms of host work, so
+2672 is decided on pooled instances in
+`bench/results/linear_cluster_istella_2026-09-11/README.md`.
+
+**Where the Istella-S time goes** (stage probe, IDENTICAL, same pod): the OLS
+device solve is 1744 to 1775 ms, of which the 220-column Jacobi is 1656 ms at 12
+sweeps and the Gram is 23.6 ms; PCA is upload 34.9, covariance 30.0 and Jacobi
+418.3 at 3 sweeps. On the same matrices the four-phase kernel takes 1825.8 and
+466.6 ms, and the two kernels agree at every one of 48,400 matrix cells and
+48,400 eigenvector cells.
+
+#### DBSCAN and HDBSCAN at 1,000,000 rows (first rows for this pair)
+
+Blocks are 1,000,000 rows of each dataset's train split, sentinel cleaned and
+standardized by their own float64 mean and standard deviation, so one eps means
+the same thing on every column. eps is the p75 quantile of the min_samples-th
+nearest neighbor distance measured on the block itself (`dbscan_eps.py`), the
+SAME value for every arm, min_samples 10. Ours runs its default ball cover;
+`cuml-gpu` is cuML's default brute force. 1 warm-up plus 3 rounds.
+
+| lane | dataset | eps | opponent | opponent ms | ours IDENTICAL ms | ours / opponent | agreement |
+|---|---|---|---|---|---|---|---|
+| dbscan | taxi (11 features) | 0.177 | cuML DBSCAN brute | 13631.0 | 1129.8 | 0.083x | 2900 clusters and noise fraction 0.2161 on both arms, adjusted Rand index 0.99999999908, noise agreement 1.000 |
+| dbscan | Istella-S (220 features) | 4.17 | cuML DBSCAN brute | pending | pending | | |
+| hdbscan | taxi, 100,000 rows | - | cuML HDBSCAN (min_samples 10, min_cluster_size 100, eom) | 191.2 | no arm | - | 159 clusters, noise fraction 0.1310; this library ships no HDBSCAN |
+
+cuML's `algorithm='rbc'` arm refused both datasets at this size ("An overflow
+occurred with the current choice of precision and the number of samples"), so
+cuML's own ball cover has no row here.
