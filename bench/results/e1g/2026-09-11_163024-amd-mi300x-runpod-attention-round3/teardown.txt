@@ -1,0 +1,6 @@
+pod=suzi3ktegog2m6
+armed=1
+terminated=1
+deadman_pid=58953
+exit=0
+at=2026-09-11T16:52:31Z

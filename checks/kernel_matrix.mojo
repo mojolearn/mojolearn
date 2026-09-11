@@ -849,8 +849,10 @@ def attn_default_arm_for[column: Int]() -> Int:
     if column == COLUMN_NVIDIA:
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
     if column == COLUMN_AMD:
-        # The MI300X leg decides AMD; until it reads, the shipped stash_tiled.
-        return ATTN_DEFAULT_WORD_STASH_TILED
+        # Measured 2026-09-11 on both AMD boxes against stash_tiled, witnesses
+        # equal: DigitalOcean MI325X geomean 0.9297 (e1g/2026-09-11_163917-amd-mi325x-do-attention-round3)
+        # and RunPod MI300X geomean 0.9325 (e1g/2026-09-11_163024-amd-mi300x-runpod-attention-round3).
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
     return ATTN_DEFAULT_WORD_STASH_TILED
 
 

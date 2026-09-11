@@ -1,0 +1,4 @@
+shipped	shipped: default=ksplit(S=132) else tuned128
+tuned128	tuned128: the old TUNED 128x128 plan forced on every call it served
+ksplit	ksplit(S=132) where its rule takes the call, else default=ksplit(S=132) else tuned128
+ksplit_leaf	ksplit_leaf(finest under the cap) where its rule takes the call, else default=ksplit(S=132) else tuned128

@@ -1,0 +1,17 @@
+vendor=amd
+commit=73d0e64be3201f1cf990a74291cdc1da37483419
+card_full=
+trace_dump=
+started=2026-09-11T16:41:07Z
+provider=digitalocean
+size=gpu-mi325x1-256gb
+gates=0
+gpu_archs=gfx942
+target_column=amd
+pixi_install_exit=0
+device_check_exit=SKIPPED
+card_exit=SKIPPED
+attention_round3_leg_exit=0
+extra_exit=0
+finished=2026-09-11T16:51:37Z
+body_exit=0

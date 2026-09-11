@@ -252,6 +252,24 @@ No AMD timing of this step exists at the target shape.
      (`tools/pick_box.sh` order: Hot Aisle, DigitalOcean, RunPod AMD).
      `tools/gemm_remote_leg.sh` does not export `MOJOLEARN_GPU_ARCHS` into the
      extra body, so AMD bodies through it must set `gfx942` themselves.
+   - **H100 confirmation of the shipped ksplit default** (bench/results/e1g/2026-09-11_163310-nvidia-h100-80gb-hbm3-gemm-ksplit-default,
+     commit f3705577, 1980 MHz pod): shipped default 0.3434 / 0.3464 s against
+     the old plan forced (`tuned128`) 0.3842 / 0.3838 s, witnesses equal,
+     `verdict tuned128 NO FLIP geomean=1.1145` (the old plan stays off); GEMM
+     sum 142.5 against 184.4 ms.
+   - **AMD verdict on the attention winner, both AMD boxes, FLIP**:
+     DigitalOcean MI325X (bench/results/e1g/2026-09-11_163917-amd-mi325x-do-attention-round3):
+     stash_tiled 3.369 / 3.344 s, `stash_tiled_fgrid_r32_qres_pf` 3.109 /
+     3.132 s (geomean 0.9297), `stash_tiled_pf` 0.9336; RunPod MI300X
+     (bench/results/e1g/2026-09-11_163024-amd-mi300x-runpod-attention-round3):
+     stash_tiled 3.618 / 3.688 s, the winner 3.444 / 3.369 s (geomean
+     0.9325), pf 0.9613; witnesses equal on every step on both. Price fwd+bwd
+     on the MI325X: stash_tiled 45.1 ms, winner 34.1 ms, forward 5.04 -> 2.53
+     ms. The AMD `attn_default_arm_for` row now names the winner as well.
+   - **The AMD step is about 9x the H100 step** (3.4 s against 0.38 s). The
+     MI325X timers for stash_tiled put `attn.bwd_dkdv_tiled` at 705 ms per
+     step (18.5 ms on the H100), `attn.o_proj` 128 ms and `attn.qkv_proj` 78
+     ms; the dk/dv tiled backward on AMD is the next target.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows
