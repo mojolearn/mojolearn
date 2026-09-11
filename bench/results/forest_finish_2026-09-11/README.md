@@ -321,6 +321,31 @@ This is why the switch is decided over four cells and not two. A classification
 only reading (0.880 and 0.865) would have overstated what this width buys a
 user fitting a regressor.
 
+### The width-selection rule, written BEFORE istellareg landed
+
+Section 9 decides WHETHER a switch flips; it does not choose between two
+widths that both win. So the rule is fixed here, at 22:40Z, with the two
+classification cells known (0.880 at 16384, 0.865 at 32768), the taxireg first
+pass known (0.986 / 0.983, quality equal at RMSE 3.496392) and istellareg still
+running:
+
+1. The switch flips only if the geometric mean over ALL FOUR cells it reaches
+   is below 1 and no cell's quality is worse. Otherwise the default stays 4096
+   and the widths remain measurement arms.
+2. If it flips, take 16384 unless 32768 beats it by more than 2 percent on that
+   four-cell geometric mean. The level workspace is `max_batch * n_cols` cells
+   across about twenty buffers, so 32768 costs roughly 800 MB at 220 columns
+   against 400 MB at 16384 and 100 MB at 4096. That memory is spent on every
+   vendor this library ships to, including unified-memory Macs and smaller
+   cards, while the speed it buys was measured on an 80 GB H100. A margin
+   inside noise does not justify doubling a per-fit allocation everywhere.
+3. Whichever width wins is then REBUILT as the default with no defines and
+   re-fingerprinted (batch G), because what ships must be the binary that was
+   gated, not a trial binary that happened to carry the same define.
+
+On the classification cells alone 32768 leads 16384 by 1.7 percent, which is
+inside the band in rule 2, so as of this writing 16384 is the candidate.
+
 ### Speed
 
 Pending: batch C's A/B, batch D's verdict, and (only if a flip is on the table)
