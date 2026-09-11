@@ -20,6 +20,14 @@ ROUNDS="${1:-3}"; OPP_ROUNDS="${2:-5}"
 mark() { echo "$1 $(date -u +%T)" | tee -a $OUT/progress.txt; }
 while ! grep -qE "^ab_done|REFUSED|_build_failed_|_missing_set_" $OUT/progress.txt 2>/dev/null; do sleep 15; done
 grep -q "^ab_done" $OUT/progress.txt || { mark phase2_skipped_ab_not_done; exit 1; }
+# The Istella-S fetch timed out once and left body_ab.sh timing cells with no
+# dataset; this phase's A/B and its Istella-S opponent cells wait for the real
+# thing (`istella_real.done`, written by the resumed fetch and decode).
+if [ ! -f $OUT/istella_real.done ]; then
+  mark phase2_waiting_for_istella
+  while [ ! -f $OUT/istella_real.done ]; do sleep 20; done
+  mark phase2_istella_ready
+fi
 
 mark phase2_build_start
 $AB build a2661 gbdt -D MOJOLEARN_2661_NONSYM_GROUP_WIDTH=1
