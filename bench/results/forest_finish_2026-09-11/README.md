@@ -42,6 +42,25 @@ DEVIATION 2663 trial (the ExtraTrees frontier batch width).
   ours-only A/B on both datasets.
 - **D** runs `tools/flip_verdict.py` for every switch.
 
+## What DEVIATION 2663's switch reaches, and what a flip therefore owes
+
+The batch width is set in `extratrees/estimator.mojo::resolve`, which BOTH the
+ExtraTrees classifier and the ExtraTrees regressor take, so under the
+one-default-per-switch rule (ENGINEERING_RULES.md section 9) its time gate is
+the geometric mean over every (lane, dataset) cell it reaches, and quality must
+not be worse in any of them. That is four cells, not two: `et` on taxi and
+Istella-S (classification, `max_features='sqrt'`, 4 and 14 sampled columns) and
+`et` on `taxireg` and `istellareg` (regression, `max_features=1.0`, so 11 and
+220 sampled columns per node). The harness runs all four: `load_dataset` knows
+the two `*reg` names and `our_et_arm` branches on `data.task`.
+
+Istella-S regression samples every one of the 220 columns per node, so its
+cells cost several times a classification fit. They are therefore run ONLY if
+batch C's classification A/B puts a flip on the table; if the classification
+geomean is not below 1 there is nothing to flip and nothing to spend the pod
+time on. A flip claimed on the classification cells alone would be a switch
+decided on half the lanes it reaches, which is exactly what section 9 forbids.
+
 ## Owed elsewhere, closed here
 
 Setup's `tools/check_buffer_foreign_argtypes.py --real-cuml` exited 0 on this
