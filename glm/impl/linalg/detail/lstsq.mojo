@@ -162,7 +162,8 @@ comptime OLS_ELEM_TPB = 256
 #: (raw columns spanning seven orders of magnitude) an R^2 of -115.6 where
 #: scikit-learn gets 0.164. `lstsq_eig` now equilibrates and cuts relative
 #: (`ols_equilibration_scale`, `ols_pinv_threshold`, DEVIATIONS 2620, 2621).
-#: This constant stays for `lstsq_min_norm`, which still cuts `A A^T` at it.
+#: `lstsq_min_norm` left it too (DEVIATION 2622, the same equilibration and
+#: relative cutoff on `A A^T`); nothing on either route cuts at it now.
 comptime OLS_NONZERO_THRESH = Float32(1.0e-10)
 
 #: `numpy.finfo(numpy.float32).eps`, 2^-23 exactly.
