@@ -189,45 +189,59 @@ FIXTURES (all from `--seed`, all recorded by sha256 in the JSON)
                  block (see the brief), which is exactly the shape a
                  warp-collective inside that loop would hang or garble
                  on. 600 queries. Sampled oracle.
-  higgs          THE SECOND KIND (DEVIATION 2524; ENGINEERING_RULES.md
-                 section 9): REAL data, not from `--seed`. The first
-                 404,000 rows of HIGGS (UCI 00280, 11,000,000 x 29; column
-                 0 is the label, columns 1..28 the features), the 28
-                 features as float32: rows 0..399,999 are the index
-                 (400,000 x 28), rows 400,000..403,999 the queries (4,000 x
-                 28). No shuffle, no scaling, no deduplication: the raw
-                 kinematic features, several of them with few distinct
-                 values (three-valued b-tags, near-discrete jet counts),
-                 are what makes it a different kind from the two
-                 generators, ties included. Duplicate index rows, if the
-                 prefix has any, are counted (`distinct_row_count`,
+  taxi           THE TWO REAL DATASETS (DEVIATION 2524; ENGINEERING_RULES.md
+  istella        section 9, rewritten 2026-09-11): REAL data, not from
+                 `--seed`, the same two every trees and classical claim
+                 quotes. `taxi` is NYC TLC yellow taxi trips (January and
+                 February 2024, every plausible trip, card and cash) taken
+                 as the 11 numeric columns `TAXI_NUMERIC` of the trees
+                 harness's cache `taxi/taxi_speed.npz` (d = 11: small
+                 integers, skewed positive amounts, -1 for missing; the
+                 narrow, dirty business table). `istella` is Istella-S
+                 LETOR's training split, `istella/istella_speed.npz`
+                 key `x_train`, all 220 features (d = 220: scales across
+                 seven orders of magnitude, 45 near-constant columns, the
+                 wide numeric table). For each, rows 0..399,999 of the
+                 cache are the index (400,000 x d) and rows
+                 400,000..403,999 the queries (4,000 x d), the layout the
+                 retired HIGGS prefix used. No shuffle, no scaling, no
+                 deduplication. Duplicate index rows (taxi has thousands,
+                 identical short trips) are counted (`distinct_row_count`,
                  `duplicate_rows`) and never dropped: a harness that chose
                  rows would be choosing its fixture. Loaded through
-                 `tools/knn_datasets.py::higgs_block` (the opponent tool
-                 `tools/knn_cuml_reference.py --dataset higgs` calls the
-                 SAME function, so the two cannot drift): only the first
-                 404,000 lines of the gzip stream are read, the parsed
-                 block is cached as an .npz under `GBM_BENCH_DATA`
-                 (default `~/datasets/gbm-bench/higgs/`, the trees lane's
-                 store, whose HIGGS.csv.gz is reused when present). A
-                 missing gzip is DOWNLOADED (2.6 GB) unless
-                 `--higgs-download never`; the download and the decode
-                 happen BEFORE the process deadline is armed and are
-                 recorded under `fixtures_prefetch.higgs` as their own
-                 timed items, never inside a timed request. No planted
+                 `tools/knn_datasets.py::real_block` (the opponent tool
+                 `tools/knn_cuml_reference.py --dataset taxi|istella`
+                 calls the SAME function, so the two cannot drift), which
+                 reads only the leading 404,000 rows of the cache. THE
+                 GATE NEVER DOWNLOADS: the caches are built once, untimed,
+                 by `python tools/speed_gbdt_arm.py --download taxi` and
+                 `--download istella` (the trees harness owns them), and a
+                 missing cache fails the fixture BEFORE the deadline is
+                 armed with that command in the message; the read is
+                 recorded under `fixtures_prefetch.<name>` as its own
+                 timed item, never inside a timed request. No planted
                  rows (like `dyadic`: `--fixtures` runs the arm-equality,
-                 row-order and sampled-oracle checks on it and the planted
-                 check is empty). Timed at k10/k15; its opponent row is
-                 the HIGGS tuple in `bench/OPPONENT_REFERENCE.md`,
-                 measured once, never the dyadic one. Under `--selftest`
-                 the fixture is used when the cache or the gzip is already
-                 on the box and SKIPPED (recorded) when it is not: a
-                 checker smoke on the Mac does not fetch 2.6 GB.
+                 row-order and sampled-oracle checks and the planted check
+                 is empty). Timed at k10/k15; each has its own opponent
+                 tuple in `bench/OPPONENT_REFERENCE.md`, measured once
+                 (`--cached-opponent-taxi`, `--cached-opponent-istella`),
+                 never the dyadic one. Under `--selftest` a real fixture
+                 is used when its cache is on the box and SKIPPED
+                 (recorded) when it is not: a checker smoke on the Mac
+                 fetches nothing.
+  higgs          RETIRED (2026-09-11, ENGINEERING_RULES.md section 9): the
+                 first "second kind", the 404,000-row HIGGS prefix through
+                 `tools/knn_datasets.py::higgs_block` (28 raw kinematic
+                 features; may download 2.6 GB unless `--higgs-download
+                 never`). Not in any default list; still accepted in
+                 `--fixtures` / `--time-fixtures` so an old JSON can be
+                 re-derived, and its ratio is never a result.
 
 `--quick` shrinks every fixture (a smoke on any GPU; the JSON says
-`quick: true` and nothing from it is a gate result); `higgs` becomes
-prefix rows 0..39,999 as the index and rows 400,000..400,399 as the
-queries (always query-region rows, never index rows).
+`quick: true` and nothing from it is a gate result); `taxi` and `istella`
+(and the retired `higgs`) become cache rows 0..39,999 as the index and
+rows 400,000..400,399 as the queries (always query-region rows, never
+index rows).
 
 Only existing public APIs are used: `NearestNeighbors(n_neighbors=k)`,
 `.fit(X)`, `.kneighbors(Q)`; the returned `mojolearn.Array` objects are
@@ -445,12 +459,47 @@ def make_divergent_tail(seed, quick):
     }
 
 
+#: The real fixtures (ENGINEERING_RULES.md section 9): built before the
+#: deadline, timed, each with its own cached opponent tuple. `higgs` is
+#: retired and handled beside them only so old JSON can be re-derived.
+REAL_FIXTURES = ("taxi", "istella")
+
+
+def make_real(name, quick, data_root, log):
+    """One of the two real datasets (`taxi` or `istella`, DEVIATION 2524;
+    ENGINEERING_RULES.md section 9) through the shared loader
+    `tools/knn_datasets.py::real_block`. Not from `--seed`. Reads the
+    leading 404,000 rows of the trees harness's cache (never downloads: a
+    missing cache raises with the `--download` command), so it is built
+    BEFORE the process deadline is armed (see `main`), and the block's
+    load record (cache path, columns, read seconds) rides along as
+    `source`. Quick: 40,000 index rows and 400 queries, always from the
+    query region. Oracle sampled, timed."""
+    knn_datasets = load_tool_module("knn_datasets")
+    n_index = 40_000 if quick else knn_datasets.REAL_INDEX_ROWS
+    n_queries = 400 if quick else knn_datasets.REAL_QUERY_ROWS
+    block = knn_datasets.real_block(name, n_index, n_queries, data_root=data_root, log=log)
+    return {
+        "name": name, "index": block["index"], "queries": block["queries"],
+        "n_index": n_index, "n_queries": n_queries, "d": block["d"],
+        "exact": [], "dup_groups": [], "offset_groups": [],
+        "oracle": "sampled", "timed": True,
+        "description": "REAL data (ENGINEERING_RULES.md section 9): %s cache rows %d..%d as the index, %d..%d as the queries, %d raw float32 features, no shuffle, no scaling, no deduplication" % (
+            name, block["index_rows"][0], block["index_rows"][1] - 1, block["query_rows"][0], block["query_rows"][1] - 1, block["d"]),
+        "dataset": block["dataset"], "fixture": block["fixture"],
+        "index_rows": block["index_rows"], "query_rows": block["query_rows"],
+        "sha256_block": block["sha256_block"], "source": block["source"],
+    }
+
+
 def make_higgs(quick, data_root, download, log):
-    """The second kind (DEVIATION 2524): the real HIGGS prefix through the
-    shared loader `tools/knn_datasets.py::higgs_block`. Not from `--seed`.
-    May download 2.6 GB and decode 404,000 lines, so it is built BEFORE the
-    process deadline is armed (see `main`), and the block's load record
-    (cache hit, parse seconds, download) rides along as `source`."""
+    """RETIRED (2026-09-11; ENGINEERING_RULES.md section 9). The first
+    second kind: the real HIGGS prefix through the shared loader
+    `tools/knn_datasets.py::higgs_block`. Not from `--seed`. May download
+    2.6 GB and decode 404,000 lines, so it is built BEFORE the process
+    deadline is armed (see `main`), and the block's load record (cache
+    hit, parse seconds, download) rides along as `source`. Kept so an old
+    JSON can be re-derived; not in any default list."""
     knn_datasets = load_tool_module("knn_datasets")
     n_index = 40_000 if quick else knn_datasets.HIGGS_INDEX_ROWS
     n_queries = 400 if quick else knn_datasets.HIGGS_QUERY_ROWS
@@ -460,7 +509,7 @@ def make_higgs(quick, data_root, download, log):
         "n_index": n_index, "n_queries": n_queries, "d": block["d"],
         "exact": [], "dup_groups": [], "offset_groups": [],
         "oracle": "sampled", "timed": True,
-        "description": "REAL data, the second kind: HIGGS prefix rows %d..%d as the index, %d..%d as the queries, 28 raw float32 features, no shuffle, no scaling, no deduplication" % (
+        "description": "RETIRED real data: HIGGS prefix rows %d..%d as the index, %d..%d as the queries, 28 raw float32 features, no shuffle, no scaling, no deduplication" % (
             block["index_rows"][0], block["index_rows"][1] - 1, block["query_rows"][0], block["query_rows"][1] - 1),
         "dataset": block["dataset"], "fixture": block["fixture"],
         "index_rows": block["index_rows"], "query_rows": block["query_rows"],
@@ -769,11 +818,13 @@ def main():
     ap.add_argument("--arm-env", default="MOJOLEARN_KNN_SELECT")
     ap.add_argument("--sabotage-env", default="MOJOLEARN_KNN_SELECT_SABOTAGE")
     ap.add_argument("--cached-opponent", default="", help="k10=ms,k15=ms from bench/OPPONENT_REFERENCE.md (dyadic-v1 tuple only); reported as a cached-reference ratio")
-    ap.add_argument("--cached-opponent-higgs", default="", help="k10=ms,k15=ms from the HIGGS tuple in bench/OPPONENT_REFERENCE.md (DEVIATION 2524; empty until that row is measured once); reported as a cached-reference ratio on the higgs fixture only")
-    ap.add_argument("--fixtures", default="large,dyadic,ties,divergent_tail,higgs", help="fixtures built and checked (arm equality, row order, planted, oracle, reach); `higgs` is the real second kind (DEVIATION 2524) and must be listed here to be timed")
-    ap.add_argument("--time-fixtures", default="dyadic,large,higgs", help="fixtures priced in the timing block; `dyadic` and `large` are one kind (two generators), `higgs` the second kind")
-    ap.add_argument("--higgs-download", choices=("auto", "never"), default="auto", help="auto fetches a missing HIGGS.csv.gz (2.6 GB, before the deadline is armed, recorded as its own timed item); never fails the gate instead. --selftest never downloads: an absent HIGGS skips the fixture")
-    ap.add_argument("--data-root", default=None, help="where HIGGS lives (default GBM_BENCH_DATA or ~/datasets/gbm-bench, the trees lane's store)")
+    ap.add_argument("--cached-opponent-taxi", default="", help="k10=ms,k15=ms from the taxi tuple in bench/OPPONENT_REFERENCE.md (ENGINEERING_RULES.md section 9; empty until that row is measured once by tools/knn_cuml_reference.py --dataset taxi); reported as a cached-reference ratio on the taxi fixture only")
+    ap.add_argument("--cached-opponent-istella", default="", help="k10=ms,k15=ms from the istella tuple in bench/OPPONENT_REFERENCE.md (empty until measured once by tools/knn_cuml_reference.py --dataset istella); reported as a cached-reference ratio on the istella fixture only")
+    ap.add_argument("--cached-opponent-higgs", default="", help="RETIRED (2026-09-11): k10=ms,k15=ms from the HIGGS tuple in bench/OPPONENT_REFERENCE.md, for re-deriving an old JSON only; never a result")
+    ap.add_argument("--fixtures", default="large,dyadic,ties,divergent_tail,taxi,istella", help="fixtures built and checked (arm equality, row order, planted, oracle, reach); `taxi` and `istella` are the two real datasets (ENGINEERING_RULES.md section 9) and must be listed here to be timed; `higgs` is retired but still accepted")
+    ap.add_argument("--time-fixtures", default="dyadic,large,taxi,istella", help="fixtures priced in the timing block; `dyadic` and `large` are one kind (two generators, correctness fixtures), `taxi` and `istella` the two real datasets a timing quotes")
+    ap.add_argument("--higgs-download", choices=("auto", "never"), default="auto", help="RETIRED with the higgs fixture (2026-09-11); a no-op for taxi and istella, whose caches the trees harness builds (`python tools/speed_gbdt_arm.py --download taxi|istella`) and this gate never fetches. For `higgs` only: auto fetches a missing HIGGS.csv.gz, never fails instead; --selftest never downloads")
+    ap.add_argument("--data-root", default=None, help="the dataset store the trees harness's caches live in (default GBM_BENCH_DATA or ~/datasets/gbm-bench)")
     ap.add_argument("--skip-timing", action="store_true")
     ap.add_argument("--skip-reach", action="store_true", help="only for a build known to lack the trial hook; the JSON records reach as NOT PROVEN")
     ap.add_argument("--oracle-sample", type=int, default=48)
@@ -857,38 +908,55 @@ def main():
             for failure in report["failures"]:
                 f.write(f"FAIL {failure}\n")
 
-    # THE REAL FIXTURE IS FETCHED AND DECODED BEFORE THE DEADLINE IS ARMED
-    # (DEVIATION 2524): a 2.6 GB download or a 404,000-line decode is not a
-    # gate cost, and a cache miss must not spend the 300 s the requests
-    # own. Both are recorded as their own timed items under
-    # `fixtures_prefetch.higgs`. Under --selftest an absent HIGGS skips the
-    # fixture (a checker smoke never fetches 2.6 GB); under the real gate
-    # `--higgs-download never` with an absent HIGGS is a failure.
+    # THE REAL FIXTURES ARE READ BEFORE THE DEADLINE IS ARMED (DEVIATION
+    # 2524; ENGINEERING_RULES.md section 9): a 355 MB cache read (or, for
+    # the retired higgs, a 2.6 GB download and a 404,000-line decode) is not
+    # a gate cost, and a cache miss must not spend the 300 s the requests
+    # own. Each is recorded as its own timed item under
+    # `fixtures_prefetch.<name>`. THE GATE NEVER DOWNLOADS taxi or istella:
+    # their caches come from `python tools/speed_gbdt_arm.py --download
+    # <name>`; under --selftest an absent cache skips the fixture (a
+    # checker smoke on the Mac fetches nothing), under the real gate it is
+    # a failure whose message names that command. `--higgs-download` only
+    # governs the retired higgs fixture.
     prebuilt = {}
-    if "higgs" in [f for f in args.fixtures.split(",") if f]:
+    wanted_fixtures = [f for f in args.fixtures.split(",") if f]
+    real_wanted = [f for f in wanted_fixtures if f in REAL_FIXTURES or f == "higgs"]
+    if real_wanted:
         knn_datasets = load_tool_module("knn_datasets")
-        present = knn_datasets.higgs_present(args.data_root)
-        if args.selftest and not present:
-            report["fixtures_prefetch"]["higgs"] = {"skipped": "selftest: HIGGS not on this box under %s; the fixture is skipped, never downloaded by a smoke" % knn_datasets.higgs_paths(args.data_root)[0]}
-            log("higgs: " + report["fixtures_prefetch"]["higgs"]["skipped"])
+    for name in real_wanted:
+        if name == "higgs":
+            present = knn_datasets.higgs_present(args.data_root)
+            where = knn_datasets.higgs_paths(args.data_root)[0]
         else:
-            t0 = time.perf_counter()
-            try:
-                prebuilt["higgs"] = make_higgs(args.quick, args.data_root, "never" if args.selftest else args.higgs_download, log)
-            except Exception as exc:  # noqa: BLE001
-                report["failures"].append(f"higgs fixture could not be built: {exc!r}")
-                report["fixtures_prefetch"]["higgs"] = {"error": repr(exc)}
-                dump("failed")
-                log(f"FAILED: higgs fixture could not be built: {exc!r}")
-                return 1
-            src = prebuilt["higgs"]["source"]
-            report["fixtures_prefetch"]["higgs"] = {
-                "seconds_total": time.perf_counter() - t0, "cache_hit": src["cache_hit"],
-                "parse_seconds": src["parse_seconds"], "download": src["download"],
-                "gz_path": src["gz_path"], "cache_path": src["cache_path"], "sha256_block": src["sha256_block"],
-                "note": "download and decode of the real fixture, before the deadline was armed; never part of a timed request",
-            }
-            log(f"higgs prefetch: {report['fixtures_prefetch']['higgs']}")
+            present = knn_datasets.real_present(name, args.data_root)
+            where = knn_datasets.real_paths(name, args.data_root)[1]
+        if args.selftest and not present:
+            report["fixtures_prefetch"][name] = {"skipped": "selftest: %s cache not on this box at %s; the fixture is skipped, never downloaded by a smoke" % (name, where)}
+            log(name + ": " + report["fixtures_prefetch"][name]["skipped"])
+            continue
+        t0 = time.perf_counter()
+        try:
+            if name == "higgs":
+                prebuilt[name] = make_higgs(args.quick, args.data_root, "never" if args.selftest else args.higgs_download, log)
+            else:
+                prebuilt[name] = make_real(name, args.quick, args.data_root, log)
+        except Exception as exc:  # noqa: BLE001
+            report["failures"].append(f"{name} fixture could not be built: {exc!r}")
+            report["fixtures_prefetch"][name] = {"error": repr(exc)}
+            dump("failed")
+            log(f"FAILED: {name} fixture could not be built: {exc!r}")
+            return 1
+        src = prebuilt[name]["source"]
+        report["fixtures_prefetch"][name] = {
+            "seconds_total": time.perf_counter() - t0, "cache_hit": src.get("cache_hit"),
+            "parse_seconds": src.get("parse_seconds"), "read_seconds": src.get("read_seconds"),
+            "download": src.get("download"), "gz_path": src.get("gz_path"),
+            "cache_path": src.get("cache_path"), "columns": src.get("columns"), "sha256_block": src["sha256_block"],
+            "note": "read of the real fixture from the trees harness's cache, before the deadline was armed; never part of a timed request"
+            if name != "higgs" else "RETIRED fixture: download and decode of the HIGGS prefix, before the deadline was armed; never part of a timed request",
+        }
+        log(f"{name} prefetch: {report['fixtures_prefetch'][name]}")
 
     # THE HARD DEADLINE: SIGALRM raises inside Python; a daemon timer is the
     # backstop if a native call is holding the interpreter when it fires.
@@ -990,16 +1058,19 @@ def run_gate(args, report, log, dump, prebuilt=None):
         fixtures.append(make_ties(args.seed, args.quick, max(ks)))
     if "divergent_tail" in wanted:
         fixtures.append(make_divergent_tail(args.seed, args.quick))
-    if "higgs" in wanted and "higgs" in prebuilt:
-        # Built in `main` before the deadline (DEVIATION 2524); a selftest
-        # without HIGGS on the box has no entry here and the fixture is
-        # simply absent (recorded under fixtures_prefetch).
-        fixtures.append(prebuilt["higgs"])
+    for name in REAL_FIXTURES + ("higgs",):
+        if name in wanted and name in prebuilt:
+            # Built in `main` before the deadline (DEVIATION 2524); a
+            # selftest without the cache on the box has no entry here and
+            # the fixture is simply absent (recorded under
+            # fixtures_prefetch). `higgs` is retired and only ever here
+            # when named explicitly.
+            fixtures.append(prebuilt[name])
     for fx in fixtures:
         fx["sha256_index"] = sha256_bytes(fx["index"])
         fx["sha256_queries"] = sha256_bytes(fx["queries"])
         fx["distinct_rows"] = bool(rows_distinct(fx["index"])) if fx["name"] != "ties" else None
-        if fx["name"] == "higgs":
+        if fx["name"] in REAL_FIXTURES or fx["name"] == "higgs":
             # Real data: duplicates are COUNTED, never dropped, never a failure.
             fx["distinct_row_count"] = int(np.unique(np.ascontiguousarray(fx["index"]).view(np.dtype((np.void, fx["index"].dtype.itemsize * fx["index"].shape[1])))).shape[0])
             fx["duplicate_rows"] = int(fx["n_index"] - fx["distinct_row_count"])
@@ -1086,17 +1157,23 @@ def run_gate(args, report, log, dump, prebuilt=None):
     for item in [s for s in args.cached_opponent.split(",") if s]:
         key, val = item.split("=")
         cached[int(key.lstrip("k"))] = float(val)
-    cached_higgs = {}
-    for item in [s for s in args.cached_opponent_higgs.split(",") if s]:
-        key, val = item.split("=")
-        cached_higgs[int(key.lstrip("k"))] = float(val)
+    # One cached opponent tuple per real fixture (ENGINEERING_RULES.md
+    # section 9: measured once per (GPU, driver, version, dataset)); the
+    # retired higgs tuple rides along only to re-derive an old JSON.
+    cached_real = {}
+    for name, spec in (("taxi", args.cached_opponent_taxi), ("istella", args.cached_opponent_istella), ("higgs", args.cached_opponent_higgs)):
+        cached_real[name] = {}
+        for item in [s for s in spec.split(",") if s]:
+            key, val = item.split("=")
+            cached_real[name][int(key.lstrip("k"))] = float(val)
     timed_fixtures = [fx for fx in fixtures if fx["name"] in args.time_fixtures.split(",") and fx["timed"]]
     wanted_timed = [f for f in args.time_fixtures.split(",") if f]
     missing_timed = [f for f in wanted_timed if f not in [fx["name"] for fx in timed_fixtures]]
     if missing_timed:
         # A timed fixture that was not built is not silently dropped: the
-        # JSON says which (higgs under a selftest without HIGGS, or a
-        # fixture named in --time-fixtures but not in --fixtures).
+        # JSON says which (taxi or istella under a selftest without the
+        # cache, or a fixture named in --time-fixtures but not in
+        # --fixtures).
         report["time_fixtures_not_built"] = missing_timed
         log(f"time fixtures not built, not timed: {missing_timed}")
     if len(arms) < 2:
@@ -1117,10 +1194,12 @@ def run_gate(args, report, log, dump, prebuilt=None):
                         row["cached_opponent_note"] = "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement"
                         if report["phase_timers"].get("available"):
                             row["cached_opponent_note"] += "; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
-                    if fx["name"] == "higgs" and k in cached_higgs and not args.quick:
-                        row["cached_opponent_ms"] = cached_higgs[k]
-                        row["cached_opponent_ratio"] = {arm: row["median_ms"][arm] / cached_higgs[k] for arm in (a, b)}
-                        row["cached_opponent_note"] = "cached cuML row from bench/OPPONENT_REFERENCE.md (HIGGS prefix tuple, DEVIATION 2524; measured once by tools/knn_cuml_reference.py --dataset higgs); admissible only if this box matches that tuple; not a paired opponent measurement"
+                    if fx["name"] in cached_real and k in cached_real[fx["name"]] and not args.quick:
+                        opp = cached_real[fx["name"]][k]
+                        row["cached_opponent_ms"] = opp
+                        row["cached_opponent_ratio"] = {arm: row["median_ms"][arm] / opp for arm in (a, b)}
+                        row["cached_opponent_note"] = "cached cuML row from bench/OPPONENT_REFERENCE.md (%s tuple, DEVIATION 2524; measured once by tools/knn_cuml_reference.py --dataset %s); admissible only if this box matches that tuple; not a paired opponent measurement%s" % (
+                            fx["fixture"], fx["name"], "; HIGGS is RETIRED (2026-09-11), this ratio re-derives an old row and is not a result" if fx["name"] == "higgs" else "")
                         if report["phase_timers"].get("available"):
                             row["cached_opponent_note"] += "; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
                     report["timing"].append(row)
