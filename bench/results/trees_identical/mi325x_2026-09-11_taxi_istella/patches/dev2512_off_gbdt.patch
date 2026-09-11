@@ -1,0 +1,495 @@
+diff --git a/core/device_zero.mojo b/core/device_zero.mojo
+index bbd325b0..d01158e1 100644
+--- a/core/device_zero.mojo
++++ b/core/device_zero.mojo
+@@ -25,7 +25,6 @@ aligned takes the byte kernel for the whole span.
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+ from std.math import ceildiv
+-from std.sys.info import size_of
+ 
+ comptime ZERO_TPB = 256
+ comptime ZERO_MAX_BLOCKS = 2048
+@@ -95,43 +94,7 @@ def enqueue_zero_buffer[
+     dt: DType
+ ](ctx: DeviceContext, buf: DeviceBuffer[dt]) raises:
+     """`enqueue_zero_bytes` over a whole device buffer."""
+-    var nbytes = len(buf) * size_of[Scalar[dt]]()
+-    # The buffer is borrowed immutably here; the device memory behind it is
+-    # what the kernel writes, addressed as the caller's memset would.
+-    var p8 = MutPointer[UInt8, MutAnyOrigin](
+-        unsafe_from_address=Int(buf.unsafe_ptr())
+-    )
+-    enqueue_zero_bytes(ctx, p8, nbytes)
+-
+-
+-def fill_kernel[dt: DType](
+-    dst: MutPointer[Scalar[dt], MutAnyOrigin], n: Int32, value: Scalar[dt]
+-):
+-    """`n` copies of `value`, one per thread, grid-stride."""
+-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+-    var stride = Int(grid_dim.x) * Int(block_dim.x)
+-    while i < Int(n):
+-        dst.unsafe_store(i, value)
+-        i += stride
+-
+-
+-def enqueue_fill[
+-    dt: DType
+-](ctx: DeviceContext, buf: DeviceBuffer[dt], value: Scalar[dt]) raises:
+-    """`enqueue_memset(buf, value)` as a kernel launch (DEVIATION 2512):
+-    the same bytes, none of Metal's memset-between-launches host cost. A
+-    zero goes through the SIMD zero kernel; any other value through the
+-    scalar fill. Nothing is enqueued for an empty buffer."""
+-    var n = len(buf)
+-    if n <= 0:
+-        return
+-    if value == Scalar[dt](0):
+-        enqueue_zero_buffer(ctx, buf)
+-        return
+-    var p = MutPointer[Scalar[dt], MutAnyOrigin](
+-        unsafe_from_address=Int(buf.unsafe_ptr())
+-    )
+-    ctx.enqueue_function[fill_kernel[dt]](
+-        p, Int32(n), value,
+-        grid_dim=_blocks_for(n), block_dim=ZERO_TPB,
++    var nbytes = len(buf) * dt.size_of()
++    enqueue_zero_bytes(
++        ctx, buf.unsafe_ptr().unsafe_bitcast[UInt8]().unsafe_origin_cast[MutAnyOrigin](), nbytes
+     )
+diff --git a/gbdt/ctrs/ctr_bins_builder.mojo b/gbdt/ctrs/ctr_bins_builder.mojo
+index bfbc2ef2..05e1e054 100644
+--- a/gbdt/ctrs/ctr_bins_builder.mojo
++++ b/gbdt/ctrs/ctr_bins_builder.mojo
+@@ -61,7 +61,6 @@ position `i` -- `gbdt/data/permutation.mojo` and `archive/reference/PORTING.md`
+ """
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext
+-from core.device_zero import enqueue_fill
+ 
+ from gbdt.ctrs.ctr import TCtrConfig, CTR_FEATURE_FREQ
+ from gbdt.ctrs.index_wrapper import (
+@@ -502,8 +501,8 @@ struct TCtrBinBuilderGpu(Movable):
+         )
+ 
+         ctx.enqueue_copy(dst_buf=self.indices, src_ptr=h.unsafe_ptr())
+-        enqueue_fill(ctx, self.bins, UInt32(0))
+-        enqueue_fill(ctx, self.current_bins, UInt32(0))
++        ctx.enqueue_memset(self.bins, UInt32(0))
++        ctx.enqueue_memset(self.current_bins, UInt32(0))
+         ctx.synchronize()
+         _ = h^  # past the drain (step-33 race class)
+ 
+diff --git a/gbdt/gpu_util/kernel/reorder_single_pass.mojo b/gbdt/gpu_util/kernel/reorder_single_pass.mojo
+index 078ea61a..88f87224 100644
+--- a/gbdt/gpu_util/kernel/reorder_single_pass.mojo
++++ b/gbdt/gpu_util/kernel/reorder_single_pass.mojo
+@@ -151,7 +151,6 @@ from std.atomic import Atomic, Ordering
+ from std.gpu import block_idx, thread_idx
+ from std.memory import stack_allocation
+ from max.gpu.host import DeviceBuffer, DeviceContext
+-from core.device_zero import enqueue_fill
+ from max.gpu.memory import AddressSpace
+ from max.gpu.primitives.block import broadcast as block_broadcast
+ from max.gpu.primitives.block import prefix_sum as block_prefix_sum
+@@ -473,8 +472,8 @@ def launch_single_pass_partition[
+             " launch_stable_partition"
+         )
+ 
+-    enqueue_fill(ctx, chunk_zeros, UInt32(0))
+-    enqueue_fill(ctx, chunk_offsets, UInt32(0))
++    ctx.enqueue_memset(chunk_zeros, UInt32(0))
++    ctx.enqueue_memset(chunk_offsets, UInt32(0))
+ 
+     var chunk_grid = max_chunks
+     if sm_count > 0:
+diff --git a/gbdt/gpu_util/kernel/segmented_scan.mojo b/gbdt/gpu_util/kernel/segmented_scan.mojo
+index f467a2b7..bba89cc9 100644
+--- a/gbdt/gpu_util/kernel/segmented_scan.mojo
++++ b/gbdt/gpu_util/kernel/segmented_scan.mojo
+@@ -114,7 +114,6 @@ device-wide scan (`archive/reference/VENDOR_LIBS.md` 3b/3c), so it is written ou
+ from std.gpu import block_dim, block_idx, thread_idx
+ from std.memory import stack_allocation
+ from max.gpu.host import DeviceBuffer, DeviceContext
+-from core.device_zero import enqueue_fill
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ 
+@@ -506,7 +505,7 @@ def launch_segmented_scan_and_scatter_non_negative(
+     if size <= 0:
+         return
+     if not inclusive:
+-        enqueue_fill(ctx, output, Float32(0.0))
++        ctx.enqueue_memset(output, Float32(0.0))
+ 
+     _run_segmented_scan[True](
+         ctx, size, SEGMENT_START_MASK, values, indices, scanned, has_flag,
+diff --git a/gbdt/methods/doc_parallel_boosting.mojo b/gbdt/methods/doc_parallel_boosting.mojo
+index 65ad76e9..b4eb1f41 100644
+--- a/gbdt/methods/doc_parallel_boosting.mojo
++++ b/gbdt/methods/doc_parallel_boosting.mojo
+@@ -4,7 +4,6 @@
+ 
+ from gbdt.options.child_hessian import child_hessian_threshold, check_child_hessian_objective
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+-from core.device_zero import enqueue_fill
+ from max.gpu.host.device_attribute import DeviceAttribute
+ from std.math import isfinite
+ from gbdt.methods.kernel_add_model_value import add_model_value_kernel
+@@ -214,7 +213,7 @@ def make_test_arm(
+         blocks = multilogit_blocks(n)
+     var max_leaves = 1 << max_depth
+     var w = ctx.enqueue_create_buffer[DType.float32](n)
+-    enqueue_fill(ctx, w, Float32(1.0))
++    ctx.enqueue_memset(w, Float32(1.0))
+     return TestArm(
+         n_rows,
+         cindex^, targets^, w^,
+@@ -1157,7 +1156,7 @@ def fit_with_test(
+         approx_dim * n_rows
+     )
+     # every plane, not only the first
+-    enqueue_fill(ctx, cursor, start_value)
++    ctx.enqueue_memset(cursor, start_value)
+ 
+     # ---- the permutations -------------------------------------------
+     #
+@@ -1193,7 +1192,7 @@ def fit_with_test(
+             )
+             # `cursors->Cursors[i]`, ALL written to the same starting
+             # value (`doc_parallel_boosting.h:180-186`)
+-            enqueue_fill(ctx, c, start_value)
++            ctx.enqueue_memset(c, start_value)
+             cursors.append(c^)
+ 
+     # their der/der2 buffers, in the two-plane layout the histogram kernels
+@@ -1340,7 +1339,7 @@ def fit_with_test(
+         # `StartingPoint` (the CB_ENSURE at `:174-182` names
+         # TestDataProvider precisely because the seed reaches it)
+         ref t_arm = test.value()
+-        enqueue_fill(ctx, t_arm.cursor, start_value)
++        ctx.enqueue_memset(t_arm.cursor, start_value)
+     var detector = make_overfitting_detector(
+         od_type, False, od_pvalue, od_wait, has_test
+     )
+@@ -2281,7 +2280,7 @@ def predict(
+     # `doc_parallel_boosting.h:434`): a fit under `boost_from_average`
+     # grew every tree against a cursor seeded there, so an apply that
+     # started at zero would return the residual, not the target.
+-    enqueue_fill(ctx, cursor, Float32(model.bias))
++    ctx.enqueue_memset(cursor, Float32(model.bias))
+ 
+     if not model.is_oblivious():
+         # THE NON-SYMMETRIC SHAPE (DEVIATION 259): their
+diff --git a/gbdt/methods/dynamic_boosting.mojo b/gbdt/methods/dynamic_boosting.mojo
+index ab70c9d9..521143c8 100644
+--- a/gbdt/methods/dynamic_boosting.mojo
++++ b/gbdt/methods/dynamic_boosting.mojo
+@@ -14,7 +14,6 @@ There is no host gradient/leaf reduction or alternate CPU training path.
+ """
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext
+-from core.device_zero import enqueue_fill
+ from std.gpu import block_idx, block_dim, thread_idx
+ from std.math import isfinite
+ from checks.numerics import ftz, identical_mul, identical_mul_add
+@@ -224,11 +223,11 @@ def fit_ordered_rmse(
+     for f in range(len(folds)):
+         var size = folds[f].quality_evaluate_samples.right
+         var cursor = ctx.enqueue_create_buffer[DType.float32](size)
+-        enqueue_fill(ctx, cursor, Float32(0))
++        ctx.enqueue_memset(cursor, Float32(0))
+         cursors.append(cursor^)
+         total += size
+     var estimation = ctx.enqueue_create_buffer[DType.float32](n)
+-    enqueue_fill(ctx, estimation, Float32(0))
++    ctx.enqueue_memset(estimation, Float32(0))
+     var model = TAdditiveModel()
+     var pool = List[PointwiseTreeWorkspace]()
+     var trace = IdentityTrace()
+@@ -261,7 +260,7 @@ def fit_ordered_rmse(
+         )
+         var bins = ctx.enqueue_create_buffer[DType.uint32](n)
+         if len(splits) == 0:
+-            enqueue_fill(ctx, bins, UInt32(0))
++            ctx.enqueue_memset(bins, UInt32(0))
+         else:
+             compute_bins_for_model(ctx, layout, splits, len(splits), cindex, n, bins)
+         var n_leaves = 1 << len(splits)
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
+index f72e8f2f..f6b21419 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
+@@ -5,7 +5,6 @@
+ from std.math import sqrt
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+-from core.device_zero import enqueue_fill
+ from max.gpu.host.device_attribute import DeviceAttribute
+ 
+ from checks.fixed_point import choose_scale
+@@ -550,7 +549,7 @@ def run_one_level(
+     # (`split_properties_helper.cpp:1061`). The histogram kernels do not
+     # write a cell whose accumulator is zero, so an unfilled allocation is
+     # read back as whatever the driver handed us.
+-    enqueue_fill(ctx, hist, Float32(0.0))
++    ctx.enqueue_memset(hist, Float32(0.0))
+     # run_one_level is depth 0 with one block per partition, so the
+     # multi-block flush never fires; the scratch satisfies the signature.
+     var acc_scratch = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+@@ -986,7 +985,7 @@ def run_tree(
+     # only the leaves a level rebuilds, and the histogram kernels skip a cell
+     # whose accumulator is zero, so an unfilled allocation is never fully
+     # overwritten.
+-    enqueue_fill(ctx, hist, Float32(0.0))
++    ctx.enqueue_memset(hist, Float32(0.0))
+ 
+     # FIXED-POINT ACCUMULATOR for replicated blocks under
+     # `NUMERIC_IDENTICAL`: partial histograms from blocks sharing a partition
+@@ -1014,7 +1013,7 @@ def run_tree(
+         acc_cells = 1
+     var acc_i32 = ctx.enqueue_create_buffer[DType.int32](acc_cells)
+     comptime if _ACC_LIVE:
+-        enqueue_fill(ctx, acc_i32, Int32(0))
++        ctx.enqueue_memset(acc_i32, Int32(0))
+ 
+     # The scale bounds every partial sum. A cell can hold at most the sum of
+     # magnitudes of the plane it accumulates, and one scale serves both
+@@ -2323,7 +2322,7 @@ def launch_histograms_for_blocks[
+             run_fixed_bridge and blk.policy == POLICY_ONE_BYTE
+         )
+         if not scratch_dead:
+-            enqueue_fill(ctx, block_hist, Float32(0.0))
++            ctx.enqueue_memset(block_hist, Float32(0.0))
+ 
+         if blk.policy == POLICY_BINARY:
+             # ================= DEVIATION 1947 =================
+@@ -3479,7 +3478,7 @@ struct TSynchronizedSymmetricLevelState(Movable):
+             dst_buf=workspace.p_sz, src_ptr=workspace.h_sz.unsafe_ptr()
+         )
+         if workspace.acc_live_key:
+-            enqueue_fill(ctx, workspace.acc_i32, Int32(0))
++            ctx.enqueue_memset(workspace.acc_i32, Int32(0))
+         var magnitude = Float64(weight_magnitude)
+         if magnitude < 0.0:
+             magnitude = -magnitude
+@@ -4318,7 +4317,7 @@ def run_tree_layout_traced[
+     # truth the bridge arms read; the fixed-point builds keep it
+     # byte-for-byte.
+     comptime if _ACC_LIVE:
+-        enqueue_fill(ctx, acc_i32, Int32(0))
++        ctx.enqueue_memset(acc_i32, Int32(0))
+ 
+     # See the note in `run_tree`: one scale serves both accumulated planes,
+     # so the bound is the larger of the two sums of magnitudes, and
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index 3dd9c057..810b68ce 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -4,7 +4,6 @@
+ 
+ from gbdt.options.child_hessian import child_hessian_threshold
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+-from core.device_zero import enqueue_fill
+ 
+ from checks.fixed_point import choose_scale
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+@@ -399,7 +398,7 @@ struct TDepthwiseWorkspace(Movable):
+             self.d_qacc = ctx.enqueue_create_buffer[DType.int32](
+                 max_leaves * stat_count * hist_cells
+             )
+-            enqueue_fill(ctx, self.d_qacc, Int32(0))
++            ctx.enqueue_memset(self.d_qacc, Int32(0))
+         else:
+             self.d_qstats = ctx.enqueue_create_buffer[DType.uint64](1)
+             self.d_qacc = ctx.enqueue_create_buffer[DType.int32](1)
+@@ -1035,13 +1034,13 @@ def fit_non_symmetric_tree[
+     h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
+     ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
+     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+-    enqueue_fill(ctx, hist, Float32(0.0))
++    ctx.enqueue_memset(hist, Float32(0.0))
+     # DEVIATION 1892: same gate as the symmetric driver's per-tree memset
+     # -- under a float flush with the warp-private `hist2` arm nothing
+     # writes or reads `acc_i32`, so the per-tree zeroing is skipped and
+     # the buffer is the pool's one-cell placeholder.
+     comptime if _ACC_LIVE:
+-        enqueue_fill(ctx, acc_i32, Int32(0))
++        ctx.enqueue_memset(acc_i32, Int32(0))
+ 
+     # The fixed-point scale, host-derived. DEVIATION 95's device derivation
+     # is not wired here: it exists to remove the boosting loop's per-tree
+diff --git a/gbdt/methods/leaves_estimation/leaves_estimation_helper.mojo b/gbdt/methods/leaves_estimation/leaves_estimation_helper.mojo
+index ba41e258..63ca80f8 100644
+--- a/gbdt/methods/leaves_estimation/leaves_estimation_helper.mojo
++++ b/gbdt/methods/leaves_estimation/leaves_estimation_helper.mojo
+@@ -28,7 +28,6 @@ leaf order and a prefix sum of the sizes would be the wrong one.
+ """
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+-from core.device_zero import enqueue_fill
+ 
+ from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
+ from gbdt.gpu_util.kernel.segmented_sort import (
+@@ -201,7 +200,7 @@ def compute_weighted_quantile(
+     )
+ 
+     # `FillBuffer(endOfBinsFlags, 0); MakeEndOfBinsFlags(...)` (`:114-117`)
+-    enqueue_fill(ctx, s.flags, UInt32(0))
++    ctx.enqueue_memset(s.flags, UInt32(0))
+     ctx.enqueue_function[make_end_of_bins_flags_kernel](
+         seg_offsets.unsafe_ptr(), seg_sizes.unsafe_ptr(),
+         s.flags.unsafe_ptr(), UInt32(EXACT_FLAG_MASK),
+@@ -218,7 +217,7 @@ def compute_weighted_quantile(
+     )
+ 
+     # `FillBuffer(needWeights, 0.0f); ComputeNeedWeights(...)` (`:125-132`)
+-    enqueue_fill(ctx, s.need_weights, Float32(0.0))
++    ctx.enqueue_memset(s.need_weights, Float32(0.0))
+     ctx.enqueue_function[compute_need_weights_kernel](
+         s.ordered_weights.unsafe_ptr(),
+         seg_offsets.unsafe_ptr(), seg_sizes.unsafe_ptr(),
+diff --git a/gbdt/methods/oblivious_tree_bin_builder.mojo b/gbdt/methods/oblivious_tree_bin_builder.mojo
+index 1da0d861..d07b2929 100644
+--- a/gbdt/methods/oblivious_tree_bin_builder.mojo
++++ b/gbdt/methods/oblivious_tree_bin_builder.mojo
+@@ -94,7 +94,6 @@ here.
+ """
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext
+-from core.device_zero import enqueue_fill
+ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+ 
+ from gbdt.models.oblivious_model import TBinarySplit
+@@ -500,7 +499,7 @@ struct TTreeUpdater(Movable):
+         """
+         self.doc_count = doc_count
+         self.learn_bins = ctx.enqueue_create_buffer[DType.uint32](doc_count)
+-        enqueue_fill(ctx, self.learn_bins, UInt32(0))
++        ctx.enqueue_memset(self.learn_bins, UInt32(0))
+         var packed = compressed_split_size(doc_count)
+         if packed < 1:
+             packed = 1
+diff --git a/gbdt/methods/oblivious_tree_fold_tasks.mojo b/gbdt/methods/oblivious_tree_fold_tasks.mojo
+index 2fce13e8..28ed26b4 100644
+--- a/gbdt/methods/oblivious_tree_fold_tasks.mojo
++++ b/gbdt/methods/oblivious_tree_fold_tasks.mojo
+@@ -69,7 +69,6 @@ streams only overlap the FILLS, never the layout.
+ """
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext
+-from core.device_zero import enqueue_fill
+ 
+ from gbdt.gpu_util.gpu_data.partitions import DataPartition
+ from gbdt.methods.dynamic_boosting_folds import TFold
+@@ -197,7 +196,7 @@ def write_fold_based_initial_bins(
+         # odd one, because they advance `currentBin += 2` per task and this
+         # list is two entries per task in the same order
+         var view = ctx.enqueue_create_buffer[DType.uint32](Int(part.size))
+-        enqueue_fill(ctx, view, UInt32(p))
++        ctx.enqueue_memset(view, UInt32(p))
+         ctx.enqueue_copy(
+             dst_ptr=bins.unsafe_ptr().unsafe_offset(Int(part.offset)),
+             src_buf=view,
+diff --git a/gbdt/methods/pointwise_optimization_subsets.mojo b/gbdt/methods/pointwise_optimization_subsets.mojo
+index 1b53331d..944f7419 100644
+--- a/gbdt/methods/pointwise_optimization_subsets.mojo
++++ b/gbdt/methods/pointwise_optimization_subsets.mojo
+@@ -3,7 +3,6 @@
+ """CatBoost optimization-subset state and its depth-to-depth transition."""
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext
+-from core.device_zero import enqueue_fill
+ from max.gpu.host.device_attribute import DeviceAttribute
+ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+ 
+@@ -621,7 +620,7 @@ def reset_subsets(
+     subsets.fold_count = UInt32(fold_count)
+     subsets.fold_bits = UInt32(fold_bits)
+ 
+-    enqueue_fill(ctx, subsets.bins, UInt32(0))
++    ctx.enqueue_memset(subsets.bins, UInt32(0))
+     launch_make_sequence(ctx, UInt32(0), subsets.indices, subsets.doc_count)
+     launch_make_sequence(
+         ctx, UInt32(0), subsets.part_ids, subsets.max_part_count
+diff --git a/gbdt/methods/pointwise_scores_calcer.mojo b/gbdt/methods/pointwise_scores_calcer.mojo
+index 10b62fbb..e5e69f45 100644
+--- a/gbdt/methods/pointwise_scores_calcer.mojo
++++ b/gbdt/methods/pointwise_scores_calcer.mojo
+@@ -55,7 +55,6 @@ ordered on the one queue. Nothing else about the class changes.
+ """
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+-from core.device_zero import enqueue_fill
+ 
+ from gbdt.gpu_data.compressed_index_builder import (
+     CompressedIndexLayout,
+@@ -278,7 +277,7 @@ struct PolicyScoreHelper(Movable):
+         self.d_hist = ctx.enqueue_create_buffer[DType.float32](
+             self.hist_helper.histogram_alloc_size(total)
+         )
+-        enqueue_fill(ctx, self.d_hist, Float32(0.0))
++        ctx.enqueue_memset(self.d_hist, Float32(0.0))
+ 
+         # THE WEIGHTS ARE INDEXED BY FEATURE ID, NOT BY BIN-FEATURE ID, so
+         # they are sized by FEATURE COUNT. They were sized `total`, the
+@@ -525,7 +524,7 @@ struct PolicyScoreHelper(Movable):
+         from-scratch level adds onto whatever the buffer holds, and
+         after a tree it holds the previous tree's SCANNED sums.
+         """
+-        enqueue_fill(ctx, self.d_hist, Float32(0.0))
++        ctx.enqueue_memset(self.d_hist, Float32(0.0))
+         self.hist_helper.reset()
+ 
+ 
+diff --git a/gbdt/models/cuda/evaluator.mojo b/gbdt/models/cuda/evaluator.mojo
+index 00a6550d..656ed678 100644
+--- a/gbdt/models/cuda/evaluator.mojo
++++ b/gbdt/models/cuda/evaluator.mojo
+@@ -459,7 +459,6 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
+ # ---------------------------------------------------------------------------
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext
+-from core.device_zero import enqueue_fill
+ 
+ from gbdt.methods.doc_parallel_boosting import model_approx_dim
+ from gbdt.models.oblivious_model import (
+@@ -699,7 +698,7 @@ def launch_eval(
+     """`EvalQuantizedData` (`evaluator.cu:344-368`): clear results, one
+     kernel over (tree blocks, doc blocks). The clear value is the model's
+     bias -- the ProcessResults deviation in the module docstring."""
+-    enqueue_fill(ctx, results, m.bias)
++    ctx.enqueue_memset(results, m.bias)
+     # the adaptive sub-block width of the kernel's DEVIATION BLOCK: fill
+     # all eight tree sub-blocks at any model size
+     var ext_width = (m.tree_count + 63) // 64
+diff --git a/gbdt/train.mojo b/gbdt/train.mojo
+index bdc4a1a8..b6af89ef 100644
+--- a/gbdt/train.mojo
++++ b/gbdt/train.mojo
+@@ -19,7 +19,6 @@ the oracle fixture.
+ 
+ from gbdt.options.child_hessian import child_hessian_threshold, check_child_hessian_objective
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+-from core.device_zero import enqueue_fill
+ 
+ from core.identity_trace import IdentityTrace
+ from ensemble.instruments import StageTimes as HostStageTimes
+@@ -221,7 +220,7 @@ def _build_cindex_from_floats(
+     var cindex = ctx.enqueue_create_buffer[DType.uint32](
+         n_rows * lay.columns
+     )
+-    enqueue_fill(ctx, cindex, UInt32(0))
++    ctx.enqueue_memset(cindex, UInt32(0))
+ 
+     # DEVIATION 2485 (boundary-tax WP5): mirror the existing columns
+     # staging ring. Bulk copy unchanged AsIs values; retain NaN scanning
+@@ -321,7 +320,7 @@ def _build_cindex_from_columns(
+     var cindex = ctx.enqueue_create_buffer[DType.uint32](
+         n_rows * lay.columns
+     )
+-    enqueue_fill(ctx, cindex, UInt32(0))
++    ctx.enqueue_memset(cindex, UInt32(0))
+ 
+     comptime _CINDEX_SLOTS = 8
+     var xdevs = List[DeviceBuffer[DType.float32]]()

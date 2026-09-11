@@ -1,0 +1,23 @@
+Collecting lightgbm
+  Downloading lightgbm-4.7.0.tar.gz (1.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 50.5 MB/s eta 0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Installing backend dependencies: started
+  Installing backend dependencies: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: lightgbm
+  Building wheel for lightgbm (pyproject.toml): started
+  Building wheel for lightgbm (pyproject.toml): finished with status 'done'
+  Created wheel for lightgbm: filename=lightgbm-4.7.0-py3-none-linux_x86_64.whl size=3631695 sha256=efaee039fff3bc223fa692ecb19cad164d119d560d2ab864d4065d821d116b07
+  Stored in directory: /tmp/pip-ephem-wheel-cache-jwhtmvnu/wheels/bb/6f/09/d74bfab150a64919c2ddc00378c9cd21e828747bf131e445c4
+Successfully built lightgbm
+Installing collected packages: lightgbm
+  Attempting uninstall: lightgbm
+    Found existing installation: lightgbm 4.7.0
+    Not uninstalling lightgbm at /usr/local/lib/python3.12/dist-packages, outside environment /root/venv-gpu
+    Can't uninstall 'lightgbm'. No files were found to uninstall.
+Successfully installed lightgbm-4.7.0

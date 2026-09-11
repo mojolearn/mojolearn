@@ -1,0 +1,3 @@
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1       697G   22G  675G   4% /
+/dev/sda         20G  9.9G  8.8G  53% /mnt/mojolearn-data

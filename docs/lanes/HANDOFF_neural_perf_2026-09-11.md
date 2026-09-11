@@ -136,6 +136,53 @@ No AMD timing of this step exists at the target shape.
    binding probe to explain the GEMM leg's 0.457 s shipped step (GEMM brief
    10.7). `tools/gemm_remote_leg.sh` has no extra-env plumbing; the attention
    settings rode in a wrapper body the leg copied to `extra_body.sh`.
+0d. WOUND DOWN 2026-09-11 ~14:35Z on Andrew's order ("please tell all lanes to
+   wind down quickly"). Nothing got faster after 0c. State:
+   - Providers. Andrew: neural legs run on NVIDIA on RunPod ("don't attempt amd
+     JUST DO NVIDIA ON FUCKING RUNPOD"); then Hot Aisle AMD was set up for new
+     legs. RunPod had no AMD MI300X stock (create: "There are no instances
+     currently available") and briefly no H100 80GB HBM3 stock either.
+     Hot Aisle: SSH to admin.hotaisle.app accepts ~/.ssh/id_ed25519; the API
+     key is NOT on disk yet (expected at ~/.mojolearn_hotaisle_key, mode 600,
+     created in the admin TUI under personal settings). Base
+     https://admin.hotaisle.app/api/, header `Authorization: Token <key>`,
+     spec admin.hotaisle.app/api/docs/swagger.json, billed per minute, GPU
+     MI300X. Opponent rows measured there are a new tuple.
+   - Trial-binding overhead, PARTIAL
+     (bench/results/e1g/2026-09-11_141443-nvidia-h100-trial-overhead; operand
+     dumps outside the repo). The attention trial binding's shipped
+     `stash_tiled` step is 0.3801 / 0.3799 s on this third H100 pod. The GEMM
+     half ran its check and shipped price but no LM probe:
+     `tools/gemm_step_leg.sh` drops `shipped` from LM_ARMS (it is always the
+     bracket), so `LM_ARMS=shipped` resolves to none. Use
+     `MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=quarter` to get the shipped bracket on
+     the GEMM trial binding (scratchpad body nvidia_trial_overhead_body2.sh
+     did; its pod f8cgynz7rl2h99 was reaped at wind-down before any work and
+     verified gone). Whether the GEMM trial build costs the 0.457 s against
+     0.380 s is still OPEN.
+   - GEMM long inner dimension lane (DEVIATIONS 2590 to 2594), NOT MERGED,
+     branch `lane/gemm-long-k` (48aa0325): brief
+     docs/lanes/BRIEF_gemm_long_k_2026-09-11.md with the reading (proj_dB at
+     2.7x proj_fwd's time for equal flops; a fitted model of one block per SM
+     over 132 SMs, not measured), the `ksplit` / `ksplit_leaf` design and its
+     identity argument. Code on the branch is a kernel matrix row and control
+     shapes only, never compiled; the arm itself is NOT BUILT. Its predicted
+     GEMM sum of about 162 ms (from 219) is a model, not a measurement.
+   - Hot Aisle runner, NOT BUILT, branch `lane/hotaisle-runner` (77c89135):
+     `tools/hotaisle_leg.sh` is a skeleton that refuses every mode (exit 2).
+     Its header holds the verified API facts and the design: key from
+     ~/.mojolearn_hotaisle_key through a 0600 curl config; dry run default,
+     `--probe` free GETs, `--rent` bills; MI300X only; balance printed before
+     create; Mac dead-man before create; on-box watchdog DELETEs its own VM
+     with `?force=true`; gone means GET 404 AND absent from a 200 team list.
+     Facts from the spec and hotaisle-cli: create has no name field (mark legs
+     with `PATCH {description}`), create and delete need the `operator` role,
+     a cancelled create still provisions, DELETE blocks until teardown,
+     `stop` keeps billing, SSH user `hotaisle`, only port 22 open. Unverified:
+     host ROCm tools, passwordless sudo, create 200 vs 201, the MI300X gfx
+     name. RUN OWED order: dry run, `--probe`, `--rent --watchdog-test`, then a
+     tiny real body. Andrew should mint a key scoped to this team with the
+     operator role, since the key rides on the VM.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows

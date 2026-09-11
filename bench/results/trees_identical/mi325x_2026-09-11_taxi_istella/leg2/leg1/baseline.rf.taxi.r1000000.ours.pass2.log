@@ -1,0 +1,20 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=rf arm=ours shape=taxi-1000000x16 ms=1503.030
+FSPEED-ORDER lane=rf round=1 arms=ours
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=1185.979 hash=d8f64dae01de00bd
+FSPEED-ORDER lane=rf round=2 arms=ours
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=2 ms=1179.335 hash=d8f64dae01de00bd
+FSPEED-ORDER lane=rf round=3 arms=ours
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=3 ms=1175.167 hash=d8f64dae01de00bd
+FSPEED-ORDER lane=rf round=4 arms=ours
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=4 ms=1170.218 hash=d8f64dae01de00bd
+FSPEED-ORDER lane=rf round=5 arms=ours
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=5 ms=1172.023 hash=d8f64dae01de00bd
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

@@ -1,0 +1,58 @@
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.755781 | 0.9540860889362754 | 28.512815 | 21.757034 | 0.7406336580620319 | 1.0 | 1.0
+TABLE stash_tiled | 3.116036 | 2.068524456071753 | 13.466274 | 10.350238000000001 | 1.556871608169783 | 2.1680689825149644 | 2.1173499811454897
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.696276 | 0.9625643674185472 | 28.467158 | 21.770882 | 0.740162556574419 | 1.0 | 1.0
+TABLE stash_tiled | 3.119109 | 2.066486510089901 | 13.559189 | 10.44008 | 1.5434739657167378 | 2.1468554000517455 | 2.0994735009593866
+BITS hashed stash_tiled+sabotage_vs_baseline ctx MOVED 1091906 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline denom MOVED 6472 of 24576
+BITS hashed stash_tiled+sabotage_vs_baseline zdot MOVED 5435 of 24576
+BITS hashed stash_tiled+sabotage_vs_baseline dq MOVED 1417359 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline dk MOVED 1236285 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline dv MOVED 1240433 of 1572864
+REACH hashed stash_tiled sabotage_flipped_cells=4997890 clean_restored=True reach_bit=stash_tiled+sabotage forward_moved=1098378 backward_moved=3899512
+BITS heavytail stash_tiled+sabotage_vs_baseline ctx MOVED 1255215 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline denom MOVED 8181 of 24576
+BITS heavytail stash_tiled+sabotage_vs_baseline zdot MOVED 7198 of 24576
+BITS heavytail stash_tiled+sabotage_vs_baseline dq MOVED 1391887 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline dk MOVED 1306530 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline dv MOVED 1333664 of 1572864
+REACH heavytail stash_tiled sabotage_flipped_cells=5302675 clean_restored=True reach_bit=stash_tiled+sabotage forward_moved=1263396 backward_moved=4039279
+attention_step_price: PASS (stash_tiled vs baseline)
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline ctx MOVED 516631 of 1572864
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline denom MOVED 4593 of 24576
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline zdot MOVED 3410 of 24576
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline dq MOVED 1277111 of 1572864
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline dk MOVED 1271638 of 1572864
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline dv MOVED 1167779 of 1572864
+REACH file:operands-enwik8 stash_tiled sabotage_flipped_cells=4241162 clean_restored=True reach_bit=stash_tiled+sabotage forward_moved=521224 backward_moved=3719938
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline ctx MOVED 521531 of 1572864
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline denom MOVED 4637 of 24576
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline zdot MOVED 3447 of 24576
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline dq MOVED 1270593 of 1572864
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline dk MOVED 1269667 of 1572864
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline dv MOVED 1150155 of 1572864
+REACH file:operands-pilegithub stash_tiled sabotage_flipped_cells=4220030 clean_restored=True reach_bit=stash_tiled+sabotage forward_moved=526168 backward_moved=3693862
+attention_step_price: PASS (stash_tiled vs baseline)
+build-price	0	35s
+build-arms-check	0	33s
+arms-check	0	2s
+smoke-stash_tiled	0	2s
+build-binding-base	0	37s
+build-binding-byte-lm	0	65s
+corpus-enwik8	0	2s
+corpus-pile-github	0	84s
+dump-enwik8	0	38s
+dump-pilegithub	0	36s
+price-stash_tiled	0	2s
+lm-stash_tiled-enwik8	0	60s
+lmtiming-stash_tiled-enwik8	0	38s
+lm-stash_tiled-pilegithub	0	59s
+lmtiming-stash_tiled-pilegithub	0	36s
+STEP gemm arm=shipped ratio=0.9998219668022803 shipped_ms=181.292031 arm_ms=181.25975499999998 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+build-check	0	22s
+build-price	0	15s
+step-check	0	8s
+price-shipped	0	4s
