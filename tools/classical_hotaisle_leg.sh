@@ -32,7 +32,14 @@ MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-$(nproc)}
 export MOJOLEARN_CTD_BODY_START MOJOLEARN_CTD_BODY_SECONDS MOJOLEARN_CTD_OUT MOJOLEARN_COMPILE_JOBS
 ALL=kmeans,pca,ols,knn,kde,svc
 mkdir -p "$MOJOLEARN_CTD_OUT"
-echo "stage=$STAGE body_seconds=$MOJOLEARN_CTD_BODY_SECONDS start=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$MOJOLEARN_CTD_OUT/hotaisle_body.txt"
+[ "$(id -u)" = 0 ] || { echo "the body needs root (/root paths); id -u is $(id -u)" >> "$MOJOLEARN_CTD_OUT/hotaisle_body.txt"; exit 5; }
+# The IDENTICAL bindings build for the box's gfx target: the runner's value
+# when it exports one, else rocminfo's first gfx name (tools/trees_hotaisle_body.sh).
+if [ -z "${MOJOLEARN_GPU_ARCHS:-}" ]; then
+    MOJOLEARN_GPU_ARCHS=$(rocminfo 2>/dev/null | grep -o -m1 'gfx[0-9a-f]*' | head -1)
+    [ -n "$MOJOLEARN_GPU_ARCHS" ] && export MOJOLEARN_GPU_ARCHS
+fi
+echo "stage=$STAGE body_seconds=$MOJOLEARN_CTD_BODY_SECONDS gpu_archs=${MOJOLEARN_GPU_ARCHS:-NONE} start=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$MOJOLEARN_CTD_OUT/hotaisle_body.txt"
 step() {  # <label> <env words>...: one call of the leg file, console kept
     _label=$1
     shift
@@ -41,7 +48,7 @@ step() {  # <label> <env words>...: one call of the leg file, console kept
     echo "step=$_label rc=$? end=$(date -u +%H:%M:%S)" >> "$MOJOLEARN_CTD_OUT/hotaisle_body.txt"
 }
 
-step setup MOJOLEARN_CTD_LANES=$ALL MOJOLEARN_CTD_PHASES=setup
+step setup MOJOLEARN_CTD_LANES=$ALL MOJOLEARN_CTD_PHASES=setup MOJOLEARN_CTD_TAXI_WAIT=${MOJOLEARN_CTD_TAXI_WAIT:-1500}
 if [ "$STAGE" = all ]; then
     step smoke MOJOLEARN_CTD_LANES=$ALL MOJOLEARN_CTD_PHASES=prep,races MOJOLEARN_CTD_SMOKE_ROWS=20000 \
         MOJOLEARN_CTD_MIN_RACE=60

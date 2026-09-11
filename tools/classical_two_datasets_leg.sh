@@ -89,6 +89,7 @@ TAXI_SHA_2024_01=c4d59da7bbc8abaeeeb1727947ee93d9891a71acb42854bd80db1571b203051
 TAXI_SHA_2024_02=c76c43c18c6c6664080dd920baab4928988d5786a6b65980792ca7cd796f9f20
 ISTELLA_TGZ_SHA=41b21116a3650cc043dbe16f02ee39f4467f9405b37fdbcc9a6a05e230a38981
 TAXI_WAIT=${MOJOLEARN_CTD_TAXI_WAIT:-0}
+UA="Mozilla/5.0 (X11; Linux x86_64) mojolearn-bench"
 
 mkdir -p "$OUT" "$DATA" "$WORK"
 cd "$ROOT" || exit 9
@@ -216,10 +217,16 @@ if has_phase setup; then
         mkdir -p "$GBM_BENCH_DATA/istella" "$GBM_BENCH_DATA/taxi"
         _t0=$(date +%s)
         _tgz="$GBM_BENCH_DATA/istella/istella-s-letor.tar.gz"
-        if [ ! -f "$_tgz" ]; then
-            timeout -k 10 1500 curl -fsSL --retry 2 -o "$_tgz.part" \
-                http://library.istella.it/dataset/istella-s-letor.tar.gz && mv "$_tgz.part" "$_tgz"
-        fi
+        # Resumed attempts, a clean restart from the third (the MI325X got HTTP
+        # 504 on a resume; tools/trees_hotaisle_body.sh).
+        _i=0
+        while [ "$_i" -lt 4 ] && [ "$(sha256sum "$_tgz" 2>/dev/null | cut -c1-64)" != "$ISTELLA_TGZ_SHA" ]; do
+            _i=$((_i + 1))
+            [ "$_i" -ge 3 ] && rm -f "$_tgz"
+            timeout -k 10 1500 curl -fsSL -C - --retry 3 --retry-delay 5 -A "$UA" -o "$_tgz" \
+                http://library.istella.it/dataset/istella-s-letor.tar.gz >> "$OUT/istella_curl.log" 2>&1
+            echo "attempt=$_i curl_exit=$? size=$(stat -c %s "$_tgz" 2>/dev/null || echo 0) $(date -u +%T)" >> "$OUT/istella_curl.log"
+        done
         _got=$(sha256sum "$_tgz" 2>/dev/null | cut -c1-64)
         [ "$_got" = "$ISTELLA_TGZ_SHA" ] || rm -f "$_tgz"
         echo "istella_tgz sha256=${_got:-none} expected=$ISTELLA_TGZ_SHA seconds=$(( $(date +%s) - _t0 ))" >> "$OUT/fetch.txt"
@@ -234,11 +241,14 @@ if has_phase setup; then
         _t0=$(date +%s)
         for m in 2024-01 2024-02; do
             _f="$GBM_BENCH_DATA/taxi/yellow_tripdata_$m.parquet"
-            [ -f "$_f" ] || { timeout -k 10 600 curl -fsSL --retry 2 -o "$_f.part" -w '%{http_code}' \
+            [ -f "$_f" ] || { timeout -k 10 600 curl -fsSL --retry 3 -A "$UA" -o "$_f.part" -w '%{http_code}' \
                 "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_$m.parquet" \
                 > "$OUT/taxi_curl_$m.txt" 2>&1 && mv "$_f.part" "$_f"; }
             rm -f "$_f.part"
         done
+        [ "$(sha256sum "$GBM_BENCH_DATA/taxi/yellow_tripdata_2024-01.parquet" 2>/dev/null | cut -c1-64)" = "$TAXI_SHA_2024_01" ] \
+            && [ "$(sha256sum "$GBM_BENCH_DATA/taxi/yellow_tripdata_2024-02.parquet" 2>/dev/null | cut -c1-64)" = "$TAXI_SHA_2024_02" ] \
+            || : > "$OUT/taxi_upload_wanted"
         # A CDN that blocks the box: MOJOLEARN_CTD_TAXI_WAIT seconds for the
         # Mac to upload the two months beside the cache (sha256 checked).
         while :; do
