@@ -125,6 +125,29 @@ than the bits themselves (a shape whose multiplier ladder lands differently
 at the two constants would move them; that is not this shape). The win is
 not an artifact of picking 128.
 
+## 3b. RUN OWED before 2670 could ever flip
+
+2670 moves pointwise IDENTICAL bits (section 2), so the orchestrator's two
+gates are owed BEFORE any flip. Both run against this branch
+(`lane/pointwise-speed`), built with the define.
+
+On the Apple M4, from a checkout of this branch:
+
+    MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 \
+      MOJOLEARN_EXTRA_DEFINES="-D MOJOLEARN_2670_PW_PRIVATE_DOC_SLOTS=1" \
+      bash bindings/build_gbdt.sh
+    pixi run check-pointwise-identical-multiplier-2670
+    pixi run check-pointwise-dispatch-2670
+    # then the five synthetic fixtures, which no Apple box has ever run for
+    # the pointwise arm (the 2624 merge left that owed too):
+    python3 ~/mojolearn-evidence/pointwise-hash-drift-2026-09-11/ptwdrift_repro.py \
+      --fixtures binary,halfbyte,onebyte,mixed,wide220 --repeats 3
+
+On an AMD box (Hot Aisle MI300X first, per the box order), the same three
+commands. The pass condition is the gates green AND the five fixture hashes
+equal to the H100's 2670 column in section 2, which is what makes the new
+bits cross-vendor bits rather than NVIDIA's.
+
 ## 4. What is NOT done
 
 - 2670 is opt-in and default OFF. Flipping it needs the Apple M4 and an AMD
