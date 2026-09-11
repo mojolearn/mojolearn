@@ -1,0 +1,29 @@
+deviation=2519
+started=2026-09-11T05:17:47Z
+root=/root/mojolearn
+jobs=2
+vendor=nvidia
+commit=d6b9c23c9a47234ea052da268c9e96a17b3b8ac9
+cuda_toolkit=1
+binding_ptx_blobs=0
+binding_cuobjdump_list_exit=255
+driver_variant=stdout
+output_kb=756
+finished=2026-09-11T05:20:40Z
+label	cap	k	entry	registers	local_bytes	spill_stores	spill_loads	ld_local	st_local	sass_ldl	sass_stl	shared_bytes	blocks_per_sm_by_regs	blocks_per_sm_by_shared	blocks_per_sm_max	occupancy_pct	runtime_blocks_per_sm	runtime_occupancy_pct	sources
+cap16_k0_generic	16	0	neighbors_checks_select_smallk6A6A6A6A_fd649f9a6011ff98	99	0			0	0			2048	2	76	2	25.0	2	25.0	runtime+ptx
+cap16_k10	16	10	neighbors_checks_select_smallk6A6A6A6A_af61bd9fd659b03e	54	0			0	0			2048	4	76	4	50.0	4	50.0	runtime+ptx
+cap16_k15	16	15	neighbors_checks_select_smallk6A6A6A6A_cda5c50b9ced866f	56	0			0	0			2048	4	76	4	50.0	4	50.0	runtime+ptx
+cap1_k1_scanonly1	1	1	neighbors_checks_select_smallk6A6A6A6A_0754158805471b98	31	0			0	0			2048	8	76	8	100.0	8	100.0	runtime+ptx
+cap32_k0_generic	32	0	neighbors_checks_select_smallk6A6A6A6A_29ce1427fb3b9b06	107	0			0	0			2048	2	76	2	25.0	2	25.0	runtime+ptx
+cap64_k0_generic	64	0	neighbors_checks_select_smallk6A6A6A6A_5c0a4eeb6e12d085	178	0			0	0			2048	1	76	1	12.5	1	12.5	runtime+ptx
+build-binding-trial	0	90s
+extract-ptx-blobs	0	0s
+build-driver-files	1	3s
+build-driver-stdout	0	8s
+driver	0	1s
+split-driver-log	0	0s
+emit-asm-default	0	41s
+emit-asm-generic	0	28s
+assemble	0	0s
+stats	0	0s

@@ -1704,3 +1704,31 @@ still buy.
   `mojo build` kernels), and the `mojo build` CLI reference is not in the
   MAX docs index reachable here, so `--emit asm` is cited from the repo's
   own use rather than from a doc page.
+
+## Step 6 result: kernel resource stats (H100, 2026-09-11 05:18Z, `bench/results/e1g/2026-09-11_011544-nvidia/remote/knn-kernel-stats`)
+
+From DeviceFunction attributes plus the dumped PTX (ptxas spill counts were
+not emitted by the toolchain on the pod; ld.local/st.local counted in the
+PTX):
+
+| instantiation | registers | local bytes | ld.local / st.local | shared | blocks per SM (regs) | occupancy |
+|---|---:|---:|---:|---:|---:|---:|
+| cap16 generic k (k up to 16) | 99 | 0 | 0 / 0 | 2048 | 2 | 25% |
+| cap16 k10 (shipped) | 54 | 0 | 0 / 0 | 2048 | 4 | 50% |
+| cap16 k15 (shipped) | 56 | 0 | 0 / 0 | 2048 | 4 | 50% |
+| cap1 k1 (scanonly1 control) | 31 | 0 | 0 / 0 | 2048 | 8 | 100% |
+| cap32 generic | 107 | 0 | 0 / 0 | 2048 | 2 | 25% |
+| cap64 generic | 178 | 0 | 0 / 0 | 2048 | 1 | 12.5% |
+
+The list is register-resident with no spills, so the "local memory" reading
+is closed. The K cost is instruction count plus occupancy: the shipped
+kernels run four 256-thread blocks per SM where the k-independent control
+runs eight, on a scan whose 3.2 ms floor is tile reads. Two levers follow
+from the table, both bit-identical: (1) CAP = K for the specialized
+instantiations (a key outside a lane's k smallest has k same-lane keys
+below it and can never reach the block's top-k, so the sixteenth slot at
+k10 is dead weight: 32 registers of list become 20 or 30), which may lift
+the shipped kernels to 5 or 6 blocks per SM; (2) a cheaper compare-and-shift
+(setp plus selp swaps instead of the branchy insert) to cut the
+per-element instruction count. Lever 1 is one comptime argument and is
+measured first, as arm `capk`.
