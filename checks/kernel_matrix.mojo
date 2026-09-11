@@ -897,6 +897,17 @@ def knn_selector_shuffle_for[column: Int, identical: Bool]() -> Bool:
     return column_lane_width_is_fixed(column)
 
 
+def knn_selector_warpbound_guard_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (2026-09-11, DEVIATION 2523): whether the IDENTICAL small-k selector (`select_smallk_identical_candidate.mojo::smallk_bucket_kernel`) runs its per-lane insertion chain behind a warp-uniform ballot with a warp-scope admission bound (every second batch, each lane publishes its list head, aligned lane groups take their minimum through five xor shuffles, the bound is the maximum over groups, and a lane admits against min(own k-th smallest, bound)) instead of the always-issued predicated chain. The bound is at or above the k-th smallest of a subset of the union of the warp's lists, so at least k union keys are at or below it and no key above it can be in the row's top-k; keys carry their column so no equality; the union still holds the true top-k, the rank phase pops the same UInt64 minima with the same index tie rule, and the bits are equal by construction (the nine-arm dispatch check, 18 planted cases, M4 and H100). Measured on the H100 2026-09-11: the chain issued on 90 to 96 percent of warp-steps under the per-lane threshold and on 46 percent under the bound; full requests at 400k x 4k x d32 went 30.8 to 27.8 ms (k10) and 36.0 to 31.0 ms (k15), every pair in both orders (bench/results/e1g/2026-09-11_023138-nvidia). NVIDIA only until the Apple and AMD columns are timed (RUN OWED; both are fixed-lane-width columns and pass the identity check, so timing is the only gate). Requires the block-uniform trip count (DEVIATION 2497) and a fixed-lane-width column. `-D MOJOLEARN_KNN_IDENTICAL_INSERT_CHAIN=1` restores the predicated chain on every column."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_INSERT_CHAIN"]():
+        return False
+    comptime if not column_lane_width_is_fixed(column):
+        return False
+    return column == COLUMN_NVIDIA
+
+
 def umap_device_optimizer_for[column: Int, identical: Bool]() -> Bool:
     """ROUTING row (2026-09-09, lane/umap-optimizer): whether the IDENTICAL UMAP layout optimizer runs on the device (`umap/optimizer_identical_device.mojo`: one thread per vertex, one epoch snapshot, each vertex's update a fixed-order fold over its CSR row, negatives from Philox keyed by (seed, epoch, edge, slot), no atomics, no launch-geometry dependence) instead of the serial host loop (`umap/optimizer.mojo::optimize_layout_identical`, `umap/sparse_optimizer.mojo::optimize_sparse_layout_identical`). The two produce DIFFERENT bits (Jacobi versus Gauss-Seidel order); the device path is the IDENTICAL contract on every column and is gated against itself across launch widths and GPUs, not against the host loop. `-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1` restores the host loop on every column (the pre-2026-09-09 cards). FAST and DETERMINISTIC never enter this row."""
     comptime if not identical:

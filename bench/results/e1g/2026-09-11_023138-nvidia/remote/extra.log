@@ -1,0 +1,9 @@
+status: passed
+timing large k10 warpbound_guard vs uniform: uniform median 30.819882 ms (min 30.796940), warpbound_guard median 27.848786 ms (min 27.771578)
+timing large k15 warpbound_guard vs uniform: uniform median 36.090291 ms (min 36.065170), warpbound_guard median 31.016865 ms (min 30.974013)
+timing dyadic k10 warpbound_guard vs uniform: uniform median 30.679320 ms (min 30.554809), warpbound_guard median 27.850553 ms (min 27.622228)
+  cached-reference ratios (NOT a paired opponent): uniform 3.000x, warpbound_guard 2.724x
+timing dyadic k15 warpbound_guard vs uniform: uniform median 35.878701 ms (min 35.868098), warpbound_guard median 30.849108 ms (min 30.787486)
+  cached-reference ratios (NOT a paired opponent): uniform 3.317x, warpbound_guard 2.852x
+build-binding-trial	0	115s
+gate	0	16s

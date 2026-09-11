@@ -2576,3 +2576,36 @@ MI325X droplet; 64-lane wavefront: depth 1, group 4, a 64-bit ballot by
 than NVIDIA takes the row. `warpbound_count` and `warpbound_guard1` never
 move anything on their own; `warpbound_guard1` promotes only through its
 own step 10 under the same rule.
+
+## Step 9 result: warpbound_guard PROMOTED on NVIDIA (H100, 2026-09-11 06:33Z and 06:40Z, `bench/results/e1g/2026-09-11_022524-nvidia` and `_023138-nvidia`)
+
+Mechanism run (phase-timer build): nine arms bit-equal with reach on every
+fixture; select_ms uniform 10.33 / 14.75 ms, warpbound_guard 7.33 / 9.72
+ms, warpbound_guard1 (refresh every batch) 7.50 / 9.83 ms; admit rate under
+the bound 0.462 at both k (C2's model said 0.45 and 0.54). The chain now
+issues on 46 percent of warp-steps instead of 90 to 96.
+
+Promotion run (unserialized, request level, three pairs per order):
+
+| fixture | k | uniform median ms | warpbound_guard median ms | pairs favoring |
+|---|---:|---:|---:|---:|
+| large | 10 | 30.82 | 27.85 | 6 of 6 |
+| large | 15 | 36.09 | 31.02 | 6 of 6 |
+| dyadic | 10 | 30.68 | 27.85 | 6 of 6 |
+| dyadic | 15 | 35.88 | 30.85 | 6 of 6 |
+
+All eight cells, both orders. Flipped: `knn_selector_warpbound_guard_for`
+in checks/kernel_matrix.mojo (NVIDIA on; Apple and AMD pass the identity
+check and are RUN OWED for timing; Qualcomm and Intel keep the chain by
+lane width). Against the cached cuML H100 rows (26.66 / 31.13 ms at the
+qualified boundary) the bare search moves from 2.61x / 2.88x toward about
+2.3x / 2.5x; a paired opponent run at the qualified boundary is the
+number to publish, not this ratio.
+
+Where the remaining selection time is: 3.5 ms of tile reads and compares
+(k-independent), about 3.1 ms of chain at k10 and 5.9 ms at k15 (46
+percent of warp-steps times the chain), 0.4 to 0.75 ms of rank. The next
+lever is the admit rate: a tighter bound (the k-th smallest of the 32
+heads costs k rounds of shuffles, C2 rejected it as too expensive before
+the guard existed; with the guard it is worth pricing) or a two-level
+bound (warp then block, the block one rarely).

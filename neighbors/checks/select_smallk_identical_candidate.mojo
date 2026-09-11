@@ -72,6 +72,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     knn_selector_shuffle_for,
     knn_selector_specialize_common_for,
+    knn_selector_warpbound_guard_for,
     lib_lane_width_for,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -436,7 +437,7 @@ comptime SMALLK_WARPBOUND_DEFAULT = False  # DEVIATION 2515: NEGATIVE on the H10
 comptime SMALLK_DEFERRED_DEFAULT = False  # DEVIATION 2517: NEGATIVE on the H100 2026-09-11, stays off
 comptime SMALLK_CAPK_DEFAULT = False  # DEVIATION 2521: NEUTRAL on the H100 2026-09-11, stays off
 comptime SMALLK_SELP_DEFAULT = False  # DEVIATION 2521: NEUTRAL on the H100 2026-09-11; requires SMALLK_CAPK_DEFAULT
-comptime SMALLK_WARPBOUND_GUARD_DEFAULT = False  # DEVIATION 2523: RUN OWED (brief, "Implementation pass, warpbound_guard")
+comptime SMALLK_WARPBOUND_GUARD_DEFAULT = knn_selector_warpbound_guard_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]() and SMALLK_UNIFORM_TRIP_DEFAULT  # DEVIATION 2523: FLIPPED 2026-09-11 on the H100 promotion run (all eight cells, bit-equal); NVIDIA row in checks/kernel_matrix.mojo
 
 comptime SMALLK_ARM_BASELINE = 0
 comptime SMALLK_ARM_UNIFORM = 1
