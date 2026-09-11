@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# ENGINEERING_RULES.md section 9 (2026-09-11): the generated rungs here are one kind and count for nothing as a timing; gmm, nystroem, rbfsampler, spectral and gp are NOT YET on taxi and Istella-S (DEVIATION 2570 moved kmeans, pca, ols, knn, kde, svc only).
 """The SIZE LADDER for the classical lanes, asking whether any of them wins
 at a size a user would actually run.
 

@@ -700,7 +700,7 @@ def _decode_letor(path, n_features):
 
 def load_istella(size, rows_cap=None, regression=False):
     """Istella-S LETOR, 3,408,630 x 220, THE HIGH-FEATURE LARGE DATASET
-    (ENGINEERING_RULES.md section 9, the second kind beside HIGGS).
+    (ENGINEERING_RULES.md section 9, the second kind beside NYC taxi; HIGGS is retired).
 
     Real web-search query/document feature vectors from the istella search
     engine (Dato et al., ACM TOIS 2016), dense, 220 numeric features,
