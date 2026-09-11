@@ -373,6 +373,16 @@ results are labeled NVIDIA, and a flip decided there ships. AMD returns as
 the tuning column when the DigitalOcean GPU limit is raised or another AMD
 cloud (Hot Aisle) is set up; the rest of this section then applies again.
 
+**AMD capacity exists again: Hot Aisle (2026-09-11 morning).** Andrew: "we
+have hot aisle now. we will need to benchmark all of our opponents there
+now." The AMD box is a single-GPU AMD Instinct MI300X VM on Hot Aisle (team
+`andrews-team`, per-minute billing, key at `~/.mojolearn_hotaisle_key`),
+reached only through `tools/hotaisle_leg.sh`, at most three VMs at once.
+Every opponent is re-measured there once per dataset. MI300X rows are a new
+tuple: never mixed with the MI325X rows of the same night or with any
+NVIDIA row. CPU opponents are measured on the 13-core VM spec only, so their
+rows stay comparable.
+
 Andrew, 2026-09-11: "lets use and tune on amd instead of nvidia going
 forward ... idea is everybody else tunes to nvidia so doing amd will be
 distinguishing. also amd is cheaper."
