@@ -149,6 +149,7 @@ from checks.kernel_matrix import (
     lib_hardware_ftz_fma_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
+    lib_gemm_block_parallelism_trial_for,
     lib_lane_width_for,
     lib_smem_page_fits_for,
     lib_smem_pages_for,
@@ -2629,6 +2630,13 @@ def identical_gemm_into[allow_vendor: Bool = True](
     slack, and only at `64 x 64` (512 KB of partials) did whole regions of
     the output come back `+0.0`. `check_device_is_batch_invariant` is what
     caught it. Use the helper, not a guess.
+
+    DEVIATION 2595: on a column whose `lib_gemm_block_parallelism_for` row
+    is above 0 (NVIDIA), a call the long-k group rule takes allocates its
+    own node workspace and SYNCHRONIZES before it returns (a buffer created
+    inside is freed at its last use); `ws` is unused on that path. The wait
+    is ordered on the caller's stream, so no caller's result moves, and the
+    workspace helper above still sizes `ws` for every other call.
     """
     # DEVIATION 1900 -- DEVIATION 1876'S SIBLING: THE _INTO FORM HAD NO MODE
     # BRANCH EITHER. `identical_gemm` grew its FAST branch (1876, below) and
@@ -2649,17 +2657,24 @@ def identical_gemm_into[allow_vendor: Bool = True](
             return
     # DEVIATION 2542 -- THE GEMM STEP ARM HOOK. Compiled only under
     # `-D MOJOLEARN_GEMM_ARM_TRIAL=1`. On a shipped build this block is not
-    # compiled and the dispatch below it is the shipped line, unchanged. On a
+    # compiled and the dispatch below it is the shipped dispatch. On a
     # trial build the arm MOJOLEARN_GEMM_ARM names takes the calls
     # `choose_gemm_plan` sends to PLAN_TUNED_128_8X8 (every GEMM of the byte
     # LM step at the target shape, brief section 2) and returns; every other
-    # call, and the `shipped` arm, falls through.
+    # call, and the clean `shipped` arm, falls through. A SABOTAGED call the
+    # arm does not take is served by the hook through the shipped dispatch's
+    # own body (DEVIATION 2595), so the default's reach can be proven.
     comptime if GEMM_ARM_TRIAL:
         if _gemm_step_arm_hook(ctx, c, a, b, ws, m, n, k, op):
             return
-    identical_gemm_with_plan(
-        ctx, c, a, b, ws, m, n, k, op, choose_gemm_plan(m, n, k)
-    )
+    # DEVIATION 2595 -- THE SHIPPED DISPATCH. Where the column's
+    # `lib_gemm_block_parallelism_for` row is above 0 (NVIDIA 132), every call
+    # the long-k group rule takes runs the `ksplit` group kernel and its fold
+    # (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 5 and 10). Where
+    # the row is 0 (AMD until the MI300X leg, Apple, every other column) it
+    # compiles to the line it replaced,
+    # `identical_gemm_with_plan(..., choose_gemm_plan(m, n, k))`.
+    identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
 
 
 # ===========================================================================
@@ -2670,7 +2685,15 @@ def identical_gemm_into[allow_vendor: Bool = True](
 # `identical_gemm_into` read the arm from the host environment on every call,
 # the MOJOLEARN_ATTN_ARM_TRIAL pattern:
 #
-#   MOJOLEARN_GEMM_ARM=shipped     the shipped plan (also: unset or empty)
+#   MOJOLEARN_GEMM_ARM=shipped     the shipped DEFAULT (also: unset or empty).
+#                                  DEVIATION 2595: `ksplit` at the column's
+#                                  block parallelism row where that row is
+#                                  above 0 and the group rule takes the
+#                                  call, else the plan `choose_gemm_plan`
+#                                  picks (TUNED 128x128 on the step's calls)
+#   MOJOLEARN_GEMM_ARM=tuned128    2595: the OLD shipped plan, TUNED 128x128,
+#                                  forced on every call `choose_gemm_plan`
+#                                  sends to it (the A/B against the default)
 #   MOJOLEARN_GEMM_ARM=lfold       2540: 128x128 reg 8x8 KS 16, cell-serial fold
 #   MOJOLEARN_GEMM_ARM=half        2540: 64x128 reg 4x8, KS 32 where two pages
 #                                  fit the column's shared limit, else 16
@@ -2685,12 +2708,21 @@ def identical_gemm_into[allow_vendor: Bool = True](
 #                                  power-of-two GROUP of leaves on grid.y,
 #                                  group nodes to a workspace, one fold
 #                                  launch; the group size reads the column's
-#                                  block parallelism (kernel matrix row)
+#                                  block parallelism TRIAL row (2595:
+#                                  `lib_gemm_block_parallelism_trial_for`,
+#                                  the shipped row where it is above 0, AMD
+#                                  110 from a reading), so a leg can force it
+#                                  where the default is off
 #   MOJOLEARN_GEMM_ARM=ksplit_leaf 2591: the same at the finest group the
 #                                  workspace cap allows (reads no machine row)
 #   anything else                  RAISES; the harnesses rely on it
 #   MOJOLEARN_GEMM_ARM_SABOTAGE=1  the arm's sabotage instantiation: one cell
-#                                  per block moves (reach proof)
+#                                  per block moves (reach proof). With
+#                                  `shipped` (2595) it is the shipped
+#                                  default's own body, sabotaged: the group
+#                                  launch's cells move where the default
+#                                  takes the call, nothing where the old
+#                                  plan runs
 #
 # Every arm applies only where `choose_gemm_plan` returns PLAN_TUNED_128_8X8.
 # Harnesses that alternate arms inside one process call
@@ -2700,8 +2732,11 @@ def identical_gemm_into[allow_vendor: Bool = True](
 # helpers: a second module would import this one and be imported by it.
 #
 # The kernel's identity argument is brief section 10.1, written before this
-# code. Nothing here changes a default: only the trial-gated hook above and
-# the trial harnesses reference this section.
+# code. Only the trial-gated hook above and the trial harnesses reference
+# this section's arms. DEVIATION 2595 made `ksplit` the shipped default where
+# the column's row is above 0: the shipped dispatch reaches
+# `identical_gemm_shipped_into` and `_ksplit_run` in the long-k section below
+# and nothing else here.
 comptime GEMM_ARM_TRIAL = is_defined["MOJOLEARN_GEMM_ARM_TRIAL"]()
 
 comptime GEMM_ARM_SHIPPED = 0
@@ -2713,7 +2748,9 @@ comptime GEMM_ARM_HEAD = 5
 comptime GEMM_ARM_HALF_HEAD = 6
 comptime GEMM_ARM_KSPLIT = 7
 comptime GEMM_ARM_KSPLIT_LEAF = 8
-comptime GEMM_ARM_COUNT = 9
+#: DEVIATION 2595: the old shipped plan, TUNED 128x128, as a trial arm.
+comptime GEMM_ARM_TUNED128 = 9
+comptime GEMM_ARM_COUNT = 10
 #: OR'd into an arm by MOJOLEARN_GEMM_ARM_SABOTAGE=1.
 comptime GEMM_ARM_SABOTAGE = 16
 
@@ -2727,7 +2764,10 @@ comptime GEMM_GEOM_HEAD_N = 5
 comptime GEMM_GEOM_HEAD_M = 6
 comptime GEMM_GEOM_KSPLIT = 7
 comptime GEMM_GEOM_KSPLIT_LEAF = 8
-comptime GEMM_GEOM_COUNT = 9
+#: DEVIATION 2595: PLAN_TUNED_128_8X8 forced, on every build. Geometry 0
+#: (`GEMM_GEOM_SHIPPED`) is the shipped DEFAULT dispatch.
+comptime GEMM_GEOM_TUNED128 = 9
+comptime GEMM_GEOM_COUNT = 10
 
 #: `head` applies to calls with `max(m, n, k)` at least this: the step's
 #: three head calls (V = 50,257), and no per-layer call (at most 2,048).
@@ -2793,9 +2833,12 @@ def gemm_step_arm_parse(name: String) raises -> Int:
         return GEMM_ARM_KSPLIT
     if name == "ksplit_leaf":
         return GEMM_ARM_KSPLIT_LEAF
+    if name == "tuned128":
+        return GEMM_ARM_TUNED128
     raise Error(
         "MOJOLEARN_GEMM_ARM='" + name + "' is not a GEMM step arm (shipped, lfold,"
-        + " half, half_ks16, quarter, head, half_head, ksplit, ksplit_leaf, or unset)"
+        + " half, half_ks16, quarter, head, half_head, ksplit, ksplit_leaf, tuned128,"
+        + " or unset)"
     )
 
 
@@ -2821,6 +2864,8 @@ def gemm_step_arm_name(arm: Int) -> String:
         name = String("ksplit")
     elif which == GEMM_ARM_KSPLIT_LEAF:
         name = String("ksplit_leaf")
+    elif which == GEMM_ARM_TUNED128:
+        name = String("tuned128")
     if (arm & GEMM_ARM_SABOTAGE) != 0:
         name += "+sabotage"
     return name
@@ -2851,6 +2896,9 @@ def gemm_step_arm_geometry(arm: Int, m: Int, n: Int, k: Int) raises -> Int:
         return GEMM_GEOM_SHIPPED
     if choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8:
         return GEMM_GEOM_SHIPPED
+    if which == GEMM_ARM_TUNED128:
+        # 2595: the old plan, on every call the old plan served.
+        return GEMM_GEOM_TUNED128
     if which == GEMM_ARM_KSPLIT:
         # 2591: the group rule decides applicability (brief section 4).
         if gemm_step_ksplit_group_leaves(GEMM_GEOM_KSPLIT, m, n, k) > 0:
@@ -2890,6 +2938,7 @@ def gemm_step_geometry_tile(geom: Int) raises -> Tuple[Int, Int]:
         or geom == GEMM_GEOM_LFOLD
         or geom == GEMM_GEOM_KSPLIT
         or geom == GEMM_GEOM_KSPLIT_LEAF
+        or geom == GEMM_GEOM_TUNED128
     ):
         return (2 * TUNED_BM_WIDE, 2 * TUNED_BN_WIDE)
     if geom == GEMM_GEOM_HALF or geom == GEMM_GEOM_HALF_KS16:
@@ -2938,7 +2987,10 @@ def _step_arm_geometry_name[
 
 def gemm_step_geometry_name(geom: Int) -> String:
     if geom == GEMM_GEOM_SHIPPED:
-        return String("shipped ") + gemm_plan_name(PLAN_TUNED_128_8X8)
+        # DEVIATION 2595: says whether the ksplit default is on.
+        return gemm_shipped_plan_summary()
+    if geom == GEMM_GEOM_TUNED128:
+        return String("tuned128 (the OLD shipped plan, forced) ") + gemm_plan_name(PLAN_TUNED_128_8X8)
     var s = String("")
     if geom == GEMM_GEOM_LFOLD:
         s = _step_arm_geometry_name[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16, True]("lfold")
@@ -2959,7 +3011,7 @@ def gemm_step_geometry_name(geom: Int) -> String:
     else:
         return String("GEOMETRY?") + String(geom)
     comptime if not GEMM_ARM_TRIAL:
-        s += " (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped plan ran)"
+        s += " (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped default ran)"
     return s
 
 
@@ -3392,8 +3444,10 @@ def _step_geometry_launch[
 # leaf-major like the SPLIT plans (`ws[q * m * n + cell]`). A second launch
 # folds the `G = ceil(P / 2^g)` nodes per cell with the SPLIT plans' fold
 # kernels. The identity argument is brief section 5, written before this
-# code. Only the trial-gated dispatch in `identical_gemm_step_geometry_into`
-# and the trial harnesses reach this section.
+# code. The trial-gated dispatch in `identical_gemm_step_geometry_into` and
+# the trial harnesses reach the arms; since DEVIATION 2595 the SHIPPED
+# dispatch reaches `_ksplit_run` too, through `identical_gemm_shipped_into`,
+# on a column whose block parallelism row is above 0 (brief section 10).
 
 #: The shipped 128x128 geometry, bound once for the group kernel.
 comptime GEMM_KSPLIT_RPT = TUNED_RPT * 2
@@ -3402,9 +3456,17 @@ comptime GEMM_KSPLIT_KS = 16
 #: `ksplit` coarsens a group while the coarser split still issues at least
 #: this many times `S` blocks (brief section 4, rule 4).
 comptime GEMM_KSPLIT_SLACK = 4
-#: `S`, the column's block parallelism (kernel matrix SCHEDULING row, 2591).
-#: 0 means no reading.
-comptime GEMM_KSPLIT_S = lib_gemm_block_parallelism_for[TARGET_COLUMN]()
+#: `S` the `ksplit` TRIAL arm reads (kernel matrix SCHEDULING row, 2591;
+#: 2595 moved it to `lib_gemm_block_parallelism_trial_for`, which is the
+#: shipped row where that row is above 0 and the column's reading elsewhere,
+#: so the MI300X leg can still force the arm at AMD's 110). 0 means no
+#: reading.
+comptime GEMM_KSPLIT_S = lib_gemm_block_parallelism_trial_for[TARGET_COLUMN]()
+#: DEVIATION 2595: `S` the SHIPPED dispatch reads. Above 0 turns the ksplit
+#: default on (NVIDIA 132); 0 compiles the old dispatch line (AMD until the
+#: MI300X leg decides, Apple, every other column).
+comptime GEMM_KSPLIT_DEFAULT_S = lib_gemm_block_parallelism_for[TARGET_COLUMN]()
+comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
 #: The largest group size `_ksplit_resolve_leaves` accepts (it travels as an
 #: Int32 kernel argument).
 comptime GEMM_KSPLIT_MAX_GROUP_LEAVES = 1 << 20
@@ -3802,6 +3864,230 @@ def _ksplit_tiles(m: Int, n: Int) -> Tuple[Int, Int]:
     return ((m + BM - 1) // BM, (n + BN - 1) // BN)
 
 
+def _ksplit_run[
+    SAB: Bool
+](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    group_leaves: Int,
+) raises:
+    """DEVIATIONS 2590 and 2595: one ksplit call with `P >= 1`. Allocate
+    `m n G` floats, SYNCHRONIZE, launch the groups, launch the fold,
+    SYNCHRONIZE, keep the buffer past the wait
+    (`[[mojo-buffer-freed-at-last-use]]`).
+
+    These are the lines the H100 leg timed as the `ksplit` arm, moved here
+    unchanged so the arm (`identical_gemm_step_ksplit_into`) and the shipped
+    default (`identical_gemm_shipped_at_row_into`) run ONE body and cannot
+    drift. RAISES at `P == 0` (brief 5.5: no group launch there; the arm
+    routes `k == 0` to the step arm kernel and the default's rule never takes
+    it) and on any group size `_ksplit_resolve_leaves` refuses."""
+    if m <= 0 or n <= 0:
+        return
+    var part = contract_partition(k)
+    var leaf = part[0]
+    var p_count = part[1]
+    var rg = _ksplit_resolve_leaves(group_leaves, p_count)
+    if p_count <= 0:
+        raise Error("_ksplit_run: k == 0 has no leaf groups (long-k brief section 5.5)")
+    var st = gemm_operand_strides(op, m, n, k)
+    var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
+    ctx.synchronize()
+    _ksplit_groups_launch[
+        GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, SAB
+    ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
+    _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
+    ctx.synchronize()
+    _ = gws
+
+
+# ===========================================================================
+# THE KSPLIT DEFAULT (DEVIATION 2595, 2026-09-11; brief
+# docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 10)
+# ===========================================================================
+# The `ksplit` arm won on the H100 (lean LM step geometric mean 0.895 over
+# enwik8 and Pile GitHub, every step witness equal) and ENGINEERING_RULES 9
+# flips a winning arm in the same session. The shipped dispatch reads ONE
+# kernel matrix row, `lib_gemm_block_parallelism_for`. Above 0 it runs the
+# group rule of brief section 4 at that `S` and takes the ksplit path on every
+# call the rule marks applicable; every other call runs the plan
+# `choose_gemm_plan` picks. At 0 the dispatch compiles to the old line. No
+# vendor name is read here. Identity: brief section 5 (Lemmas A to C, checked
+# exhaustively on the host by `check_group_fold_is_the_contract_tree`); the
+# group size, the grid and the row are execution plan, so no stored cell moves
+# on any column. The old plan stays reachable as the `tuned128` trial arm and
+# as `identical_gemm_with_plan(..., PLAN_TUNED_128_8X8)`.
+
+
+def gemm_default_ksplit_leaves_at(m: Int, n: Int, k: Int, row: Int) -> Int:
+    """DEVIATION 2595: leaves per group the shipped dispatch's body uses at
+    `(m, n, k)` when the block parallelism row reads `row`; 0 means the plan
+    `choose_gemm_plan` picks runs (TUNED 128x128 on the step's calls). A row
+    at or below 0 answers 0 at every shape: the row turns the default off.
+    A row above 0 is `ksplit`'s group rule (brief section 4, rules 1, 2 and 4)
+    at `S = row`. Execution plan only (contract 6.1); the row is an argument
+    so a check can hold both sides of the switch on any column."""
+    if row <= 0:
+        return 0
+    return gemm_step_ksplit_rule(m, n, k, row, True)
+
+
+def gemm_default_ksplit_leaves(m: Int, n: Int, k: Int) -> Int:
+    """`gemm_default_ksplit_leaves_at` at the column's shipped row
+    (`GEMM_KSPLIT_DEFAULT_S`): what `identical_gemm_into` runs here."""
+    return gemm_default_ksplit_leaves_at(m, n, k, GEMM_KSPLIT_DEFAULT_S)
+
+
+def identical_gemm_shipped_at_row_into[
+    SAB: Bool
+](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    row: Int,
+) raises:
+    """DEVIATION 2595: THE SHIPPED DISPATCH'S BODY at a NAMED block
+    parallelism row. `identical_gemm_shipped_into` is exactly this at the
+    column's row with `SAB = False` wherever that row is above 0.
+
+    `gemm_default_ksplit_leaves_at(m, n, k, row) > 0`: `_ksplit_run`, which
+    allocates its node workspace and SYNCHRONIZES (`ws` unused). Otherwise
+    `identical_gemm_with_plan(..., choose_gemm_plan(m, n, k))`, asynchronous,
+    the line the default replaced. At `row = 0` the second branch runs at
+    every shape, which is how a check proves the old plan runs with the row
+    at 0 on a column whose row is not.
+
+    `SAB = True` sabotages the group launch (brief 5.6): exactly
+    `gemm_step_ksplit_reach(m, n, k, leaves)` cells move where the ksplit
+    branch runs, and none where the old plan runs. Only the trial hook and
+    the trial checks instantiate it."""
+    var gl = gemm_default_ksplit_leaves_at(m, n, k, row)
+    if gl > 0:
+        _ksplit_run[SAB](ctx, c, a, b, m, n, k, op, gl)
+        return
+    identical_gemm_with_plan(
+        ctx, c, a, b, ws, m, n, k, op, choose_gemm_plan(m, n, k)
+    )
+
+
+def identical_gemm_shipped_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises:
+    """DEVIATION 2595: the shipped IDENTICAL dispatch, the lines
+    `identical_gemm_into` runs after its FAST branch and its trial hook, and
+    the reference every GEMM step harness calls `shipped`. It reads no
+    environment on any build.
+
+    Row above 0 (NVIDIA): `identical_gemm_shipped_at_row_into[False]` at the
+    row. Row 0 (AMD until the MI300X leg decides, Apple, every other column):
+    the old line, and the ksplit path is not compiled at all."""
+    comptime if GEMM_KSPLIT_DEFAULT_ON:
+        identical_gemm_shipped_at_row_into[False](
+            ctx, c, a, b, ws, m, n, k, op, GEMM_KSPLIT_DEFAULT_S
+        )
+    else:
+        identical_gemm_with_plan(
+            ctx, c, a, b, ws, m, n, k, op, choose_gemm_plan(m, n, k)
+        )
+
+
+def gemm_shipped_plan_summary() -> String:
+    """DEVIATION 2595: the shipped dispatch in one shape-free line, from the
+    bound constants: whether the ksplit default is on and at which row."""
+    comptime if GEMM_KSPLIT_DEFAULT_ON:
+        return (
+            String("shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=")
+            + String(GEMM_KSPLIT_DEFAULT_S) + " slack=" + String(GEMM_KSPLIT_SLACK)
+            + ") where the group rule takes the call, else choose_gemm_plan's plan ("
+            + gemm_plan_name(PLAN_TUNED_128_8X8) + " on the step's calls)"
+        )
+    return (
+        String("shipped DEFAULT ") + gemm_plan_name(PLAN_TUNED_128_8X8)
+        + " (ksplit default off: block parallelism row 0)"
+    )
+
+
+def gemm_shipped_dispatch_name_at(m: Int, n: Int, k: Int, row: Int) -> String:
+    """DEVIATION 2595: the plan the shipped dispatch's body RUNS at
+    `(m, n, k)` with the row at `row`, built from the bound constants:
+    the ksplit geometry with its group size, group count and launched blocks,
+    or the plan `choose_gemm_plan` picks with the reason the default did not
+    take the call."""
+    var plan = choose_gemm_plan(m, n, k)
+    var gl = gemm_default_ksplit_leaves_at(m, n, k, row)
+    if gl <= 0:
+        var s = gemm_plan_name(plan)
+        if plan == PLAN_TUNED_128_8X8:
+            if row <= 0:
+                s += " (ksplit default off: block parallelism row 0)"
+            else:
+                s += String(" (ksplit default on at S=") + String(row) + ": the group rule declines this call)"
+        return s
+    var p_count = contract_partition(k)[1]
+    var groups = (p_count + gl - 1) // gl
+    var tt = _ksplit_tiles(m, n)
+    var s2 = _step_arm_geometry_name[
+        GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False
+    ](String("DEFAULT ksplit (DEVIATION 2595)"))
+    s2 += " leaf groups on grid.y -> node workspace -> fold (block per cell <= "
+    s2 += String(SPLIT_BLOCK_FOLD_MAX_CELLS) + ", else register stack)"
+    s2 += " S=" + String(row) + " slack=" + String(GEMM_KSPLIT_SLACK)
+    s2 += " leaves_per_group=" + String(gl) + " groups=" + String(groups)
+    s2 += " launched_blocks=" + String(tt[0] * tt[1] * groups)
+    return s2
+
+
+def gemm_shipped_dispatch_name(m: Int, n: Int, k: Int) -> String:
+    """`gemm_shipped_dispatch_name_at` at the column's shipped row."""
+    return gemm_shipped_dispatch_name_at(m, n, k, GEMM_KSPLIT_DEFAULT_S)
+
+
+def gemm_step_arm_plan_label(arm: Int) -> String:
+    """DEVIATION 2595: which plan `arm` runs, in one line with no tab, from
+    the bound constants, so a probe row or a summary row can never confuse
+    the new default with the old plan. `tools/gemm_step_leg.sh` writes it
+    beside `gemm_arm` (the probe's `gemm_plan` field)."""
+    var which = arm & (GEMM_ARM_SABOTAGE - 1)
+    var dflt = String("default=tuned128 (block parallelism row 0)")
+    comptime if GEMM_KSPLIT_DEFAULT_ON:
+        dflt = String("default=ksplit(S=") + String(GEMM_KSPLIT_DEFAULT_S) + ") else tuned128"
+    var s = String("")
+    if which == GEMM_ARM_SHIPPED:
+        s = String("shipped: ") + dflt
+    elif which == GEMM_ARM_TUNED128:
+        s = String("tuned128: the old TUNED 128x128 plan forced on every call it served")
+    elif which == GEMM_ARM_KSPLIT:
+        s = String("ksplit(S=") + String(GEMM_KSPLIT_S) + ") where its rule takes the call, else " + dflt
+    elif which == GEMM_ARM_KSPLIT_LEAF:
+        s = String("ksplit_leaf(finest under the cap) where its rule takes the call, else ") + dflt
+    else:
+        s = gemm_step_arm_name(which) + " on the calls it takes, else " + dflt
+    comptime if not GEMM_ARM_TRIAL:
+        if which != GEMM_ARM_SHIPPED:
+            s += " (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped default ran)"
+    return s
+
+
 def identical_gemm_step_ksplit_workspace_floats(
     m: Int, n: Int, k: Int, group_leaves: Int
 ) raises -> Int:
@@ -3835,9 +4121,12 @@ def identical_gemm_step_ksplit_into(
     `k == 0` takes no group launch: the step arm kernel at the shipped
     geometry with `LFOLD = False` stores `+0.0` per cell (brief 5.5).
 
-    On a build without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` this runs
-    PLAN_TUNED_128_8X8 and ignores `group_leaves` and `sabotage`, so the arms
-    check fails on reach there."""
+    DEVIATION 2595: the `P >= 1` path is `_ksplit_run`, the body the shipped
+    default runs.
+
+    On a build without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` this runs the shipped
+    dispatch (`identical_gemm_shipped_into`) and ignores `group_leaves` and
+    `sabotage`, so the arms check fails on reach there."""
     if m <= 0 or n <= 0:
         return
     comptime if GEMM_ARM_TRIAL:
@@ -3845,7 +4134,7 @@ def identical_gemm_step_ksplit_into(
         var leaf = part[0]
         var p_count = part[1]
         var st = gemm_operand_strides(op, m, n, k)
-        var rg = _ksplit_resolve_leaves(group_leaves, p_count)
+        _ = _ksplit_resolve_leaves(group_leaves, p_count)
         if p_count <= 0:
             if sabotage:
                 _launch_step_arm[
@@ -3857,21 +4146,12 @@ def identical_gemm_step_ksplit_into(
                 ](ctx, c, a, b, m, n, k, leaf, p_count, st)
             ctx.synchronize()
             return
-        var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
-        ctx.synchronize()
         if sabotage:
-            _ksplit_groups_launch[
-                GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, True
-            ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
+            _ksplit_run[True](ctx, c, a, b, m, n, k, op, group_leaves)
         else:
-            _ksplit_groups_launch[
-                GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False
-            ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
-        _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
-        ctx.synchronize()
-        _ = gws
+            _ksplit_run[False](ctx, c, a, b, m, n, k, op, group_leaves)
         return
-    identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8)
+    identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
     ctx.synchronize()
 
 
@@ -3889,8 +4169,8 @@ def identical_gemm_step_ksplit_phase_into(
 ) raises -> Tuple[Int, Int, Int]:
     """`identical_gemm_step_ksplit_into` (clean) with a host synchronize
     after each phase: `(alloc_ns, group_ns, fold_ns)`. The price harness's
-    PHASE lines (2593). A non-trial build runs PLAN_TUNED_128_8X8 and
-    reports it all as `group_ns`."""
+    PHASE lines (2593). A non-trial build runs the shipped dispatch
+    (`identical_gemm_shipped_into`) and reports it all as `group_ns`."""
     if m <= 0 or n <= 0:
         return (0, 0, 0)
     comptime if GEMM_ARM_TRIAL:
@@ -3921,7 +4201,7 @@ def identical_gemm_step_ksplit_phase_into(
         _ = gws
         return (Int(t1 - t0), Int(t2 - t1), Int(t3 - t2))
     var ts = perf_counter_ns()
-    identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8)
+    identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
     ctx.synchronize()
     return (0, Int(perf_counter_ns() - ts), 0)
 
@@ -3990,11 +4270,14 @@ def gemm_step_ksplit_group_leaves(geom: Int, m: Int, n: Int, k: Int) raises -> I
 
 
 def gemm_step_geometry_group_leaves(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
-    """Leaves per group a FORCED launch of `geom` uses: 0 for a geometry that
-    is not ksplit; the rule where it applies; where it declines (a forced
-    harness launch only, never the hook), the finest group under the cap, and
-    1 at `k == 0` (no group launch runs). RAISES when not even one group
-    fits the cap."""
+    """Leaves per group a FORCED launch of `geom` uses: for the shipped
+    geometry (DEVIATION 2595) the shipped default's group size, 0 where the
+    old plan runs; 0 for any other geometry that is not ksplit; the rule
+    where it applies; where it declines (a forced harness launch only, never
+    the hook), the finest group under the cap, and 1 at `k == 0` (no group
+    launch runs). RAISES when not even one group fits the cap."""
+    if geom == GEMM_GEOM_SHIPPED:
+        return gemm_default_ksplit_leaves(m, n, k)
     if geom != GEMM_GEOM_KSPLIT and geom != GEMM_GEOM_KSPLIT_LEAF:
         return 0
     var gl = gemm_step_ksplit_group_leaves(geom, m, n, k)
@@ -4047,9 +4330,16 @@ def gemm_step_ksplit_reach(m: Int, n: Int, k: Int, group_leaves: Int) raises -> 
 
 def gemm_step_geometry_reach(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
     """Cells a sabotage launch of `geom` through
-    `identical_gemm_step_geometry_into` moves: 0 for shipped, one per block
-    for the 2540 and 2541 geometries, `gemm_step_ksplit_reach` for ksplit."""
+    `identical_gemm_step_geometry_into` moves: for shipped (DEVIATION 2595)
+    the default's group launch reach where the default takes the call and 0
+    where the old plan runs; 0 for `tuned128`; one per block for the 2540 and
+    2541 geometries; `gemm_step_ksplit_reach` for ksplit."""
     if geom == GEMM_GEOM_SHIPPED:
+        var gl0 = gemm_default_ksplit_leaves(m, n, k)
+        if gl0 <= 0:
+            return 0
+        return gemm_step_ksplit_reach(m, n, k, gl0)
+    if geom == GEMM_GEOM_TUNED128:
         return 0
     if geom == GEMM_GEOM_KSPLIT or geom == GEMM_GEOM_KSPLIT_LEAF:
         return gemm_step_ksplit_reach(
@@ -4060,14 +4350,15 @@ def gemm_step_geometry_reach(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
 
 def gemm_step_geometry_launched_blocks(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
     """Blocks the (first) launch of `geom` issues: tiles times groups for
-    ksplit (the fold launch is not counted), tiles otherwise."""
+    ksplit and for the shipped geometry where the ksplit default takes the
+    call (DEVIATION 2595; the fold launch is not counted), tiles otherwise."""
     var blocks = gemm_step_geometry_blocks(geom, m, n)
-    if geom != GEMM_GEOM_KSPLIT and geom != GEMM_GEOM_KSPLIT_LEAF:
-        return blocks
     var p_count = contract_partition(k)[1]
     if blocks <= 0 or p_count <= 0:
         return blocks
     var gl = gemm_step_geometry_group_leaves(geom, m, n, k)
+    if gl <= 0:
+        return blocks
     return blocks * ((p_count + gl - 1) // gl)
 
 
@@ -4102,17 +4393,35 @@ def identical_gemm_step_geometry_into(
     harnesses; `identical_gemm_into`'s hook reaches it through
     `gemm_step_arm_geometry`). ASYNCHRONOUS like `identical_gemm_into`.
 
-    GEMM_GEOM_SHIPPED runs PLAN_TUNED_128_8X8. On a build without
-    `-D MOJOLEARN_GEMM_ARM_TRIAL=1` EVERY geometry runs PLAN_TUNED_128_8X8
-    and `sabotage` is ignored, so the arms check fails on reach there.
+    DEVIATION 2595. GEMM_GEOM_SHIPPED runs the shipped dispatch
+    (`identical_gemm_shipped_into`: ksplit where the column's row is above 0
+    and the group rule takes the call, else `choose_gemm_plan`'s plan); with
+    `sabotage` on a trial build it runs that dispatch's body sabotaged
+    (`identical_gemm_shipped_at_row_into[True]` at the column's row).
+    GEMM_GEOM_TUNED128 runs PLAN_TUNED_128_8X8, the old plan, on EVERY
+    build. On a build without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` every other
+    geometry runs the shipped dispatch and `sabotage` is ignored, so the arms
+    check fails on reach there.
 
-    The two ksplit geometries (2591) allocate their own workspace and
-    therefore SYNCHRONIZE before returning
-    (`identical_gemm_step_ksplit_into`); their group size is
-    `gemm_step_geometry_group_leaves`."""
+    The two ksplit geometries (2591), and the shipped geometry wherever the
+    ksplit default takes the call, allocate their own workspace and
+    therefore SYNCHRONIZE before returning (`_ksplit_run`); their group size
+    is `gemm_step_geometry_group_leaves`."""
     if geom < 0 or geom >= GEMM_GEOM_COUNT:
         raise Error("identical_gemm_step_geometry_into: no geometry " + String(geom))
     if m <= 0 or n <= 0:
+        return
+    if geom == GEMM_GEOM_TUNED128:
+        identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8)
+        return
+    if geom == GEMM_GEOM_SHIPPED:
+        comptime if GEMM_ARM_TRIAL:
+            if sabotage:
+                identical_gemm_shipped_at_row_into[True](
+                    ctx, c, a, b, ws, m, n, k, op, GEMM_KSPLIT_DEFAULT_S
+                )
+                return
+        identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
         return
     comptime if GEMM_ARM_TRIAL:
         if geom == GEMM_GEOM_KSPLIT or geom == GEMM_GEOM_KSPLIT_LEAF:
@@ -4121,13 +4430,12 @@ def identical_gemm_step_geometry_into(
                 gemm_step_geometry_group_leaves(geom, m, n, k), sabotage,
             )
             return
-        if geom != GEMM_GEOM_SHIPPED:
-            if sabotage:
-                _step_geometry_launch[True](ctx, c, a, b, m, n, k, op, geom)
-            else:
-                _step_geometry_launch[False](ctx, c, a, b, m, n, k, op, geom)
-            return
-    identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8)
+        if sabotage:
+            _step_geometry_launch[True](ctx, c, a, b, m, n, k, op, geom)
+        else:
+            _step_geometry_launch[False](ctx, c, a, b, m, n, k, op, geom)
+    else:
+        identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
 
 
 def _gemm_step_arm_hook(
@@ -4142,13 +4450,20 @@ def _gemm_step_arm_hook(
     op: Int,
 ) raises -> Bool:
     """DEVIATION 2542. True when an arm served the call. Raises on an
-    unknown MOJOLEARN_GEMM_ARM before anything is enqueued."""
+    unknown MOJOLEARN_GEMM_ARM before anything is enqueued.
+
+    DEVIATION 2595: a SABOTAGED call whose geometry is shipped (the
+    `shipped` arm, or any arm at a call it does not take) is served here by
+    the shipped dispatch's own body, sabotaged, so the default's reach is
+    provable through the entry; a clean one falls through to the shipped
+    dispatch line."""
     var arm = gemm_step_arm_from_env()
     var geom = gemm_step_arm_geometry(arm, m, n, k)
-    if geom == GEMM_GEOM_SHIPPED:
+    var sabotage = (arm & GEMM_ARM_SABOTAGE) != 0
+    if geom == GEMM_GEOM_SHIPPED and not sabotage:
         return False
     identical_gemm_step_geometry_into(
-        ctx, c, a, b, ws, m, n, k, op, geom, (arm & GEMM_ARM_SABOTAGE) != 0
+        ctx, c, a, b, ws, m, n, k, op, geom, sabotage
     )
     return True
 

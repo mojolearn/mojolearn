@@ -29,6 +29,14 @@ False`, the control: it should read like the shipped row); then `lfold`,
 `identical_gemm_ksplit_kernel` at the shipped geometry, which should also
 read like the shipped row (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md
 section 5.1: same per-window body, two more Int32 arguments, a 2-D grid).
+
+DEVIATION 2595 (that brief's section 10): `shipped_128x128` is the TUNED
+128x128 specialization, which the shipped dispatch still runs wherever the
+ksplit default does not take a call (every call on a column whose block
+parallelism row is 0). On a column whose row is above 0 the calls the group
+rule takes run the `ksplit_128x128` row's kernel. The
+`GEMM_STEP_RESOURCES_GEOMETRY label=shipped_default` line says which is true
+on this build.
 """
 from max.gpu.host import Attribute, DeviceContext
 
@@ -47,6 +55,7 @@ from gemm.checks.gemm_identical import (
     GEMM_GEOM_KSPLIT,
     GEMM_GEOM_LFOLD,
     GEMM_GEOM_QUARTER,
+    GEMM_GEOM_SHIPPED,
     GEMM_HALF_KS,
     GEMM_KSPLIT_CPT,
     GEMM_KSPLIT_KS,
@@ -153,6 +162,7 @@ def main() raises:
         " shared_limit=", column_shared_limit(TARGET_COLUMN), " head_w=", GEMM_HEAD_W,
         " tpb=", TUNED_TPB, sep="",
     )
+    print("GEMM_STEP_RESOURCES_GEOMETRY label=shipped_default ", gemm_step_geometry_name(GEMM_GEOM_SHIPPED), sep="")
     try:
         _stat_shipped(ctx, String("shipped_128x128"))
     except e:
