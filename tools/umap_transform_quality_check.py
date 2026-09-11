@@ -188,7 +188,8 @@ def main():
             train_before, query_before = train.tobytes(), query.tobytes()
             original = neighbor_order(query, train)
             model = UMAP(numeric_mode=args.mode, **config).fit(train)
-            fitted = model.embedding_.copy()
+            # embedding_ and transform() return mojolearn.Array; NumPy views both.
+            fitted = np.array(np.asarray(model.embedding_), copy=True)
             row["training_embedding"] = bits(fitted)
             row["fitted_config"] = list(model._transform_config)
             row["fitted_mode"] = model._transform_mode
@@ -197,13 +198,13 @@ def main():
             row["binding_sha256"] = sha(Path(binding.__file__))
             row["binding_mode_code"] = int(binding.umap_numeric_mode())
             save(args.output, record)
-            transformed = model.transform(query)
+            transformed = np.asarray(model.transform(query))
             row["query_embedding"] = bits(transformed)
             if transformed.shape != (len(query), dimensions):
                 raise RuntimeError("transform output shape mismatch")
             if (train.tobytes() != train_before or query.tobytes() != query_before
-                    or model.embedding_.tobytes() != fitted.tobytes()
-                    or model._transform_embedding.tobytes() != fitted.tobytes()):
+                    or np.asarray(model.embedding_).tobytes() != fitted.tobytes()
+                    or np.asarray(model._transform_embedding).tobytes() != fitted.tobytes()):
                 raise RuntimeError("transform mutated training/query data or fitted coordinates")
             measured = quality(original, transformed, fitted)
             # Every fixture length is coprime to 37; these are bijections.
