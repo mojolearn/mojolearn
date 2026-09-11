@@ -66,8 +66,11 @@ from training.checks.loss_oracle import REDUCTION_MEAN, CeConfig
 from training.checks.optimizer import (
     ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
     identical_optimizer_workspace_floats,
+    # DEVIATIONS 2646 and 2647: the pieces the glue update path launches.
+    OPT_TPB, _grid_for as _opt_grid_for, adam_update_kernel, adam_update_oop_kernel,
+    device_step_scalars, opt_refuse_device_inputs,
 )
-from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
+from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )

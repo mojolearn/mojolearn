@@ -191,6 +191,26 @@ refuses every sabotage build, `_require_profile`) and the recorded
 intermediates (`OPT_RECORD_INTERMEDIATES`; the trial path refuses the
 combination at compile time).
 
+READ LINE BY LINE against `adam_update_kernel` (lane, 2026-09-11, after
+writing it). Walking the shipped kernel top to bottom with every sabotage
+define off: `SAB_ADAMW_AS_ADAM` (skipped, `is_adamw` from the argument),
+the four loads with `ftz` in the order g, p, mp, vp (same order), the
+`SAB_FTZ_LATE` reloads (skipped), the decay branch on `weight_decay !=
+0.0` with O4b under the `SAB_DECAY_ADD_FORM` else and O4a (same
+expressions), `SAB_MOMENT_LERP` else `ms` then `m` (same), `vs` formed
+before the `SAB_SQ_ASSOC` else `g2` then `v` (same order), the
+`SAB_FTZ_LATE` recompute (skipped), `SAB_MHAT_FORM` (skipped, its early
+return is the sabotage's), `SAB_EPS_INSIDE_SQRT` else `SAB_RSQRT` else
+`s`, `sd`, `dn` (same), `SAB_RECIP_MUL` else `q` (same),
+`SAB_UNFUSED_UPDATE` else O14 `identical_mul_add(-step_size, q, p)` (same),
+the stores `p_out`, `ftz(m)`, `ftz(v)` (same values, other buffers),
+`OPT_RECORD_INTERMEDIATES` (not carried). The shipped `var m =
+Float32(0.0)` and `var v = Float32(0.0)` declarations are overwritten
+before any use and compute nothing. No operand, operation, flush or order
+differs. The only plain arithmetic operators in either clean path are
+`sd + eps` and the negation `-step_size`, both identical, and neither has a
+multiply operand a compiler could contract.
+
 The file's own warning applies: a random fixture cannot see a fused against
 unfused O14 (zero of 2^20 hashed patterns in `check-ieee-arith`). So the
 transcription rests on reading it beside the shipped kernel, as the shipped

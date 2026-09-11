@@ -600,6 +600,11 @@ def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=No
         attention_arm_resolved_hd64=mode.get('attention_arm_resolved_hd64'),
         attention_arm_trial_build=mode.get('attention_arm_trial_build'),
         gemm_arm=mode.get('gemm_arm'), gemm_plan=mode.get('gemm_plan'),
+        # DEVIATION 2648: the step glue arm the binding ran, the raw request
+        # and whether the binding was a glue trial build (see `mode`).
+        step_glue_arm=mode.get('step_glue_arm'),
+        step_glue_arm_requested=mode.get('step_glue_arm_requested'),
+        step_glue_trial_build=mode.get('step_glue_trial_build'),
         # Per-step witnesses (loss always; gradients/parameters/m/v/flags
         # when the step was witnessed) so a lean run compares with a full
         # run from result.json alone; the same records are in events.jsonl.

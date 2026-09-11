@@ -1102,6 +1102,8 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
         # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
+        # DEVIATION 2648: the step glue arm read-back (arm, trial).
+        module.def_function[byte_lm_step_glue_arm_binding]("byte_lm_step_glue_arm")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm: ", error))
