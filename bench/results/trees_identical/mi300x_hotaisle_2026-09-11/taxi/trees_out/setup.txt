@@ -1,0 +1,27 @@
+started=2026-09-11T16:14:58Z leg=taxi commit= gpu_archs=gfx942 target_column=amd
+pixi_install=0 16:14:59
+taxi_fetch=cdn, sha256 of both months matches the Mac 16:15:00
+venv_uv=0 16:15:02
+venv_via=uv CPython 3.12 (this runtime's python3 is '3.10')
+pip_base=0 16:15:28
+xgb_rocm_index=https://pypi.amd.com/rocm-6.4.4/simple (rocm major '6')
+pip_amd_xgboost=1 16:15:28
+xgb_rocm_works=NO (install failed)
+decode_taxi=0 16:15:35
+pip_xgboost_cpu=0 16:15:38
+build_base=0 16:15:45
+apt_lgbm_opencl=0 16:16:02
+lightgbm_opencl_build=0 16:16:53
+lightgbm_opencl_works=NO
+lightgbm_wheel_restore=0 16:17:08
+lgbm_retry_seconds=80
+build_gbdt=0 16:17:12
+build_rf=0 16:17:38
+build_trees=0 16:18:05
+build_fast_gbdt=0 16:19:31
+build_fast_rf=0 16:19:57
+build_fast_trees=0 16:20:23
+MOJO_PYTHON_LIBRARY=/root/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/libpython3.12.so.1.0
+import_identical=0 16:20:24
+import_fast=0 16:20:24
+setup_finished=2026-09-11T16:20:24Z

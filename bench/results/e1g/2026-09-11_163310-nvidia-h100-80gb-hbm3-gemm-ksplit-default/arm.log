@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod efurtjraw11nce ...
+ARMED. Pod efurtjraw11nce is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/ece6c35f-471f-4b93-8fcf-f6462a0e5568/scratchpad/wt-2595/tools/../bench/results/runpod_leases/efurtjraw11nce.lease
+  extend with: tools/runpod_guard.sh extend efurtjraw11nce '-p 17104 root@103.207.149.142' <minutes>

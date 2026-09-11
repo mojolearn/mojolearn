@@ -1,0 +1,30 @@
+| set | lane | dataset | rows | mode | arm | rounds | median ms | min..max | hash | FSPEED-ACC | log |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| baseline | et | taxi | 1000000 | full | cuml-et-gpu | 0 | - | - |  | REFUSED reason=ModuleNotFoundError: No module named 'cuml' | baseline.et.taxi.r1000000.full |
+| baseline | et | taxi | 1000000 | full | ours | 5 | 4093 | 4074..4134 | e683f121d11f59dd | metric=logloss value=0.527541 metric=auc value=0.608084 | baseline.et.taxi.r1000000.full |
+| baseline | et | taxi | 1000000 | full | sklearn-et-cpu | 5 | 10224 | 10190..10246 | 3c5811e5ad542b1c,43c1a43d20b7b26a,b9d0f44081218d53,dd689173dd36c732,ef2db2569c96cdbf | metric=logloss value=0.527011 metric=auc value=0.611206 | baseline.et.taxi.r1000000.full |
+| baseline | et | taxi | 1000000 | ours | ours | 5 | 4081 | 4071..4095 | e683f121d11f59dd | metric=logloss value=0.527541 metric=auc value=0.608084 | baseline.et.taxi.r1000000.ours.fastab |
+| baseline | et | taxi | 1000000 | ours | ours-ab | 5 | 4081 | 4075..4091 | e683f121d11f59dd | metric=logloss value=0.527541 metric=auc value=0.608084 | baseline.et.taxi.r1000000.ours.fastab |
+| baseline | gbdt-depthwise | taxi | 1000000 | full | ours | 5 | 1047 | 1038..1063 | 40c1683b9e0eb151 | metric=logloss value=0.525086 metric=auc value=0.621421 | baseline.gbdt-depthwise.taxi.r1000000.full |
+| baseline | gbdt-depthwise | taxi | 1000000 | full | catboost-cpu | 5 | 4362 | 4317..4423 | d46ebc8ea717cec9 | metric=logloss value=0.525755 metric=auc value=0.620508 | baseline.gbdt-depthwise.taxi.r1000000.full |
+| baseline | gbdt-depthwise | taxi | 1000000 | full | xgboost-cpu | 5 | 1043 | 1013..1483 | 98e44c1ffb4f3ad5 | metric=logloss value=0.525332 metric=auc value=0.620103 | baseline.gbdt-depthwise.taxi.r1000000.full |
+| baseline | gbdt-depthwise | taxi | 1000000 | ours | ours | 5 | 1004 | 1002..1020 | 40c1683b9e0eb151 | metric=logloss value=0.525086 metric=auc value=0.621421 | baseline.gbdt-depthwise.taxi.r1000000.ours.fastab |
+| baseline | gbdt-depthwise | taxi | 1000000 | ours | ours-ab | 5 | 1097 | 1086..1129 | 47694757993dfc44,87f4135d04d7729f,ca52b12327449ca9,d72abea2b6d10f2c | metric=logloss value=0.525256 metric=auc value=0.620847 | baseline.gbdt-depthwise.taxi.r1000000.ours.fastab |
+| baseline | gbdt-lossguide | taxi | 1000000 | full | ours | 5 | 1774 | 1741..1779 | 0dd8bcfc3c3a4a1d | metric=logloss value=0.525504 metric=auc value=0.619386 | baseline.gbdt-lossguide.taxi.r1000000.full |
+| baseline | gbdt-lossguide | taxi | 1000000 | full | catboost-cpu | 5 | 6943 | 6868..6986 | 37d3cda55fec49eb | metric=logloss value=0.526113 metric=auc value=0.619758 | baseline.gbdt-lossguide.taxi.r1000000.full |
+| baseline | gbdt-lossguide | taxi | 1000000 | full | xgboost-cpu | 5 | 1034 | 982..1491 | 98e44c1ffb4f3ad5 | metric=logloss value=0.525332 metric=auc value=0.620103 | baseline.gbdt-lossguide.taxi.r1000000.full |
+| baseline | gbdt-lossguide | taxi | 1000000 | full | lightgbm-cpu | 5 | 952 | 930..988 | 009bb8aaa0751d0a,8c83a15cd6ec5715 | metric=logloss value=0.525029 metric=auc value=0.620694 | baseline.gbdt-lossguide.taxi.r1000000.full |
+| baseline | gbdt-lossguide | taxi | 1000000 | ours | ours | 5 | 1749 | 1735..1759 | 0dd8bcfc3c3a4a1d | metric=logloss value=0.525504 metric=auc value=0.619386 | baseline.gbdt-lossguide.taxi.r1000000.ours.fastab |
+| baseline | gbdt-lossguide | taxi | 1000000 | ours | ours-ab | 5 | 1837 | 1821..1859 | 3b212f511b417858,4afc84abd9cd44ac,8dd5f97ece76ffa2,9483451e9bc6e4d9,df4ed7c00b1424d3 | metric=logloss value=0.525250 metric=auc value=0.620216 | baseline.gbdt-lossguide.taxi.r1000000.ours.fastab |
+| baseline | gbdt-symmetric | taxi | 1000000 | full | ours | 5 | 507 | 492..525 | 90c3558501933f47 | metric=logloss value=0.525735 metric=auc value=0.619460 | baseline.gbdt-symmetric.taxi.r1000000.full |
+| baseline | gbdt-symmetric | taxi | 1000000 | full | catboost-cpu | 5 | 2180 | 2168..2212 | e127ef39e1772f6c | metric=logloss value=0.525674 metric=auc value=0.617966 | baseline.gbdt-symmetric.taxi.r1000000.full |
+| baseline | gbdt-symmetric | taxi | 1000000 | ours | ours | 5 | 456 | 453..468 | 90c3558501933f47 | metric=logloss value=0.525735 metric=auc value=0.619460 | baseline.gbdt-symmetric.taxi.r1000000.ours.fastab |
+| baseline | gbdt-symmetric | taxi | 1000000 | ours | ours-ab | 5 | 543 | 541..557 | acfbbd54d9764a29 | metric=logloss value=0.525736 metric=auc value=0.619459 | baseline.gbdt-symmetric.taxi.r1000000.ours.fastab |
+| baseline | rf | taxi | 1000000 | full | cuml-rf-gpu | 0 | - | - |  | REFUSED reason=ModuleNotFoundError: No module named 'cuml' | baseline.rf.taxi.r1000000.full |
+| baseline | rf | taxi | 1000000 | full | ours | 5 | 1291 | 1280..1372 | d8f64dae01de00bd | metric=logloss value=0.525910 metric=auc value=0.617154 | baseline.rf.taxi.r1000000.full |
+| baseline | rf | taxi | 1000000 | full | sklearn-rf-cpu | 5 | 12529 | 12478..12593 | 2b5a8b5dab81f4e2,38fa9de608f35e4d,97583f1f83dd3ede,d1cb14081b2c79dc,da536ed21a7fc52f | metric=logloss value=0.525336 metric=auc value=0.617420 | baseline.rf.taxi.r1000000.full |
+| baseline | rf | taxi | 1000000 | ours | ours | 5 | 1280 | 1276..1310 | d8f64dae01de00bd | metric=logloss value=0.525910 metric=auc value=0.617154 | baseline.rf.taxi.r1000000.ours.fastab |
+| baseline | rf | taxi | 1000000 | ours | ours-ab | 5 | 1280 | 1273..1295 | 22b93d50f6939aa0 | metric=logloss value=0.525887 metric=auc value=0.617467 | baseline.rf.taxi.r1000000.ours.fastab |
+| baseline | rf | taxi | 2000000 | full | cuml-rf-gpu | 0 | - | - |  | REFUSED reason=ModuleNotFoundError: No module named 'cuml' | baseline.rf.taxi.r2000000.full |
+| baseline | rf | taxi | 2000000 | full | ours | 5 | 1896 | 1888..1961 | f1240292e3b1dd3f | metric=logloss value=0.524221 metric=auc value=0.622648 | baseline.rf.taxi.r2000000.full |
+| baseline | rf | taxi | 2000000 | full | sklearn-rf-cpu | 5 | 27955 | 27811..28089 | 022e7b307c164084,09d14a067066941f,3ee4f3ea97a4d319,6fbc3efd066d9a31,9b0fee0627d354d1 | metric=logloss value=0.523834 metric=auc value=0.622621 | baseline.rf.taxi.r2000000.full |

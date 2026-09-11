@@ -324,9 +324,42 @@ OUR IDENTICAL arm on the SAME pod: the shipped `stash_tiled` lean step from
 | ours IDENTICAL (`stash_tiled`, bits equal on every vendor) | 0.3835 | 0.3833 | 1 |
 
 Not measured, so their true fast column may be faster still: compile with
-TF32, and mixed precision (bf16 autocast). Our number is the step time for
+TF32, and mixed precision (bf16 autocast). The harness now has those columns
+(`compile_tf32`; `eager_bf16` and `compile_bf16`, which wrap forward and loss
+in `torch.autocast` bfloat16 with float32 parameters and AdamW state, leave
+the SDPA pick to torch under `auto`, and record the SDPA kernel that ran). They
+are owed on this H100 and on the AMD MI300X (Hot Aisle, ROCm torch). The
+MI300X rows are a new tuple and are never mixed with the H100 rows above.
+Our number is the step time for
 bitwise identical results across Apple, NVIDIA and AMD; theirs carries no
 such property (`nondeterministic_label` true on every column).
+
+#### Same pod, after the two NVIDIA default flips (2026-09-11 16:41Z)
+
+Source: `bench/results/e1g/2026-09-11_164101-nvidia-h100-80gb-hbm3-new-defaults-torch/remote/`
+(`attention-step/lm_summary.tsv`, `torch-lm-step/summary.tsv`), RunPod pod
+mgpc9vhnkjre5x, driver 580.126.09 (1980 MHz clock reading), commit e629434d,
+same harness, shape, init, AdamW, clock and corpora as the table above. OUR
+IDENTICAL arm is the shipped NVIDIA default at that commit: GEMM `ksplit`
+(DEVIATION 2595) and attention `stash_tiled_fgrid_r32_qres_pf` (DEVIATION
+2534), resolved by the binding and confirmed by the shipped fused check on
+the pod. SDPA observed in the profiled warmup: `efficient` for the float32
+columns, `flash` for the bf16 columns.
+
+| column | enwik8 s | Pile GitHub s | our IDENTICAL / column (enwik8, Pile GitHub) |
+|---|---|---|---|
+| compile_bf16 (their fastest measured) | 0.02038 | 0.02085 | 14.48x, 14.15x |
+| compile_tf32 | 0.03189 | 0.03208 | 9.25x, 9.19x |
+| eager_bf16 | 0.03705 | 0.03879 | 7.96x, 7.60x |
+| eager_tf32 | 0.03788 | 0.03779 | 7.79x, 7.80x |
+| compile_fp32 | 0.05775 | 0.05735 | 5.11x, 5.14x |
+| eager_fp32 | 0.06197 | 0.06200 | 4.76x, 4.76x |
+| ours IDENTICAL (shipped defaults, bits equal on every vendor) | 0.2950 | 0.2949 | 1 |
+
+On the same pod our previous attention default (`stash_tiled`, with the GEMM
+default already `ksplit`) ran 0.3414 / 0.3409 s. Every torch column is
+nondeterministic by label; ours is bitwise identical across Apple, NVIDIA
+and AMD.
 
 ### kNN second kind (HIGGS rows)
 
@@ -538,8 +571,10 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
    below 1M).
 5. (closed 2026-09-11 on the H100: the "torch byte-LM training step" table
    in the H100 section, eager fp32, eager TF32 and compile fp32 on enwik8 and
-   Pile GitHub. Still owed: the same row on the AMD MI325X with ROCm torch,
-   and compile TF32 and bf16 autocast columns on the H100.)
+   Pile GitHub. Still owed: the same row on AMD with ROCm torch (the leg now
+   targets the Hot Aisle MI300X, a new tuple), and the harness's
+   `compile_tf32`, `eager_bf16` and `compile_bf16` columns on the H100 and on
+   the MI300X.)
 6. cuML brute-force kNN on the HIGGS prefix (the kNN second kind, DEVIATION
    2524; the "kNN second kind (HIGGS rows)" table above), H100, k 10 and
    15, measured once by `tools/knn_selection_gate.sh` under
@@ -997,6 +1032,26 @@ arm's 0.138653 / 0.966990 exactly (still two hashes across five rounds), which
 points at the greedy searcher path on AMD. RF and ET hashes equal the H100
 hashes at 1M and 2M (574b24d0d7af51d0, cc25cb08f8b5a813, 40b1c5b03ba40420).
 
+Cause found and fixed 2026-09-11 (DEVIATION 2600, lane/amd-gbdt-identity-fix).
+The greedy searcher's binary, half-byte and hist_2 5-/6-bit histogram kernels
+peeled a partition's head and tail with a loop that gave threads at or past
+128 or 256 of a 512-thread block no trip, so part of the block skipped a
+threadgroup barrier that only the 64-lane AMD column issues
+(`gbdt/methods/greedy_subsets_searcher/kernel/lane_sync.mojo`). Taxi and
+Istella-S have low-cardinality columns that land in those kernels; the
+128-border float fixtures do not. Verified on a Hot Aisle MI300X (VF, gfx942,
+8 cores, ROCm 6.4.1 userland on a 7.2.4 host) with the same source built with
+and without the fix: identity_break 36/36 gbdt cells equal to the H100 with it
+(32/36, `ties` MOVED, without); `checks/gbdt_sub_byte_identity_check.py` 16/16
+with it (0/16 without, and restoring one kernel file at a time failed exactly
+that file's fixtures); taxi 1M symmetric hash 90c3558501933f47 in 10 of 10
+rounds with logloss 0.525735 / AUC 0.619460, equal to the H100 cell of the same
+source (without it five hashes in five rounds, twice). On the H100 both builds
+gave the same bits. The GBDT rows and accuracy above were measured BEFORE the
+fix and are not re-run; they are not IDENTICAL results. The shipped 0.8.1 wheel
+moves on `ties` on the MI300X (it carries the defect). The pointwise arm's
+second hash is not explained by this fix and was not re-measured.
+
 Taxi, 1,000,000 training rows (2,000,000 for RF 2M), leg 1 (droplet
 599636038):
 
@@ -1058,3 +1113,55 @@ istella=1.408 reason=time (quality better on both); DEVIATION 2512 on
 against off, RF NO FLIP geomean=1.001 taxi=0.999 istella=1.004 (bits equal),
 symmetric NO FLIP geomean=1.011 taxi=0.999 istella=1.023 (its quality delta
 is inside the round-to-round movement above), so 2512 is neutral on AMD.
+
+## AMD Instinct MI300X, amdgpu 6.16.13, ROCm 6.4.1, Hot Aisle (13-core VM)
+
+Hot Aisle 1x MI300X VM on the 13-core spec (the card reports AMD Instinct
+MI300X VF, gfx942), Intel Xeon Platinum 8470 with 13 cores and 224 GB. The
+host runs Ubuntu 24.04.4 with ROCm 7.2.4, and the leg body runs in the
+runner's default container `rocm/dev-ubuntu-22.04:6.4.1-complete` (Ubuntu
+22.04.5, glibc 2.35, ROCm 6.4.1 userland), CPython 3.12.14, Mojo 1.0.0
+(ed45d567). ENGINEERING_RULES.md section 10 applies, and these rows are a new
+tuple, never mixed with the MI325X rows above or with any NVIDIA row. CatBoost
+and scikit-learn have no AMD GPU path and run on this VM's CPU on all 13
+cores. Ours is the IDENTICAL tier at the default build, source 8d7e129c, which
+carries the AMD GBDT identity fix (6ad945c6, DEVIATION 2600). Same process as
+our arm, arms alternating per round, opponents imported before our binding, 1
+warm-up plus 5 rounds, ms median (min..max), configs as in the MI325X section.
+Accuracy is logloss / AUC on the fixed test tail. Ours FAST is the
+`numeric_mode='fast'` arm interleaved with IDENTICAL in its own ours-only cell
+(`*.ours.fastab.log`), set against the opponent row beside it. Evidence is in
+`bench/results/trees_identical/mi300x_hotaisle_2026-09-11/taxi/` (build logs
+over 100 KB stay outside the repository).
+
+Two opponents with an AMD GPU path did not run on the GPU here, and each row
+says so. XGBoost is the PyPI 3.4.1 build on the CPU, because AMD ships
+`amd_xgboost` only as manylinux_2_39 wheels and this container has glibc 2.35,
+so pip found no distribution. The amd_xgboost GPU row is owed on an Ubuntu
+24.04 image. LightGBM 4.7.0 ran on the CPU with `min_child_weight=1e-3`
+(`MOJOLEARN_SPEED_LGBM_PARAMS`), the one retry after the harness's 0.0 was
+refused on the MI325X. Its OpenCL build compiled and still failed its probe
+with "Check failed: (best_split_info.right_count) > (0)" under
+`gpu_use_dp=True` (one attempt, 80 s).
+
+Identity on this box. With the fix, each of our IDENTICAL GBDT lanes returned
+one prediction hash across all ten fits in both of its cells (symmetric
+90c3558501933f47, depthwise 40c1683b9e0eb151, lossguide 0dd8bcfc3c3a4a1d). Our
+RF and ET hashes equal the MI325X taxi hashes (RF 1M d8f64dae01de00bd, RF 2M
+f1240292e3b1dd3f, ET e683f121d11f59dd). FAST GBDT hashes move every round, FAST
+RF holds one hash of its own, and FAST ET returns the IDENTICAL hash.
+
+Taxi, 1,000,000 training rows (2,000,000 for RF 2M), VM 9b86604d:
+
+| lane | opponent | version | device | config | opponent ms | opponent logloss / AUC | ours IDENTICAL ms | ours logloss / AUC | IDENTICAL / opponent | ours FAST ms | FAST / opponent |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| RF 1M | scikit-learn RandomForestClassifier | 1.9.1 | CPU, 13 cores (n_jobs=-1) | exact thresholds (no bins) | 12529 (12478..12593) | 0.525336 / 0.617420 | 1291 (1280..1372) | 0.525910 / 0.617154 | 0.10x | 1280 (1273..1295) | 0.10x |
+| RF 2M | scikit-learn RandomForestClassifier | 1.9.1 | CPU, 13 cores | same | 27955 (27811..28089) | 0.523834 / 0.622621 | 1896 (1888..1961) | 0.524221 / 0.622648 | 0.07x | not run (FAST cells are 1M) | - |
+| ET 1M | scikit-learn ExtraTreesClassifier | 1.9.1 | CPU, 13 cores | no bootstrap | 10224 (10190..10246) | 0.527011 / 0.611206 | 4093 (4074..4134) | 0.527541 / 0.608084 | 0.40x | 4081 (4075..4091) | 0.40x |
+| symmetric 1M | CatBoost SymmetricTree | 1.2.10 | CPU, 13 threads | task_type CPU | 2180 (2168..2212) | 0.525674 / 0.617966 | 507 (492..525) | 0.525735 / 0.619460 | 0.23x | 543 (541..557) | 0.25x |
+| depthwise 1M | CatBoost Depthwise | 1.2.10 | CPU, 13 threads | task_type CPU | 4362 (4317..4423) | 0.525755 / 0.620508 | 1047 (1038..1063) | 0.525086 / 0.621421 | 0.24x | 1097 (1086..1129) | 0.25x |
+| depthwise 1M | XGBoost (PyPI) | 3.4.1 | CPU, 13 threads (amd_xgboost not installable on the glibc 2.35 image) | tree_method hist, device cpu | 1043 (1013..1483) | 0.525332 / 0.620103 | 1047 (1038..1063) | 0.525086 / 0.621421 | 1.00x | 1097 (1086..1129) | 1.05x |
+| lossguide 1M | CatBoost Lossguide | 1.2.10 | CPU, 13 threads | task_type CPU | 6943 (6868..6986) | 0.526113 / 0.619758 | 1774 (1741..1779) | 0.525504 / 0.619386 | 0.26x | 1837 (1821..1859) | 0.26x |
+| lossguide 1M | XGBoost (PyPI) | 3.4.1 | CPU, 13 threads (same reason) | grow_policy lossguide; hash 98e44c1ffb4f3ad5, equal to its depthwise row | 1034 (982..1491) | 0.525332 / 0.620103 | 1774 (1741..1779) | 0.525504 / 0.619386 | 1.72x | 1837 (1821..1859) | 1.78x |
+| lossguide 1M | LightGBM | 4.7.0 | CPU, 13 threads | min_child_weight=1e-3 (retry); OpenCL build failed its probe | 952 (930..988) | 0.525029 / 0.620694 | 1774 (1741..1779) | 0.525504 / 0.619386 | 1.86x | 1837 (1821..1859) | 1.93x |
+| depthwise, lossguide 1M | XGBoost `amd_xgboost` | - | GPU | - | owed (needs a glibc 2.39 image) | - | - | - | - | - | - |

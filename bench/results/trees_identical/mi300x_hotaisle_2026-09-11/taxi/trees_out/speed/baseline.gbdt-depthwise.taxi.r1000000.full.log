@@ -1,0 +1,40 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=cpu,gpu,opencl metric=devices delta=3.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (ENGINEERING_RULES.md section 10); every arm name carries its device
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=3.000000 reason=devices=cpu,gpu,opencl (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+FSPEED-IMPORT-ORDER lane=gbdt-depthwise first=opponents
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-cpu mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 ms=4742.737
+FSPEED-WARMUP lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 ms=4432.338
+FSPEED-WARMUP lane=gbdt-depthwise arm=xgboost-cpu shape=taxi-1000000x16 ms=983.279
+FSPEED-ORDER lane=gbdt-depthwise round=1 arms=ours,catboost-cpu,xgboost-cpu
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=1 ms=1047.337 hash=40c1683b9e0eb151
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 round=1 ms=4345.245 hash=d46ebc8ea717cec9
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=taxi-1000000x16 round=1 ms=1042.849 hash=98e44c1ffb4f3ad5
+FSPEED-ORDER lane=gbdt-depthwise round=2 arms=ours,catboost-cpu,xgboost-cpu
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=2 ms=1063.157 hash=40c1683b9e0eb151
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 round=2 ms=4423.349 hash=d46ebc8ea717cec9
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=taxi-1000000x16 round=2 ms=1013.441 hash=98e44c1ffb4f3ad5
+FSPEED-ORDER lane=gbdt-depthwise round=3 arms=ours,catboost-cpu,xgboost-cpu
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=3 ms=1038.257 hash=40c1683b9e0eb151
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 round=3 ms=4378.337 hash=d46ebc8ea717cec9
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=taxi-1000000x16 round=3 ms=1030.361 hash=98e44c1ffb4f3ad5
+FSPEED-ORDER lane=gbdt-depthwise round=4 arms=ours,catboost-cpu,xgboost-cpu
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=4 ms=1048.398 hash=40c1683b9e0eb151
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 round=4 ms=4317.243 hash=d46ebc8ea717cec9
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=taxi-1000000x16 round=4 ms=1047.184 hash=98e44c1ffb4f3ad5
+FSPEED-ORDER lane=gbdt-depthwise round=5 arms=ours,catboost-cpu,xgboost-cpu
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=5 ms=1041.368 hash=40c1683b9e0eb151
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 round=5 ms=4362.498 hash=d46ebc8ea717cec9
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=taxi-1000000x16 round=5 ms=1483.110 hash=98e44c1ffb4f3ad5
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.525086
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.621421
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=logloss value=0.525755
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=auc value=0.620508
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-cpu metric=logloss value=0.525332
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-cpu metric=auc value=0.620103
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

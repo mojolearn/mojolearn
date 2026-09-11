@@ -326,7 +326,9 @@ def add_half_byte_point(
             and `sub_byte_lane_sync_for` hands a real threadgroup barrier to
             every column that is not exactly 32 lanes wide. It reorders
             nothing: no slot receives adds from two tiles, so per slot the
-            order is program order either way.
+            order is program order either way. The "block-uniform trip
+            count" above did NOT hold for the head/tail peel's calls until
+            DEVIATION 2600 (see `lane_sync.mojo`).
 
             THE PRICE, on `amd` only among buildable columns: eight
             threadgroup barriers per point instead of eight warp syncs. That

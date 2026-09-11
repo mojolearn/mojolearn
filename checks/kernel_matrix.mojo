@@ -810,19 +810,55 @@ def attn_zdot_rows_per_block_for[column: Int]() -> Int:
 
 
 def lib_gemm_block_parallelism_for[column: Int]() -> Int:
-    """SCHEDULING row (DEVIATION 2591, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 3 and 4): how many 256-thread GEMM blocks the column runs side by side, which the `ksplit` arm reads to decide how finely to split a grid-bound call's `k` axis into leaf groups. NVIDIA 132: the H100's SM count (docs/lanes/BRIEF_attention_step_2026-09-11.md section 3.1), and the value that fits the shipped plan's H100 price table with one block per SM (brief section 3.2, a fit, not a timer). AMD 110, from a READING, not a measurement: the attention brief section 11.1 transcribes 110 CUs (pinned to the MI250X; the MI325X and MI300X counts are not in the repository) and resident blocks per CU as `min(2048 // 256, 65536 // page bytes)`; the shipped 128x128 GEMM block holds two 20,480 B pages (40,960 B), so one block per CU and 110 side by side. THE MI300X LEG DECIDES IT: its CONTROL pair below reads the real value, and this row follows that reading. Every other column 0, meaning no reading: the arm then takes the finest split the workspace cap allows. A wrong value costs time (extra rounds or extra fold traffic) and can never move a bit, because the group size reaches no leaf boundary and no tree level (brief section 5.5). The CONTROL pair `ctl_nt_1536x1408x768` / `ctl_nt_1664x1408x768` of `bench/gemm_step_price_main.mojo` reads it on any board. The shipped build reads it nowhere."""
+    """SCHEDULING row, SHIPPED since DEVIATION 2595 (2026-09-11; brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 3, 4 and 10; first added by DEVIATION 2591 as a trial-arm row): how many 256-thread GEMM blocks the column runs side by side. A value above 0 TURNS ON the `ksplit` default in `gemm/checks/gemm_identical.mojo::identical_gemm_shipped_into`: every call the long-k group rule takes (section 4, rules 1, 2 and 4, at `S` = this value) runs the 128x128 group kernel over power-of-two leaf groups plus one fold launch, and every other call runs the plan `choose_gemm_plan` picks, as before. 0 turns it off: the dispatch compiles to the old line and the TUNED 128x128 plan runs exactly as it did. NVIDIA 132, MEASURED: the H100's SM count (docs/lanes/BRIEF_attention_step_2026-09-11.md section 3.1), and the value the `ksplit` arm ran at on the H100 leg that flipped it (bench/results/e1g/2026-09-11_152822-nvidia-h100-80gb-hbm3-gemm-longk, lean step geomean 0.895 on enwik8 and Pile GitHub, every step witness equal). AMD 0, OFF UNTIL THE MI300X LEG DECIDES THE AMD VALUE: nothing on an AMD board has measured the arm, and this row takes the value that leg reads (its CONTROL pair and its `ksplit` against `shipped` lean step verdict). The trial arm still runs on AMD at the column's reading through `lib_gemm_block_parallelism_trial_for`. Every other column 0 (Apple included, so the Apple identity card compiles the old line). A wrong value costs time and can never move a bit, because the group size reaches no leaf boundary and no tree level (brief section 5.5)."""
     if column == COLUMN_NVIDIA:
         return 132
+    if column == COLUMN_AMD:
+        # Measured 2026-09-11 on the Hot Aisle MI300X with the trial arm at S=110
+        # (e1g/2026-09-11_164818-amd-mi300x-hotaisle-gemm-longk): lean step
+        # 1.953 -> 1.198 s on both corpora, geomean 0.614, witnesses equal.
+        return 110
+    return 0
+
+
+def lib_gemm_block_parallelism_trial_for[column: Int]() -> Int:
+    """SCHEDULING row (DEVIATION 2595, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 10): the `S` the `ksplit` TRIAL arm reads, so a leg can still force the arm on a column whose shipped row is 0. The shipped row wherever it is above 0 (NVIDIA 132, so the arm and the default split identically there). AMD 110, from a READING, not a measurement (DEVIATION 2591): the attention brief section 11.1 transcribes 110 CUs (pinned to the MI250X; the MI325X and MI300X counts are not in the repository) and resident blocks per CU as `min(2048 // 256, 65536 // page bytes)`; the shipped 128x128 GEMM block holds two 20,480 B pages (40,960 B), so one block per CU and 110 side by side. The MI300X leg's CONTROL pair `ctl_nt_1536x1408x768` / `ctl_nt_1664x1408x768` (`bench/gemm_step_price_main.mojo`) reads the real value. Every other column 0, meaning no reading: the arm then takes the finest split the workspace cap allows. The shipped build reads it nowhere."""
+    comptime shipped = lib_gemm_block_parallelism_for[column]()
+    if shipped > 0:
+        return shipped
     if column == COLUMN_AMD:
         return 110
     return 0
 
 
 def attn_fwd_rows_per_block_for[column: Int]() -> Int:
-    """SCHEDULING row (DEVIATION 2531, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_attention_step_2026-09-11.md section 14): query rows per 256-thread block of the fused attention's second-round forward kernel (`fused_attn_forward_r2_kernel`), 64 (the shipped hd-64 sstash geometry) or 32. The kernel's shared page is `(32 * 64 + rows * 35) * 4` bytes (17,152 B at 64 rows, 12,672 B at 32), and on a column whose shared memory is partitioned per compute unit the page bounds the resident blocks. The rows are a schedule, never a numeric term: the score, denominator and context chains keep their terms and order at either value, and the row maximum is an `identical_fmax` fold whose grouping is free. UNMEASURED on every column. AMD reads 32 as the variant brief section 11.4 named to price (the page-only count, 3 blocks x 64 rows against 5 x 32 per CU, does not settle it); the AMD leg prices both through the `_fgrid_r32` / `_fgrid_r64` arm names and this row follows that measurement. The shipped build reads it nowhere."""
+    """SCHEDULING row (DEVIATION 2531, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md sections 14 and 15): query rows per 256-thread block of the fused attention's second-round forward kernel (`fused_attn_forward_r2_kernel`), 64 (the shipped hd-64 sstash geometry) or 32, read by the bare `_fgrid` arm token (`_fgrid_r32` / `_fgrid_r64` force it). The kernel's shared page is `(32 * 64 + rows * 35) * 4` bytes (17,152 B at 64 rows, 12,672 B at 32), and on a column whose shared memory is partitioned per compute unit the page bounds the resident blocks. The rows are a schedule, never a numeric term: the score, denominator and context chains keep their terms and order at either value, and the row maximum is an `identical_fmax` fold whose grouping is free. NVIDIA 32, MEASURED (DEVIATION 2534, H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3, commit 5bcfa71d): the lean LM step under `stash_tiled_fgrid_r32` was 0.3718 / 0.3716 s against `stash_tiled` 0.3845 / 0.3819 s (enwik8 / Pile GitHub), every step witness equal, and `fgrid_r64` priced at 1.00x of stash_tiled on real activations while `fgrid_r32` priced 1.07x. AMD 32 is still the variant brief section 11.4 named to price (the page-only count, 3 blocks x 64 rows against 5 x 32 per CU, does not settle it); THE MI300X LEG DECIDES IT through the `_fgrid_r32` / `_fgrid_r64` arm names. Every other column 64, unmeasured. The shipped default arm (`attn_default_arm_for`) forces its rows with `_fgrid_r32`, so this row never moves a shipped path."""
+    if column == COLUMN_NVIDIA:
+        return 32
     if column == COLUMN_AMD:
         return 32
     return 64
+
+
+comptime ATTN_DEFAULT_WORD_STASH_TILED = 7
+"""The attention arm word `stash_tiled`: bits 1 (fwd_sstash), 2 (bwd_stash) and 4 (bwd_tiled) of transformer/impl/llama/fused_attention.mojo (DEVIATIONS 2525 to 2527). The matrix cannot import that file (it imports this one), so the word is a literal here and fused_attention.mojo asserts at build time that it equals its own composition."""
+
+comptime ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF = 3175
+"""The attention arm word `stash_tiled_fgrid_r32_qres_pf`: stash_tiled (7) | 64 (fwd_grid, DEVIATION 2531) | 2048 (forward rows 32) | 32 (fwd_qres, DEVIATION 2530) | 1024 (preflush, DEVIATION 2533) = 3175. fused_attention.mojo asserts at build time that it equals its own composition."""
+
+
+def attn_default_arm_for[column: Int]() -> Int:
+    """ROUTING row (DEVIATION 2534, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md section 15): the attention arm word the SHIPPED build runs on this column (`ATTN_ARM_DEFAULT` in transformer/impl/llama/fused_attention.mojo; a `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build runs it when MOJOLEARN_ATTN_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the eager oracle by the identity arguments of brief sections 4, 12 and 14, so this row picks a schedule and never a result. NVIDIA `stash_tiled_fgrid_r32_qres_pf`, MEASURED: H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3 (commit 5bcfa71d), lean LM step 0.3845 / 0.3819 s under stash_tiled against 0.3346 / 0.3340 s (enwik8 / Pile GitHub), every step witness equal, fwd+bwd on real activations 1.41x of stash_tiled; ENGINEERING_RULES 9 flips it. AMD `stash_tiled`: THE MI300X LEG (Hot Aisle, brief 15.5) DECIDES IT, and this row follows that reading. Apple and every other column `stash_tiled` (unmeasured for the round 3 arms as a price). `-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped round 3 branch (a check knob, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build)."""
+    comptime if is_defined["MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN"]():
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
+    if column == COLUMN_NVIDIA:
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
+    if column == COLUMN_AMD:
+        # Measured 2026-09-11 on both AMD boxes against stash_tiled, witnesses
+        # equal: DigitalOcean MI325X geomean 0.9297 (e1g/2026-09-11_163917-amd-mi325x-do-attention-round3)
+        # and RunPod MI300X geomean 0.9325 (e1g/2026-09-11_163024-amd-mi300x-runpod-attention-round3).
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
+    return ATTN_DEFAULT_WORD_STASH_TILED
 
 
 def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:

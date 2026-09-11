@@ -61,6 +61,11 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit import (
     hist2_8bit_gather_kernel,
     hist2_8bit_kernel,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    hist2_level_quantize_kernel,
+)
+from checks.numerics import numeric_mode_name
+from std.os import getenv
 
 from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
@@ -442,6 +447,63 @@ comptime SYM_RIDX_SPLITS_2031 = (
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
     ]()
 )
+
+# ================= DEVIATION BLOCK 2580 =================
+# QUANTIZE THE STATS ONCE PER LEVEL, NOT ONCE PER 4-FEATURE GROUP. Every
+# one-byte hist_2 kernel (fused 8-bit and the 5/6/7-bit ladder) computed
+# `hist2_dither(pos)` and two `hist2_quantize` calls per row INSIDE each
+# group's walk: 55 quantizes per row per level at Istella-S's 220
+# features, 4 at taxi's. `hist2_level_quantize_kernel` now writes the
+# level's compute leaves into one Int32 plane of the stat plane's shape,
+# one launch per level after the reorder, and the kernels read two Int32s
+# per point. Same position, same dither key, same scale, so the histogram
+# receives the same integer addends and no bit can move.
+#
+# Opt-in: `-D MOJOLEARN_2580_LEVEL_QUANT=1`. Reaches the fused 8-bit
+# kernel on both tiers (IDENTICAL's maxBins ladder sends 254-border blocks
+# there; FAST's `greedy_one_byte_fixed_for` sends every width there) and
+# the ladder under 2581. Off under DEVIATION 2031, whose stat reads go
+# through row ids. Named checks, one per side:
+# `checks/sym_arms_check.mojo` `check_2580_off` / `check_2580_on`.
+# ====================================================
+comptime SYM_LEVEL_QUANT_2580 = (
+    is_defined["MOJOLEARN_2580_LEVEL_QUANT"]() and not SYM_RIDX_SPLITS_2031
+)
+
+# ================= DEVIATION BLOCK 2581 =================
+# PICK THE BIT WIDTH PER 4-FEATURE GROUP. CatBoost's
+# `TComputeSplitPropsGroupsBuilder` picks 5, 6, 7 or 8 bits from each
+# group's widest feature (`GetHistogramSpecialization`,
+# `compute_by_blocks_helper.cpp`). Ours keyed the width on the WHOLE
+# one-byte block's widest feature (IDENTICAL) or took 8 bits for every
+# width (FAST, DEVIATION 1906), so a 30-fold group paid a 256-bin slice,
+# its zeroing and its reduce. `OneByteWidthPlan` sorts a block's groups by
+# width once per fit, and one launch per width present (at most three
+# more per level) takes them, the column of each group read from a map
+# after its features. Every width accumulates the same per-row Int32
+# addends into the same accumulator cells, and integer sums do not
+# depend on grouping, so no bit can move.
+#
+# DEFAULT ON UNDER IDENTICAL since 2026-09-11 (MI300X Hot Aisle, tools/
+# flip_verdict.py FLIP geomean=0.995 taxi=1.006 istella=0.985 quality=ok);
+# `-D MOJOLEARN_2581_GROUP_WIDTH_OFF=1` restores the block-widest ladder.
+# FAST stays OPT-IN (`-D MOJOLEARN_2581_GROUP_WIDTH=1`; NO FLIP geomean=1.007
+# on the same box). What it reaches today: Istella-S's one-byte block is 32
+# groups, 31 of them 8-bit and one short 7-bit group, so one group leaves the
+# 8-bit route; taxi's two groups are both 8-bit and only change launcher.
+# Named checks, one per side, both instantiated explicitly whatever the
+# defines: `checks/sym_arms_check.mojo` `check_2581_off` / `check_2581_on`.
+# `MOJOLEARN_GBDT_PATH=1` prints each fit's per-width group counts.
+# ====================================================
+from checks.numerics import GLOBAL_NUMERIC_MODE
+
+comptime SYM_GROUP_WIDTH_2581 = is_defined["MOJOLEARN_2581_GROUP_WIDTH"]() or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_2581_GROUP_WIDTH_OFF"]()
+)
+
+#: Threads per block of the level quantize launch; no shared memory.
+comptime LEVEL_QUANT_BLOCK = 512
 
 
 def make_split_features_buffers(
@@ -1654,6 +1716,434 @@ def upload_blocks(
     return out^
 
 
+def one_byte_width_index(max_folds: Int) -> Int:
+    """CatBoost's `GetHistogramSpecialization` one-byte arm
+    (`compute_by_blocks_helper.cpp`): 0, 1, 2, 3 for 5, 6, 7, 8 bits."""
+    if max_folds <= 32:
+        return 0
+    if max_folds <= 64:
+        return 1
+    if max_folds <= 128:
+        return 2
+    return 3
+
+
+@fieldwise_init
+struct OneByteWidthPlan(Copyable, Movable):
+    """DEVIATION 2581: one one-byte block's 4-feature groups, sorted by bit
+    width. Per width `w`, the descriptor arrays hold `feat_count[w]`
+    features from `feat_start[w]` (whole groups, a short last group padded
+    with zero-fold features that no flush writes), and `folds` carries
+    each group's column right after them, at `feat_start[w] +
+    feat_count[w] + slot`. Fold offsets and group sizes are the PARENT
+    block's, so every cell lands where the parent block's launch put it."""
+
+    var parent_block: Int
+    var feat_start: List[Int]
+    var feat_count: List[Int]
+    var group_max_folds: List[Int]
+    var folds: DeviceBuffer[DType.uint32]
+    var fold_off: DeviceBuffer[DType.uint32]
+    var grp_off: DeviceBuffer[DType.uint32]
+    var grp_sz: DeviceBuffer[DType.uint32]
+
+
+def upload_width_plans(
+    ctx: DeviceContext, blocks: List[PolicyBlock]
+) raises -> List[OneByteWidthPlan]:
+    """One `OneByteWidthPlan` per one-byte block, uploaded once per layout."""
+    var out = List[OneByteWidthPlan]()
+    for b in range(len(blocks)):
+        ref blk = blocks[b]
+        if blk.policy != POLICY_ONE_BYTE:
+            continue
+        var n = blk.count()
+        var total = 0
+        for k in range(n):
+            total += Int(blk.folds[k])
+        var n_groups = (n + 3) // 4
+        var gmax = List[Int]()
+        var gw = List[Int]()
+        var per = [0, 0, 0, 0]
+        for g in range(n_groups):
+            var m = 0
+            var end = 4 * g + 4
+            if end > n:
+                end = n
+            for k in range(4 * g, end):
+                if Int(blk.folds[k]) > m:
+                    m = Int(blk.folds[k])
+            gmax.append(m)
+            var w = one_byte_width_index(m)
+            gw.append(w)
+            per[w] += 1
+        var starts = List[Int]()
+        var counts = List[Int]()
+        var cursor = 0
+        for w in range(4):
+            starts.append(cursor)
+            counts.append(4 * per[w])
+            cursor += 5 * per[w]
+        var length = cursor
+        if length < 1:
+            length = 1
+        var h1 = ctx.enqueue_create_host_buffer[DType.uint32](length)
+        var h2 = ctx.enqueue_create_host_buffer[DType.uint32](length)
+        var h3 = ctx.enqueue_create_host_buffer[DType.uint32](length)
+        var h4 = ctx.enqueue_create_host_buffer[DType.uint32](length)
+        for i in range(length):
+            h1.unsafe_ptr().unsafe_store(i, UInt32(0))
+            h2.unsafe_ptr().unsafe_store(i, UInt32(0))
+            h3.unsafe_ptr().unsafe_store(i, UInt32(0))
+            h4.unsafe_ptr().unsafe_store(i, UInt32(total))
+        var slot = [0, 0, 0, 0]
+        for g in range(n_groups):
+            var w = gw[g]
+            var s = starts[w]
+            for j in range(4):
+                var k = 4 * g + j
+                var at = s + 4 * slot[w] + j
+                if k < n:
+                    h1.unsafe_ptr().unsafe_store(at, blk.folds[k])
+                    h2.unsafe_ptr().unsafe_store(at, blk.fold_offset[k])
+                    h3.unsafe_ptr().unsafe_store(at, blk.group_offset[k])
+                    h4.unsafe_ptr().unsafe_store(at, blk.group_size[k])
+            h1.unsafe_ptr().unsafe_store(s + counts[w] + slot[w], UInt32(g))
+            slot[w] += 1
+        var d1 = ctx.enqueue_create_buffer[DType.uint32](length)
+        var d2 = ctx.enqueue_create_buffer[DType.uint32](length)
+        var d3 = ctx.enqueue_create_buffer[DType.uint32](length)
+        var d4 = ctx.enqueue_create_buffer[DType.uint32](length)
+        ctx.enqueue_copy(dst_buf=d1, src_ptr=h1.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d2, src_ptr=h2.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d3, src_ptr=h3.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d4, src_ptr=h4.unsafe_ptr())
+        # the staging must outlive its queued copies (step-33 race class)
+        ctx.synchronize()
+        _ = h1^
+        _ = h2^
+        _ = h3^
+        _ = h4^
+        out.append(
+            OneByteWidthPlan(
+                b, starts^, counts^, gmax^, d1^, d2^, d3^, d4^,
+            )
+        )
+    return out^
+
+
+def sym_arms_path_line(blocks: List[PolicyBlock]) -> String:
+    """RULE 8: the path a symmetric fit takes, for the benchmark log.
+    Printed once per layout when `MOJOLEARN_GBDT_PATH=1`."""
+    comptime fused_all = greedy_one_byte_fixed_for[
+        TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+    ]()
+    var line = String("GBDT-SYM-PATH mode=") + numeric_mode_name()
+    line += String(" level_quant_2580=") + (
+        String("1") if SYM_LEVEL_QUANT_2580 else String("0")
+    )
+    line += String(" group_width_2581=") + (
+        String("1") if SYM_GROUP_WIDTH_2581 else String("0")
+    )
+    if SYM_GROUP_WIDTH_2581:
+        line += String(" one_byte_route=per_group_width")
+    elif fused_all:
+        line += String(" one_byte_route=fused8_every_width")
+    else:
+        line += String(" one_byte_route=ladder_by_block_widest")
+    for b in range(len(blocks)):
+        ref blk = blocks[b]
+        if blk.policy != POLICY_ONE_BYTE:
+            continue
+        var n = blk.count()
+        var n_groups = (n + 3) // 4
+        var per = [0, 0, 0, 0]
+        var widest = String("")
+        for g in range(n_groups):
+            var m = 0
+            var end = 4 * g + 4
+            if end > n:
+                end = n
+            for k in range(4 * g, end):
+                if Int(blk.folds[k]) > m:
+                    m = Int(blk.folds[k])
+            per[one_byte_width_index(m)] += 1
+            if g > 0:
+                widest += String(",")
+            widest += String(m)
+        line += (
+            String(" one_byte_features=") + String(n)
+            + String(" groups=") + String(n_groups)
+            + String(" w5=") + String(per[0])
+            + String(" w6=") + String(per[1])
+            + String(" w7=") + String(per[2])
+            + String(" w8=") + String(per[3])
+            + String(" group_max_folds=") + widest
+        )
+    return line^
+
+
+def enqueue_level_quantize(
+    ctx: DeviceContext,
+    n_live: Int,
+    n_rows: Int,
+    stat_count: Int,
+    sm_count: Int,
+    mut stats: DeviceBuffer[DType.float32],
+    mut qstats: DeviceBuffer[DType.int32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut ids: DeviceBuffer[DType.uint32],
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
+) raises:
+    """DEVIATION 2580: the level's one quantize launch, over the SAME
+    compute leaves (`ids`, `n_live`) the histogram launch reads next."""
+    if n_live < 1:
+        return
+    var replicas = replication_for(1, n_live, 1, sm_count, gather=True)
+    ctx.enqueue_function[hist2_level_quantize_kernel](
+        p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+        stats.unsafe_ptr(), qstats.unsafe_ptr(),
+        Int32(n_rows), Int32(stat_count), fixed_scale,
+        grid_dim=(replicas, n_live, 1),
+        block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
+    )
+
+
+def launch_hist2_width_group[bits: Int, preq: Bool, col_map: Bool](
+    ctx: DeviceContext,
+    folds: MutPointer[UInt32, MutAnyOrigin],
+    fold_off: MutPointer[UInt32, MutAnyOrigin],
+    grp_off: MutPointer[UInt32, MutAnyOrigin],
+    grp_sz: MutPointer[UInt32, MutAnyOrigin],
+    n_features: Int,
+    depth: Int,
+    n_live: Int,
+    n_rows: Int,
+    stat_count: Int,
+    max_leaves: Int,
+    sm_count: Int,
+    line: Int,
+    base: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    stats_ptr: MutPointer[Float32, MutAnyOrigin],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut ids: DeviceBuffer[DType.uint32],
+    mut block_hist: DeviceBuffer[DType.float32],
+    mut acc_i32: DeviceBuffer[DType.int32],
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
+) raises:
+    """DEVIATIONS 2580 and 2581: one two-stat one-byte launch at `bits`
+    over raw descriptor pointers. 8 bits is the fused kernel with
+    `launch_hist2_8bit`'s grid; 5 to 7 is the ladder in the shared-Int32
+    mode with `launch_hist2_one_byte`'s grid (one stat pair). Both write the
+    same fixed-point accumulator the bridge reads."""
+    if stat_count != 2:
+        raise Error("the one-byte arms launcher is two-stat by construction")
+    var groups = feature_groups_for(POLICY_ONE_BYTE, n_features)
+    comptime if bits == 8:
+        var replicas = replication_for(
+            groups, n_live, 1, sm_count, gather=(depth > 0)
+        )
+        if depth == 0:
+            ctx.enqueue_function[hist2_8bit_kernel[preq, col_map]](
+                folds, fold_off, grp_off, grp_sz,
+                Int32(n_features), cindex.unsafe_ptr(), Int32(line),
+                Int32(base), stats_ptr, Int32(n_rows),
+                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                Int32(max_leaves), Int32(stat_count),
+                grid_dim=(groups * replicas, n_live, 1),
+                block_dim=(H8_BLOCK, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[
+                hist2_8bit_gather_kernel[False, preq, col_map]
+            ](
+                folds, fold_off, grp_off, grp_sz,
+                Int32(n_features), cindex.unsafe_ptr(), Int32(line),
+                Int32(base), row_index.unsafe_ptr(),
+                stats_ptr, Int32(n_rows),
+                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                Int32(max_leaves), Int32(stat_count),
+                grid_dim=(groups * replicas, n_live, 1),
+                block_dim=(H8_BLOCK, 1, 1),
+            )
+    else:
+        comptime BLOCK = hist2_block_size[HIST_SMEM_SHARED2_I32]()
+        var replicas = replication_for(groups, n_live, 1, sm_count)
+        if depth == 0:
+            ctx.enqueue_function[
+                hist2_one_byte_kernel[
+                    bits, False, HIST_SMEM_SHARED2_I32, preq, col_map
+                ]
+            ](
+                folds, fold_off, grp_off, grp_sz,
+                Int32(n_features), cindex.unsafe_ptr(), Int32(line),
+                Int32(base), stats_ptr, Int32(n_rows),
+                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                Int32(max_leaves), Int32(stat_count),
+                grid_dim=(groups * replicas, n_live, 1),
+                block_dim=(BLOCK, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[
+                hist2_one_byte_gather_kernel[
+                    bits, False, HIST_SMEM_SHARED2_I32, False, preq, col_map
+                ]
+            ](
+                folds, fold_off, grp_off, grp_sz,
+                Int32(n_features), cindex.unsafe_ptr(), Int32(line),
+                Int32(base), row_index.unsafe_ptr(),
+                stats_ptr, Int32(n_rows),
+                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                Int32(max_leaves), Int32(stat_count),
+                grid_dim=(groups * replicas, n_live, 1),
+                block_dim=(BLOCK, 1, 1),
+            )
+
+
+def launch_one_byte_arms[level_quant: Bool, group_width: Bool, fused_all: Bool](
+    ctx: DeviceContext,
+    mut blk: DeviceBlock,
+    block_index: Int,
+    width_plans: List[OneByteWidthPlan],
+    qstats: Optional[DeviceBuffer[DType.int32]],
+    depth: Int,
+    n_live: Int,
+    n_rows: Int,
+    stat_count: Int,
+    max_leaves: Int,
+    sm_count: Int,
+    line: Int,
+    base: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut ids: DeviceBuffer[DType.uint32],
+    mut block_hist: DeviceBuffer[DType.float32],
+    mut acc_i32: DeviceBuffer[DType.int32],
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
+) raises:
+    """A two-stat one-byte block on a fixed-point accumulator route, with
+    DEVIATION 2580 and/or 2581 compiled in. Without 2581 it takes the
+    tier's own route (`fused_all`: 8 bits for every width, else the maxBins
+    ladder on the block's widest feature), so 2580 is timed alone."""
+    var stats_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        stats.unsafe_ptr()
+    )
+    comptime if level_quant:
+        if not qstats.__bool__():
+            raise Error(
+                "DEVIATION 2580 is compiled in and no Int32 plane was passed"
+            )
+        # a var handle: `unsafe_ptr` takes a mutable receiver (core/gemm.mojo)
+        var qplane = qstats.value()
+        stats_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+            qplane.unsafe_ptr()
+        )
+    comptime if group_width:
+        var pi = -1
+        for i in range(len(width_plans)):
+            if width_plans[i].parent_block == block_index:
+                pi = i
+        if pi < 0:
+            raise Error(
+                "DEVIATION 2581 is compiled in and one-byte block "
+                + String(block_index) + " has no width plan"
+            )
+        ref plan = width_plans[pi]
+        # var handles: `unsafe_ptr` takes a mutable receiver, and
+        # `width_plans` is borrowed immutably
+        var pb0 = plan.folds
+        var pb1 = plan.fold_off
+        var pb2 = plan.grp_off
+        var pb3 = plan.grp_sz
+        var f0 = rebind[MutPointer[UInt32, MutAnyOrigin]](pb0.unsafe_ptr())
+        var f1 = rebind[MutPointer[UInt32, MutAnyOrigin]](pb1.unsafe_ptr())
+        var f2 = rebind[MutPointer[UInt32, MutAnyOrigin]](pb2.unsafe_ptr())
+        var f3 = rebind[MutPointer[UInt32, MutAnyOrigin]](pb3.unsafe_ptr())
+        for wi in range(4):
+            var n = plan.feat_count[wi]
+            if n == 0:
+                continue
+            var s = plan.feat_start[wi]
+            if wi == 0:
+                launch_hist2_width_group[5, level_quant, True](
+                    ctx, f0 + s, f1 + s, f2 + s, f3 + s, n, depth, n_live,
+                    n_rows, stat_count, max_leaves, sm_count, line, base,
+                    cindex, row_index, stats_ptr, p_off, p_sz, ids,
+                    block_hist, acc_i32, fixed_scale,
+                )
+            elif wi == 1:
+                launch_hist2_width_group[6, level_quant, True](
+                    ctx, f0 + s, f1 + s, f2 + s, f3 + s, n, depth, n_live,
+                    n_rows, stat_count, max_leaves, sm_count, line, base,
+                    cindex, row_index, stats_ptr, p_off, p_sz, ids,
+                    block_hist, acc_i32, fixed_scale,
+                )
+            elif wi == 2:
+                launch_hist2_width_group[7, level_quant, True](
+                    ctx, f0 + s, f1 + s, f2 + s, f3 + s, n, depth, n_live,
+                    n_rows, stat_count, max_leaves, sm_count, line, base,
+                    cindex, row_index, stats_ptr, p_off, p_sz, ids,
+                    block_hist, acc_i32, fixed_scale,
+                )
+            else:
+                launch_hist2_width_group[8, level_quant, True](
+                    ctx, f0 + s, f1 + s, f2 + s, f3 + s, n, depth, n_live,
+                    n_rows, stat_count, max_leaves, sm_count, line, base,
+                    cindex, row_index, stats_ptr, p_off, p_sz, ids,
+                    block_hist, acc_i32, fixed_scale,
+                )
+    else:
+        var d0 = rebind[MutPointer[UInt32, MutAnyOrigin]](blk.folds.unsafe_ptr())
+        var d1 = rebind[MutPointer[UInt32, MutAnyOrigin]](
+            blk.fold_off.unsafe_ptr()
+        )
+        var d2 = rebind[MutPointer[UInt32, MutAnyOrigin]](
+            blk.grp_off.unsafe_ptr()
+        )
+        var d3 = rebind[MutPointer[UInt32, MutAnyOrigin]](
+            blk.grp_sz.unsafe_ptr()
+        )
+        var nf = Int(blk.n_features)
+        var wi = 3
+        comptime if not fused_all:
+            wi = one_byte_width_index(Int(blk.max_folds))
+        if wi == 0:
+            launch_hist2_width_group[5, level_quant, False](
+                ctx, d0, d1, d2, d3, nf, depth, n_live, n_rows, stat_count,
+                max_leaves, sm_count, line, base, cindex, row_index,
+                stats_ptr, p_off, p_sz, ids, block_hist, acc_i32, fixed_scale,
+            )
+        elif wi == 1:
+            launch_hist2_width_group[6, level_quant, False](
+                ctx, d0, d1, d2, d3, nf, depth, n_live, n_rows, stat_count,
+                max_leaves, sm_count, line, base, cindex, row_index,
+                stats_ptr, p_off, p_sz, ids, block_hist, acc_i32, fixed_scale,
+            )
+        elif wi == 2:
+            launch_hist2_width_group[7, level_quant, False](
+                ctx, d0, d1, d2, d3, nf, depth, n_live, n_rows, stat_count,
+                max_leaves, sm_count, line, base, cindex, row_index,
+                stats_ptr, p_off, p_sz, ids, block_hist, acc_i32, fixed_scale,
+            )
+        else:
+            launch_hist2_width_group[8, level_quant, False](
+                ctx, d0, d1, d2, d3, nf, depth, n_live, n_rows, stat_count,
+                max_leaves, sm_count, line, base, cindex, row_index,
+                stats_ptr, p_off, p_sz, ids, block_hist, acc_i32, fixed_scale,
+            )
+
+
 def launch_hist2_8bit[ridx_stats: Bool = False](
     ctx: DeviceContext,
     mut blk: DeviceBlock,
@@ -1693,7 +2183,9 @@ def launch_hist2_8bit[ridx_stats: Bool = False](
         groups, n_live, 1, sm_count, gather=(depth > 0)
     )
     if depth == 0:
-        ctx.enqueue_function[hist2_8bit_kernel](
+        # bound explicitly: the kernel carries DEVIATION 2580/2581's comptime
+        # parameters, and an unbound name is a generic enqueue refuses
+        ctx.enqueue_function[hist2_8bit_kernel[False, False]](
             blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
             blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
             Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1707,7 +2199,9 @@ def launch_hist2_8bit[ridx_stats: Bool = False](
     else:
         # `ridx_stats` (DEVIATION 1902): the gather arm's stat loads go
         # through the row index when the ridx-only split route is on.
-        ctx.enqueue_function[hist2_8bit_gather_kernel[ridx_stats]](
+        ctx.enqueue_function[
+            hist2_8bit_gather_kernel[ridx_stats, False, False]
+        ](
             blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
             blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
             Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1953,7 +2447,9 @@ def launch_hist2_one_byte[
 
     if depth == 0:
         if is_odd == 1:
-            ctx.enqueue_function[hist2_one_byte_kernel[bits, True, smem_mode]](
+            ctx.enqueue_function[
+                hist2_one_byte_kernel[bits, True, smem_mode, False, False]
+            ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1965,7 +2461,9 @@ def launch_hist2_one_byte[
                 block_dim=(BLOCK, 1, 1),
             )
         else:
-            ctx.enqueue_function[hist2_one_byte_kernel[bits, False, smem_mode]](
+            ctx.enqueue_function[
+                hist2_one_byte_kernel[bits, False, smem_mode, False, False]
+            ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1980,7 +2478,9 @@ def launch_hist2_one_byte[
         if is_odd == 1:
             # `ridx_stats` (DEVIATION 1902) on both gather arms below.
             ctx.enqueue_function[
-                hist2_one_byte_gather_kernel[bits, True, smem_mode, ridx_stats]
+                hist2_one_byte_gather_kernel[
+                    bits, True, smem_mode, ridx_stats, False, False
+                ]
             ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
@@ -1995,7 +2495,9 @@ def launch_hist2_one_byte[
             )
         else:
             ctx.enqueue_function[
-                hist2_one_byte_gather_kernel[bits, False, smem_mode, ridx_stats]
+                hist2_one_byte_gather_kernel[
+                    bits, False, smem_mode, ridx_stats, False, False
+                ]
             ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
@@ -2093,13 +2595,10 @@ def replication_for(
     One pin for all three policies, because a pin only some policies
     read cannot be audited.
 
-    THE RESIDUE THIS PIN DOES NOT CLOSE: `min_docs_per_block` inside
-    those kernels multiplies in `BLOCK_SIZE`, and
-    `kernel_matrix.block_size_for` is not identical-gated -- NVIDIA's
-    48 KB budget yields 768 where the identity floor's 32 KB yields 512,
-    so the float-family fold shape still differs cross-vendor under
-    IDENTICAL until that accessor reads the frozen floor. Reported to
-    the matrix's owner; this function cannot fix it from here.
+    `min_docs_per_block` inside those kernels multiplies in `BLOCK_SIZE`,
+    and under IDENTICAL `kernel_matrix.block_size_for` caps it at the
+    identity floor's 512 on every vendor (32 KB budget, 512 cap), so
+    NVIDIA does not get 768 and the fold shape is vendor-blind there too.
     """
     var blocks_per_sm = 2
     # DEVIATION 354: pinned under IDENTICAL, device count under FAST.
@@ -2141,7 +2640,8 @@ def replication_for(
 
 
 def launch_histograms_for_blocks[
-    hist2_smem_mode: Int = HIST2_SMEM_MODE, ridx_stats: Bool = False
+    hist2_smem_mode: Int = HIST2_SMEM_MODE, ridx_stats: Bool = False,
+    level_quant: Bool = False, group_width: Bool = False,
 ](
     ctx: DeviceContext,
     mut blocks: List[DeviceBlock],
@@ -2164,6 +2664,12 @@ def launch_histograms_for_blocks[
     mut block_hist: DeviceBuffer[DType.float32],
     hist_cells_per_leaf: Int,
     skip_bridge: Bool = False,
+    # DEVIATION 2580: the level's Int32 plane, already written by
+    # `enqueue_level_quantize` over these `ids`; read only with
+    # `level_quant`. DEVIATION 2581: the fit's width plans; read only with
+    # `group_width`. Both defaults leave every existing caller as it was.
+    qstats: Optional[DeviceBuffer[DType.int32]] = None,
+    width_plans: List[OneByteWidthPlan] = List[OneByteWidthPlan](),
 ) raises:
     """One histogram launch per policy present, dispatching on the block.
 
@@ -2341,11 +2847,15 @@ def launch_histograms_for_blocks[
             # construction, and low-cardinality features histogram on a
             # 64-wide wavefront.
             #
-            # WHAT IS ELIGIBLE IS NOT WHAT IS VERIFIED: no sub-byte block
-            # has ever EXECUTED on 64-wide hardware in either mode (every
-            # AMD fixture to date is 255-border float data, which produces
-            # one-byte blocks only). The MI325X covtype leg named in
-            # DEVIATION 1947 is OWED.
+            # WHAT IS ELIGIBLE WAS NOT WHAT WAS VERIFIED. Sub-byte blocks
+            # first executed on 64-wide hardware on the MI325X on 2026-09-11
+            # (identity_break `ties`, taxi, Istella-S under IDENTICAL), and
+            # the fit moved between repeats (on the MI300X the binary arm
+            # instead gave one wrong answer every time): the head/tail peel
+            # gave the block a non-uniform count of threadgroup barriers.
+            # DEVIATION 2600 fixed the peel, measured with and without it on
+            # the MI300X; `checks/gbdt_sub_byte_identity_check.py` is the
+            # gate.
             # ==================================================
             if depth == 0:
                 ctx.enqueue_function[binary_hist_kernel](
@@ -2515,7 +3025,31 @@ def launch_histograms_for_blocks[
             # arm's precondition is a runtime `stat_count`, and the ladder
             # is instantiated on both sides of it.
             # =========================================================
-            if _one_byte_fixed and stat_count == 2:
+            # DEVIATIONS 2580 / 2581: with either compiled in, a two-stat
+            # block on a fixed-point accumulator route takes the arms
+            # launcher; every other shape keeps the dispatch below.
+            comptime _arms_route = (
+                (level_quant or group_width)
+                and (
+                    hist2_smem_mode == HIST_SMEM_SHARED2_I32
+                    or _one_byte_fixed
+                )
+                and not ridx_stats
+            )
+            var take_arms = False
+            comptime if _arms_route:
+                take_arms = run_fixed_bridge and stat_count == 2
+            if take_arms:
+                comptime if _arms_route:
+                    launch_one_byte_arms[
+                        level_quant, group_width, _one_byte_fixed
+                    ](
+                        ctx, blk, b, width_plans, qstats, depth, n_live,
+                        n_rows, stat_count, max_leaves, sm_count, line, base,
+                        cindex, row_index, stats, p_off, p_sz, ids,
+                        block_hist, acc_i32, fixed_scale,
+                    )
+            elif _one_byte_fixed and stat_count == 2:
                 launch_hist2_8bit[ridx_stats](
                     ctx, blk, depth, n_live, n_rows, stat_count,
                     max_leaves, sm_count, line, base, cindex,
@@ -2893,6 +3427,11 @@ struct TTreeWorkspace(Movable):
     var bfr_bin: DeviceBuffer[DType.uint32]
     var scale_dev: DeviceBuffer[DType.float32]
     var h_scale: HostBuffer[DType.float32]
+    # DEVIATION 2580: the level's Int32 stat plane (one cell unless the
+    # arm is compiled in). DEVIATION 2581: the layout's width plans (empty
+    # unless the arm is compiled in).
+    var qstats: DeviceBuffer[DType.int32]
+    var width_plans: List[OneByteWidthPlan]
 
     def __init__(
         out self,
@@ -3064,6 +3603,10 @@ struct TTreeWorkspace(Movable):
         self.scale_dev = ctx.enqueue_create_buffer[DType.float32](1)
         self.h_scale = ctx.enqueue_create_host_buffer[DType.float32](1)
         self.dblocks = List[DeviceBlock]()
+        self.qstats = ctx.enqueue_create_buffer[DType.int32](
+            stat_count * n_rows if SYM_LEVEL_QUANT_2580 else 1
+        )
+        self.width_plans = List[OneByteWidthPlan]()
         self.refresh_layout_metadata(ctx, layout, blocks)
 
     def refresh_sampled_layout(
@@ -3107,6 +3650,10 @@ struct TTreeWorkspace(Movable):
         var max_leaves = self.max_leaves_key
         var hist_cells_per_leaf = self.hist_cells_per_leaf_key
         self.dblocks = upload_blocks(ctx, blocks)
+        comptime if SYM_GROUP_WIDTH_2581:
+            self.width_plans = upload_width_plans(ctx, blocks)
+        if getenv("MOJOLEARN_GBDT_PATH") == "1":
+            print(sym_arms_path_line(blocks))
 
         # ---- constant fills: staged locally, settled by the one drain ----
         var h_dense = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
@@ -4211,6 +4758,8 @@ def run_tree_layout_traced[
     ref block_hist = ws[0].block_hist
     ref acc_i32 = ws[0].acc_i32
     ref dblocks = ws[0].dblocks
+    ref qstats = ws[0].qstats
+    ref width_plans = ws[0].width_plans
     ref p_off = ws[0].p_off
     ref p_sz = ws[0].p_sz
     ref hp_off = ws[0].hp_off
@@ -4595,26 +5144,64 @@ def run_tree_layout_traced[
         # DEVIATION 2031: `ridx_stats` routes the gather kernels' stat
         # loads through `row_index` when the flag holds; False is the
         # shipped byte-for-byte default.
-        if planned:
-            launch_histograms_for_blocks[
-                hist2_smem_mode, SYM_RIDX_SPLITS_2031
-            ](
-                ctx, dblocks, depth, n_compute, n_rows, stat_count,
-                max_leaves, sm_count, fixed_scale,
-                active_cindex, row_index, stats, p_off, p_sz, ids_compute,
-                dense_ids,
-                hist, acc_i32, block_hist, hist_cells_per_leaf,
-            )
+        comptime if SYM_LEVEL_QUANT_2580 or SYM_GROUP_WIDTH_2581:
+            # DEVIATIONS 2580 / 2581: the level quantize over the compute
+            # leaves, then the histogram launch reading its plane.
+            if planned:
+                comptime if SYM_LEVEL_QUANT_2580:
+                    enqueue_level_quantize(
+                        ctx, n_compute, n_rows, stat_count, sm_count, stats,
+                        qstats, p_off, p_sz, ids_compute, fixed_scale,
+                    )
+                launch_histograms_for_blocks[
+                    hist2_smem_mode, SYM_RIDX_SPLITS_2031,
+                    SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
+                ](
+                    ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                    max_leaves, sm_count, fixed_scale,
+                    active_cindex, row_index, stats, p_off, p_sz,
+                    ids_compute, dense_ids,
+                    hist, acc_i32, block_hist, hist_cells_per_leaf,
+                    qstats=Optional(qstats.copy()), width_plans=width_plans,
+                )
+            else:
+                comptime if SYM_LEVEL_QUANT_2580:
+                    enqueue_level_quantize(
+                        ctx, n_compute, n_rows, stat_count, sm_count, stats,
+                        qstats, p_off, p_sz, zero_ids, fixed_scale,
+                    )
+                launch_histograms_for_blocks[
+                    hist2_smem_mode, SYM_RIDX_SPLITS_2031,
+                    SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
+                ](
+                    ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                    max_leaves, sm_count, fixed_scale,
+                    active_cindex, row_index, stats, p_off, p_sz, zero_ids,
+                    dense_ids,
+                    hist, acc_i32, block_hist, hist_cells_per_leaf,
+                    qstats=Optional(qstats.copy()), width_plans=width_plans,
+                )
         else:
-            launch_histograms_for_blocks[
-                hist2_smem_mode, SYM_RIDX_SPLITS_2031
-            ](
-                ctx, dblocks, depth, n_compute, n_rows, stat_count,
-                max_leaves, sm_count, fixed_scale,
-                active_cindex, row_index, stats, p_off, p_sz, zero_ids,
-                dense_ids,
-                hist, acc_i32, block_hist, hist_cells_per_leaf,
-            )
+            if planned:
+                launch_histograms_for_blocks[
+                    hist2_smem_mode, SYM_RIDX_SPLITS_2031
+                ](
+                    ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                    max_leaves, sm_count, fixed_scale,
+                    active_cindex, row_index, stats, p_off, p_sz, ids_compute,
+                    dense_ids,
+                    hist, acc_i32, block_hist, hist_cells_per_leaf,
+                )
+            else:
+                launch_histograms_for_blocks[
+                    hist2_smem_mode, SYM_RIDX_SPLITS_2031
+                ](
+                    ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                    max_leaves, sm_count, fixed_scale,
+                    active_cindex, row_index, stats, p_off, p_sz, zero_ids,
+                    dense_ids,
+                    hist, acc_i32, block_hist, hist_cells_per_leaf,
+                )
         mgr.stream_kernel()
 
         # their `TScanHistogramsKernel` (`:1262`), over the computed set;

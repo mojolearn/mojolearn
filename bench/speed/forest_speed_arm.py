@@ -396,6 +396,12 @@ def verify_our_arm(arm, requested=None):
                            % (requested, expected_vendor, resolved, compiled, vendor))
     print("BENCH_BINDING arm=%s requested=%s resolved=%s compiled=%s vendor=%s path=%s"
           % (arm.name, requested, resolved, compiled, vendor, binding.__file__), flush=True)
+    # ENGINEERING_RULES.md section 8: the compiled side of every opt-in
+    # switch this binding carries, beside the timing (DEVIATIONS 2550, 2551,
+    # 2580, 2581).
+    paths = getattr(binding, prefix + "_per_round_paths", None)
+    if paths is not None:
+        print("BENCH_PATHS arm=%s %s" % (arm.name, paths()), flush=True)
     return dict(requested=requested, resolved=resolved, compiled=compiled,
                 vendor=vendor, path=binding.__file__)
 

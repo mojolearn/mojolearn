@@ -43,6 +43,23 @@
 # stash_tiled_fgrid_r32_qres_pf, stash_tiled_ztiled_r64_pf. The settings for
 # that leg live in tools/attention_round3_leg.sh, which calls this body.
 #
+# DEVIATION 2534 (brief section 15): the shipped default is a kernel-matrix
+# row per column (`attn_default_arm_for`: NVIDIA stash_tiled_fgrid_r32_qres_pf,
+# every other column stash_tiled), and a trial binding runs it when
+# MOJOLEARN_ATTN_ARM is unset or empty. So that baseline, stash_tiled and the
+# default can never be confused in a result: the harness takes the name
+# `default` as an alias and prints only the explicit name (a `DEFAULT
+# column=... arm=...` line, `is_default=` and `resolved_hd64=` in its PATH
+# lines), and gate.txt records that line; an LM arm `default` runs the probe
+# with MOJOLEARN_ATTN_ARM empty (run name lm-default-<corpus>), and every
+# lm-*/result.json names the arm the binding ran (`attention_arm`), the raw
+# request and the column default, all printed in lm_summary.tsv.
+# MOJOLEARN_ATTN_LEG_SHIPPED_CHECK=1 also builds
+# transformer/checks/transformer_fused_check.mojo WITHOUT the trial define
+# and runs it (shipped-fused-check.log): the shipped path runs the column's
+# default at head_dim 64, bit-identical to eager. The confirmation body is
+# tools/attention_flip_r3_leg.sh.
+#
 # NVIDIA confirmation:
 #
 #   MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
@@ -253,6 +270,23 @@ if [ -x "$OUT/bin/arms-check" ]; then
     run arms-check timeout "$DEADLINE" "$OUT/bin/arms-check"
 fi
 
+# ---- DEVIATION 2534: the SHIPPED path (no trial define) ---------------------
+# transformer_fused_check without -D MOJOLEARN_ATTN_ARM_TRIAL=1 runs the
+# column's default arm (kernel matrix attn_default_arm_for) and fails unless
+# every head_dim 64 launch RAN it and every buffer is bit-identical to eager.
+# Its DEFAULT, ARM and PASS lines go to gate.txt.
+echo "deviation_default_row=2534 shipped_check=${MOJOLEARN_ATTN_LEG_SHIPPED_CHECK:-0}" >> "$OUT/gate.txt"
+if [ "${MOJOLEARN_ATTN_LEG_SHIPPED_CHECK:-0}" = "1" ]; then
+    # shellcheck disable=SC2086
+    run build-shipped-fused-check pixi run mojo build -j "$JOBS" -I . $IDENT \
+        transformer/checks/transformer_fused_check.mojo -o "$OUT/bin/shipped-fused-check"
+    if [ -x "$OUT/bin/shipped-fused-check" ]; then
+        run shipped-fused-check timeout "$DEADLINE" "$OUT/bin/shipped-fused-check"
+        grep -h '^DEFAULT\|^ARM \|^transformer_fused_check:' "$OUT/shipped-fused-check.log" \
+            | sed 's/^/shipped_check: /' >> "$OUT/gate.txt"
+    fi
+fi
+
 # ---- the smoke: hashed and adversarial kinds, bits and reach only -----------
 # (ENGINEERING_RULES section 9: never a timing input; MOJOLEARN_ATTN_TIMING=0)
 first=1
@@ -266,6 +300,8 @@ for arm in $(echo "$ARMS" | tr ',' ' '); do
     MOJOLEARN_ATTN_ORACLE="$oracle" MOJOLEARN_ATTN_REACH=1 \
     run "smoke-$arm" timeout "$DEADLINE" "$OUT/bin/attn-price"
 done
+# The trial build's column default as the harness names it (DEVIATION 2534).
+grep -h '^DEFAULT' "$OUT"/smoke-*.log 2>/dev/null | head -1 | sed 's/^/harness: /' >> "$OUT/gate.txt"
 
 # ---- the bindings, with the trial hook, the timers and the operand dump ----
 # The probe's own wrapper builds the two bindings the same way; the defines
@@ -371,11 +407,15 @@ if [ "$LM_OK" = 1 ]; then
         name=${spec%%=*}
         path=${spec#*=}
         for arm in $(echo "$LM_ARMS" | tr ',' ' '); do
-            PYTHONPATH="$ROOT/python:$ROOT" MOJOLEARN_ATTN_ARM="$arm" \
+            # DEVIATION 2534: `default` runs with MOJOLEARN_ATTN_ARM empty, so
+            # the binding runs the column's default; result.json names it.
+            arm_env=$arm
+            [ "$arm" = default ] && arm_env=""
+            PYTHONPATH="$ROOT/python:$ROOT" MOJOLEARN_ATTN_ARM="$arm_env" \
             run "lm-$arm-$name" timeout "$DEADLINE" pixi run python tools/lm_step_memory_probe.py \
                 --out "$OUT/lm-$arm-$name" --target --resident-lean --witness-every-step \
                 --steps 3 --budget-seconds "$DEADLINE" --corpus "$path"
-            PYTHONPATH="$ROOT/python:$ROOT" MOJOLEARN_ATTN_ARM="$arm" \
+            PYTHONPATH="$ROOT/python:$ROOT" MOJOLEARN_ATTN_ARM="$arm_env" \
             run "lmtiming-$arm-$name" timeout "$DEADLINE" pixi run python tools/lm_step_memory_probe.py \
                 --out "$OUT/lmtiming-$arm-$name" --target --resident-lean --component-timing \
                 --steps 1 --budget-seconds "$DEADLINE" --corpus "$path"
@@ -399,7 +439,12 @@ for d in sorted(out.glob('lm-*')):
     med = j.get('steady_median_seconds')
     lim = j.get('limited')
     corpus = (j.get('corpus') or {}).get('sha256')
-    print(f"{d.name}\tsteady_median_seconds={med}\tlimited={lim}\tarm={j.get('attention_arm')}\tcorpus_sha256={corpus}")
+    # DEVIATION 2534: arm is what the binding ran; the request and the
+    # column default beside it, so no row can pass for another arm.
+    print(f"{d.name}\tsteady_median_seconds={med}\tlimited={lim}\tarm={j.get('attention_arm')}"
+          f"\tarm_requested={j.get('attention_arm_requested')}\tarm_default={j.get('attention_arm_default')}"
+          f"\tarm_is_default={j.get('attention_arm_is_default')}"
+          f"\tarm_resolved_hd64={j.get('attention_arm_resolved_hd64')}\tcorpus_sha256={corpus}")
     for w in j.get('step_witnesses') or []:
         print(f"{d.name}\tstep={w.get('step')}\tsha256={json.dumps(w.get('sha256'), sort_keys=True)}")
     rows[d.name] = [json.dumps(w.get('sha256'), sort_keys=True) for w in j.get('step_witnesses') or []]

@@ -15,9 +15,34 @@ measures ONE column on ONE corpus at ONE shape and writes one JSON file:
   compile_fp32  torch.compile (inductor, default mode) of the whole forward
                 and loss, FP32, TF32 OFF. Extra column, labeled
                 nondeterministic.
+  eager_bf16    torch eager, bf16 MIXED PRECISION, the standard recipe:
+                torch.autocast(device_type, dtype=torch.bfloat16) around the
+                forward and the loss only; parameters, gradients and AdamW
+                state stay float32; no GradScaler (bf16 needs none); TF32 OFF.
+                Extra column, labeled nondeterministic. A probe on the device
+                (a float32 linear under autocast must come out bfloat16 and
+                its backward must run, and on the torch.cuda API
+                is_bf16_supported() must answer True) decides whether the mode
+                exists; when it does not, a NOT APPLICABLE record carrying the
+                probe read back is written and the run exits 4.
+  compile_tf32  compile_fp32 with TF32 ON (the eager_tf32 flags). Extra
+                column, labeled nondeterministic; NOT APPLICABLE (exit 4)
+                wherever eager_tf32 is.
+  compile_bf16  compile_fp32 inside eager_bf16's autocast. Extra column,
+                labeled nondeterministic; NOT APPLICABLE (exit 4) wherever
+                eager_bf16 is.
 
 No column asserts determinism: the fused SDPA backward is not a deterministic
 kernel, and nothing here sets torch's deterministic switches.
+
+SDPA BACKEND PER COLUMN: float32 columns (fp32 and tf32) pin ONE backend
+(--sdpa-backend; auto probes efficient, then flash, then math). bf16 columns
+under auto leave torch's own SDPA dispatch alone (switches at torch's
+defaults, read back), because the kernel torch picks for bfloat16 (flash on
+NVIDIA, where it exists) is part of their fast path; a named --sdpa-backend
+pins it for bf16 too, probed in bfloat16. On EVERY column the last warmup
+step runs under the CPU op profiler and the SDPA kernels that actually ran are
+recorded (sdpa.observed); the timed steps are never profiled.
 
 THE MODEL IS OURS, SHAPE FOR SHAPE (every item names the source it mirrors):
 
@@ -86,6 +111,7 @@ shape).
 Exit codes: 0 measured, 3 refused, 4 not applicable (record written).
 """
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -111,10 +137,19 @@ EXPECTED_PARAMETERS = {'control': 20453376, 'target': 162147840}
 # corpora, still accepted so older evidence can be re-read.
 CORPORA = ('enwik8', 'pile_github', 'tinyshakespeare', 'cpython312_lib')
 COLUMNS = {
-    'eager_fp32': dict(tf32=False, compile=False, role='row', nondeterministic_label=False),
-    'eager_tf32': dict(tf32=True, compile=False, role='extra', nondeterministic_label=True),
-    'compile_fp32': dict(tf32=False, compile=True, role='extra', nondeterministic_label=True),
+    'eager_fp32': dict(tf32=False, compile=False, autocast=None, role='row', nondeterministic_label=False),
+    'eager_tf32': dict(tf32=True, compile=False, autocast=None, role='extra', nondeterministic_label=True),
+    'compile_fp32': dict(tf32=False, compile=True, autocast=None, role='extra', nondeterministic_label=True),
+    'compile_tf32': dict(tf32=True, compile=True, autocast=None, role='extra', nondeterministic_label=True),
+    'eager_bf16': dict(tf32=False, compile=False, autocast='bfloat16', role='extra',
+                       nondeterministic_label=True),
+    'compile_bf16': dict(tf32=False, compile=True, autocast='bfloat16', role='extra',
+                         nondeterministic_label=True),
 }
+# Profiler event keys naming an SDPA kernel, most specific first.
+SDPA_KERNEL_TAGS = (('cudnn_attention', 'cudnn'), ('efficient_attention', 'efficient'),
+                    ('flash_attention_for_cpu', 'flash_cpu'), ('flash_attention', 'flash'),
+                    ('attention_math', 'math'))
 RMS_EPS = 1e-6          # training/byte_lm.mojo:479
 ROPE_THETA = 10000.0    # training/byte_lm.mojo:569
 LR, BETAS, ADAM_EPS, WEIGHT_DECAY = 1e-3, (0.9, 0.999), 1e-8, 0.01
@@ -327,15 +362,33 @@ def set_precision(torch, tf32):
                 float32_matmul_precision=torch.get_float32_matmul_precision())
 
 
-def choose_sdpa_backend(torch, requested, device, dims, sync):
+def _sdpa_switches(torch):
+    cuda = torch.backends.cuda
+    readback = {}
+    for name, (_, query) in SDPA_SWITCHES.items():
+        fn = getattr(cuda, query, None)
+        readback[name] = bool(fn()) if fn is not None else None
+    return readback
+
+
+def choose_sdpa_backend(torch, requested, device, dims, sync, autocast_dtype=None):
     """ONE SDPA backend via the global switches (they hold for eager and for
-    compiled graphs alike), never torch's own pick. A named backend must pass
-    the probe or the run refuses; auto takes the first of efficient, flash,
-    math (cpu: math) that passes. The probe is a small FP32 causal forward and
-    backward at this head_dim on the device; every attempt is recorded."""
+    compiled graphs alike). A named backend must pass the probe or the run
+    refuses; auto takes the first of efficient, flash, math (cpu: math) that
+    passes. The probe is a small causal forward and backward at this head_dim
+    on the device, in float32, or in bfloat16 for an autocast column; every
+    attempt is recorded. EXCEPTION: auto on an autocast (bf16) column touches
+    no switch and leaves the pick to torch's own dispatch, because that pick is
+    part of their mixed precision fast path; sdpa.observed says what ran."""
     F = torch.nn.functional
     cuda = torch.backends.cuda
     hd = dims[5]
+    if requested == 'auto' and autocast_dtype:
+        return dict(requested=requested, backend='torch_default',
+                    selection='auto on an autocast %s column: no switch set, torch picks per call '
+                              '(switches read back below are torch defaults)' % autocast_dtype,
+                    probes=[], enabled=_sdpa_switches(torch), probe_shape=None)
+    probe_dtype = getattr(torch, autocast_dtype) if autocast_dtype else torch.float32
     if requested == 'auto':
         candidates = ['efficient', 'flash', 'math'] if device.type == 'cuda' else ['math']
     else:
@@ -351,9 +404,9 @@ def choose_sdpa_backend(torch, requested, device, dims, sync):
             if fn is not None:
                 fn(name == backend)
         try:
-            q = torch.randn(1, 2, 16, hd, device=device, dtype=torch.float32, requires_grad=True)
+            q = torch.randn(1, 2, 16, hd, device=device, dtype=probe_dtype, requires_grad=True)
             out = F.scaled_dot_product_attention(q, q, q, is_causal=True, scale=attention_scale(torch, hd))
-            out.sum().backward()
+            out.float().sum().backward()
             sync()
             probes.append(dict(backend=backend, ok=True))
             chosen = backend
@@ -362,12 +415,97 @@ def choose_sdpa_backend(torch, requested, device, dims, sync):
             probes.append(dict(backend=backend, ok=False, error=repr(exc)[:600]))
     if chosen is None:
         refuse('no SDPA backend passed the probe: %s' % json.dumps(probes))
-    readback = {}
-    for name, (_, query) in SDPA_SWITCHES.items():
-        fn = getattr(cuda, query, None)
-        readback[name] = bool(fn()) if fn is not None else None
-    return dict(requested=requested, backend=chosen, probes=probes, enabled=readback,
-                probe_shape='[1, 2, 16, head_dim] float32, is_causal, forward and backward')
+    return dict(requested=requested, backend=chosen,
+                selection='global switches: only %s enabled' % chosen,
+                probes=probes, enabled=_sdpa_switches(torch),
+                probe_shape='[1, 2, 16, head_dim] %s, is_causal, forward and backward'
+                            % str(probe_dtype).replace('torch.', ''))
+
+
+def probe_autocast(torch, device, dtype_name, sync):
+    """Does torch.autocast(device.type, dtype) exist on this device? A float32
+    linear under autocast must come out in the autocast dtype, its backward
+    must run and leave a float32 gradient, and on the torch.cuda API
+    is_bf16_supported() must answer True. Everything is read back and
+    recorded; an unsupported autocast dtype that torch silently disables is
+    caught by the output dtype."""
+    F = torch.nn.functional
+    dtype = getattr(torch, dtype_name)
+    info = dict(device_type=device.type, dtype=dtype_name)
+    checker = getattr(torch.amp, 'is_autocast_available', None)
+    try:
+        info['amp_is_autocast_available'] = bool(checker(device.type)) if checker is not None else None
+    except Exception as exc:
+        info['amp_is_autocast_available'] = repr(exc)[:600]
+    cuda_ok = True
+    if device.type == 'cuda':
+        try:
+            info['cuda_is_bf16_supported'] = bool(torch.cuda.is_bf16_supported())
+            cuda_ok = info['cuda_is_bf16_supported']
+        except Exception as exc:
+            info['cuda_is_bf16_supported'] = repr(exc)[:600]
+            cuda_ok = False
+        try:
+            info['cuda_is_bf16_supported_native'] = bool(torch.cuda.is_bf16_supported(including_emulation=False))
+        except TypeError:
+            info['cuda_is_bf16_supported_native'] = 'this torch has no including_emulation argument'
+        except Exception as exc:
+            info['cuda_is_bf16_supported_native'] = repr(exc)[:600]
+    try:
+        weight = torch.randn(8, 8, device=device, dtype=torch.float32, requires_grad=True)
+        x = torch.randn(2, 8, device=device, dtype=torch.float32)
+        with torch.autocast(device_type=device.type, dtype=dtype):
+            y = F.linear(x, weight)
+            info['probe_output_dtype'] = str(y.dtype).replace('torch.', '')
+        y.float().pow(2).mean().backward()
+        sync()
+        info['probe_grad_dtype'] = str(weight.grad.dtype).replace('torch.', '')
+        info['probe_ok'] = y.dtype == dtype and weight.grad.dtype == torch.float32
+    except Exception as exc:
+        info['probe_ok'] = False
+        info['probe_error'] = repr(exc)[:600]
+    info['applicable'] = bool(info['probe_ok'] and cuda_ok)
+    info['probe'] = ('F.linear float32 [2, 8] x [8, 8] under torch.autocast(%r, %s), then backward'
+                     % (device.type, dtype_name))
+    return info
+
+
+def profiled(torch, fn):
+    """fn() once under the CPU op profiler; returns (fn's value, the SDPA
+    kernels that ran). A profiler that cannot start is recorded, never fatal;
+    an exception from fn itself propagates."""
+    try:
+        from torch.profiler import ProfilerActivity, profile
+        prof = profile(activities=[ProfilerActivity.CPU])
+        prof.__enter__()
+    except Exception as exc:
+        return fn(), dict(error='profiler unavailable: %r' % exc)
+    try:
+        value = fn()
+    finally:
+        prof.__exit__(None, None, None)
+    try:
+        kernels = {}
+        for event in prof.key_averages():
+            key = str(event.key)
+            if any(tag in key for tag in ('scaled_dot_product', 'flash_attention', 'efficient_attention',
+                                          'cudnn_attention')):
+                kernels[key] = int(event.count)
+    except Exception as exc:
+        return value, dict(error='profiler events unreadable: %r' % exc)
+    backends = set()
+    for key in kernels:
+        for tag, name in SDPA_KERNEL_TAGS:
+            if tag in key:
+                backends.add(name)
+                break
+    backends = sorted(backends)
+    observed = dict(kernels=kernels, backends=backends,
+                    backend=backends[0] if len(backends) == 1 else ('mixed' if backends else None))
+    if not backends:
+        observed['note'] = ('no SDPA kernel appeared in the profiled step (a compiled graph can '
+                            'decompose the math backend into plain ops)')
+    return value, observed
 
 
 def _bounded(text, limit=4000):
@@ -464,6 +602,11 @@ def main():
     tf32_applicable = on_gpu and build == 'cuda' and torch.cuda.get_device_capability(0)[0] >= 8
     precision = set_precision(torch, column['tf32'])
     commit, commit_source = _commit()
+    sync = torch.cuda.synchronize if on_gpu else (lambda: None)
+    autocast = column['autocast']
+    # bf16 autocast: asked of the device, read back, never assumed. Only the
+    # autocast columns probe, so the float32 columns run exactly as before.
+    autocast_probe = probe_autocast(torch, device, autocast, sync) if autocast else None
 
     def base_record():
         return dict(
@@ -473,7 +616,16 @@ def main():
             column_flags=dict(tf32=column['tf32'], compile=column['compile'],
                               compile_backend='inductor' if column['compile'] else None,
                               compile_mode='default' if column['compile'] else None,
-                              dtype='float32', nondeterministic_label=column['nondeterministic_label'],
+                              dtype='autocast_%s' % autocast if autocast else 'float32',
+                              autocast_dtype=autocast,
+                              autocast_device_type=device.type if autocast else None,
+                              autocast_scope='forward and mean cross entropy; backward and AdamW outside'
+                                             if autocast else None,
+                              parameter_dtype='float32', gradient_dtype='float32',
+                              optimizer_state_dtype='float32', grad_scaler=None,
+                              autocast_applicable=autocast_probe['applicable'] if autocast else None,
+                              autocast_probe=autocast_probe,
+                              nondeterministic_label=column['nondeterministic_label'],
                               determinism_asserted=False, tf32_applicable=tf32_applicable,
                               tf32_note=None if tf32_applicable else
                               'TF32 is an NVIDIA CUDA (Ampere+) matmul mode; this torch/device accepts the '
@@ -492,18 +644,24 @@ def main():
             repo_commit=commit, repo_commit_source=commit_source,
             harness_sha256=_sha(Path(__file__).read_bytes()))
 
+    reason = None
     if column['tf32'] and not tf32_applicable:
+        reason = ('%s on torch build %r, device %r: no TF32 mode exists here, so no TF32 number is '
+                  'invented' % (args.column, build, args.device))
+    elif autocast and not autocast_probe['applicable']:
+        reason = ('%s on torch build %r, device %r: torch.autocast(%r, %s) does not work here (probe read '
+                  'back in column_flags.autocast_probe), so no %s number is invented'
+                  % (args.column, build, args.device, device.type, autocast, autocast))
+    if reason is not None:
         record = dict(base_record(), status='not_applicable', median_seconds=None, tokens_per_second=None,
-                      reason='eager_tf32 on torch build %r, device %r: no TF32 mode exists here, so no '
-                             'TF32 number is invented' % (build, args.device))
+                      reason=reason)
         with args.out.open('x') as handle:
             handle.write(json.dumps(record, indent=2, allow_nan=False) + '\n')
         print(json.dumps(dict(event='not_applicable', column=args.column, corpus=args.corpus,
                               torch_build=build, out=str(args.out))), flush=True)
         return EXIT_NOT_APPLICABLE
 
-    sync = torch.cuda.synchronize if on_gpu else (lambda: None)
-    sdpa = choose_sdpa_backend(torch, args.sdpa_backend, device, dims, sync)
+    sdpa = choose_sdpa_backend(torch, args.sdpa_backend, device, dims, sync, autocast)
     torch.manual_seed(INIT_SEED)
 
     setup_start = time.perf_counter()
@@ -522,6 +680,13 @@ def main():
         adam_kwargs['foreach'] = False
     optimizer = torch.optim.AdamW(model.parameters(), **adam_kwargs)
     step_fn = torch.compile(model) if column['compile'] else model
+    if autocast:
+        autocast_dtype = getattr(torch, autocast)
+
+        def autocast_scope():
+            return torch.autocast(device_type=device.type, dtype=autocast_dtype)
+    else:
+        autocast_scope = contextlib.nullcontext
     sync()
     setup_seconds = time.perf_counter() - setup_start
 
@@ -534,7 +699,8 @@ def main():
         start = time.perf_counter()
         ids = host.to(device, non_blocking=True)
         optimizer.zero_grad(set_to_none=True)
-        loss = step_fn(ids)
+        with autocast_scope():
+            loss = step_fn(ids)
         loss.backward()
         optimizer.step()
         value = loss.item()
@@ -547,9 +713,23 @@ def main():
     if on_gpu:
         torch.cuda.reset_peak_memory_stats()
     warmups, timed = [], []
+    observed = dict(note='not observed: --warmup 0 leaves no untimed step to profile')
     for k in range(args.warmup):
-        warmups.append(one_step(k))
+        if k == args.warmup - 1:
+            # The last warmup (never a timed step) under the CPU op profiler:
+            # which SDPA kernels this column actually ran.
+            step, observed = profiled(torch, lambda: one_step(k))
+            step['profiled'] = True
+            observed['step_index'] = k
+            warmups.append(step)
+        else:
+            warmups.append(one_step(k))
         print(json.dumps(dict(event='warmup', **warmups[-1])), flush=True)
+    sdpa['observed'] = observed
+    if sdpa['backend'] in SDPA_SWITCHES and observed.get('backends'):
+        sdpa['observed_matches_selected'] = observed['backends'] == [sdpa['backend']]
+    else:
+        sdpa['observed_matches_selected'] = None
     for k in range(args.warmup, args.warmup + args.steps):
         timed.append(one_step(k))
         print(json.dumps(dict(event='step', **timed[-1])), flush=True)
@@ -571,15 +751,18 @@ def main():
         median_seconds=median, tokens_per_second=b * l / median,
         peak_memory_allocated_bytes=torch.cuda.max_memory_allocated() if on_gpu else None,
         timing_boundary='synchronize; clock; host ids (pinned) to device; zero_grad; forward + mean '
-                        'cross entropy; backward; AdamW step; loss.item(); synchronize; clock. '
-                        'Warmups (compilation included for compile_fp32) are untimed.',
+                        'cross entropy%s; backward; AdamW step; loss.item(); synchronize; clock. '
+                        'Warmups (compilation included for compile columns) are untimed; the last '
+                        'warmup runs under the CPU op profiler to record the SDPA kernels.'
+                        % (' inside torch.autocast(%r, %s)' % (device.type, autocast) if autocast else ''),
         qualification='opponent measurement for our IDENTICAL step at the same shape and corpus; '
                       'extra columns are nondeterministic by label; no learning claim')
     with args.out.open('x') as handle:
         handle.write(json.dumps(result, indent=2, allow_nan=False) + '\n')
     print(json.dumps(dict(event='result', column=args.column, corpus=args.corpus, shape=args.shape,
                           median_seconds=median, tokens_per_second=b * l / median,
-                          sdpa_backend=sdpa['backend'], torch=str(torch.__version__),
+                          sdpa_backend=sdpa['backend'], sdpa_observed=observed.get('backend'),
+                          torch=str(torch.__version__),
                           torch_build=build, out=str(args.out))), flush=True)
     return 0
 

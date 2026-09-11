@@ -1,0 +1,25 @@
+Collecting xgboost
+  Downloading xgboost-3.4.1-py3-none-manylinux_2_28_x86_64.whl.metadata (2.0 kB)
+Collecting numpy (from xgboost)
+  Using cached numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Collecting scipy (from xgboost)
+  Using cached scipy-1.18.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+Collecting nvidia-nccl-cu13 (from xgboost)
+  Downloading nvidia_nccl_cu13-2.31.2-py3-none-manylinux_2_18_x86_64.whl.metadata (2.1 kB)
+Downloading xgboost-3.4.1-py3-none-manylinux_2_28_x86_64.whl (57.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 57.6/57.6 MB 130.5 MB/s  0:00:00
+Using cached numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+Downloading nvidia_nccl_cu13-2.31.2-py3-none-manylinux_2_18_x86_64.whl (252.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 252.4/252.4 MB 129.9 MB/s  0:00:01
+Using cached scipy-1.18.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.3 MB)
+Installing collected packages: nvidia-nccl-cu13, numpy, scipy, xgboost
+  Attempting uninstall: numpy
+    Found existing installation: numpy 2.5.3
+    Uninstalling numpy-2.5.3:
+      Successfully uninstalled numpy-2.5.3
+  Attempting uninstall: scipy
+    Found existing installation: scipy 1.18.1
+    Uninstalling scipy-1.18.1:
+      Successfully uninstalled scipy-1.18.1
+
+Successfully installed numpy-2.5.3 nvidia-nccl-cu13-2.31.2 scipy-1.18.1 xgboost-3.4.1

@@ -202,7 +202,100 @@ No AMD timing of this step exists at the target shape.
      fails naming the define, gemm_device_check green, price and resources
      compile). Its H100 leg (`tools/gemm_longk_leg.sh`) launched from a
      detached worktree at 3612e17d.
-   - Attention round 3 (2533, 2531, 2530) is building in a worktree lane.
+   - Attention round 3 (2533, 2531, 2530) MERGED 5bcfa71d, trial only, after
+     M4 gates; its H100 leg (`tools/attention_round3_leg.sh`) is running.
+   - **FIRST NEW SPEED WIN: GEMM `ksplit` FLIP on the H100**
+     (bench/results/e1g/2026-09-11_152822-nvidia-h100-80gb-hbm3-gemm-longk,
+     1980 MHz pod, commit 3612e17d, pod terminated and verified). Lean LM step
+     shipped 0.3833 / 0.3836 s against ksplit 0.3423 / 0.3450 s on enwik8 /
+     Pile GitHub (0.892 / 0.899, geomean 0.895; `ksplit_leaf` 0.906), every
+     step witness equal. GEMM sum per step 183.6 -> 142.6 ms (0.777); proj_dB
+     0.746 -> 0.265 ms; every PHASEBITS and BITS line EQUAL; the step arms
+     check passed on the H100 including all 24 ksplit LM call lines. CONTROL
+     pairs: 768x768 outputs at 0.35 to 0.42 of shipped, 1536x1408 and
+     1664x1408 at 1.00, 1024x1024x2048 at 0.56. A flip lane (DEVIATION 2595)
+     is making ksplit the shipped plan where `lib_gemm_block_parallelism_for`
+     is above 0 (NVIDIA 132; AMD 0 until the MI300X leg on Hot Aisle, which
+     takes the next free slot).
+   - **SECOND NEW WIN: attention round 3 FLIP on the H100**
+     (bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3,
+     1980 MHz pod, commit 5bcfa71d, pod terminated and verified; operand dumps
+     outside the repo). Lean step against the shipped `stash_tiled`
+     (0.3845 / 0.3819 s), every step witness equal:
+     `stash_tiled_fgrid_r32` 0.3718 / 0.3716 s (geomean 0.970),
+     `stash_tiled_pf` 0.3488 / 0.3473 s (0.908),
+     `stash_tiled_fgrid_r32_qres_pf` 0.3346 / 0.3340 s (0.872, the winner).
+     Price fwd+bwd on real activations: fgrid_r32 1.07x, fgrid_r32_qres 1.08x,
+     pf 1.27x, fgrid_r32_qres_pf 1.41x, fgrid_r64 1.00x. Winner's timers: bwd
+     zdot stash 89.9 -> 66.2 ms, forward kernel 37.0 -> 20.9 ms, dq 15.5 ->
+     12.5 ms, dk/dv 18.5 -> 12.4 ms. On NVIDIA the 32-row forward grid pays,
+     unlike 2528's 32-row backward. A flip lane (DEVIATION 2534, branch
+     lane/attention-flip-r3) makes it the shipped default where a kernel
+     matrix row enables it (NVIDIA; AMD stays on stash_tiled until the MI300X
+     leg). The GEMM and attention wins touch different kernels; their
+     combined step is owed as one confirmation leg after both flips.
+   - **BOTH WINS ARE THE SHIPPED NVIDIA DEFAULT.** DEVIATION 2595 (GEMM ksplit,
+     `lib_gemm_block_parallelism_for` NVIDIA 132, AMD and Apple 0, old plan =
+     trial arm `tuned128`) merged f3705577; DEVIATION 2534 (attention
+     `attn_default_arm_for` NVIDIA `stash_tiled_fgrid_r32_qres_pf` with 32
+     forward rows per block, AMD and Apple `stash_tiled`) merged e629434d. M4
+     gates green on both, merged trees re-verified. Known gate failure on
+     2595, recorded in its merge: the no-trial gemm step arms check segfaults
+     in `check_ragged_controls` (Metal shader compiler crash), check-only;
+     fix lane `lane/ksplit-followups` also writes the classical GEMM caller
+     A/B body (OLS, PCA, GP on taxi and Istella-S, tuned128 vs default) the
+     trees session asked for under section 9.
+   - Confirmation legs running: H100 2595 (tuned128 vs default), and one H100
+     pod with the new defaults vs `stash_tiled` plus all six torch columns
+     (same pod, so the torch ratio is valid). AMD verdicts: attention round 3
+     on the DigitalOcean MI325X, GEMM ksplit on the first free AMD box
+     (`tools/pick_box.sh` order: Hot Aisle, DigitalOcean, RunPod AMD).
+     `tools/gemm_remote_leg.sh` does not export `MOJOLEARN_GPU_ARCHS` into the
+     extra body, so AMD bodies through it must set `gfx942` themselves.
+   - **H100 confirmation of the shipped ksplit default** (bench/results/e1g/2026-09-11_163310-nvidia-h100-80gb-hbm3-gemm-ksplit-default,
+     commit f3705577, 1980 MHz pod): shipped default 0.3434 / 0.3464 s against
+     the old plan forced (`tuned128`) 0.3842 / 0.3838 s, witnesses equal,
+     `verdict tuned128 NO FLIP geomean=1.1145` (the old plan stays off); GEMM
+     sum 142.5 against 184.4 ms.
+   - **AMD verdict on the attention winner, both AMD boxes, FLIP**:
+     DigitalOcean MI325X (bench/results/e1g/2026-09-11_163917-amd-mi325x-do-attention-round3):
+     stash_tiled 3.369 / 3.344 s, `stash_tiled_fgrid_r32_qres_pf` 3.109 /
+     3.132 s (geomean 0.9297), `stash_tiled_pf` 0.9336; RunPod MI300X
+     (bench/results/e1g/2026-09-11_163024-amd-mi300x-runpod-attention-round3):
+     stash_tiled 3.618 / 3.688 s, the winner 3.444 / 3.369 s (geomean
+     0.9325), pf 0.9613; witnesses equal on every step on both. Price fwd+bwd
+     on the MI325X: stash_tiled 45.1 ms, winner 34.1 ms, forward 5.04 -> 2.53
+     ms. The AMD `attn_default_arm_for` row now names the winner as well.
+   - **The AMD step is about 9x the H100 step** (3.4 s against 0.38 s). The
+     MI325X timers for stash_tiled put `attn.bwd_dkdv_tiled` at 705 ms per
+     step (18.5 ms on the H100), `attn.o_proj` 128 ms and `attn.qkv_proj` 78
+     ms; the dk/dv tiled backward on AMD is the next target.
+   - **Both NVIDIA defaults together, measured on one H100 pod with torch**
+     (bench/results/e1g/2026-09-11_164101-nvidia-h100-80gb-hbm3-new-defaults-torch,
+     commit e629434d, 1980 MHz pod): shipped default step 0.2950 / 0.2949 s
+     on enwik8 / Pile GitHub, against 0.3414 / 0.3409 s with the previous
+     attention default on the same pod (GEMM already ksplit), witnesses
+     equal; the morning's step was 0.383 s. Torch on the same pod: compile
+     bf16 0.0204 / 0.0208 s (their fastest, flash attention), compile TF32
+     0.0319 / 0.0321 s, eager fp32 0.0620 s. Our IDENTICAL step takes 14.5x
+     compile bf16's time, 9.2x compile TF32's and 4.8x eager fp32's
+     (bench/OPPONENT_REFERENCE.md H100 torch section).
+   - **GEMM ksplit FLIP on AMD, now the AMD default** (bench/results/e1g/2026-09-11_164818-amd-mi300x-hotaisle-gemm-longk,
+     Hot Aisle MI300X 1x VM, commit 73d0e64b, trial arm at S=110): lean step
+     shipped 1.9527 / 1.9556 s against ksplit 1.1982 / 1.1993 s (geomean
+     0.614; ksplit_leaf 0.609), witnesses equal; GEMM sum per step 1339 ->
+     589 ms; CONTROL 768x768 outputs 0.15 to 0.20 of shipped. Commit
+     190fb7a4 sets `lib_gemm_block_parallelism_for` AMD to 110 after M4
+     gates. So on AMD the matrix multiplies were the larger cost, not the
+     attention (the shipped step on this Hot Aisle leg's GEMM binding is 1.95
+     s, not the 3.4 s the DigitalOcean and RunPod attention legs measured on
+     their bindings and boxes; not attributed). Owed: the classical AMD A/B
+     for callers ksplit takes there (KDE and SVC on Istella-S at d = 220; lane
+     `lane/ksplit-classical-amd`), and the H100 classical A/B is running.
+   - Hot Aisle 2gpu retry (branch lane/hotaisle-2gpu 593e580d): both GPUs
+     pinned apart (hip+rocminfo, fd:00.0 and ff:00.0); GPU 1 (torch ROCm)
+     finished and fetched; GPU 0 (attention stash_tiled against baseline)
+     running.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows

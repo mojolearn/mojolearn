@@ -1,0 +1,50 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=cpu,gpu,opencl metric=devices delta=3.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (ENGINEERING_RULES.md section 10); every arm name carries its device
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=3.000000 reason=devices=cpu,gpu,opencl (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+FSPEED-IMPORT-ORDER lane=gbdt-lossguide first=opponents
+FSPEED-NOTE lane=gbdt-lossguide arms=lightgbm-* metric=params delta=1.000000 reason=MOJOLEARN_SPEED_LGBM_PARAMS overrides the harness LightGBM params: min_child_weight=0.001
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-cpu mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cpu mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 ms=5452.910
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 ms=7040.512
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-1000000x16 ms=1022.037
+FSPEED-WARMUP lane=gbdt-lossguide arm=lightgbm-cpu shape=taxi-1000000x16 ms=971.986
+FSPEED-ORDER lane=gbdt-lossguide round=1 arms=ours,catboost-cpu,xgboost-cpu,lightgbm-cpu
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=1 ms=1741.123 hash=0dd8bcfc3c3a4a1d
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 round=1 ms=6956.333 hash=37d3cda55fec49eb
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-1000000x16 round=1 ms=992.528 hash=98e44c1ffb4f3ad5
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=taxi-1000000x16 round=1 ms=929.565 hash=009bb8aaa0751d0a
+FSPEED-ORDER lane=gbdt-lossguide round=2 arms=ours,catboost-cpu,xgboost-cpu,lightgbm-cpu
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=2 ms=1773.858 hash=0dd8bcfc3c3a4a1d
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 round=2 ms=6986.060 hash=37d3cda55fec49eb
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-1000000x16 round=2 ms=981.617 hash=98e44c1ffb4f3ad5
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=taxi-1000000x16 round=2 ms=944.408 hash=009bb8aaa0751d0a
+FSPEED-ORDER lane=gbdt-lossguide round=3 arms=ours,catboost-cpu,xgboost-cpu,lightgbm-cpu
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=3 ms=1754.225 hash=0dd8bcfc3c3a4a1d
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 round=3 ms=6867.572 hash=37d3cda55fec49eb
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-1000000x16 round=3 ms=1075.064 hash=98e44c1ffb4f3ad5
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=taxi-1000000x16 round=3 ms=971.137 hash=009bb8aaa0751d0a
+FSPEED-ORDER lane=gbdt-lossguide round=4 arms=ours,catboost-cpu,xgboost-cpu,lightgbm-cpu
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=4 ms=1776.424 hash=0dd8bcfc3c3a4a1d
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 round=4 ms=6943.398 hash=37d3cda55fec49eb
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-1000000x16 round=4 ms=1033.631 hash=98e44c1ffb4f3ad5
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=taxi-1000000x16 round=4 ms=988.191 hash=009bb8aaa0751d0a
+FSPEED-ORDER lane=gbdt-lossguide round=5 arms=ours,catboost-cpu,xgboost-cpu,lightgbm-cpu
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=5 ms=1779.196 hash=0dd8bcfc3c3a4a1d
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 round=5 ms=6892.954 hash=37d3cda55fec49eb
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-1000000x16 round=5 ms=1490.631 hash=98e44c1ffb4f3ad5
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=taxi-1000000x16 round=5 ms=951.792 hash=8c83a15cd6ec5715
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.525504
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.619386
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=logloss value=0.526113
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=auc value=0.619758
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-cpu metric=logloss value=0.525332
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-cpu metric=auc value=0.620103
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cpu metric=logloss value=0.525029
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cpu metric=auc value=0.620694
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

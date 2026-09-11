@@ -368,7 +368,7 @@ never again after that.
 on NVIDIA H100 on RunPod.** Andrew: "just do nvidia on fucking runpod". The
 DigitalOcean account runs one GPU droplet at a time, so every lane waited in
 one line, and RunPod had no AMD stock. Legs run in parallel on RunPod
-(at most three of this project's pods at once, the home uplink's limit),
+(at most five of this project's pods at once; the uplink moved a 9.6 MB bundle in 4 s on 2026-09-11),
 results are labeled NVIDIA, and a flip decided there ships. AMD returns as
 the tuning column when the DigitalOcean GPU limit is raised or another AMD
 cloud (Hot Aisle) is set up; the rest of this section then applies again.
@@ -382,6 +382,18 @@ Every opponent is re-measured there once per dataset. MI300X rows are a new
 tuple: never mixed with the MI325X rows of the same night or with any
 NVIDIA row. CPU opponents are measured on the 13-core VM spec only, so their
 rows stay comparable.
+
+**Box order, and never wait (Andrew, 2026-09-11).** "use hot aisle first if
+we can, digital ocean second if we can, runpod 3rd.. DO NOT WAIT". Before
+renting, a leg runs `tools/pick_box.sh` and takes the first box that can
+start NOW: Hot Aisle (a free slot, the spec in stock), then DigitalOcean (the
+GPU lock free), then RunPod. A lane never sits in a queue while another
+provider could run it. RunPod has had no AMD stock, so for a leg whose
+numbers must be AMD rows, `pick_box.sh --need amd` printing `none` means: run
+the NVIDIA version of the work that is also owed on RunPod now
+(`--need any`), and take the AMD row when a box frees. A before-and-after
+A/B is valid on whichever box runs both sides; label the box. Rows from
+different GPU models are still never mixed in one ratio.
 
 Andrew, 2026-09-11: "lets use and tune on amd instead of nvidia going
 forward ... idea is everybody else tunes to nvidia so doing amd will be

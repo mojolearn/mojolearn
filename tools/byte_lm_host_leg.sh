@@ -1,8 +1,9 @@
 #!/bin/sh
 # tools/byte_lm_host_leg.sh. THE CPU INFERENCE LEG BODY (DEVIATIONS 2610-2614).
 # Runs on a CPU-only droplet through tools/do_extra_leg.sh cpu-intel|cpu-amd
-# with MOJOLEARN_DO_EXTRA_PAYLOAD carrying the capture subset. cwd is
-# /root/mojolearn, the leg directory is /root/gemm_leg_out, pixi is on PATH.
+# with MOJOLEARN_DO_EXTRA_UPLOAD carrying the capture subset as
+# byte_lm_host_capture_payload.tgz. cwd is /root/mojolearn, the leg directory
+# is /root/gemm_leg_out, pixi is on PATH.
 #
 #   1. production build, no accelerator target, x86-64-v3 on x86_64
 #   2. gate: every held-out loss byte plus every 8th training step's, against
@@ -24,6 +25,19 @@ export MOJOLEARN_GATE_COMMIT
 lscpu > "$OUT/lscpu.txt" 2>&1 || true
 grep -m1 -E '^(flags|Features)' /proc/cpuinfo > "$OUT/cpu_flags.txt" 2>&1 || true
 nproc > "$OUT/nproc.txt" 2>&1 || true
+
+# The capture subset `git archive` excludes (bench/results) arrives through
+# do_extra_leg.sh's MOJOLEARN_DO_EXTRA_UPLOAD, sha256-checked on the box before
+# this body runs, and is unpacked here at its repository paths.
+PAYLOAD=/root/gemm_leg_upload/byte_lm_host_capture_payload.tgz
+if [ ! -f "$CAPTURE/full128/heldout-final/evaluation.json" ]; then
+    if [ -f "$PAYLOAD" ]; then
+        tar -xzf "$PAYLOAD" -C /root/mojolearn > "$OUT/payload_extract.log" 2>&1
+        echo "payload_extract_exit=$?" >> "$OUT/leg.txt"
+    else
+        echo "payload_missing=$PAYLOAD" >> "$OUT/leg.txt"
+    fi
+fi
 
 if ! command -v cc > /dev/null 2>&1; then
     # A fresh droplet's cloud-init runs apt itself; on 2026-09-11 it held

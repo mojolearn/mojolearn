@@ -1,0 +1,3 @@
+STEP gemm arm=ksplit ratio=0.4396067968789843 shipped_ms=1339.1797060000001 arm_ms=588.712501 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=ksplit_leaf ratio=0.4374409803101549 shipped_ms=1338.4759849999998 arm_ms=585.5042470000001 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=shipped ratio=0.9996359134300145 shipped_ms=1336.6299119999999 arm_ms=1336.1432629999997 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)

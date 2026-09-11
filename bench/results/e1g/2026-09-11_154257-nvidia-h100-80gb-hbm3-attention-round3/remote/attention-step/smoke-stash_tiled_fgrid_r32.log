@@ -1,0 +1,59 @@
+1436 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x104ac0000000, nodemask=1)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+baseline=stash_tiled candidate=stash_tiled_fgrid_r32 rounds=7 warmups=2
+PATH baseline arm=stash_tiled zdot_rows=- fwd_rows=- preflush=False reach_bit=sabotage
+PATH candidate arm=stash_tiled_fgrid_r32 zdot_rows=- fwd_rows=32 preflush=False reach_bit=sabotage_new
+--- kind hashed
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST hashed stash_tiled ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+DIGEST hashed stash_tiled_fgrid_r32 ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+BITS hashed stash_tiled_fgrid_r32_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_vs_stash_tiled amax MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_vs_stash_tiled denom MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_vs_stash_tiled zdot MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_vs_stash_tiled dq MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_vs_stash_tiled dk MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_vs_stash_tiled dv MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled ctx MOVED 1217507 of 1572864
+BITS hashed stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled amax MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled denom MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled zdot MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled dq MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled dk MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled dv MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_restored_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_restored_vs_stash_tiled amax MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_restored_vs_stash_tiled denom MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_restored_vs_stash_tiled zdot MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_restored_vs_stash_tiled dq MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_restored_vs_stash_tiled dk MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_restored_vs_stash_tiled dv MATCH 0 of 1572864
+REACH hashed stash_tiled_fgrid_r32 sabotage_flipped_cells=1217507 clean_restored=True reach_bit=stash_tiled_fgrid_r32+sabotage_new forward_moved=1217507 backward_moved=0 amax_denom_moved=0 ctx_moved_columns_16_up=911597 zdot_moved=0 dv_moved=0
+--- kind heavytail
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST heavytail stash_tiled ctx aff4e652e9f55718 amax 839832dc27b619dc denom 7cbf2d64fd3477b2 zdot 3b3f30c9c44ac436 dq f46bc57e6248e259 dk 6eefe3816467e38d dv 65573d5a06bdfda8
+DIGEST heavytail stash_tiled_fgrid_r32 ctx aff4e652e9f55718 amax 839832dc27b619dc denom 7cbf2d64fd3477b2 zdot 3b3f30c9c44ac436 dq f46bc57e6248e259 dk 6eefe3816467e38d dv 65573d5a06bdfda8
+BITS heavytail stash_tiled_fgrid_r32_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_vs_stash_tiled amax MATCH 0 of 24576
+BITS heavytail stash_tiled_fgrid_r32_vs_stash_tiled denom MATCH 0 of 24576
+BITS heavytail stash_tiled_fgrid_r32_vs_stash_tiled zdot MATCH 0 of 24576
+BITS heavytail stash_tiled_fgrid_r32_vs_stash_tiled dq MATCH 0 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_vs_stash_tiled dk MATCH 0 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_vs_stash_tiled dv MATCH 0 of 1572864
+BITS heavytail stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled ctx MOVED 1296320 of 1572864
+BITS heavytail stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled amax MATCH 0 of 24576
+BITS heavytail stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled denom MATCH 0 of 24576
+BITS heavytail stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled zdot MATCH 0 of 24576
+BITS heavytail stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled dq MATCH 0 of 1572864
+BITS heavytail stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled dk MATCH 0 of 1572864
+BITS heavytail stash_tiled_fgrid_r32+sabotage_new_vs_stash_tiled dv MATCH 0 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_restored_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_restored_vs_stash_tiled amax MATCH 0 of 24576
+BITS heavytail stash_tiled_fgrid_r32_restored_vs_stash_tiled denom MATCH 0 of 24576
+BITS heavytail stash_tiled_fgrid_r32_restored_vs_stash_tiled zdot MATCH 0 of 24576
+BITS heavytail stash_tiled_fgrid_r32_restored_vs_stash_tiled dq MATCH 0 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_restored_vs_stash_tiled dk MATCH 0 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_restored_vs_stash_tiled dv MATCH 0 of 1572864
+REACH heavytail stash_tiled_fgrid_r32 sabotage_flipped_cells=1296320 clean_restored=True reach_bit=stash_tiled_fgrid_r32+sabotage_new forward_moved=1296320 backward_moved=0 amax_denom_moved=0 ctx_moved_columns_16_up=971894 zdot_moved=0 dv_moved=0
+attention_step_price: PASS (stash_tiled_fgrid_r32 vs stash_tiled)

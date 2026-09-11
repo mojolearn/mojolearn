@@ -1,0 +1,10 @@
+deviations=2590-2595
+brief=docs/lanes/BRIEF_gemm_long_k_2026-09-11.md
+started=2026-09-11T16:35:53Z
+root=/root/mojolearn
+arms=shipped,tuned128,ksplit,ksplit_leaf
+lm_arms=tuned128
+lmtiming=1
+check_arms=shipped,tuned128,ksplit,ksplit_leaf
+controls=1
+out=/root/gemm_leg_out/gemm-longk

@@ -1,0 +1,275 @@
+1030 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ad640000000, nodemask=2)
+== gemm/checks/gemm_device_check.mojo [IDENTICAL]  sabotage: none ==
+   profile: mojolearn.identical.gemm.fp32.v1   contract: gemm/IDENTICAL_FP32_CONTRACT.md
+   kernel: gemm/checks/gemm_identical.mojo   oracle: gemm/checks/gemm_oracle.mojo::gemm_oracle
+check_fold_stack_depth_covers_the_profile OK: 12 levels in 16 slots covers P <= 1024 which needs 11
+check_tile_fold_is_the_contract_tree OK: thread-local 4-cell fold == the contract's balanced tree, bit for bit, every cell, at every P in 1..2049
+check_strides_match_the_contract_addressing OK: NN, NT and TN address every A_eff and B_eff entry the way contract section 3 spells it (m=5, n=7, k=11, all different)
+check_stack_fold_is_the_contract_tree OK: register stack == the contract's balanced tree, bit for bit, at every P in 1..2049
+check_device_matches_oracle [IDENTICAL]: per-cell bits against gemm_oracle
+  -- the shape table, at reduced m and n (see docstring) --
+    OK   gram.32x32x1M  TN 4x4x1000000  L=977 P=1024  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   gram.32x32x64K  TN 4x4x65536  L=128 P=512  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   gram.128sq.x100003  TN 4x4x100003  L=128 P=782  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   ols.step1.16x16x64K  TN 4x4x65536  L=128 P=512  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   pca.transform.8192x4x4  NT 4x4x4  L=4 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   pca.transform.wide.8192x64x128  NT 4x4x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   kmeans.dist.4096x64x64  NT 4x4x64  L=64 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   ols.predict.gemv.64Kx16  NT 4x1x16  L=16 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   llama8b.qkv.t1  NT 1x4x4096  L=128 P=32  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.qkv.t8  NT 4x4x4096  L=128 P=32  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.qkv.t512  NT 4x4x4096  L=128 P=32  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.mlp_up.t1  NT 1x4x4096  L=128 P=32  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.mlp_up.t8  NT 4x4x4096  L=128 P=32  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.mlp_up.t512  NT 4x4x4096  L=128 P=32  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.mlp_down.t1  NT 1x4x14336  L=128 P=112  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.mlp_down.t8  NT 4x4x14336  L=128 P=112  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.mlp_down.t512  NT 4x4x14336  L=128 P=112  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.lm_head.t1  NT 1x4x4096  L=128 P=32  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.lm_head.t8  NT 4x4x4096  L=128 P=32  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   llama8b.lm_head.t512  NT 4x4x4096  L=128 P=32  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+  -- one real row at its SHIPPED m and n --
+    OK   kmeans.dist.full  NT 4096x64x64  L=64 P=1  plan=TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+  -- synthetic: the partition cases the table cannot reach --
+    OK   k0.P0  NT 3x3x0  L=1 P=0  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k1.P1  NT 1x1x1  L=1 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k64.P1  NN 4x4x64  L=64 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k128.P1  TN 4x4x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k129.P2.ragged  NT 4x4x129  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k256.P2.exact  NT 4x4x256  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k300.P3.odd.ragged  NN 4x4x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k517.P5.odd.2carries  TN 4x4x517  L=128 P=5  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   k800.P7.odd  NT 4x4x800  L=128 P=7  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   k1024.P8.even  NT 4x4x1024  L=128 P=8  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   k4097.P33.odd.tail1  NT 3x3x4097  L=128 P=33  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   k130900.P1023.odd  NT 2x2x130900  L=128 P=1023  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   k131073.P1017.past.crossover  NT 2x2x131073  L=129 P=1017  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   k4M.P1024.cap  NT 1x1x4000000  L=3907 P=1024  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+  -- synthetic: ragged m and n that no tile divides --
+    OK   5x7.P3  NT 5x7x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   17x33.P3  NT 17x33x300  L=128 P=3  plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+    OK   33x17.P5  NN 33x17x517  L=128 P=5  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   17x33.P33  TN 17x33x4097  L=128 P=33  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   64x64.P1.manyblocks  NT 64x64x64  L=64 P=1  plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+  -- EVERY named plan against the oracle, not only the dispatcher's --
+    OK   allplans.17x33x517.P5.odd [FLAT(1 thread/cell, tpb=256, 1-D grid)]
+    OK   allplans.17x33x517.P5.odd [TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)]
+    OK   allplans.17x33x517.P5.odd [TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)]
+    OK   allplans.17x33x517.P5.odd [TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)]
+    OK   allplans.17x33x517.P5.odd [SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)]
+    OK   allplans.17x33x517.P5.odd [SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)]
+    OK   allplans.17x33x517.P5.odd [TUNED 32x32 reg2x2 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TUNED 128x128 reg8x8 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, transposed tiles)]
+    OK   allplans.5x7x4200.P33.odd [FLAT(1 thread/cell, tpb=256, 1-D grid)]
+    OK   allplans.5x7x4200.P33.odd [TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)]
+    OK   allplans.5x7x4200.P33.odd [TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)]
+    OK   allplans.5x7x4200.P33.odd [TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)]
+    OK   allplans.5x7x4200.P33.odd [SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)]
+    OK   allplans.5x7x4200.P33.odd [SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)]
+    OK   allplans.5x7x4200.P33.odd [TUNED 32x32 reg2x2 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TUNED 128x128 reg8x8 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, transposed tiles)]
+  -- synthetic: EVERY LEAF PARTIAL IS -0.0 (contract 9.2, F7) -- the ONLY input that separates a CARRY from +0.0 PADDING --
+    OK   minuszero.k300.P3.carry  NT 5x7x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   minuszero.k517.P5.2carries  NT 5x7x517  L=128 P=5  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+    OK   minuszero.k128.P1.nofold  NT 5x7x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   minuszero.k4200.P33.odd  NT 3x3x4200  L=128 P=33  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+  -- synthetic: SUBNORMAL products, contract seam 5c --
+    OK   subnormal.k300  NT 4x4x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   subnormal.k4096  NT 4x4x4096  L=128 P=32  plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+check_device_matches_oracle [IDENTICAL] OK: 86 shapes, every cell bit-identical to gemm_oracle
+check_device_is_launch_invariant [IDENTICAL]: 20 execution plans, one numerical plan
+  64x64x64   P=1  (the fold has no node)  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+      OK   TUNED 32x32 reg2x2 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, transposed tiles)
+  17x33x300  P=3  odd, ragged, no tile divides  op=NN
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+      OK   TUNED 32x32 reg2x2 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, transposed tiles)
+  33x17x517  P=5  two carries  op=TN
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+      OK   TUNED 32x32 reg2x2 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, transposed tiles)
+  130x70x4096 P=32 even  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+      OK   TUNED 32x32 reg2x2 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, transposed tiles)
+  12x9x130900 P=1023 odd, ten levels  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+      OK   TUNED 32x32 reg2x2 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, transposed tiles)
+  5x7x0      P=0  every cell a stored +0.0  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+      OK   TUNED 32x32 reg2x2 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      OK   SPLIT 128x128 reg8x8 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+      OK   TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, transposed tiles)
+check_device_is_launch_invariant [IDENTICAL] OK: 6 shapes x 20 execution plans, all bit-identical
+check_device_is_batch_invariant [IDENTICAL]: a cell's bits against the launch width
+  k = 4096  L = 128  P = 32
+      OK   n: 4 vs 64: 256 overlapping cells identical  [64x4 -> SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)  |  64x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+      OK   n: 4 vs 256: 256 overlapping cells identical  [64x4 -> SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)  |  64x256 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+      OK   n: 64 vs 256: 4096 overlapping cells identical  [64x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)  |  64x256 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+      OK   m: 64 vs 130: 4096 overlapping cells identical  [64x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)  |  130x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+      OK   n: 4 vs 4096: 256 overlapping cells identical  [64x4 -> SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)  |  64x4096 -> TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+      OK   loop[0] 64x4 -> SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle), shared ws of 266240 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[1] 64x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle), shared ws of 266240 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[2] 130x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle), shared ws of 266240 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[3] 64x4 -> SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle), shared ws of 266240 floats: 256 overlapping cells identical to the solo launch
+  k = 4097  L = 128  P = 33
+      OK   n: 4 vs 64: 256 overlapping cells identical  [64x4 -> SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)  |  64x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+      OK   n: 4 vs 256: 256 overlapping cells identical  [64x4 -> SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)  |  64x256 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+      OK   n: 64 vs 256: 4096 overlapping cells identical  [64x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)  |  64x256 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+      OK   m: 64 vs 130: 4096 overlapping cells identical  [64x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)  |  130x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)]
+      OK   n: 4 vs 4096: 256 overlapping cells identical  [64x4 -> SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)  |  64x4096 -> TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+      OK   loop[0] 64x4 -> SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle), shared ws of 274560 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[1] 64x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle), shared ws of 274560 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[2] 130x64 -> SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle), shared ws of 274560 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[3] 64x4 -> SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle), shared ws of 274560 floats: 256 overlapping cells identical to the solo launch
+check_device_is_batch_invariant [IDENTICAL] OK: every overlapping cell identical across launch widths and across a dispatch boundary
+check_device_default_dispatch [IDENTICAL]: column block parallelism row=132, enabled row=132
+  257x520x300  P=3  NT  plan chosen=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      entry  ran [DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=3 launched_blocks=45]  cells differing from FLAT: 0
+      row 132 ran [DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=3 launched_blocks=45]  cells differing from FLAT: 0
+      old plan by name  cells differing from FLAT: 0
+      OK   all four bit-identical
+  520x257x129  P=2  TN  plan chosen=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      entry  ran [DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=2 launched_blocks=30]  cells differing from FLAT: 0
+      row 132 ran [DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=2 launched_blocks=30]  cells differing from FLAT: 0
+      old plan by name  cells differing from FLAT: 0
+      OK   all four bit-identical
+  257x520x129  P=2  NN  plan chosen=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      entry  ran [DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=2 launched_blocks=30]  cells differing from FLAT: 0
+      row 132 ran [DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=2 launched_blocks=30]  cells differing from FLAT: 0
+      old plan by name  cells differing from FLAT: 0
+      OK   all four bit-identical
+  257x520x1000 P=8  TN  plan chosen=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      entry  ran [DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=8 launched_blocks=120]  cells differing from FLAT: 0
+      row 132 ran [DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=8 launched_blocks=120]  cells differing from FLAT: 0
+      old plan by name  cells differing from FLAT: 0
+      OK   all four bit-identical
+  257x520x128  P=1  NT (the rule declines)  plan chosen=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+      entry  ran [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) (ksplit default on at S=132: the group rule declines this call)]  cells differing from FLAT: 0
+      row 132 ran [TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) (ksplit default on at S=132: the group rule declines this call)]  cells differing from FLAT: 0
+      old plan by name  cells differing from FLAT: 0
+      OK   all four bit-identical
+check_device_default_dispatch [IDENTICAL] OK: 5 shapes bit-identical to FLAT and the old plan; the shipped entry took ksplit at 4 (column row 132), the enabled row at 4
+gemm device kernel + gates: all green [IDENTICAL]  (8 gates, sabotage: none)

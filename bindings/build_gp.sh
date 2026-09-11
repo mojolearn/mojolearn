@@ -2,6 +2,12 @@
 # Build the Gaussian process regression CPython extension into
 # python/mojolearn/_mojolearn_gp.so. Run from anywhere; requires pixi.
 #
+# MOJOLEARN_BUILD_EXTRA_DEFINES (optional, empty by default): extra flags
+# appended verbatim, word-split, to the `mojo build` command, exactly as in
+# bindings/build.sh. For trial builds only (for example
+# `-D MOJOLEARN_GEMM_ARM_TRIAL=1`, tools/gemm_ksplit_classical_leg.sh); a
+# release build leaves it unset.
+#
 # THIS EXTENSION IS gaussian_process/ AND NOTHING ELSE. It is the
 # THIRTEENTH binding, owed by commit 22a5b550 (the surface landed with the
 # binding registered in _backend.py and not yet written), and it is
@@ -162,6 +168,7 @@ out="$tmpdir/_mojolearn_gp.so"
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
+    ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn_gp.mojo \

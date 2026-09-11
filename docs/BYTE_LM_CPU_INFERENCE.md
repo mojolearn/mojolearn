@@ -66,21 +66,25 @@ order. The gate run on that build must find a mismatch.
 
 ## Running it
 
-On a rented CPU-only droplet (both builds, both gates, logs come home):
+The default is GitHub's free standard runners. `.github/workflows/byte-lm-cpu-gate.yml`
+runs both builds, both gates and the fake-binding plumbing tests on ARM64 Linux
+(Azure Cobalt 100), Apple M1 macOS and five x86-64 Linux draws, on every push
+to `main` or the lane branches that touches the CPU path, and uploads the
+reports. GitHub assigns the x86-64 host, so Intel and AMD rows come only from a
+report that names the CPU. A row enters the table below only after its uploaded
+reports are read.
+
+A rented CPU-only droplet (DEVIATION 2614) runs the same body. It is the
+fallback, not the default: do not overlap it with another lane's GPU legs.
 
 ```sh
 MOJOLEARN_GEMM_LEG_EXTRA=tools/byte_lm_host_leg.sh \
-MOJOLEARN_DO_EXTRA_PAYLOAD=/path/to/byte_lm_host_capture_payload.tgz \
+MOJOLEARN_DO_EXTRA_UPLOAD=/absolute/path/byte_lm_host_capture_payload.tgz \
 bash tools/do_extra_leg.sh cpu-intel --minutes 45
 ```
 
-`cpu-amd` is the AMD twin. The payload is the capture subset `git archive`
-excludes; see DEVIATION 2614 in `tools/do_extra_leg.sh`.
-
-On GitHub's free standard runners (ARM64 Linux on Azure Cobalt 100, x86-64
-Linux, Apple M1 macOS), `.github/workflows/byte-lm-cpu-gate.yml` runs the same
-two builds and two gates on every push to the lane branches and uploads the
-reports. A row enters the table below only after its uploaded reports are read.
+`cpu-amd` is the AMD twin. The upload is the capture subset `git archive`
+excludes, packed at its repository paths; the body unpacks it.
 
 ## Certified CPUs
 

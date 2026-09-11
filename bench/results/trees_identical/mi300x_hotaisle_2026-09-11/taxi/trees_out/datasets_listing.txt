@@ -1,0 +1,6 @@
+total 507892
+drwxr-xr-x 2 root root      4096 Sep 11 16:15 .
+drwxr-xr-x 3 root root      4096 Sep 11 16:14 ..
+-rw-r--r-- 1 root root 419757252 Sep 11 16:15 taxi_speed.npz
+-rw-r--r-- 1 root root  49961641 Sep 11 16:14 yellow_tripdata_2024-01.parquet
+-rw-r--r-- 1 root root  50349284 Sep 11 16:15 yellow_tripdata_2024-02.parquet

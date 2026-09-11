@@ -1,0 +1,23 @@
+Collecting lightgbm==4.7.0
+  Downloading lightgbm-4.7.0.tar.gz (1.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 89.0 MB/s  0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Installing backend dependencies: started
+  Installing backend dependencies: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: lightgbm
+  Building wheel for lightgbm (pyproject.toml): started
+  Building wheel for lightgbm (pyproject.toml): finished with status 'done'
+  Created wheel for lightgbm: filename=lightgbm-4.7.0-py3-none-linux_x86_64.whl size=3335431 sha256=0113792a49572a6c53711d84262099ea4c7c5010fe509deeafc98fc901054656
+  Stored in directory: /tmp/pip-ephem-wheel-cache-_ntr6agt/wheels/bb/6f/09/d74bfab150a64919c2ddc00378c9cd21e828747bf131e445c4
+Successfully built lightgbm
+Installing collected packages: lightgbm
+  Attempting uninstall: lightgbm
+    Found existing installation: lightgbm 4.7.0
+    Uninstalling lightgbm-4.7.0:
+      Successfully uninstalled lightgbm-4.7.0
+Successfully installed lightgbm-4.7.0

@@ -22,8 +22,15 @@
 #   sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
 #       --gpu "NVIDIA H100 80GB HBM3"
 #
-# AMD (Hot Aisle MI300X, once tools/hotaisle_leg.sh is built): brief
-# section 14.7.
+# AMD (Hot Aisle MI300X; AMD's shipped default is still stash_tiled, so this
+# leg decides it, brief section 15.5):
+#
+#   MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_round3_leg.sh \
+#   MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-attention-round3 \
+#   bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
+#
+# MOJOLEARN_HOTAISLE_EXTRA_ENV="MOJOLEARN_ATTN_LEG_SHIPPED_CHECK=1" adds the
+# no-trial transformer_fused_check (DEVIATION 2534) when the lease allows.
 #
 # Gates: brief section 6 with stash_tiled in place of baseline. Flip:
 # ENGINEERING_RULES 9, the geometric mean of the enwik8 and pilegithub lean

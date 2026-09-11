@@ -79,6 +79,18 @@
 #                 ratios below 1, and every step witness equal to shipped on
 #                 both corpora, else NO FLIP with the reason).
 #
+# DEVIATION 2595 (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 10):
+# `shipped` is the SHIPPED DEFAULT dispatch: the ksplit default where the
+# column's block parallelism row is above 0 (NVIDIA), the TUNED 128x128 plan
+# where it is 0 (AMD until the MI300X leg decides, Apple). The old plan is
+# the arm `tuned128`. Every label says which plan ran: price logs carry
+# DEFAULT, PLANLABEL and shipped_plan=[...] lines; plans.tsv maps each arm to
+# the step-price binary's PLANLABEL (MOJOLEARN_GEMM_STEP_LABEL_ONLY=1, no
+# device work); each LM probe gets MOJOLEARN_GEMM_PLAN_LABEL, which
+# tools/lm_step_memory_probe.py records as `gemm_plan` beside `gemm_arm`;
+# lm_summary.tsv prints both, and every verdict line names the arm's plan and
+# the shipped plan.
+#
 # KNOBS (all through MOJOLEARN_DO_EXTRA_ENV on DigitalOcean):
 #   MOJOLEARN_GEMM_STEP_LEG_ARMS     price arms, default
 #                                    shipped,lfold,half,half_ks16,quarter,head,half_head
@@ -196,7 +208,7 @@ run() {
 }
 
 {
-    echo "deviations=2540-2544"
+    echo "deviations=2540-2544,2595"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT"
     echo "arms=$ARMS"
@@ -247,7 +259,8 @@ for arm in $(echo "$ARMS" | tr ',' ' '); do
         timeout "$DEADLINE" "$OUT/bin/step-price"
 done
 # CONTROL, PHASE and PHASEBITS lines: DEVIATION 2593 (tools/gemm_longk_leg.sh).
-grep -h '^STEP\|^PRICE\|^TABLE\|^BITS\|^CONTROL\|^PHASE' "$OUT"/price-*.log > "$OUT/price_tables.txt" 2>/dev/null
+# DEFAULT and PLANLABEL lines: DEVIATION 2595.
+grep -h '^STEP\|^PRICE\|^TABLE\|^BITS\|^CONTROL\|^PHASE\|^DEFAULT\|^PLANLABEL' "$OUT"/price-*.log > "$OUT/price_tables.txt" 2>/dev/null
 grep -h '^STEP' "$OUT"/price-*.log > "$OUT/price_step.txt" 2>/dev/null
 
 # THE AUTO PICK: the lowest STEP ratio among price runs that exited 0 (a run
@@ -271,6 +284,22 @@ fi
 # `shipped` is always the bracket; drop it from the arm list.
 LM_ARMS=$(echo "$LM_ARMS" | tr ',' '\n' | grep -v '^shipped$' | grep -v '^$' | paste -sd, -)
 echo "lm_arms_resolved=${LM_ARMS:-none}" >> "$OUT/gate.txt"
+
+# DEVIATION 2595: which plan each arm runs, from this build's step-price
+# binary (label only: it exits before creating a DeviceContext).
+: > "$OUT/plans.tsv"
+if [ -x "$OUT/bin/step-price" ]; then
+    for arm in shipped $(echo "$ARMS,$LM_ARMS" | tr ',' ' '); do
+        if awk -F '\t' -v a="$arm" '$1 == a { f = 1 } END { exit !f }' "$OUT/plans.tsv"; then
+            continue
+        fi
+        plan_label=$(env MOJOLEARN_GEMM_ARM="$arm" MOJOLEARN_GEMM_ARM_SABOTAGE=0 \
+            MOJOLEARN_GEMM_STEP_LABEL_ONLY=1 timeout 120 "$OUT/bin/step-price" 2>/dev/null \
+            | sed -n 's/^PLANLABEL arm=[^ ]* label=//p' | head -1)
+        printf '%s\t%s\n' "$arm" "${plan_label:-unlabeled}" >> "$OUT/plans.tsv"
+    done
+fi
+awk -F '\t' '$1 == "shipped" { print "shipped_plan=" $2 }' "$OUT/plans.tsv" >> "$OUT/gate.txt"
 
 # ---- the bindings, with the trial hook ---------------------------------------
 LM_OK=0
@@ -306,14 +335,17 @@ if [ "$LM_OK" = 1 ]; then
         for arm in shipped $(echo "$LM_ARMS" | tr ',' ' ') shippedclose; do
             env_arm=$arm
             [ "$arm" = shippedclose ] && env_arm=shipped
+            plan_label=$(awk -F '\t' -v a="$env_arm" '$1 == a { print $2; exit }' "$OUT/plans.tsv" 2>/dev/null)
             run "lm-$arm-$name" env PYTHONPATH="$ROOT/python:$ROOT" \
                 MOJOLEARN_GEMM_ARM="$env_arm" MOJOLEARN_GEMM_ARM_SABOTAGE=0 \
+                MOJOLEARN_GEMM_PLAN_LABEL="${plan_label:-unlabeled}" \
                 timeout "$DEADLINE" pixi run python tools/lm_step_memory_probe.py \
                 --out "$OUT/lm-$arm-$name" --target --resident-lean --witness-every-step \
                 --steps "$LM_STEPS" --budget-seconds "$DEADLINE" --corpus "$path"
             if [ "${MOJOLEARN_GEMM_STEP_LEG_LMTIMING:-0}" = "1" ] && [ "$arm" != shippedclose ]; then
                 run "lmtiming-$arm-$name" env PYTHONPATH="$ROOT/python:$ROOT" \
                     MOJOLEARN_GEMM_ARM="$env_arm" MOJOLEARN_GEMM_ARM_SABOTAGE=0 \
+                    MOJOLEARN_GEMM_PLAN_LABEL="${plan_label:-unlabeled}" \
                     timeout "$DEADLINE" pixi run python tools/lm_step_memory_probe.py \
                     --out "$OUT/lmtiming-$arm-$name" --target --resident-lean --component-timing \
                     --steps 1 --budget-seconds "$DEADLINE" --corpus "$path"
@@ -323,6 +355,13 @@ if [ "$LM_OK" = 1 ]; then
     pixi run python - "$OUT" <<'PY' > "$OUT/lm_summary.tsv" 2>> "$OUT/lm_summary.err"
 import json, math, sys, pathlib
 out = pathlib.Path(sys.argv[1])
+# DEVIATION 2595: arm -> the plan it runs (the step-price binary's PLANLABEL).
+plans = {}
+if (out / 'plans.tsv').exists():
+    for line in (out / 'plans.tsv').read_text().splitlines():
+        if '\t' in line:
+            a, lab = line.split('\t', 1)
+            plans[a] = lab
 rows, med = {}, {}
 for d in sorted(out.glob('lm-*')):
     r = d / 'result.json'
@@ -333,7 +372,8 @@ for d in sorted(out.glob('lm-*')):
     med[d.name] = j.get('steady_median_seconds')
     corpus = (j.get('corpus') or {}).get('sha256')
     print(f"{d.name}\tsteady_median_seconds={med[d.name]}\tlimited={j.get('limited')}"
-          f"\tgemm_arm={j.get('gemm_arm')}\tattention_arm={j.get('attention_arm')}\tcorpus_sha256={corpus}")
+          f"\tgemm_arm={j.get('gemm_arm')}\tgemm_plan={j.get('gemm_plan')}"
+          f"\tattention_arm={j.get('attention_arm')}\tcorpus_sha256={corpus}")
     for w in j.get('step_witnesses') or []:
         print(f"{d.name}\tstep={w.get('step')}\tsha256={json.dumps(w.get('sha256'), sort_keys=True)}")
     rows[d.name] = [json.dumps(w.get('sha256'), sort_keys=True) for w in j.get('step_witnesses') or []]
@@ -359,16 +399,17 @@ for name, hashes in rows.items():
 need = ('enwik8', 'pilegithub')
 for arm in sorted(set(ratios) | set(equal)):
     per = ratios.get(arm, {})
+    labels = f"\tarm_plan={plans.get(arm)}\tshipped_plan={plans.get('shipped')}"
     if not all(c in per for c in need):
-        print(f"verdict\t{arm}\tNO FLIP\ta corpus is unmeasured (measured: {sorted(per)})")
+        print(f"verdict\t{arm}\tNO FLIP\ta corpus is unmeasured (measured: {sorted(per)}){labels}")
         continue
     if not all(equal.get(arm, {}).get(c) for c in need):
-        print(f"verdict\t{arm}\tNO FLIP\ta step witness differs from shipped: not the shipped step's bits")
+        print(f"verdict\t{arm}\tNO FLIP\ta step witness differs from shipped: not the shipped step's bits{labels}")
         continue
     g = math.sqrt(per['enwik8'] * per['pilegithub'])
     word = 'FLIP' if g < 1 else 'NO FLIP'
     print(f"verdict\t{arm}\t{word}\tgeomean={g:.4f}\tenwik8={per['enwik8']:.4f}"
-          f"\tpilegithub={per['pilegithub']:.4f}\tquality=identical (every step witness equal to shipped)")
+          f"\tpilegithub={per['pilegithub']:.4f}\tquality=identical (every step witness equal to shipped){labels}")
 PY
 fi
 
