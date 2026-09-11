@@ -1,0 +1,34 @@
+diff --git a/python/mojolearn/_forest_protocol.py b/python/mojolearn/_forest_protocol.py
+index dd721075..8300894f 100644
+--- a/python/mojolearn/_forest_protocol.py
++++ b/python/mojolearn/_forest_protocol.py
+@@ -272,7 +272,8 @@ def _export_fit_result(native, descriptor, *, compare_legacy=False):
+     Native same-fit/save gates cover all three modes on Metal (DEVIATION 2482).
+     """
+     import numbers
+-    from ._buffer import empty
++    from ._array import _CODE
++    from ._buffer import _output_store
+ 
+     if not isinstance(descriptor, (list, tuple)) or not descriptor:
+         raise ValueError('native forest export returned an invalid descriptor')
+@@ -295,7 +296,18 @@ def _export_fit_result(native, descriptor, *, compare_legacy=False):
+             raise ValueError('native forest export metadata must contain integers')
+         dtypes = ('<i4', '<i4', '<f4', '<i4', '<f4')
+         sizes = (trees + 1, nodes, nodes, nodes, nodes * outputs)
+-        arrays = tuple(empty((size,), dtype) for size, dtype in zip(sizes, dtypes))
++        # DEVIATION 2511: the five destinations are UNINITIALIZED raw
++        # allocations (`_output_store`, the DEVIATION 2473/2500 pattern),
++        # not zero-filled `empty()` Arrays. The native export writes every
++        # element of every one -- `offsets[0..trees]`, one column /
++        # threshold / left-child per node (the registry validated `nodes`
++        # as the node total), and `nodes * outputs` leaves (validated at
++        # retain) -- and a raising export never lets them escape. The
++        # zero fill was 40-48 ms of a 1516 ms RF round at HIGGS 1M on the
++        # H100 (4.02M nodes, 96 MB); the bytes returned are unchanged.
++        arrays = tuple(
++            Array._owned(_output_store(_CODE[dtype], size), (size,), dtype, "C")
++            for size, dtype in zip(sizes, dtypes))
+         native.forest_export(handle, *(_addr(a) for a in arrays), list(counts))
+         if compare_legacy:
+             old = native.forest_export_legacy(handle)

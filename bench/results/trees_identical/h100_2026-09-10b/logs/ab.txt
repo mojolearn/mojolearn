@@ -1,0 +1,37 @@
+ib_exit baseline=0 02:45:29
+ib_diff sep10_baseline vs baseline exit=0 02:45:29
+ib_diff sep10_flip2011 vs baseline exit=0 02:45:29
+PHASE_A_DONE 02:45:29
+speed_exit baseline.rf.higgs.r1000000.ours=0 02:48:39
+speed_exit baseline.rf.higgs.r1000000.stage=0 02:49:49
+speed_exit baseline.gbdt-depthwise.higgs.r1000000.stage=0 02:50:02
+speed_exit baseline.gbdt-lossguide.higgs.r1000000.stage=0 02:50:13
+PHASE_B1_DONE 02:50:13
+speed_exit baseline.gbdt-depthwise.higgs.r1000000.ours=0 02:50:37
+profile_exit=0 02:52:34
+build_exit stamps.rf=0 02:53:02
+430656902678159fb61976e7ee5912c59db959485c2e4d57dd7c3093d70dfd82  /root/bins/stamps/_mojolearn_rf.so
+speed_exit stamps.rf.higgs.r1000000.stage=0 02:54:13
+GAP_L_DONE 02:54:13
+build_exit stamps2.rf=0 02:57:07
+ecd0e84ddfc1ca63056766783ccc25a964c739ed929abbeec9a8c32bb0e81e2b  /root/bins/stamps2/_mojolearn_rf.so
+speed_exit stamps2.rf.higgs.r1000000.stage=0 02:58:17
+speed_exit baseline.gbdt-lossguide.higgs.r1000000.ours=0 03:02:08
+speed_exit baseline.gbdt-depthwise.higgs.r2000000.ours=0 03:02:34
+speed_exit baseline.gbdt-lossguide.higgs.r2000000.ours=0 03:03:01
+speed_exit baseline.gbdt-symmetric.higgs.r1000000.ours=0 03:03:21
+speed_exit baseline.et.higgs.r1000000.ours=0 03:05:26
+speed_exit baseline.rf.higgs.r2000000.ours=0 03:09:03
+speed_exit baseline2.rf.higgs.r1000000.ours=0 03:12:31
+PHASE_B_DONE 03:12:31
+ib_exit exp2511=0 03:12:36
+ib_diff baseline vs exp2511 exit=0 03:12:37
+speed_exit exp2511.rf.higgs.r1000000.ours=0 03:15:50
+speed_exit exp2511.rf.higgs.r2000000.ours=0 03:20:51
+export_profile_exit=0 03:20:59
+PHASE_D_DONE 03:20:59
+build_exit stampsg.gbdt=0 03:22:27
+b2e65157a6f788a45ecbe8e31074391ba075794585e7dd6e1bbe66c5caf23142  /root/bins/stampsg/_mojolearn_gbdt.so
+speed_exit stampsg.gbdt-depthwise.higgs.r1000000.stage=0 03:22:47
+speed_exit stampsg.gbdt-lossguide.higgs.r1000000.stage=0 03:23:02
+PHASE_N_DONE 03:23:02

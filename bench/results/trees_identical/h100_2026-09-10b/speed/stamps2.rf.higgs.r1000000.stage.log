@@ -1,0 +1,73 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+3352 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a4440000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+3352 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a4480000000, nodemask=2)
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.00080873 s
+  bin_dataset	0.000224657 s
+  host_setup	0.000302031 s
+  row_sampling	0.00180996 s
+  host_begin_tree	0.003251631 s
+  flush_splits	0.006592118 s
+  device_wait	0.751438491 s
+  host_read_splits	0.018702903 s
+  host_enq_partition	0.102700703 s
+  host_queue_push	0.119335779 s
+  host_enq_hist	0.083864285 s
+  host_enq_hist_retry	0.089436419 s
+  tree_copy	0.040153747 s
+  leaf_values	0.068751402 s
+  host_teardown	0.000463894 s
+  fit_total	1.356183945 s
+  other	0.068347195 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  bind_ctx_create	0.17703078 s
+  bind_pinned_alloc	0.509732096 s
+  bind_host_copy	0.020352188 s
+  bind_h2d	0.002426665 s
+  bind_release_buffers	1.4078e-05 s
+  bind_release_ctx	2.6104e-05 s
+  bind_export_retain	2.2552e-05 s
+  binding_total	2.066056463 s
+FSPEED-WARMUP lane=rf arm=ours shape=higgs-1000000x28 ms=2244.407
+FSPEED-ORDER lane=rf round=1 arms=ours
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.000467304 s
+  bin_dataset	0.000189446 s
+  host_setup	0.000112195 s
+  row_sampling	0.001860737 s
+  host_begin_tree	0.002813907 s
+  flush_splits	0.006469091 s
+  device_wait	0.761359802 s
+  host_read_splits	0.018358895 s
+  host_enq_partition	0.102384534 s
+  host_queue_push	0.103713018 s
+  host_enq_hist	0.082409046 s
+  host_enq_hist_retry	0.089474886 s
+  tree_copy	0.033406807 s
+  leaf_values	0.070666274 s
+  host_teardown	0.00047171 s
+  fit_total	1.341742678 s
+  other	0.067585026 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  bind_ctx_create	4.8108e-05 s
+  bind_pinned_alloc	1.1824e-05 s
+  bind_host_copy	0.02017692 s
+  bind_h2d	0.002145804 s
+  bind_release_buffers	1.3498e-05 s
+  bind_release_ctx	3.0387e-05 s
+  bind_export_retain	2.2163e-05 s
+  binding_total	1.364285521 s
+3352 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52f940000000, nodemask=1)
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=1533.769 hash=3ffa2951595422d4
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538850
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

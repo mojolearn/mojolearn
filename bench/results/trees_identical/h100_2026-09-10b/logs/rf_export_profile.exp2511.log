@@ -1,0 +1,6 @@
+5073 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x788280000000, nodemask=2)
+5073 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x121d00000000, nodemask=1)
+5073 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x121d40000000, nodemask=1)
+rep 0 trees=100 nodes=4019922 native_ms=2410.2 export_alloc_ms=45.7 export_copy_ms=19.4 export_release_ms=4.6 del_Xf_ms=5.2
+rep 1 trees=100 nodes=4019922 native_ms=1361.9 export_alloc_ms=52.5 export_copy_ms=25.2 export_release_ms=0.4 del_Xf_ms=5.0
+rep 2 trees=100 nodes=4019922 native_ms=1339.0 export_alloc_ms=41.3 export_copy_ms=41.2 export_release_ms=0.3 del_Xf_ms=5.1
