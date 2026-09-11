@@ -94,6 +94,7 @@ excludes, packed at its repository paths; the body unpacks it.
 | AMD x86_64, DigitalOcean Premium AMD (model name masked by QEMU; family 23 model 49, Zen 2; AVX2, FMA), 4 vCPU | Ubuntu 24.04, Python 3.12.3 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `da4fe0c6` | 33 of 33 on the reference AND threaded paths | yes, 9 of 33 on both paths | `bench/results/e1g/2026-09-11_165210-cpu-amd-byte-lm-host-threads` |
 | AMD x86_64, EPYC 9V45 (Zen 5, family 26 model 2; AVX2, FMA, AVX-512 present but not targeted), GitHub `ubuntu-24.04` | Ubuntu 24.04, Python 3.12 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `5e10863b` | 33 of 33 on the reference AND threaded paths | yes, 9 of 33 on both paths | `bench/results/gh-actions/2026-09-11_165309-byte-lm-cpu-gate-run34624545221/byte-lm-cpu-gate-ubuntu-24.04` |
 | Intel x86_64, Xeon 6973P-C (Granite Rapids, family 6 model 173; AVX2, FMA, AVX-512 present but not targeted), GitHub `ubuntu-22.04` | Ubuntu 22.04, Linux 6.8, Python 3.12.14 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `205b22fa` (main merged) | 33 of 33 on the reference AND threaded paths; plumbing tests 8 passed | yes, 9 of 33 on both paths | `bench/results/gh-actions/2026-09-11_1716-byte-lm-cpu-gate-run34626867783/byte-lm-cpu-gate-x86-e` |
+| Intel x86_64, Xeon Platinum 8573C (Emerald Rapids, family 6 model 207; AVX2, FMA, AVX-512 present but not targeted), GitHub `ubuntu-24.04` and `ubuntu-22.04` | Ubuntu 24.04 and 22.04, Python 3.12.14 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `155f6195` | 33 of 33 on the reference AND threaded paths in two draws; plumbing tests 8 passed | yes, 9 of 33 on both paths | `bench/results/gh-actions/2026-09-11_1722-byte-lm-cpu-gate-run34627322685/byte-lm-cpu-gate-x86-b` and `x86-d` |
 | AMD x86_64, EPYC 7763 (Zen 3, family 25 model 1; AVX2, FMA), GitHub `ubuntu-24.04` and `ubuntu-22.04` | Ubuntu 24.04 and 22.04 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `205b22fa` | 33 of 33 on both paths in six draws; plumbing tests 8 passed | yes, 9 of 33 on both paths | runs 34626868143 (x86-b, c, e) and 34626867783 (x86-a, b, d) |
 | AMD x86_64, EPYC 9V74 (Zen 4, family 25 model 17), GitHub `ubuntu-24.04` and `ubuntu-22.04` | Ubuntu 24.04 and 22.04 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `205b22fa` | 33 of 33 on both paths in three draws; plumbing tests 8 passed | yes, 9 of 33 on both paths | runs 34626868143 (x86-a, d) and 34626867783 (x86-c) |
 | ARM64, Azure Cobalt 100 (Arm Neoverse N2, implementer 0x41 part 0xd49; ASIMD, SVE, SVE2), GitHub `ubuntu-24.04-arm` | Ubuntu 24.04, Python 3.12 | no CPU flag (aarch64 default), Mojo 1.0.0, commit `5e10863b` | 33 of 33 on both paths | yes, 9 of 33 on both paths | `.../byte-lm-cpu-gate-ubuntu-24.04-arm` |
@@ -121,8 +122,12 @@ The runs on commit `205b22fa` (main merged into the lane) repeat the Apple M1
 row, and all ten x86-64 draws pass. In both of those runs the ARM64 job stopped
 in its "Runner facts" step before building: the step shell is `bash -eo
 pipefail` and ARM64 `/proc/cpuinfo` has no `model name` line. That is a
-workflow defect, fixed in the next commit, and not a result for ARM64 either
-way; the ARM64 row stands on run 34624545221 until the rerun reports.
+workflow defect, fixed in commit `155f6195`, and not a result for ARM64 either
+way. The rerun on `155f6195` (run
+[34627322685](https://github.com/mojolearn/mojolearn/actions/runs/34627322685),
+evidence `bench/results/gh-actions/2026-09-11_1722-byte-lm-cpu-gate-run34627322685`)
+is green on all seven runners, ARM64 included: 33 of 33 on both paths, the
+control caught, plumbing tests 8 passed, the same logits hash.
 
 Not measured here: a Qualcomm CPU (no rentable cloud offers one), bare-metal
 Apple silicon, and a binary built on one CPU and run on another. The Intel
