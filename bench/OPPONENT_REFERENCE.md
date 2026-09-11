@@ -656,7 +656,12 @@ step on the same VM.
 1b. Trees at 2M and 5M for the Sep 9 same-process protocol (only 1M exists).
 2. (closed 2026-09-09: the 20 H100 cuBLAS rows above were transcribed
    from the Aug 25 logs by the GEMM split-K lane; no re-run.)
-3. cuML DBSCAN and PCA at 1M rows or more (the fixtures above are small).
+3. (closed 2026-09-11 by lane linear-cluster-istella on H100 pod
+   1yxsotvvcbxtuu: cuML PCA at 4,000,000 x 11 (19.54 ms) and 2,043,304 x 220
+   (81.91 ms), and cuML DBSCAN at 1,000,000 rows on both datasets (taxi
+   13631.0 ms at eps 0.177, Istella-S 55240 ms at eps 4.17), plus cuML
+   HDBSCAN at 100,000 rows on both. The small fixtures above are superseded
+   for these two.)
 4. cuML UMAP on the H100 at 1M rows, and on the L40S at 20k and 100k rows
    (the H100 has 20k and 100k, the L40S has 1M; ours IDENTICAL was measured
    on the L40S at all three on 2026-09-09, so no same-GPU ratio exists yet
