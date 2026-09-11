@@ -1136,3 +1136,54 @@ def knn_distance_exact_chain_for[column: Int, identical: Bool]() -> Bool:
     comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN"]():
         return identical
     return False
+
+
+comptime KNN_IDENTICAL_WIDE_QUERY_TILE = 512
+
+
+@always_inline
+def knn_query_tile_for[column: Int, identical: Bool]() -> Int:
+    """SCHEDULING row (DEVIATION 2631, 2026-09-11, lane/knn-finish): the default query tile of the IDENTICAL tiled k-NN arm (`neighbors/estimator.mojo::DEFAULT_QUERY_TILE`), and on the same column the radix scratch the small-k selector never reads is not allocated (`knn_brute_force.mojo::tiled_radix_scratch_len`). 0 means the estimator's historical rule (512 on NVIDIA IDENTICAL, 256 elsewhere). Tiling cannot move a bit: every cell's chain is a function of its query row and index column alone, every row's selection and partial merges run in the same column-tile order whatever the query tile, and the scratch is never read on a k <= 64 request. Arms for the A/B: `-D MOJOLEARN_KNN_QUERY_TILE_ARM_512`, `_1024`, `_2048`, `_4096` force that tile on every column; `-D MOJOLEARN_KNN_IDENTICAL_FULL_RADIX_SCRATCH=1` keeps the historical scratch."""
+    comptime if not identical:
+        return 0
+    comptime if is_defined["MOJOLEARN_KNN_QUERY_TILE_ARM_512"]():
+        return 512
+    comptime if is_defined["MOJOLEARN_KNN_QUERY_TILE_ARM_1024"]():
+        return 1024
+    comptime if is_defined["MOJOLEARN_KNN_QUERY_TILE_ARM_2048"]():
+        return 2048
+    comptime if is_defined["MOJOLEARN_KNN_QUERY_TILE_ARM_4096"]():
+        return 4096
+    return KNN_IDENTICAL_WIDE_QUERY_TILE if column == COLUMN_NVIDIA else 0
+
+
+@always_inline
+def knn_radix_scratch_shrink_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 2631): whether a k <= 64 IDENTICAL tiled request allocates `k` radix scratch pairs per query row instead of `n_index // 8`. The small-k selector (`knn_smallk_select_for`) serves every column tile of such a request, so the radix kernel that reads the scratch is never launched and no output can depend on its size. Same column scope as `knn_query_tile_for`'s measured tile. `-D MOJOLEARN_KNN_IDENTICAL_FULL_RADIX_SCRATCH=1` keeps the historical size everywhere."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_FULL_RADIX_SCRATCH"]():
+        return False
+    return column == COLUMN_NVIDIA
+
+
+@always_inline
+def knn_fused_distance_select_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 2667, 2026-09-11, lane/knn-finish): whether the transposed IDENTICAL tiled k-NN arm computes each column tile's distances INSIDE the small-k selector (`neighbors/checks/fused_distance_select_identical.mojo`), one launch per tile, instead of a register-tile distance launch that writes a `query_tile x index_tile` matrix and a selector launch that reads it back. The shape of cuVS's `fusedL2Knn` (`knn_brute_force.cuh:447-451`): no distance matrix is written. Each candidate's distance is the register tile's cell chain (`pinned_distance_tile.mojo::_rt_step` over the feature axis ascending, then the same epilogue, clamp and root), its key is the same composite (distance, index) key, and the selector's rank phase returns the k smallest keys of the whole tile, which do not depend on which thread saw which column, so neighbors and distances are the same bits. `-D MOJOLEARN_EXPERIMENTAL_KNN_FUSED_SELECT=1` forces it on every column; `-D MOJOLEARN_KNN_IDENTICAL_UNFUSED_SELECT=1` forces the two-launch form."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_UNFUSED_SELECT"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_FUSED_SELECT"]():
+        return True
+    return False
+
+
+@always_inline
+def umap_device_optimizer_live_row_for[column: Int, identical: Bool]() -> Bool:
+    """ROUTING row (DEVIATION 2668, 2026-09-11, lane/knn-finish): whether the IDENTICAL UMAP device optimizer (`umap/optimizer_identical_device.mojo::umap_identical_epoch_kernel`) applies a vertex's own attractive and repulsive moves to its running position during its fold (cuML's per-vertex serial kernel, `optimize_batch_kernel.cuh:569-577, 608-616`) instead of summing every move from the epoch snapshot. The mirror edge's tail move stays deferred. MOVES UMAP BITS on every column (the IDENTICAL contract is one default for all columns); both forms are pure functions of the epoch snapshot with one writer per vertex, so each is independent of launch width and vendor. `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` restores the snapshot fold on every column."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD"]():
+        return False
+    return True

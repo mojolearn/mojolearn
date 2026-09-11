@@ -49,7 +49,10 @@ from std.math import isfinite
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
+from checks.kernel_matrix import TARGET_COLUMN, umap_device_optimizer_live_row_for
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_mul,
@@ -66,6 +69,26 @@ comptime UMAP_IDENTICAL_OPT_TPB = (
 )
 
 comptime UMAP_IDENTICAL_GRAD_CLIP = Float32(4.0)
+
+# DEVIATION 2668 (2026-09-11, lane/knn-finish; kernel-matrix row
+# `umap_device_optimizer_live_row_for`): within a vertex's fold, its own
+# attractive and repulsive moves are applied to its running position as the
+# fold visits them (cuML's per-vertex serial kernel,
+# `simpl_set_embed/optimize_batch_kernel.cuh:569-577, 608-616`, which
+# `umap.pyx:562-570` selects for a spectral fit), and only the mirror edge's
+# tail move is still summed and applied at the end. The fold is still a pure
+# function of the epoch snapshot with one writer per vertex, so the bits stay
+# independent of launch width and vendor; they differ from the snapshot fold
+# (a re-baseline). Measured on taxi 100k (H200, 2026-09-11): the snapshot
+# fold summed about twenty undamped moves from one point and scored sampled
+# trustworthiness 0.906 where the serial host loop on the same graph and init
+# scored 0.980. `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` restores the
+# snapshot fold; `-D MOJOLEARN_UMAP_LIVE_BOTH_ARM=1` (trial only) applies
+# both attractive moves live.
+comptime UMAP_LIVE_ROW = umap_device_optimizer_live_row_for[
+    TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+]()
+comptime UMAP_LIVE_BOTH_ARM = is_defined["MOJOLEARN_UMAP_LIVE_BOTH_ARM"]()
 
 
 def _clip(value: Float32) -> Float32:
@@ -138,8 +161,19 @@ def umap_identical_epoch_kernel[C: Int](
                 var g = ftz(
                     identical_mul(alpha, _clip(ftz(identical_mul(coeff, delta[c]))))
                 )
-                acc[c] = ftz(acc[c] + g)
-                acc[c] = ftz(acc[c] + g)
+                comptime if UMAP_LIVE_BOTH_ARM:
+                    # Trial arm only: both moves applied to the running row.
+                    x[c] = ftz(x[c] + g)
+                    x[c] = ftz(x[c] + g)
+                elif UMAP_LIVE_ROW:
+                    # DEVIATION 2668: the head move lands on the running
+                    # position now, so the next edge's delta sees it; the
+                    # mirror (tail) move stays deferred to the epilogue.
+                    x[c] = ftz(x[c] + g)
+                    acc[c] = ftz(acc[c] + g)
+                else:
+                    acc[c] = ftz(acc[c] + g)
+                    acc[c] = ftz(acc[c] + g)
         var draw = SIMD[DType.uint32, 4](0)
         for j in range(rate):
             var lane = j & 3
@@ -171,14 +205,26 @@ def umap_identical_epoch_kernel[C: Int](
                     ),
                 )
                 comptime for c in range(C):
-                    acc[c] = ftz(
-                        acc[c]
-                        + ftz(
-                            identical_mul(
-                                alpha, _clip(ftz(identical_mul(coeff, nd[c])))
+                    comptime if UMAP_LIVE_ROW or UMAP_LIVE_BOTH_ARM:
+                        # DEVIATION 2668: the repulsive move lands on the
+                        # running position, as cuML's serial kernel applies it.
+                        x[c] = ftz(
+                            x[c]
+                            + ftz(
+                                identical_mul(
+                                    alpha, _clip(ftz(identical_mul(coeff, nd[c])))
+                                )
                             )
                         )
-                    )
+                    else:
+                        acc[c] = ftz(
+                            acc[c]
+                            + ftz(
+                                identical_mul(
+                                    alpha, _clip(ftz(identical_mul(coeff, nd[c])))
+                                )
+                            )
+                        )
     comptime for c in range(C):
         destination.unsafe_store(v * C + c, ftz(x[c] + acc[c]))
 

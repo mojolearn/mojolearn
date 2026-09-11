@@ -106,7 +106,8 @@ from neighbors.checks.pinned_distance_tile import (
     vector_exponent_minimum_kernel,
     pinned_distance_tile_kernel,
 )
-from checks.kernel_matrix import knn_distance_exact_chain_for
+from checks.kernel_matrix import knn_distance_exact_chain_for, knn_fused_distance_select_for, knn_radix_scratch_shrink_for
+from neighbors.checks.fused_distance_select_identical import fused_distance_select_launch
 
 # DEVIATION 2629 (kernel-matrix row `knn_distance_exact_chain_for`): the
 # transposed register-tile distance admits tiles whose request-local exponent
@@ -210,6 +211,75 @@ from neighbors.impl.distance.detail.distance_ops import (
     metric_norm_takes_sqrt,
     metric_uses_norms,
 )
+
+
+# DEVIATION 2667 (kernel-matrix row `knn_fused_distance_select_for`): the
+# transposed IDENTICAL arm computes each column tile's distances inside the
+# small-k selector, one launch and no distance matrix. It needs every row it
+# replaces to be on (transpose, register tile, small-k selector) and none of
+# the opt-in distance variants whose chains it does not carry (Apple's
+# request-local metadata, DEVIATION 2629's exact chain), and trial builds
+# keep the two-launch form so a selector arm from the environment still runs.
+comptime KNN_FUSED_SELECT = (
+    knn_fused_distance_select_for[TARGET_COLUMN, IDENTICAL_BUILD]()
+    and EXPERIMENTAL_SMALLK_IDENTICAL
+    and EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL
+    and KNN_REGISTER_TILE_IDENTICAL
+    and not KNN_PREFLIGHT_METADATA
+    and not KNN_PREFLIGHT_METADATA_DEFAULT
+    and not KNN_EXACT_CHAIN
+    and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
+)
+# DEVIATION 2631 (kernel-matrix row `knn_radix_scratch_shrink_for`).
+comptime KNN_RADIX_SCRATCH_SHRINK = (
+    knn_radix_scratch_shrink_for[TARGET_COLUMN, IDENTICAL_BUILD]()
+    and EXPERIMENTAL_SMALLK_IDENTICAL
+)
+
+
+def fused_select_applies(
+    n_index: Int, n_features: Int, k: Int, metric: Int, use_vendor_topk: Bool
+) -> Bool:
+    """Whether a transposed IDENTICAL request takes the fused distance and
+    selection launch (DEVIATION 2667) on every column tile. `metric` is the
+    RESOLVED metric. The caller also needs the transposed layout, which
+    `tiled_brute_force_knn` builds for exactly these metrics and shapes."""
+    comptime if KNN_FUSED_SELECT:
+        return (
+            not use_vendor_topk
+            and (metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_EXPANDED)
+            and k >= 1 and k <= SMALLK_MAX_K and k <= n_index
+            and n_features > 0 and n_features <= 2147483647
+            and n_index <= 2147483647
+        )
+    return False
+
+
+def tiled_radix_scratch_len(n_index: Int, k: Int) -> Int:
+    """`buf_len`, the radix scratch pairs per query row the tiled arm is
+    given: `n_index // 8` (at least `k`) historically. DEVIATION 2631: where
+    the small-k selector serves every column tile (k <= 64 on a column whose
+    `knn_radix_scratch_shrink_for` row is on) the radix kernel is never
+    launched, so the scratch is `k` pairs and 800 MB per 2,048-row tile is
+    not allocated."""
+    var buf_len = n_index // 8
+    if buf_len < k:
+        buf_len = k
+    comptime if KNN_RADIX_SCRATCH_SHRINK:
+        if k >= 1 and k <= SMALLK_MAX_K and k <= n_index:
+            return k
+    return buf_len
+
+
+def tiled_distance_tile_cells(
+    query_tile: Int, n_index: Int, n_features: Int, k: Int, metric: Int
+) -> Int:
+    """The distance tile a request allocates: one cell when the fused launch
+    (DEVIATION 2667) serves every column tile, which writes no matrix, else
+    `query_tile x identical_index_tile(n_index)`. `metric` is resolved."""
+    if fused_select_applies(n_index, n_features, k, metric, False):
+        return 1
+    return query_tile * identical_index_tile(n_index)
 
 
 #: THE SENTINEL `metric` EVERY PRE-2026-09-01 CALLER GETS.
@@ -556,7 +626,12 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     var index_tile = identical_index_tile(n_index)
     if use_vendor_topk:
         index_tile = n_index
-    if len(dist_tile) < query_tile * index_tile:
+    # DEVIATION 2667: the fused launch writes no distance matrix, so the
+    # caller's tile may be one cell (`tiled_distance_tile_cells`).
+    var use_fused = use_transposed_index and fused_select_applies(
+        n_index, n_features, k, mtr, use_vendor_topk
+    )
+    if not use_fused and len(dist_tile) < query_tile * index_tile:
         raise Error(
             "tiled_brute_force_knn: the distance tile holds "
             + String(len(dist_tile))
@@ -660,7 +735,24 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
 
             comptime if KNN_PHASE_TIMERS:
                 t_class = perf_counter_ns()
-            if not metric_uses_norms(mtr):
+            if use_fused:
+                # DEVIATION 2667 (kernel-matrix row
+                # `knn_fused_distance_select_for`): distances and the
+                # tile's top-k in one launch, written straight to the same
+                # selection destination; the selection block below records
+                # the tile as selected and the partial merge follows as
+                # before. Timed under the distance class.
+                comptime if KNN_FUSED_SELECT:
+                    fused_distance_select_launch(
+                        ctx, sel_dist, sel_idx,
+                        queries.unsafe_ptr().unsafe_offset(q * n_features).unsafe_origin_cast[MutAnyOrigin](),
+                        transposed_index.value().unsafe_offset(c).unsafe_origin_cast[MutAnyOrigin](),
+                        query_norm.unsafe_ptr().unsafe_offset(q).unsafe_origin_cast[MutAnyOrigin](),
+                        index_norm.unsafe_ptr().unsafe_offset(c).unsafe_origin_cast[MutAnyOrigin](),
+                        rows, cols, n_index, n_features, k,
+                        mtr == DIST_L2_SQRT_EXPANDED,
+                    )
+            elif not metric_uses_norms(mtr):
                 # THEIR `else` AT `:224`: the op did the whole cell, there is
                 # no epilogue and no norm. One kernel, both modes.
                 ctx.enqueue_function[metric_distance_kernel](
@@ -990,7 +1082,11 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                         # which returns the same ascending (distance, index)
                         # rows the radix rank pass does. It needs k real
                         # keys in the row; every column tile has them.
-                        if cols >= k and k <= SMALLK_MAX_K and cols <= 2147483647:
+                        if use_fused:
+                            # DEVIATION 2667: the fused launch above already
+                            # wrote this tile's top-k.
+                            selected_smallk = True
+                        elif cols >= k and k <= SMALLK_MAX_K and cols <= 2147483647:
                             smallk_select_launch(
                                 ctx,
                                 dist_tile.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
@@ -1113,7 +1209,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
             "distance_launches", n_distance, "select_launches", n_select,
             "merge_launches", n_merge, "query_tile", query_tile,
             "index_tile", index_tile, "n_queries", n_queries, "n_index", n_index,
-            "k", k,
+            "k", k, "fused", Int(use_fused),
         )
     _ = part_dist^
     _ = part_idx^

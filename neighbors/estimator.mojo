@@ -227,14 +227,22 @@ from neighbors.impl.ball_cover.ball_cover import (
 
 # Measured NVIDIA IDENTICAL query batching; row arithmetic is unchanged.
 # Other columns retain 256 unless explicitly opting into qualification.
-from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, knn_query_tile_for
 comptime QUERY_TILE_512_CANDIDATE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_KNN_LEGACY_QUERY_TILE"]()
     and (TARGET_COLUMN == COLUMN_NVIDIA or is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]())
 )
-comptime DEFAULT_QUERY_TILE = 512 if QUERY_TILE_512_CANDIDATE else 256
-"""Measured NVIDIA IDENTICAL 512 schedule; otherwise 256, bounded below."""
+# DEVIATION 2631 (kernel-matrix row `knn_query_tile_for`): the row's tile
+# replaces the 512 candidate where it is set; 0 keeps the historical rule.
+from neighbors.impl.detail.knn_brute_force import tiled_radix_scratch_len, tiled_distance_tile_cells
+comptime KNN_ROW_QUERY_TILE =knn_query_tile_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]()
+comptime DEFAULT_QUERY_TILE = (
+    KNN_ROW_QUERY_TILE if (QUERY_TILE_512_CANDIDATE and KNN_ROW_QUERY_TILE > 0)
+    else (512 if QUERY_TILE_512_CANDIDATE else 256)
+)
+"""The kernel-matrix row's tile on the column it names (DEVIATION 2631),
+else the measured NVIDIA IDENTICAL 512 schedule, else 256, bounded below."""
 
 comptime MIN_QUERY_TILE = 32
 """The floor the workspace cap will not lower past. Below this the tile loop
@@ -261,17 +269,23 @@ def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int) -> Int:
         tile = DEFAULT_QUERY_TILE
 
     var per_row_bytes = n_index * 4
+    var budget = WORKSPACE_BUDGET_BYTES
     comptime if QUERY_TILE_512_CANDIDATE:
         # Limit the new budgeting rule to the largest measured index. For
         # n_index > 400000 the historical estimate necessarily halves 512
         # to 256 (already >768MiB), then follows the exact old default path.
         # This prevents larger radix scratch on unmeasured large indices.
-        if n_index <= 400000 and tile <= 512:
+        # DEVIATION 2631: the scope's tile ceiling is the default tile, and
+        # the budget admits that tile's bounded distance tile (2048 x 65,536
+        # cells is 512 MiB, 4096 is 1 GiB) so the row's tile is not halved.
+        if n_index <= 400000 and tile <= DEFAULT_QUERY_TILE:
             per_row_bytes = identical_index_tile(n_index) * 4
+            if DEFAULT_QUERY_TILE * per_row_bytes > budget:
+                budget = DEFAULT_QUERY_TILE * per_row_bytes
     if per_row_bytes > 0:
         while (
             tile > MIN_QUERY_TILE
-            and tile * per_row_bytes > WORKSPACE_BUDGET_BYTES
+            and tile * per_row_bytes > budget
         ):
             tile = tile // 2
     if tile < MIN_QUERY_TILE:
@@ -474,9 +488,8 @@ def _knn_search_traced_retaining(
 
     # `scaling_main.mojo`'s sizing. `buf_len` must clear `k` or the fallback
     # selector has nowhere to put a full result row.
-    var buf_len = n_index // 8
-    if buf_len < k:
-        buf_len = k
+    # DEVIATION 2631: `k` pairs where the small-k selector serves every tile.
+    var buf_len = tiled_radix_scratch_len(n_index, k)
 
     var index = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
     var queries = ctx.enqueue_create_buffer[DType.float32](
@@ -487,8 +500,9 @@ def _knn_search_traced_retaining(
     # `identical_index_tile` is `n_index` on FAST and DETERMINISTIC builds;
     # under IDENTICAL on the columns that tile the index axis it is the
     # kernel-matrix row's width, so the tile is bounded whatever the index.
+    # DEVIATION 2667: one cell when the fused launch writes no matrix.
     var dist_tile = ctx.enqueue_create_buffer[DType.float32](
-        query_tile * identical_index_tile(n_index)
+        tiled_distance_tile_cells(query_tile, n_index, n_features, k, mtr)
     )
     var buf_val = ctx.enqueue_create_buffer[DType.float32](
         query_tile * 2 * buf_len

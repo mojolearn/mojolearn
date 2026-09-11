@@ -180,3 +180,46 @@ mutation; these are authored source checks, pending main-thread execution.
 They do not establish cuML coordinate identity or qualify untested profiles.
 The public slice still excludes supervised targets, alternative metrics and
 initialization, arbitrary output dimensions, and local_connectivity != 1.
+
+## Why our embedding scored below cuML's, and DEVIATION 2668
+
+2026-09-11 (lane/knn-finish, H200 pod `zwmta1li2twxx2`, NYC taxi 100,000
+rows x 11 numeric columns, n_neighbors 15, n_epochs 200, sampled
+trustworthiness and 10-neighbor retention on a 4,000-row stride sample):
+our IDENTICAL UMAP scored trustworthiness 0.9062 (retention 0.3736) where
+cuML 26.8 scored 0.9657 (0.4804). The cause is the OPTIMIZER'S UPDATE ORDER,
+not the graph, the init or any parameter:
+
+- the two inits agree. Ours with the optimizer effectively off scored 0.9097
+  and cuML's the same way 0.9104;
+- our own serial host optimizer (`-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1`),
+  on the same graph and the same init, scored 0.9796 (retention 0.4987),
+  ABOVE cuML, in 48.6 s against the device optimizer's 2.6 s;
+- cuML's own edge-parallel kernel (`force_serial_epochs=False`) drops them
+  to 0.9429, and a random init to 0.8027. `umap.pyx:562-570` selects their
+  per-vertex SERIAL kernel for a spectral fit, which updates a vertex's
+  position after every edge and every negative sample
+  (`optimize_batch_kernel.cuh:569-577, 608-616`).
+
+The device optimizer (2026-09-09) summed every move of an epoch from one
+snapshot, so a vertex with about twenty eligible edges applied twenty
+undamped moves computed from the same point and overshot; lowering the
+learning rate, which damps exactly that, recovered a third of the gap
+(0.9457 at 0.25, 0.9348 at 0.05).
+
+DEVIATION 2668 is the smallest change in cuML's direction that keeps the
+identity contract: within a vertex's fold its own attractive and repulsive
+moves land on its running position as the fold visits them, and only the
+mirror edge's tail move is still deferred to the epilogue. It is still a
+pure function of the epoch snapshot with one writer per vertex, so the bits
+stay independent of launch width and vendor; they differ from the snapshot
+fold, which is a re-baseline of the UMAP cards. Kernel-matrix row
+`umap_device_optimizer_live_row_for`;
+`-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` restores the snapshot fold.
+Measured on taxi: trustworthiness 0.9062 to 0.9323, retention 0.3736 to
+0.3627. The trial arm that also applies the mirror move live
+(`-D MOJOLEARN_UMAP_LIVE_BOTH_ARM=1`) is worse on both (0.8907, 0.2826).
+What remains between 0.9323 and the host loop's 0.9796 is the order ACROSS
+vertices: the host loop is a Gauss-Seidel sweep in which a vertex sees every
+earlier vertex's move of the same epoch, and that order has no parallel form
+whose bits are a function of the inputs alone.
