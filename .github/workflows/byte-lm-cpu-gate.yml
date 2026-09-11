@@ -35,6 +35,7 @@ on:
       - "python/mojolearn/_backend.py"
       - "python/mojolearn/_buffer.py"
       - "tools/byte_lm_host_gate.py"
+      - "tools/byte_lm_host_path_sweep.py"
       - ".github/workflows/byte-lm-cpu-gate.yml"
 
 permissions: {}
@@ -170,6 +171,18 @@ jobs:
           python3 -m pip install --quiet numpy pytest
           cd python
           python3 -m pytest -q mojolearn/tests/test_byte_lm_host.py 2>&1 | tee "$GATE_OUT/pytest_host.log"
+
+      # DEVIATION 2640: the threaded path against the reference path byte for
+      # byte through the public surface, at every batch from 1 to 8 and every
+      # length from 1 to 32, next bytes and losses, three parameter states,
+      # thread counts 1, 2 and 3. Same seed everywhere, so the per-state
+      # reference logits SHA-256 in each report can be compared across CPUs.
+      - name: Path sweep, threaded against reference at every shape
+        if: always()
+        run: |
+          set -o pipefail
+          python3 tools/byte_lm_host_path_sweep.py --threads 1,2,3 --max-batch 8 \
+            --report "$GATE_OUT/path_sweep.json" 2>&1 | tee "$GATE_OUT/path_sweep.log"
 
       # DEVIATION 2640's two Mojo checks, built with the binding's CPU target so
       # they test the codegen the gate ran: the host kernels against the

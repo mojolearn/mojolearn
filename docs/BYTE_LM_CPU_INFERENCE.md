@@ -90,6 +90,17 @@ patterns. Its first run found the lanes returning signaling NaNs quieted where
 the scalar returns them unchanged. No model input reaches a signaling NaN, but
 the lanes now pass NaNs through by an integer select and match on every pattern.
 
+`tools/byte_lm_host_path_sweep.py` compares the threaded path with the
+reference path through the public surface, byte for byte, at every batch from
+1 to 8 and every length from 1 to 32, including `next_bytes`, and compares
+`loss_bits` on random batches, for three parameter states and thread counts 1,
+2 and 3, with seeded ids that reach all 256 byte values. It records one SHA-256
+per state over the reference logits of the whole sweep, so reports from
+different CPUs can be compared at every shape. On the Apple M4 at `a824d9da`
+all 4752 comparisons were equal (evidence
+`bench/results/local/2026-09-11_1648-apple-m4-byte-lm-path-sweep`); CI runs it
+on every runner.
+
 ## Running it
 
 The default is GitHub's free standard runners. `.github/workflows/byte-lm-cpu-gate.yml`
