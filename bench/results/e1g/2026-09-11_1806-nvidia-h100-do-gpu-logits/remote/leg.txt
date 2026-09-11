@@ -1,0 +1,16 @@
+vendor=nvidia
+commit=652b93fe37513a61d4a073a9f968de120cb49564
+card_full=
+trace_dump=
+started=2026-09-11T22:06:14Z
+provider=digitalocean
+size=gpu-h100x1-80gb
+gates=0
+gpu_archs=sm_90a
+target_column=nvidia
+pixi_install_exit=0
+device_check_exit=SKIPPED
+card_exit=SKIPPED
+extra_exit=0
+finished=2026-09-11T22:09:36Z
+body_exit=0

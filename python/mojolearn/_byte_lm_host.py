@@ -99,6 +99,37 @@ def _refuse_ids(tokens, vocab, batch, width, target_column):
             raise ValueError(f'ids must be byte values in [0, {vocab}); got {v} at row {r}, position {c}')
 
 
+def _logits_ids(ids, shape):
+    """`(tokens, copied)` for a logits call, int32 ids `[batch, length]` with
+    `batch >= 1`, `1 <= length <= shape.length` and every id a byte value,
+    refused with ValueError otherwise. Shared with the trainer's GPU logits
+    (DEVIATION 2658) so both surfaces admit the same ids."""
+    tokens, copied = as_i32_c(ids, ndim=2, name='ids')
+    batch, length = tokens.shape
+    if batch <= 0 or not 0 < length <= shape.length:
+        raise ValueError(f'ids must be [batch, 1..{shape.length}]')
+    _refuse_ids(tokens, shape.vocab_size, batch, length, None)
+    return tokens, copied
+
+
+def _greedy_next_bytes(logits):
+    """The greedy next byte after each row of float32 logits
+    `[batch, length, vocab]`, read at the last position; ties go to the
+    lowest byte value. Shared with the trainer's GPU logits (DEVIATION
+    2658), so equal logits bytes pick equal bytes."""
+    batch, length, vocab = logits.shape
+    flat = flat_view(logits, 'f')
+    result = []
+    for b in range(batch):
+        base = ((b * length) + length - 1) * vocab
+        best = 0
+        for v in range(1, vocab):
+            if flat[base + v] > flat[base + best]:
+                best = v
+        result.append(best)
+    return result
+
+
 def _thread_count(value):
     """None is one thread per physical core, sent to the binding as 0."""
     if value is None:
@@ -180,11 +211,8 @@ class LanguageModelInference:
         `[batch, length]`, positions from 0, length at most `shape.length`."""
         flag = self._threads_flag(threaded)
         count = self._threads_arg(threads)
-        tokens, _ = as_i32_c(ids, ndim=2, name='ids')
+        tokens, _ = _logits_ids(ids, self._shape)
         batch, length = tokens.shape
-        if batch <= 0 or not 0 < length <= self._shape.length:
-            raise ValueError(f'ids must be [batch, 1..{self._shape.length}]')
-        _refuse_ids(tokens, self._shape.vocab_size, batch, length, None)
         out = zeros((batch, length, self._shape.vocab_size), '<f4')
         written = self._binding.byte_lm_host_logits(
             [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids'),
@@ -217,15 +245,4 @@ class LanguageModelInference:
     def next_bytes(self, ids, *, threaded=None, threads=None):
         """Greedy next byte after each row of ids `[batch, length]`; ties go
         to the lowest byte value."""
-        out = self.logits(ids, threaded=threaded, threads=threads)
-        batch, length, vocab = out.shape
-        flat = flat_view(out, 'f')
-        result = []
-        for b in range(batch):
-            base = ((b * length) + length - 1) * vocab
-            best = 0
-            for v in range(1, vocab):
-                if flat[base + v] > flat[base + best]:
-                    best = v
-            result.append(best)
-        return result
+        return _greedy_next_bytes(self.logits(ids, threaded=threaded, threads=threads))
