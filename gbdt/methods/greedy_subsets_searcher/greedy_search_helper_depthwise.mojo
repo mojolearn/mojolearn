@@ -141,6 +141,35 @@ comptime INCREMENTAL_PART_STATS = (
 )
 comptime REPORT_PART_STATS_WORK = is_defined["MOJOLEARN_GBDT_PART_STATS_WORK"]()
 
+# ============================ DEVIATION 2661 ============================
+# THE PER-GROUP BIT WIDTH REACHES THE NON-SYMMETRIC DRIVERS. DEVIATION 2581
+# sorts a one-byte block's 4-feature groups by width and launches one kernel
+# per width present, instead of paying the whole block's widest feature for
+# every group; it is the IDENTICAL default in the symmetric driver
+# (`greedy_search_helper.mojo`, `SYM_GROUP_WIDTH_2581`, flipped 2026-09-11 on
+# geomean 0.995). The depthwise and lossguide histogram call below binds
+# neither of that launcher's trailing parameters, so these two policies have
+# always taken the block-widest ladder. The workspace is the SAME
+# `TTreeWorkspace`, and `refresh_layout_metadata` already fills
+# `width_plans` whenever 2581 is compiled in, so the plans this needs are
+# built and uploaded on this path today and simply never read.
+#
+# WHY NO BIT CAN MOVE: the one-byte arms accumulate per-row Int32 addends
+# into the same accumulator cells, and an integer sum does not depend on
+# grouping. A narrower width changes WHICH launch adds a group's addends,
+# never the addends or the total, and the dequantization in the writeback
+# is untouched. The same argument carried 2581 in the symmetric driver.
+#
+# OPT-IN (`-D MOJOLEARN_2661_NONSYM_GROUP_WIDTH=1`) until its own A/B on
+# both datasets says otherwise: 2581's flip was measured on the symmetric
+# policy, and a switch is decided on the lanes its code reaches.
+# Istella-S is where it can pay (220 features, one one-byte block of 32
+# groups); taxi's two groups are both 8-bit, so there it only changes
+# launcher.
+comptime NONSYM_GROUP_WIDTH_2661 = is_defined[
+    "MOJOLEARN_2661_NONSYM_GROUP_WIDTH"
+]()
+
 # DEVIATION 1902: whether the non-symmetric drivers move ONLY the row
 # index at a split, leaving the stat planes stationary in document order
 # for the life of the fit. The row is False under IDENTICAL on every
@@ -1421,12 +1450,31 @@ def fit_non_symmetric_tree[
                     )
                     quantized_built = True
             if not quantized_built:
-                launch_histograms_for_blocks[hist2_smem_mode, RIDX_ONLY_SPLITS](
-                    ctx, dblocks, iteration - 1, len(non_zero), n_rows,
-                    stat_count, max_leaves, sm_count, fixed_scale,
-                    cindex, row_index, stats, p_off, p_sz, d_ids, dense_ids,
-                    hist, acc_i32, block_hist, hist_cells_per_leaf,
-                )
+                # DEVIATION 2661 (see `NONSYM_GROUP_WIDTH_2661`): the same
+                # launcher, told to take the fit's per-group width plans.
+                # `level_quant` stays False, so no Int32 level plane is
+                # needed and none is passed.
+                comptime if NONSYM_GROUP_WIDTH_2661:
+                    launch_histograms_for_blocks[
+                        hist2_smem_mode, RIDX_ONLY_SPLITS, False, True
+                    ](
+                        ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                        stat_count, max_leaves, sm_count, fixed_scale,
+                        cindex, row_index, stats, p_off, p_sz, d_ids,
+                        dense_ids, hist, acc_i32, block_hist,
+                        hist_cells_per_leaf,
+                        width_plans=ws[0].width_plans,
+                    )
+                else:
+                    launch_histograms_for_blocks[
+                        hist2_smem_mode, RIDX_ONLY_SPLITS
+                    ](
+                        ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                        stat_count, max_leaves, sm_count, fixed_scale,
+                        cindex, row_index, stats, p_off, p_sz, d_ids,
+                        dense_ids, hist, acc_i32, block_hist,
+                        hist_cells_per_leaf,
+                    )
             mgr.stream_kernel()
             stage_times.end(ctx, "hist.build")
 
