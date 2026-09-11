@@ -2162,7 +2162,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         enqueues. Returns True when the batch is finished, with the pushed
         splits in `st.result`."""
         if st.phase == 1:
+            var t_rd = instr.times.start()
             st.result = self._read_splits(len(st.work_items))
+            instr.times.stop_host("host_read_splits", t_rd)
             # DEVIATION 401 -- the batch's splits as the PARTITION read
             # them back: chosen column, threshold bits, child counts.
             # This is "after split selection" for the whole batch.
@@ -2177,7 +2179,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                     st.result,
                 )
             return True
+        var t_rd = instr.times.start()
         var h = self._read_splits(len(st.active_items))
+        instr.times.stop_host("host_read_splits", t_rd)
         # DEVIATION 401 -- the round's CANDIDATE splits, before the retry
         # dispatch, so a divergence is pinned to a sampling round rather
         # than to the batch's final answer.
@@ -2207,9 +2211,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             st.active_items = retry_items^
             st.active_to_original = retry_to_original^
             st.round += 1
+            var t_rt = instr.times.start()
             self._enqueue_round[sabotage](
                 ctx, dataset, quantiles, smem_config, st, instr
             )
+            instr.times.stop_host("host_enq_hist_retry", t_rt)
             return False
         # DEVIATION 1919 -- at round 0 the device span already holds this
         # batch's items and block map (round zero staged `active_items`,
@@ -2219,6 +2225,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # must never read -- the reuse is off and every batch restages
         # (priced in the 2011 block). Comptime-folds to `st.round == 0`
         # under the default flag.
+        var t_ns = instr.times.start()
         self.enqueue_node_split(
             ctx,
             dataset,
@@ -2226,6 +2233,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             st.final_splits,
             reuse_phase_span=(st.round == 0 and HIST_ITEMS_PER_THREAD == 1),
         )
+        instr.times.stop_host("host_enq_partition", t_ns)
         st.phase = 1
         return False
 
@@ -2702,16 +2710,26 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         step and carries its own syncs, exactly as the serial train did."""
         if ts.done:
             return True
+        # DEVIATION 2510 -- this step's HOST work, stamped piecewise with
+        # no drain so the stage table can split `other`: `advance_batch`
+        # stamps its own readback decode and enqueues; here the queue
+        # push (child nodes into the tree) and the next batch's pop plus
+        # histogram-round enqueue. Off unless MOJOLEARN_STAGE_TIMES=1;
+        # changes no arithmetic.
         if not self.advance_batch[sabotage](
             ctx, ts.ds, quantiles, ts.smem_config, ts.batch, instr
         ):
             return False
+        var t_host = instr.times.start()
         ts.queue.push(ts.batch.work_items, ts.batch.result)
+        instr.times.stop_host("host_queue_push", t_host)
         if ts.queue.has_work():
+            t_host = instr.times.start()
             var work_items = ts.queue.pop()
             ts.batch = self.begin_batch[sabotage](
                 ctx, ts.ds, quantiles, work_items, ts.smem_config, instr
             )
+            instr.times.stop_host("host_enq_hist", t_host)
             return False
         self._finish_tree(ctx, ts, instr)
         return True
@@ -2726,8 +2744,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         DEVIATION 402 times the leaf pass here, where it runs, because
         `set_leaf_predictions` carries its own per-batch syncs and its
         wall time is real device work."""
+        # DEVIATION 2510 -- the tree copy out of the queue is host work,
+        # stamped without a drain.
+        var t_copy = instr.times.start()
         var tree = ts.queue.tree.copy()
         tree.treeid = self.treeid
+        instr.times.stop_host("tree_copy", t_copy)
         var t0 = instr.times.start()
         self.set_leaf_predictions(
             ctx, tree, ts.queue.node_instances_.copy(), ts.ds
