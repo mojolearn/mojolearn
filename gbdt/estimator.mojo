@@ -87,6 +87,10 @@ from gbdt.models.model_text import load_model_text
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     DEVICE_LEAF_PARTITION,
 )
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    SYM_GROUP_WIDTH_2581,
+    SYM_LEVEL_QUANT_2580,
+)
 from gbdt.train import (
     BORROW_X_COLUMNS,
     TrainedModel,
@@ -582,8 +586,8 @@ def gbdt_fit(
 
 
 def gbdt_per_round_paths() -> String:
-    """Which side of each gbdt-per-round switch this binary compiled
-    (DEVIATIONS 2550, 2551), for the benchmark's path line
+    """Which side of each gbdt speed switch this binary compiled
+    (DEVIATIONS 2550, 2551, 2580, 2581), for the benchmark's path line
     (ENGINEERING_RULES.md section 8)."""
     var out = String("2550_borrow_x=")
     comptime if BORROW_X_COLUMNS:
@@ -592,6 +596,16 @@ def gbdt_per_round_paths() -> String:
         out += "0"
     out += " 2551_device_partition="
     comptime if DEVICE_LEAF_PARTITION:
+        out += "1"
+    else:
+        out += "0"
+    out += " 2580_level_quant="
+    comptime if SYM_LEVEL_QUANT_2580:
+        out += "1"
+    else:
+        out += "0"
+    out += " 2581_group_width="
+    comptime if SYM_GROUP_WIDTH_2581:
         out += "1"
     else:
         out += "0"
